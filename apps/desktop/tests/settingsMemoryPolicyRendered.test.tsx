@@ -46,6 +46,12 @@ describe("Settings memory component policy", () => {
     await reactAct(async () => button(rendered.container, "Memory").click());
     await flush();
     expect(rendered.container.textContent).toContain("Enable memory");
+    const views = rendered.container.querySelector('[data-slot="view-switcher"]');
+    expect(views?.getAttribute("role")).toBe("group");
+    expect(views?.querySelectorAll('button[aria-pressed]')).toHaveLength(8);
+    expect(
+      rendered.container.querySelectorAll('[data-slot="setting-row"][data-density="compact"]'),
+    ).toHaveLength(3);
 
     rendered.rerender(settings(false));
     expect(rendered.container.textContent).not.toContain("Enable memory");

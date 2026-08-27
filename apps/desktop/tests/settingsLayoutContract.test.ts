@@ -47,8 +47,17 @@ describe("Settings page layout contract", () => {
   test("uses a compact item rhythm inside visibly separated groups", () => {
     expect(source).toContain('className="space-y-1"');
     expect(source).toContain('className="min-h-0 flex-1 space-y-6');
-    expect(source).toContain("gap-2 rounded-lg px-2 py-1.5");
-    expect(source).toContain('<Icon className="size-3.5 shrink-0" />');
+    expect(source).toContain("<NavigationRow");
+    expect(source).toContain("label={t(labelKey)}");
+    expect(source).toContain("leading={<Icon />}");
+    expect(source).toContain("current={id === tab}");
+    expect(source).toContain("onSelect={() => setTab(id)}");
+  });
+
+  test("uses the standard Button for the Back action", () => {
+    expect(source).toMatch(
+      /<Button[\s\S]*?data-settings-back[\s\S]*?variant="ghost"[\s\S]*?size="row"/,
+    );
   });
 
   test("keeps every settings tab on the shared 48px titlebar", () => {
@@ -100,7 +109,7 @@ describe("Settings page layout contract", () => {
   test("includes Pets as a first-class settings panel", () => {
     expect(source).toMatch(/\{ id: "pets", icon: PawPrint, labelKey: "settings\.pets" \}/);
     expect(source).toContain('{tab === "pets" && (');
-    expect(source).toMatch(/<Page title=\{t\("settings\.pets"\)\}[\s\S]*?<PetSettings \/>/);
+    expect(source).toMatch(/<SettingsPanel title=\{t\("settings\.pets"\)\}[\s\S]*?<PetSettings \/>/);
   });
 
   test("clips pet catalog previews to a compact square", () => {

@@ -5,7 +5,7 @@ import { CheckIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 const menuItemStyles =
-  "group/dropdown-menu-item relative flex min-h-(--ds-menu-item-height) cursor-default select-none items-center gap-2.5 rounded-(--ds-menu-item-radius) px-2 py-1.5 text-ui leading-4 outline-none transition-colors duration-(--ds-motion-feedback) ease-(--ds-ease-enter) focus:bg-(--ds-color-fill-hover) focus:text-(--ds-color-text) data-highlighted:bg-(--ds-color-fill-hover) data-highlighted:text-(--ds-color-text) data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-(--ds-color-destructive) data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:data-highlighted:bg-destructive/10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-(--ds-icon-list) [&_svg:not([class*='text-'])]:text-muted-foreground";
+  "group/dropdown-menu-item relative flex min-h-menu-item cursor-default select-none items-center gap-module-inset rounded-menu-item px-2 py-1.5 text-ui leading-4 outline-none transition-colors duration-feedback ease-enter focus:bg-fill-hover focus:text-content data-highlighted:bg-fill-hover data-highlighted:text-content data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-status-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:data-highlighted:bg-destructive/10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-icon-list [&_svg:not([class*='text-'])]:text-muted-foreground";
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
@@ -16,7 +16,7 @@ function DropdownMenuTrigger({ className, ...props }: MenuPrimitive.Trigger.Prop
     <MenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
       className={cn(
-        "transition-colors duration-(--ds-motion-feedback) ease-(--ds-ease-enter) data-[popup-open]:bg-(--ds-color-fill-hover) data-[popup-open]:text-(--ds-color-text)",
+        "transition-colors duration-feedback ease-enter data-[popup-open]:bg-fill-hover data-[popup-open]:text-content",
         className,
       )}
       {...props}
@@ -45,7 +45,7 @@ function DropdownMenuContent({
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cn(
-            "pop-layer z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-(--ds-menu-radius) bg-(--ds-color-raised) p-(--ds-menu-padding) text-(--ds-color-text) shadow-(--ds-menu-elevation) outline-none",
+            "pop-layer z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu bg-raised p-menu text-content shadow-menu outline-none",
             className,
           )}
           {...props}
@@ -92,11 +92,33 @@ function DropdownMenuRadioItem({
       {children}
       <MenuPrimitive.RadioItemIndicator
         data-slot="dropdown-menu-radio-item-indicator"
-        className="ml-auto flex size-(--ds-icon-list) shrink-0 items-center justify-center text-(--ds-color-text)"
+        className="ml-auto flex size-icon-list shrink-0 items-center justify-center text-content"
       >
         <CheckIcon />
       </MenuPrimitive.RadioItemIndicator>
     </MenuPrimitive.RadioItem>
+  );
+}
+
+function DropdownMenuCheckboxItem({
+  className,
+  children,
+  ...props
+}: MenuPrimitive.CheckboxItem.Props) {
+  return (
+    <MenuPrimitive.CheckboxItem
+      data-slot="dropdown-menu-checkbox-item"
+      className={cn(menuItemStyles, className)}
+      {...props}
+    >
+      {children}
+      <MenuPrimitive.CheckboxItemIndicator
+        data-slot="dropdown-menu-checkbox-item-indicator"
+        className="ml-auto flex size-icon-list shrink-0 items-center justify-center text-content"
+      >
+        <CheckIcon />
+      </MenuPrimitive.CheckboxItemIndicator>
+    </MenuPrimitive.CheckboxItem>
   );
 }
 
@@ -151,6 +173,7 @@ export {
   DropdownMenuItem,
   DropdownMenuItemDescription,
   DropdownMenuItemText,
+  DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,

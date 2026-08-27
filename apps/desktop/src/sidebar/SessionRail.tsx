@@ -47,6 +47,8 @@ import {
 } from "../electrobun/contextMenu";
 import type { NativeContextMenuItem } from "../electrobun/rpc";
 import { ProviderIcon } from "../providers/ProviderIcon";
+import { NavigationRow } from "@/components/business/navigation-row";
+import { QuotaProgress } from "@/components/business/quota-progress";
 import { Button } from "@/components/ui/button";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import {
@@ -257,8 +259,6 @@ export function SessionRail({
   // Clamped on every render, not just while dragging, so a width saved on one display comes back
   // usable on another.
   const applied = Math.min(420, Math.max(220, width));
-  const featureRowClass =
-    "flex h-(--ds-control-normal) w-full items-center gap-2 rounded-(--ds-radius-control) px-2 text-left text-ui text-foreground/75 transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
   const quickQuotaWindow = quickQuota?.windowMinutes === 300
     ? t("quota.window5h")
     : quickQuota?.windowMinutes === 10_080
@@ -876,22 +876,20 @@ export function SessionRail({
       </div>
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}
-      <LiquidSelectionGroup
+      <div
         data-rail-features
         role="navigation"
         aria-label={t("rail.features")}
-        activeSelector='[aria-current="page"]'
-        fill="var(--color-fill-hover)"
         className="flex flex-col gap-0.5 px-2 pb-1"
       >
         <div
           data-rail-feature="new-task"
           role="group"
           aria-label={t("rail.newTask")}
-          className="group/new-task flex h-(--ds-control-normal) min-w-0 items-center rounded-(--ds-radius-control) text-foreground/75 transition-colors hover:bg-accent/55 hover:text-foreground focus-within:bg-accent/55 focus-within:text-foreground"
+          className="group/new-task flex h-control min-w-0 items-center rounded-control text-foreground/75 transition-colors hover:bg-fill-hover hover:text-foreground focus-within:bg-fill-hover focus-within:text-foreground"
         >
           <button
-            className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-(--ds-radius-control) pl-2 pr-1 text-left text-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-control pl-2 pr-1 text-left text-ui outline-none focus-visible:focus-ring-inset"
             title={`${t("rail.newTask")} ${newHint}`}
             onClick={onNew}
           >
@@ -906,7 +904,7 @@ export function SessionRail({
                   variant="ghost"
                   size="icon-xs"
                   data-rail-quick-session
-                  className="mr-1 size-6 rounded-full text-muted-foreground ring-1 ring-foreground/10 hover:bg-accent/80 hover:text-foreground group-hover/new-task:text-foreground"
+                  className="mr-1 size-control-mini rounded-control text-muted-foreground hover:bg-fill-hover hover:text-foreground group-hover/new-task:text-foreground"
                   aria-label={t("rail.newTemporarySession")}
                   onClick={onNewTemporary}
                 >
@@ -925,8 +923,8 @@ export function SessionRail({
                   size="icon-xs"
                   data-rail-side-chat
                   className={cn(
-                    "mr-1 size-6 rounded-full text-muted-foreground hover:bg-accent/80 hover:text-foreground group-hover/new-task:text-foreground",
-                    sideChatOpen && "bg-accent/80 text-foreground",
+                    "mr-1 size-control-mini rounded-control text-muted-foreground hover:bg-fill-hover hover:text-foreground group-hover/new-task:text-foreground",
+                    sideChatOpen && "bg-fill-hover text-foreground",
                   )}
                   aria-label={t("sideChat.toggle")}
                   aria-pressed={sideChatOpen}
@@ -939,55 +937,50 @@ export function SessionRail({
             <TooltipContent side="right">{t("sideChat.title")}</TooltipContent>
           </Tooltip>
         </div>
-        <button
-          data-rail-feature="pull-requests"
-          aria-current={pullRequestsOpen ? "page" : undefined}
-          className={cn(featureRowClass, pullRequestsOpen && "font-medium text-foreground hover:bg-transparent")}
-          onClick={onOpenPullRequests}
-        >
-          <GitPullRequest className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{t("pullRequests.title")}</span>
-        </button>
-        <button
-          data-rail-feature="task-board"
-          aria-current={taskBoardOpen ? "page" : undefined}
-          className={cn(featureRowClass, taskBoardOpen && "font-medium text-foreground hover:bg-transparent")}
-          onClick={onOpenTaskBoard}
-        >
-          <SquareKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{t("taskboard.title")}</span>
-        </button>
-        <button
-          data-rail-feature="scheduled-tasks"
-          aria-current={automationsOpen ? "page" : undefined}
-          className={cn(featureRowClass, automationsOpen && "font-medium text-foreground hover:bg-transparent")}
-          onClick={onOpenAutomations}
-        >
-          <CalendarClock className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{t("automations.tasks")}</span>
-        </button>
-        <button
-          data-rail-feature="plugins"
-          aria-current={pluginManagerOpen ? "page" : undefined}
-          className={cn(featureRowClass, pluginManagerOpen && "font-medium text-foreground hover:bg-transparent")}
-          onClick={onOpenMarket}
-        >
-          <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{t("pluginHub.plugins")}</span>
-        </button>
+        <div data-rail-feature="pull-requests">
+          <NavigationRow
+            label={t("pullRequests.title")}
+            leading={<GitPullRequest className="size-4" />}
+            current={pullRequestsOpen}
+            onSelect={onOpenPullRequests}
+          />
+        </div>
+        <div data-rail-feature="task-board">
+          <NavigationRow
+            label={t("taskboard.title")}
+            leading={<SquareKanban className="size-4" />}
+            current={taskBoardOpen}
+            onSelect={onOpenTaskBoard}
+          />
+        </div>
+        <div data-rail-feature="scheduled-tasks">
+          <NavigationRow
+            label={t("automations.tasks")}
+            leading={<CalendarClock className="size-4" />}
+            current={automationsOpen}
+            onSelect={onOpenAutomations}
+          />
+        </div>
+        <div data-rail-feature="plugins">
+          <NavigationRow
+            label={t("pluginHub.plugins")}
+            leading={<Blocks className="size-4" />}
+            current={pluginManagerOpen}
+            onSelect={onOpenMarket}
+          />
+        </div>
         {dockerAvailable ? (
-          <button
-            data-rail-feature="docker"
-            aria-current={dockerOpen ? "page" : undefined}
-            className={cn(featureRowClass, dockerOpen && "bg-accent font-medium text-foreground")}
-            onClick={onOpenDocker}
-          >
-            <Container className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="min-w-0 flex-1 truncate">{t("docker.title")}</span>
-          </button>
+          <div data-rail-feature="docker">
+            <NavigationRow
+              label={t("docker.title")}
+              leading={<Container className="size-4" />}
+              current={dockerOpen}
+              onSelect={onOpenDocker}
+            />
+          </div>
         ) : null}
         {pluginActions}
-      </LiquidSelectionGroup>
+      </div>
 
       {/* ---- 3 · recent chats --------------------------------------------------------------- */}
       {/* The section header carries the project switcher: which project's chats these are, and
@@ -1144,14 +1137,14 @@ export function SessionRail({
 
       {/* ---- 4 · utilities ------------------------------------------------------------------ */}
       <div data-rail-utilities className="flex shrink-0 flex-col gap-0.5 px-2 pb-2 pt-1">
-        <button
-          data-rail-feature="usage"
-          aria-busy={quickQuotaLoading || undefined}
-          className={featureRowClass}
-          title={quickQuotaTitle}
-          onClick={onOpenUsage}
-        >
-          {quickQuota ? (
+        <div data-rail-feature="usage">
+          <NavigationRow
+            label={t("quota.quick")}
+            busy={quickQuotaLoading}
+            accessibilityLabel={quickQuotaTitle}
+            title={quickQuotaTitle}
+            onSelect={onOpenUsage}
+            leading={quickQuota ? (
             <span
               data-quota-provider={quickQuota.provider}
               className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
@@ -1159,31 +1152,15 @@ export function SessionRail({
               <ProviderIcon provider={quickQuota.provider} className="size-4" />
             </span>
           ) : (
-            <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <ChartNoAxesColumn className="size-4" />
           )}
-          <span className="min-w-0 flex-1 truncate">{t("quota.quick")}</span>
-          {quickQuota ? (
+            meta={quickQuota ? (
             <span className="flex shrink-0 items-center gap-1.5">
-              <span
-                role="progressbar"
-                aria-label={t("quota.remainingLabel", { window: quickQuotaWindow })}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={quickQuota.remainingPercent}
-                className="h-1 w-10 overflow-hidden rounded-full bg-foreground/10"
-              >
-                <span
-                  className={cn(
-                    "block h-full rounded-full",
-                    quickQuota.remainingPercent <= 5
-                      ? "bg-destructive"
-                      : quickQuota.remainingPercent <= 20
-                        ? "bg-warning"
-                        : "bg-primary",
-                  )}
-                  style={{ width: `${quickQuota.remainingPercent}%` }}
-                />
-              </span>
+              <QuotaProgress
+                density="rail"
+                label={t("quota.remainingLabel", { window: quickQuotaWindow })}
+                remainingPercent={quickQuota.remainingPercent}
+              />
               <span className="w-7 text-right text-fine font-medium tabular-nums">
                 {quickQuota.remainingPercent}%
               </span>
@@ -1195,15 +1172,15 @@ export function SessionRail({
               ) : "—"}
             </span>
           )}
-        </button>
-        <button
-          data-rail-feature="settings"
-          className={featureRowClass}
-          onClick={onOpenSettings}
-        >
-          <Settings className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{t("header.settings")}</span>
-        </button>
+          />
+        </div>
+        <div data-rail-feature="settings">
+          <NavigationRow
+            label={t("header.settings")}
+            leading={<Settings className="size-4" />}
+            onSelect={onOpenSettings}
+          />
+        </div>
       </div>
       </div>
     </aside>

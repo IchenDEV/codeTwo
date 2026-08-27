@@ -73,6 +73,23 @@ describe("Appearance settings", () => {
     view.unmount();
   });
 
+  test("uses standard setting rows for palette, typography, and surface controls", async () => {
+    activateDom();
+    installThemeTokens();
+    const view = mount(<Harness />);
+    await flush();
+
+    expect(view.container.querySelectorAll('[data-slot="setting-row"]')).toHaveLength(12);
+    expect(
+      view.container.querySelector('[aria-label="Interface font"]')?.closest('[data-slot="setting-row"]'),
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector('[aria-label="Interface font size"]')?.closest('[data-slot="setting-row"]'),
+    ).not.toBeNull();
+
+    view.unmount();
+  });
+
   test("normalizes the standalone pet settings and preserves explicit choices", () => {
     activateDom();
     expect(normalizeAppearanceSettings({})).toMatchObject({

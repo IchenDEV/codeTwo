@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { CheckCircle2, CircleAlert, Info, X } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type Tone = "info" | "success" | "error";
@@ -48,7 +49,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={push}>
       {children}
-      <div className="pointer-events-none fixed bottom-9 right-4 z-50 flex flex-col items-end gap-2">
+      <div className="pointer-events-none fixed inset-x-4 bottom-8 z-50 flex flex-col items-end gap-2">
         {toasts.map((t) => (
           <ToastRow key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
         ))}
@@ -71,12 +72,8 @@ function ToastRow({ toast, onDismiss }: { toast: Toast; onDismiss: () => void })
   const Icon = ICONS[toast.tone];
   return (
     <div
-      role="status"
-      className={cn(
-        "glass-raised animate-rise-in pointer-events-auto flex max-w-96 items-start gap-2 rounded-lg border px-3 py-2 text-ui shadow-lg",
-        toast.tone === "error" && "border-destructive/40",
-        toast.tone === "success" && "border-success/40",
-      )}
+      role={toast.tone === "error" ? "alert" : "status"}
+      className="animate-rise-in pointer-events-auto flex w-fit max-w-full items-start gap-2 rounded-module bg-raised px-3 py-2 text-ui text-content shadow-raised"
     >
       <Icon
         className={cn(
@@ -88,19 +85,22 @@ function ToastRow({ toast, onDismiss }: { toast: Toast; onDismiss: () => void })
       />
       <span className="min-w-0 flex-1 break-words">{toast.text}</span>
       {toast.action && (
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
           onClick={() => {
             toast.action!.run();
             onDismiss();
           }}
-          className="shrink-0 rounded font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="shrink-0"
         >
           {toast.action.label}
-        </button>
+        </Button>
       )}
-      <button onClick={onDismiss} className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Dismiss">
+      <Button type="button" variant="ghost" size="icon-xs" onClick={onDismiss} className="shrink-0" aria-label="Dismiss">
         <X className="size-3.5" />
-      </button>
+      </Button>
     </div>
   );
 }

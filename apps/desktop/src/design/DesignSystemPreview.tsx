@@ -2,15 +2,57 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import {
   AlertTriangle,
   Check,
-  ChevronDown,
   CircleHelp,
   Monitor,
   Moon,
   Search,
   Sun,
 } from "@/components/ui/icons";
+import { applyAppearanceSettings, useAppearanceSettings } from "@/appearance";
 import { ActivityOrb } from "@/components/ui/activity-orb";
-import "./tokens.css";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { LoadFeedback } from "@/components/business/load-feedback";
+import { QuotaProgress } from "@/components/business/quota-progress";
+import { SelectableRow } from "@/components/business/selectable-row";
+import { SettingRow } from "@/components/business/setting-row";
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { StatusBadge } from "@/components/business/status-badge";
+import { StatusIndicator } from "@/components/business/status-indicator";
+import { ViewSwitcher } from "@/components/business/view-switcher";
+import { useToast } from "@/ui/toast";
 import "./preview.css";
 
 type ThemeMode = "system" | "light" | "dark";
@@ -103,11 +145,59 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
 }
 
 export function DesignSystemPreview() {
+  const toast = useToast();
   const systemDark = useSystemDark();
+  const appearance = useAppearanceSettings();
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [boldText, setBoldText] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState("codex");
+  const [selectedBusinessView, setSelectedBusinessView] = useState("all");
+  const [memoryCapture, setMemoryCapture] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [invalidValue, setInvalidValue] = useState("Missing token");
   const resolvedTheme = themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute("data-ds-theme");
+    const wasDark = root.classList.contains("dark");
+    const previousColorScheme = root.style.colorScheme;
+    const previewStyle = document.createElement("div");
+
+    applyAppearanceSettings(previewStyle, appearance, resolvedTheme);
+    const previousAppearance = new Map(
+      Array.from(previewStyle.style).map((name) => [
+        name,
+        {
+          priority: root.style.getPropertyPriority(name),
+          value: root.style.getPropertyValue(name),
+        },
+      ]),
+    );
+
+    root.setAttribute("data-ds-theme", resolvedTheme);
+    root.classList.toggle("dark", resolvedTheme === "dark");
+    root.style.colorScheme = resolvedTheme;
+    for (const name of previewStyle.style) {
+      root.style.setProperty(
+        name,
+        previewStyle.style.getPropertyValue(name),
+        previewStyle.style.getPropertyPriority(name),
+      );
+    }
+
+    return () => {
+      for (const [name, previous] of previousAppearance) {
+        if (previous.value) root.style.setProperty(name, previous.value, previous.priority);
+        else root.style.removeProperty(name);
+      }
+      root.style.colorScheme = previousColorScheme;
+      if (previousTheme === null) root.removeAttribute("data-ds-theme");
+      else root.setAttribute("data-ds-theme", previousTheme);
+      root.classList.toggle("dark", wasDark);
+    };
+  }, [appearance, resolvedTheme]);
+
   const swatches = useMemo(
     () =>
       colorTokens.map(([label, token]) => ({
@@ -217,14 +307,14 @@ export function DesignSystemPreview() {
 
           <section className="ds-preview-section">
             <SectionHeading eyebrow="02 · Typography" title="Platform system faces, Mac rhythm" />
-            <div className="ds-specimen-card ds-type-specimen">
+            <Card className="ds-type-specimen">
               {typeRoles.map(([role, metric, className]) => (
                 <div className="ds-type-row" key={role}>
                   <span className="ds-type-meta"><strong>{role}</strong><code>{metric}</code></span>
                   <span className={className}>C2 stays compact and legible.</span>
                 </div>
               ))}
-            </div>
+            </Card>
             <div className="ds-inline-facts">
               <span><strong>macOS</strong> SF Pro · SF Mono</span>
               <span><strong>Windows</strong> Segoe UI · Cascadia / Consolas</span>
@@ -235,7 +325,7 @@ export function DesignSystemPreview() {
           <section className="ds-preview-section ds-two-column">
             <div>
               <SectionHeading eyebrow="03 · Spacing" title="A finite 2–32 scale" />
-              <div className="ds-specimen-card ds-spacing-list">
+              <Card className="ds-spacing-list">
                 {spacingRoles.map(([role, value]) => (
                   <div className="ds-spacing-row" key={role}>
                     <span>{role}</span>
@@ -243,11 +333,11 @@ export function DesignSystemPreview() {
                     <code>{value}px</code>
                   </div>
                 ))}
-              </div>
+              </Card>
             </div>
             <div>
               <SectionHeading eyebrow="04 · Geometry" title="Four radii, three icon sizes" />
-              <div className="ds-specimen-card ds-geometry-grid">
+              <Card className="ds-geometry-grid">
                 <div className="ds-radius-sample ds-radius-micro"><span>4</span><small>micro</small></div>
                 <div className="ds-radius-sample ds-radius-control"><span>8</span><small>control</small></div>
                 <div className="ds-radius-sample ds-radius-module"><span>12</span><small>module</small></div>
@@ -258,7 +348,7 @@ export function DesignSystemPreview() {
                   <Search className="ds-icon-control" />
                   <span>12 · 14 · 16</span>
                 </div>
-              </div>
+              </Card>
             </div>
           </section>
 
@@ -275,100 +365,265 @@ export function DesignSystemPreview() {
           <section className="ds-preview-section" id="components">
             <SectionHeading eyebrow="06 · Components" title="Shared controls carry every state" />
             <div className="ds-component-grid">
-              <div className="ds-specimen-card ds-control-specimen">
+              <Card className="ds-control-specimen">
                 <span className="ds-specimen-label">Buttons</span>
                 <div className="ds-control-row">
-                  <button className="ds-button ds-button-primary" type="button">Continue</button>
-                  <button className="ds-button ds-button-secondary" type="button">Save draft</button>
-                  <button className="ds-button ds-button-ghost" type="button">Cancel</button>
-                  <button className="ds-button ds-button-destructive" type="button">Delete</button>
-                  <button className="ds-button ds-button-secondary" disabled type="button">Disabled</button>
+                  <Button type="button">Continue</Button>
+                  <Button variant="secondary" type="button">Save draft</Button>
+                  <Button variant="ghost" type="button">Cancel</Button>
+                  <Button variant="destructive" type="button">Delete</Button>
+                  <Button variant="secondary" disabled type="button">Disabled</Button>
+                  <Button disabled><Spinner data-icon="inline-start" />Saving</Button>
                 </div>
                 <p>One primary action per area. Outline is not a variant.</p>
-              </div>
+              </Card>
 
-              <div className="ds-specimen-card ds-control-specimen">
+              <Card className="ds-control-specimen">
                 <span className="ds-specimen-label">Inputs</span>
-                <label className="ds-field-label" htmlFor="preview-search">Project</label>
-                <div className="ds-input-shell">
-                  <Search className="ds-icon-list" />
-                  <input id="preview-search" defaultValue="C2" />
-                  <kbd>⌘K</kbd>
-                </div>
-                <div className="ds-input-shell ds-static-focus">
-                  <input aria-label="Keyboard focus example" readOnly value="Keyboard focus" />
-                </div>
-                <div className="ds-input-shell ds-input-invalid">
-                  <input
+                <Field>
+                  <FieldLabel htmlFor="preview-project">Project</FieldLabel>
+                  <Input id="preview-project" defaultValue="C2" />
+                </Field>
+                <Input aria-label="Compact filter example" defaultValue="Filter providers" size="compact" />
+                <Field data-invalid>
+                  <FieldLabel htmlFor="preview-invalid-token">Token</FieldLabel>
+                  <Input
                     aria-describedby="preview-error"
                     aria-invalid="true"
-                    aria-label="Invalid token example"
+                    id="preview-invalid-token"
                     onChange={(event) => setInvalidValue(event.target.value)}
                     value={invalidValue}
                   />
-                </div>
-                <span className="ds-error-text" id="preview-error">Use a semantic token.</span>
-              </div>
+                  <FieldError id="preview-error">Use a semantic token.</FieldError>
+                </Field>
+                <Textarea
+                  aria-label="Compact multiline example"
+                  size="compact"
+                  rows={2}
+                  defaultValue="Add a concise implementation note."
+                />
+              </Card>
 
-              <div className="ds-specimen-card ds-control-specimen">
+              <Card className="ds-control-specimen">
                 <span className="ds-specimen-label">Rows & status</span>
-                <button className="ds-select-row" type="button">
-                  <span><span className="ds-provider-icon">C</span> Current provider</span>
-                  <span>Codex <ChevronDown className="ds-icon-inline" /></span>
-                </button>
-                <label className="ds-check-row">
-                  <input defaultChecked type="checkbox" />
-                  <span><Check className="ds-icon-inline" /></span>
-                  Keep the panel visible
-                </label>
+                <Select
+                  value={selectedProvider}
+                  onValueChange={(value) => value && setSelectedProvider(value)}
+                >
+                  <SelectTrigger aria-label="Current provider" className="w-full">
+                    <SelectValue>
+                      {selectedProvider === "claude" ? "Claude Code" : "Codex"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="codex">Codex</SelectItem>
+                      <SelectItem value="claude">Claude Code</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <Field orientation="horizontal">
+                  <Checkbox defaultChecked id="preview-keep-panel" />
+                  <FieldLabel htmlFor="preview-keep-panel">Keep the panel visible</FieldLabel>
+                </Field>
                 <div className="ds-status-row"><ActivityOrb state="searching" visualSize={14} aria-hidden="true" /> Refreshing provider quota</div>
                 <div className="ds-status-row"><ActivityOrb state="working" visualSize={14} aria-hidden="true" /> Agent working</div>
                 <div className="ds-status-row"><ActivityOrb state="listening" visualSize={14} aria-hidden="true" /> Listening to voice input</div>
                 <div className="ds-status-row"><ActivityOrb state="shaping" visualSize={14} aria-hidden="true" /> Structuring transcript</div>
                 <div className="ds-status-row ds-status-warning"><AlertTriangle className="ds-icon-list" /> Quota unavailable</div>
-              </div>
+              </Card>
 
-              <div className="ds-layer-stage">
-                <div className="ds-dialog-demo">
-                  <div className="ds-dialog-title-row">
-                    <div><strong>Provider quota</strong><span>Current provider: Codex</span></div>
-                    <button aria-label="Help" className="ds-icon-button" type="button"><CircleHelp className="ds-icon-control" /></button>
-                  </div>
-                  <div className="ds-progress"><span /></div>
-                  <div className="ds-dialog-copy"><strong>5-hour limit</strong><span>72% remaining · resets in 1h 42m</span></div>
-                  <div className="ds-dialog-actions">
-                    <button className="ds-button ds-button-ghost" type="button">Refresh</button>
-                    <button className="ds-button ds-button-secondary" type="button">Done</button>
-                  </div>
+              <Card className="ds-control-specimen">
+                <span className="ds-specimen-label">Business patterns</span>
+                <ViewSwitcher
+                  label="Provider view"
+                  value={selectedBusinessView}
+                  options={[
+                    { value: "all", label: "All", count: 4 },
+                    { value: "ready", label: "Ready", count: 2 },
+                    { value: "blocked", label: "Blocked", count: 1, disabled: true },
+                  ]}
+                  onValueChange={setSelectedBusinessView}
+                />
+                <div className="flex items-center gap-2 text-metadata text-content-muted">
+                  <span>Active providers</span>
+                  <Separator className="flex-1" />
+                  <span>2</span>
                 </div>
-              </div>
+                <div className="flex flex-col gap-1">
+                  <SelectableRow
+                    selected={selectedProvider === "codex"}
+                    label="Codex"
+                    description="Default provider for this project"
+                    leading={<span className="ds-provider-icon">C</span>}
+                    meta={<StatusBadge tone="success">Active</StatusBadge>}
+                    onSelect={() => setSelectedProvider("codex")}
+                  />
+                  <SelectableRow
+                    selected={selectedProvider === "claude"}
+                    label="Claude Code"
+                    description="Available through the desktop host"
+                    leading={<span className="ds-provider-icon">A</span>}
+                    onSelect={() => setSelectedProvider("claude")}
+                  />
+                  <SelectableRow
+                    selected={false}
+                    disabled
+                    label="Unavailable provider"
+                    description="This deliberately long description checks wrapping without widening a compact picker or hiding the reason the provider is unavailable."
+                    onSelect={() => {}}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusBadge tone="neutral">Paused</StatusBadge>
+                  <StatusBadge tone="success">Active</StatusBadge>
+                  <StatusBadge tone="warning">Pending</StatusBadge>
+                  <StatusBadge tone="destructive">Failed</StatusBadge>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <StatusIndicator tone="neutral" label="Unavailable" />
+                  <StatusIndicator tone="success" label="Ready" />
+                  <StatusIndicator tone="warning" label="Unverified" />
+                  <StatusIndicator tone="destructive" label="Failed" />
+                </div>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+                  <span className="text-metadata text-content-muted">72%</span>
+                  <QuotaProgress label="Healthy quota remaining" remainingPercent={72} />
+                  <span className="text-metadata text-content-muted">18%</span>
+                  <QuotaProgress label="Low quota remaining" remainingPercent={18} />
+                  <span className="text-metadata text-content-muted">4%</span>
+                  <QuotaProgress label="Critical quota remaining" remainingPercent={4} />
+                  <span className="text-metadata text-content-muted">Rail</span>
+                  <QuotaProgress label="Rail quota remaining" remainingPercent={72} density="rail" />
+                </div>
+                <SettingRow
+                  label="Project model"
+                  description="Inherited by new sessions in this project."
+                  surface="card"
+                  controlSize="wide"
+                >
+                  <StatusBadge tone="neutral">Provider default</StatusBadge>
+                </SettingRow>
+                <SettingToggle
+                  label="Capture useful context"
+                  description="Save durable context after a completed task."
+                  checked={memoryCapture}
+                  onCheckedChange={setMemoryCapture}
+                />
+                <SettingToggle
+                  label="Unavailable setting"
+                  description="Disabled labels and controls share one state."
+                  checked={false}
+                  disabled
+                  onCheckedChange={() => {}}
+                />
+                <LoadFeedback
+                  state="error"
+                  message="Provider catalog is unavailable."
+                  retryLabel="Retry"
+                  onRetry={() => {}}
+                />
+                <p>Domain states map to semantic tones inside each feature.</p>
+              </Card>
+
+              <Card className="ds-control-specimen">
+                <span className="ds-specimen-label">Navigation & layers</span>
+                <Tabs defaultValue="quota">
+                  <TabsList>
+                    <TabsTrigger value="quota">Quota</TabsTrigger>
+                    <TabsTrigger value="history">History</TabsTrigger>
+                  </TabsList>
+                  <TabsContent className="text-metadata text-content-muted" value="quota">
+                    72% remaining · resets in 1h 42m
+                  </TabsContent>
+                  <TabsContent className="text-metadata text-content-muted" value="history">
+                    Seven-day provider usage
+                  </TabsContent>
+                </Tabs>
+                <div className="flex flex-wrap gap-2">
+                  <Popover>
+                    <PopoverTrigger render={<Button variant="secondary" type="button" />}>
+                      Provider summary
+                    </PopoverTrigger>
+                    <PopoverContent align="start">
+                      <PopoverHeader>
+                        <PopoverTitle>Codex</PopoverTitle>
+                        <PopoverDescription>Ready for project tasks.</PopoverDescription>
+                      </PopoverHeader>
+                    </PopoverContent>
+                  </Popover>
+                  <Tooltip>
+                    <TooltipTrigger render={<Button variant="ghost" type="button" />}>
+                      Usage reset
+                    </TooltipTrigger>
+                    <TooltipContent>Available after the current limit resets</TooltipContent>
+                  </Tooltip>
+                  <Button
+                    onClick={() => {
+                      const previousTheme = themeMode;
+                      setThemeMode("dark");
+                      toast("Dark theme enabled", "success", {
+                        label: "Undo",
+                        run: () => setThemeMode(previousTheme),
+                      });
+                    }}
+                    variant="secondary"
+                    type="button"
+                  >
+                    Use dark theme
+                  </Button>
+                  <Button onClick={() => setDialogOpen(true)} type="button">Open quota details</Button>
+                </div>
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-module-inset">
+                        <CircleHelp /> Provider quota
+                      </DialogTitle>
+                      <DialogDescription>Current provider: Codex</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-module-inset">
+                      <QuotaProgress label="Provider quota remaining" remainingPercent={72} />
+                      <strong className="text-body">5-hour limit</strong>
+                      <span className="text-metadata text-content-muted">72% remaining · resets in 1h 42m</span>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="ghost" type="button">Refresh</Button>
+                      <Button onClick={() => setDialogOpen(false)} variant="secondary" type="button">Done</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </Card>
             </div>
           </section>
 
           <section className="ds-preview-section ds-two-column">
             <div>
               <SectionHeading eyebrow="07 · Motion" title="Four durations, no theatre" />
-              <div className="ds-specimen-card ds-motion-list">
+              <Card className="ds-motion-list">
                 {motionRoles.map(([role, duration, use]) => (
                   <div className="ds-motion-row" key={role}>
                     <span className={`ds-motion-dot ds-motion-${role.toLowerCase()}`} />
                     <strong>{role}</strong><code>{duration}</code><span>{use}</span>
                   </div>
                 ))}
-              </div>
+              </Card>
             </div>
             <div id="accessibility">
               <SectionHeading eyebrow="08 · Accessibility" title="OS preferences stay in control" />
-              <div className="ds-specimen-card ds-access-list">
+              <Card className="ds-access-list">
                 <div><Check className="ds-icon-list" /><span><strong>Reduced motion</strong><small>All four semantic durations collapse.</small></span></div>
                 <div><Check className="ds-icon-list" /><span><strong>Increased contrast</strong><small>Muted text and control fills strengthen.</small></span></div>
                 <div><Check className="ds-icon-list" /><span><strong>Reduced transparency</strong><small>Sidebar falls back to a solid plane.</small></span></div>
-                <label className="ds-bold-toggle">
-                  <input checked={boldText} onChange={(event) => setBoldText(event.target.checked)} type="checkbox" />
-                  <span><Check className="ds-icon-inline" /></span>
-                  Simulate bold text
-                </label>
-              </div>
+                <Field orientation="horizontal">
+                  <Checkbox
+                    checked={boldText}
+                    id="preview-bold-text"
+                    onCheckedChange={(checked) => setBoldText(checked === true)}
+                  />
+                  <FieldLabel htmlFor="preview-bold-text">Simulate bold text</FieldLabel>
+                </Field>
+              </Card>
             </div>
           </section>
 

@@ -1,15 +1,17 @@
 # C2 desktop design system
 
-Status: **0.9.0 candidate**. The system is structurally frozen; it becomes 1.0.0 only after the
-preview has been checked on Windows with Segoe UI/Cascadia in light and dark mode.
+Status: **0.9.0 candidate**. The visual foundation is structurally frozen; proven business
+patterns may still be added through the admission rules below. The system becomes 1.0.0 only after
+the preview has been checked on Windows with Segoe UI/Cascadia in light and dark mode.
 
 This document applies to `apps/desktop` only. The website has its own system; only brand and logo
 assets may be shared. The machine-readable source is
 `apps/desktop/src/design/tokens.css`. Do not copy token values into TypeScript.
 
-Phase 1 establishes the system, development preview, automated contrast checks, and a no-growth
-baseline for existing visual debt. It intentionally does not partially restyle the production UI.
-Phase 2 migrates every desktop surface in one coordinated change and removes the legacy baseline.
+Phase 1 established the system, development preview, automated contrast checks, and a no-growth
+baseline for existing visual debt. Phase 2 migrates production UI in coherent feature cohorts.
+Each cohort lands or reuses the shared pattern first, replaces every selected legacy call site, and
+ratchets the baseline down. The baseline is removed only after the final cohort reaches zero.
 
 Open the development-only preview with:
 
@@ -45,10 +47,112 @@ There are three levels, in this order:
 3. Shared-component aliases such as `--ds-button-height` and `--ds-dialog-radius` belong only to
    reusable primitives.
 
+Tailwind v4 is the public styling API for product TypeScript. `src/styles.css` maps approved
+semantic and shared-component tokens through `@theme inline`; product `.ts`/`.tsx` files consume
+the resulting named utilities and never spell `--ds-*` directly. This includes arbitrary-variable
+forms such as `rounded-(--ds-radius-control)` and inline styles such as
+`var(--ds-color-surface)`. Add a semantic mapping to the theme bridge when a role is missing.
+
+| contract | named Tailwind examples |
+| --- | --- |
+| surface and content | `bg-canvas`, `bg-surface`, `bg-raised`, `text-content`, `text-content-muted` |
+| status and interaction fill | `text-status-success`, `text-status-warning`, `bg-fill-hover` |
+| geometry and control size | `rounded-control`, `rounded-module`, `h-control-field`, `h-titlebar`, `h-panel-strip`, `size-icon-control` |
+| layer and motion | `shadow-raised`, `shadow-modal`, `duration-feedback`, `ease-enter` |
+| interaction focus | `focus-visible:focus-ring` |
+| clipped row focus | `focus-visible:focus-ring-inset` |
+
+`Button` owns this choice through `focusStyle="default" | "inset"`; callers do not layer competing focus utilities onto it.
+
+Token and hand-written CSS infrastructure may consume semantic custom properties directly. The
+runtime appearance controller and the internal token preview are file-scoped exceptions because
+they write or enumerate token names rather than style a product component.
+
 Business components may override layout—width, flex/grid, alignment, positioning, responsive
 behavior, and semantic spacing. They may not override typography, color, radius, elevation,
 control height, motion, or focus appearance. A missing visual treatment becomes a semantic variant
 in the shared primitive, not a local class string.
+
+## System composition
+
+The desktop system has five product-facing parts and one verification layer:
+
+1. **Foundation tokens** are private raw inputs in `src/design/tokens.css`.
+2. **Semantic tokens** name color, type, spacing, geometry, elevation, and motion by purpose.
+3. **UI primitives** in `src/components/ui` own styling and interaction contracts. Product code
+   imports each primitive directly; there is no barrel and no direct Base UI import.
+4. **Business components** in `src/components/business` compose primitives into repeated C2
+   patterns. They accept semantic content and behavior, not visual escape hatches.
+5. **Product surfaces** own domain state, copy, data loading, and feature-specific layout.
+6. **Preview, tests, and `check:design`** make the contract visible and prevent new local styling.
+
+`src/main.tsx` loads `styles.css` once for every renderer path; that Tailwind entry imports
+`tokens.css`. Feature modules must not import the global token source as a side effect of mounting
+a particular screen.
+
+A business component is admitted only when at least two real callers already implement the same
+pattern. Its interface must remove visual and accessibility decisions from callers, while domain
+state mapping remains in the feature. The change that introduces it also replaces the proven
+callers; do not add speculative wrappers or maintain two shared implementations of one pattern.
+
+Transient loading motion uses the shared `Spinner` primitive. It is decorative inside a labelled
+button or an existing status region; pass `label` only when the spinner itself owns the status
+announcement. Product code must not add `animate-spin` to Lucide icons. Compose `Button` and
+`Spinner` for busy actions rather than adding a loading prop to the button. `ActivityOrb` remains
+reserved for agent, provider, search, voice, and shaping activity; `LoadFeedback` owns content-
+blocking loading and recoverable failures.
+
+Anchored rich content uses the shared `Popover` even when feature state controls whether it is
+open. The primitive owns the trigger relationship, portal, focus handling, Escape, and outside-
+press dismissal; the feature owns only its domain state, content, anchor, width, and alignment.
+External controllers that already own positioning or keyboard selection, such as BlockNote's `@`
+menu and the Usage chart hit targets, keep that controller but use the same solid raised surface,
+semantic radius, and raised elevation. They do not recreate glass, static borders, decorative
+rings, arbitrary radii, or arbitrary shadows.
+
+Product code uses the shared `Textarea` for multiline input. Its default density serves forms and
+dialogs; `compact` serves embedded editors and inline comment cards. Feature code owns rows,
+placeholders, values, and validation, but not local radius, fill, focus ring, typography, or
+padding. Native `<textarea>` belongs only inside the primitive.
+
+Single-line forms use the shared `Input`, `Select`, `Checkbox`, and `Field` primitives. Default
+inputs and select triggers are 32px; compact inputs and small select triggers are 28px. Checkbox
+visuals remain 16px with an expanded pointer target. `FieldGroup` owns the 16px form-section gap,
+while `Field` owns label, description, invalid, and error relationships. Every `SelectItem` is
+composed inside `SelectGroup`; product surfaces do not place items directly in `SelectContent`.
+`Command` uses a 32px search field and 28px menu rows. The development preview renders these real
+shared components rather than maintaining CSS lookalikes.
+
+Viewport-bound dialogs use `max-h-dialog-max`; their bounded file, issue, and preview collections
+use `max-h-dialog-content`. Both resolve through the Tailwind theme bridge, so product code does not
+repeat viewport calculations or read shared-component variables directly. Scrollable rows use the
+shared `ScrollArea` and an inset-focus `Button` row; the primitive owns radius, focus, and scrollbar
+visuals while the feature keeps its result content and keyboard-selection state.
+
+Structural divisions use the shared `Separator` rather than local `border-b`, `border-t`, or
+inline-edge border utilities. The separator is semantic when it divides content; use
+`aria-hidden` only when an adjacent resize handle already owns the separator role. Table, diff,
+code, document, and native scrollbar structure remain file-scoped content exceptions.
+
+The shared business set is:
+
+| module | owns | current callers |
+| --- | --- | --- |
+| `PageHeader` | page heading hierarchy, description measure, responsive action placement | Automations, Plugin Hub, Scene Studio, Task Board |
+| `SearchField` | labelled search input, icon geometry, optional accessible clear action | Automations, Plugin Hub, Task Board, Pull Requests, Plugin Manager, Memory, Trajectory |
+| `Empty` primitive | empty-state hierarchy, media, description, and action composition | Automations, Plugin Hub, Pull Requests |
+| `SelectableRow` | compact picker choice, visible selection mark, accessible selected/disabled state, description and metadata layout | Composer mode, memory, collaboration, worktree, provider, and model pickers; Scene picker; Checkout picker |
+| `StatusBadge` | neutral, success, warning, and destructive status-pill treatment | Automations, Turn Card, Plugin Manager and bundle administration, Scene chip/popover, GitHub pull-request detail |
+| `SettingToggle` | visible label and description association, immediate boolean control, disabled presentation, and row layout | Project actions, Memory, Sync, Project scheduling, Appshots, Pets |
+
+`SelectableRow` is deliberately limited to persistent selection inside compact pickers. Radio or
+checkbox questions, navigation/current-page rows, disclosure rows, and master-detail list rows keep
+their own interaction contracts. `StatusBadge` is limited to labelled pills; dot-and-label status
+indicators and metadata such as source, version, or category are not variants of it. Domain values
+such as `failed`, `paused`, or `trusted` are mapped to its small semantic tone set inside the owning
+feature rather than taught to the shared component. `SettingToggle` is limited to immediately
+applied boolean preferences. Form selections, batch selection, tri-state policy, and composite rows
+with disclosure or secondary actions retain their checkbox, select, or feature-owned contracts.
 
 ## Color and surfaces
 
@@ -164,7 +268,28 @@ invalid are added where meaningful.
 
 Button variants are Primary, Secondary, Ghost, and Destructive. Secondary is a neutral elevated
 surface, Ghost has no shadow, and Destructive is red only for a destructive action. Outline is not
-a variant.
+a variant. Default buttons are 28px, mini and icon buttons are 24px, and the 32px field size is
+reserved for an action that must align with an input or select. Size changes never introduce a
+different radius.
+
+Tabs provide three presentations without changing their keyboard or panel contract: Default is a
+32px segmented container with 28px triggers, Line is content navigation with a 2px selection mark,
+and Toolbar is a 28px application strip. Tabs use `rounded-control`, semantic fills, and the shared
+focus ring; callers may control width, overflow, and orientation only.
+
+Dialog and Alert Dialog share `bg-overlay`, `bg-modal`, `rounded-modal`, `shadow-modal`, a 24px
+gutter, and the same header/footer typography and spacing. Callers may choose a semantic maximum
+width or scrolling behavior, but do not rebuild the overlay, radius, elevation, or close control.
+
+Card owns the solid `surface` plane, 12px radius, surface elevation, 12px inset, title,
+description, content, and footer hierarchy. Product callers compose those parts and may change
+layout, but do not restate the card fill, radius, elevation, typography, or inset.
+
+Popover, Tooltip, and Toast share the solid `raised` plane and raised elevation without a
+decorative border or translucent glass. Popover uses the 12px module radius and 12px inset;
+Tooltip uses the 8px control radius and waits 600ms before the first open, with a 400ms instant
+phase between related triggers. Toast uses shared Buttons for actions, announces errors as alerts,
+and announces other outcomes as status messages. Callers own content, anchoring, and layout only.
 
 Inputs use a neutral surface plus `elevation-surface`, without a border. Rest, hover, keyboard
 focus, invalid, disabled, read-only, and loading all preserve the 32px field contract.
@@ -236,14 +361,19 @@ bun test
 bun run build
 ```
 
-The checker reads CSS tokens directly, verifies declared contrast pairs, and scans TSX/CSS for
-raw color, arbitrary values, off-scale type, spacing, radii, shadow, motion, borders, direct
-foundation use, visual `!important`, and non-contract control heights. Errors include file, line,
-matched value, and the expected replacement.
+The checker reads CSS tokens directly, verifies declared contrast pairs, and scans product CSS,
+JavaScript, TypeScript, and TSX for raw color, arbitrary values, off-scale type and Tailwind
+spacing, radii, shadow, motion, borders, direct design-token or foundation-token use, visual
+`!important`, and non-contract control heights. Errors include file, line, matched value, and the
+expected replacement. Renderer builds also inspect compiled CSS for representative semantic
+selectors and unresolved Tailwind token rules. Physical and logical spacing directions share the
+same scale; arbitrary border/ring values and pointer-focus rings are debt. The scanner admits only
+the exact 2px keyboard-focus and invalid-state forms defined by the state contract.
 
-`scripts/design-system-baseline.json` records only pre-Phase-1 debt by rule, path, and value. CI
-allows the count to decrease but never increase. New system files have zero baseline allowance.
-Phase 2 removes all recorded violations and deletes the baseline in the same migration.
+`scripts/design-system-baseline.json` records the remaining accepted debt by rule, path, value,
+and source-context occurrence. CI allows debt to decrease but rejects both count growth and moving
+an accepted value into new code. New system files have zero baseline allowance. Each Phase 2
+cohort removes the fingerprints it owns; the final cohort deletes the empty baseline.
 
 Pixel-diff CI is intentionally deferred because platform system-font rasterization differs. CI
 enforces rules and contrast; the development preview is manually checked in light, dark, narrow,

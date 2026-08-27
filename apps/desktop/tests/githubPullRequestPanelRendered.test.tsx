@@ -98,6 +98,7 @@ describe("GitHubPullRequestPanel", () => {
     await waitFor(() => expect(view.container.querySelector("[data-github-pr='42']")).not.toBeNull());
     expect(text(view.container, "feat: review from the dock")).not.toBeNull();
     expect(text(view.container, "All passed")).not.toBeNull();
+    expect(view.container.querySelector('[data-slot="status-badge"]')?.getAttribute("data-tone")).toBe("success");
 
     click(button(view.container, "Open PR #42 on GitHub"));
     await waitFor(() => expect(opened).toEqual([pullRequest.url]));
@@ -133,6 +134,27 @@ describe("GitHubPullRequestPanel", () => {
       </I18nProvider>,
     );
     await waitFor(() => expect(text(view.container, "No pull request is linked to codex/no-pr.")).not.toBeNull());
+    view.unmount();
+  });
+
+  test("keeps draft pull requests visually neutral", async () => {
+    activateDom();
+    const api = {
+      sourceControl: async () => sourceControl,
+      currentPullRequest: async () => ({ ...pullRequest, is_draft: true }),
+      pullRequestDiff: async () => ({ text: "", truncated: false }),
+      review: async () => {},
+      merge: async () => {},
+      open: async () => {},
+    };
+    const view = mount(
+      <I18nProvider>
+        <GitHubPullRequestPanel cwd="/repo" branch="codex/review-dock" api={api} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(view.container.querySelector("[data-github-pr='42']")).not.toBeNull());
+    expect(view.container.querySelector('[data-slot="status-badge"]')?.getAttribute("data-tone")).toBe("neutral");
     view.unmount();
   });
 });

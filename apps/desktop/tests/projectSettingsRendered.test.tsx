@@ -72,11 +72,15 @@ describe("Project settings", () => {
     expect(view.container.textContent).toContain("Danger");
     expect(view.container.textContent).toContain("GPT-5.6 Sol");
     expect(view.container.textContent).toContain("Low");
-    expect(view.container.querySelectorAll(".project-settings-control").length).toBeGreaterThanOrEqual(8);
+    expect(
+      view.container.querySelectorAll('[data-slot="setting-row"][data-control-size="wide"]').length,
+    ).toBeGreaterThanOrEqual(8);
     expect(view.container.querySelector("[data-project-icon-picker]")).not.toBeNull();
     expect(view.container.querySelector("[data-project-icon-picker] [data-project-icon]")?.getAttribute("style"))
       .toContain("width: 24px");
-    expect(view.container.querySelector('[data-slot="switch"][aria-label="Scene schedules"]')).not.toBeNull();
+    const scheduling = [...view.container.querySelectorAll('[data-slot="setting-toggle"]')]
+      .find((row) => row.querySelector('[data-slot="setting-row-label"]')?.textContent === "Scene schedules");
+    expect(scheduling?.querySelector('[data-slot="switch"]')).not.toBeNull();
 
     const name = view.container.querySelector('input[aria-label="Name"]');
     await reactAct(async () => {

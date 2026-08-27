@@ -40,9 +40,9 @@ describe("desktop UI stack", () => {
     const badgeSource = read("src/components/ui/badge.tsx");
     const productSource = sourceFiles("src").map(read).join("\n");
 
-    expect(cardSource).toContain("rounded-(--ds-card-radius)");
+    expect(cardSource).toContain("rounded-card");
     expect(cardSource).not.toContain("rounded-xl");
-    expect(badgeSource).toContain("rounded-(--ds-radius-micro)");
+    expect(badgeSource).toContain("rounded-micro");
     expect(badgeSource).not.toContain("rounded-full");
     expect(productSource).not.toContain("--ds-radius-panel");
   });

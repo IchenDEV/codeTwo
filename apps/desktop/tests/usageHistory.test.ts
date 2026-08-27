@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { UsageHistory } from "../src/bridge";
-import { fmtCost, fmtReset, fmtTokens, seriesColor, stackHistory } from "../src/usage/usageMath";
+import { fmtCost, fmtReset, fmtTokens, seriesColorClass, stackHistory } from "../src/usage/usageMath";
 
 const HOUR = 3600;
 
@@ -46,12 +46,12 @@ describe("stackHistory", () => {
   });
 });
 
-describe("seriesColor", () => {
+describe("seriesColorClass", () => {
   test("color follows the provider identity, never its position", () => {
-    expect(seriesColor("claude")).toBe("var(--ds-color-primary)");
-    expect(seriesColor("codex")).toBe("var(--ds-color-success)");
+    expect(seriesColorClass("claude")).toBe("text-primary");
+    expect(seriesColorClass("codex")).toBe("text-status-success");
     // Unknown providers share the muted fallback slot.
-    expect(seriesColor("something-new")).toBe("var(--ds-color-text-muted)");
+    expect(seriesColorClass("something-new")).toBe("text-content-muted");
   });
 });
 

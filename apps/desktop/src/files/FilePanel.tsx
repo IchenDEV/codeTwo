@@ -20,6 +20,7 @@ import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ContextMenu,
@@ -420,8 +421,8 @@ export function FilePanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* h-9 matches the viewer's file-tab strip across the border — one continuous bar. */}
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
+      {/* The shared panel strip matches the viewer's file tabs across one continuous separator. */}
+      <div className="flex h-panel-strip shrink-0 items-center gap-1 px-2">
         <Input
           className="h-(--ds-control-mini) text-hint"
           placeholder={t("files.filter")}
@@ -465,6 +466,7 @@ export function FilePanel({
           <TooltipContent>{t("files.refresh")}</TooltipContent>
         </Tooltip>
       </div>
+      <Separator />
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-1">

@@ -178,7 +178,9 @@ describe("UsagePanel", () => {
     const meter = view.container.querySelector('[role="progressbar"]');
     expect(meter?.getAttribute("aria-valuenow")).toBe("73");
     expect(meter?.getAttribute("aria-label")).toContain("Capacity remaining");
-    expect(meter?.firstElementChild?.getAttribute("style")).toContain("width: 73%");
+    expect(meter?.getAttribute("data-tone")).toBe("success");
+    expect(meter?.querySelector('[data-slot="progress-indicator"]')?.getAttribute("style"))
+      .toContain("width: 73%");
 
     view.unmount();
   });

@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
 
 const DEFAULT_OPTIONS: WorkspaceSearchOptions = {
   regex: false,
@@ -62,6 +61,7 @@ export function WorkspaceSearchModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const queryInputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
   const resultRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -153,8 +153,9 @@ export function WorkspaceSearchModal({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="flex max-h-[86dvh] min-h-0 flex-col sm:max-w-3xl"
+        className="flex max-h-dialog-max min-h-0 flex-col sm:max-w-3xl"
         aria-busy={visibleLoading}
+        initialFocus={queryInputRef}
       >
         <DialogHeader>
           <DialogTitle>Search workspace contents</DialogTitle>
@@ -165,11 +166,11 @@ export function WorkspaceSearchModal({
             Search text
           </label>
           <Input
+            ref={queryInputRef}
             id="workspace-content-query"
             type="search"
             value={query}
             maxLength={256}
-            autoFocus
             autoComplete="off"
             spellCheck={false}
             aria-describedby="workspace-search-status"
@@ -181,7 +182,7 @@ export function WorkspaceSearchModal({
             <Button
               type="button"
               size="sm"
-              variant={options.case_sensitive ? "default" : "outline"}
+              variant={options.case_sensitive ? "default" : "secondary"}
               aria-pressed={options.case_sensitive}
               onClick={() => toggle("case_sensitive")}
             >
@@ -190,7 +191,7 @@ export function WorkspaceSearchModal({
             <Button
               type="button"
               size="sm"
-              variant={options.whole_word ? "default" : "outline"}
+              variant={options.whole_word ? "default" : "secondary"}
               aria-pressed={options.whole_word}
               onClick={() => toggle("whole_word")}
             >
@@ -199,7 +200,7 @@ export function WorkspaceSearchModal({
             <Button
               type="button"
               size="sm"
-              variant={options.regex ? "default" : "outline"}
+              variant={options.regex ? "default" : "secondary"}
               aria-pressed={options.regex}
               onClick={() => toggle("regex")}
             >
@@ -210,7 +211,7 @@ export function WorkspaceSearchModal({
 
         <div
           id="workspace-search-status"
-          className="min-h-5 text-hint text-muted-foreground"
+          className="min-h-control-mini text-hint text-muted-foreground"
           role="status"
           aria-live="polite"
         >
@@ -234,15 +235,16 @@ export function WorkspaceSearchModal({
           <ul className="space-y-1" aria-label="Workspace search results">
             {matches.map((match, index) => (
               <li key={`${match.path}:${match.line}:${match.column}:${index}`}>
-                <button
+                <Button
                   ref={(node) => {
                     resultRefs.current[index] = node;
                   }}
                   type="button"
-                  className={cn(
-                    "block w-full min-w-0 rounded-md px-2.5 py-2 text-start outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring",
-                    activeIndex === index && "bg-accent/50",
-                  )}
+                  variant="selectable"
+                  size="row"
+                  focusStyle="inset"
+                  data-selected={activeIndex === index ? "true" : "false"}
+                  className="min-w-0 flex-col items-stretch gap-optical"
                   onFocus={() => setActiveIndex(index)}
                   onKeyDown={(event) => onResultKeyDown(event, index)}
                   onClick={() => openResult(match)}
@@ -256,7 +258,7 @@ export function WorkspaceSearchModal({
                   <span className="mt-0.5 block truncate font-mono text-hint text-muted-foreground">
                     {match.preview || "Blank matching line"}
                   </span>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>

@@ -49,6 +49,7 @@ import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ActivityOrb } from "@/components/ui/activity-orb";
+import { SelectableRow } from "@/components/business/selectable-row";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -225,47 +226,6 @@ function displayGitRef(reference: string | null | undefined): string | null {
     .replace(/^refs\/remotes\//, "");
 }
 
-function CheckoutOptionRow({
-  selected,
-  label,
-  accessibleLabel,
-  status,
-  detail,
-  disabled = false,
-  onClick,
-}: {
-  selected: boolean;
-  label: string;
-  accessibleLabel: string;
-  status: string;
-  detail: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  const detailId = useId();
-  return (
-    <button
-      type="button"
-      aria-label={accessibleLabel}
-      aria-describedby={detailId}
-      aria-pressed={selected}
-      disabled={disabled}
-      onClick={onClick}
-      title={detail}
-      className={cn(
-        "flex h-(--ds-control-field) w-full items-center gap-3 rounded-(--ds-radius-control) px-2.5 text-left outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring",
-        selected ? "bg-foreground/[0.06] text-foreground" : "hover:bg-accent/50",
-        disabled && !selected && "cursor-not-allowed opacity-50 hover:bg-transparent",
-        disabled && selected && "cursor-default",
-      )}
-    >
-      <span className="min-w-0 flex-1 truncate text-ui">{label}</span>
-      <span className="shrink-0 text-fine text-muted-foreground">{status}</span>
-      <span id={detailId} className="sr-only">{detail}</span>
-    </button>
-  );
-}
-
 /**
  * The persistent checkout control. It keeps execution location separate from source control, and
  * only presents baselines the engine can actually materialize.
@@ -320,13 +280,13 @@ export function CheckoutBar({
   return (
     <div
       data-checkout-bar
-      className="relative z-0 mx-5 mt-2 flex min-h-(--ds-control-field) min-w-0 items-center rounded-(--ds-radius-module) bg-muted/30 px-1 py-1 text-hint text-muted-foreground ring-[0.5px] ring-foreground/[0.07]"
+      className="relative z-0 mx-page mt-2 flex min-h-control-field min-w-0 items-center rounded-module bg-fill-quiet px-1 py-1 text-hint text-muted-foreground"
     >
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={<button
             type="button"
-            className="flex h-(--ds-control-normal) min-w-0 shrink items-center gap-1.5 rounded-(--ds-radius-control) px-2 text-left outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-control min-w-0 shrink items-center gap-1.5 rounded-control px-2 text-left outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:focus-ring"
             title={t("checkout.choose")}
             aria-label={`${t("checkout.title")}: ${modeLabel}`}
             aria-expanded={open}
@@ -344,16 +304,16 @@ export function CheckoutBar({
         >
           {config.hasSession ? (
             <>
-              <CheckoutOptionRow
+              <SelectableRow
                 selected
                 disabled
                 label={selectedRef ?? (selectedKind == null ? projectLabel : modeLabel)}
-                accessibleLabel={modeLabel}
-                status={t("checkout.currentBadge")}
-                detail={config.activeWorktreeUnknown
+                accessibilityContext={modeLabel}
+                meta={t("checkout.currentBadge")}
+                description={config.activeWorktreeUnknown
                   ? t("worktree.legacyUnknownHint")
                   : config.activeWorktreeBaseline?.display ?? projectDetail}
-                onClick={() => {}}
+                onSelect={() => {}}
               />
               <p className="px-2.5 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
                 {t("worktree.fixedForSession")}
@@ -361,15 +321,15 @@ export function CheckoutBar({
             </>
           ) : (
             <>
-              <CheckoutOptionRow
+              <SelectableRow
                 selected={config.worktreeBase == null}
                 label={projectLabel}
-                accessibleLabel={t("checkout.project")}
-                status={config.worktreeBase == null
+                accessibilityContext={t("checkout.project")}
+                meta={config.worktreeBase == null
                   ? t("checkout.currentBadge")
                   : t("checkout.projectBadge")}
-                detail={projectDetail}
-                onClick={() => {
+                description={projectDetail}
+                onSelect={() => {
                   config.onWorktreeBase(null);
                   setOpen(false);
                 }}
@@ -385,23 +345,23 @@ export function CheckoutBar({
                     ?? gatingReason
                     ?? t("worktree.unavailable");
                 return (
-                  <CheckoutOptionRow
+                  <SelectableRow
                     key={kind}
                     selected={config.worktreeBase === kind}
                     disabled={unavailable}
                     label={displayGitRef(option?.resolved?.ref) ?? (kind === "current"
                       ? t("checkout.currentRef")
                       : t("checkout.originRef"))}
-                    accessibleLabel={kind === "current"
+                    accessibilityContext={kind === "current"
                       ? t("checkout.currentRef")
                       : t("checkout.originRef")}
-                    status={unavailable
+                    meta={unavailable
                       ? t("checkout.unavailableBadge")
                       : config.worktreeBase === kind
                         ? t("checkout.currentBadge")
                         : t("checkout.worktreeBadge")}
-                    detail={detail}
-                    onClick={() => {
+                    description={detail}
+                    onSelect={() => {
                       config.onWorktreeBase(kind);
                       setOpen(false);
                     }}
@@ -417,7 +377,7 @@ export function CheckoutBar({
         <button
           type="button"
           onClick={checkout.onOpen}
-          className="ml-auto flex h-(--ds-control-normal) shrink-0 items-center gap-1.5 rounded-(--ds-radius-control) bg-foreground/[0.04] px-2.5 font-mono text-fine text-foreground/80 outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="ml-auto flex h-control shrink-0 items-center gap-1.5 rounded-control bg-foreground/[0.04] px-module-inset font-mono text-fine text-foreground/80 outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:focus-ring"
           aria-label={t("checkout.openSourceControl", { branch: checkout.branch })}
           title={t("checkout.openSourceControl", { branch: checkout.branch })}
         >
@@ -444,7 +404,7 @@ export const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { t
       ref={ref}
       type="button"
       className={cn(
-        "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-hint transition-colors hover:bg-accent/50",
+        "flex h-control-mini shrink-0 items-center gap-1.5 rounded-control px-2 text-hint transition-colors hover:bg-accent/50",
         tone === "warning" ? "text-warning" : "text-muted-foreground hover:text-foreground",
         className,
       )}
@@ -465,61 +425,9 @@ function MenuSection({ children }: { children: ReactNode }) {
 function DefaultBadge() {
   const t = useT();
   return (
-    <span className="shrink-0 rounded-(--ds-radius-micro) border bg-muted/60 px-1.5 py-px text-cap text-muted-foreground">
+    <span className="shrink-0 rounded-micro bg-muted/60 px-1.5 py-px text-cap text-muted-foreground">
       {t("composer.default")}
     </span>
-  );
-}
-
-/** One selectable row of a picker menu: the current choice sits on a filled background. */
-export function MenuRow({
-  selected,
-  isDefault,
-  label,
-  detail,
-  leading,
-  onClick,
-  disabled = false,
-  detailWrap = false,
-}: {
-  selected: boolean;
-  isDefault: boolean;
-  label: string;
-  detail?: string | null;
-  /** Optional marker before the label — the provider list's availability dot. */
-  leading?: ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  /** Scene summaries need enough room to explain the posture instead of ending in an ellipsis. */
-  detailWrap?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "flex w-full gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui transition-colors",
-        detailWrap ? "items-start" : "items-center",
-        selected ? "bg-accent" : "hover:bg-accent/50",
-        disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
-      )}
-    >
-      {leading}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{label}</span>
-        {detail && (
-          <span
-            className={cn(
-              "block text-fine text-muted-foreground",
-              detailWrap ? "whitespace-normal leading-relaxed" : "truncate",
-            )}
-          >
-            {detail}
-          </span>
-        )}
-      </span>
-      {isDefault && <DefaultBadge />}
-    </button>
   );
 }
 
@@ -572,14 +480,13 @@ export function ModePicker({ config }: { config: SessionConfig }) {
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.mode")}</MenuSection>
         {SESSION_MODES.map((m) => (
-          <MenuRow
+          <SelectableRow
             key={m.id}
             selected={m.id === active}
-            isDefault={false}
             label={t(`mode.${m.id}` as "mode.ask")}
-            detail={t(`mode.${m.id}Hint` as "mode.askHint")}
+            description={t(`mode.${m.id}Hint` as "mode.askHint")}
             disabled={config.modeChangeDisabled}
-            onClick={() => {
+            onSelect={() => {
               config.onSessionMode(m.id);
               setOpen(false);
             }}
@@ -620,13 +527,13 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
       <PopoverContent align="start" side="top" className="w-72 p-1.5">
         <MenuSection>{t("config.memory")}</MenuSection>
         {MEMORY_PRESETS.map((preset) => (
-          <MenuRow
+          <SelectableRow
             key={preset.id}
             selected={preset.id === active.id}
-            isDefault={preset.id === "standard"}
             label={t(`memory.preset.${preset.id}` as "memory.preset.standard")}
-            detail={t(`memory.preset.${preset.id}Hint` as "memory.preset.standardHint")}
-            onClick={() => {
+            description={t(`memory.preset.${preset.id}Hint` as "memory.preset.standardHint")}
+            meta={preset.id === "standard" ? <DefaultBadge /> : undefined}
+            onSelect={() => {
               config.onMemoryPolicy(preset.read, preset.write);
               setOpen(false);
             }}
@@ -664,13 +571,12 @@ export function CollaborationModePicker({
       <PopoverContent align="center" side="top" className="w-64 p-1.5">
         <MenuSection>{option.name}</MenuSection>
         {option.choices.map((choice) => (
-          <MenuRow
+          <SelectableRow
             key={choice.id}
             selected={choice.id === option.current}
-            isDefault={false}
             label={choice.name}
-            detail={choice.description}
-            onClick={() => {
+            description={choice.description}
+            onSelect={() => {
               onChange(option.id, choice.id);
               setOpen(false);
             }}
@@ -819,9 +725,8 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
         <MenuSection>{t("config.worktree")}</MenuSection>
         {config.hasSession ? (
           <>
-            <MenuRow
+            <SelectableRow
               selected
-              isDefault={false}
               label={
                 config.activeWorktreeUnknown
                   ? t("worktree.legacyUnknown")
@@ -829,13 +734,13 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
                     ? t("worktree.off")
                     : t(`worktree.${selectedKind}` as "worktree.current")
               }
-              detail={
+              description={
                 config.activeWorktreeUnknown
                   ? t("worktree.legacyUnknownHint")
                   : config.activeWorktreeBaseline?.display ?? t("worktree.offHint")
               }
               disabled
-              onClick={() => {}}
+              onSelect={() => {}}
             />
             <p className="px-2.5 pb-1 pt-2 text-fine leading-relaxed text-muted-foreground">
               {t("worktree.fixedForSession")}
@@ -843,12 +748,11 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
           </>
         ) : (
           <>
-            <MenuRow
+            <SelectableRow
               selected={config.worktreeBase == null}
-              isDefault={false}
               label={t("worktree.off")}
-              detail={t("worktree.offHint")}
-              onClick={() => {
+              description={t("worktree.offHint")}
+              onSelect={() => {
                 config.onWorktreeBase(null);
                 setOpen(false);
               }}
@@ -862,14 +766,13 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
                   ? `${option.resolved.display} · ${t("worktree.localOnly")}`
                   : option?.unavailable_reason || t("worktree.unavailable");
               return (
-                <MenuRow
+                <SelectableRow
                   key={kind}
                   selected={config.worktreeBase === kind}
-                  isDefault={false}
                   label={t(`worktree.${kind}` as "worktree.current")}
-                  detail={detail}
+                  description={detail}
                   disabled={unavailable}
-                  onClick={() => {
+                  onSelect={() => {
                     config.onWorktreeBase(kind);
                     setOpen(false);
                   }}
@@ -933,7 +836,7 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
           </p>
         )}
         {config.providersStatus === "error" && (
-          <div className="mb-1 flex items-center gap-2 rounded-(--ds-radius-control) bg-muted/60 px-2.5 py-2 text-fine">
+          <div className="mb-1 flex items-center gap-2 rounded-control bg-muted/60 px-module-inset py-2 text-fine">
             <span role="alert" className="min-w-0 flex-1 text-muted-foreground">
               {t("config.providersLoadFailed")}
             </span>
@@ -947,14 +850,13 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
           </div>
         )}
         {providers.map((p) => (
-          <MenuRow
+          <SelectableRow
             key={p.id}
             selected={p.id === config.provider}
-            isDefault={false}
             label={p.display_name}
             // The dot says installed; the line under it says what's missing, so the list itself
             // answers "why can't I use that one?" without a paragraph of warning text.
-            detail={registryReady && !p.available
+            description={registryReady && !p.available
               ? p.enabled === false
                 ? t("settings.providerDisabled")
                 : p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")
@@ -975,7 +877,7 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
               </>
             }
             disabled={registryReady && !p.available}
-            onClick={() => {
+            onSelect={() => {
               config.onProvider(p.id);
               setOpen(false);
             }}
@@ -1143,14 +1045,14 @@ export function ModelPicker({
                 className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
               >
                 {modelRows.map((r) => (
-                  <MenuRow
+                  <SelectableRow
                     key={r.key}
                     selected={r.selected}
-                    isDefault={r.isDefault}
                     label={r.label}
-                    detail={r.detail}
+                    description={r.detail}
+                    meta={r.isDefault ? <DefaultBadge /> : undefined}
                     disabled={disabled}
-                    onClick={() => {
+                    onSelect={() => {
                       r.select();
                       setModelOpen(false);
                     }}
@@ -1180,14 +1082,14 @@ export function ModelPicker({
           <PopoverContent align="start" side="top" className="w-44 p-1.5">
             <MenuSection>{t("composer.reasoning")}</MenuSection>
             {effortRows.map((r) => (
-              <MenuRow
-                key={r.key}
-                selected={r.selected}
-                isDefault={r.isDefault}
-                label={r.label}
-                detail={r.detail}
-                disabled={disabled}
-                onClick={() => {
+                <SelectableRow
+                  key={r.key}
+                  selected={r.selected}
+                  label={r.label}
+                  description={r.detail}
+                  meta={r.isDefault ? <DefaultBadge /> : undefined}
+                  disabled={disabled}
+                  onSelect={() => {
                   r.select();
                   setEffortOpen(false);
                 }}
@@ -1695,7 +1597,7 @@ export function Composer({
                 : // The renderer delegates the fill and raised shadow to liquid-gooey so its
                   // silhouette can lag resizing without softening the editor's actual DOM.
                   cn(
-                    "rounded-(--ds-composer-radius)",
+                    "rounded-composer",
                     LIQUID_AVAILABLE
                       ? "bg-transparent"
                       : "bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
@@ -1724,12 +1626,12 @@ export function Composer({
                 {appshots.map((appshot) => (
                   <div
                     key={appshot.id}
-                    className="group relative flex w-64 shrink-0 items-center gap-2 rounded-(--ds-radius-control) bg-fill-quiet p-1.5 ring-[0.5px] ring-foreground/10"
+                    className="group relative flex w-64 shrink-0 items-center gap-2 rounded-control bg-fill-quiet p-1.5 shadow-surface"
                   >
                     <img
                       src={appshot.preview_data_url}
                       alt=""
-                      className="aspect-5/3 w-20 shrink-0 rounded-(--ds-radius-control) object-cover ring-[0.5px] ring-foreground/10"
+                      className="aspect-5/3 w-20 shrink-0 rounded-control object-cover"
                     />
                     <div className="min-w-0 flex-1 pr-5">
                       <p className="truncate text-hint font-medium">{appshot.window_title}</p>
@@ -1802,7 +1704,7 @@ export function Composer({
               className={cn(
                 "flex flex-col gap-1",
                 docMode
-                  ? "glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-(--ds-composer-radius) border p-2 shadow-raised"
+                  ? "glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"
                   : // Keep every outer edge 8px from the controls. The 24px surface radius then
                     // shares its bottom-right centre with the circular send/stop control.
                     "p-2",

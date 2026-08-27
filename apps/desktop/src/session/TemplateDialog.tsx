@@ -124,7 +124,7 @@ function toRow(slot: SceneSlotDef): SlotRow {
 }
 
 const FIELD_CLASSES =
-  "canvas-ui-control w-full bg-fill-rest px-2 py-1 text-ui outline-none transition-[color,box-shadow,background-color] focus-visible:ring-[3px] focus-visible:ring-ring/50";
+  "canvas-ui-control w-full bg-fill-rest px-2 py-1 text-ui outline-none transition-[color,box-shadow,background-color] focus-visible:focus-ring";
 
 export function TemplateDialog({
   source,
@@ -351,7 +351,7 @@ export function TemplateDialog({
                     <button
                       type="button"
                       aria-label={t("templateFrom.removeSlot")}
-                      className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:focus-ring"
                       onClick={() =>
                         setSlots((current) => current.filter((_, at) => at !== index))
                       }

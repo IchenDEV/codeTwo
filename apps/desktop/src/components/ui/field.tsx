@@ -36,7 +36,7 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="field-group"
-      className={cn("group/field-group @container/field-group flex w-full flex-col gap-5", className)}
+      className={cn("group/field-group @container/field-group flex w-full flex-col gap-section", className)}
       {...props}
     />
   )
@@ -108,7 +108,7 @@ function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
   return (
     <p
       data-slot="field-description"
-      className={cn("text-left text-fine leading-normal text-muted-foreground", className)}
+      className={cn("text-start text-fine leading-normal text-muted-foreground", className)}
       {...props}
     />
   )
@@ -130,7 +130,7 @@ function FieldError({
     if (unique.length === 0) return null
     if (unique.length === 1) return unique[0]
     return (
-      <ul className="ml-4 flex list-disc flex-col gap-1">
+      <ul className="ms-4 flex list-disc flex-col gap-1">
         {unique.map((message) => <li key={message}>{message}</li>)}
       </ul>
     )

@@ -19,7 +19,6 @@ import {
   Pin,
   PinOff,
   Plus,
-  Search,
   ShieldCheck,
   Trash2,
 } from "@/components/ui/icons";
@@ -53,6 +52,10 @@ import {
 import { useLanguage, useT } from "../i18n";
 import { en as EN_STRINGS, type StringKey } from "../i18n/strings";
 import { useToast } from "../ui/toast";
+import { SearchField } from "@/components/business/search-field";
+import { SettingRow } from "@/components/business/setting-row";
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { ViewSwitcher } from "@/components/business/view-switcher";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -64,10 +67,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -175,37 +178,6 @@ function formatDate(
   ).format(new Date(value));
 }
 
-function ToggleRow({
-  checked,
-  disabled,
-  label,
-  hint,
-  onChange,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  label: string;
-  hint: string;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="memory-toggle-row">
-      <div className="min-w-0">
-        <div className="text-ui font-medium">{label}</div>
-        <p className="mt-0.5 text-hint leading-relaxed text-muted-foreground">
-          {hint}
-        </p>
-      </div>
-      <Checkbox
-        aria-label={label}
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={(value) => onChange(value === true)}
-      />
-    </div>
-  );
-}
-
 function PolicySelect({
   label,
   value,
@@ -219,8 +191,7 @@ function PolicySelect({
 }) {
   const t = useT();
   return (
-    <div className="memory-policy-field">
-      <span className="text-hint text-muted-foreground">{label}</span>
+    <SettingRow label={label} density="compact" disabled={disabled}>
       <Select
         value={value}
         disabled={disabled}
@@ -231,17 +202,19 @@ function PolicySelect({
         <SelectTrigger
           size="sm"
           aria-label={label}
-          className="memory-policy-select justify-between"
+          className="w-32 justify-between"
         >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="inherit">{t("memory.policy.inherit")}</SelectItem>
-          <SelectItem value="allow">{t("memory.policy.allow")}</SelectItem>
-          <SelectItem value="deny">{t("memory.policy.deny")}</SelectItem>
+          <SelectGroup>
+            <SelectItem value="inherit">{t("memory.policy.inherit")}</SelectItem>
+            <SelectItem value="allow">{t("memory.policy.allow")}</SelectItem>
+            <SelectItem value="deny">{t("memory.policy.deny")}</SelectItem>
+          </SelectGroup>
         </SelectContent>
       </Select>
-    </div>
+    </SettingRow>
   );
 }
 
@@ -414,11 +387,13 @@ function MemoryEditor({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {MEMORY_CATEGORIES.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {translatedDynamic(t, "memory.category", value)}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  {MEMORY_CATEGORIES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {translatedDynamic(t, "memory.category", value)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </label>
@@ -570,11 +545,13 @@ function DetailPanel({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {MEMORY_CATEGORIES.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {translatedDynamic(t, "memory.category", value)}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  {MEMORY_CATEGORIES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {translatedDynamic(t, "memory.category", value)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </dd>
@@ -1033,11 +1010,13 @@ export function MemorySettingsPage({
               <SelectValue placeholder={t("memory.noProject")} />
             </SelectTrigger>
             <SelectContent>
-              {projects.map((project) => (
-                <SelectItem key={project.path} value={project.path}>
-                  {project.name}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {projects.map((project) => (
+                  <SelectItem key={project.path} value={project.path}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <Button
@@ -1065,32 +1044,32 @@ export function MemorySettingsPage({
         <div className="memory-disclosure-body">
           <div className="memory-policy-column">
             <h2>{t("memory.globalDefaults")}</h2>
-            <ToggleRow
+            <SettingToggle
               checked={settings.enabled}
               label={t("memory.enabled")}
-              hint={t("memory.enabledHint")}
-              onChange={(enabled) => updateSettings({ enabled })}
+              description={t("memory.enabledHint")}
+              onCheckedChange={(enabled) => updateSettings({ enabled })}
             />
-            <ToggleRow
+            <SettingToggle
               checked={settings.capture}
               disabled={!settings.enabled}
               label={t("memory.capture")}
-              hint={t("memory.captureHintShort")}
-              onChange={(capture) => updateSettings({ capture })}
+              description={t("memory.captureHintShort")}
+              onCheckedChange={(capture) => updateSettings({ capture })}
             />
-            <ToggleRow
+            <SettingToggle
               checked={settings.inject}
               disabled={!settings.enabled}
               label={t("memory.inject")}
-              hint={t("memory.injectHintShort")}
-              onChange={(inject) => updateSettings({ inject })}
+              description={t("memory.injectHintShort")}
+              onCheckedChange={(inject) => updateSettings({ inject })}
             />
-            <ToggleRow
+            <SettingToggle
               checked={settings.include_external_context}
               disabled={!settings.enabled || !settings.capture}
               label={t("memory.external")}
-              hint={t("memory.externalHintShort")}
-              onChange={(include_external_context) =>
+              description={t("memory.externalHintShort")}
+              onCheckedChange={(include_external_context) =>
                 updateSettings({ include_external_context })
               }
             />
@@ -1197,36 +1176,26 @@ export function MemorySettingsPage({
               {t("memory.pendingCount", { count: stats.pending })}
             </span>
           </div>
-          <nav className="memory-view-tabs" aria-label={t("memory.views")}>
-            {VIEWS.map(({ value, key }) => (
-              <button
-                key={value}
-                type="button"
-                className={filter.view === value ? "is-active" : undefined}
-                onClick={() =>
-                  setFilter((current) => ({ ...current, view: value }))
-                }
-              >
-                {t(key)}
-              </button>
-            ))}
-          </nav>
+          <ViewSwitcher
+            label={t("memory.views")}
+            value={filter.view}
+            options={VIEWS.map(({ value, key }) => ({ value, label: t(key) }))}
+            onValueChange={(view) =>
+              setFilter((current) => ({ ...current, view }))
+            }
+          />
           <div className="memory-toolbar">
-            <label className="memory-search-field">
-              <span className="sr-only">{t("memory.search")}</span>
-              <Search />
-              <Input
-                type="search"
-                value={filter.query}
-                placeholder={t("memory.searchPlaceholderShort")}
-                onChange={(event) =>
-                  setFilter((current) => ({
-                    ...current,
-                    query: event.target.value,
-                  }))
-                }
-              />
-            </label>
+            <SearchField
+              label={t("memory.search")}
+              value={filter.query}
+              placeholder={t("memory.searchPlaceholderShort")}
+              onChange={(event) =>
+                setFilter((current) => ({
+                  ...current,
+                  query: event.currentTarget.value,
+                }))
+              }
+            />
             <Select
               value={filter.category}
               onValueChange={(category) => {
@@ -1242,12 +1211,14 @@ export function MemorySettingsPage({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("memory.allCategories")}</SelectItem>
-                {MEMORY_CATEGORIES.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {translatedDynamic(t, "memory.category", value)}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectItem value="all">{t("memory.allCategories")}</SelectItem>
+                  {MEMORY_CATEGORIES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {translatedDynamic(t, "memory.category", value)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
             <Select
@@ -1264,16 +1235,18 @@ export function MemorySettingsPage({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("memory.allOrigins")}</SelectItem>
-                <SelectItem value="manual">
-                  {t("memory.origin.manual")}
-                </SelectItem>
-                <SelectItem value="automatic">
-                  {t("memory.origin.automatic")}
-                </SelectItem>
-                <SelectItem value="user_correction">
-                  {t("memory.origin.userCorrection")}
-                </SelectItem>
+                <SelectGroup>
+                  <SelectItem value="all">{t("memory.allOrigins")}</SelectItem>
+                  <SelectItem value="manual">
+                    {t("memory.origin.manual")}
+                  </SelectItem>
+                  <SelectItem value="automatic">
+                    {t("memory.origin.automatic")}
+                  </SelectItem>
+                  <SelectItem value="user_correction">
+                    {t("memory.origin.userCorrection")}
+                  </SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
             <Select
@@ -1294,13 +1267,15 @@ export function MemorySettingsPage({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="activity">
-                  {t("memory.sort.activity")}
-                </SelectItem>
-                <SelectItem value="updated">
-                  {t("memory.sort.updated")}
-                </SelectItem>
-                <SelectItem value="used">{t("memory.sort.used")}</SelectItem>
+                <SelectGroup>
+                  <SelectItem value="activity">
+                    {t("memory.sort.activity")}
+                  </SelectItem>
+                  <SelectItem value="updated">
+                    {t("memory.sort.updated")}
+                  </SelectItem>
+                  <SelectItem value="used">{t("memory.sort.used")}</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>

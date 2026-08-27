@@ -233,13 +233,19 @@ describe("SessionRail row layout", () => {
     });
     const features = view.container.querySelector("[data-rail-features]");
     const rows = [...(features?.querySelectorAll(
-      ':scope > button, :scope > [data-rail-feature="new-task"] > button:first-child',
+      ':scope > [data-rail-feature="new-task"] > button:first-child, :scope > [data-rail-feature]:not([data-rail-feature="new-task"]) > [data-slot="navigation-row"]',
     ) ?? [])];
     const sessionScroll = view.container.querySelector("[data-rail-session-scroll]");
     const utilities = view.container.querySelector("[data-rail-utilities]");
-    const utilityRows = [...(utilities?.querySelectorAll(":scope > button") ?? [])];
+    const utilityRows = [...(utilities?.querySelectorAll(
+      ':scope > [data-rail-feature] > [data-slot="navigation-row"]',
+    ) ?? [])];
 
-    expect(rows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+    expect(rows.map((row) => {
+      const copy = row.cloneNode(true) as HTMLElement;
+      copy.querySelectorAll('[role="progressbar"] [role="presentation"]').forEach((node) => node.remove());
+      return copy.textContent?.replace(/\s+/g, " ").trim();
+    })).toEqual([
       "New task",
       "Pull requests",
       "Task board",
@@ -251,26 +257,31 @@ describe("SessionRail row layout", () => {
       "Settings",
     ]);
     expect(sessionScroll?.nextElementSibling).toBe(utilities);
-    expect(features?.querySelector('[data-rail-feature="task-board"]')?.getAttribute("aria-current"))
+    expect(features?.querySelector('[data-rail-feature="task-board"] [data-slot="navigation-row"]')?.getAttribute("aria-current"))
       .toBe("page");
-    expect(features?.querySelector('[data-rail-feature="scheduled-tasks"]')?.getAttribute("aria-current"))
+    expect(features?.querySelector('[data-rail-feature="scheduled-tasks"] [data-slot="navigation-row"]')?.getAttribute("aria-current"))
       .toBe("page");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
     for (const row of [...rows, ...utilityRows]) click(row);
     expect(opened).toEqual(["new", "pull-requests", "tasks", "scheduled", "plugins", "usage", "settings"]);
     expect(features?.querySelector('[data-rail-feature="mission-control"]')).toBeNull();
-    expect(utilities?.querySelector('[data-rail-feature="usage"] [role="progressbar"]')?.getAttribute("aria-valuenow"))
-      .toBe("42");
+    const quotaButton = utilities?.querySelector(
+      '[data-rail-feature="usage"] [data-slot="navigation-row"]',
+    );
+    const quotaMeter = quotaButton?.querySelector('[data-slot="quota-progress"]');
+    expect(quotaButton?.getAttribute("aria-label"))
+      .toBe("OpenAI Codex · Weekly limit · 42% left · Open Usage settings");
+    expect(quotaButton?.querySelector('[role="progressbar"]')).toBeNull();
+    expect(quotaMeter?.tagName).toBe("SPAN");
+    expect(quotaMeter?.getAttribute("aria-hidden")).toBe("true");
+    expect(quotaMeter?.querySelector('[data-slot="progress-indicator"]')?.getAttribute("style"))
+      .toContain("width: 42%");
     expect(utilities?.querySelector('[data-rail-feature="usage"] [data-quota-provider]')?.getAttribute("data-quota-provider"))
       .toBe("codex");
-    for (const feature of [
-      ...(features?.querySelectorAll(":scope > [data-rail-feature]") ?? []),
-      ...utilityRows,
-    ]) {
-      expect(feature.className).toContain("h-(--ds-control-normal)");
-      expect(feature.className).toContain(
-        feature.getAttribute("aria-current") === "page" ? "text-foreground" : "text-foreground/75",
-      );
+    for (const row of [...rows.slice(1), ...utilityRows]) {
+      expect(row.getAttribute("data-slot")).toBe("navigation-row");
+      expect(row.className).toContain("min-h-control");
+      expect(row.className).toContain("rounded-control");
     }
 
     view.unmount();
@@ -291,8 +302,8 @@ describe("SessionRail row layout", () => {
     const sideChat = control?.querySelector('button[data-rail-side-chat]');
 
     expect(control?.getAttribute("role")).toBe("group");
-    expect(control?.className).toContain("h-(--ds-control-normal)");
-    expect(control?.className).toContain("hover:bg-accent/55");
+    expect(control?.className).toContain("h-control");
+    expect(control?.className).toContain("hover:bg-fill-hover");
     expect(primary?.textContent?.trim()).toBe("New task");
     expect(quickSession?.getAttribute("aria-label")).toBe("Temporary session");
     expect(sideChat?.getAttribute("aria-label")).toBe("Toggle side chat");
@@ -437,8 +448,11 @@ describe("SessionRail row layout", () => {
     expect(running?.querySelector('[data-session-line="status"]')?.getAttribute("aria-label"))
       .toBe("Working");
     expect(quotaOrb?.style.width).toBe("14px");
-    expect(view.container.querySelector('[data-rail-feature="usage"]')?.getAttribute("aria-busy"))
-      .toBe("true");
+    expect(
+      view.container
+        .querySelector('[data-rail-feature="usage"] [data-slot="navigation-row"]')
+        ?.getAttribute("aria-busy"),
+    ).toBe("true");
 
     view.unmount();
   });

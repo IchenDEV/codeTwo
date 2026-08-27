@@ -91,6 +91,22 @@ describe("TurnCard rendered activity", () => {
     expect(rendered.container.querySelector("article")?.getAttribute("aria-busy")).toBe("false");
     expect(rendered.container.querySelector('[role="status"]')).toBeNull();
     expect(rendered.container.textContent).toContain("queued #2");
+    expect(rendered.container.querySelector('[data-slot="status-badge"]')?.getAttribute("data-tone")).toBe("neutral");
+    rendered.unmount();
+  });
+
+  test("uses the destructive status tone for a failed turn", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard turn={{ ...runningTurn(), endedAt: 2, error: "Provider failed" }} />
+      </I18nProvider>,
+    );
+
+    const badge = rendered.container.querySelector('[data-slot="status-badge"]');
+    expect(badge?.getAttribute("data-tone")).toBe("destructive");
+    expect(badge?.textContent).toContain("failed");
     rendered.unmount();
   });
 

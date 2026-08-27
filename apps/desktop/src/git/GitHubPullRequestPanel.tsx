@@ -26,9 +26,11 @@ import {
   type SourceControlInfo,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/business/status-badge";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -383,20 +385,17 @@ export function GitHubPullRequestPanel({
                 {pullRequest.title}
                 <ExternalLink className="ms-1 inline size-3 align-baseline" aria-hidden="true" />
               </button>
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-2 py-0.5 text-cap font-medium",
-                  pullRequest.state === "MERGED"
-                    ? "bg-primary/15 text-primary"
-                    : pullRequest.state === "OPEN"
-                      ? "bg-success/15 text-success"
-                      : "bg-muted text-muted-foreground",
-                )}
+              <StatusBadge
+                tone={pullRequest.is_draft
+                  ? "neutral"
+                  : pullRequest.state === "OPEN" || pullRequest.state === "MERGED"
+                    ? "success"
+                    : "neutral"}
               >
                 {pullRequest.is_draft
                   ? t("githubPr.state.draft")
                   : t(`githubPr.state.${pullRequest.state.toLocaleLowerCase() as "open" | "merged" | "closed"}`)}
-              </span>
+              </StatusBadge>
             </div>
             <p className="truncate font-mono text-cap text-muted-foreground" title={`${pullRequest.head_ref} → ${pullRequest.base_ref}`}>
               {pullRequest.head_ref} → {pullRequest.base_ref}
@@ -554,9 +553,11 @@ export function GitHubPullRequestPanel({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="squash">{t("githubPr.mergeStrategy.squash")}</SelectItem>
-                    <SelectItem value="merge">{t("githubPr.mergeStrategy.merge")}</SelectItem>
-                    <SelectItem value="rebase">{t("githubPr.mergeStrategy.rebase")}</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="squash">{t("githubPr.mergeStrategy.squash")}</SelectItem>
+                      <SelectItem value="merge">{t("githubPr.mergeStrategy.merge")}</SelectItem>
+                      <SelectItem value="rebase">{t("githubPr.mergeStrategy.rebase")}</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
                 <Button

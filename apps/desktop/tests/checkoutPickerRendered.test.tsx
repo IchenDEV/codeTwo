@@ -111,7 +111,7 @@ describe("CheckoutBar", () => {
 
     try {
       const checkoutBar = rendered.container.querySelector("[data-checkout-bar]");
-      expect(checkoutBar?.className).toContain("mx-5");
+      expect(checkoutBar?.className).toContain("mx-page");
       expect(checkoutBar?.className).toContain("mt-2");
       expect(checkoutBar?.className).not.toContain("-mt-");
 
@@ -126,10 +126,10 @@ describe("CheckoutBar", () => {
       expect(popup?.textContent).toContain("origin/main");
       expect(popup?.textContent).toContain("current");
       expect(popup?.textContent).toContain("worktree");
-      expect(button(popup, "Project checkout").getAttribute("aria-pressed")).toBe("true");
-      expect(button(popup, "From the current ref").getAttribute("title")).toBe("main @ 3befbb7d");
+      expect(button(popup, "codeTwo, Project checkout").getAttribute("aria-pressed")).toBe("true");
+      expect(button(popup, "main, From the current ref").getAttribute("title")).toBe("main @ 3befbb7d");
 
-      click(button(popup, "From the current ref"));
+      click(button(popup, "main, From the current ref"));
       expect(selected).toBe("current");
     } finally {
       rendered.unmount();
@@ -154,7 +154,7 @@ describe("CheckoutBar", () => {
 
     try {
       const popup = await openPicker(rendered.container);
-      expect(button(popup, "Project checkout").disabled).toBe(false);
+      expect(button(popup, "No project selected, Project checkout").disabled).toBe(false);
       expect(button(popup, "From the current ref").disabled).toBe(true);
       expect(button(popup, "From the origin default ref").disabled).toBe(true);
       expect(rendered.container.textContent).not.toContain("main");
@@ -197,9 +197,11 @@ describe("CheckoutBar", () => {
       await flush();
 
       const popup = dom.document.body.querySelector('[data-slot="popover-content"]');
-      const selected = button(popup, "Session worktree");
+      const selected = button(popup, "main, Session worktree");
       expect(selected.getAttribute("aria-pressed")).toBe("true");
-      expect(selected.className).not.toContain("opacity-50");
+      expect(selected.className).toContain(
+        "disabled:data-[selected=true]:opacity-100",
+      );
       expect(popup?.textContent).toContain("main");
       expect(selected.getAttribute("title")).toBe("main @ 3befbb7d");
       expect(popup?.textContent).toContain("exact local ref and commit");

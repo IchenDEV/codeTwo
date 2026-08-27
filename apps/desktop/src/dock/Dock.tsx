@@ -310,7 +310,7 @@ export function Dock({
               insets keep the border on the same line even though this row only holds Close. */}
           <div
             data-dock-titlebar
-            className="electrobun-webkit-app-region-drag flex items-center gap-1 border-b px-3 py-2.5"
+            className="electrobun-webkit-app-region-drag flex h-titlebar items-center gap-1 px-3"
           >
             <div className="electrobun-webkit-app-region-drag flex-1" />
             <Button variant="ghost" size="compact" className="w-(--ds-control-normal) px-0" onClick={onClose} title={t("dock.close")}>
@@ -353,7 +353,7 @@ export function Dock({
             same reason: the overlay title bar leaves nothing else to grab. */}
         <div
           data-dock-titlebar
-          className="electrobun-webkit-app-region-drag flex items-center gap-1 border-b px-3 py-2.5"
+          className="electrobun-webkit-app-region-drag flex h-titlebar items-center gap-1 px-3"
         >
           <TabsList variant="toolbar">
             {visibleSurfaces.map(({ id, icon: Icon, titleKey }) => (

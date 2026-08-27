@@ -7,7 +7,6 @@ import {
   Clock3,
   Folder,
   GitBranch,
-  LoaderCircle,
   Pause,
   Pencil,
   Play,
@@ -48,12 +47,16 @@ import {
   type ScheduleDraft,
 } from "./schedule";
 import { Button } from "@/components/ui/button";
+import { SearchField } from "@/components/business/search-field";
+import { StatusBadge } from "@/components/business/status-badge";
+import { ViewSwitcher } from "@/components/business/view-switcher";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
 import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -145,7 +148,7 @@ function runIcon(status: AutomationRunStatus) {
   if (status === "succeeded") return CheckCircle2;
   if (status === "failed" || status === "interrupted") return CircleAlert;
   if (status === "needs_attention") return Clock3;
-  return LoaderCircle;
+  return null;
 }
 
 function AutomationRow({
@@ -169,7 +172,7 @@ function AutomationRow({
       aria-current={selected ? "true" : undefined}
       onClick={onSelect}
       className={cn(
-        "group grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-x-2 rounded-(--ds-radius-control) px-3 py-2.5 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "group grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-x-2 rounded-control px-3 py-module-inset text-left transition-colors hover:bg-accent/55 focus-visible:focus-ring",
         selected && "bg-accent text-foreground",
       )}
     >
@@ -183,7 +186,9 @@ function AutomationRow({
         />
       </span>
       <span className="min-w-0 truncate text-ui font-medium">{automation.name}</span>
-      <span className="text-fine text-muted-foreground">{status}</span>
+      <StatusBadge tone={automation.enabled ? "success" : "neutral"}>
+        {status}
+      </StatusBadge>
       <span className="col-start-2 col-end-4 mt-1 flex min-w-0 items-center gap-2 text-fine text-muted-foreground">
         <span className="min-w-0 flex-1 truncate">{schedule}</span>
         <span className="truncate">{projectName}</span>
@@ -404,23 +409,17 @@ export function AutomationsPage({
       <div data-automation-list-pane className="automation-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
         <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-3 py-2.5">
           {headerLeadingAction ? <div data-automation-leading-action>{headerLeadingAction}</div> : null}
-          <LiquidSelectionGroup data-automation-filters role="tablist" aria-label={t("automations.filterLabel")} className="flex h-(--ds-control-normal) items-center gap-1">
-            {(["all", "active", "paused"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={filter === value}
-                className={cn(
-                  "h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  filter === value && "font-medium text-foreground hover:bg-transparent",
-                )}
-                onClick={() => setFilter(value)}
-              >
-                {t(`automations.filter.${value}`)}
-              </button>
-            ))}
-          </LiquidSelectionGroup>
+          <div data-automation-filters>
+            <ViewSwitcher
+              label={t("automations.filterLabel")}
+              value={filter}
+              options={(["all", "active", "paused"] as const).map((value) => ({
+                value,
+                label: t(`automations.filter.${value}`),
+              }))}
+              onValueChange={setFilter}
+            />
+          </div>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={primaryActionLabel} onClick={primaryAction}><Plus className="size-3.5" /></Button>} />
@@ -429,30 +428,22 @@ export function AutomationsPage({
         </header>
 
         <div className="flex shrink-0 items-center gap-2 px-4 py-3">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              data-automation-search
-              type="search"
-              size="compact"
-              className="pl-8 pr-8"
+          <div data-automation-search className="min-w-0 flex-1">
+            <SearchField
+              label={t("automations.searchPlaceholder")}
               value={query}
               placeholder={t("automations.searchPlaceholder")}
-              aria-label={t("automations.searchPlaceholder")}
+              clearLabel={t("automations.clearSearch")}
+              onClear={() => setQuery("")}
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
-            {query !== "" && (
-              <Button variant="ghost" size="icon-xs" className="absolute right-1 top-1/2 -translate-y-1/2" aria-label={t("automations.clearSearch")} onClick={() => setQuery("")}>
-                <X className="size-3.5" />
-              </Button>
-            )}
           </div>
         </div>
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-3 pb-4" aria-live="polite">
             {loading && automations.length === 0 ? (
-              <div role="status" className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{t("automations.loading")}</div>
+              <div role="status" className="flex items-center justify-center gap-2 py-section text-ui text-muted-foreground"><Spinner />{t("automations.loading")}</div>
             ) : automations.length === 0 ? (
               <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-ui text-muted-foreground">
                 <CalendarClock className="size-4" />
@@ -526,7 +517,7 @@ export function AutomationsPage({
               <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={selected.enabled ? t("automations.pause") : t("automations.resume")} onClick={() => void toggle(selected)}>{selected.enabled ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}</Button>} /><TooltipContent>{selected.enabled ? t("automations.pause") : t("automations.resume")}</TooltipContent></Tooltip>
               <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("automations.delete")} onClick={() => void remove(selected)}><Trash2 className="size-3.5 text-destructive" /></Button>} /><TooltipContent>{t("automations.delete")}</TooltipContent></Tooltip>
               <Button variant="secondary" size="compact" disabled={activeRun !== null} onClick={() => void runNow(selected)}>
-                {activeRun ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+                {activeRun ? <Spinner className="size-3.5" /> : <Play className="size-3.5" />}
                 {activeRun ? t("automations.inProgress") : t("automations.runNow")}
               </Button>
             </>
@@ -564,7 +555,7 @@ export function AutomationsPage({
                       <span>{selected.enabled ? t("automations.next", { time: dateTime(selected.next_run_at) }) : t("automations.paused")}</span>
                     </div>
                   </div>
-                  {activeRun ? <LoaderCircle className="size-4 animate-spin text-primary" /> : null}
+                  {activeRun ? <Spinner className="size-4 text-primary" /> : null}
                 </div>
 
                 <div className="mt-8 grid gap-4">
@@ -572,7 +563,7 @@ export function AutomationsPage({
                   <DetailMetric icon={<ProviderIcon provider={providerId(selected.provider)} className="size-3.5" />} label={t("automations.agent")}>{providerLabel(selected.provider)}</DetailMetric>
                   <DetailMetric icon={<Clock3 className="size-3.5" />} label={t("automations.schedule")}><span>{scheduleLabel(selected.cron)}</span><span className="ml-2 text-fine text-muted-foreground">{selected.timezone}</span></DetailMetric>
                   <DetailMetric icon={<GitBranch className="size-3.5" />} label={t("automations.workspace")}>{selected.use_worktree ? t("automations.isolated") : t("automations.local")}</DetailMetric>
-                  <DetailMetric icon={<CalendarClock className="size-3.5" />} label={t("automations.status")}><span className="inline-flex items-center gap-1.5"><span className={cn("size-2 rounded-full", selected.enabled ? "bg-success" : "bg-muted-foreground")} />{selected.enabled ? t("automations.active") : t("automations.paused")}</span></DetailMetric>
+                  <DetailMetric icon={<CalendarClock className="size-3.5" />} label={t("automations.status")}><StatusBadge tone={selected.enabled ? "success" : "neutral"}>{selected.enabled ? t("automations.active") : t("automations.paused")}</StatusBadge></DetailMetric>
                 </div>
 
                 <section className="mt-8">
@@ -598,7 +589,7 @@ export function AutomationsPage({
                           className="grid min-h-(--ds-control-field) w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2 text-left text-ui transition-colors enabled:hover:bg-accent/60 disabled:opacity-80"
                           onClick={() => run.session_id && onOpenSession(run.session_id)}
                         >
-                          <Icon className={cn("size-4", SPINNING_RUNS.has(run.status) && "animate-spin text-primary", run.status === "needs_attention" && "text-warning", run.status === "succeeded" && "text-success", (run.status === "failed" || run.status === "interrupted") && "text-destructive")} />
+                          {SPINNING_RUNS.has(run.status) ? <Spinner className="text-primary" /> : Icon ? <Icon className={cn("size-4", run.status === "needs_attention" && "text-warning", run.status === "succeeded" && "text-success", (run.status === "failed" || run.status === "interrupted") && "text-destructive")} /> : null}
                           <span className="min-w-0"><span className="block font-medium">{t(`automations.status.${run.status}`)}</span><span className="block text-fine text-muted-foreground">{dateTime(run.started_at)}</span>{run.error ? <span className="mt-1 block text-hint text-destructive">{run.error}</span> : null}</span>
                           {openable ? <span className="text-hint text-primary">{t("automations.openRun")}</span> : null}
                         </button>
@@ -771,7 +762,7 @@ function AutomationEditor({
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" size="compact" onClick={onCancel}>{t("automations.cancel")}</Button>
           <Button type="submit" size="compact" disabled={!valid || saving}>
-            {saving && <LoaderCircle className="animate-spin" />}
+            {saving && <Spinner />}
             {saving ? t("automations.saving") : t("automations.save")}
           </Button>
         </div>

@@ -7,6 +7,7 @@ import {
 } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import { useToast } from "../ui/toast";
+import { PageHeader } from "@/components/business/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,9 +57,9 @@ function SceneCard({
   };
 
   return (
-    <Card className="gap-4 py-5">
-      <CardHeader className="gap-2 px-5">
-        <CardTitle className="truncate text-ui">{sceneTitle(scene, locale)}</CardTitle>
+    <Card>
+      <CardHeader>
+        <CardTitle className="truncate">{sceneTitle(scene, locale)}</CardTitle>
         <CardDescription className="line-clamp-2 leading-relaxed">
           {description || t("sceneStudio.noDescription")}
         </CardDescription>
@@ -66,7 +67,7 @@ function SceneCard({
           <SourceBadge source={scene.source} />
         </CardAction>
       </CardHeader>
-      <CardContent className="flex flex-wrap items-center gap-1.5 px-5">
+      <CardContent className="flex flex-wrap items-center gap-1.5">
         {scene.execution?.session_mode && (
           <Badge variant="secondary">{t(`mode.${scene.execution.session_mode}` as never)}</Badge>
         )}
@@ -75,7 +76,7 @@ function SceneCard({
           <Badge variant="outline">{t("sceneStudio.outputs", { count: scene.artifacts.length })}</Badge>
         )}
       </CardContent>
-      <CardFooter className="flex-wrap gap-1.5 px-5">
+      <CardFooter className="flex-wrap gap-1.5">
         {active ? (
           <Button type="button" size="sm" variant="secondary" disabled>
             {t("sceneStudio.active")}
@@ -204,11 +205,8 @@ export function SceneStudio({
         />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
-          <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-8 pb-20 pt-10">
-            <div className="flex max-w-2xl flex-col gap-2">
-              <h1 className="text-display font-semibold tracking-tight">{t("sceneStudio.title")}</h1>
-              <p className="text-ui leading-relaxed text-muted-foreground">{t("sceneStudio.description")}</p>
-            </div>
+          <main className="mx-auto flex w-full max-w-5xl flex-col gap-page px-8 pb-page-end pt-page-start">
+            <PageHeader title={t("sceneStudio.title")} description={t("sceneStudio.description")} />
 
             {renderGroup(t("sceneStudio.customTitle"), t("sceneStudio.customDescription"), customScenes)}
             {renderGroup(t("sceneStudio.providedTitle"), t("sceneStudio.providedDescription"), providedScenes)}

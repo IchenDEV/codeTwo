@@ -2,6 +2,13 @@ import { useState } from "react";
 import { Check, Lock } from "@/components/ui/icons";
 
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useT } from "../i18n";
 import type { PipelineInstanceDetail, PipelineStageStatus, SceneArtifactRecord } from "../bridge";
 
@@ -34,11 +41,12 @@ function StagePopover({
   const t = useT();
   const artifacts = newestPerKey(stage.artifacts);
   return (
-    <div
-      className="absolute start-0 top-full z-50 mt-1 w-64 border bg-popover p-2"
-      style={{ borderRadius: "var(--ds-radius-module)" }}
+    <PopoverContent
+      align="start"
+      className="w-64 p-2"
       data-testid={`stage-popover-${stage.id}`}
     >
+      <PopoverTitle className="sr-only">{stage.title}</PopoverTitle>
       <p className="px-1 pb-1 text-cap text-muted-foreground">{t("stage.artifacts")}</p>
       {artifacts.length === 0 ? (
         <p className="px-1 pb-1 text-hint text-muted-foreground">{t("stage.empty")}</p>
@@ -57,18 +65,20 @@ function StagePopover({
         <p className="px-1 text-hint text-muted-foreground">{t("stage.empty")}</p>
       ) : (
         stage.sessions.map((sessionId) => (
-          <button
+          <Button
             key={sessionId}
             type="button"
-            className="block w-full truncate rounded-full px-1 py-0.5 text-start text-ui hover:bg-accent/50"
+            variant="ghost"
+            size="row"
+            focusStyle="inset"
             data-testid={`stage-session-${sessionId}`}
             onClick={() => onSelectSession(sessionId)}
           >
-            {sessionId}
-          </button>
+            <span className="truncate">{sessionId}</span>
+          </Button>
         ))
       )}
-    </div>
+    </PopoverContent>
   );
 }
 
@@ -89,44 +99,55 @@ export function StageTrack({
         aria-label={t("stage.track")}
       >
         {detail.stages.map((stage) => (
-          <div key={stage.id} className="relative" role="listitem">
-            <button
-              type="button"
-              data-testid={`stage-${stage.id}`}
-              data-state={stage.state}
-              aria-expanded={openStage === stage.id}
-              title={t(`stage.state.${stage.state}` as "stage.state.done")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-ui transition-colors hover:bg-accent/50",
-                stage.state === "current" && "bg-accent text-foreground",
-                stage.state === "done" && "bg-card text-muted-foreground",
-                stage.state === "pending" && "bg-card text-muted-foreground opacity-60",
-              )}
-              onClick={() => setOpenStage(openStage === stage.id ? null : stage.id)}
+          <div key={stage.id} role="listitem">
+            <Popover
+              open={openStage === stage.id}
+              onOpenChange={(open) => setOpenStage(open ? stage.id : null)}
             >
-              {stage.state === "done" && (
-                <Check className="size-3 shrink-0" aria-label={t("stage.state.done")} />
-              )}
-              <span className="truncate">{stage.title}</span>
-              {stage.loop_count > 1 && (
-                <span
-                  className="shrink-0 text-cap text-muted-foreground"
-                  data-testid={`stage-loop-${stage.id}`}
-                  data-count={stage.loop_count}
-                >
-                  {t("stage.loop", { count: stage.loop_count })}
-                </span>
-              )}
-              {stage.gate === "confirm" && (
-                <Lock
-                  className="size-3 shrink-0 text-muted-foreground"
-                  aria-label={t("stage.confirmGate")}
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="selectable"
+                    data-selected={stage.state === "current" ? "true" : undefined}
+                    data-testid={`stage-${stage.id}`}
+                    data-state={stage.state}
+                    title={t(`stage.state.${stage.state}` as "stage.state.done")}
+                    className={cn(
+                      "max-w-full gap-control-group px-3",
+                      stage.state !== "current" && "text-content-muted",
+                      stage.state === "pending" && "opacity-60",
+                    )}
+                  />
+                }
+              >
+                {stage.state === "done" && (
+                  <Check data-icon="inline-start" aria-label={t("stage.state.done")} />
+                )}
+                <span className="truncate">{stage.title}</span>
+                {stage.loop_count > 1 && (
+                  <span
+                    className="shrink-0 text-cap text-muted-foreground"
+                    data-testid={`stage-loop-${stage.id}`}
+                    data-count={stage.loop_count}
+                  >
+                    {t("stage.loop", { count: stage.loop_count })}
+                  </span>
+                )}
+                {stage.gate === "confirm" && (
+                  <Lock data-icon="inline-end" aria-label={t("stage.confirmGate")} />
+                )}
+              </PopoverTrigger>
+              {openStage === stage.id && (
+                <StagePopover
+                  stage={stage}
+                  onSelectSession={(sessionId) => {
+                    setOpenStage(null);
+                    onSelectSession(sessionId);
+                  }}
                 />
               )}
-            </button>
-            {openStage === stage.id && (
-              <StagePopover stage={stage} onSelectSession={onSelectSession} />
-            )}
+            </Popover>
           </div>
         ))}
       </div>

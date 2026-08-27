@@ -7,6 +7,7 @@ import type { SceneSlotDef } from "../session/scene";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
@@ -214,7 +215,7 @@ interface SlotCardEditor {
 }
 
 const FIELD_CLASSES =
-  "canvas-ui-control bg-fill-rest px-2 py-1 text-ui outline-none transition-[color,box-shadow,background-color] focus-visible:ring-[3px] focus-visible:ring-ring/50";
+  "canvas-ui-control bg-fill-rest px-2 py-1 text-ui outline-none transition-[color,box-shadow,background-color] focus-visible:focus-ring";
 
 export function SlotCardView({
   block,
@@ -289,11 +290,12 @@ export function SlotCardView({
     switch (slot.kind) {
       case "multiline":
         return (
-          <textarea
+          <Textarea
             data-slot-field
             aria-label={label}
             aria-required={slot.required || undefined}
-            className={cn(FIELD_CLASSES, "w-full resize-none")}
+            size="compact"
+            className="resize-none"
             rows={2}
             placeholder={label}
             value={value}

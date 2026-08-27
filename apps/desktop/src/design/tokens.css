@@ -1,9 +1,9 @@
 /* @design-system-version 0.9.0
  *
  * C2 desktop design tokens. This is the single source of truth for the new system.
- * Phase 1 deliberately does not remap the production UI yet; the legacy values in styles.css
- * remain baseline debt until the one-shot migration. Product components may consume semantic or
- * shared-component tokens only. Foundation tokens are private inputs for this file.
+ * Phase 2 migrates production UI in coherent feature cohorts while legacy values in styles.css
+ * remain baseline debt. Product components may consume semantic or shared-component tokens only.
+ * Foundation tokens are private inputs for this file.
  */
 
 :root {
@@ -78,6 +78,8 @@
   --ds-foundation-light-warning: oklch(0.48 0.13 70);
   --ds-foundation-light-destructive: oklch(0.56 0.22 27);
   --ds-foundation-light-destructive-hover: oklch(0.52 0.22 27);
+  --ds-foundation-light-viz-cyan: #0184bc;
+  --ds-foundation-light-viz-purple: #a626a4;
   --ds-foundation-light-focus: oklch(0.38 0.01 260);
   --ds-foundation-light-overlay: oklch(0.18 0.01 260 / 42%);
   --ds-foundation-light-shadow: rgb(16 24 40 / 10%);
@@ -100,6 +102,8 @@
   --ds-foundation-dark-warning: oklch(0.8 0.13 82);
   --ds-foundation-dark-destructive: oklch(0.72 0.17 22);
   --ds-foundation-dark-destructive-hover: oklch(0.76 0.17 22);
+  --ds-foundation-dark-viz-cyan: #6fc1c9;
+  --ds-foundation-dark-viz-purple: #c29bf0;
   --ds-foundation-dark-focus: oklch(0.78 0.008 260);
   --ds-foundation-dark-overlay: oklch(0.08 0.004 265 / 72%);
   --ds-foundation-dark-shadow: rgb(0 0 0 / 34%);
@@ -170,6 +174,9 @@
   --ds-space-section: var(--ds-foundation-space-16);
   --ds-space-page: var(--ds-foundation-space-24);
   --ds-space-page-section: var(--ds-foundation-space-32);
+  --ds-space-page-start: calc(var(--ds-space-page) + var(--ds-space-section));
+  --ds-space-page-start-wide: calc(var(--ds-space-page) + var(--ds-space-page-section));
+  --ds-space-page-end: calc(var(--ds-space-page-section) * 2 + var(--ds-space-section));
 
   /* Semantic type roles. */
   --ds-font-ui: var(--ds-foundation-font-ui);
@@ -235,6 +242,12 @@
   --ds-color-warning: var(--ds-foundation-light-warning);
   --ds-color-destructive: var(--ds-foundation-light-destructive);
   --ds-color-destructive-hover: var(--ds-foundation-light-destructive-hover);
+  --ds-color-viz-series-1: var(--ds-foundation-light-primary);
+  --ds-color-viz-series-2: var(--ds-foundation-light-success);
+  --ds-color-viz-series-3: var(--ds-foundation-light-warning);
+  --ds-color-viz-series-4: var(--ds-foundation-light-destructive);
+  --ds-color-viz-series-5: var(--ds-foundation-light-viz-cyan);
+  --ds-color-viz-series-6: var(--ds-foundation-light-viz-purple);
   --ds-color-focus: var(--ds-foundation-light-focus);
   --ds-color-overlay: var(--ds-foundation-light-overlay);
   --ds-color-shadow: var(--ds-foundation-light-shadow);
@@ -261,12 +274,16 @@
   --ds-input-radius: var(--ds-radius-control);
   --ds-card-radius: var(--ds-radius-module);
   --ds-dialog-radius: var(--ds-radius-modal);
+  --ds-dialog-max-height: 86dvh;
+  --ds-dialog-content-max-height: 52vh;
   --ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));
   --ds-menu-radius: var(--ds-radius-module);
   --ds-menu-item-radius: var(--ds-radius-control);
   --ds-menu-item-height: var(--ds-control-normal);
   --ds-menu-padding: var(--ds-space-control-group);
   --ds-menu-elevation: var(--ds-elevation-raised);
+  --ds-titlebar-height: calc(var(--ds-control-field) + var(--ds-space-section));
+  --ds-panel-strip-height: calc(var(--ds-control-normal) + var(--ds-space-module-inset));
 
 }
 
@@ -289,6 +306,12 @@
   --ds-color-warning: var(--ds-foundation-light-warning);
   --ds-color-destructive: var(--ds-foundation-light-destructive);
   --ds-color-destructive-hover: var(--ds-foundation-light-destructive-hover);
+  --ds-color-viz-series-1: var(--ds-foundation-light-primary);
+  --ds-color-viz-series-2: var(--ds-foundation-light-success);
+  --ds-color-viz-series-3: var(--ds-foundation-light-warning);
+  --ds-color-viz-series-4: var(--ds-foundation-light-destructive);
+  --ds-color-viz-series-5: var(--ds-foundation-light-viz-cyan);
+  --ds-color-viz-series-6: var(--ds-foundation-light-viz-purple);
   --ds-color-focus: var(--ds-foundation-light-focus);
   --ds-color-overlay: var(--ds-foundation-light-overlay);
   --ds-color-shadow: var(--ds-foundation-light-shadow);
@@ -325,6 +348,12 @@
   --ds-color-warning: var(--ds-foundation-dark-warning);
   --ds-color-destructive: var(--ds-foundation-dark-destructive);
   --ds-color-destructive-hover: var(--ds-foundation-dark-destructive-hover);
+  --ds-color-viz-series-1: var(--ds-foundation-dark-primary);
+  --ds-color-viz-series-2: var(--ds-foundation-dark-success);
+  --ds-color-viz-series-3: var(--ds-foundation-dark-warning);
+  --ds-color-viz-series-4: var(--ds-foundation-dark-destructive);
+  --ds-color-viz-series-5: var(--ds-foundation-dark-viz-cyan);
+  --ds-color-viz-series-6: var(--ds-foundation-dark-viz-purple);
   --ds-color-focus: var(--ds-foundation-dark-focus);
   --ds-color-overlay: var(--ds-foundation-dark-overlay);
   --ds-color-shadow: var(--ds-foundation-dark-shadow);
@@ -375,5 +404,9 @@
 /* @contrast --ds-color-text --ds-color-surface 4.5 */
 /* @contrast --ds-color-text-muted --ds-color-surface 4.5 */
 /* @contrast --ds-color-primary-text --ds-color-primary 4.5 */
+/* @contrast --ds-color-text-muted --ds-color-canvas 4.5 */
+/* @contrast --ds-color-success --ds-color-canvas 4.5 */
+/* @contrast --ds-color-warning --ds-color-canvas 4.5 */
+/* @contrast --ds-color-destructive --ds-color-canvas 4.5 */
 /* @contrast --ds-color-destructive --ds-color-surface 4.5 */
 /* @contrast --ds-color-focus --ds-color-surface 3 */

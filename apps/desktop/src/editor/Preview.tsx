@@ -52,7 +52,7 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
         )}
 
         {canvases.length > 0 && (
-          <div className="canvas-ui-module flex flex-col gap-3 border bg-card/60 p-3" aria-label="Canvas previews">
+          <div className="canvas-ui-module flex flex-col gap-3 bg-fill-quiet p-3" aria-label="Canvas previews">
             {canvases.map((canvas) => (
               <section key={`${canvas.id}:${canvas.frozenRevision}`} className="flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2 text-fine text-muted-foreground">
@@ -63,7 +63,7 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
                 {canvas.exports.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Canvas images">
                     {canvas.exports.map((item) => (
-                      <figure key={item.id} className="canvas-ui-control overflow-hidden border bg-muted/30">
+                      <figure key={item.id} className="canvas-ui-control overflow-hidden bg-surface">
                         <img
                           src={canvasExportDataUrl(item)}
                           alt={`${canvas.title || "Canvas"} ${item.kind}${item.index == null ? "" : ` ${item.index + 1}`}`}
@@ -78,7 +78,7 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
           </div>
         )}
 
-        <ScrollArea className="max-h-[52vh] rounded-lg bg-muted/40">
+        <ScrollArea className="max-h-dialog-content rounded-module bg-fill-quiet">
           <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-hint leading-relaxed">
             {preview.prompt || "(empty)"}
           </pre>

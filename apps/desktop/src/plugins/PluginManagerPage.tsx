@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge, type StatusTone } from "@/components/business/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -259,6 +260,15 @@ function CompactStatus({
   );
 }
 
+function statusTone(status: PluginManagerStatus): StatusTone {
+  if (status === "active") return "success";
+  if (status === "failed") return "destructive";
+  if (status === "pending" || status === "loading" || status === "requires_auth") {
+    return "warning";
+  }
+  return "neutral";
+}
+
 function StatusSummary({
   state,
   labels,
@@ -268,12 +278,14 @@ function StatusSummary({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <CompactStatus status={state.status} labels={labels} />
+      <StatusBadge tone={statusTone(state.status)}>
+        {labels.status[state.status]}
+      </StatusBadge>
       {state.missingDependencies?.length ? (
-        <Badge variant="destructive">
+        <StatusBadge tone="destructive">
           <CircleAlert />
           {labels.missingCount(state.missingDependencies.length)}
-        </Badge>
+        </StatusBadge>
       ) : null}
     </div>
   );
@@ -710,9 +722,9 @@ function PluginList({
                   {plugin.name}
                 </span>
               {plugin.bundle?.requiresTrust && !plugin.bundle.trusted ? (
-                  <Badge variant="destructive" className="shrink-0">
+                  <StatusBadge tone="destructive">
                     {labels.notTrusted}
-                  </Badge>
+                  </StatusBadge>
                 ) : (
                   <CompactStatus status={plugin.state.status} labels={labels} />
                 )}
@@ -1663,7 +1675,7 @@ export function PluginManagerPage({
       aria-label={labels.title}
     >
       <div className="plugin-manager-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
-        <header className="plugin-manager-list-header electrobun-webkit-app-region-drag flex h-(--ds-layout-titlebar-height) shrink-0 items-center gap-1 px-3">
+        <header className="plugin-manager-list-header electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-1 px-3">
           {headerLeadingAction ? (
             <div data-plugin-manager-leading-action className="shrink-0">
               {headerLeadingAction}
@@ -1719,7 +1731,7 @@ export function PluginManagerPage({
       </div>
 
       <div className="plugin-manager-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <header className="plugin-manager-detail-header electrobun-webkit-app-region-drag flex h-(--ds-layout-titlebar-height) shrink-0 items-center gap-2 px-4">
+        <header className="plugin-manager-detail-header electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-2 px-4">
           {headerLeadingAction ? (
             <div data-plugin-manager-detail-leading-action className="plugin-manager-detail-leading-action shrink-0">
               {headerLeadingAction}
