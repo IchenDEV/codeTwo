@@ -713,7 +713,10 @@ function PluginList({
             aria-pressed={selected}
           onClick={() => onSelect(plugin.id)}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-(--ds-radius-control) bg-fill-quiet text-muted-foreground">
+          <span className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-control bg-fill-quiet",
+            selected ? "text-foreground" : "text-muted-foreground",
+          )}>
             {sourceIcon(plugin.source)}
           </span>
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -767,7 +770,10 @@ function ResourceList({
             aria-pressed={selected}
             onClick={() => onSelect(resource.id)}
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-(--ds-radius-control) bg-fill-quiet text-muted-foreground">
+            <span className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-control bg-fill-quiet",
+              selected ? "text-foreground" : "text-muted-foreground",
+            )}>
               {resourceIcon(tab)}
             </span>
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -817,7 +823,7 @@ function ResourceDetails({
     >
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold leading-tight">
+          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold">
             <span className="truncate">{resource.name}</span>
             <Badge variant="secondary">
               {labels.componentKind(resource.kind)}
@@ -941,7 +947,7 @@ function PluginDetails({
     <article data-plugin-details className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold leading-tight">
+          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold">
             <span className="truncate">{plugin.name}</span>
           {plugin.version ? (
             <Badge variant="secondary">v{plugin.version}</Badge>
@@ -1217,7 +1223,7 @@ function MarketplaceDetails({
     <article data-marketplace-details className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold leading-tight">
+          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold">
             <span className="truncate">{item.name}</span>
             {item.version ? <Badge variant="secondary">v{item.version}</Badge> : null}
             <Badge variant="secondary">{item.kind}</Badge>
@@ -1681,7 +1687,8 @@ export function PluginManagerPage({
               {headerLeadingAction}
             </div>
           ) : null}
-          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="plugin-manager-tabs flex min-w-0 items-center gap-0.5 overflow-x-auto">
+          <h1 className="shrink-0 text-dialog font-semibold">{labels.title}</h1>
+          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="plugin-manager-tabs flex h-control min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
             {(["plugins", "mcps", "skills", "hooks", "marketplace"] as const).map((id) => (
               <button
                 key={id}
@@ -1690,7 +1697,7 @@ export function PluginManagerPage({
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "plugin-manager-tab h-(--ds-control-normal) shrink-0 rounded-(--ds-radius-control) px-1 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  "plugin-manager-tab h-control shrink-0 rounded-control px-1 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:focus-ring-inset",
                   tab === id && "font-medium text-foreground hover:bg-transparent",
                 )}
               >

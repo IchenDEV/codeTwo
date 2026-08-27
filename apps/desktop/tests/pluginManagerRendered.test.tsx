@@ -386,6 +386,8 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("w-full")).toBe(true);
     expect(view.container.querySelector("[data-plugin-details]")?.tagName).toBe("ARTICLE");
     expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent).toContain("Memory");
+    expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"] > span:first-child')?.className).toContain("text-foreground");
+    expect(view.container.querySelector(".plugin-manager-list-header h1")?.textContent).toBe("Features & plugins");
     expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"] [data-plugin-status="active"] .bg-success')).not.toBeNull();
     expect(view.container.textContent).toContain("Built-in feature");
     expect(view.container.textContent).toContain("Host feature");

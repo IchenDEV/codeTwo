@@ -48,7 +48,10 @@ function NavigationRow({
     >
       <span
         data-slot="navigation-row-leading"
-        className="flex shrink-0 items-center justify-center"
+        className={cn(
+          "flex shrink-0 items-center justify-center",
+          current ? "text-current" : "text-muted-foreground",
+        )}
         aria-hidden="true"
       >
         {leading}

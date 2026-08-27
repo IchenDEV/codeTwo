@@ -44,6 +44,15 @@ describe("C2 design system", () => {
     }
   });
 
+  test("maps production page and dialog utilities to the documented type roles", () => {
+    expect(styleSource).toContain("--text-display: var(--ds-type-page-title-size);");
+    expect(styleSource).toContain("--text-display--line-height: var(--ds-type-page-title-leading);");
+    expect(styleSource).toContain("--text-page: var(--ds-type-page-title-size);");
+    expect(styleSource).toContain("--text-page--line-height: var(--ds-type-page-title-leading);");
+    expect(styleSource).toContain("--text-dialog: var(--ds-type-dialog-size);");
+    expect(styleSource).toContain("--text-dialog--line-height: var(--ds-type-dialog-leading);");
+  });
+
   test("keeps the eight approved type roles in the token source", () => {
     for (const role of [
       "large-title",
@@ -65,6 +74,7 @@ describe("C2 design system", () => {
     expect(mainSource).not.toContain('import "./design/tokens.css";');
     for (const role of [
       "large-title",
+      "display",
       "page",
       "section",
       "dialog",

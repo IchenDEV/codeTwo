@@ -53,6 +53,8 @@ describe("desktop UI stack", () => {
 
     expect(dialogSource).toContain("flex flex-col gap-2 sm:flex-row sm:justify-end");
     expect(alertDialogSource).toContain("flex flex-col gap-2 sm:flex-row sm:justify-end");
+    expect(dialogSource).toContain('text-title leading-5 font-semibold');
+    expect(alertDialogSource).toContain('text-title leading-5 font-semibold');
     expect(dialogSource).not.toContain("flex-col-reverse");
     expect(alertDialogSource).not.toContain("flex-col-reverse");
   });

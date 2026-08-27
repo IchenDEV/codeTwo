@@ -42,6 +42,11 @@ describe("AutomationsPage layout", () => {
 
     expect(view.container.querySelector('button[aria-label="Expand the sidebar"]')).not.toBeNull();
     expect(view.container.textContent).toContain("Add a project before creating an automation.");
+    expect(view.container.querySelector("[data-automation-page] h1")?.textContent).toBe("Automations");
+    expect(view.container.querySelector("[data-automation-page] h1")?.className).toContain("text-dialog");
+    const emptyState = view.container.querySelector("[data-automation-list-pane] [aria-live]");
+    expect(emptyState?.querySelector("p")?.className).toContain("font-medium");
+    expect(emptyState?.querySelectorAll("p")[1]?.className).toContain("text-hint");
     const addProject = button(view.container, "Add project");
     expect(addProject).not.toBeNull();
     expect(addProject?.hasAttribute("disabled")).toBeFalse();

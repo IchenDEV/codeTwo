@@ -294,6 +294,7 @@
   --text-title: var(--ds-type-dialog-size);
   --text-heading: var(--ds-type-section-size);
   --text-display: var(--ds-type-page-title-size);
+  --text-display--line-height: var(--ds-type-page-title-leading);
 }
 
 /* The desktop shell uses macOS-style hairlines. Keep the bare Tailwind border utilities on the
