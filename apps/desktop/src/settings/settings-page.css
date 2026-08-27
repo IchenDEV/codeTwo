@@ -7,6 +7,19 @@
   padding: 2rem 2rem 0;
 }
 
+.session-import-result {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-page-section);
+  margin-top: var(--ds-space-module-inset);
+  padding: var(--ds-space-surface-inset);
+  border-radius: var(--ds-radius-module);
+  background: var(--ds-color-fill-quiet);
+  box-shadow: var(--ds-elevation-surface);
+}
+
 .project-settings-row {
   gap: var(--ds-space-page-section);
 }
@@ -205,6 +218,11 @@
 
   .settings-profile-page {
     padding: 1rem 1rem 0;
+  }
+
+  .session-import-result {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .settings-worktrees-page {

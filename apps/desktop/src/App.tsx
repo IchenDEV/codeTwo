@@ -5968,6 +5968,7 @@ export default function App() {
             setShowSettings(false);
             void selectSession(id);
           }}
+          onSessionsImported={refreshSessions}
           memoryEnabled={memorySettingsEnabled}
           deviceSyncEnabled={deviceSyncSettingsEnabled}
           onClose={() => {

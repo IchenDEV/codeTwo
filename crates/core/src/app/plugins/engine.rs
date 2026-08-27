@@ -320,6 +320,45 @@ fn register_commands(
     })?;
 
     #[derive(Deserialize)]
+    struct ImportSessionsArgs {
+        paths: Vec<String>,
+        fallback_cwd: String,
+    }
+    let importing = store.clone();
+    let import_bus = bus.clone();
+    ctx.command("sessions.import", move |args| {
+        let store = importing.clone();
+        let bus = import_bus.clone();
+        async move {
+            let args: ImportSessionsArgs = take_args(args)?;
+            if args.paths.is_empty() {
+                return Err(PluginError::new("select at least one session file"));
+            }
+            if args.paths.len() > 100 {
+                return Err(PluginError::new(
+                    "select no more than 100 session files at once",
+                ));
+            }
+            let report = crate::session_import::import_session_files(
+                &store,
+                &args.paths,
+                &args.fallback_cwd,
+            );
+            for session in report.sessions.iter().filter(|session| session.imported) {
+                bus.publish(crate::event::Event::SessionCreated {
+                    session: session.id.clone(),
+                    cwd: session.cwd.clone(),
+                    project_path: session.project_path.clone(),
+                    worktree_path: None,
+                    worktree_baseline: None,
+                    request_id: None,
+                });
+            }
+            json(report)
+        }
+    })?;
+
+    #[derive(Deserialize)]
     struct SessionArgs {
         session: String,
     }

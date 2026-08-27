@@ -2090,6 +2090,50 @@ impl Store {
         Self::upsert_session_on(&conn, s)
     }
 
+    /// Atomically add one provider-owned historical session. The deterministic imported session
+    /// id is the dedupe receipt: selecting the same source file again never duplicates messages.
+    pub fn import_session(
+        &self,
+        session: &Session,
+        entries: &[TranscriptEntry],
+    ) -> Result<bool, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?1)",
+            [&session.id],
+            |row| row.get(0),
+        )?;
+        if exists {
+            return Ok(false);
+        }
+
+        Self::upsert_session_on(&tx, session)?;
+        for (seq, entry) in entries.iter().enumerate() {
+            let search_text = match (&entry.role, &entry.part) {
+                (Role::User, Part::Prompt { text, .. }) | (Role::Agent, Part::Text { text }) => {
+                    Some(text.chars().take(262_144).collect::<String>())
+                }
+                _ => None,
+            };
+            tx.execute(
+                "INSERT INTO parts (session_id,seq,sync_id,role,part_json,search_text,created_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                rusqlite::params![
+                    session.id,
+                    seq as i64,
+                    uuid::Uuid::new_v4().to_string(),
+                    serde_json::to_string(&entry.role)?,
+                    serde_json::to_string(&entry.part)?,
+                    search_text,
+                    entry.created_at,
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(true)
+    }
+
     /// Persist a newly created session and its external command identity in one transaction.
     pub fn upsert_session_with_command_receipt(
         &self,
