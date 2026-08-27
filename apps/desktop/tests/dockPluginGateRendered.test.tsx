@@ -5,7 +5,12 @@ import { activateDom, button, click, dom, flush, mount, restoreDom } from "./dom
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
-const { Dock, dockMaxWidth, shouldOverlayRailForDock } = await import("../src/dock/Dock");
+const {
+  Dock,
+  dockMaxWidth,
+  shouldOverlayRailForDock,
+  shouldOverlayRailForWorkspace,
+} = await import("../src/dock/Dock");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -59,6 +64,10 @@ describe("Dock plugin component gate", () => {
   test("preserves the document measure after accounting for an inline rail", () => {
     expect(dockMaxWidth(1280, 288)).toBe(372);
     expect(dockMaxWidth(800)).toBe(300);
+    expect(shouldOverlayRailForWorkspace(907, 288)).toBe(true);
+    expect(shouldOverlayRailForWorkspace(908, 288)).toBe(false);
+    expect(shouldOverlayRailForWorkspace(1039, 420)).toBe(true);
+    expect(shouldOverlayRailForWorkspace(1040, 420)).toBe(false);
     expect(shouldOverlayRailForDock(1207, 288)).toBe(true);
     expect(shouldOverlayRailForDock(1208, 288)).toBe(false);
   });

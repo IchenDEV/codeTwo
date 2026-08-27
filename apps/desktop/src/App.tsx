@@ -348,6 +348,7 @@ import { needsMeCount } from "./sidebar/missionControl.ts";
 import {
   Dock,
   shouldOverlayRailForDock,
+  shouldOverlayRailForWorkspace,
   type DockSurface,
   type DockTab,
 } from "./dock/Dock";
@@ -424,7 +425,6 @@ function promptImagesForTurn(captures: readonly AppshotCapture[]): PromptImage[]
 }
 
 const EMPTY_APPSHOTS: AppshotCapture[] = [];
-const RAIL_OVERLAY_BREAKPOINT = 960;
 
 interface PendingPromptRequest {
   requestId: string;
@@ -984,25 +984,25 @@ export default function App() {
     () => setRailCollapsedRaw(railCollapsed ? 0 : 1),
     [railCollapsed, setRailCollapsedRaw],
   );
-  const [narrowLayout, setNarrowLayout] = useState(
-    () => window.innerWidth < RAIL_OVERLAY_BREAKPOINT,
-  );
+  const appliedRailWidth = Math.min(420, Math.max(220, railWidth));
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  const narrowLayout = shouldOverlayRailForWorkspace(
+    viewportWidth,
+    appliedRailWidth,
+  );
   const [narrowRailOpen, setNarrowRailOpen] = useState(false);
   const wasNarrowLayoutRef = useRef(narrowLayout);
   useEffect(() => {
     const measure = () => {
-      const width = window.innerWidth;
-      const next = width < RAIL_OVERLAY_BREAKPOINT;
-      if (next && !wasNarrowLayoutRef.current) setNarrowRailOpen(false);
-      wasNarrowLayoutRef.current = next;
-      setNarrowLayout(next);
-      setViewportWidth(width);
+      setViewportWidth(window.innerWidth);
     };
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
-  const appliedRailWidth = Math.min(420, Math.max(220, railWidth));
+  useLayoutEffect(() => {
+    if (narrowLayout && !wasNarrowLayoutRef.current) setNarrowRailOpen(false);
+    wasNarrowLayoutRef.current = narrowLayout;
+  }, [narrowLayout]);
   const dockForcesRailOverlay =
     dockTab !== null && shouldOverlayRailForDock(viewportWidth, appliedRailWidth);
   const railOverlay = narrowLayout || dockForcesRailOverlay;
@@ -6581,7 +6581,7 @@ export default function App() {
                 docMode
                   ? "order-1 min-h-0 min-w-0 flex-1 flex-col"
                   : turns.length === 0 && !sessionLoading
-                    ? "order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"
+                    ? "hero-scroll-shell order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"
                     : "order-2 shrink-0 flex-col",
               )}
             >

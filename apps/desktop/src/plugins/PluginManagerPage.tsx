@@ -1663,7 +1663,7 @@ export function PluginManagerPage({
       aria-label={labels.title}
     >
       <div className="plugin-manager-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
-        <header className="plugin-manager-list-header electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 px-3 py-2.5">
+        <header className="plugin-manager-list-header electrobun-webkit-app-region-drag flex h-(--ds-layout-titlebar-height) shrink-0 items-center gap-1 px-3">
           {headerLeadingAction ? (
             <div data-plugin-manager-leading-action className="shrink-0">
               {headerLeadingAction}
@@ -1719,7 +1719,7 @@ export function PluginManagerPage({
       </div>
 
       <div className="plugin-manager-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-2.5">
+        <header className="plugin-manager-detail-header electrobun-webkit-app-region-drag flex h-(--ds-layout-titlebar-height) shrink-0 items-center gap-2 px-4">
           {headerLeadingAction ? (
             <div data-plugin-manager-detail-leading-action className="plugin-manager-detail-leading-action shrink-0">
               {headerLeadingAction}

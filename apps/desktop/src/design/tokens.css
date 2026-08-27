@@ -28,6 +28,7 @@
   --ds-foundation-control-24: 24px;
   --ds-foundation-control-28: 28px;
   --ds-foundation-control-32: 32px;
+  --ds-foundation-chrome-48: 48px;
 
   /* Foundation: platform typography. SF is selected by macOS through -apple-system. */
   --ds-foundation-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -206,6 +207,7 @@
   --ds-control-mini: var(--ds-foundation-control-24);
   --ds-control-normal: var(--ds-foundation-control-28);
   --ds-control-field: var(--ds-foundation-control-32);
+  --ds-layout-titlebar-height: var(--ds-foundation-chrome-48);
 
   /* Semantic motion. */
   --ds-motion-feedback: var(--ds-foundation-motion-120);

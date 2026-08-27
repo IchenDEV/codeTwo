@@ -1,5 +1,5 @@
 .settings-titlebar {
-  height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));
+  height: var(--ds-layout-titlebar-height);
 }
 
 .settings-sidebar {
@@ -382,6 +382,30 @@
     width: 100%;
     justify-content: flex-end;
   }
+}
+
+/* Profile geometry follows its actual content column, not the outer window. The settings rail can
+   leave a narrow detail pane even while the window itself remains above the compact breakpoint. */
+@container settings-page (max-width: 40rem) {
+  .profile-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .profile-actions {
+    align-items: flex-start;
+  }
+
+  .profile-actions > div {
+    justify-content: flex-start;
+  }
+
+  .profile-status {
+    align-self: flex-start;
+    padding: 0;
+  }
 
   .profile-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -415,28 +439,6 @@
   }
 }
 
-@media (max-width: 50rem) {
-  .profile-header {
-    align-items: stretch;
-    flex-direction: column;
-    padding-right: 0;
-    padding-left: 0;
-  }
-
-  .profile-actions {
-    align-items: flex-start;
-  }
-
-  .profile-actions > div {
-    justify-content: flex-start;
-  }
-
-  .profile-status {
-    align-self: flex-start;
-    padding: 0;
-  }
-}
-
 @container settings-page (max-width: 36rem) {
   .settings-row:not([data-compact]) {
     align-items: stretch;
@@ -454,7 +456,7 @@
   }
 }
 
-@media (max-width: 38rem) {
+@container settings-page (max-width: 38rem) {
   .profile-identity {
     align-items: flex-start;
   }
