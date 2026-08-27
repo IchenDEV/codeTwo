@@ -72,7 +72,7 @@ pub use plugin_manager::{
 
 pub use service::{
     CanvasService, CostService, EngineService, EventBus, HandoffService, KeymapService,
-    LoaderService, MemoryService, Paths, PluginConfigService, PluginHub, ProviderService,
+    LoaderService, Paths, PluginConfigService, PluginHub, ProviderService,
     ProviderSummary, SceneRuntimeService, SceneService, SkillService, StoreService, TerminalEvent,
     TerminalService,
 };

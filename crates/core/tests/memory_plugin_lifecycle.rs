@@ -1,6 +1,7 @@
 //! Memory is an optional, revocable engine capability rather than part of persistence itself.
 
 use codetwo_core::app::{AppConfig, CoreApp};
+use codetwo_core::memory::MemoryCapability;
 use serde_json::{json, Value};
 
 #[tokio::test]
@@ -14,6 +15,7 @@ async fn disabling_memory_keeps_the_engine_and_store_online() {
         )
     });
     let app = CoreApp::boot(config).await.unwrap();
+    assert!(app.service::<MemoryCapability>().is_some());
     assert!(app.call("memory.settings", Value::Null).await.is_ok());
     assert!(app
         .commands()
@@ -38,6 +40,7 @@ async fn disabling_memory_keeps_the_engine_and_store_online() {
     .await
     .unwrap();
 
+    assert!(app.service::<MemoryCapability>().is_none());
     assert!(app.call("memory.settings", Value::Null).await.is_err());
     assert!(app
         .commands()

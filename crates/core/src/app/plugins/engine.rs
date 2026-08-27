@@ -11,8 +11,7 @@
 
 use crate::app::events::{EngineEvent, ScenesChanged, SkillsChanged};
 use crate::app::service::{
-    EngineService, EventBus, MemoryService, Paths, ProviderService, SceneService, SkillService,
-    StoreService,
+    EngineService, EventBus, Paths, ProviderService, SceneService, SkillService, StoreService,
 };
 use crate::app::{json, take_args};
 use crate::engine::{Engine, ParallelTaskCreation};
@@ -124,7 +123,9 @@ impl Plugin for EnginePlugin {
             provider_tools: providers.shared_toolsets(),
             skills: skills.library(),
             store: store.0.clone(),
-            memory: ctx.get::<MemoryService>().map(|memory| memory.0.clone()),
+            memory: ctx
+                .get::<crate::memory::MemoryCapability>()
+                .map(|memory| memory.as_ref().clone()),
         };
         let (engine, mut rx) = match &self.builder {
             Some(build) => build(inputs),
