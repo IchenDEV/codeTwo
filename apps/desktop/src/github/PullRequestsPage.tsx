@@ -303,7 +303,8 @@ export function PullRequestsPage({
       <div className="pull-requests-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
         <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-3 py-2.5">
           {headerLeadingAction}
-          <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.views")} className="flex h-(--ds-control-normal) items-center gap-1">
+          <h1 className="shrink-0 text-dialog font-semibold">{t("pullRequests.title")}</h1>
+          <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.views")} className="flex h-control min-w-0 shrink items-center gap-1 overflow-x-auto">
             {(["all", "reviewing", "authored"] as const).map((id) => (
               <button
                 key={id}
@@ -312,7 +313,7 @@ export function PullRequestsPage({
                 aria-selected={view === id}
                 onClick={() => setView(id)}
                 className={cn(
-                  "h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  "h-control rounded-control px-module-inset text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:focus-ring-inset",
                   view === id && "font-medium text-foreground hover:bg-transparent",
                 )}
               >
@@ -320,7 +321,7 @@ export function PullRequestsPage({
               </button>
             ))}
           </LiquidSelectionGroup>
-          <div className="electrobun-webkit-app-region-drag flex-1" />
+          <div className="electrobun-webkit-app-region-drag hidden flex-1 sm:block" />
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.refresh")} onClick={() => void reload()} disabled={loading}>{loading ? <Spinner /> : <RefreshCw />}</Button>} />
             <TooltipContent>{t("pullRequests.refresh")}</TooltipContent>
@@ -352,7 +353,7 @@ export function PullRequestsPage({
             ) : error ? (
               <div role="alert" className="mx-1 flex flex-col items-center gap-3 py-12 text-center text-ui text-muted-foreground"><CircleAlert className="size-4 text-destructive" /><p className="max-w-72 leading-relaxed">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload()}>{t("pullRequests.retry")}</Button></div>
             ) : groups.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-12 text-center text-ui text-muted-foreground"><GitPullRequest className="size-4" /><p>{query || readiness !== "all" ? t("pullRequests.noMatches") : t("pullRequests.empty")}</p></div>
+              <div className="flex flex-col items-center gap-2 py-section text-center"><GitPullRequest className="size-4 text-muted-foreground" /><p className="text-ui font-medium text-foreground">{query || readiness !== "all" ? t("pullRequests.noMatches") : t("pullRequests.empty")}</p></div>
             ) : groups.map((group) => (
               <section key={group.id} className="pt-2">
                 <h2 className="px-3 pb-1 text-fine font-medium text-muted-foreground">{groupLabel(group.id)}</h2>
@@ -435,7 +436,7 @@ export function PullRequestsPage({
               <article className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    <h1 className="text-page font-semibold leading-tight text-foreground">{detail.title}</h1>
+                    <h1 className="text-page font-semibold text-foreground">{detail.title}</h1>
                     <div className="mt-2 flex items-center gap-2 text-ui text-muted-foreground">{avatar(detail.author.login)}<span>{detail.author.login}</span><span>·</span><span>{shortPullRequestAge(detail.createdAt)}</span><span>·</span><span>{detail.repository.nameWithOwner} #{detail.number}</span></div>
                   </div>
                   {detailState?.loading && <ActivityOrb state="searching" visualSize={14} />}

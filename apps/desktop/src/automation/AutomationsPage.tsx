@@ -409,7 +409,8 @@ export function AutomationsPage({
       <div data-automation-list-pane className="automation-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
         <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-3 py-2.5">
           {headerLeadingAction ? <div data-automation-leading-action>{headerLeadingAction}</div> : null}
-          <div data-automation-filters>
+          <h1 className="shrink-0 text-dialog font-semibold">{t("automations.title")}</h1>
+          <div data-automation-filters className="min-w-0 shrink">
             <ViewSwitcher
               label={t("automations.filterLabel")}
               value={filter}
@@ -420,7 +421,7 @@ export function AutomationsPage({
               onValueChange={setFilter}
             />
           </div>
-          <div className="electrobun-webkit-app-region-drag flex-1" />
+          <div className="electrobun-webkit-app-region-drag hidden flex-1 sm:block" />
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={primaryActionLabel} onClick={primaryAction}><Plus className="size-3.5" /></Button>} />
             <TooltipContent>{primaryActionLabel}</TooltipContent>
@@ -445,10 +446,10 @@ export function AutomationsPage({
             {loading && automations.length === 0 ? (
               <div role="status" className="flex items-center justify-center gap-2 py-section text-ui text-muted-foreground"><Spinner />{t("automations.loading")}</div>
             ) : automations.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-ui text-muted-foreground">
-                <CalendarClock className="size-4" />
-                <p>{t("automations.empty")}</p>
-                {!hasProjects ? <p>{t("automations.projectRequired")}</p> : null}
+              <div className="flex flex-col items-center gap-2 px-4 py-section text-center">
+                <CalendarClock className="size-4 text-muted-foreground" />
+                <p className="text-ui font-medium text-foreground">{t("automations.empty")}</p>
+                {!hasProjects ? <p className="text-hint text-muted-foreground">{t("automations.projectRequired")}</p> : null}
                 <Button variant="secondary" size="compact" onClick={primaryAction}><Plus className="size-3.5" />{primaryActionLabel}</Button>
               </div>
             ) : groups.length === 0 ? (
@@ -546,7 +547,7 @@ export function AutomationsPage({
               <article className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    <h1 className="text-page font-semibold leading-tight text-foreground">{selected.name}</h1>
+                    <h1 className="text-page font-semibold text-foreground">{selected.name}</h1>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-ui text-muted-foreground">
                       <span className="flex items-center gap-1.5"><ProviderIcon provider={providerId(selected.provider)} className="size-4" />{providerLabel(selected.provider)}</span>
                       <span>·</span>
@@ -646,7 +647,7 @@ function AutomationEditor({
     <section data-automation-editor className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-page font-semibold leading-tight">{draft.id ? draft.name : t("automations.createTitle")}</h1>
+          <h1 className="text-page font-semibold">{draft.id ? draft.name : t("automations.createTitle")}</h1>
           <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">{t("automations.formHint")}</p>
         </div>
         <Button variant="ghost" size="icon-sm" aria-label={t("automations.cancel")} onClick={onCancel}>

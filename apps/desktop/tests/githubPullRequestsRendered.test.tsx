@@ -98,6 +98,8 @@ describe("PullRequestsPage", () => {
     );
     mounted.push(view);
 
+    expect(view.container.querySelector(".pull-requests-list-pane h1")?.textContent).toBe("Pull requests");
+    expect(view.container.querySelector(".pull-requests-list-pane h1")?.className).toContain("text-dialog");
     await waitFor(() => {
       expect(dom.document.body.textContent).toContain("Build the GitHub panel");
       expect(dom.document.body.textContent).toContain("feature/github-panel");

@@ -261,6 +261,10 @@ describe("SessionRail row layout", () => {
       .toBe("page");
     expect(features?.querySelector('[data-rail-feature="scheduled-tasks"] [data-slot="navigation-row"]')?.getAttribute("aria-current"))
       .toBe("page");
+    expect(features?.querySelector('[data-rail-feature="task-board"] [data-slot="navigation-row-leading"]')?.getAttribute("class"))
+      .toContain("text-current");
+    expect(features?.querySelector('[data-rail-feature="pull-requests"] [data-slot="navigation-row-leading"]')?.getAttribute("class"))
+      .toContain("text-muted-foreground");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
     for (const row of [...rows, ...utilityRows]) click(row);
     expect(opened).toEqual(["new", "pull-requests", "tasks", "scheduled", "plugins", "usage", "settings"]);

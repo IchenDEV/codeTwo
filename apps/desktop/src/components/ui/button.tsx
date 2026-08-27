@@ -34,7 +34,7 @@ const buttonVariants = cva(
         "icon-sm": "size-control",
         "icon-lg": "size-control-field",
         row:
-          "min-h-control w-full justify-start gap-module-inset px-module-inset py-control-group text-start font-normal whitespace-normal [&_[data-slot=navigation-row-leading]]:text-muted-foreground [&_[data-slot=navigation-row-meta]]:text-fine [&_[data-slot=navigation-row-meta]]:text-muted-foreground [&_[data-slot=selectable-row-description]]:text-fine [&_[data-slot=selectable-row-description]]:leading-relaxed [&_[data-slot=selectable-row-description]]:text-muted-foreground [&_[data-slot=selectable-row-meta]]:text-fine [&_[data-slot=selectable-row-meta]]:text-muted-foreground",
+          "min-h-control w-full justify-start gap-module-inset px-module-inset py-control-group text-start font-normal whitespace-normal [&_[data-slot=navigation-row-meta]]:text-fine [&_[data-slot=navigation-row-meta]]:text-muted-foreground [&_[data-slot=selectable-row-description]]:text-fine [&_[data-slot=selectable-row-description]]:leading-relaxed [&_[data-slot=selectable-row-description]]:text-muted-foreground [&_[data-slot=selectable-row-meta]]:text-fine [&_[data-slot=selectable-row-meta]]:text-muted-foreground",
       },
       focusStyle: {
         default: "focus-visible:focus-ring",
