@@ -420,6 +420,47 @@ async fn handle_notification(
                 }
             }
         }
+        // Cursor exposes provider-owned subagents through its documented ACP extension instead
+        // of a session/update variant. Project the completion into the ordinary tool-call path;
+        // Cursor remains responsible for spawning, running, and resuming the child agent.
+        "cursor/task" => {
+            let Some(tool_call_id) = params
+                .get("toolCallId")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+            else {
+                tracing::debug!("acp: ignoring cursor/task without toolCallId");
+                return;
+            };
+            let raw_input = ["subagentType", "description", "prompt", "model"]
+                .into_iter()
+                .filter_map(|key| {
+                    params
+                        .get(key)
+                        .cloned()
+                        .map(|value| (key.to_string(), value))
+                })
+                .collect();
+            handler
+                .session_update(SessionNotification {
+                    session_id: params
+                        .get("sessionId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    update: SessionUpdate::ToolCall(super::wire::ToolCall {
+                        tool_call_id: tool_call_id.to_string(),
+                        title: Some("cursor/task".into()),
+                        kind: Some("agent".into()),
+                        status: Some("completed".into()),
+                        content: None,
+                        raw_input: Some(Value::Object(raw_input)),
+                        raw_output: None,
+                        meta: None,
+                    }),
+                })
+                .await;
+        }
         other => {
             conn.record_ignored_notification(other);
             tracing::debug!("acp: ignoring notification {other}");
@@ -533,5 +574,68 @@ mod tests {
         let json = serde_json::to_string(&snapshot).unwrap();
         assert!(!json.contains("private-session"));
         assert!(!json.contains("must-not-survive"));
+    }
+}
+
+#[cfg(test)]
+mod cursor_tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::acp::wire::ToolCall;
+
+    #[derive(Default)]
+    struct Handler(Mutex<Vec<SessionNotification>>);
+
+    #[async_trait::async_trait]
+    impl ClientHandler for Handler {
+        async fn session_update(&self, note: SessionNotification) {
+            self.0.lock().unwrap().push(note);
+        }
+    }
+
+    #[tokio::test]
+    async fn cursor_native_subagent_notification_uses_tool_call_path() {
+        let (tx_out, _rx_out) = tokio::sync::mpsc::unbounded_channel();
+        let conn = Connection {
+            tx_out,
+            pending: Mutex::new(HashMap::new()),
+            next_id: AtomicU64::new(1),
+            closed_at_unix_ms: AtomicI64::new(0),
+            diagnostics: Mutex::new(AcpProtocolDiagnosticState::default()),
+        };
+        let handler = Arc::new(Handler::default());
+        handle_notification(
+            &conn,
+            handler.as_ref(),
+            "cursor/task",
+            json!({
+                "toolCallId": "cursor-child-1",
+                "description": "Explore authentication",
+                "prompt": "Find the authentication entry points",
+                "subagentType": "explore",
+                "agentId": "private-provider-id",
+                "durationMs": 42
+            }),
+        )
+        .await;
+
+        let notes = handler.0.lock().unwrap();
+        let SessionUpdate::ToolCall(ToolCall {
+            tool_call_id,
+            kind,
+            status,
+            raw_input: Some(raw_input),
+            ..
+        }) = &notes[0].update
+        else {
+            panic!("cursor/task should become an agent tool call");
+        };
+        assert_eq!(tool_call_id, "cursor-child-1");
+        assert_eq!(kind.as_deref(), Some("agent"));
+        assert_eq!(status.as_deref(), Some("completed"));
+        assert_eq!(raw_input["subagentType"], "explore");
+        assert!(raw_input.get("agentId").is_none());
+        assert!(raw_input.get("durationMs").is_none());
     }
 }

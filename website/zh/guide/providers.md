@@ -16,23 +16,25 @@ C2 不会重新实现智能体，也不代理模型访问；它只在本机启�
 
 “支持”不代表所有 Provider 都暴露完全相同的模型和 ACP 能力。C2 只显示当前 ACP 端点真实上报的内容，不会伪造能力一致性。
 
-## 九个内置 Provider
+## 十一个内置 Provider
 
 | Provider | 接入方式 | C2 启动命令 | 前置要求 |
 | --- | --- | --- | --- |
 | **Claude Code** | ACP 适配器 | `npx -y @agentclientprotocol/claude-agent-acp` | Node，以及已完成身份验证的 Claude Code 环境 |
-| **OpenAI Codex** | App Server ACP 适配器 | `npx -y @agentclientprotocol/codex-acp@1.6.2` | Node，以及本地 Codex runtime/登录状态 |
+| **OpenAI Codex** | App Server ACP 适配器 | `npx -y @agentclientprotocol/codex-acp@1.7.0` | Node，以及本地 Codex runtime/登录状态 |
 | **Grok** | 原生 ACP | `grok agent stdio` | 已登录的 `grok` CLI，并位于 `PATH` 中 |
-| **Cursor** | CLI 内置 ACP 模式 | `cursor-agent --acp` | 已登录的 `cursor-agent`，并位于 `PATH` 中 |
+| **Cursor** | CLI 内置 ACP 模式 | `cursor-agent acp` | 已登录的 `cursor-agent`，并位于 `PATH` 中 |
 | **OpenCode 1** | CLI 内置 ACP 模式 | `opencode acp` | 已登录的 `opencode`，并位于 `PATH` 中 |
 | **OpenCode 2（Beta）** | CLI 内置 ACP 模式 | `opencode2 acp` | 已登录的 `opencode2` beta，并位于 `PATH` 中 |
 | **Pi** | 社区 ACP 适配器 | `npx -y pi-acp` | Node；`pi` 位于 `PATH` 中以读取配置和凭据 |
 | **Kimi** | 原生 ACP | `kimi acp` | 已登录的 `kimi` CLI，并位于 `PATH` 中 |
 | **ZCode（GLM）** | GLM ACP 智能体 | `npx -y glm-acp-agent` | Node，加 `Z_AI_API_KEY` 或一次性 `--setup` |
+| **Amp** | ACP 适配器 | `npx -y amp-acp` | Node，以及已登录并位于 `PATH` 中的 `amp` |
+| **Droid** | 原生 ACP | `droid exec --output-format acp` | 已登录的 `droid` CLI，并位于 `PATH` 中 |
 
 ### 原生 ACP
 
-**Grok** 和 **Kimi** 直接提供 ACP 端点，因此 C2 无需 Node 适配器即可启动它们。
+**Grok**、**Kimi** 和 **Droid** 直接提供 ACP 端点，因此 C2 无需 Node 适配器即可启动它们。
 
 ### CLI 内置 ACP 模式
 
@@ -42,13 +44,23 @@ Beta 的安装与迁移边界见 [OpenCode 2 官方文档](https://opencode.ai/v
 
 ### 适配器接入
 
-**Claude Code**、**Codex**、**Pi** 和 **ZCode（GLM）** 通过 `npx` 启动。Pi 使用社区适配器，因为 Pi 本身目前没有 ACP 模式。GLM 项启动的是 GLM ACP 智能体，而不是 ZCode 桌面应用；后者自身是 ACP 客户端，不能作为 C2 驱动的 CLI。
+**Claude Code**、**Codex**、**Pi**、**ZCode（GLM）** 和 **Amp** 通过 `npx` 启动。Pi 与 Amp 使用社区适配器。GLM 项启动的是 GLM ACP 智能体，而不是 ZCode 桌面应用；后者自身是 ACP 客户端，不能作为 C2 驱动的 CLI。
 
 GLM 可以通过环境变量提供 `Z_AI_API_KEY`，也可以先运行：
 
 ```sh
 npx -y glm-acp-agent --setup
 ```
+
+### Provider 原生子代理
+
+C2 不会自行调度子代理。只有当前原生运行时或适配器已经确认提供 Agent/Task 委派工具时，
+插件子代理块才会发送给 Provider：Claude Code、Codex、Cursor、OpenCode 1/2、Kimi、Amp
+和 Droid。它们的标准 ACP 工具调用事件直接进入现有只读 Agents roster；Cursor 官方定义的
+`cursor/task` 完成通知只在 ACP 接入层做一次标准化。
+
+Grok、Pi、ZCode 和自定义 Provider 收到含插件子代理的 prompt 时，会在 turn 被接受前直接
+失败；C2 不会把 specialist 指令悄悄交给主 Agent 内联执行。
 
 ## 可用状态与身份验证
 

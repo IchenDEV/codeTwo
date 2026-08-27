@@ -590,6 +590,16 @@ fn client_capabilities() -> Value {
     serde_json::json!({"elicitation": {"form": {}}})
 }
 
+fn ensure_native_subagents(provider: &ProviderId, compiled: &CompiledPrompt) -> Result<(), String> {
+    if compiled.subagents.is_empty() || provider.supports_native_subagents() {
+        return Ok(());
+    }
+    Err(format!(
+        "provider '{}' does not have verified native subagent support",
+        provider.as_str()
+    ))
+}
+
 fn is_mcp_elicitation(req: &RequestPermissionRequest) -> bool {
     req.meta
         .as_ref()
@@ -3108,11 +3118,13 @@ impl Engine {
         self.state.activity.claim(session, request_id, initial)
     }
 
-    fn preflight_attachment_document(
+    /// Compile the full provider prompt before accepting a turn so validation can happen before
+    /// canonical history is written.
+    fn compile_prompt_document(
         &self,
         doc: &[DocBlock],
         cwd: &str,
-    ) -> Result<Option<CompiledPrompt>, String> {
+    ) -> Result<CompiledPrompt, String> {
         let has_canvas = doc
             .iter()
             .any(|block| matches!(block, DocBlock::Canvas { .. }));
@@ -3122,9 +3134,6 @@ impl Engine {
                 DocBlock::Appshot { .. } | DocBlock::Attachment { .. }
             )
         });
-        if !has_canvas && !has_private_image {
-            return Ok(None);
-        }
         let library = self.state.skills.lock().unwrap();
         let resolve_session = |id: &str, through_seq: Option<i64>| -> Option<String> {
             self.referenced_session_context_through(id, through_seq)
@@ -3171,9 +3180,14 @@ impl Engine {
                     "private prompt images are unavailable in this host".to_string()
                 })?,
             )?,
-            (false, false) => unreachable!(),
+            (false, false) => compile_with_sessions(
+                doc,
+                &library,
+                Some(std::path::Path::new(cwd)),
+                Some(&resolve_session),
+            ),
         };
-        Ok(Some(compiled))
+        Ok(compiled)
     }
 
     /// A session's persisted transcript (empty if not using a store).
@@ -4196,7 +4210,7 @@ impl Engine {
         if canonical.trim().is_empty() {
             return Err("prompt is empty".into());
         }
-        let (client, acp_session_id, cwd, interaction, liveness) = {
+        let (client, acp_session_id, cwd, interaction, provider, liveness) = {
             let sessions = self.state.sessions.lock().unwrap();
             let runtime = sessions
                 .get(session)
@@ -4209,29 +4223,15 @@ impl Engine {
                     .ok_or_else(|| "ACP session is unavailable".to_string())?,
                 runtime.cwd.clone(),
                 runtime.interaction.clone(),
+                runtime.session.provider.clone(),
                 runtime.liveness.clone(),
             )
         };
         if !interaction.steering {
             return Err("the provider did not advertise native steering".into());
         }
-        let compiled = match self.preflight_attachment_document(&doc, &cwd)? {
-            Some(compiled) => compiled,
-            None => {
-                let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
-                    self.referenced_session_context_through(id, through_seq)
-                        .ok()
-                        .flatten()
-                };
-                let library = self.state.skills.lock().unwrap();
-                compile_with_sessions(
-                    &doc,
-                    &library,
-                    Some(std::path::Path::new(&cwd)),
-                    Some(&resolve),
-                )
-            }
-        };
+        let compiled = self.compile_prompt_document(&doc, &cwd)?;
+        ensure_native_subagents(&provider, &compiled)?;
         let mut blocks = vec![ContentBlock::text(compiled.prompt)];
         for path in &compiled.images {
             if let Ok((mime_type, data)) =
@@ -5216,24 +5216,34 @@ impl Engine {
                     });
                     return Ok(());
                 }
-                // App-owned attachments are resolved and validated before the turn claim and
-                // before any canonical prompt/activity row is persisted. A path, gate, provider,
-                // or budget error therefore cannot become accepted history.
-                let attachment_preflight = if native_command.is_some() {
+                // Compile and validate before the turn claim, so unsupported provider features or
+                // attachment failures cannot become accepted history. Native slash commands are
+                // already validated above and do not compile the accompanying document.
+                let prompt_preflight = if native_command.is_some() {
                     None
                 } else {
-                    match self.preflight_attachment_document(&doc, &checkout.cwd) {
+                    let compiled = match self.compile_prompt_document(&doc, &checkout.cwd) {
                         Ok(compiled) => compiled,
                         Err(error) => {
                             self.emit(Event::Error {
                                 session: Some(session),
-                                message: error.to_string(),
+                                message: error,
                                 terminal: true,
                                 request_id,
                             });
                             return Ok(());
                         }
+                    };
+                    if let Err(message) = ensure_native_subagents(&checkout.provider, &compiled) {
+                        self.emit(Event::Error {
+                            session: Some(session),
+                            message,
+                            terminal: true,
+                            request_id,
+                        });
+                        return Ok(());
                     }
+                    Some(compiled)
                 };
                 let turn_lease = match self.try_start_turn(&session, request_id.clone()) {
                     Some(lease) => lease,
@@ -5256,7 +5266,7 @@ impl Engine {
                 let canonical_user_prompt = canonical_doc_text(&doc);
                 let canonical_prompt = canvas_history_projection(
                     canonical_user_prompt.clone(),
-                    attachment_preflight.as_ref(),
+                    prompt_preflight.as_ref(),
                 );
                 let mut prompt_display: String = canonical_user_prompt.chars().take(400).collect();
                 if canonical_user_prompt.chars().count() > 400 {
@@ -5382,25 +5392,7 @@ impl Engine {
                         ..CompiledPrompt::default()
                     }
                 } else {
-                    match attachment_preflight {
-                        Some(compiled) => compiled,
-                        None => {
-                            let lib = self.state.skills.lock().unwrap();
-                            // `@`-mentioned past chats resolve against the store; without one (tests,
-                            // in-memory runs) they surface as unresolved rather than silently vanishing.
-                            let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
-                                self.referenced_session_context_through(id, through_seq)
-                                    .ok()
-                                    .flatten()
-                            };
-                            compile_with_sessions(
-                                &doc,
-                                &lib,
-                                Some(std::path::Path::new(&cwd)),
-                                Some(&resolve),
-                            )
-                        }
-                    }
+                    prompt_preflight.expect("non-native prompt compiled before turn claim")
                 };
                 // Scene preamble (R8): guardrails, inline fragments, artifact-capture and clarify
                 // instructions of the session's persisted active scene, injected AFTER project
@@ -6535,6 +6527,26 @@ impl Engine {
 
     fn emit(&self, event: Event) {
         let _ = self.state.events.send(event);
+    }
+}
+
+#[cfg(test)]
+mod provider_subagent_tests {
+    use super::ensure_native_subagents;
+    use crate::provider::ProviderId;
+    use crate::skill::CompiledPrompt;
+
+    #[test]
+    fn plugin_subagents_require_verified_provider_support() {
+        let mut compiled = CompiledPrompt::default();
+        assert!(ensure_native_subagents(&ProviderId::Grok, &compiled).is_ok());
+
+        compiled.subagents.push("reviewer".into());
+        assert!(ensure_native_subagents(&ProviderId::Codex, &compiled).is_ok());
+        assert_eq!(
+            ensure_native_subagents(&ProviderId::Grok, &compiled).unwrap_err(),
+            "provider 'grok' does not have verified native subagent support"
+        );
     }
 }
 

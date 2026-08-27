@@ -21,23 +21,25 @@ When you choose that provider for a session, C2:
 Support does **not** mean every provider exposes identical models or ACP features. C2 displays
 what the active ACP endpoint actually reports rather than inventing parity.
 
-## Nine built-in providers
+## Eleven built-in providers
 
 | Provider | Connection | C2 launches | Prerequisite |
 | --- | --- | --- | --- |
 | **Claude Code** | ACP adapter | `npx -y @agentclientprotocol/claude-agent-acp` | Node and an authenticated Claude Code setup |
-| **OpenAI Codex** | App Server ACP adapter | `npx -y @agentclientprotocol/codex-acp@1.6.2` | Node and a local Codex runtime/login |
+| **OpenAI Codex** | App Server ACP adapter | `npx -y @agentclientprotocol/codex-acp@1.7.0` | Node and a local Codex runtime/login |
 | **Grok** | Native ACP | `grok agent stdio` | Authenticated `grok` CLI on `PATH` |
-| **Cursor** | CLI ACP mode | `cursor-agent --acp` | Authenticated `cursor-agent` on `PATH` |
+| **Cursor** | CLI ACP mode | `cursor-agent acp` | Authenticated `cursor-agent` on `PATH` |
 | **OpenCode 1** | CLI ACP mode | `opencode acp` | Authenticated `opencode` on `PATH` |
 | **OpenCode 2 (Beta)** | CLI ACP mode | `opencode2 acp` | Authenticated `opencode2` beta on `PATH` |
 | **Pi** | Community ACP adapter | `npx -y pi-acp` | Node; `pi` on `PATH` for its config and credentials |
 | **Kimi** | Native ACP | `kimi acp` | Authenticated `kimi` CLI on `PATH` |
 | **ZCode (GLM)** | GLM ACP agent | `npx -y glm-acp-agent` | Node plus `Z_AI_API_KEY`, or one-time `--setup` |
+| **Amp** | ACP adapter | `npx -y amp-acp` | Node and an authenticated `amp` on `PATH` |
+| **Droid** | Native ACP | `droid exec --output-format acp` | Authenticated `droid` CLI on `PATH` |
 
 ### Native ACP
 
-**Grok** and **Kimi** expose ACP directly, so C2 can launch them without a Node adapter.
+**Grok**, **Kimi**, and **Droid** expose ACP directly, so C2 can launch them without a Node adapter.
 
 ### Built-in CLI ACP modes
 
@@ -48,15 +50,27 @@ boundary.
 
 ### Adapter-backed providers
 
-**Claude Code**, **Codex**, **Pi**, and **ZCode (GLM)** launch through `npx`. Pi uses a community
-adapter because Pi itself does not currently expose an ACP mode. The GLM entry launches the GLM ACP
-agent—not the ZCode desktop app, which is itself an ACP client.
+**Claude Code**, **Codex**, **Pi**, **ZCode (GLM)**, and **Amp** launch through `npx`. Pi and Amp use
+community adapters. The GLM entry launches the GLM ACP agent—not the ZCode desktop app, which is
+itself an ACP client.
 
 For GLM, provide `Z_AI_API_KEY` in the environment or run:
 
 ```sh
 npx -y glm-acp-agent --setup
 ```
+
+### Provider-native subagents
+
+C2 never schedules child agents itself. Plugin subagent blocks are sent only to providers whose
+current native runtime or adapter has a verified Agent/Task delegation tool: Claude Code, Codex,
+Cursor, OpenCode 1/2, Kimi, Amp, and Droid. Their ordinary ACP tool-call events feed the existing
+read-only agent roster; Cursor's documented `cursor/task` completion notification is normalized at
+the ACP connection layer.
+
+Grok, Pi, ZCode, and custom providers fail before the turn is accepted when a prompt requests a
+plugin subagent. This fails closed instead of silently running the specialist instructions in the
+parent agent.
 
 ## Availability and authentication
 

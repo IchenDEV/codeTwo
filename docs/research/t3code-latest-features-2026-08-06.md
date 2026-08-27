@@ -49,7 +49,7 @@ C2 是 Rust core + Tauri/React desktop + ratatui TUI + headless WebSocket server
 - session rail 有 active / archived、手工 rename 和 archive，但没有持久化 pin。[`SessionRail.tsx`](../../apps/desktop/src/sidebar/SessionRail.tsx)
 - 远程设置已经列出 LAN / Loopback endpoints，也能生成 176px 左右的二维码；但 `remote_pairing_link` 不接收 endpoint，始终由 `pairing_url()` 自动挑一个 host。因此“展示了多个端点”和“二维码能选择端点”目前是两回事。[`Remote.tsx`](../../apps/desktop/src/remote/Remote.tsx) · [`src-tauri/src/lib.rs`](../../apps/desktop/src-tauri/src/lib.rs) · [`server/lib.rs`](../../crates/server/src/lib.rs)
 - terminal 已经支持 font family、font size、scrollback 并能 live apply，因此没有必要重复移植上游 typography 的 terminal 子集。[`terminal/settings.ts`](../../apps/desktop/src/terminal/settings.ts)
-- `delegate.rs` 明确标为未接入 engine / frontend 的 prototype。C2 还没有稳定的子代理生命周期、聚合用量、全体停止或 Agents surface。[`delegate.rs`](../../crates/core/src/delegate.rs)
+- 调研开始时存在一个未接入 engine / frontend 的 `delegate.rs` prototype；该自研调度原型已于 2026-08-28 删除。C2 只消费 Provider 原生 Agent/Task 工具产生的 ACP ToolCall，不再拥有子代理执行生命周期。
 - WebSocket 初始只送 session list，transcript 按 session 请求，这一点已经避开了上游“连接即全库 hydration”的同型问题；但 `Store::transcript()` 仍会把选中会话全部读入内存。[`server/lib.rs`](../../crates/server/src/lib.rs) · [`store.rs`](../../crates/core/src/store.rs)
 
 ## 已合并 / 已进 nightly 的重点增量
@@ -156,12 +156,12 @@ C2 的关键限制：当前 Claude/Codex 都经过 ACP adapter，架构还明确
 
 本轮只吸收这个能力的 **phase zero**：ACP `tool_call` 若明确携带 provider-neutral `kind`，就随 event 与 transcript 保留；只有 tool kind/title/structured input 明确命中 agent/workflow launch signal 时，core 才从 raw input 投影描述性白名单字段。每个字段最多 2,048 字符、总预算 8,192 字符，command、secret、cwd、request id 等任意 payload 不会进入持久化或广播。Desktop 在 live update 与 transcript replay 中保留这些字段，并用窄规则生成只读 Agents roster；普通 task、shell 或只在文本中提到 agent 的调用仍留在 Tools。
 
-这不是完整的 subagent runtime：当前没有 core lifecycle fold、乱序/终态状态机、usage 聚合、TUI/remote Agents surface、provider-native child linkage 或 interrupt-all。下列三片仍是后续架构顺序，而非本轮已交付项：
+这不是完整的 subagent runtime：当前没有 core lifecycle fold、乱序/终态状态机、usage 聚合、TUI/remote Agents surface、provider-native child linkage 或 interrupt-all。2026-08-28 的后续决策已明确：这些能力继续归 Provider 所有，C2 不补一套平行 runtime；下列路线保留为当时的历史方案，其中第 2 项已被否决。
 
 建议分三片：
 
 1. **共享状态模型先行**：在 Rust core 定义 `AgentTaskLinkage`、`AgentTaskStatus`、`AgentTaskEvent` 与纯 fold；状态归 core，Desktop/TUI/remote 共用，避免把业务 fold 放 React。
-2. **C2-owned delegation 先接入**：把现有 `delegate.rs` prototype 晋升为 engine 能控制的 manager/executor lifecycle，先验证 panel、usage、interrupt-all 和持久化语义。
+2. **已否决：C2-owned delegation**：不把旧 `delegate.rs` prototype 晋升为 manager/executor；删除原型，使用 Provider 原生 Agent/Task 工具及其标准 ACP ToolCall。
 3. **provider-native 扩展后接入**：对 ACP extension feature-detect，保留 unknown payload；只有拿到明确 task id / parent id 才标为 agent。没有 stamp 的 background shell 保持普通 tool row，禁止 UI 猜测。
 
 第一阶段验收应以 mock wire fixture 为主：乱序 completion、重复 progress、idle 后 reactivation、父 turn 停止时所有 child 都收到 interrupt、late usage 不倒退。不要把“画出了 Agents panel”当作完成。

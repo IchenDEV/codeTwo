@@ -389,8 +389,8 @@ pub fn propose_macro_slots(text: &str) -> (String, Vec<SlotDef>) {
     (out, slots)
 }
 
-/// A reusable specialist supplied by a plugin. ACP does not standardize provider-native subagent
-/// registration, so C2 also keeps a deterministic inline delegation fallback.
+/// A reusable specialist supplied by a plugin. Execution belongs to the provider's native
+/// subagent capability; C2 only supplies the contract.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubagentDefinition {
     pub name: String,
@@ -993,7 +993,7 @@ fn compile_full_resolving(
                     SkillPayload::Subagent { agent } => {
                         out.subagents.push(agent.name.clone());
                         let mut contract = format!(
-                            "## Subagent: {}\n\nDelegate a focused subtask to this specialist when the provider supports delegation. Otherwise, follow the specialist instructions directly.\n\n{}",
+                            "## Provider-native subagent: {}\n\nUse the provider's native subagent capability to delegate this focused task. If native delegation is unavailable, report that it is unsupported; do not execute these specialist instructions inline.\n\n{}",
                             agent.name,
                             agent.prompt.trim()
                         );
@@ -1375,7 +1375,12 @@ mod tests {
             &lib,
         );
         assert_eq!(compiled.subagents, vec!["Researcher"]);
-        assert!(compiled.prompt.contains("## Subagent: Researcher"));
+        assert!(compiled
+            .prompt
+            .contains("## Provider-native subagent: Researcher"));
+        assert!(compiled
+            .prompt
+            .contains("do not execute these specialist instructions inline"));
         assert!(compiled.prompt.contains("Allowed tools: web, files"));
         assert!(compiled.prompt.contains("Preferred model: fast"));
     }

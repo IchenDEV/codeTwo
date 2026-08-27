@@ -29,13 +29,15 @@ To run a real turn you need one agent CLI on your `PATH`:
 
 - **Grok** — `grok` (speaks ACP natively; simplest, no Node needed).
 - **Claude Code** — Node/npx (C2 launches `npx @agentclientprotocol/claude-agent-acp`).
-- **Codex** — Node/npx (`npx -y @agentclientprotocol/codex-acp@1.6.2`).
+- **Codex** — Node/npx (`npx -y @agentclientprotocol/codex-acp@1.7.0`).
 - **Cursor** — `cursor-agent`.
 - **OpenCode 1** — `opencode`.
 - **OpenCode 2 (Beta)** — `opencode2`; V1 and V2 can be installed side by side.
 - **Pi** — Node/npx (`npx -y pi-acp`, with `pi` on your `PATH` for its own config).
 - **Kimi** — `kimi` (speaks ACP natively).
 - **ZCode (GLM)** — Node/npx (`npx -y glm-acp-agent`) plus a `Z_AI_API_KEY`.
+- **Amp** — Node/npx (`npx -y amp-acp`, with `amp` on your `PATH`).
+- **Droid** — `droid` (speaks ACP natively).
 
 C2 shows a health dot per provider so you can tell what's available. See
 [Providers](/guide/providers).
