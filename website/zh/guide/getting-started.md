@@ -27,13 +27,15 @@ brew link --force zig@0.15
 
 - **Grok** — `grok`，原生支持 ACP，最简单且不依赖 Node。
 - **Claude Code** — Node/npx；C2 会运行 `npx @agentclientprotocol/claude-agent-acp`。
-- **Codex** — Node/npx；运行 `npx -y @agentclientprotocol/codex-acp@1.6.2`。
+- **Codex** — Node/npx；运行 `npx -y @agentclientprotocol/codex-acp@1.7.0`。
 - **Cursor** — `cursor-agent`。
 - **OpenCode 1** — `opencode`。
 - **OpenCode 2（Beta）** — `opencode2`；可与 V1 并存安装。
 - **Pi** — Node/npx；运行 `npx -y pi-acp`，并需要在 `PATH` 中提供 `pi` 以读取自身配置。
 - **Kimi** — `kimi`，原生支持 ACP。
 - **ZCode（GLM）** — Node/npx；运行 `npx -y glm-acp-agent`，并设置 `Z_AI_API_KEY`。
+- **Amp** — Node/npx；运行 `npx -y amp-acp`，并需要在 `PATH` 中提供 `amp`。
+- **Droid** — `droid`，原生支持 ACP。
 
 C2 会为每个 Provider 显示健康状态，方便确认当前启动命令是否可用。完整说明见 [Provider 与接入方式](/zh/guide/providers)。
 

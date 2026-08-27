@@ -5,6 +5,8 @@
 > 范围：Claude Code、Grok、Cursor Agent、OpenCode、Pi、Kimi Code、ZCode / GLM ACP；Codex 作为对照。
 >
 > 目标：严格分开“服务商公开模型目录”“对应 CLI 实际接受的模型”“ACP `session/new` 实际上报的模型 / `thought_level`”，为 `crates/core/src/models.rs` 的回退策略提供依据。
+>
+> 后续核验（2026-08-28）：同一台机器上的 `cursor-agent 2026.07.23-e383d2b` 提供未列在顶层帮助中的 `cursor-agent acp` 子命令；`cursor-agent --acp` 仍然无效。Cursor 官方现已发布 [ACP 文档](https://prod.cursor.com/docs/cli/acp)。下文的 `--acp` 失败记录是旧启动参数的历史证据，不再代表 Cursor 没有 ACP 入口。
 
 ## 结论先行
 
@@ -12,14 +14,14 @@
 2. **除 Codex 的 app-server 查询外，`models.rs` 现有静态表大多已经过时或模型 ID 形状不对。** Grok、Cursor、OpenCode、Pi、Kimi、ZCode 都不应继续把现在的静态表当作可信目录。
 3. **思考等级必须以当前模型的运行时能力为准，不能按 Provider 统一硬编码。** 明确不应硬编码的 Provider：Claude Code、Grok、Cursor、OpenCode、Pi、Kimi Code、ZCode / GLM ACP；Codex 也应继续以 app-server `model/list` 为主，静态表只能是短期故障回退。
 4. **当前最明显的等级错配是 GLM-5.3。** Z.AI 官方服务实际只区分 `low / high / max`，但 `glm-acp-agent@1.6.0` 当前上报 `minimal / low / medium / high / xhigh / max` 六档；其中多档会被服务端归并，用户看到的是伪精度。应优先修适配器，让它只上报真实三档。
-5. **Cursor Provider 当前不是“模型列表旧”这么简单，而是启动命令不可用。** 本机 `cursor-agent 2026.07.23-e383d2b` 对 `--acp` 返回 `unknown option`；截至调研日没有找到官方 Cursor ACP 模式。修复传输层之前，不应伪造一个 ACP 模型 / effort 选择器。
+5. **Cursor 必须使用 ACP 子命令，不是旧 flag。** 本机 `cursor-agent 2026.07.23-e383d2b` 对 `--acp` 返回 `unknown option`，但 `cursor-agent acp` 可启动 ACP server。模型 / effort 仍应服从真实 ACP 会话，不应由静态表伪造。
 
 ### 本次 CodeTwo 兼容处置
 
 - Grok：从模型 `_meta` 读取本机实际四档，并通过 `session/set_mode` 写回。
 - GLM-5.3：在 UI 边界把当前适配器的同义值收敛为服务端真实的 `low / high / max`；这是上游修复前的窄兼容层。
 - Pi：暂时隐藏 `pi-acp@0.0.33` 固定上报的伪模型级档位；待适配器接入 Pi 的 `get_available_thinking_levels` 后删除该保护。
-- Cursor：只把 `--list-models` 的完整账号 ID 作为原子模型候选，不额外生成组合；ACP transport 仍明确标记为未解决。
+- Cursor：启动改为 `cursor-agent acp`；只把 `--list-models` 的完整账号 ID 作为原子模型候选，不额外生成组合。
 
 ## 证据口径与本机探针
 
@@ -36,7 +38,7 @@
 |---|---|---|---|---|---|
 | Claude Code | Fable 5、Opus 5、Sonnet 5、Haiku 4.5 | alias、完整模型名、账号 picker、组织 allowlist 共同决定 | 适配器源码：动态 `model` + 当前模型的 `thought_level`；本机未确认 | 模型级 + 组织 cap；`ultracode` 不是模型 effort | 否 |
 | Grok | 服务目录与 CLI 账号目录可变 | 本机只有 `grok-4.6` | **已实测**：标准 legacy `models` 仅 `grok-4.6`；effort 在 `_meta.x.ai/sessionConfig` | 本机 `low / medium / high / xhigh`；不是标准 `thought_level` | 否 |
-| Cursor Agent | 官方产品页含 Claude 5、GPT-5.6、Gemini 3.x、Composer 2.5、Grok 4.6 等 | **已实测**：账号级长列表；effort / thinking / fast 编入模型 ID | **未确认：当前 CLI 不支持 `--acp`** | 不能从模型家族推导；完整 CLI ID 是原子选择 | 否 |
+| Cursor Agent | 官方产品页含 Claude 5、GPT-5.6、Gemini 3.x、Composer 2.5、Grok 4.6 等 | **已实测**：账号级长列表；effort / thinking / fast 编入模型 ID | `cursor-agent acp` 入口已确认；账号级 `session/new` payload 待复测 | 不能从模型家族推导；完整 CLI ID 是原子选择 | 否 |
 | OpenCode | 75+ Provider，含本地模型；不是单一目录 | 由项目、凭据、Provider、配置生成 | **已实测**：标准动态 `model`；当前模型无 variant，因此无 `thought_level` | variant 名称按模型生成 | 否 |
 | Pi | 多 Provider 内置目录 + 自定义 / 已认证模型 | 本机未安装；源码提供运行时 `get_available_models` | `pi-acp` 源码动态拿模型，但静态上报六档 thought level | 适配器已落后于 Pi 的模型级等级 RPC，且漏 `max` | 否 |
 | Kimi Code | Kimi K3；API `kimi-k3` | Kimi Code 使用配置 alias，例如 `kimi-code/k3` | 本机因未登录而 `Authentication required`；源码为动态 model + model-specific thought level | K3 为 `low / high / max`、不可关闭；API 默认 `max`，账号 ACP 默认未确认 | 否 |
@@ -98,10 +100,10 @@
 
 #### ACP 实际上报
 
-- 本机 `cursor-agent 2026.07.23-e383d2b --acp` 立即返回 `error: unknown option '--acp'`；`--help` 也没有 ACP / stdio server 参数。
-- 截至调研日，未找到 Cursor 官方文档或官方 CLI 帮助中存在 ACP server 模式。因此 CodeTwo 当前 `cursor-agent --acp` 启动配置不能建立 ACP 会话，模型与 `thought_level` 均为**未确认 / 不存在可测通道**。
+- 本机 `cursor-agent 2026.07.23-e383d2b --acp` 立即返回 `error: unknown option '--acp'`；正确入口是未列在顶层帮助中的 `cursor-agent acp`，其帮助明确说明会启动 ACP server。
+- Cursor 官方 ACP 文档列出 `cursor/task` 等扩展。CodeTwo 启动配置必须使用 `cursor-agent acp`；账号级模型与 `thought_level` 仍需通过真实 `session/new` 复测。
 
-**对 CodeTwo 的含义**：先修正或禁用失效的 Cursor ACP Provider，不能用静态模型表掩盖启动失败。若仍要提供会话前选项，应实时解析 `cursor-agent --list-models`，并把每个返回 ID 视为原子选择；不要再额外生成独立的 thought level，否则会与 ID 内 effort 重复或组合出 CLI 不接受的值。
+**对 CodeTwo 的含义**：启动参数改为 `cursor-agent acp`，不能用静态模型表掩盖会话探测失败。若仍要提供会话前选项，应实时解析 `cursor-agent --list-models`，并把每个返回 ID 视为原子选择；不要再额外生成独立的 thought level，否则会与 ID 内 effort 重复或组合出 CLI 不接受的值。
 
 ### 4. OpenCode
 
@@ -245,7 +247,7 @@
 1. **Claude Code 账号级 ACP 实际 payload**：本机未安装 / 登录 Claude Code；源码能证明动态行为，但不能证明当前账号会显示哪些模型、是否受组织 allowlist / effort cap。
 2. **Pi 账号级 ACP 实际 payload**：本机没有 Pi；`pi-acp@0.0.33` 源码已证明固定六档问题，但没有真实 session 输出。
 3. **Kimi Code 登录后的实际 ACP payload**：本机 `session/new` 被 `Authentication required` 阻断；官方配置和源码表明 K3 应为 `low / high / max`，但同一官方配置页对 provisioned alias 的 default 同时出现 `max` 与 `high` 两种描述，账号还可能下发不同 alias / override。
-4. **Cursor 的官方 ACP 入口**：当前 CLI 明确没有 `--acp`；未找到新的官方 ACP 命令。若 CodeTwo 依赖未公开或单独分发的 Cursor build，需要提供该二进制和协议证据后再测。
+4. **Cursor 账号级 ACP payload**：官方入口与本机 `cursor-agent acp` 已确认；仍需在已登录会话中复测 `session/new` 的模型和思考等级 payload。
 5. **Grok 标准化计划**：当前 xAI ACP 确实把 effort 放在专有 `_meta`，没有证据表明何时会迁移为标准 `configOptions`。
 6. **GLM adapter 上游是否会接受三档修正**：服务端三档语义有官方证据，但社区适配器当前刻意暴露六个“可接受字符串”；需要上游 issue / PR 决策。
 

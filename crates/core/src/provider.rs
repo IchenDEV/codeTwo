@@ -107,6 +107,22 @@ impl ProviderId {
             ProviderId::Custom(s) => s,
         }
     }
+
+    /// Whether the built-in runtime or adapter exposes its own Agent/Task delegation tool.
+    /// Unknown and custom providers fail closed until their native support is verified.
+    pub fn supports_native_subagents(&self) -> bool {
+        matches!(
+            self,
+            ProviderId::ClaudeCode
+                | ProviderId::Codex
+                | ProviderId::Cursor
+                | ProviderId::OpenCode
+                | ProviderId::OpenCode2
+                | ProviderId::Kimi
+                | ProviderId::Amp
+                | ProviderId::Droid
+        )
+    }
 }
 
 /// How to launch a provider's ACP endpoint as a subprocess.
@@ -202,7 +218,7 @@ pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provi
         Provider {
             id: ProviderId::Cursor,
             display_name: "Cursor".into(),
-            launch: LaunchSpec::new("cursor-agent", ["--acp"]),
+            launch: LaunchSpec::new("cursor-agent", ["acp"]),
             needs_node: false,
         },
         Provider {
@@ -424,6 +440,30 @@ mod tests {
         let kimi = reg.iter().find(|p| p.id == ProviderId::Kimi).unwrap();
         assert_eq!(kimi.launch.command, "kimi");
         assert_eq!(kimi.launch.args, vec!["acp"]);
+    }
+
+    #[test]
+    fn native_subagent_support_fails_closed() {
+        for provider in [
+            ProviderId::ClaudeCode,
+            ProviderId::Codex,
+            ProviderId::Cursor,
+            ProviderId::OpenCode,
+            ProviderId::OpenCode2,
+            ProviderId::Kimi,
+            ProviderId::Amp,
+            ProviderId::Droid,
+        ] {
+            assert!(provider.supports_native_subagents(), "{provider:?}");
+        }
+        for provider in [
+            ProviderId::Grok,
+            ProviderId::Pi,
+            ProviderId::ZCode,
+            ProviderId::Custom("custom".into()),
+        ] {
+            assert!(!provider.supports_native_subagents(), "{provider:?}");
+        }
     }
 
     #[test]

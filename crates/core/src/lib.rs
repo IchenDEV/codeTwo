@@ -29,7 +29,6 @@ pub mod capability_v2;
 pub mod codex_runtime;
 pub mod context;
 pub mod cost;
-pub mod delegate;
 pub mod device_sync;
 pub mod elicitation;
 pub mod engine;

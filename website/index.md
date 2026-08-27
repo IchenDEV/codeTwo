@@ -163,7 +163,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <div>
               <h3>OpenAI Codex</h3>
               <p>App Server adapter · Node required</p>
-              <code>codex-acp@1.6.2</code>
+              <code>codex-acp@1.7.0</code>
             </div>
           </article>
           <article class="provider-entry">
@@ -179,7 +179,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <div>
               <h3>Cursor</h3>
               <p>Built-in ACP mode</p>
-              <code>cursor-agent --acp</code>
+              <code>cursor-agent acp</code>
             </div>
           </article>
           <article class="provider-entry">
@@ -220,6 +220,22 @@ description: Compose structured prompts, weave in reusable skills, and run your 
               <h3>ZCode (GLM)</h3>
               <p>GLM ACP agent · Node required</p>
               <code>glm-acp-agent</code>
+            </div>
+          </article>
+          <article class="provider-entry">
+            <span class="provider-index">10</span>
+            <div>
+              <h3>Amp</h3>
+              <p>ACP adapter · Node required</p>
+              <code>amp-acp</code>
+            </div>
+          </article>
+          <article class="provider-entry">
+            <span class="provider-index">11</span>
+            <div>
+              <h3>Droid</h3>
+              <p>Native ACP</p>
+              <code>droid exec --output-format acp</code>
             </div>
           </article>
         </div>
