@@ -16,6 +16,7 @@ import {
   Plus,
   PenLine,
   Sparkles,
+  SlidersHorizontal,
   Square,
   Store,
   Target,
@@ -160,11 +161,9 @@ function useReducedMotionPreference() {
 function ComposerLiquidSurface({
   children,
   docMode,
-  reducedMotion,
 }: {
   children: ReactElement;
   docMode: boolean;
-  reducedMotion: boolean;
 }) {
   if (!LIQUID_AVAILABLE) return children;
 
@@ -178,25 +177,7 @@ function ComposerLiquidSurface({
       shadow={docMode ? undefined : COMPOSER_LIQUID_SHADOW}
       className={cn("composer-liquid-surface relative z-10", docMode && "flex min-h-0 flex-1")}
     >
-      <Liquid.Item
-        morph={reducedMotion
-          ? undefined
-          : {
-              shape: true,
-              speed: 1.1,
-              bounce: 0,
-              contentBlur: 0,
-              advanced: {
-                evolve: {
-                  roundness: 0.18,
-                  anticipation: 50,
-                  travel: 8,
-                  cornerDuration: 260,
-                  cornerEase: "cubic-bezier(0.16, 1, 0.3, 1)",
-                },
-              },
-            }}
-      >
+      <Liquid.Item observe>
         {children}
       </Liquid.Item>
     </Liquid>
@@ -1227,6 +1208,7 @@ export function SessionControls({
   configOptions,
   onConfigOption,
   modelChangeDisabled = false,
+  showWorktreePicker = true,
 }: {
   config: SessionConfig;
   models: ModelChoice[];
@@ -1236,25 +1218,80 @@ export function SessionControls({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   modelChangeDisabled?: boolean;
+  /** The checkout bar already owns this choice when it is rendered below the composer. */
+  showWorktreePicker?: boolean;
 }) {
+  const t = useT();
+  const optionsId = useId();
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const activeMode = sessionMode(config.mode, config.sandbox);
+  const hasHiddenOverride =
+    activeMode !== "ask" ||
+    (config.memoryEnabled && (config.memoryRead !== "inherit" || config.memoryWrite !== "inherit")) ||
+    (showWorktreePicker && (
+      config.activeWorktreeUnknown ||
+      config.activeWorktreeBaseline !== null ||
+      config.worktreeBase !== null
+    ));
+
   return (
-    <div data-session-controls className="flex flex-wrap items-center gap-0.5">
-      {config.scenesEnabled ? <SceneChip config={config} /> : null}
-      <ProviderPicker config={config} />
-      <ModelPicker
-        models={models}
-        current={currentModel}
-        defaultModel={defaultModel}
-        provider={config.provider}
-        onModel={onModel}
-        configOptions={configOptions}
-        onConfigOption={onConfigOption}
-        hasSession={config.hasSession}
-        disabled={modelChangeDisabled}
-      />
-      <ModePicker config={config} />
-      {config.memoryEnabled ? <MemoryPicker config={config} /> : null}
-      <WorktreePicker config={config} />
+    <div data-session-controls className="flex min-w-0 flex-col items-start gap-0.5">
+      <div className="flex max-w-full flex-wrap items-center gap-0.5">
+        {config.scenesEnabled ? <SceneChip config={config} /> : null}
+        <ProviderPicker config={config} />
+        <ModelPicker
+          models={models}
+          current={currentModel}
+          defaultModel={defaultModel}
+          provider={config.provider}
+          onModel={onModel}
+          configOptions={configOptions}
+          onConfigOption={onConfigOption}
+          hasSession={config.hasSession}
+          disabled={modelChangeDisabled}
+        />
+        <Tooltip>
+          <TooltipTrigger
+            render={<Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "relative size-7 shrink-0 rounded-full text-muted-foreground",
+                optionsOpen && "bg-accent text-foreground",
+                activeMode === "full_access" && "text-warning",
+              )}
+              aria-label={t(optionsOpen ? "config.hideSessionOptions" : "config.showSessionOptions")}
+              aria-expanded={optionsOpen}
+              aria-controls={optionsId}
+              onClick={() => setOptionsOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="size-3.5" />
+              {hasHiddenOverride ? (
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "absolute right-0.5 top-0.5 size-1.5 rounded-full",
+                    activeMode === "full_access" ? "bg-warning" : "bg-primary",
+                  )}
+                />
+              ) : null}
+            </Button>}
+          />
+          <TooltipContent>{t("config.sessionOptionsHint")}</TooltipContent>
+        </Tooltip>
+      </div>
+      {optionsOpen ? (
+        <div
+          id={optionsId}
+          data-session-options
+          className="flex max-w-full flex-wrap items-center gap-0.5 pl-1"
+        >
+          <ModePicker config={config} />
+          {config.memoryEnabled ? <MemoryPicker config={config} /> : null}
+          {showWorktreePicker ? <WorktreePicker config={config} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1632,7 +1669,7 @@ export function Composer({
       >
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
             column, and clipping them takes the block gutter away. */}
-        <ComposerLiquidSurface docMode={docMode} reducedMotion={reducedMotion}>
+        <ComposerLiquidSurface docMode={docMode}>
           <div
             className={cn(
               "composer-card relative z-10 flex flex-col",
@@ -1765,6 +1802,7 @@ export function Composer({
                 configOptions={configOptions}
                 onConfigOption={onConfigOption}
                 modelChangeDisabled={running || loading}
+                showWorktreePicker={!checkout}
               />
               <div className="flex items-center gap-0.5">
                 {controls}
