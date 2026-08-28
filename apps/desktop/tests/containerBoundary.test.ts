@@ -13,7 +13,7 @@ function sourceFiles(directory: string): string[] {
 }
 
 function isDesktopImplementation(path: string): boolean {
-  const name = relative(sourceRoot, path);
+  const name = relative(sourceRoot, path).replaceAll("\\", "/");
   return (
     name === "container.ts"
     || name === "browser/electrobun.ts"
