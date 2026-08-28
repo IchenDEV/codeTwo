@@ -101,8 +101,9 @@ and the Rust feature coverage remains blocked by the repository's existing Ghost
 ## Review and release
 
 The user authorized creating and merging a pull request on 2026-08-29. This does not authorize a
-versioned product release. The PR must link this artifact and pass the `SDLC contract` check before
-merge; requiring that check in branch protection remains an external repository setting.
+versioned product release. [PR #178](https://github.com/IchenDEV/codeTwo/pull/178) links this
+artifact and must pass the `SDLC contract` check before merge; requiring that check in branch
+protection remains an external repository setting.
 
 ## Feedback
 
