@@ -160,19 +160,19 @@ eligible = installed + enabled + bundle-trusted + workspace-policy-allowed
 
 **[仓库事实]** 当前 [C2 Plugin Standard](../plugin-standard.md) 已把 Bundle、Contribution、Runtime module、Host adapter、Policy 分成五个概念；安装不执行代码，runtime/LSP 需要 enabled + trusted；项目 runtime 有独立 graph/process/command realm/data dir；第三方 UI 只能提交宿主渲染 descriptor。这些都应保留。
 
-**[仓库事实]** 第三方 process bundle 会转换成同一 loader 中的 `bundle:<id>` factory，并按 bundle/realm 单独起进程：[bundle runtime](../../crates/core/src/app/bundle_runtime.rs)。当前 marketplace parser 已支持 root `marketplace.json`、逐条错误隔离、local/GitHub/Git/npm/archive source shape，以及 Git SHA/archive SHA-256 字段：[marketplace parser](../../crates/core/src/plugin_marketplace.rs)。`c2-plugins` 应成为这套格式的 canonical catalog，而不是新造第二套插件系统。
+**[仓库事实]** 第三方 process bundle 会转换成同一 loader 中的 `bundle:<id>` factory，并按 bundle/realm 单独起进程：[bundle runtime](../../crates/plugins/src/app/bundle_runtime.rs)。当前 marketplace parser 已支持 root `marketplace.json`、逐条错误隔离、local/GitHub/Git/npm/archive source shape，以及 Git SHA/archive SHA-256 字段：[marketplace parser](../../crates/plugins/src/marketplace.rs)。`c2-plugins` 应成为这套格式的 canonical catalog，而不是新造第二套插件系统。
 
 ### 5.2 P0 边界缺口
 
 #### A. 内部模块机制仍被当成公共插件模型
 
-**[仓库事实]** 当前 Core 文档说“每个 subsystem 都是 Plugin”，并写明“一个插件的 commands 就是 app 的 public API”：[CoreApp module](../../crates/core/src/app/mod.rs)。`BUILTIN` 目录又把 paths/store/bus/providers/engine/plugin-hub 等基础设施与 Git、voice、market、skills 等可选能力一起注册和展示：[built-in registry](../../crates/core/src/app/plugins/mod.rs)。
+**[仓库事实]** 当前 Core 文档说“每个 subsystem 都是 Plugin”，并写明“一个插件的 commands 就是 app 的 public API”：[CoreApp module](../../crates/plugins/src/app/mod.rs)。`BUILTIN` 目录又把 paths/store/bus/providers/engine/plugin-hub 等基础设施与 Git、voice、market、skills 等可选能力一起注册和展示：[built-in registry](../../crates/plugins/src/app/plugins/mod.rs)。
 
 **[推断]** 内部统一生命周期很有价值，但它不应决定外部 API 和用户词汇。否则“关闭一个插件”可能意味着关闭数据库/政策恢复面，“开发插件”又可能被理解成实现 Rust trait、写 JSON-RPC 进程或只放一个 Skill。
 
 #### B. 第三方 runtime 能看到并调用 realm 内全部 Core 命令
 
-**[仓库事实]** `initialize.host.commands` 当前由 `ctx.runtime().commands()` 全量生成；协议注释明确写着插件可以回调任意一个命令。`command/call` 直接进入同一 realm 的普通 command path：[protocol host surface](../../crates/core/src/app/protocol/mod.rs)、[wire contract](../../crates/core/src/app/protocol/wire.rs)、[request dispatch](../../crates/core/src/app/protocol/peer.rs)。
+**[仓库事实]** `initialize.host.commands` 当前由 `ctx.runtime().commands()` 全量生成；协议注释明确写着插件可以回调任意一个命令。`command/call` 直接进入同一 realm 的普通 command path：[protocol host surface](../../crates/plugins/src/app/protocol/mod.rs)、[wire contract](../../crates/plugins/src/app/protocol/wire.rs)、[request dispatch](../../crates/plugins/src/app/protocol/peer.rs)。
 
 **[推断]** realm 隔离阻止跨项目 fallback，但没有形成 Core/private 与 Extension/public 的边界。任何新增内部 command 都会无意扩大第三方 API 与权限面，也让 Core 难以重构。
 
@@ -184,7 +184,7 @@ eligible = installed + enabled + bundle-trusted + workspace-policy-allowed
 
 #### D. Marketplace 是单版本目录，不是版本解析与供应链
 
-**[仓库事实]** 当前 `MarketplacePlugin` 每项只有一个 `version + source`；没有 publisher identity、`engines.codetwo`、target platform、channel、releasedAt、artifact signature、yank/deprecation/advisory 或多版本解析。GitHub `reference` 和 `sha` 都可选；archive `sha256` 也可选：[marketplace parser](../../crates/core/src/plugin_marketplace.rs)。
+**[仓库事实]** 当前 `MarketplacePlugin` 每项只有一个 `version + source`；没有 publisher identity、`engines.codetwo`、target platform、channel、releasedAt、artifact signature、yank/deprecation/advisory 或多版本解析。GitHub `reference` 和 `sha` 都可选；archive `sha256` 也可选：[marketplace parser](../../crates/plugins/src/marketplace.rs)。
 
 **[推断]** 这足够做本地目录/预览，不足以支撑默认社区更新渠道。
 

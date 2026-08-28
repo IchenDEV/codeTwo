@@ -234,6 +234,7 @@ import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
+import { FileDockContent } from "./files/FileDockContent";
 import { WorkspaceSearchModal } from "./files/WorkspaceSearch";
 import type { FileRevealTarget } from "./files/FileViewer";
 import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
@@ -380,6 +381,10 @@ import {
   type DockSurface,
   type DockTab,
 } from "./dock/Dock";
+import { BrowserPanel } from "./browser/Browser";
+import { GitDockContent } from "./git/GitDockContent";
+import { TerminalDockContent } from "./terminal/TerminalDockContent";
+import { TrajectoryView } from "./session/TrajectoryView";
 import { SessionRail } from "./sidebar/SessionRail";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
@@ -7768,12 +7773,11 @@ export default function App() {
             <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
-          {/* The shared titlebar height centres the 28px controls on the same 48px line as the rail
-              and dock headers. With the rail collapsed, the inset clears
-              the traffic lights and the expand button takes the wordmark's place. */}
+          {/* The shared 40px title line keeps every pane on one baseline. With the rail collapsed,
+              the inset clears the traffic lights and the expand button takes the wordmark's place. */}
           <header
             className={cn(
-              "session-header electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 border-b py-2.5 pr-4",
+              "session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4",
               displayedRailCollapsed ? "window-controls-safe-main" : "pl-4",
             )}
           >
@@ -8293,36 +8297,59 @@ export default function App() {
               }}
               onClose={() => manualDockTab(null)}
               autoTab={dockAutoHint?.surface ?? null}
-              highlightFile={dockAutoHint?.file ?? null}
-              cwd={cwd || null}
-              projectPath={
-                activeProject ? normalizePluginProjectPath(activeProject) : null
-              }
-              sessionKey={activeSession ?? "main"}
-              git={git}
-              onRefreshGit={refreshGit}
-              onOpenSourceControl={openSourceControl}
-              browserUrl={browserUrl}
-              onNavigate={setBrowserUrl}
-              onAnnotate={(n) => void annotate(n)}
-              onInsertFile={(p) => insertFileRef.current?.(p)}
-              onSendText={(text) => insertTextRef.current?.(text)}
-              onOpenFile={openFileTab}
-              openFiles={openFiles}
-              activeFile={activeFile}
-              fileReveal={fileReveal}
-              onActiveFile={(path) => {
-                setActiveFile(path);
-                setFileReveal(null);
+              content={{
+                trajectory: (
+                  <TrajectoryView
+                    turns={turns}
+                    usage={focusedSessionUsage}
+                    hasEarlier={focusedTranscriptState.nextBefore !== null}
+                    loadingEarlier={focusedTranscriptState.loadingEarlier}
+                    onLoadEarlier={() => void loadEarlierTranscript(paneLayout.focused)}
+                  />
+                ),
+                browser: (
+                  <BrowserPanel
+                    url={browserUrl}
+                    projectPath={lspProjectPath}
+                    visible={dockTab !== null}
+                    onNavigate={setBrowserUrl}
+                    onAnnotate={(notes) => void annotate(notes)}
+                  />
+                ),
+                terminal: (
+                  <TerminalDockContent
+                    cwd={cwd || null}
+                    projectPath={lspProjectPath}
+                    sessionKey={activeSession ?? "main"}
+                    onSendText={(text) => insertTextRef.current?.(text)}
+                  />
+                ),
+                files: (
+                  <FileDockContent
+                    cwd={cwd || null}
+                    openFiles={openFiles}
+                    activeFile={activeFile}
+                    reveal={fileReveal}
+                    highlightFile={dockAutoHint?.file ?? null}
+                    onActiveFile={(path) => {
+                      setActiveFile(path);
+                      setFileReveal(null);
+                    }}
+                    onCloseFile={closeFileTab}
+                    onInsertFile={(path) => insertFileRef.current?.(path)}
+                    onOpenFile={openFileTab}
+                    onSendText={(text) => insertTextRef.current?.(text)}
+                  />
+                ),
+                git: (
+                  <GitDockContent
+                    cwd={cwd || null}
+                    status={git}
+                    onRefresh={refreshGit}
+                    onOpenSourceControl={openSourceControl}
+                  />
+                ),
               }}
-              onCloseFile={closeFileTab}
-              turns={turns}
-              usage={sessionUsage}
-              hasEarlier={focusedTranscriptState.nextBefore !== null}
-              loadingEarlier={focusedTranscriptState.loadingEarlier}
-              onLoadEarlier={() =>
-                void loadEarlierTranscript(paneLayout.focused)
-              }
               width={dockWidth}
               onWidth={setDockWidth}
               reservedWidth={railInlineWidth}

@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 codetwo-core.workspace = true
+codetwo-plugins.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 ratatui = "0.29"

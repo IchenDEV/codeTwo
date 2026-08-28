@@ -1,7 +1,8 @@
-# Core runtime modules and plugins
+# Runtime modules and plugins
 
-C2 Core is implemented as a runtime-module graph. This document explains that internal mechanism,
-how Core and host modules fit together, and where the public extension boundary begins.
+C2's host runtime is implemented as a runtime-module graph in `codetwo-plugins`. This document
+explains that internal mechanism, how plugin-independent Core capabilities become runtime modules,
+and where the public extension boundary begins.
 
 For the normative package, naming, lifecycle, scope, security, versioning, and host-capability
 rules, see the [C2 Plugin Standard 1.1.0](plugin-standard.md). This document focuses on the graph's
@@ -11,6 +12,13 @@ The internal model is [cordis](https://github.com/cordiverse/cordis)', ported to
 [`crates/kernel`](../crates/kernel). Cordis' claim is that an application is not a program with
 extension points bolted on; it is a graph of plugins that happens to boot. We agree, and this is
 what taking that seriously looks like in a Rust codebase.
+
+The crate seam is deliberate: `codetwo-core` owns product behavior, `codetwo-kernel` owns generic
+lifecycle machinery, and `codetwo-plugins` is the shared composition crate that depends on both.
+Host binaries may also depend on both when they contribute platform-specific runtime modules;
+shared composition still belongs in `codetwo-plugins`. Built-in runtime modules are adapters over
+Core; Bundle parsing, policy, process supervision, and the public protocol do not leak back into
+Core.
 
 In product language, `codetwo_kernel::Plugin` is a **runtime module**, not automatically an
 installable plugin. The catalog assigns one of three roles:
@@ -107,7 +115,7 @@ disabling `paths` or another foundation plugin cannot strand the user without a 
 ## Booting
 
 ```rust
-use codetwo_core::app::{AppConfig, CoreApp};
+use codetwo_plugins::{AppConfig, CoreApp};
 
 let app = CoreApp::boot(AppConfig::new("~/.codetwo")).await?;
 let status = app.call("git.status", json!({ "cwd": "/repo" })).await?;
@@ -164,7 +172,7 @@ impl Plugin for IssuesPlugin {
 }
 ```
 
-Register it in `crates/core/src/app/plugins/mod.rs` (`builtin_registry`) and add its name to
+Register it in `crates/plugins/src/app/plugins/mod.rs` (`builtin_registry`) and add its name to
 `BUILTIN`. Add it to `CORE` only when host ownership is required to preserve a product, data, or
 security invariant. That is the whole integration.
 
@@ -289,7 +297,7 @@ becomes eligible only once the user marks the bundle **trusted**. Its static Man
 then ready, while the process starts on the first invocation — installing still executes nothing. See
 [`docs/plugin-protocol.md`](plugin-protocol.md) for the spec and a working plugin in forty lines.
 Runtime, safe UI actions, and language servers are distributed together from that same bundle root;
-run `cargo run -p codetwo-core --example validate_bundle -- <bundle-root>` before publishing it or
+run `cargo run -p codetwo-plugins --example validate_bundle -- <bundle-root>` before publishing it or
 installing it from GitHub. The Bun `plugin:validate` command remains a faster manifest-only
 preflight.
 
@@ -325,7 +333,7 @@ surface are decided at runtime. External command surfaces are static Manifest co
 than process-discovered UI, while a host can register compiled modules of its own at boot:
 
 ```rust
-let mut registry = codetwo_core::app::plugins::builtin_registry();
+let mut registry = codetwo_plugins::builtins::builtin_registry();
 registry.register(|| MyPlugin);                 // add
 registry.register_arc(Box::new(|| my_engine));  // or replace a built-in by name
 CoreApp::boot_with(config, registry).await?;
@@ -343,7 +351,7 @@ They meet in `plugin-hub`, and the terms remain separate:
 - **Runtime module** — code that runs under the internal graph lifecycle and contributes commands
   or services. Compiled modules implement `codetwo_kernel::Plugin`; external extensions use the
   [plugin protocol](plugin-protocol.md) and only the public Extension API.
-- **Installed bundle** (`codetwo_core::plugin::InstalledPlugin`) — a package users install from
+- **Installed bundle** (`codetwo_plugins::bundle::InstalledPlugin`) — a package users install from
   GitHub. Installing it executes nothing; it contributes skills, subagent definitions, MCP server
   definitions, scenes, and scaffolds. See `docs/architecture.md`.
 
@@ -355,10 +363,10 @@ Extension API.
 
 The application migration is complete:
 
-- `codetwo-core` boots the built-in graph through `CoreApp::boot(AppConfig)`. Worktrees,
+- `codetwo-plugins` boots the built-in graph through `CoreApp::boot(AppConfig)`. Worktrees,
   workspace I/O and search, projects, artifacts, canvas/document compilation, terminal/PTY/tmux,
   usage, voice, issues/delegation, scene commands, pipelines, memory, Git, market, skills and the
-  engine all contribute commands from plugin scopes.
+  engine all adapt `codetwo-core` capabilities into commands from plugin scopes.
 - `codetwo-tui` boots that graph and consumes its typed event and engine services. It trims plugins
   it does not need through `AppConfig` rather than constructing a separate application.
 - The standalone `codetwo-server` also boots `CoreApp`, then gives the graph's engine, store,
@@ -370,10 +378,10 @@ The application migration is complete:
   trusted and enabled extension adapters ready, registers their static commands into the same
   command seam, and lazily creates isolated child processes and command realms for project-capable
   Bundles.
-- The renderer exposes one typed `call` request. Electrobun relays it to one versioned JSON-lines
-  `call` method on the bundled Rust host; host events return over the same connection. A protocol
-  mismatch or failed Kernel startup stops desktop startup instead of falling back to another
-  implementation.
+- Renderer content reaches Electrobun only through `src/container.ts`. Its one typed `call` request
+  is relayed to one versioned JSON-lines `call` method on the bundled Rust host; host events return
+  over the same connection. A protocol mismatch or failed Kernel startup stops desktop startup
+  instead of falling back to another implementation.
 
 Desktop event envelopes remain host plumbing rather than a business API. Manual browser tabs
 persist in the renderer and render as sandboxed `<electrobun-webview>` elements.
@@ -393,7 +401,7 @@ requires; restoring it requires an upstream-capable adapter, not a pretend parti
 Desktop-only registration follows the same loader contract:
 
 ```rust
-let mut registry = codetwo_core::app::plugins::builtin_registry();
+let mut registry = codetwo_plugins::builtins::builtin_registry();
 let events = events.clone();
 registry.register(move || HostEventsPlugin::new(events.clone()));
 let config = AppConfig::new(&data_dir).with("desktop-events", PluginEntry::default());

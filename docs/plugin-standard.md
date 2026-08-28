@@ -172,7 +172,7 @@ package or ship renderer code. Validate the same directory that will be committe
 ```sh
 cd apps/desktop
 bun run plugin:validate ../../packs/hello-runtime
-cargo run -p codetwo-core --example validate_bundle -- ../../packs/hello-runtime
+cargo run -p codetwo-plugins --example validate_bundle -- ../../packs/hello-runtime
 ```
 
 The Bun command is a fast manifest preflight. The Rust command uses the desktop installer's
@@ -358,9 +358,9 @@ A change is plugin-conformant only when all applicable statements are true:
 Useful validation commands:
 
 ```sh
-cargo test -p codetwo-core plugin --lib
-cargo test -p codetwo-core --test plugin_protocol
-cargo test -p codetwo-core --test project_bundle_runtime
+cargo test -p codetwo-plugins
+cargo test -p codetwo-plugins --test plugin_protocol
+cargo test -p codetwo-plugins --test project_bundle_runtime
 cd apps/desktop && bun test && bun run build
 cd website && bun run docs:build
 ```

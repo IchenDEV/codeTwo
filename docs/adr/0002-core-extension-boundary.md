@@ -35,10 +35,16 @@ C2 uses these product terms:
 Extension API. Runtime metadata carries a `core`, `built_in`, or `extension` role so policy and UI
 do not infer product ownership from the shared lifecycle mechanism.
 
-Core currently contains the path/store/event/provider foundations, plugin installation and policy,
-Skills service required by the engine, the engine, the recovery/inspection surface, and extension
-process supervision. Hosts may still compose a smaller graph explicitly; user or project extension
-policy cannot remove a Core module from a graph the host chose to provide.
+Physical ownership follows the same distinction:
+
+- `codetwo-core` contains product domain and execution behavior, with no dependency on the Kernel
+  or plugin composition crate;
+- `codetwo-kernel` contains the product-agnostic runtime-module lifecycle;
+- `codetwo-plugins` is the composition root that depends on both, owns built-in adapters, Bundle
+  installation and policy, the recovery/inspection surface, and extension process supervision.
+
+Hosts may still compose a smaller graph explicitly; user or project extension policy cannot remove
+a Core-role module from a graph the host chose to provide.
 
 The existing `CoreApp::call` and realm-aware command path remains the one host-facing transport.
 Commands are internal by default. A process extension receives and may call only commands that Core

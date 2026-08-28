@@ -114,7 +114,7 @@ bridge from IDE toward office work. Packaging only; the scene format is already 
 invalid files skipped non-fatally), the scene loader reads installed plugins'
 `bundle/scenes/`, and `scene::export_skill_md` covers the §Interop SKILL.md export.
 Scenes/pipelines as plugin components (schema-validated, pure data — the hub pipeline in
-`crates/core/src/plugin.rs` already models component counts), plus SKILL.md export for
+`crates/plugins/src/bundle.rs` already models component counts), plus SKILL.md export for
 skill-only hosts as specified in `docs/scenes.md` §Interop.
 
 ## Dependencies at a glance

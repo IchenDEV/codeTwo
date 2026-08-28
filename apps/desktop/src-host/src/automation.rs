@@ -7,7 +7,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use codetwo_core::app::{EngineService, EventBus, StoreService};
 use codetwo_core::permission::ExecutionPolicy;
 use codetwo_core::session::SessionRunState;
 use codetwo_core::skill::DocBlock;
@@ -18,6 +17,7 @@ use codetwo_core::{
 use codetwo_kernel::{
     async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
 };
+use codetwo_plugins::{EngineService, EventBus, StoreService};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::broadcast;

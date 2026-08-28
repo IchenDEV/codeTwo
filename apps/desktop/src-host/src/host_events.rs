@@ -1,10 +1,10 @@
 //! Scope-owned forwarding from core broadcasts to the desktop host protocol.
 
-use codetwo_core::app::events::PluginsChanged;
-use codetwo_core::app::{EventBus, TerminalEvent, TerminalOutputEvent};
 use codetwo_kernel::{
     async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult,
 };
+use codetwo_plugins::events::PluginsChanged;
+use codetwo_plugins::{EventBus, TerminalEvent, TerminalOutputEvent};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::broadcast;

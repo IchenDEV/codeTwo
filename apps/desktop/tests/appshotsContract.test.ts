@@ -5,11 +5,13 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 
 describe("Appshots desktop contract", () => {
   test("offers the requested settings and routes a capture into the Composer", () => {
-    const settings = source("src/settings/SettingsPage.tsx");
+    const settingsShell = source("src/settings/SettingsPage.tsx");
+    const settings = source("src/settings/AppshotsSettings.tsx");
     const app = source("src/App.tsx");
     const composer = source("src/session/Composer.tsx");
 
-    expect(settings).toContain('{ id: "appshots", icon: ScanText, labelKey: "settings.appshots" }');
+    expect(settingsShell).toContain('{ id: "appshots", icon: ScanText, labelKey: "settings.appshots" }');
+    expect(settingsShell).toContain("<AppshotsSettingsPage");
     expect(settings).toContain('<SelectItem value="both-command">');
     expect(settings).toContain('<SelectItem value="automatic">');
     expect(settings).toContain('label={t("settings.appshotsFrontmost")}');

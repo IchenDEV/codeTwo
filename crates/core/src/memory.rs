@@ -280,10 +280,6 @@ pub struct MemoryCapability {
     inner: Arc<MemoryCapabilityInner>,
 }
 
-impl codetwo_kernel::Service for MemoryCapability {
-    const NAME: &'static str = "memory";
-}
-
 struct MemoryCapabilityInner {
     store: Arc<Store>,
     lifecycle: RwLock<MemoryLifecycle>,

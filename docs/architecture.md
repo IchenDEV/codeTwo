@@ -2,16 +2,19 @@
 
 C2 drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
 Protocol (ACP)** and presents them through a **document-first** UI. The desktop, TUI, and server all
-use the same Rust core and Plugin Kernel. Electrobun is a desktop-shell adapter, not a second
-business runtime.
+compose the same plugin-independent Rust Core through one plugin runtime. Electrobun is a
+desktop-shell adapter, not a second business runtime.
 
 ## Why this shape
 
 - **ACP is the common abstraction.** JSON-RPC over stdio, with entry points for all three
   providers (Grok natively; Claude Code & Codex via official adapters). We implement the client
   loop once and treat each backend as a launch command.
-- **The Rust core is the single implementation.** The TUI and server link it directly. The desktop
-  packages `codetwo-desktop-host`, which boots the same `CoreApp` graph plus desktop-owned
+- **Core has one direction of dependency.** `codetwo-core` owns product behavior and knows nothing
+  about plugin lifecycle, extension Bundles, or host protocols. `codetwo-plugins` depends on Core
+  and the generic Kernel, adapting Core capabilities into the shared `CoreApp` graph. The TUI,
+  server, and desktop host depend on that composition layer. The desktop packages
+  `codetwo-desktop-host`, which boots the same graph plus desktop-owned
   automation, device-sync, event, language-server, and remote adapters. Bun owns windows, dialogs,
   updates, and the narrow JSON-lines process transport.
 
@@ -19,9 +22,9 @@ business runtime.
 
 Everything below is a kernel **runtime module**. `crates/kernel` is a Rust port of
 [cordis](https://github.com/cordiverse/cordis): contexts, services published by name, declared
-injections, and scopes that undo everything a plugin did when it unloads. `crates/core/src/app`
-defines C2's subsystems as plugins over it, and `CoreApp::boot(AppConfig)` assembles them from
-config rather than from a constructor.
+injections, and scopes that undo everything a plugin did when it unloads. `crates/plugins` owns the
+composition root, built-in adapters, extension Bundle management, and process protocol;
+`CoreApp::boot(AppConfig)` assembles them from config rather than from a constructor.
 
 That shared Rust trait is an implementation mechanism, not the public plugin contract. Product
 policy distinguishes non-user-manageable **Core**, optional C2-owned **built-in features**, and
@@ -43,20 +46,35 @@ command invocation starts the process. Spec:
 ## Layers
 
 ```
-                 crates/kernel  (the plugin runtime — cordis in Rust)
-                   crates/core  (Rust library — no UI)
-   ┌──────────────────────────────────────────────────────────────┐
-   │ ACP, providers, sessions, skills, policy, events and plugins │
-   └──────────────────┬───────────────────────┬───────────────────┘
-                      │ links directly        │ links directly
-              crates/tui (ratatui)     crates/server (Axum)
-
-   apps/desktop/src-host  (Rust CoreApp + desktop host plugins)
+   crates/core                         crates/kernel
+   product domain and execution       generic plugin lifecycle
+             │                              │
+             └──────────┐      ┌────────────┘
+                        ▼      ▼
+                  crates/plugins
+       built-in adapters, CoreApp, Bundles and protocol
+                 │          │          │
+                 ▼          ▼          ▼
+            crates/tui  crates/server  apps/desktop/src-host
+                                      (CoreApp + desktop host modules)
                       │ versioned JSON-lines commands + events
-   apps/desktop/src/electrobun  (Bun window/dialog/update adapter)
-                      │ one typed Electrobun `call` RPC
-   apps/desktop/src  (React + Vite + BlockNote + sandboxed webviews)
+   apps/desktop/src/electrobun + browser/electrobun.ts  (platform implementation)
+                      │
+   apps/desktop/src/container.ts  (the renderer's only desktop-shell port)
+                      │ typed capabilities; no Electrobun imports above this line
+   apps/desktop/src/bridge.ts + product content  (React + Vite + BlockNote)
 ```
+
+The forbidden edges are part of the design: `codetwo-core` must not depend on
+`codetwo-kernel` or `codetwo-plugins`, and `codetwo-kernel` remains product-agnostic. Shared
+composition belongs in `codetwo-plugins`; a host may additionally provide platform-specific
+Kernel modules, but those modules must not leak back into Core.
+
+The desktop follows the same rule inside the renderer. `container.ts` owns the shell-facing import
+surface: RPC transport, dialogs, native menus, updates, appshots, pets, and embedded webviews.
+`bridge.ts` owns product commands and browser fallbacks. Product components may depend on those two
+content-facing modules, but they do not import Electrobun implementations directly. This keeps a
+shell replacement or browser-only renderer from spreading conditional native code through the UI.
 
 ## Device synchronization
 

@@ -20,8 +20,9 @@ import {
   desktopUpdateStatus,
   isElectrobun,
   listenDesktop,
-} from "./electrobun/client";
-import { onDesktopAppshotCaptured, onDesktopAppshotFailed } from "./electrobun/client";
+  onDesktopAppshotCaptured,
+  onDesktopAppshotFailed,
+} from "./container";
 import type {
   AppshotCapture,
   AppshotDestination,
@@ -29,7 +30,7 @@ import type {
   AppshotSettings,
   AppUpdateStatus,
   WorkspaceOpenTarget,
-} from "./electrobun/rpc";
+} from "./container";
 import type { PluginRuntimeCommandContribution, PluginUiContribution } from "./pluginModel";
 import {
   browserAnnotateLocal,
@@ -51,9 +52,9 @@ import {
   browserVisibleLocal,
   browserZoomLocal,
   type EmbeddedBrowserTab,
-} from "./browser/electrobun";
+} from "./container";
 
-// Typed renderer bridge to the Rust Plugin Kernel through Electrobun's desktop adapter.
+// Product-facing content bridge. Native shell details stay behind `container.ts`.
 
 export type {
   AppshotCapture,
@@ -80,7 +81,7 @@ let systemProfileAvatarRequest: Promise<string | null> | null = null;
 
 export function systemProfileAvatar(): Promise<string | null> {
   if (!inDesktop) return Promise.resolve(null);
-  systemProfileAvatarRequest ??= desktopSystemProfileAvatar();
+  if (!systemProfileAvatarRequest) systemProfileAvatarRequest = desktopSystemProfileAvatar();
   return systemProfileAvatarRequest;
 }
 

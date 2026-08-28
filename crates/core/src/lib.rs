@@ -1,11 +1,10 @@
-//! C2 core — the shared brain behind both the Electrobun desktop app and the ratatui TUI.
+//! C2 core — product domain and execution capabilities shared by every host.
 //!
-//! Nothing in here knows about a UI. Frontends drive the core through the SQ/EQ interface
-//! ([`Op`] in, [`Event`] out) and render the [`Event`] stream however they like.
+//! Nothing in here depends on a UI, Kernel lifecycle, extension Bundle, or host protocol. The
+//! `codetwo-plugins` crate adapts these capabilities into runtime modules and exposes `CoreApp` to
+//! desktop, TUI, and server hosts.
 //!
 //! Module map:
-//! - [`app`] — the plugin graph: every subsystem below, wired by declaration instead of by a
-//!   constructor. Start here; the modules it lists are its parts.
 //! - [`acp`] — Agent Client Protocol client (JSON-RPC over stdio) used to drive provider CLIs.
 //! - [`provider`] — registry of provider launch specs (Claude Code / Codex / Grok).
 //! - [`models`] — built-in model lists for providers that don't report their own over ACP.
@@ -18,7 +17,6 @@
 pub mod acp;
 pub mod activity;
 pub mod agent_skill_v2;
-pub mod app;
 pub mod artifact;
 pub mod attachment;
 pub mod automation;
@@ -46,8 +44,6 @@ pub mod memory;
 pub mod models;
 pub mod orchestrator;
 pub mod permission;
-pub mod plugin;
-pub mod plugin_marketplace;
 pub mod project;
 pub mod provider;
 pub mod provider_lifecycle;
@@ -66,6 +62,7 @@ pub mod store;
 pub mod task;
 pub mod task_capsule;
 pub mod task_store;
+#[cfg(feature = "terminal")]
 pub mod term;
 pub mod testsignal;
 pub mod tmux;
@@ -189,6 +186,7 @@ pub use task_capsule::{
     TaskCapsuleError,
 };
 pub use task_store::TaskRecord;
+#[cfg(feature = "terminal")]
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
 pub use testsignal::{classify_test_command, test_outcome, TestOutcome};
 pub use workspace_search::{WorkspaceContentMatch, WorkspaceSearchOptions, WorkspaceSearchResult};

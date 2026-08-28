@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use codetwo_core::app::{AppConfig, CanvasService, CoreApp, EngineService, EventBus, StoreService};
+use codetwo_plugins::{AppConfig, CanvasService, CoreApp, EngineService, EventBus, StoreService};
 use codetwo_server::{bind_and_serve_with_canvas, print_pairing, AuthState, DEFAULT_PAIRING_TTL};
 
 fn data_dir() -> PathBuf {

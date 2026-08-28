@@ -21,11 +21,11 @@ const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffect
 const themeSource = source("../src/theme.tsx");
 
 describe("macOS window chrome contract", () => {
-  test("centers the native macOS traffic lights in the 48px titlebar", () => {
+  test("centers the native macOS traffic lights in the 40px titlebar", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toContain("trafficLightOffset");
     expect(electrobunHost).toMatch(
-      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 17\);[\s\S]*?\}\s*rendererReady = true;/,
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 13\);[\s\S]*?\}\s*rendererReady = true;/,
     );
   });
 
@@ -113,15 +113,28 @@ describe("macOS window chrome contract", () => {
     );
   });
 
-  test("keeps both dock header states aligned to the 48px titlebar", () => {
+  test("keeps the rail, workspace, and both dock states on one 40px titlebar baseline", () => {
     const titlebarClasses = Array.from(
       dockSource.matchAll(/data-dock-titlebar[\s\S]*?className="([^"]+)"/g),
       (match) => match[1].split(/\s+/),
     );
 
+    expect(styles).toMatch(
+      /\.window-titlebar\s*{[^}]*height:\s*calc\(var\(--ds-control-normal\) \+ var\(--ds-space-surface-inset\)\);/s,
+    );
+    expect(styles).toMatch(
+      /\.window-titlebar\s*{[^}]*box-shadow:\s*inset 0 calc\(-1 \* var\(--hairline-width\)\) 0 var\(--border\);/s,
+    );
+    expect(appSource).toContain(
+      '"session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4"',
+    );
+    expect(railSource).toContain(
+      'className="window-titlebar window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 pr-2"',
+    );
     expect(titlebarClasses).toHaveLength(2);
-    expect(titlebarClasses.every((classes) => classes.includes("h-titlebar"))).toBe(true);
+    expect(titlebarClasses.every((classes) => classes.includes("window-titlebar"))).toBe(true);
     expect(titlebarClasses.every((classes) => !classes.includes("py-2.5"))).toBe(true);
+    expect(titlebarClasses.every((classes) => !classes.includes("border-b"))).toBe(true);
     expect(dockSource).toContain(
       'size="compact" className="w-(--ds-control-normal) px-0" onClick={onClose}',
     );

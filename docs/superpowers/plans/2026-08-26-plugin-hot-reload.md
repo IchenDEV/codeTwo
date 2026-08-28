@@ -13,8 +13,8 @@
 ### Task 1: Targeted dynamic Bundle reload
 
 **Files:**
-- Modify: `crates/core/src/app/plugin_manager.rs`
-- Test: `crates/core/tests/project_bundle_runtime.rs`
+- Modify: `crates/plugins/src/app/plugin_manager.rs`
+- Test: `crates/plugins/tests/project_bundle_runtime.rs`
 
 - [ ] **Step 1: Add a failing integration test**
 
@@ -37,7 +37,7 @@ assert_eq!(before_stable["pid"], after_stable["pid"]);
 
 - [ ] **Step 2: Run the focused test and confirm failure**
 
-Run: `cargo test -p codetwo-core --test project_bundle_runtime targeted_bundle_reload`
+Run: `cargo test -p codetwo-plugins --test project_bundle_runtime targeted_bundle_reload`
 
 Expected: compilation fails because `reload_installed_bundles` does not exist.
 
@@ -67,7 +67,7 @@ forced set with fingerprint-derived changes before calling each loader's `reconc
 
 - [ ] **Step 4: Run the focused test**
 
-Run: `cargo test -p codetwo-core --test project_bundle_runtime targeted_bundle_reload`
+Run: `cargo test -p codetwo-plugins --test project_bundle_runtime targeted_bundle_reload`
 
 Expected: PASS; only the requested Bundle pid changes.
 
@@ -76,10 +76,10 @@ Expected: PASS; only the requested Bundle pid changes.
 **Files:**
 - Modify: `crates/core/Cargo.toml`
 - Modify: `Cargo.lock`
-- Create: `crates/core/src/app/plugin_development.rs`
-- Modify: `crates/core/src/app/mod.rs`
-- Modify: `crates/core/src/app/plugins/hub.rs`
-- Test: `crates/core/tests/project_bundle_runtime.rs`
+- Create: `crates/plugins/src/app/plugin_development.rs`
+- Modify: `crates/plugins/src/app/mod.rs`
+- Modify: `crates/plugins/src/app/plugins/hub.rs`
+- Test: `crates/plugins/tests/project_bundle_runtime.rs`
 
 - [ ] **Step 1: Add failing command and watcher tests**
 
@@ -102,7 +102,7 @@ assert_ne!(before["pid"], changed["pid"]);
 
 - [ ] **Step 2: Run the tests and confirm failure**
 
-Run: `cargo test -p codetwo-core --test project_bundle_runtime developer_`
+Run: `cargo test -p codetwo-plugins --test project_bundle_runtime developer_`
 
 Expected: command-not-found failures for the three development commands.
 
@@ -163,7 +163,7 @@ reconcile through `try_lock`.
 
 - [ ] **Step 5: Run core verification**
 
-Run: `cargo test -p codetwo-core --test project_bundle_runtime developer_`
+Run: `cargo test -p codetwo-plugins --test project_bundle_runtime developer_`
 
 Expected: PASS for persistence, manual reload, automatic reload, disabled mode, and isolation.
 
@@ -304,7 +304,7 @@ Developer settings path to `docs/plugins.md`.
 
 Run: `cargo fmt --all -- --check`
 
-Run: `cargo test -p codetwo-core --test project_bundle_runtime`
+Run: `cargo test -p codetwo-plugins --test project_bundle_runtime`
 
 Run: `cargo test -p codetwo-desktop-host`
 

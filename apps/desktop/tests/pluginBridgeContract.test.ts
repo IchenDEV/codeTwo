@@ -20,7 +20,7 @@ describe("plugin bridge contract", () => {
     const adapter = readFileSync(resolve(desktop, "src/electrobun/nativeHost.ts"), "utf8");
     const host = readFileSync(resolve(desktop, "src-host/src/lib.rs"), "utf8");
     const enginePlugin = readFileSync(
-      resolve(repository, "crates/core/src/app/plugins/engine.rs"),
+      resolve(repository, "crates/plugins/src/app/plugins/engine.rs"),
       "utf8",
     );
     const config = readFileSync(resolve(desktop, "electrobun.config.ts"), "utf8");
@@ -69,7 +69,7 @@ describe("plugin bridge contract", () => {
   test("registers every static command used by the renderer bridge", () => {
     const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
     const pluginSources = [
-      ...rustFiles(resolve(repository, "crates/core/src/app/plugins")),
+      ...rustFiles(resolve(repository, "crates/plugins/src/app/plugins")),
       ...rustFiles(resolve(desktop, "src-host/src")),
     ]
       .map((path) => readFileSync(path, "utf8"))

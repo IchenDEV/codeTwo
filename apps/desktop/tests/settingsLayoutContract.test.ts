@@ -2,9 +2,25 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 const source = readFileSync(new URL("../src/settings/SettingsPage.tsx", import.meta.url), "utf8");
+const personalSource = readFileSync(new URL("../src/settings/PersonalSettings.tsx", import.meta.url), "utf8");
+const primitivesSource = readFileSync(new URL("../src/settings/SettingsPrimitives.tsx", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/settings/settings-page.css", import.meta.url), "utf8");
 const petStyles = readFileSync(new URL("../src/settings/pet-settings.css", import.meta.url), "utf8");
+
+const CONTENT_MODULES = [
+  "GeneralSettingsPage",
+  "ImportSettingsPage",
+  "KeybindingsSettingsPage",
+  "ProjectSettingsPage",
+  "WorktreeSettingsPage",
+  "ProviderSettingsPage",
+  "ComputerUseSettingsPage",
+  "BrowserUseSettingsPage",
+  "AppshotsSettingsPage",
+  "DeviceSyncSettingsPage",
+  "DeveloperSettingsPage",
+] as const;
 
 describe("Settings page layout contract", () => {
   test("places the Back action above the settings menu", () => {
@@ -37,7 +53,7 @@ describe("Settings page layout contract", () => {
 
   test("collapses navigation labels and stacks regular rows when space is constrained", () => {
     expect(source).toContain("settings-nav-label");
-    expect(source).toContain("settings-row-control");
+    expect(primitivesSource).toContain("settings-row-control");
     expect(styles).toContain("@media (max-width: 44rem)");
     expect(styles).toMatch(/\.settings-sidebar \{[\s\S]*?width: 4rem;/);
     expect(styles).toContain("@container settings-page (max-width: 36rem)");
@@ -103,13 +119,14 @@ describe("Settings page layout contract", () => {
   test("includes session import as a first-class personal panel", () => {
     expect(source).toMatch(/\{ id: "import", icon: Download, labelKey: "settings\.import" \}/);
     expect(source).toContain('{tab === "import" && (');
-    expect(source).toContain("data-session-import-result");
+    expect(personalSource).toContain("data-session-import-result");
   });
 
   test("includes Pets as a first-class settings panel", () => {
     expect(source).toMatch(/\{ id: "pets", icon: PawPrint, labelKey: "settings\.pets" \}/);
     expect(source).toContain('{tab === "pets" && (');
-    expect(source).toMatch(/<SettingsPanel title=\{t\("settings\.pets"\)\}[\s\S]*?<PetSettings \/>/);
+    expect(source).toMatch(/<Page title=\{t\("settings\.pets"\)\}>[\s\S]*?<PetSettings \/>/);
+    expect(primitivesSource).toContain("<SettingsPanel");
   });
 
   test("clips pet catalog previews to a compact square", () => {
@@ -125,5 +142,17 @@ describe("Settings page layout contract", () => {
     expect(source).toMatch(
       /\{tab === "memory" && memoryEnabled && \([\s\S]*?<MemorySettingsPage[\s\S]*?projectPath=\{projectPath\}[\s\S]*?projects=\{projects\}[\s\S]*?onOpenSession=\{onOpenSession\}[\s\S]*?\/>(?:[\s\S]*?)\)\}/,
     );
+  });
+
+  test("keeps the settings shell separate from stateful content modules", () => {
+    for (const module of CONTENT_MODULES) {
+      expect(source).toContain(`<${module}`);
+    }
+    expect(source).not.toContain("setAppUpdate");
+    expect(source).not.toContain("setAppshotSettings");
+    expect(source).not.toContain("setProviderOperation");
+    expect(source).not.toContain("setComputerUseSettings");
+    expect(source).not.toContain("setWorktreesByProject");
+    expect(source).not.toContain("setProjectNameDraft");
   });
 });
