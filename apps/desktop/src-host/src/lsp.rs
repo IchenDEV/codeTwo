@@ -12,9 +12,9 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use codetwo_core::app::events::PluginsChanged;
-use codetwo_core::app::Paths;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
+use codetwo_plugins::events::PluginsChanged;
+use codetwo_plugins::Paths;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
@@ -87,7 +87,7 @@ fn lsp_start(
     state.ensure_open()?;
     let plugins_dir = paths.plugins();
     if plugins_dir.is_dir() {
-        let plugins = codetwo_core::plugin::load_dir(&plugins_dir).unwrap_or_default();
+        let plugins = codetwo_plugins::bundle::load_dir(&plugins_dir).unwrap_or_default();
         for plugin in plugins
             .into_iter()
             .filter(|plugin| plugin.enabled && plugin.trusted)

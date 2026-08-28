@@ -9,13 +9,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use codetwo_core::app::StoreService;
 use codetwo_core::device_sync::{
     device_sync_snapshot_version, merge_device_sync_documents, DeviceSyncCounts, DeviceSyncDocument,
 };
 use codetwo_core::session::now_millis;
 use codetwo_core::Store;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult, Service};
+use codetwo_plugins::StoreService;
 use futures_util::future::join_all;
 use reqwest::{Client, Response, Url};
 use serde::de::DeserializeOwned;

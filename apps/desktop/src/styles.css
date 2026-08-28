@@ -419,6 +419,10 @@
   .macos-window-glass .app-shell {
     background: transparent;
   }
+  .window-titlebar {
+    height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));
+    box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--border);
+  }
   .window-controls-safe-main {
     padding-left: 1rem;
   }
@@ -495,6 +499,13 @@
   .dock-panel-side {
     container-name: dock;
     container-type: inline-size;
+  }
+  .dock-content-tabbar {
+    height: calc(var(--ds-control-field) + var(--ds-space-inline));
+    box-shadow: inset 0 -1px var(--border);
+  }
+  .dock-content-split {
+    box-shadow: inset 1px 0 var(--border);
   }
   @container dock (max-width: 359px) {
     .dock-tab-label {

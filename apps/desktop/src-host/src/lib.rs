@@ -17,12 +17,12 @@ mod scene_mcp;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
-use codetwo_core::app::{AppConfig, CoreApp};
 use codetwo_core::{CanvasFeatureGate, DesktopMcpConfig, Engine};
 use codetwo_kernel::{
     PluginCategory, PluginEntry, PluginMetadata, PluginOrigin, PluginRole, PluginScopeSupport,
 };
+use codetwo_plugins::builtins::{EngineInputs, EnginePlugin};
+use codetwo_plugins::{AppConfig, CoreApp};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -152,7 +152,7 @@ pub async fn run() -> Result<(), String> {
         browser_enabled: false,
     };
 
-    let mut registry = codetwo_core::app::plugins::builtin_registry();
+    let mut registry = codetwo_plugins::builtins::builtin_registry();
     #[cfg(unix)]
     let engine_metadata = registry
         .get("engine")

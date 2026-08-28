@@ -8,8 +8,8 @@ import {
   desktopUpdatePetState,
   isElectrobun,
   listenDesktop,
-} from "../electrobun/client";
-import type { DesktopPetState } from "../electrobun/rpc";
+  type DesktopPetState,
+} from "../container";
 import { CodeTwoPet } from "./CodeTwoPet";
 import type { CodeTwoPetAnimation } from "./state";
 

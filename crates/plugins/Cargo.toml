@@ -1,0 +1,27 @@
+[package]
+name = "codetwo-plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "C2 runtime-module graph, built-in adapters, extension bundles, and plugin protocol."
+
+[dependencies]
+codetwo-core = { workspace = true, features = ["terminal"] }
+codetwo-kernel.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+blake3 = "1"
+base64 = "0.22"
+chrono = "0.4"
+url = "2"
+tempfile = "3"
+notify = "8.2"
+
+[dev-dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }

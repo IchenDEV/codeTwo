@@ -1,7 +1,7 @@
 //! C2 TUI entrypoint. Same core as the desktop app; ratatui renders it.
 //!
 //! The TUI does not build a C2 — it boots one. Storage, providers, the skill library and the
-//! agent loop all come out of the plugin graph ([`codetwo_core::app`]), which is also why this
+//! agent loop all come out of the plugin graph ([`codetwo_plugins`]), which is also why this
 //! file no longer knows the order any of them have to be constructed in.
 //!
 //! Two event sources feed one loop: a background thread reads terminal key events into a channel,
@@ -14,9 +14,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use app::App;
-use codetwo_core::app::{AppConfig, CoreApp, EngineService, EventBus, SkillService};
 use codetwo_core::provider::{default_registry, home_dir};
 use codetwo_core::Op;
+use codetwo_plugins::{AppConfig, CoreApp, EngineService, EventBus, SkillService};
 
 use ratatui::crossterm::event::{self, Event as CtEvent};
 use ratatui::DefaultTerminal;
@@ -30,10 +30,12 @@ fn data_dir() -> PathBuf {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let dir = data_dir();
-    // A terminal frontend has no use for scenes, key bindings or the market — so it does not load
-    // them. Trimming the app is a config edit, not a build flag.
+    // A terminal frontend has no use for the scene graph, key bindings or the market — so it does
+    // not load them. Trimming the app is a config edit, not a build flag.
     let config = AppConfig::new(&dir)
         .without("scenes")
+        .without("scene-runtime")
+        .without("scene-commands")
         .without("keymap")
         .without("market");
     let core = CoreApp::boot(config).await.map_err(std::io::Error::other)?;
@@ -43,7 +45,9 @@ async fn main() -> std::io::Result<()> {
         .ok_or_else(|| std::io::Error::other(boot_failure(&core)))?;
     let engine = &*engine;
     // The skill library resolves the workspace the TUI was started in.
-    let skills = core.service::<SkillService>().ok_or_else(|| std::io::Error::other("no skills"))?;
+    let skills = core
+        .service::<SkillService>()
+        .ok_or_else(|| std::io::Error::other("no skills"))?;
     skills.reload(std::env::current_dir().ok().as_deref());
     let skill_vec = skills.list();
     let mut engine_rx = core
@@ -85,7 +89,11 @@ fn boot_failure(core: &CoreApp) -> String {
         .filter(|scope| scope.error.is_some() || !scope.missing.is_empty())
         .map(|scope| match scope.error {
             Some(error) => format!("{}: {error}", scope.plugin),
-            None => format!("{} is waiting for {}", scope.plugin, scope.missing.join(", ")),
+            None => format!(
+                "{} is waiting for {}",
+                scope.plugin,
+                scope.missing.join(", ")
+            ),
         })
         .collect();
     format!("the agent loop did not start — {}", blocked.join("; "))

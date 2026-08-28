@@ -44,8 +44,8 @@ import { openNativePath, providerLabel, type Project, type SessionInfo } from ".
 import {
   nativeContextMenusAvailable,
   showNativeContextMenu,
-} from "../electrobun/contextMenu";
-import type { NativeContextMenuItem } from "../electrobun/rpc";
+  type NativeContextMenuItem,
+} from "../container";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { NavigationRow } from "@/components/business/navigation-row";
 import { QuotaProgress } from "@/components/business/quota-progress";
@@ -835,10 +835,10 @@ export function SessionRail({
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
       {/* Keep the collapse control in the title row, with enough clearance for macOS traffic
-          lights. Search gets a full-width launcher below so it is visible and easy to target. */}
+          lights. Search gets a full-width launcher below; all panes share the same 40px baseline. */}
       <div
         data-rail-header
-        className="window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pr-2"
+        className="window-titlebar window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 pr-2"
       >
         <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
         <Tooltip>

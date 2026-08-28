@@ -2,7 +2,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 
-use codetwo_core::app::{CoreApp, SceneService, StoreService};
+use codetwo_plugins::{CoreApp, SceneService, StoreService};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 

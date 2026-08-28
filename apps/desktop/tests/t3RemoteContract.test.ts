@@ -26,7 +26,7 @@ describe("Rust Plugin Kernel remote contract", () => {
 
   test("routes task transfer through the Rust handoff plugin and native agent", () => {
     const bridge = read("src/bridge.ts");
-    const handoff = read("../../crates/core/src/app/plugins/handoff.rs");
+    const handoff = read("../../crates/plugins/src/app/plugins/handoff.rs");
     const agent = read("../../crates/server/src/bin/codetwo-agent.rs");
 
     expect(bridge).toContain('call<TaskHandoffResult>("handoff.transfer_pairing"');

@@ -31,28 +31,11 @@ function renderDock(
         onTab={() => {}}
         onOpenSideChat={onOpenSideChat}
         onClose={() => {}}
-        cwd={null}
-        projectPath={null}
-        sessionKey="test"
-        git={null}
-        onRefreshGit={() => {}}
-        onOpenSourceControl={() => {}}
-        browserUrl="about:blank"
-        onNavigate={() => {}}
-        onAnnotate={() => {}}
-        onInsertFile={() => {}}
-        onOpenFile={() => {}}
-        onSendText={() => {}}
-        openFiles={[]}
-        activeFile={null}
-        fileReveal={null}
-        onActiveFile={() => {}}
-        onCloseFile={() => {}}
-        turns={[]}
-        usage={null}
-        hasEarlier={false}
-        loadingEarlier={false}
-        onLoadEarlier={() => {}}
+        content={{
+          trajectory: (
+            <div aria-label="Execution trajectory">No events match this view.</div>
+          ),
+        }}
         width={440}
         onWidth={() => {}}
       />
@@ -140,7 +123,7 @@ describe("Dock plugin component gate", () => {
     view.unmount();
   });
 
-  test("renders trajectory as a right-panel module", async () => {
+  test("renders caller-supplied trajectory content as a right-panel module", async () => {
     activateDom();
     const home = renderDock(["trajectory"], "home");
     await flush();

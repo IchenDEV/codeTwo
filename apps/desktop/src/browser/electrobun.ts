@@ -253,7 +253,8 @@ function detach(label: string, view: WebviewTagElement): void {
 }
 
 /** Connect a React-rendered `<electrobun-webview>` to the browser command surface. */
-export function registerBrowserWebview(label: string, view: WebviewTagElement | null): void {
+export function registerBrowserWebview(label: string, element: HTMLElement | null): void {
+  const view = element as WebviewTagElement | null;
   const previous = views.get(label);
   if (previous && previous !== view) detach(label, previous);
   if (!view) {

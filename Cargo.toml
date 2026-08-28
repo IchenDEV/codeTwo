@@ -8,6 +8,7 @@ resolver = "2"
 members = [
     "crates/kernel",
     "crates/core",
+    "crates/plugins",
     "crates/tui",
     "crates/server",
     "apps/desktop/src-host",
@@ -32,6 +33,7 @@ tracing = "0.1"
 # Local crates
 codetwo-kernel = { path = "crates/kernel" }
 codetwo-core = { path = "crates/core" }
+codetwo-plugins = { path = "crates/plugins" }
 
 [patch.crates-io]
 # 0.2.1 links Ghostty's Windows static archive under the Unix library name. Keep the published

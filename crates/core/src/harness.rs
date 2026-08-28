@@ -94,13 +94,18 @@ pub fn discover_in(home: Option<&Path>, cwd: Option<&Path>) -> Vec<Skill> {
 pub fn source_label(skill_id: &str) -> Option<&'static str> {
     let rest = skill_id.strip_prefix("harness:")?;
     let (harness_id, _) = rest.split_once(':')?;
-    HARNESSES.iter().find(|h| h.id == harness_id).map(|h| h.label)
+    HARNESSES
+        .iter()
+        .find(|h| h.id == harness_id)
+        .map(|h| h.label)
 }
 
 /// Read `<root>/<dir>/SKILL.md` entries into `out`, skipping ids an earlier (higher-precedence)
 /// root already produced.
 fn scan_root(root: &Path, spec: &HarnessSpec, out: &mut Vec<Skill>) {
-    let Ok(entries) = std::fs::read_dir(root) else { return };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
     for entry in entries.flatten() {
         let dir = entry.path();
         let Some(dir_name) = dir.file_name().and_then(|s| s.to_str()).map(str::to_string) else {
@@ -110,7 +115,9 @@ fn scan_root(root: &Path, spec: &HarnessSpec, out: &mut Vec<Skill>) {
             continue;
         }
         // Also rejects stray files: `<file>/SKILL.md` can't be read.
-        let Ok(text) = std::fs::read_to_string(dir.join("SKILL.md")) else { continue };
+        let Ok(text) = std::fs::read_to_string(dir.join("SKILL.md")) else {
+            continue;
+        };
         let id = format!("harness:{}:{dir_name}", spec.id);
         if out.iter().any(|s| s.id == id) {
             continue;
@@ -121,7 +128,11 @@ fn scan_root(root: &Path, spec: &HarnessSpec, out: &mut Vec<Skill>) {
         let name = name.unwrap_or_else(|| dir_name.clone());
         let mut description = description.unwrap_or_default();
         if description.chars().count() > MAX_DESCRIPTION_CHARS {
-            description = description.chars().take(MAX_DESCRIPTION_CHARS).collect::<String>() + "…";
+            description = description
+                .chars()
+                .take(MAX_DESCRIPTION_CHARS)
+                .collect::<String>()
+                + "…";
         }
         // No icon: discovered skills take the picker's neutral fallback glyph rather than
         // inventing an emoji per product.
@@ -131,7 +142,10 @@ fn scan_root(root: &Path, spec: &HarnessSpec, out: &mut Vec<Skill>) {
             description,
             icon: None,
             source: Some(spec.label.to_string()),
-            payload: SkillPayload::AgentSkill { skill_ref: name, inline_text: None },
+            payload: SkillPayload::AgentSkill {
+                skill_ref: name,
+                inline_text: None,
+            },
         });
     }
 }
@@ -140,7 +154,7 @@ fn scan_root(root: &Path, spec: &HarnessSpec, out: &mut Vec<Skill>) {
 /// top-level `key: value` pairs (plain or quoted) plus indented continuation lines / `>`-style
 /// block scalars for multi-line descriptions. Anything fancier still loads — unknown keys are
 /// ignored and missing ones fall back to the directory name / empty.
-pub(crate) fn parse_frontmatter(text: &str) -> (Option<String>, Option<String>) {
+pub fn parse_frontmatter(text: &str) -> (Option<String>, Option<String>) {
     let mut lines = text.lines();
     if lines.next().map(str::trim_end) != Some("---") {
         return (None, None);
@@ -149,7 +163,11 @@ pub(crate) fn parse_frontmatter(text: &str) -> (Option<String>, Option<String>) 
     let mut description = None;
     // The key still collecting continuation lines, and what it has so far.
     let mut open: Option<(bool, String)> = None; // (is_name, value)
-    fn flush(open: &mut Option<(bool, String)>, name: &mut Option<String>, description: &mut Option<String>) {
+    fn flush(
+        open: &mut Option<(bool, String)>,
+        name: &mut Option<String>,
+        description: &mut Option<String>,
+    ) {
         if let Some((is_name, value)) = open.take() {
             let value = value.trim().to_string();
             if !value.is_empty() {
@@ -173,7 +191,9 @@ pub(crate) fn parse_frontmatter(text: &str) -> (Option<String>, Option<String>) 
             continue;
         }
         flush(&mut open, &mut name, &mut description);
-        let Some((key, value)) = line.split_once(':') else { continue };
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
         let is_name = match key.trim() {
             "name" => true,
             "description" => false,
@@ -182,8 +202,11 @@ pub(crate) fn parse_frontmatter(text: &str) -> (Option<String>, Option<String>) 
         let value = value.trim();
         // `>` / `|` (with optional chomping `-`) start a block scalar: the value is the indented
         // lines that follow.
-        let seed =
-            if matches!(value, ">" | ">-" | "|" | "|-") { String::new() } else { unquote(value).to_string() };
+        let seed = if matches!(value, ">" | ">-" | "|" | "|-") {
+            String::new()
+        } else {
+            unquote(value).to_string()
+        };
         open = Some((is_name, seed));
     }
     flush(&mut open, &mut name, &mut description);
@@ -226,21 +249,43 @@ mod tests {
             "code-review",
             "---\nname: code-review\ndescription: Review a pull request\n---\nbody",
         );
-        write_skill(&home.join(".codex/skills"), "deploy", "No frontmatter at all.");
-        write_skill(&cwd.join(".opencode/skill"), "docs", "---\nname: docs\n---\n");
+        write_skill(
+            &home.join(".codex/skills"),
+            "deploy",
+            "No frontmatter at all.",
+        );
+        write_skill(
+            &cwd.join(".opencode/skill"),
+            "docs",
+            "---\nname: docs\n---\n",
+        );
         std::fs::create_dir_all(home.join(".claude/skills/empty-no-md")).unwrap();
-        write_skill(&home.join(".claude/skills"), ".hidden", "---\nname: h\n---\n");
+        write_skill(
+            &home.join(".claude/skills"),
+            ".hidden",
+            "---\nname: h\n---\n",
+        );
 
         let skills = discover_in(Some(&home), Some(&cwd));
         let ids: Vec<&str> = skills.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, vec!["harness:claude:code-review", "harness:codex:deploy", "harness:opencode:docs"]);
+        assert_eq!(
+            ids,
+            vec![
+                "harness:claude:code-review",
+                "harness:codex:deploy",
+                "harness:opencode:docs"
+            ]
+        );
 
         let review = &skills[0];
         assert_eq!(review.name, "code-review");
         assert_eq!(review.description, "Review a pull request");
         assert_eq!(
             review.payload,
-            SkillPayload::AgentSkill { skill_ref: "code-review".into(), inline_text: None }
+            SkillPayload::AgentSkill {
+                skill_ref: "code-review".into(),
+                inline_text: None
+            }
         );
         // No frontmatter → directory name, empty description.
         assert_eq!(skills[1].name, "deploy");
@@ -254,11 +299,20 @@ mod tests {
 
     #[test]
     fn project_skill_shadows_user_skill() {
-        let tmp = std::env::temp_dir().join(format!("codetwo-harness-shadow-{}", uuid::Uuid::new_v4()));
+        let tmp =
+            std::env::temp_dir().join(format!("codetwo-harness-shadow-{}", uuid::Uuid::new_v4()));
         let home = tmp.join("home");
         let cwd = tmp.join("proj");
-        write_skill(&home.join(".claude/skills"), "review", "---\ndescription: user copy\n---\n");
-        write_skill(&cwd.join(".claude/skills"), "review", "---\ndescription: project copy\n---\n");
+        write_skill(
+            &home.join(".claude/skills"),
+            "review",
+            "---\ndescription: user copy\n---\n",
+        );
+        write_skill(
+            &cwd.join(".claude/skills"),
+            "review",
+            "---\ndescription: project copy\n---\n",
+        );
 
         let skills = discover_in(Some(&home), Some(&cwd));
         assert_eq!(skills.len(), 1);
@@ -269,10 +323,8 @@ mod tests {
 
     #[test]
     fn opencode_v2_plural_skill_root_shadows_legacy_singular_root() {
-        let tmp = std::env::temp_dir().join(format!(
-            "codetwo-opencode2-skills-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("codetwo-opencode2-skills-{}", uuid::Uuid::new_v4()));
         let cwd = tmp.join("proj");
         write_skill(
             &cwd.join(".opencode/skills"),
@@ -294,12 +346,20 @@ mod tests {
 
     #[test]
     fn discovered_skill_compiles_as_agent_skill() {
-        let tmp = std::env::temp_dir().join(format!("codetwo-harness-compile-{}", uuid::Uuid::new_v4()));
+        let tmp =
+            std::env::temp_dir().join(format!("codetwo-harness-compile-{}", uuid::Uuid::new_v4()));
         let home = tmp.join("home");
-        write_skill(&home.join(".claude/skills"), "pdf", "---\nname: pdf\ndescription: Work with PDFs\n---\n");
+        write_skill(
+            &home.join(".claude/skills"),
+            "pdf",
+            "---\nname: pdf\ndescription: Work with PDFs\n---\n",
+        );
 
         let lib = SkillLibrary::new(discover_in(Some(&home), None));
-        let doc = vec![DocBlock::Skill { skill_id: "harness:claude:pdf".into(), params: HashMap::new() }];
+        let doc = vec![DocBlock::Skill {
+            skill_id: "harness:claude:pdf".into(),
+            params: HashMap::new(),
+        }];
         let c = compile(&doc, &lib);
         assert_eq!(c.agent_skills, vec!["pdf".to_string()]);
         assert!(c.prompt.contains("Use the **pdf** skill."));

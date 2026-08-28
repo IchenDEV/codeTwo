@@ -13,8 +13,8 @@ import { openExternal, openNativePath, revealNativePath } from "../bridge";
 import {
   nativeContextMenusAvailable,
   showNativeContextMenu,
-} from "../electrobun/contextMenu";
-import type { NativeContextMenuItem } from "../electrobun/rpc";
+  type NativeContextMenuItem,
+} from "../container";
 import { useT, type Translate } from "../i18n";
 import { currentDesktopPlatform } from "../platform";
 import { ChartBlock, parseChartSpec } from "./ChartBlock";

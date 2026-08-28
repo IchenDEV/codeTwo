@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use codetwo_core::app::{AppConfig, CanvasService, CoreApp, EngineService, EventBus, StoreService};
+use codetwo_plugins::{AppConfig, CanvasService, CoreApp, EngineService, EventBus, StoreService};
 use codetwo_server::{
     bind_and_serve_with_canvas, pairing_endpoints, pairing_qr_svg, pairing_url_for_endpoint,
     select_pairing_endpoint, AuthState, PairingEndpoint,

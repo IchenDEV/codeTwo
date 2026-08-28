@@ -6,9 +6,9 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use codetwo_core::app::{CanvasService, EngineService, EventBus, StoreService};
 use codetwo_core::{Engine, Event, Store};
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
+use codetwo_plugins::{CanvasService, EngineService, EventBus, StoreService};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast;
@@ -230,8 +230,7 @@ impl Plugin for RemotePlugin {
     }
 
     fn inject(&self) -> Injection {
-        Injection::required(["engine", "store", "bus", "canvas"])
-            .with_optional(["device-sync"])
+        Injection::required(["engine", "store", "bus", "canvas"]).with_optional(["device-sync"])
     }
 
     fn description(&self) -> Option<&str> {
@@ -295,9 +294,10 @@ impl Plugin for RemotePlugin {
                 let auth = Arc::new(codetwo_server::AuthState::load(Some(
                     service.auth_path.clone(),
                 )));
-                let device_sync_http = service.device_sync.clone().map(|device_sync| {
-                    device_sync as Arc<dyn codetwo_server::DeviceSyncHttp>
-                });
+                let device_sync_http = service
+                    .device_sync
+                    .clone()
+                    .map(|device_sync| device_sync as Arc<dyn codetwo_server::DeviceSyncHttp>);
                 let bound = codetwo_server::bind_and_serve_with_services(
                     service.engine.clone(),
                     service.events.clone(),
@@ -481,9 +481,7 @@ impl Plugin for RemotePlugin {
                     true
                 } else {
                     match &service.device_sync {
-                        Some(sync) => sync
-                            .revoke_device(&args.id)
-                            .map_err(PluginError::new)?,
+                        Some(sync) => sync.revoke_device(&args.id).map_err(PluginError::new)?,
                         None => false,
                     }
                 };

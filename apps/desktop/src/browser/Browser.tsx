@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { WebviewTagElement } from "electrobun/view";
 import {
   ArrowLeft,
   ArrowRight,
@@ -60,7 +59,7 @@ import {
   type BrowserHistoryState,
   type StorageLike,
 } from "./history";
-import { embeddedBrowserRenderer, registerBrowserWebview } from "./electrobun";
+import { embeddedBrowserRenderer, registerBrowserWebview } from "../container";
 
 const BLANK = "about:blank";
 
@@ -168,8 +167,7 @@ function BrowserWebview({
   visible: boolean;
 }) {
   const connect = useCallback(
-    (element: HTMLElement | null) =>
-      registerBrowserWebview(label, element as WebviewTagElement | null),
+    (element: HTMLElement | null) => registerBrowserWebview(label, element),
     [label],
   );
   return (
