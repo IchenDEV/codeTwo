@@ -3,7 +3,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
-import { Columns2, Rows2, X } from "lucide-react";
+import { PanelBottom, PanelRight, X } from "@/components/ui/icons";
 
 import { MIN_RATIO, type DividerRect } from "./paneLayout";
 import { TurnCard } from "./TurnCard";
@@ -38,7 +38,7 @@ export function PaneToolbar({
         className="flex size-6 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:focus-ring"
         onClick={onSplitRight}
       >
-        <Columns2 className="size-3.5" aria-hidden />
+        <PanelRight className="size-3.5" aria-hidden />
       </button>
       <button
         type="button"
@@ -47,7 +47,7 @@ export function PaneToolbar({
         className="flex size-6 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:focus-ring"
         onClick={onSplitDown}
       >
-        <Rows2 className="size-3.5" aria-hidden />
+        <PanelBottom className="size-3.5" aria-hidden />
       </button>
       {canClose ? (
         <button
