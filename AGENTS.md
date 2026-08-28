@@ -4,6 +4,23 @@ Follow the global Codex contract and the repository's existing architecture and 
 changes narrowly scoped, preserve unrelated worktree state, and verify claims against the live
 checkout.
 
+## Development lifecycle
+
+[`docs/sdlc/workflow.md`](docs/sdlc/workflow.md) is the single source of truth for material change
+artifacts, lifecycle states, gates, verification evidence, release handoff, incidents, and evals.
+
+- A direct user implementation request may supply the accepted Intent. Record its source and the
+  observable acceptance criteria in one change artifact before treating implementation as ready.
+- Reuse accepted ADRs, design documents, issues, and PRs as evidence; link them from the change
+  artifact instead of copying their state into another tracker.
+- Run `python3 script/check_sdlc.py` before handoff. A PR that changes repository files must change
+  or add a canonical file under `docs/sdlc/changes/`.
+- Do not create `docs/superpowers`, a parallel specs/plans tree, or another lifecycle registry.
+- Never mark a change verified, released, or closed without the corresponding observed evidence.
+
+C2's product-level Scenes, Pipelines, task boards, and packs are application features and fixtures;
+they are not repositories for this project's development-lifecycle state.
+
 ## Desktop development instances
 
 Treat one desktop data directory as having exactly one live Core owner. Two Core processes must
