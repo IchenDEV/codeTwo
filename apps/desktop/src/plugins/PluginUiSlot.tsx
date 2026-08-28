@@ -69,7 +69,7 @@ export function PluginUiSlot({
               type="button"
               variant="ghost"
               size="compact"
-              className="session-header-plugin-action max-w-44 shrink-0"
+              className="session-header-plugin-action max-w-44 shrink-0 text-muted-foreground hover:text-muted-foreground"
               title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
               aria-label={`${contribution.pluginName}: ${contribution.label}`}
               disabled={busy !== null}

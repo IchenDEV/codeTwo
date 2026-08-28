@@ -140,8 +140,6 @@ interface ComposerProps {
 }
 
 const LIQUID_AVAILABLE = typeof ResizeObserver !== "undefined";
-const COMPOSER_LIQUID_SHADOW =
-  "0 1px 2px color-mix(in srgb, var(--ds-color-shadow) 30%, transparent), 0 4px 16px color-mix(in srgb, var(--ds-color-shadow) 50%, transparent), inset 0 0 0 0.5px var(--composer-liquid-border-color)";
 
 function useReducedMotionPreference() {
   const [reduced, setReduced] = useState(() =>
@@ -159,32 +157,6 @@ function useReducedMotionPreference() {
   }, []);
 
   return reduced;
-}
-
-function ComposerLiquidSurface({
-  children,
-  docMode,
-}: {
-  children: ReactElement;
-  docMode: boolean;
-}) {
-  if (!LIQUID_AVAILABLE) return children;
-
-  return (
-    <Liquid
-      data-gooey-composer
-      blur={5.5}
-      contrast={20}
-      fill={docMode ? "transparent" : "var(--card)"}
-      filterPadding={20}
-      shadow={docMode ? undefined : COMPOSER_LIQUID_SHADOW}
-      className={cn("composer-liquid-surface relative z-10", docMode && "flex min-h-0 flex-1")}
-    >
-      <Liquid.Item observe>
-        {children}
-      </Liquid.Item>
-    </Liquid>
-  );
 }
 
 function LiquidActionSurface({
@@ -1585,25 +1557,18 @@ export function Composer({
         )}
       >
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
-            column, and clipping them takes the block gutter away. */}
-        <ComposerLiquidSurface docMode={docMode}>
-          <div
-            className={cn(
-              "composer-card relative z-10 flex flex-col",
-              docMode
-                ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
-                  // `relative` anchors the floating control bar below.
-                  "min-h-0 flex-1"
-                : // The renderer delegates the fill and raised shadow to liquid-gooey so its
-                  // silhouette can lag resizing without softening the editor's actual DOM.
-                  cn(
-                    "rounded-composer",
-                    LIQUID_AVAILABLE
-                      ? "bg-transparent"
-                      : "bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
-                  ),
-            )}
-          >
+            column, and clipping them takes the block gutter away. The compact card paints its own
+            surface so its background can never drift away from the editor in WebKit. */}
+        <div
+          className={cn(
+            "composer-card relative z-10 flex flex-col",
+            docMode
+              ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
+                // `relative` anchors the floating control bar below.
+                "min-h-0 flex-1"
+              : "rounded-composer bg-card shadow-raised transition-shadow duration-feedback ease-enter focus-within:focus-ring-inset",
+          )}
+        >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
               document owns the column, so it's hidden — but kept mounted to preserve the tree. */}
           <div
@@ -1726,8 +1691,7 @@ export function Composer({
               </div>
             </div>
           </div>
-          </div>
-        </ComposerLiquidSurface>
+        </div>
 
         {/* Execution location and source control are adjacent but distinct: changing where a fresh
             session runs must never be confused with inspecting the current branch. */}

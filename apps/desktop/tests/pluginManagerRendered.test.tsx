@@ -347,6 +347,11 @@ describe("PluginManagerPage", () => {
       const action = region.querySelector(`button[aria-label="Review Tools: Action ${order}"]`)
         ?? button(region, order === 3 ? "Run" : `Action ${order}`);
       expect(action).not.toBeNull();
+      if (slot === "session.header") {
+        expect(action.getAttribute("data-variant")).toBe("ghost");
+        expect(action.classList.contains("text-muted-foreground")).toBe(true);
+        expect(action.classList.contains("hover:text-muted-foreground")).toBe(true);
+      }
     }
 
     const railAction = view.container.querySelector(

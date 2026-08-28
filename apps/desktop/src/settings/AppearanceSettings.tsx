@@ -237,7 +237,7 @@ function RangeSetting({
   onChange: (value: number) => void;
 }) {
   return (
-    <SettingRow label={label} description={hint} surface="card">
+    <SettingRow label={label} description={hint}>
       <span className="flex max-w-full shrink-0 items-center gap-module-inset">
         <output className="min-w-14 text-right font-mono text-metadata tabular-nums text-content-muted">
           {value}{suffix}
@@ -435,12 +435,13 @@ export function AppearanceSettings({
             )}
           </div>
         </div>
-        {!activeTheme.builtin && (
-          <div className="mt-section">
+        <div className="appearance-editor-surface">
+          {!activeTheme.builtin && (
             <SettingRow
               label={t("settings.themeName")}
               density="compact"
               controlSize="wide"
+              className="appearance-theme-name-row"
             >
               <Input
                 aria-label={t("settings.themeName")}
@@ -450,21 +451,20 @@ export function AppearanceSettings({
                 className="w-full"
               />
             </SettingRow>
+          )}
+          <div className="appearance-palette-grid">
+            <PaletteEditor scheme="light" palette={activeTheme.light} onChange={(key, color) => editColor("light", key, color)} />
+            <PaletteEditor scheme="dark" palette={activeTheme.dark} onChange={(key, color) => editColor("dark", key, color)} />
           </div>
-        )}
-        <div className="appearance-palette-grid">
-          <PaletteEditor scheme="light" palette={activeTheme.light} onChange={(key, color) => editColor("light", key, color)} />
-          <PaletteEditor scheme="dark" palette={activeTheme.dark} onChange={(key, color) => editColor("dark", key, color)} />
         </div>
       </section>
 
       <section className="appearance-section" aria-labelledby="appearance-typography">
         <h2 id="appearance-typography" className="appearance-settings-heading">{t("settings.typography")}</h2>
-        <div className="mt-surface-inset flex flex-col gap-inline">
+        <div className="appearance-setting-group">
           <SettingRow
             label={t("settings.interfaceFont")}
             description={t("settings.interfaceFontHint")}
-            surface="card"
           >
             <Select value={settings.uiFont} onValueChange={(font) => setAppearanceSettings({ uiFont: font as UiFontId })}>
               <SelectTrigger
@@ -493,7 +493,6 @@ export function AppearanceSettings({
           <SettingRow
             label={t("settings.codeFont")}
             description={t("settings.codeFontHint")}
-            surface="card"
           >
             <Select value={settings.codeFont} onValueChange={(font) => setAppearanceSettings({ codeFont: font as CodeFontId })}>
               <SelectTrigger
@@ -524,7 +523,7 @@ export function AppearanceSettings({
 
       <section className="appearance-section" aria-labelledby="appearance-surfaces">
         <h2 id="appearance-surfaces" className="appearance-settings-heading">{t("settings.surfaces")}</h2>
-        <div className="mt-surface-inset flex flex-col gap-inline">
+        <div className="appearance-setting-group">
           <RangeSetting
             label={t("settings.sidebarOpacity")}
             hint={t("settings.sidebarOpacityHint")}

@@ -237,9 +237,12 @@ export function EnvironmentPopover({
     >
       <PopoverTrigger
         render={<Button
-          variant={open ? "secondary" : "ghost"}
+          variant="ghost"
           size="icon"
-          className={cn("size-7 shrink-0", open && "text-primary")}
+          className={cn(
+            "size-7 shrink-0 text-muted-foreground hover:text-muted-foreground",
+            open && "bg-fill-rest",
+          )}
           aria-label={t("header.environment")}
           title={t("header.environment")}
         >

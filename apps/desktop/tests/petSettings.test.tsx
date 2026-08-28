@@ -41,7 +41,10 @@ describe("Pet settings", () => {
     const view = mount(<I18nProvider><PetSettings loadCatalog={loadCatalog} /></I18nProvider>);
     await flush();
 
-    expect(view.container.querySelector(".pet-catalog-copy h3")?.textContent).toBe("Naiwa");
+    expect(view.container.querySelector(".pet-catalog [data-slot='setting-row-label']")?.textContent).toBe("Naiwa");
+    expect(view.container.querySelector("ul.pet-catalog")).not.toBeNull();
+    expect(view.container.querySelectorAll(".pet-catalog > li.pet-catalog-item")).toHaveLength(2);
+    expect(view.container.querySelectorAll(".pet-catalog [data-slot='setting-row']")).toHaveLength(2);
     expect(view.container.querySelectorAll(".codex-pet")).toHaveLength(2);
     expect(view.container.querySelector(".pet-selected-status")?.textContent).toBe("Selected");
     expect(view.container.querySelector<HTMLElement>(".pet-catalog-avatar .codex-pet")?.style
@@ -56,7 +59,7 @@ describe("Pet settings", () => {
     const activity = view.container.querySelector<HTMLButtonElement>(
       '[data-slot="setting-toggle"] [data-slot="switch"]',
     );
-    expect(view.container.querySelector('[data-slot="setting-row-label"]')?.textContent)
+    expect(view.container.querySelector('.pet-setting-group [data-slot="setting-row-label"]')?.textContent)
       .toBe("React to task activity");
     expect(activity?.hasAttribute("data-checked")).toBe(true);
     activity?.click();
@@ -68,7 +71,9 @@ describe("Pet settings", () => {
     expect(getAppearanceSettings().petSize).toBe("large");
     const size = view.container.querySelector('[aria-label="Pet size"]');
     expect(size?.textContent).toContain("Large");
-    expect(size?.closest('[data-slot="setting-row"]')?.getAttribute("data-surface")).toBe("card");
+    expect(size?.closest('[data-slot="setting-row"]')?.getAttribute("data-surface")).toBe("plain");
+    expect(view.container.querySelector(".pet-setting-group")).not.toBeNull();
+    expect(view.container.querySelector(".pet-setting-group [data-surface='card']")).toBeNull();
 
     view.unmount();
   });
@@ -99,7 +104,7 @@ describe("Pet settings", () => {
       petId: "columbina",
       petName: "Columbina",
     });
-    expect(view.container.querySelector(".pet-catalog-copy h3")?.textContent).toBe("Columbina");
+    expect(view.container.querySelector(".pet-catalog [data-slot='setting-row-label']")?.textContent).toBe("Columbina");
     expect(view.container.querySelectorAll(".pet-selected-status")).toHaveLength(1);
 
     view.unmount();

@@ -58,7 +58,21 @@
     },
     "settings": {
       "maxWidth": 768,
-      "profileMaxWidth": 1024
+      "profileMaxWidth": 1024,
+      "bottomPadding": 80,
+      "appearance": {
+        "sectionGap": 32,
+        "contentGap": 12,
+        "schemeColumns": 3,
+        "themeColumns": 3,
+        "paletteColumns": 2,
+        "compactAt": 608,
+        "compactThemeColumns": 2,
+        "compactPaletteColumns": 1,
+        "auxiliaryAt": 480,
+        "auxiliarySchemeColumns": 1,
+        "auxiliaryThemeColumns": 1
+      }
     },
     "workbench": {
       "listMinWidth": 320,

@@ -336,11 +336,11 @@ export function DesignSystemPreview() {
               </Card>
             </div>
             <div>
-              <SectionHeading eyebrow="04 · Geometry" title="Four radii, three icon sizes" />
+              <SectionHeading eyebrow="04 · Geometry" title="12px floor, 16px modules" />
               <Card className="ds-geometry-grid">
-                <div className="ds-radius-sample ds-radius-micro"><span>4</span><small>micro</small></div>
-                <div className="ds-radius-sample ds-radius-control"><span>8</span><small>control</small></div>
-                <div className="ds-radius-sample ds-radius-module"><span>12</span><small>module</small></div>
+                <div className="ds-radius-sample ds-radius-micro"><span>12</span><small>micro</small></div>
+                <div className="ds-radius-sample ds-radius-control"><span>12</span><small>control</small></div>
+                <div className="ds-radius-sample ds-radius-module"><span>16</span><small>module</small></div>
                 <div className="ds-radius-sample ds-radius-modal"><span>16</span><small>modal</small></div>
                 <div className="ds-icon-scale">
                   <Search className="ds-icon-inline" />

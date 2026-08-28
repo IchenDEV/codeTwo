@@ -2,45 +2,29 @@
   container-type: inline-size;
 }
 
-.pet-catalog-copy {
-  min-width: 0;
-}
-
-.pet-catalog-copy p {
-  margin: var(--ds-space-inline) 0 0;
-  color: var(--ds-color-text-muted);
-  font-size: var(--ds-type-metadata-size);
-  line-height: var(--ds-type-metadata-leading);
-}
-
-.pet-catalog-copy h3 {
-  margin: 0;
-  color: var(--ds-color-text);
-  font-size: var(--ds-type-body-size);
-  font-weight: var(--ds-font-weight-medium);
-  line-height: var(--ds-type-body-leading);
-}
-
 .pet-catalog {
   overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   background: var(--ds-color-surface);
   border-radius: var(--ds-radius-module);
-  box-shadow: inset 0 0 0 var(--hairline-width) var(--border);
 }
 
 .pet-catalog-row {
-  display: grid;
-  min-width: 0;
-  min-height: calc(var(--ds-control-field) + var(--ds-control-normal));
-  grid-template-columns: 3.5rem minmax(0, 1fr) auto;
-  align-items: center;
+  flex-wrap: nowrap;
   gap: var(--ds-space-section);
   padding: var(--ds-space-surface-inset) var(--ds-space-section);
 }
 
-.pet-catalog-row + .pet-catalog-row,
+.pet-catalog-row > [data-slot="setting-row-control"] {
+  margin-left: auto;
+}
+
+.pet-catalog-item + .pet-catalog-item,
+.pet-catalog-item + .pet-catalog-state,
 .pet-catalog-state {
-  box-shadow: inset 0 var(--hairline-width) 0 var(--border);
+  box-shadow: inset 0 var(--hairline-width) 0 var(--ds-color-fill-rest);
 }
 
 .pet-catalog-avatar {
@@ -58,10 +42,6 @@
   max-width: 100%;
   max-height: 100%;
   overflow: hidden;
-}
-
-.pet-catalog-copy p {
-  max-width: 42rem;
 }
 
 .pet-selected-status {
@@ -101,18 +81,23 @@
   flex: 1;
 }
 
+.pet-setting-group {
+  overflow: hidden;
+  background: var(--ds-color-surface);
+  border-radius: var(--ds-radius-module);
+}
+
+.pet-setting-group [data-slot="setting-row"] {
+  padding-right: var(--ds-space-surface-inset);
+  padding-left: var(--ds-space-surface-inset);
+}
+
+.pet-setting-group > [data-slot="setting-toggle"] + [data-slot="setting-row"] {
+  box-shadow: inset 0 var(--hairline-width) 0 var(--ds-color-fill-rest);
+}
+
 @container (max-width: 30rem) {
   .pet-catalog-row {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .pet-selected-status {
-    grid-column: 2;
-    justify-self: end;
-  }
-
-  .pet-select-button {
-    grid-column: 2;
-    justify-self: end;
+    flex-wrap: wrap;
   }
 }

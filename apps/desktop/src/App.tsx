@@ -7665,6 +7665,7 @@ export default function App() {
                 const transcriptState =
                   transcriptStateByPane[paneId] ?? EMPTY_PANE_TRANSCRIPT_STATE;
                 const sessionLoading = transcriptState.loading;
+                const hasConversationContent = turns.length > 0 || running || sessionLoading;
                 const transcriptNextBefore = transcriptState.nextBefore;
                 const loadingEarlier = transcriptState.loadingEarlier;
                 const docEmpty = editorEmptyByPane[paneId] ?? true;
@@ -7776,6 +7777,7 @@ export default function App() {
           {/* The shared 40px title line keeps every pane on one baseline. With the rail collapsed,
               the inset clears the traffic lights and the expand button takes the wordmark's place. */}
           <header
+            data-has-conversation={hasConversationContent ? "true" : undefined}
             className={cn(
               "session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4",
               displayedRailCollapsed ? "window-controls-safe-main" : "pl-4",
@@ -7832,6 +7834,7 @@ export default function App() {
 
             <div className="electrobun-webkit-app-region-drag flex-1" />
 
+            <div className="session-header-toolbar flex min-w-0 shrink-0 items-center gap-1">
             <PluginUiSlot
               slot="session.header"
               contributions={pluginUiActions["session.header"]}
@@ -7840,7 +7843,7 @@ export default function App() {
 
             {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                 is in flight — and the way back to the answer without leaving the mode for good. */}
-            {docMode && (running || turns.length > 0 || sessionLoading) && (
+            {docMode && hasConversationContent && (
               <button
                 onClick={() => toggleDocMode(false)}
                 className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
@@ -7926,6 +7929,7 @@ export default function App() {
               }}
               onMoveTask={() => activeSession && setShowTaskHandoff(true)}
             />
+            </div>
           </header>
 
           {/* Horizontal stage track (R9): rendered above the transcript only while the active
@@ -7947,7 +7951,7 @@ export default function App() {
               docMode ? "flex-row" : "flex-col",
             )}
           >
-            {(turns.length > 0 || running || sessionLoading) && (
+            {hasConversationContent && (
               <TranscriptPane
                 sessionId={activeSession}
                 variant={docMode ? "side" : "main"}
