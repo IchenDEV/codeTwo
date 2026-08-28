@@ -118,9 +118,10 @@ explicit build channel and cannot replace a release through the in-app updater.
 ### Versioned release
 
 Run the [Release macOS](.github/workflows/release-macos.yml) workflow, enter a semantic version such
-as `0.1.0`, and choose whether it is a prerelease. The workflow builds and verifies the versioned
-Apple Silicon DMG before it creates the matching `v<version>` tag and publishes a GitHub Release
-with the DMG and SHA-256 checksum. Existing tags are never overwritten.
+as `0.1.0`, provide a canonical change id whose Artifact is `ready-to-release`, and choose whether
+it is a prerelease. The workflow builds and verifies the versioned Apple Silicon DMG before it
+creates the matching `v<version>` tag and publishes a GitHub Release with the DMG, SHA-256 checksum,
+and authorized change id. Existing tags are never overwritten.
 
 Release packages are currently ad-hoc signed and not Apple-notarized. They are suitable for testing
 through GitHub Releases, but a public production distribution still requires Developer ID signing
@@ -199,6 +200,10 @@ an issue first so the product boundary and protocol impact can be discussed befo
 Please keep changes scoped, add tests for behavior changes, and run the relevant checks above. A
 pull request that changes user-visible desktop UI should include light, dark, and narrow viewport
 evidence where applicable.
+
+Material changes follow the repository's [artifact-driven development lifecycle](docs/sdlc/workflow.md).
+Link the canonical change artifact in the pull request; do not create a parallel specs or plans
+directory.
 
 ## Security and privacy
 

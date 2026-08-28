@@ -1,0 +1,30 @@
+name: SDLC contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdlc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Test the SDLC checker
+        run: python3 -m unittest script/test_check_sdlc.py
+      - name: Validate the canonical SDLC source
+        run: python3 script/check_sdlc.py
+      - name: Require a changed Artifact on pull requests
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 script/check_sdlc.py --base "$BASE_SHA"

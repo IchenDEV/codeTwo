@@ -8,6 +8,10 @@ on:
         description: "Semantic version, for example 0.1.0 or 0.2.0-beta.1"
         required: true
         type: string
+      change_id:
+        description: "Canonical ready-to-release change id"
+        required: true
+        type: string
       prerelease:
         description: "Publish as a GitHub prerelease"
         required: true
@@ -70,6 +74,11 @@ jobs:
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
           printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Validate SDLC release gate
+        env:
+          CHANGE_ID: ${{ inputs.change_id }}
+        run: python3 script/check_sdlc.py --release-change "$CHANGE_ID"
+
       - name: Verify runner architecture
         run: |
           set -euo pipefail
@@ -95,6 +104,7 @@ jobs:
       - name: Verify and stage release package
         shell: bash
         env:
+          CHANGE_ID: ${{ inputs.change_id }}
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
@@ -140,10 +150,12 @@ jobs:
             cd release
             shasum -a 256 "$release_dmg" > "$release_dmg.sha256"
           )
+          printf '%s\n' "$CHANGE_ID" > release/change-id.txt
 
       - name: Publish GitHub Release and tag
         shell: bash
         env:
+          CHANGE_ID: ${{ inputs.change_id }}
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ inputs.prerelease }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
@@ -155,7 +167,7 @@ jobs:
             release/*
             --target "$GITHUB_SHA"
             --title "C2 $RELEASE_TAG"
-            --notes "Apple Silicon DMG. This build is ad-hoc signed and not Apple-notarized."
+            --notes "Apple Silicon DMG. This build is ad-hoc signed and not Apple-notarized. SDLC change: $CHANGE_ID."
             --generate-notes
             --fail-on-no-commits
           )
