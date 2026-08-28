@@ -2378,6 +2378,12 @@ export const en = {
   "config.showSessionOptions": "Show session settings",
   "config.hideSessionOptions": "Hide session settings",
   "config.sessionOptionsHint": "Permissions, memory, and worktree",
+
+  // panes — the tiling workspace
+  "pane.splitRight": "Split right",
+  "pane.splitDown": "Split down",
+  "pane.close": "Close pane",
+  "pane.empty": "No messages yet",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -4608,6 +4614,12 @@ export const zhCN: Record<StringKey, string> = {
   "config.showSessionOptions": "显示会话设置",
   "config.hideSessionOptions": "收起会话设置",
   "config.sessionOptionsHint": "权限、记忆与 Worktree",
+
+  // panes — the tiling workspace
+  "pane.splitRight": "向右分割",
+  "pane.splitDown": "向下分割",
+  "pane.close": "关闭窗格",
+  "pane.empty": "还没有消息",
 };
 
 export const LOCALES = {

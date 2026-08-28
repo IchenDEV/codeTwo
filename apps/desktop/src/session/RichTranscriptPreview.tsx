@@ -6,7 +6,6 @@ import { EnvironmentPopover } from "../environment/EnvironmentPopover";
 import { TranscriptPane } from "./TranscriptPane";
 import { TrajectoryView } from "./TrajectoryView";
 import type { Turn } from "./turns";
-import { useTranscriptScroll } from "./useTranscriptScroll";
 
 const chart = `\`\`\`chart
 {"type":"bar","title":"Renderer verification","xLabel":"Check","yLabel":"Passed assertions","labels":["Transcript order","Markdown","Chart","Visualize"],"series":[{"name":"Desktop","values":[12,8,6,7]},{"name":"Narrow window","values":[10,8,6,7]}]}
@@ -132,7 +131,6 @@ const previewTurns = [previewTurn] as const;
 
 export function RichTranscriptPreview() {
   const [trajectory, setTrajectory] = useState(false);
-  const scroll = useTranscriptScroll("rich-transcript-preview", previewTurns);
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-2 bg-fill-quiet px-5 py-3">
@@ -172,14 +170,13 @@ export function RichTranscriptPreview() {
           />
         ) : (
           <TranscriptPane
+            sessionId="rich-transcript-preview"
             variant="main"
             turns={previewTurns}
             loading={false}
             hasEarlier={false}
             loadingEarlier={false}
             onLoadEarlier={() => {}}
-            scroll={scroll}
-            sessionId="rich-transcript-preview"
             onForkTurn={() => {}}
             onAddSelection={() => {}}
             onExplainSelection={() => {}}

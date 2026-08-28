@@ -10,6 +10,7 @@ import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { useTranscriptScroll } from "./useTranscriptScroll";
 
 interface TranscriptPaneProps {
   variant: "main" | "side";
@@ -17,8 +18,7 @@ interface TranscriptPaneProps {
   loading: boolean;
   hasEarlier: boolean;
   loadingEarlier: boolean;
-  onLoadEarlier: () => void;
-  scroll: TranscriptScrollController;
+  onLoadEarlier: (scroll: TranscriptScrollController) => void;
   /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
   onSaveTemplate?: (promptText: string) => void;
   linkActions?: BuiltinLinkActions;
@@ -34,16 +34,15 @@ interface TranscriptPaneProps {
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
 export function TranscriptPane({
+  sessionId,
   variant,
   turns,
   loading,
   hasEarlier,
   loadingEarlier,
   onLoadEarlier,
-  scroll,
   onSaveTemplate,
   linkActions,
-  sessionId,
   onForkTurn,
   onAddSelection,
   onExplainSelection,
@@ -51,6 +50,7 @@ export function TranscriptPane({
   before,
 }: TranscriptPaneProps) {
   const t = useT();
+  const scroll = useTranscriptScroll(sessionId ?? null, turns);
   const Root = variant === "side" ? "aside" : "section";
   const selectionScopeRef = useRef<HTMLDivElement | null>(null);
 
@@ -99,7 +99,7 @@ export function TranscriptPane({
                     size="sm"
                     variant="ghost"
                     disabled={loadingEarlier}
-                    onClick={onLoadEarlier}
+                    onClick={() => onLoadEarlier(scroll)}
                   >
                     {loadingEarlier ? (
                       <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden />

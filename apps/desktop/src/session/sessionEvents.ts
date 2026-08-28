@@ -117,11 +117,17 @@ export function enqueuePermission(
     : queue.map((item, index) => (index === existing ? request : item));
 }
 
-/** Pending inputs are collected globally, then projected onto the active chat by the UI. */
+/**
+ * Permission prompts are globally actionable; rendered turn state belongs to the active id, or —
+ * once the column tiles — to any session currently bound to a pane. `paneSessions`, when supplied,
+ * broadens only the final "is this turn content mine" check so background panes accumulate their
+ * transcript; every earlier special case (creation events, correlated global failures) is unchanged.
+ */
 export function shouldRenderSessionEvent(
   event: CoreEvent,
   activeSession: string | null,
   awaitingCreationRequest: string | null = null,
+  paneSessions: ReadonlySet<string> | null = null,
 ): boolean {
   if (event.event === "permission_request" || event.event === "elicitation_request") return true;
   if (
@@ -134,7 +140,19 @@ export function shouldRenderSessionEvent(
   if (event.event === "error" && event.session === null && event.request_id != null) {
     return awaitingCreationRequest !== null && event.request_id === awaitingCreationRequest;
   }
-  return event.session === null || event.session === activeSession;
+  if (event.session === null || event.session === activeSession) return true;
+  return paneSessions !== null && paneSessions.has(event.session);
+}
+
+/** Resolve the sole pane that owns a session; selection uses this to prevent duplicate bindings. */
+export function paneBoundToSession(
+  panes: Readonly<Record<string, { sessionId: string | null }>>,
+  session: string,
+): string | null {
+  for (const [paneId, content] of Object.entries(panes)) {
+    if (content.sessionId === session) return paneId;
+  }
+  return null;
 }
 
 /** Only an explicit turn end or a terminal error may clear a session's running state. */
