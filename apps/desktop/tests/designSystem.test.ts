@@ -17,6 +17,7 @@ import { cn } from "../src/lib/utils";
 const root = resolve(import.meta.dir, "..");
 const tokenSource = readFileSync(resolve(root, "src/design/tokens.css"), "utf8");
 const styleSource = readFileSync(resolve(root, "src/styles.css"), "utf8");
+const normalizedStyleSource = styleSource.replace(/\r\n?/g, "\n");
 const mainSource = readFileSync(resolve(root, "src/main.tsx"), "utf8");
 const allowlist = JSON.parse(
   readFileSync(resolve(root, "scripts/design-system-allowlist.json"), "utf8"),
@@ -36,6 +37,25 @@ function newDesignViolations() {
 }
 
 describe("C2 design system", () => {
+  test("keeps semantic radii at the approved 12px floor", () => {
+    expect(tokenSource).toContain("--ds-radius-micro: var(--ds-foundation-radius-12);");
+    expect(tokenSource).toContain("--ds-radius-control: var(--ds-foundation-radius-12);");
+    expect(tokenSource).toContain("--ds-radius-module: var(--ds-foundation-radius-16);");
+    expect(tokenSource).toContain("--ds-radius-modal: var(--ds-foundation-radius-16);");
+    expect(tokenSource).toContain(
+      "--ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));",
+    );
+  });
+
+  test("keeps legacy rounded utilities at the semantic radius floor", () => {
+    for (const role of ["xs", "sm", "md", "lg"]) {
+      expect(styleSource).toContain(`--radius-${role}: var(--ds-radius-control);`);
+    }
+    expect(styleSource).toContain("--radius-xl: var(--ds-radius-module);");
+    expect(normalizedStyleSource).toContain(".rounded,\n  .rounded-sm,\n  .rounded-md,\n  .rounded-lg {");
+    expect(styleSource).toContain("border-radius: var(--ds-radius-control);");
+  });
+
   test("keeps every declared light and dark contrast pair above its contract", () => {
     const results = checkContrastContracts(tokenSource);
     expect(results).toHaveLength(20);

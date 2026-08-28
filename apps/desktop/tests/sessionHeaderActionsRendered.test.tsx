@@ -81,6 +81,49 @@ describe("SessionHeaderActions", () => {
     view.unmount();
   });
 
+  test("uses one neutral ghost treatment for resting and active titlebar actions", () => {
+    activateDom();
+    const { view } = renderActions({ panelActive: true });
+    const group = view.container.querySelector(".session-header-actions");
+    expect(group?.classList.contains("gap-1")).toBe(true);
+
+    for (const label of [
+      "Add action",
+      "Open",
+      "Open · More",
+      "Commit",
+      "Commit · More",
+      "Toggle side panel",
+    ]) {
+      const action = button(view.container, label);
+      expect(action.dataset.variant).toBe("ghost");
+      expect(action.classList.contains("text-muted-foreground")).toBe(true);
+      expect(action.classList.contains("hover:text-muted-foreground")).toBe(true);
+      expect(action.classList.contains("text-primary")).toBe(false);
+    }
+
+    const panel = button(view.container, "Toggle side panel");
+    expect(panel.classList.contains("bg-fill-rest")).toBe(true);
+
+    const splitGroups = Array.from(view.container.querySelectorAll(".session-header-split-group"));
+    expect(splitGroups).toHaveLength(2);
+    for (const splitGroup of splitGroups) {
+      expect(splitGroup.classList.contains("gap-0")).toBe(true);
+      const [main, trigger] = Array.from(splitGroup.querySelectorAll("button"));
+      expect(main.classList.contains("rounded-r-none")).toBe(true);
+      expect(trigger.classList.contains("rounded-l-none")).toBe(true);
+      expect(trigger.classList.contains("before:w-px")).toBe(true);
+    }
+
+    for (const action of Array.from(view.container.querySelectorAll("button"))) {
+      expect(
+        action.classList.contains("h-control") || action.classList.contains("size-7"),
+      ).toBe(true);
+    }
+
+    view.unmount();
+  });
+
   test("wires the primary actions and exposes the split menus", async () => {
     activateDom();
     const { calls, view } = renderActions();

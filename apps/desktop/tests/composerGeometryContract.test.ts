@@ -17,38 +17,25 @@ const tokens = readFileSync(
   new URL("../src/design/tokens.css", import.meta.url),
   "utf8",
 );
-const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const voiceButton = readFileSync(
   new URL("../src/voice/VoiceButton.tsx", import.meta.url),
   "utf8",
 );
-const composerLiquidSurface = composer.slice(
-  composer.indexOf("function ComposerLiquidSurface"),
-  composer.indexOf("function LiquidActionSurface"),
-);
-
 describe("composer geometry contract", () => {
-  test("keeps the composer silhouette synchronized with its interactive content", () => {
-    expect(composerLiquidSurface).not.toContain("morph=");
-    expect(composerLiquidSurface).toContain("<Liquid.Item observe>");
+  test("paints the compact composer on the same DOM card as its interactive content", () => {
+    expect(composer).not.toContain("function ComposerLiquidSurface");
+    expect(composer).not.toContain("data-gooey-composer");
+    expect(composer).toContain(
+      '"rounded-composer bg-card shadow-raised transition-shadow duration-feedback ease-enter focus-within:focus-ring-inset"',
+    );
   });
 
   test("keeps the circular submit control concentric with the composer corner", () => {
     expect(tokens).toContain(
       "--ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));",
     );
-    expect(composer).toContain("data-gooey-composer");
     expect(composer).toContain('data-composer-mode={docMode ? "document" : "compact"}');
     expect(composer).toContain('"composer-mode-transition flex flex-col"');
-    expect(composer).toContain(
-      "inset 0 0 0 0.5px var(--composer-liquid-border-color)",
-    );
-    expect(composer).toContain('"composer-liquid-surface relative z-10"');
-    expect(styles).toContain(".composer-liquid-surface:focus-within");
-    expect(composer).toContain('? "bg-transparent"');
-    expect(composer).toContain(
-      ': "bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07]',
-    );
     expect(composer).toContain('effect={reducedMotion ? undefined : "move"}');
     expect(composer).toContain(
       '"glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"',

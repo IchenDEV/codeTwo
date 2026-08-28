@@ -37,11 +37,11 @@ function SplitMenuTrigger({ label, disabled = false }: { label: string; disabled
       render={(
         <Button
           type="button"
-          variant="secondary"
+          variant="ghost"
           size="compact"
           disabled={disabled}
           aria-label={label}
-          className="session-header-split-trigger relative w-7 rounded-l-none px-0 before:absolute before:left-0 before:h-4 before:w-px before:bg-foreground/10"
+          className="session-header-split-trigger relative w-7 rounded-l-none px-0 text-muted-foreground hover:text-muted-foreground before:absolute before:left-0 before:h-4 before:w-px before:bg-foreground/10"
         >
           <ChevronDown className="size-4" aria-hidden />
         </Button>
@@ -67,9 +67,12 @@ function PanelAction({
         render={(
           <Button
             type="button"
-            variant={active ? "secondary" : "ghost"}
+            variant="ghost"
             size="icon"
-            className={cn("size-7", active && "text-primary")}
+            className={cn(
+              "size-7 text-muted-foreground hover:text-muted-foreground",
+              active && "bg-fill-rest",
+            )}
             aria-label={label}
             aria-pressed={active}
             onClick={onClick}
@@ -124,15 +127,15 @@ export function SessionHeaderActions({
 
   return (
     <div
-      className="session-header-actions flex shrink-0 items-center gap-2"
+      className="session-header-actions flex shrink-0 items-center gap-1"
       role="group"
       aria-label={t("header.actions")}
     >
       <Button
         type="button"
-        variant="secondary"
+        variant="ghost"
         size="compact"
-        className="session-header-action-main"
+        className="session-header-action-main text-muted-foreground hover:text-muted-foreground"
         aria-label={t("header.addAction")}
         onClick={onAddAction}
       >
@@ -144,9 +147,9 @@ export function SessionHeaderActions({
         <Button
           key={action.id}
           type="button"
-          variant="secondary"
+          variant="ghost"
           size="compact"
-          className="session-header-action-main max-w-36"
+          className="session-header-action-main max-w-36 text-muted-foreground hover:text-muted-foreground"
           aria-label={action.name || action.id}
           title={action.kind === "prompt" ? action.prompt : action.command}
           onClick={() => onRunAction?.(action)}
@@ -166,9 +169,9 @@ export function SessionHeaderActions({
             render={(
               <Button
                 type="button"
-                variant="secondary"
+                variant="ghost"
                 size="icon"
-                className="size-7"
+                className="size-7 text-muted-foreground hover:text-muted-foreground"
                 aria-label={t("actionDialog.moreActions")}
               >
                 <Ellipsis className="size-4" aria-hidden />
@@ -196,12 +199,12 @@ export function SessionHeaderActions({
       )}
 
       <DropdownMenu>
-        <div className="session-header-split-group flex shrink-0">
+        <div className="session-header-split-group flex shrink-0 gap-0">
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             size="compact"
-            className="session-header-action-main rounded-r-none px-2.5"
+            className="session-header-action-main rounded-r-none text-muted-foreground hover:text-muted-foreground"
             aria-label={t("header.open")}
             onClick={onOpen}
           >
@@ -238,13 +241,13 @@ export function SessionHeaderActions({
       </DropdownMenu>
 
       <DropdownMenu>
-        <div className="session-header-split-group flex shrink-0">
+        <div className="session-header-split-group flex shrink-0 gap-0">
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             size="compact"
             disabled={!canCommit}
-            className="session-header-action-main rounded-r-none px-2.5"
+            className="session-header-action-main rounded-r-none text-muted-foreground hover:text-muted-foreground"
             aria-label={t("header.commit")}
             onClick={onCommit}
           >

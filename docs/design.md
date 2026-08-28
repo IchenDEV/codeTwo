@@ -222,12 +222,11 @@ Spacing is a 4px grid with one controlled 2px optical step:
 | 24 | dialog and page gutter |
 | 32 | large page section |
 
-The radius scale is 4 / 8 / 12 / 16px:
+The visible semantic radius floor is 12px:
 
-- 4: checkbox, status mark, micro element.
-- 8: button, input, menu item, list row.
-- 12: card, popover, sidebar module.
-- 16: dialog and large panel.
+- 12: checkbox, status mark, micro element, button, input, menu item, and list row.
+- 16: card, popover, sidebar module, dialog, and large panel.
+- 24: Composer, whose larger content surface keeps its own fixed semantic radius.
 
 Fully round geometry is reserved for intrinsically circular objects. Icons are exactly 12 / 14 /
 16px for inline, list, and control roles. Standard UI does not use 20px icons.
@@ -235,6 +234,16 @@ Fully round geometry is reserved for intrinsically circular objects. Icons are e
 Control heights are 24px for mini/icon/inline controls, 28px for normal buttons, menus, and
 toolbars, and 32px for inputs, selects, and important controls. A taller element is content input
 such as Composer, not a generic large-button size.
+
+Session titlebar tools form one quiet monochrome toolbar. Icons and labels keep the muted foreground
+across rest, hover, open, and pressed states; hover may add a neutral surface and keyboard focus
+adds the standard ring. A real open or pressed state may use only a neutral fill. Titlebar actions
+never switch to the product accent color. Independent 28px controls use a 4px gap; joined
+split-button halves keep a zero-width inner gap and a subtle seam.
+
+The session titlebar divider is contextual: an empty pane has no bottom hairline, while a pane with
+persisted, running, or loading conversation content restores the semantic border. Rail and dock
+titlebars keep their structural separators.
 
 ## Elevation and borders
 
@@ -245,6 +254,11 @@ Elevation communicates a real layer and never changes on hover:
 | `elevation-surface` | input, card, persistent panel |
 | `elevation-raised` | menu, popover, tooltip |
 | `elevation-modal` | dialog, blocking overlay |
+
+Settings pages separate major groups with page-section spacing. Related rows share one tonal module
+with internal hairlines; they do not become a stack of individually elevated cards. Choice tiles
+such as appearance schemes and themes use tonal hover and a semantic selected ring without surface
+elevation. Input fields, popovers, and dialogs retain the elevation assigned to their real layer.
 
 Static borders and decorative rings are forbidden. The complete whitelist is:
 
@@ -281,13 +295,13 @@ Dialog and Alert Dialog share `bg-overlay`, `bg-modal`, `rounded-modal`, `shadow
 gutter, and the same header/footer typography and spacing. Callers may choose a semantic maximum
 width or scrolling behavior, but do not rebuild the overlay, radius, elevation, or close control.
 
-Card owns the solid `surface` plane, 12px radius, surface elevation, 12px inset, title,
+Card owns the solid `surface` plane, 16px radius, surface elevation, 12px inset, title,
 description, content, and footer hierarchy. Product callers compose those parts and may change
 layout, but do not restate the card fill, radius, elevation, typography, or inset.
 
 Popover, Tooltip, and Toast share the solid `raised` plane and raised elevation without a
-decorative border or translucent glass. Popover uses the 12px module radius and 12px inset;
-Tooltip uses the 8px control radius and waits 600ms before the first open, with a 400ms instant
+decorative border or translucent glass. Popover uses the 16px module radius and 12px inset;
+Tooltip uses the 12px control radius and waits 600ms before the first open, with a 400ms instant
 phase between related triggers. Toast uses shared Buttons for actions, announces errors as alerts,
 and announces other outcomes as status messages. Callers own content, anchoring, and layout only.
 

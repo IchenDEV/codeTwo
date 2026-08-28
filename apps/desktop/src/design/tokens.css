@@ -204,9 +204,9 @@
   --ds-font-weight-medium: 600;
 
   /* Semantic geometry. */
-  --ds-radius-micro: var(--ds-foundation-radius-4);
-  --ds-radius-control: var(--ds-foundation-radius-8);
-  --ds-radius-module: var(--ds-foundation-radius-12);
+  --ds-radius-micro: var(--ds-foundation-radius-12);
+  --ds-radius-control: var(--ds-foundation-radius-12);
+  --ds-radius-module: var(--ds-foundation-radius-16);
   --ds-radius-modal: var(--ds-foundation-radius-16);
   --ds-icon-inline: var(--ds-foundation-icon-12);
   --ds-icon-list: var(--ds-foundation-icon-14);

@@ -128,6 +128,9 @@ describe("macOS window chrome contract", () => {
     expect(appSource).toContain(
       '"session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4"',
     );
+    expect(appSource).toContain(
+      'className="session-header-toolbar flex min-w-0 shrink-0 items-center gap-1"',
+    );
     expect(railSource).toContain(
       'className="window-titlebar window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 pr-2"',
     );
@@ -137,6 +140,20 @@ describe("macOS window chrome contract", () => {
     expect(titlebarClasses.every((classes) => !classes.includes("border-b"))).toBe(true);
     expect(dockSource).toContain(
       'size="compact" className="w-(--ds-control-normal) px-0" onClick={onClose}',
+    );
+  });
+
+  test("shows the session titlebar divider only when conversation content exists", () => {
+    expect(appSource).toContain(
+      "const hasConversationContent = turns.length > 0 || running || sessionLoading;",
+    );
+    expect(appSource).toContain(
+      'data-has-conversation={hasConversationContent ? "true" : undefined}',
+    );
+    expect(appSource).toContain("{hasConversationContent && (");
+    expect(styles).toMatch(/\.session-header\s*{[^}]*box-shadow:\s*none;/s);
+    expect(styles).toMatch(
+      /\.session-header\[data-has-conversation="true"\]\s*{[^}]*box-shadow:\s*inset 0 calc\(-1 \* var\(--hairline-width\)\) 0 var\(--border\);/s,
     );
   });
 

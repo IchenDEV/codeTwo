@@ -6,7 +6,10 @@ const personalSource = readFileSync(new URL("../src/settings/PersonalSettings.ts
 const primitivesSource = readFileSync(new URL("../src/settings/SettingsPrimitives.tsx", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/settings/settings-page.css", import.meta.url), "utf8");
+const appearanceStyles = readFileSync(new URL("../src/settings/appearance-settings.css", import.meta.url), "utf8");
+const petSource = readFileSync(new URL("../src/settings/PetSettings.tsx", import.meta.url), "utf8");
 const petStyles = readFileSync(new URL("../src/settings/pet-settings.css", import.meta.url), "utf8");
+const layoutSpec = JSON.parse(readFileSync(new URL("../layout-spec.json", import.meta.url), "utf8"));
 
 const CONTENT_MODULES = [
   "GeneralSettingsPage",
@@ -116,6 +119,49 @@ describe("Settings page layout contract", () => {
     expect(styles).toContain("@container settings-page (max-width: 38rem)");
   });
 
+  test("gives Appearance a spaced flat hierarchy instead of stacked elevation cards", () => {
+    expect(layoutSpec.content.settings.appearance).toMatchObject({
+      sectionGap: 32,
+      contentGap: 12,
+      schemeColumns: 3,
+      themeColumns: 3,
+      paletteColumns: 2,
+      compactAt: 608,
+      compactThemeColumns: 2,
+      compactPaletteColumns: 1,
+      auxiliaryAt: 480,
+      auxiliarySchemeColumns: 1,
+      auxiliaryThemeColumns: 1,
+    });
+    expect(appearanceStyles).toMatch(
+      /\.appearance-settings\s*{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*gap:\s*var\(--ds-space-page-section\);/s,
+    );
+    expect(appearanceStyles).toMatch(
+      /\.appearance-section\s*{[^}]*gap:\s*var\(--ds-space-surface-inset\);/s,
+    );
+    expect(appearanceStyles).toContain(".appearance-setting-group");
+    expect(appearanceStyles).toContain(".appearance-editor-surface");
+    expect(appearanceStyles).not.toMatch(
+      /\.appearance-(?:scheme-option|theme-card)\s*{[^}]*box-shadow:\s*var\(--ds-elevation-surface\)/s,
+    );
+    const compactAppearanceStyles = appearanceStyles.slice(
+      appearanceStyles.indexOf("@container (max-width: 38rem)"),
+      appearanceStyles.indexOf("@container (max-width: 30rem)"),
+    );
+    expect(compactAppearanceStyles).toMatch(
+      /\.appearance-theme-grid\s*{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
+    );
+    expect(compactAppearanceStyles).toMatch(
+      /\.appearance-palette-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+    );
+    expect(appearanceStyles).toMatch(
+      /@container \(max-width:\s*30rem\)[\s\S]*?\.appearance-scheme-grid,[\s\S]*?\.appearance-theme-grid\s*{[^}]*minmax\(0, 1fr\)/,
+    );
+    expect(appearanceStyles).toMatch(
+      /@container \(max-width:\s*30rem\)[\s\S]*?\.appearance-scheme-option\s*{[^}]*grid-template-columns:\s*minmax\(0, 9rem\) minmax\(0, 1fr\)/,
+    );
+  });
+
   test("includes session import as a first-class personal panel", () => {
     expect(source).toMatch(/\{ id: "import", icon: Download, labelKey: "settings\.import" \}/);
     expect(source).toContain('{tab === "import" && (');
@@ -129,7 +175,26 @@ describe("Settings page layout contract", () => {
     expect(primitivesSource).toContain("<SettingsPanel");
   });
 
-  test("clips pet catalog previews to a compact square", () => {
+  test("keeps Settings content clear of the bottom scroll boundary", () => {
+    expect(layoutSpec.content.settings.bottomPadding).toBe(80);
+    expect(source).not.toContain('"settings-page mx-auto w-full pb-20"');
+    expect(styles).toMatch(
+      /\.settings-page\s*{[^}]*padding:\s*2rem 2rem var\(--ds-space-page-end\);/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*44rem\)[\s\S]*?\.settings-page\s*{[^}]*padding:\s*1rem 1rem var\(--ds-space-page-end\);/,
+    );
+  });
+
+  test("reuses flat setting rows for the Pets catalog and behavior group", () => {
+    expect(petSource).toContain('<ul className="pet-catalog"');
+    expect(petSource).toContain('className="pet-catalog-row"');
+    expect(petSource).toContain('<SettingRow');
+    expect(petSource).not.toContain('surface="card"');
+    expect(petStyles).toContain(".pet-setting-group");
+    expect(petStyles).not.toMatch(
+      /\.pet-catalog\s*{[^}]*box-shadow:/s,
+    );
     expect(petStyles).toContain("width: 3.5rem;");
     expect(petStyles).toContain("height: 3.5rem;");
     expect(petStyles).toContain("overflow: hidden;");

@@ -404,7 +404,7 @@ export function SettingsPage({
         <ScrollArea key={tab} className="min-h-0 flex-1">
           <div
             className={cn(
-              "settings-page mx-auto w-full pb-20",
+              "settings-page mx-auto w-full",
               tab === "profile" && "settings-profile-page",
               tab === "worktrees" && "settings-worktrees-page",
             )}

@@ -86,6 +86,12 @@ describe("Appearance settings", () => {
     expect(
       view.container.querySelector('[aria-label="Interface font size"]')?.closest('[data-slot="setting-row"]'),
     ).not.toBeNull();
+    expect(view.container.querySelectorAll(".appearance-section")).toHaveLength(5);
+    expect(view.container.querySelectorAll(".appearance-setting-group")).toHaveLength(2);
+    expect(view.container.querySelector(".appearance-editor-surface")).not.toBeNull();
+    expect(
+      view.container.querySelector(".appearance-setting-group [data-surface='card']"),
+    ).toBeNull();
 
     view.unmount();
   });

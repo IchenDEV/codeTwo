@@ -4,6 +4,7 @@ import {
   type RefObject,
 } from "react";
 import { PanelBottom, PanelRight, X } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
 
 import { MIN_RATIO, type DividerRect } from "./paneLayout";
 import { TurnCard } from "./TurnCard";
@@ -30,35 +31,41 @@ export function PaneToolbar({
   labels,
 }: PaneToolbarProps) {
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      <button
+    <div className="flex shrink-0 items-center gap-1">
+      <Button
         type="button"
+        variant="ghost"
+        size="icon-sm"
         title={labels.splitRight}
         aria-label={labels.splitRight}
-        className="flex size-6 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:focus-ring"
+        className="size-7 text-muted-foreground hover:text-muted-foreground"
         onClick={onSplitRight}
       >
-        <PanelRight className="size-3.5" aria-hidden />
-      </button>
-      <button
+        <PanelRight className="size-4" aria-hidden />
+      </Button>
+      <Button
         type="button"
+        variant="ghost"
+        size="icon-sm"
         title={labels.splitDown}
         aria-label={labels.splitDown}
-        className="flex size-6 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:focus-ring"
+        className="size-7 text-muted-foreground hover:text-muted-foreground"
         onClick={onSplitDown}
       >
-        <PanelBottom className="size-3.5" aria-hidden />
-      </button>
+        <PanelBottom className="size-4" aria-hidden />
+      </Button>
       {canClose ? (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           title={labels.close}
           aria-label={labels.close}
-          className="flex size-6 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:focus-ring"
+          className="size-7 text-muted-foreground hover:text-muted-foreground"
           onClick={onClose}
         >
-          <X className="size-3.5" aria-hidden />
-        </button>
+          <X className="size-4" aria-hidden />
+        </Button>
       ) : null}
     </div>
   );

@@ -40,6 +40,12 @@ describe("PaneChrome", () => {
     const buttons = Array.from(rendered.container.querySelectorAll("button"));
     // No close button while canClose is false.
     expect(buttons).toHaveLength(2);
+    for (const toolbarButton of buttons) {
+      expect(toolbarButton.dataset.variant).toBe("ghost");
+      expect(toolbarButton.classList.contains("size-7")).toBe(true);
+      expect(toolbarButton.classList.contains("text-muted-foreground")).toBe(true);
+      expect(toolbarButton.classList.contains("hover:text-muted-foreground")).toBe(true);
+    }
     click(rendered.container.querySelector("[aria-label='Split right']")!);
     click(rendered.container.querySelector("[aria-label='Split down']")!);
     await flush();
