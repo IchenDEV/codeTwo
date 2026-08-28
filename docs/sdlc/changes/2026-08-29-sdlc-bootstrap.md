@@ -1,11 +1,11 @@
 ---
 id: change-2026-08-29-sdlc-bootstrap
 kind: change
-status: verified
+status: closed
 owner: repository maintainers
 created: 2026-08-29
 updated: 2026-08-29
-next_trigger: pull request checks pass and the authorized merge completes
+next_trigger: new lifecycle feedback, incident, or regression
 ---
 
 # Establish one artifact-driven development lifecycle
@@ -49,9 +49,9 @@ spec/plan tree.
 ## Decision and gates
 
 The user's explicit Skill invocation accepted the Bootstrap Intent. The follow-up instruction to
-remove the old version accepted consolidation onto one canonical system. No permission was given to
-create a PR, merge, dispatch packaging, deploy Pages, publish a release, or change external GitHub
-branch-protection settings.
+remove the old version accepted consolidation onto one canonical system. The user later authorized
+creating and merging the repository PR. No permission was given to dispatch packaging, deploy
+Pages, publish a versioned release, or change external GitHub branch-protection settings.
 
 ## Plan
 
@@ -83,10 +83,10 @@ Observed on 2026-08-29:
   legacy-tree, duplicate-id, missing-section, release-state, and missing-Artifact PR failures.
 - `PYTHONDONTWRITEBYTECODE=1 python3 script/check_sdlc.py`: `[sdlc] contract valid`.
 - `python3 script/check_sdlc.py --release-change change-2026-08-29-sdlc-bootstrap` was rejected
-  because the current change is `verified`, proving the release Gate does not accept an earlier
-  state. The unit fixture separately accepts a named `ready-to-release` Artifact.
-- Ruby's YAML parser accepted both changed GitHub workflow files; `actionlint` is not installed in
-  this environment, so GitHub-specific lint remains for remote CI.
+  while the change was `verified`, proving the release Gate does not accept an earlier state. The
+  unit fixture separately accepts a named `ready-to-release` Artifact.
+- Ruby's YAML parser accepted both changed GitHub workflow files; `actionlint` was not installed
+  locally. GitHub then parsed and ran the new workflow successfully for PR #178.
 - `bun test tests/developerSettings.test.tsx tests/pluginBridgeContract.test.ts` after
   `bun install --frozen-lockfile`: 4 tests passed with 46 assertions. React emitted existing
   `act(...)` environment warnings; no test failed.
@@ -95,15 +95,18 @@ Observed on 2026-08-29:
   `clamp_to_integral.h:47:58: use of undeclared identifier 'INFINITY'`.
 - `git diff --check` passed. No product UI changed, so real-window visual QA is not applicable.
 
-Residual risk: the new GitHub workflow has not run remotely because no PR or push was authorized,
-and the Rust feature coverage remains blocked by the repository's existing Ghostty toolchain issue.
+Remote `SDLC contract` run
+[`33198244379`](https://github.com/IchenDEV/codeTwo/actions/runs/33198244379) completed successfully,
+including the base-diff Artifact Gate. Residual risk: Rust feature coverage remains blocked by the
+repository's existing Ghostty toolchain issue.
 
 ## Review and release
 
-The user authorized creating and merging a pull request on 2026-08-29. This does not authorize a
-versioned product release. [PR #178](https://github.com/IchenDEV/codeTwo/pull/178) links this
-artifact and must pass the `SDLC contract` check before merge; requiring that check in branch
-protection remains an external repository setting.
+The user authorized creating and merging the repository change on 2026-08-29. [PR #178](https://github.com/IchenDEV/codeTwo/pull/178)
+passed the `SDLC contract` and merged to `main` as
+[`0a1f025`](https://github.com/IchenDEV/codeTwo/commit/0a1f02506f9a6c5431c9d017c703d41c2a116791).
+No versioned product release was performed or authorized. Requiring the check in branch protection
+remains an external repository setting.
 
 ## Feedback
 
