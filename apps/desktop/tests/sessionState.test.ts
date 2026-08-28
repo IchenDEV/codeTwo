@@ -15,6 +15,7 @@ import {
   isTerminalSessionEvent,
   latestActivity,
   matchesSessionCreation,
+  paneBoundToSession,
   permissionQueueAfterAnswer,
   permissionQueueAfterActivity,
   pendingInputsForSession,
@@ -53,6 +54,35 @@ describe("session event isolation", () => {
         "session-b",
       ),
     ).toBe(true);
+  });
+
+  test("accumulates a background pane's transcript when its session is tiled", () => {
+    const late = {
+      event: "agent_text",
+      session: "session-a",
+      message_id: "1",
+      text: "late A",
+    } as const;
+    // With no pane set, a background session's turn is still dropped from the focused transcript.
+    expect(shouldRenderSessionEvent(late, "session-b")).toBe(false);
+    // Once session-a is bound to a (background) pane, its turns render into that pane.
+    expect(
+      shouldRenderSessionEvent(late, "session-b", null, new Set(["session-a", "session-b"])),
+    ).toBe(true);
+    // A session bound to no pane at all stays filtered out.
+    expect(
+      shouldRenderSessionEvent(late, "session-b", null, new Set(["session-b"])),
+    ).toBe(false);
+  });
+
+  test("finds an existing pane binding so session selection cannot duplicate it", () => {
+    const panes = {
+      "pane-a": { sessionId: "session-a" },
+      "pane-b": { sessionId: "session-b" },
+      "pane-c": { sessionId: null },
+    };
+    expect(paneBoundToSession(panes, "session-b")).toBe("pane-b");
+    expect(paneBoundToSession(panes, "session-c")).toBeNull();
   });
 
   test("keeps global errors and permissions actionable", () => {
