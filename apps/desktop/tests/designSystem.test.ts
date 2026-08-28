@@ -17,6 +17,7 @@ import { cn } from "../src/lib/utils";
 const root = resolve(import.meta.dir, "..");
 const tokenSource = readFileSync(resolve(root, "src/design/tokens.css"), "utf8");
 const styleSource = readFileSync(resolve(root, "src/styles.css"), "utf8");
+const normalizedStyleSource = styleSource.replace(/\r\n?/g, "\n");
 const mainSource = readFileSync(resolve(root, "src/main.tsx"), "utf8");
 const allowlist = JSON.parse(
   readFileSync(resolve(root, "scripts/design-system-allowlist.json"), "utf8"),
@@ -51,7 +52,7 @@ describe("C2 design system", () => {
       expect(styleSource).toContain(`--radius-${role}: var(--ds-radius-control);`);
     }
     expect(styleSource).toContain("--radius-xl: var(--ds-radius-module);");
-    expect(styleSource).toContain(".rounded,\n  .rounded-sm,\n  .rounded-md,\n  .rounded-lg {");
+    expect(normalizedStyleSource).toContain(".rounded,\n  .rounded-sm,\n  .rounded-md,\n  .rounded-lg {");
     expect(styleSource).toContain("border-radius: var(--ds-radius-control);");
   });
 
