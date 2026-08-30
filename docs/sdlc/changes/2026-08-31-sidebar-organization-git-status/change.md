@@ -195,8 +195,8 @@ into the sidebar change, so its Draft PR will inherit the baseline failure until
 
 Approval: the user authorized Draft PR creation on 2026-08-31; human code review and merge
 approval remain pending.
-Review surface: pending Draft PR creation; merge is additionally blocked by the existing main
-documentation-catalog failure.
+Review surface: [Draft PR #195](https://github.com/IchenDEV/codeTwo/pull/195); merge is additionally
+blocked by the existing main documentation-catalog failure.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
