@@ -26,6 +26,7 @@ import { AppshotManager } from "./appshots";
 import { macOSApplicationMenu } from "./applicationMenu";
 import {
   configureMacOSWindowEffects,
+  performMacOSTitlebarDoubleClick,
   setMacOSSystemBadgeCount,
 } from "./windowEffects";
 import { workspaceOpenCommand } from "./workspaceOpen";
@@ -268,6 +269,7 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         return true;
       },
       systemBadgeSet: ({ count }) => setMacOSSystemBadgeCount(count),
+      titlebarDoubleClick: () => performMacOSTitlebarDoubleClick(mainWindow.ptr),
       systemProfileAvatar: readSystemProfileAvatar,
       browserZoom: ({ webviewId, factor }) => {
         BrowserView.getById(webviewId)?.setPageZoom(factor);
@@ -397,6 +399,9 @@ if (process.platform === "darwin") {
   if (!windowEffectsStatus.backdrop) {
     console.warn("The macOS system backdrop could not be installed");
   }
+  // AppKit can reset standard-window-button frames during its own resize layout pass. Reapply the
+  // same fixed position afterward; the 56px titlebar has no runtime geometry to measure.
+  mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(28, 21));
 }
 
 mainWindow.webview.on("dom-ready", () => {
@@ -404,8 +409,8 @@ mainWindow.webview.on("dom-ready", () => {
     mainWindow.webview.executeJavascript(
       'document.documentElement.classList.add("macos-window-glass")',
     );
-    // Center the 14px native controls in the shared 56px title row.
-    mainWindow.setWindowButtonPosition(22, 21);
+    // The shared titlebar is a fixed 56px tall, so the native controls use one fixed position.
+    mainWindow.setWindowButtonPosition(28, 21);
   }
   rendererReady = true;
   rpc.send.hostStatus({ ready: true });

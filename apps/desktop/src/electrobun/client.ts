@@ -112,6 +112,10 @@ export async function desktopSetSystemBadgeCount(count: number): Promise<boolean
   return (await client()).request.systemBadgeSet({ count });
 }
 
+export async function desktopPerformTitlebarDoubleClick(): Promise<boolean> {
+  return (await client()).request.titlebarDoubleClick();
+}
+
 export async function desktopSystemProfileAvatar(): Promise<string | null> {
   return (await client()).request.systemProfileAvatar();
 }

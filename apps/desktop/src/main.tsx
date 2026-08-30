@@ -8,6 +8,8 @@ import { I18nProvider } from "./i18n";
 import { ThemeProvider } from "./theme";
 import { currentDesktopPlatform } from "./platform";
 import { DesktopPetWindow } from "./pet/DesktopPet";
+import { desktopPerformTitlebarDoubleClick, isElectrobun } from "./electrobun/client";
+import { installTitlebarDoubleClick } from "./electrobun/titlebar";
 import "./styles.css";
 
 document.documentElement.dataset.platform = currentDesktopPlatform();
@@ -51,6 +53,14 @@ protectInteractiveNode(document.documentElement);
 new MutationObserver((records) => {
   for (const record of records) for (const node of record.addedNodes) protectInteractiveNode(node);
 }).observe(document.documentElement, { childList: true, subtree: true });
+
+if (!showDesktopPet && currentDesktopPlatform() === "macos" && isElectrobun) {
+  installTitlebarDoubleClick(document, () => {
+    void desktopPerformTitlebarDoubleClick().catch((error) => {
+      console.warn("Could not perform the macOS titlebar double-click action", error);
+    });
+  });
+}
 
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
 async function render() {

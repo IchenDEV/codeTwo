@@ -19,14 +19,43 @@ const prepareElectrobun = source("../scripts/prepare-electrobun.ts");
 const patchMacOSInfo = source("../scripts/patch-macos-info.ts");
 const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffects.m");
 const themeSource = source("../src/theme.tsx");
+const titlebarSource = source("../src/electrobun/titlebar.ts");
+const rpcSource = source("../src/electrobun/rpc.ts");
 
 describe("macOS window chrome contract", () => {
-  test("centers the native macOS traffic lights in the shared titlebar", () => {
+  test("centers the native macOS traffic lights with one fixed position", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toContain("trafficLightOffset");
     expect(electrobunHost).toMatch(
-      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 21\);[\s\S]*?\}\s*rendererReady = true;/,
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(28, 21\);[\s\S]*?\}\s*rendererReady = true;/,
     );
+    expect(electrobunHost).toContain(
+      'mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(28, 21))',
+    );
+    expect(electrobunHost).not.toContain("ResizeObserver");
+    expect(electrobunHost).not.toContain("getBoundingClientRect");
+    expect(
+      Array.from(electrobunHost.matchAll(/setWindowButtonPosition\(([^)]*)\)/g), (match) => match[1]),
+    ).toEqual(["28, 21", "28, 21"]);
+  });
+
+  test("routes custom titlebar double-clicks through the user's macOS window action", () => {
+    expect(mainSource).toContain("installTitlebarDoubleClick(document");
+    expect(mainSource).toContain(
+      '!showDesktopPet && currentDesktopPlatform() === "macos" && isElectrobun',
+    );
+    expect(titlebarSource).toContain("electrobun-webkit-app-region-drag");
+    expect(titlebarSource).toContain("electrobun-webkit-app-region-no-drag");
+    expect(rpcSource).toContain("titlebarDoubleClick: { params: undefined; response: boolean }");
+    expect(electrobunHost).toContain(
+      "titlebarDoubleClick: () => performMacOSTitlebarDoubleClick(mainWindow.ptr)",
+    );
+    expect(nativeWindowEffects).toContain("AppleActionOnDoubleClick");
+    expect(nativeWindowEffects).toContain("AppleMiniaturizeOnDoubleClick");
+    expect(nativeWindowEffects).toContain("performMiniaturize:nil");
+    expect(nativeWindowEffects).toContain("performZoom:nil");
+    expect(nativeWindowEffects).toContain("screen.visibleFrame");
+    expect(nativeWindowEffects).toContain("setFrame:targetFrame display:YES animate:YES");
   });
 
   test("reserves traffic-light space only on macOS", () => {
