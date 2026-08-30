@@ -7298,26 +7298,6 @@ export default function App() {
         )}
         <SessionRail
           projects={projects}
-          activeProject={activeProject}
-          onSelectProject={(path) => {
-            setShowAutomations(false);
-            setShowPluginManager(false);
-            setShowPullRequests(false);
-            setShowDocker(false);
-            selectProject(path);
-            if (railOverlay) setNarrowRailOpen(false);
-          }}
-          onAddProject={() => void addProjectFolder()}
-          onRenameProject={(path, name) => {
-            void updateProjectName(path, name).catch((error) => {
-              toast(t("settings.projectSaveFailed", { error: String(error) }), "error");
-            });
-          }}
-          onRemoveProject={(path) => {
-            void removeProjectEntry(path).catch((error) => {
-              toast(t("settings.projectSaveFailed", { error: String(error) }), "error");
-            });
-          }}
           sessions={sessions}
           archivedSessions={archivedSessions}
           previews={previews}
