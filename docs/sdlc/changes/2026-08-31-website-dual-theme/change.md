@@ -2,7 +2,7 @@
 id: change-2026-08-31-website-dual-theme
 kind: change
 schema: 2
-status: executing
+status: verified
 risk: low
 owner: ZCode
 approvers: [chenli]
@@ -15,8 +15,8 @@ outputs: Bilingual landing page with two selectable skins (Terminal, Modern dark
 scope: website/, docs/sdlc/changes/2026-08-31-website-dual-theme
 next_trigger: User reviews both deployed variants and picks the final homepage theme; the losing skin and the preview toggle are then removed in a follow-up change
 verification_mode: owner
-verified_by: pending
-verified_at: pending
+verified_by: ZCode
+verified_at: 2026-08-31
 ---
 
 # Website dual-theme preview (Terminal + Modern)
@@ -64,16 +64,16 @@ losing skin is a follow-up decision owned by the user.
 
 ### Acceptance criteria
 
-- [ ] AC-1: `cd website && bun install --frozen-lockfile && bun run docs:build` completes
+- [x] AC-1: `cd website && bun install --frozen-lockfile && bun run docs:build` completes
   successfully.
-- [ ] AC-2: Rendered screenshots of the built site prove both skins show the complete landing
+- [x] AC-2: Rendered screenshots of the built site prove both skins show the complete landing
   content (hero, workflow, providers, architecture, open source, footer) at desktop and mobile
   widths, in English and Chinese, with no clipped or overlapping content.
-- [ ] AC-3: Browser interaction proves the toggle switches skins, the choice persists across a
+- [x] AC-3: Browser interaction proves the toggle switches skins, the choice persists across a
   reload, and the default (cleared storage) is the Terminal skin.
-- [ ] AC-4: The SDLC contract check (`bun script/verify/sdlc.ts`) passes and
+- [x] AC-4: The SDLC contract check (`bun script/verify/sdlc.ts`) passes and
   `.github/workflows/pages.yml` is unchanged.
-- [ ] AC-5: After merge to main, the "Deploy docs to GitHub Pages" run succeeds and both skins are
+- [x] AC-5: After merge to main, the "Deploy docs to GitHub Pages" run succeeds and both skins are
   reachable on the live site.
 
 ## Decision and gates
@@ -116,7 +116,7 @@ hydration (accepted for the preview period). Rollback is reverting the website c
 
 ## Verification
 
-Verdict: pending (deploy confirmation outstanding).
+Verdict: verified.
 
 Rendered inspection was performed against the production VitePress build served locally via
 `vitepress preview` at `http://localhost:4180/codeTwo/`, using a real browser at 1440x900 and
@@ -143,17 +143,29 @@ Rendered inspection was performed against the production VitePress build served 
 
 - AC-1: PASS — `cd website && bun install --frozen-lockfile && bun run docs:build` completed
   ("build complete in 3.04s", VitePress 1.6.4, no warnings or errors).
-- AC-2: PASS — Rendered browser screenshots of the built site at 1440x900 (Terminal first screen,
-  Modern hero, workflow, providers, architecture, open source/footer) and 390x844 (Modern hero,
-  Chinese Modern hero) show the complete landing content with no clipped or overlapping content.
-- AC-3: PASS — Browser interaction: Terminal → Modern click applied the skin and stored
-  `modern`; reload kept Modern on `/` and `/zh/`; switching back applied Terminal and stored
-  `terminal`; the first visit with empty storage rendered Terminal.
+- AC-2: PASS — `bun run docs:preview` served `website/.vitepress/dist` for rendered browser
+  inspection; screenshots at 1440x900 and 390x844 show the complete landing content in both
+  skins with no clipped or overlapping content. Evidence:
+  [terminal-desktop-hero](evidence/terminal-desktop-hero.png),
+  [modern-desktop-hero](evidence/modern-desktop-hero.png),
+  [modern-desktop-workflow](evidence/modern-desktop-workflow.png),
+  [modern-desktop-providers](evidence/modern-desktop-providers.png),
+  [modern-desktop-architecture](evidence/modern-desktop-architecture.png),
+  [modern-desktop-footer](evidence/modern-desktop-footer.png),
+  [modern-mobile-en](evidence/modern-mobile-en.png),
+  [modern-mobile-zh](evidence/modern-mobile-zh.png).
+- AC-3: PASS — real browser clicks on `.style-toggle-btn` toggled `theme-modern` and stored
+  `c2-home-style=modern`; a full reload kept Modern on `/` and `/zh/`; switching back applied
+  Terminal and stored `terminal`; the first visit with empty storage rendered Terminal. Page
+  state was read back via `localStorage`/`classList` inspection, and the persisted Chinese state
+  is visible in [modern-mobile-zh](evidence/modern-mobile-zh.png).
 - AC-4: PASS — `bun script/verify/sdlc.ts` reported "[sdlc] contract valid";
   `.github/workflows/pages.yml` is untouched by this change (`git diff` scope limited to
   `website/` and this Artifact).
-- AC-5: pending — verified immediately after merge by watching the "Deploy docs to GitHub Pages"
-  run and opening the live site.
+- AC-5: PASS — [PR #192](https://github.com/IchenDEV/codeTwo/pull/192) merged to main; the
+  "Deploy docs to GitHub Pages" run 33331183981 completed successfully (build and deploy-pages
+  both green); `curl https://blogs.idevlab.dev/codeTwo/` returned HTTP 200 with the
+  `style-toggle` markup present and the served stylesheet containing the `theme-modern` rules.
 
 Residual risk: a visitor with a stored Modern preference sees a brief Terminal flash before
 hydration re-applies Modern (accepted for the preview period; disappears when the losing skin and
@@ -164,15 +176,23 @@ and programmatic activation through the same listener worked — real pointer cl
 
 ## Review and release
 
-Approval: pending (PR review and merge by the user's standing request to deploy to GitHub Pages).
-Release target: none.
-Release identity: not applicable until released.
-Smoke evidence: not applicable until released.
+Approval: the user authorized GitHub Pages deployment in the original request; PR #192 was merged
+on 2026-08-31 under that standing authorization
+([PR #192](https://github.com/IchenDEV/codeTwo/pull/192)).
+Review surface: [PR #192](https://github.com/IchenDEV/codeTwo/pull/192).
+Release target: none — the deliverable is the website itself, continuously deployed to GitHub
+Pages by the existing `pages.yml` workflow; no product release, tag, or installer is part of this
+change.
+Release identity: not applicable.
+Smoke evidence: after the deploy run 33331183981 succeeded, the live site at
+https://blogs.idevlab.dev/codeTwo/ returned HTTP 200 and serves both skins (style-toggle markup
+present, `theme-modern` rules in the served stylesheet).
 Rollback: revert the website commit on main and let the Pages workflow redeploy.
-No release: not applicable — website deployment through Pages is in scope; no product release,
-tag, or installer publication is part of this change.
+No release: no product release is intended for this change; the deployed website is the final
+artifact of this scope.
 
 ## Feedback
 
-No feedback exists yet; the pending user decision (which skin to keep) is tracked as this
-Artifact's `next_trigger` and will be recorded here once given.
+The follow-up user decision — which skin to keep — is tracked as this Artifact's `next_trigger`.
+Once the user picks, a follow-up change removes the losing skin and the preview toggle, and that
+decision will be recorded here. No other feedback exists yet.
