@@ -52,6 +52,7 @@ import {
 import { useLanguage, useT } from "../i18n";
 import { en as EN_STRINGS, type StringKey } from "../i18n/strings";
 import { useToast } from "../ui/toast";
+import { PageHeader } from "@/components/business/page-header";
 import { SearchField } from "@/components/business/search-field";
 import { SettingRow } from "@/components/business/setting-row";
 import { SettingToggle } from "@/components/business/setting-toggle";
@@ -986,49 +987,45 @@ export function MemorySettingsPage({
 
   return (
     <div className="memory-console">
-      <header className="memory-page-header">
-        <div className="min-w-0">
-          <h1 className="text-display font-semibold tracking-tight">
-            {t("memory.title")}
-          </h1>
-          <p className="mt-1 text-hint leading-relaxed text-muted-foreground">
-            {t("memory.consoleHint")}
-          </p>
-        </div>
-        <div className="memory-page-actions">
-          <Select
-            value={selectedProject}
-            onValueChange={(value) => {
-              if (value) setSelectedProject(value);
-            }}
-          >
-            <SelectTrigger
-              size="sm"
-              aria-label={t("memory.project")}
-              className="memory-project-select justify-between"
+      <PageHeader
+        title={t("memory.title")}
+        description={t("memory.consoleHint")}
+        actions={
+          <>
+            <Select
+              value={selectedProject}
+              onValueChange={(value) => {
+                if (value) setSelectedProject(value);
+              }}
             >
-              <SelectValue placeholder={t("memory.noProject")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {projects.map((project) => (
-                  <SelectItem key={project.path} value={project.path}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button
-            size="sm"
-            disabled={!selectedProject || !settings.enabled}
-            onClick={() => openEditor("new")}
-          >
-            <Plus />
-            {t("memory.new")}
-          </Button>
-        </div>
-      </header>
+              <SelectTrigger
+                size="sm"
+                aria-label={t("memory.project")}
+                className="memory-project-select justify-between"
+              >
+                <SelectValue placeholder={t("memory.noProject")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {projects.map((project) => (
+                    <SelectItem key={project.path} value={project.path}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              disabled={!selectedProject || !settings.enabled}
+              onClick={() => openEditor("new")}
+            >
+              <Plus />
+              {t("memory.new")}
+            </Button>
+          </>
+        }
+      />
 
       <details className="memory-disclosure">
         <summary>
@@ -1129,7 +1126,7 @@ export function MemorySettingsPage({
       {!selectedProject ? (
         <p className="memory-empty-state">{t("memory.noProject")}</p>
       ) : (
-        <>
+        <div className="memory-workbench">
           <div className="memory-stats" aria-label={t("memory.stats")}>
             <StatButton
               value={stats.active}
@@ -1176,14 +1173,16 @@ export function MemorySettingsPage({
               {t("memory.pendingCount", { count: stats.pending })}
             </span>
           </div>
-          <ViewSwitcher
-            label={t("memory.views")}
-            value={filter.view}
-            options={VIEWS.map(({ value, key }) => ({ value, label: t(key) }))}
-            onValueChange={(view) =>
-              setFilter((current) => ({ ...current, view }))
-            }
-          />
+          <div className="memory-view-switcher">
+            <ViewSwitcher
+              label={t("memory.views")}
+              value={filter.view}
+              options={VIEWS.map(({ value, key }) => ({ value, label: t(key) }))}
+              onValueChange={(view) =>
+                setFilter((current) => ({ ...current, view }))
+              }
+            />
+          </div>
           <div className="memory-toolbar">
             <SearchField
               label={t("memory.search")}
@@ -1390,7 +1389,7 @@ export function MemorySettingsPage({
               {detail}
             </aside>
           </div>
-        </>
+        </div>
       )}
 
       <Dialog open={narrow && detailOpen} onOpenChange={setDetailOpen}>
