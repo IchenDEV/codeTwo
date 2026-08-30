@@ -89,7 +89,7 @@ export function DiffStatCell({
 }
 
 /**
- * R6 (docs/roadmap.md): the cross-session overview answering "what needs me" — every session's
+ * R6 (docs/archive/scenes-v1/roadmap.md): the cross-session overview answering "what needs me" — every session's
  * state, scene, working-tree diff, and context occupancy, with one click into review.
  */
 export function MissionControlDialog({

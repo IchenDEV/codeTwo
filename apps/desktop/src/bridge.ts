@@ -4246,7 +4246,7 @@ export function providerLabel(p: string | { custom: string }): string {
   return typeof p === "string" ? p : p.custom;
 }
 
-// ---- scenes (Agent Scenes 1.0.0; see docs/scenes.md) ---------------------------------------
+// ---- scenes (Agent Scenes 1.0.0; see docs/reference/scenes.md) ---------------------------------------
 
 import type { SceneDocument, SceneInfo } from "./session/scene";
 
@@ -4788,7 +4788,7 @@ export async function getProjectScheduling(path: string): Promise<boolean> {
   return call<boolean>("scenes.scheduling", { path }).catch(() => false);
 }
 
-/** Lossy SKILL.md export of a scene (docs/scenes.md §Interop); null when it cannot resolve. */
+/** Lossy SKILL.md export of a scene (docs/reference/scenes.md §Interop); null when it cannot resolve. */
 export async function exportSceneSkillMd(reference: string): Promise<string | null> {
   if (!inDesktop) return null;
   return call<string>("scenes.export_skill_md", { reference }).catch(() => null);

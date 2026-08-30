@@ -3,7 +3,7 @@ import type { ArtifactRef } from "../bridge";
 import type { ToolEntry, Turn } from "./turns";
 
 /**
- * R10 dock follow (docs/design/scenes-impl-frontend.md, Item 6): map a tool call to the dock
+ * R10 dock follow (docs/archive/scenes-v1/frontend-implementation-plan.md, Item 6): map a tool call to the dock
  * surface where its effect is visible, and decide — through a pure latch reducer — whether the
  * dock may follow it. Deliberately a sibling of `agentActivity.ts`: the same conservative
  * identifier heuristics, but classifying surfaces instead of delegation, and never editing it.

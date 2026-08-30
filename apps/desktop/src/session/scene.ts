@@ -2,7 +2,7 @@ import { SESSION_MODES, type SessionMode } from "./mode";
 import type { MemoryAccess } from "../bridge";
 
 /**
- * Agent Scenes 1.0.0 wire shapes and pure helpers (see docs/scenes.md).
+ * Agent Scenes 1.0.0 wire shapes and pure helpers (see docs/reference/scenes.md).
  *
  * Like `mode.ts`, this file is pure logic so the binding matrix, the escalation ordering, and the
  * cycling ring can be unit-tested without a DOM or a bridge.
@@ -220,7 +220,7 @@ export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
 }
 
 /**
- * Which scene fields a soft-apply cannot honor (binding matrix, docs/scenes.md §Binding):
+ * Which scene fields a soft-apply cannot honor (binding matrix, docs/reference/scenes.md §Binding):
  * providers/model/reasoning_effort bind at session creation; worktree is immutable per session.
  * When the live value already matches, the field is not pending.
  */

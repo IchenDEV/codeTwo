@@ -12,9 +12,10 @@
 <p align="center">
   <a href="https://ichendev.github.io/codeTwo/">Website</a> ·
   <a href="website/guide/getting-started.md">Get started</a> ·
-  <a href="docs/architecture.md">Architecture</a> ·
-  <a href="docs/plugin-standard.md">Plugin standard</a> ·
-  <a href="docs/plugin-protocol.md">Plugin protocol</a>
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="docs/reference/architecture.md">Architecture</a> ·
+  <a href="docs/reference/plugin-standard.md">Plugin standard</a> ·
+  <a href="docs/reference/plugin-protocol.md">Plugin protocol</a>
 </p>
 
 ![C2 document editor with the skill picker open](docs/screenshots/slash-menu.png)
@@ -31,8 +32,9 @@ whole turn, and only then send it to the agent you choose.
 
 - **Document-first prompts.** Compose in a BlockNote editor instead of squeezing a specification
   into a single-line input.
-- **Nine coding CLIs, one protocol.** Drive Claude Code, Codex, Grok, Cursor, OpenCode 1 or 2,
-  Pi, Kimi, and ZCode/GLM through the [Agent Client Protocol](https://agentclientprotocol.com/).
+- **Eleven coding CLIs, one protocol.** Drive Claude Code, Codex, Grok, Cursor, OpenCode 1 or 2,
+  Pi, Kimi, ZCode/GLM, Amp, and Droid through the
+  [Agent Client Protocol](https://agentclientprotocol.com/).
 - **Skills and complete plugins.** Insert reusable skills inline, or install GitHub packages that
   can include skills, subagents, MCP servers, and project scaffolds.
 - **Local, inspectable continuity.** Sessions and project memory live in the shared Rust core;
@@ -46,7 +48,7 @@ whole turn, and only then send it to the agent you choose.
 ## How it fits together
 
 ```text
-Claude Code · Codex · Grok · Cursor · OpenCode 1 · OpenCode 2 · Pi · Kimi · GLM
+Claude Code · Codex · Grok · Cursor · OpenCode 1 · OpenCode 2 · Pi · Kimi · GLM · Amp · Droid
                               │
                          ACP over stdio
                               │
@@ -62,10 +64,10 @@ Claude Code · Codex · Grok · Cursor · OpenCode 1 · OpenCode 2 · Pi · Kimi
 C2's internals form a runtime-module graph inspired by
 [cordis](https://github.com/cordiverse/cordis): storage, agent execution, git, memory, scenes, and
 other subsystems declare what they require and provide. Separately installed extensions use the
-small JSON-RPC [plugin protocol](docs/plugin-protocol.md) and only the explicitly exported Extension
+small JSON-RPC [plugin protocol](docs/reference/plugin-protocol.md) and only the explicitly exported Extension
 API; the internal Rust trait and Core commands are not the public plugin contract. Package,
 lifecycle, scope, security, and host behavior follow the
-[C2 Plugin Standard](docs/plugin-standard.md).
+[C2 Plugin Standard](docs/reference/plugin-standard.md).
 
 ## Build from source
 
@@ -90,7 +92,7 @@ Then clone the repository and run the desktop app:
 ```sh
 git clone https://github.com/IchenDEV/codeTwo.git
 cd codeTwo
-./script/build_and_run.sh
+./script/dev/run.sh
 ```
 
 C2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
@@ -133,7 +135,7 @@ From the repository root:
 
 ```sh
 # Build the TUI, server, and their sibling Bun Tool Broker
-./script/build_rust_hosts.sh release
+./script/build/hosts.sh release
 
 # Terminal interface
 ./target/release/codetwo-tui
@@ -160,7 +162,8 @@ tailnet; C2 does not provide a hosted relay.
 | [`apps/desktop`](apps/desktop)   | Electrobun + React + BlockNote desktop app                                  |
 | [`packages/tool-broker`](packages/tool-broker) | Provider-neutral special-tool catalog and immutable routing plans |
 | [`website`](website)             | VitePress documentation and GitHub Pages site                               |
-| [`docs`](docs)                   | Architecture, design laws, roadmap, and protocol notes                      |
+| [`docs`](docs/README.md)         | Documentation map, current contracts, designs, research, and SDLC records   |
+| [`script`](script/README.md)     | Development, build, and repository-verification entry points                |
 
 ## Development
 
@@ -169,7 +172,7 @@ Run Rust checks from the repository root:
 ```sh
 cargo check --workspace --all-targets
 cargo test --workspace
-./script/build_rust_hosts.sh debug
+./script/build/hosts.sh debug
 ```
 
 Run desktop checks from `apps/desktop`:
@@ -188,7 +191,7 @@ bun install --frozen-lockfile
 bun run docs:build
 ```
 
-The desktop UI follows the repository's [design system](docs/design.md). Product surfaces use the
+The desktop UI follows the repository's [design system](docs/design/system.md). Product surfaces use the
 shared components under `apps/desktop/src/components/ui`; avoid introducing one-off interaction
 primitives or visual tokens.
 

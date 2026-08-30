@@ -5,7 +5,7 @@
 //! [`test_outcome`] decides at terminal status whether it passed. The bias is silence: an
 //! unclassified command or an ambiguous outcome yields `None`, and failure is NEVER inferred from
 //! stderr presence, warnings, or non-terminal statuses. Hooks must tolerate the signal never
-//! firing (docs/scenes.md §hooks).
+//! firing (docs/reference/scenes.md §hooks).
 
 use serde_json::Value;
 

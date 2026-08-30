@@ -1,5 +1,5 @@
 //! Conformance: the six example definitions under `schemas/agent-scenes/1.0.0/examples/` are
-//! normative fixtures (docs/scenes.md §Versioning & conformance). A conforming implementation
+//! normative fixtures (docs/reference/scenes.md §Versioning & conformance). A conforming implementation
 //! must load all of them and reproduce the authored structure.
 
 use codetwo_core::scene::{Gate, SceneLibrary, TransitionTrigger};

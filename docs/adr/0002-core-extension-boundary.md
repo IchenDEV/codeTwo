@@ -15,7 +15,7 @@ unclear:
 - compiled C2 features appeared equivalent to separately installed code;
 - process extensions inherited every command in the Core registry as an accidental public API.
 
-The accompanying [VS Code extension architecture research](../research/vscode-extension-architecture-2026-08-26.md)
+The accompanying [archived VS Code extension architecture research](../archive/research/vscode-extension-architecture-2026-08-26.md)
 shows the useful precedent: the workbench, extension host, stable `vscode` API, declarative
 contributions, and Gallery are separate contracts. VS Code's extension host is a responsiveness and
 fault boundary, not an OS security sandbox. C2 should preserve its stronger per-bundle/per-realm

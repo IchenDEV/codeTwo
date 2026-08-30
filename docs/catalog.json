@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "rules": [
+    {
+      "classification": "catalog",
+      "authority": "current",
+      "paths": ["docs/README.md", "docs/catalog.json", "docs/reference/README.md"]
+    },
+    {
+      "classification": "contract",
+      "authority": "current",
+      "paths": [
+        "docs/reference/architecture.md",
+        "docs/design/system.md",
+        "docs/reference/memory.md",
+        "docs/reference/plugin-protocol.md",
+        "docs/reference/plugin-standard.md",
+        "docs/reference/plugins.md",
+        "docs/reference/remote-agent.md",
+        "docs/reference/scenes.md"
+      ]
+    },
+    {
+      "classification": "architecture-decision",
+      "authority": "accepted",
+      "pattern": "^docs/adr/[0-9]{4}-[a-z0-9-]+\\.md$"
+    },
+    {
+      "classification": "active-design",
+      "authority": "accepted-pending",
+      "paths": [
+        "docs/design/README.md",
+        "docs/design/scenes-v2.md",
+        "docs/design/scenes-v2-implementation-plan.md",
+        "docs/design/taskboard-concept.png",
+        "docs/design/taskboard-editor-concept.png"
+      ]
+    },
+    {
+      "classification": "published-documentation-asset",
+      "authority": "current-reference",
+      "paths": [
+        "docs/screenshots/README.md",
+        "docs/screenshots/app-main.png",
+        "docs/screenshots/slash-menu.png"
+      ]
+    },
+    {
+      "classification": "sdlc-authority",
+      "authority": "current",
+      "paths": [
+        "docs/sdlc/workflow.md",
+        "docs/sdlc/templates/change.md",
+        "docs/sdlc/templates/eval.md",
+        "docs/sdlc/templates/incident.md",
+        "docs/sdlc/evals/ai-native-sdlc-gates.md"
+      ]
+    },
+    {
+      "classification": "change-record",
+      "authority": "historical-state",
+      "pattern": "^docs/sdlc/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*/change\\.md$"
+    },
+    {
+      "classification": "archive",
+      "authority": "historical-non-normative",
+      "pattern": "^docs/archive/"
+    }
+  ]
+}

@@ -51,7 +51,7 @@ The first dictation raises two macOS prompts — microphone and speech recogniti
 - **`CODETWO_TRANSCRIBE_CMD` set in your shell profile?** A GUI app doesn't read that. Launch
   C2 from a terminal, or rely on route 3.
 - **Running only the Vite renderer?** It has no native host, so route 3 is unavailable. Use
-  `bun run dev` or `script/build_and_run.sh` to run the bundled Electrobun app.
+  `bun run dev` or `script/dev/run.sh` to run the bundled Electrobun app.
 
 ## Privacy
 

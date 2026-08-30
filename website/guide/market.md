@@ -111,9 +111,9 @@ namespace rather than adding a top-level `runtime` field:
 ```
 
 The complete normative contract is the
-[C2 Plugin Standard 1.1.0](https://github.com/IchenDEV/codeTwo/blob/main/docs/plugin-standard.md);
+[C2 Plugin Standard 1.1.0](https://github.com/IchenDEV/codeTwo/blob/main/docs/reference/plugin-standard.md);
 the stdio JSON-RPC messages are documented in the
-[C2 Plugin Protocol](https://github.com/IchenDEV/codeTwo/blob/main/docs/plugin-protocol.md).
+[C2 Plugin Protocol](https://github.com/IchenDEV/codeTwo/blob/main/docs/reference/plugin-protocol.md).
 
 ## Live management and project scope
 

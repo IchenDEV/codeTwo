@@ -11,21 +11,33 @@ those facts and owns lifecycle status and the next trigger.
 ```text
 docs/sdlc/
   workflow.md                  lifecycle, states, Gates, and actual commands
-  templates/change.md         compact Intent-to-feedback Artifact
+  templates/change.md         compact Intent-to-feedback Artifact template
   templates/incident.md       real operational event and recovery
   templates/eval.md           repeatable real-task or Incident regression
-  changes/<date>-<slug>.md    one state record per material change
+  changes/<date>-<slug>/      one bundle per material change
+    change.md                 canonical lifecycle state
+    evidence/                 optional runtime or visual evidence
   incidents/<date>-<slug>.md  created only after a real Incident
   evals/<slug>.md             fixed regression cases with actual results
 ```
 
-Use one compact change file by default. For a high-risk or cross-system change, keep the lifecycle
-state in that file and link accepted ADRs, design documents, migration plans, test reports, and
-release evidence from their existing authoritative locations. Do not create global parallel
-`specs`, `plans`, `docs/superpowers`, or another lifecycle registry.
+Use one compact `change.md` inside each change bundle. This borrows the adjacent project's
+per-change colocation without splitting the same lifecycle state across repeated stage files. For a
+high-risk or cross-system change, keep state in `change.md` and link accepted ADRs, design
+documents, migration plans, test reports, and release evidence from their existing authoritative
+locations. Binary or runtime evidence may live in the bundle's `evidence/` directory. Do not create
+global parallel `specs`, `plans`, `docs/superpowers`, or another lifecycle registry.
 
 Historical change Artifacts remain auditable evidence. Superseding the workflow never permits
 deleting unrelated product history merely to make a new template look uniform.
+
+Canonical change Artifacts live at
+`docs/sdlc/changes/<yyyy-mm-dd-slug>/change.md` and use `schema: 2`. All retained historical
+Artifacts have been migrated; schema-1 files are rejected even for path-only moves. Schema 2 adds
+machine-readable `risk`, `approved_at`,
+repository `scope`, `verification_mode`, `verified_by`, and `verified_at` fields. Scope is a
+comma-separated list of exact repository files or directory prefixes. Root-wide paths, traversal,
+backslashes, and globs are rejected.
 
 ## End-to-end chain
 
@@ -61,9 +73,11 @@ recorded. It does not authorize PR creation, merge, release, deployment, product
 messages, or long-running automation. Security, data migration, major design, merge, and production
 release remain human Gates unless separately authorized.
 
-A PR containing changes outside its canonical change Artifact must include a changed Artifact in
-`executing` or a later execution state. An Artifact-only proposal may remain `draft` or
-`in-review`; this lets Intent be reviewed without falsely treating implementation as authorized.
+A PR containing changes outside its canonical `change.md` must include a changed schema-2 Artifact
+in `executing` or a later execution state. Every changed path must fall under the explicit scope of
+at least one such Artifact. An Artifact-only proposal may remain `draft` or `in-review`; this lets
+Intent be reviewed without falsely treating implementation as authorized. A changed historical
+Artifact must first be upgraded to schema 2. Flat files directly under `changes/` are rejected.
 
 ## Intent, Spec, Plan, and Build
 
@@ -76,6 +90,11 @@ risks, rollback, and required Gates. Build links implementation commits or PRs a
 material deviations; it is not a work diary. Concurrent code revisions use separate worktrees and
 must follow the desktop ownership rules in [`AGENTS.md`](../../AGENTS.md).
 
+Schema-2 acceptance criteria use stable, unique `AC-N` identifiers. Risk must be `low`, `medium`,
+`high`, or `critical`. High and critical changes require an Intent/Spec approver other than the
+implementation owner; their final verifier must also be independent. This deterministic identity
+check supports human judgment but does not prove that a name corresponds to a real approval.
+
 ## Verification loop
 
 Verification records actual commands, environment, results, runtime or visual evidence, failed
@@ -86,8 +105,10 @@ to `executing`, then produces new evidence.
   states. Compilation is not visual acceptance.
 - Service, data, protocol, and release changes require the corresponding contract, integration,
   migration, request/response, log, package, or smoke evidence.
-- `verified` and later states require every acceptance checkbox checked, `Verdict: verified`, and a
-  concrete `Residual risk:` statement.
+- `verified` and later schema-2 states require every acceptance checkbox checked, exactly one
+  `PASS` evidence mapping per `AC-N`, a named verifier and date, `Verdict: verified`, and a concrete
+  `Residual risk:` statement. Each mapping cites a command or linked artifact.
+- `failed` schema-2 changes retain every criterion mapping and at least one concrete `FAIL` result.
 - Skipped checks state why they are not applicable or what blocks them.
 
 ## Review and release
@@ -141,15 +162,21 @@ Incident Eval merely because its fixture is difficult; repair its isolation or s
 Run from the repository root:
 
 ```sh
-bun test script/check-sdlc.test.ts
-bun script/check-sdlc.ts
+bun test script/verify/checks.test.ts
+bun script/verify/docs.ts
+bun script/verify/sdlc.ts
+bun script/verify/sdlc.ts --worktree
 ```
 
-CI additionally runs `bun script/check-sdlc.ts --base "$BASE_SHA"`. A versioned release runs
-`bun script/check-sdlc.ts --release-change "$CHANGE_ID"`. The checker uses only Bun and Node
-built-ins and validates required fields and sections, unique ids, legal states, local links,
-acceptance closure, verification evidence, release readiness, Incident/Eval feedback links,
-forbidden parallel sources, and the branch-diff Gate.
+The documentation check enforces `docs/catalog.json`, archive boundaries, local links, schema-2
+change history, and asset ownership. The plain lifecycle check validates the full Artifact tree.
+`--worktree` additionally applies the Gate to
+staged, unstaged, and untracked files before handoff. CI runs
+`bun script/verify/sdlc.ts --base "$BASE_SHA"` against committed PR differences. A versioned release
+runs `bun script/verify/sdlc.ts --release-change "$CHANGE_ID"`. The checker uses only Bun and Node
+built-ins and validates required fields and sections, unique ids, legal states, local links, risk,
+explicit changed-path scope, acceptance-to-evidence mapping, verification identity, release
+readiness, Incident/Eval feedback links, forbidden parallel sources, and branch/worktree Gates.
 
 These checks validate the repository-controlled lifecycle. They do not claim external branch
 protection, deployment success, production monitoring, or release smoke evidence that was not

@@ -1082,7 +1082,7 @@ export default function App() {
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [quickChatOpen, setQuickChatOpen] = useState(false);
   const [sideChatSeed, setSideChatSeed] = useState<TransientChatSeed | null>(null);
-  // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
+  // ---- R10 dock follow (docs/archive/scenes-v1/frontend-implementation-plan.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
   const dockTabRef = useRef<DockTab | null>(null);
@@ -1095,7 +1095,7 @@ export default function App() {
       console.warn("Could not update the system badge", error);
     });
   }, [systemBadgeCount]);
-  // ---- scenes (Agent Scenes 1.0.0; docs/scenes.md) ----
+  // ---- scenes (Agent Scenes 1.0.0; docs/reference/scenes.md) ----
   const [scenes, setScenes] = useState<SceneInfo[]>([]);
   /** The active scene's canonical reference for the focused session (or the draft). */
   const [activeSceneName, setActiveSceneName] = useState<string | null>(null);
@@ -1115,7 +1115,7 @@ export default function App() {
   } | null>(null);
   /** Scene completion/suggestion banner above the composer (R8); latest state key wins. */
   const [sceneBanner, setSceneBanner] = useState<SceneBannerState | null>(null);
-  // ---- R9 pipeline instances (docs/scenes.md §Pipelines) ----
+  // ---- R9 pipeline instances (docs/reference/scenes.md §Pipelines) ----
   const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
   /** The active session's instance projection; the stage track renders only while this is set. */
   const [pipelineDetail, setPipelineDetail] =
@@ -1571,7 +1571,7 @@ export default function App() {
   const componentEnabledRef = useRef<(id: BuiltinUiComponentId) => boolean>(
     () => false,
   );
-  // ---- R4 plan-as-document (docs/design/scenes-impl-frontend.md Item 3) ----
+  // ---- R4 plan-as-document (docs/archive/scenes-v1/frontend-implementation-plan.md Item 3) ----
   // Plan markdown waiting on the Replace/Append/Cancel decision because the composer isn't empty.
   const [planDocPending, setPlanDocPending] = useState<string | null>(null);
   /** The edited plan IS the next prompt: it opens into this session's composer document. */
@@ -1612,7 +1612,7 @@ export default function App() {
   const canPinPlan = (
     scenes.find((s) => s.reference === activeSceneName)?.artifacts ?? []
   ).some((artifact) => artifact.kind === "plan");
-  // ---- R2 template-from-history (docs/design/scenes-impl-frontend.md Item 8) ----
+  // ---- R2 template-from-history (docs/archive/scenes-v1/frontend-implementation-plan.md Item 8) ----
   // Stable so the memoized TurnCards don't re-render on every App render.
   const openTemplateDraft = useCallback((promptText: string) => {
     setTemplateDraft(promptText);

@@ -181,7 +181,7 @@ pub struct PluginScaffold {
 }
 
 /// A bundle that ships **code** through `extensions.dev.codetwo.runtime`: a process C2 speaks the
-/// plugin protocol to (`docs/plugin-protocol.md`).
+/// plugin protocol to (`docs/reference/plugin-protocol.md`).
 ///
 /// Installing one still executes nothing. Enablement and trust make
 /// its host adapter eligible; the first declared command starts the process. See
@@ -2200,7 +2200,7 @@ fn discover_scaffolds(root: &Path) -> Result<Vec<PluginScaffold>, PluginError> {
 
 /// Count the plugin's Agent Scenes components: `scenes/*.scene.json` and `scenes/*.pipeline.json`
 /// documents, serde-parsed and validated against the 1.0.0 schemas at install/parse time. Invalid
-/// or unreadable files are warned about and skipped — never fatal to the install (docs/scenes.md:
+/// or unreadable files are warned about and skipped — never fatal to the install (docs/reference/scenes.md:
 /// same posture as `SkillLibrary::load_dir`). The bundle collector already preserves the
 /// directory verbatim; hosts read the installed copy back through [`plugin_scenes_dir`].
 fn count_scene_components(root: &Path) -> (usize, usize) {

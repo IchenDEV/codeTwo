@@ -77,7 +77,7 @@ jobs:
       - name: Validate AI-native release Gate
         env:
           CHANGE_ID: ${{ inputs.change_id }}
-        run: bun script/check-sdlc.ts --release-change "$CHANGE_ID"
+        run: bun script/verify/sdlc.ts --release-change "$CHANGE_ID"
 
       - name: Verify runner architecture
         run: |

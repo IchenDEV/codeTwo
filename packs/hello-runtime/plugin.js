@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A complete C2 plugin, in one file. See docs/plugin-protocol.md.
+// A complete C2 plugin, in one file. See docs/reference/plugin-protocol.md.
 //
 // It contributes one command, calls one extension-public host command from inside it, and listens
 // for a host event. Nothing here is C2-specific machinery: JSON-RPC 2.0, one object per line.
