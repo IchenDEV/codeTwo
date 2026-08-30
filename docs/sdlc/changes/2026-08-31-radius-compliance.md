@@ -128,6 +128,7 @@ window-safe-area work remains in the shared worktree and is outside this change'
 ## Review and release
 
 Approval: the user approved PR creation and merge on 2026-08-31 after rendered verification.
+Review surface: [PR #188](https://github.com/IchenDEV/codeTwo/pull/188).
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.

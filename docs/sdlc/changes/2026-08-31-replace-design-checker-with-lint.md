@@ -115,6 +115,7 @@ runtime persistence changed.
 ## Review and release
 
 Approval: the user approved PR creation and merge on 2026-08-31 after local verification.
+Review surface: [PR #188](https://github.com/IchenDEV/codeTwo/pull/188).
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.

@@ -218,6 +218,7 @@ verified in the live Vite renderer without disturbing that Core.
 ## Review and release
 
 Approval: the user approved PR creation and merge on 2026-08-31 after rendered verification.
+Review surface: [PR #188](https://github.com/IchenDEV/codeTwo/pull/188).
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
