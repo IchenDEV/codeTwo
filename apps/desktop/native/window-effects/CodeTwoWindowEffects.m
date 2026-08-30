@@ -3,6 +3,7 @@
 #import <objc/runtime.h>
 
 static char codeTwoBackdropKey;
+static char codeTwoFillRestoreFrameKey;
 
 enum CodeTwoWindowEffect : uint32_t {
   CodeTwoWindowEffectShadow = 1 << 0,
@@ -47,6 +48,71 @@ static uint32_t configureWindowEffects(NSWindow *window) {
   return effects;
 }
 
+static BOOL performFillAction(NSWindow *window) {
+  NSScreen *screen = window.screen ?: NSScreen.mainScreen;
+  if (screen == nil) return NO;
+
+  NSRect visibleFrame = screen.visibleFrame;
+  NSValue *restoreValue = objc_getAssociatedObject(window, &codeTwoFillRestoreFrameKey);
+  BOOL isFilled = NSEqualRects(NSIntegralRect(window.frame), NSIntegralRect(visibleFrame));
+  NSRect targetFrame;
+
+  if (isFilled && restoreValue != nil) {
+    targetFrame = restoreValue.rectValue;
+    objc_setAssociatedObject(
+      window,
+      &codeTwoFillRestoreFrameKey,
+      nil,
+      OBJC_ASSOCIATION_RETAIN_NONATOMIC
+    );
+  } else {
+    objc_setAssociatedObject(
+      window,
+      &codeTwoFillRestoreFrameKey,
+      [NSValue valueWithRect:window.frame],
+      OBJC_ASSOCIATION_RETAIN_NONATOMIC
+    );
+    targetFrame = visibleFrame;
+  }
+
+  [window setFrame:targetFrame display:YES animate:YES];
+  return YES;
+}
+
+static BOOL performTitlebarDoubleClick(NSWindow *window) {
+  if (window == nil) return NO;
+
+  NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+  NSString *action = [defaults stringForKey:@"AppleActionOnDoubleClick"];
+  if (action == nil) {
+    action = [defaults boolForKey:@"AppleMiniaturizeOnDoubleClick"]
+      ? @"Minimize"
+      : @"Maximize";
+  }
+
+  if ([action caseInsensitiveCompare:@"Fill"] == NSOrderedSame) {
+    return performFillAction(window);
+  }
+
+  objc_setAssociatedObject(
+    window,
+    &codeTwoFillRestoreFrameKey,
+    nil,
+    OBJC_ASSOCIATION_RETAIN_NONATOMIC
+  );
+
+  if ([action caseInsensitiveCompare:@"Minimize"] == NSOrderedSame) {
+    [window performMiniaturize:nil];
+    return YES;
+  }
+  if ([action caseInsensitiveCompare:@"Maximize"] == NSOrderedSame) {
+    [window performZoom:nil];
+    return YES;
+  }
+  if ([action caseInsensitiveCompare:@"None"] == NSOrderedSame) return YES;
+  return NO;
+}
+
 uint32_t codetwoConfigureWindowEffects(void *windowPointer) {
   if (windowPointer == NULL) return 0;
 
@@ -58,6 +124,19 @@ uint32_t codetwoConfigureWindowEffects(void *windowPointer) {
     configuredEffects = configureWindowEffects(window);
   });
   return configuredEffects;
+}
+
+uint32_t codetwoPerformTitlebarDoubleClick(void *windowPointer) {
+  if (windowPointer == NULL) return 0;
+
+  NSWindow *window = (__bridge NSWindow *)windowPointer;
+  if ([NSThread isMainThread]) return performTitlebarDoubleClick(window) ? 1 : 0;
+
+  __block BOOL handled = NO;
+  dispatch_sync(dispatch_get_main_queue(), ^{
+    handled = performTitlebarDoubleClick(window);
+  });
+  return handled ? 1 : 0;
 }
 
 static BOOL setDockBadgeCount(uint32_t count) {

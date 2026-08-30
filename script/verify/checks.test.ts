@@ -197,11 +197,18 @@ test("documentation Gate accepts the catalog and rejects unsafe drift", () => {
         {"classification":"catalog","authority":"current","paths":["docs/catalog.json"]},
         {"classification":"contract","authority":"current","paths":["docs/reference/current.md"]},
         {"classification":"change-record","authority":"historical-state","pattern":"^docs/sdlc/changes/.+/change\\\\.md$"},
+        {"classification":"change-evidence","authority":"historical-evidence","pattern":"^docs/sdlc/changes/.+/evidence/"},
         {"classification":"archive","authority":"historical-non-normative","pattern":"^docs/archive/"}
       ]}`,
     );
     write(root, "docs/reference/current.md", "# Current\n\n[Archive](../archive/README.md)\n");
     write(root, "docs/archive/README.md", "# Archive\n");
+    write(
+      root,
+      "docs/sdlc/changes/2026-08-30-example/change.md",
+      "---\nschema: 2\n---\n\n![Evidence](evidence/window.png)\n",
+    );
+    write(root, "docs/sdlc/changes/2026-08-30-example/evidence/window.png", "fixture");
     expect(validateDocumentation(root)).toEqual([]);
 
     write(root, "docs/reference/current.md", "# Current\n\n[Missing](missing.md)\n");

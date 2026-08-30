@@ -14,6 +14,10 @@ let windowEffects:
           args: readonly [typeof FFIType.u32];
           returns: typeof FFIType.u32;
         };
+        codetwoPerformTitlebarDoubleClick: {
+          args: readonly [typeof FFIType.ptr];
+          returns: typeof FFIType.u32;
+        };
       }>
     >
   | undefined;
@@ -33,6 +37,10 @@ function library() {
     },
     codetwoSetDockBadgeCount: {
       args: [FFIType.u32],
+      returns: FFIType.u32,
+    },
+    codetwoPerformTitlebarDoubleClick: {
+      args: [FFIType.ptr],
       returns: FFIType.u32,
     },
   });
@@ -66,6 +74,17 @@ export function setMacOSSystemBadgeCount(count: number): boolean {
     return library().symbols.codetwoSetDockBadgeCount(normalized) !== 0;
   } catch (error) {
     console.warn("Could not update the macOS system badge", error);
+    return false;
+  }
+}
+
+export function performMacOSTitlebarDoubleClick(windowPointer: Pointer): boolean {
+  if (process.platform !== "darwin") return false;
+
+  try {
+    return library().symbols.codetwoPerformTitlebarDoubleClick(windowPointer) !== 0;
+  } catch (error) {
+    console.warn("Could not perform the macOS titlebar double-click action", error);
     return false;
   }
 }

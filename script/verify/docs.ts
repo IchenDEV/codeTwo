@@ -118,7 +118,10 @@ export function validateDocumentation(repositoryRoot: string): string[] {
   for (const path of docsFiles) {
     const rule = classification.get(path);
     if (!rule) continue;
-    if (/\d{4}-\d{2}-\d{2}/.test(path) && !new Set(["archive", "change-record"]).has(rule.classification)) {
+    if (
+      /\d{4}-\d{2}-\d{2}/.test(path)
+      && !new Set(["archive", "change-record", "change-evidence"]).has(rule.classification)
+    ) {
       errors.push(`${path}: dated snapshots belong in docs/archive or canonical change bundles`);
     }
     if (rule.classification === "change-record") {
