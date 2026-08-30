@@ -94,8 +94,9 @@ present in the existing native and rendered context menus.
 ## Review and release
 
 The user explicitly authorized creating and merging the repository pull request on 2026-08-30.
-Repository integration remains pending until the PR checks pass and the merge is observed. No
-versioned product release was requested.
+[PR #183](https://github.com/IchenDEV/codeTwo/pull/183) carries the implementation; repository
+integration remains pending until its checks pass and the merge is observed. No versioned product
+release was requested.
 
 ## Feedback
 
