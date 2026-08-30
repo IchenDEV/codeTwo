@@ -100,6 +100,17 @@ describe("MissionControlDialog", () => {
     expect(calls.closed).toBe(1);
   });
 
+  test("the full row primary action is a semantic button", async () => {
+    activateDom();
+    const { calls } = renderDialog();
+    const body = dom.document.body;
+    await waitFor(() => expect(button(body, "Session alpha")).not.toBeNull());
+    click(button(body, "Session alpha"));
+    expect(calls.selected).toEqual(["alpha"]);
+    expect(calls.reviewed).toEqual([]);
+    expect(calls.closed).toBe(1);
+  });
+
   test("shows the empty line when there are no sessions", async () => {
     activateDom();
     renderDialog({ sessions: [] });

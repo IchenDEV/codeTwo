@@ -22,7 +22,7 @@ function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdr
   return (
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-overlay"
-      className={cn("overlay-layer fixed inset-0 z-50 bg-foreground/50", className)}
+      className={cn("overlay-layer fixed inset-0 z-50 bg-overlay", className)}
       {...props}
     />
   )
@@ -35,7 +35,7 @@ function AlertDialogContent({ className, ...props }: AlertDialogPrimitive.Popup.
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cn(
-          "dialog-layer fixed top-1/2 left-1/2 z-50 grid w-full max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-modal bg-background p-6 shadow-(--ds-elevation-modal) ring-1 ring-foreground/10 outline-none",
+          "dialog-layer fixed top-1/2 left-1/2 z-50 grid w-full max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-modal bg-modal p-6 shadow-modal outline-none",
           className,
         )}
         {...props}
@@ -68,7 +68,7 @@ function AlertDialogTitle({ className, ...props }: AlertDialogPrimitive.Title.Pr
   return (
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
-      className={cn("text-title leading-5 font-semibold", className)}
+      className={cn("text-dialog font-semibold", className)}
       {...props}
     />
   )
@@ -78,7 +78,7 @@ function AlertDialogDescription({ className, ...props }: AlertDialogPrimitive.De
   return (
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
-      className={cn("text-ui text-muted-foreground", className)}
+      className={cn("text-body text-muted-foreground", className)}
       {...props}
     />
   )

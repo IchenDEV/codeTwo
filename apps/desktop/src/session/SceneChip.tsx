@@ -5,11 +5,12 @@ import type { SessionConfig } from "./config";
 import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
 import { exportSceneSkillMd } from "../bridge";
 import { useToast } from "../ui/toast";
-import { Chip } from "./Composer";
+import { ControlChip as Chip } from "@/components/ui/control-chip";
 import { SelectableRow } from "@/components/business/selectable-row";
 import { StatusBadge } from "@/components/business/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -27,7 +28,7 @@ import { cn } from "@/lib/utils";
 export function SourceBadge({ source }: { source: SceneSource }) {
   const t = useT();
   return (
-    <Badge variant="outline" className="shrink-0 text-cap text-muted-foreground">
+    <Badge variant="outline" className="shrink-0 text-metadata text-muted-foreground">
       {t(`scene.source.${source}` as "scene.source.builtin")}
     </Badge>
   );
@@ -85,7 +86,7 @@ export function SceneChip({ config }: { config: SessionConfig }) {
       >
         <div className="@container/composer">
           <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5">
-            <span className="min-w-0 flex-1 truncate text-hint text-muted-foreground">
+            <span className="min-w-0 flex-1 truncate text-metadata text-muted-foreground">
               {surfaceLabel}
             </span>
             {config.scenesEnabled && active && <SourceBadge source={active.source} />}
@@ -149,7 +150,7 @@ export function SceneChip({ config }: { config: SessionConfig }) {
             <>
               <Separator className="mx-2 my-1.5 w-auto" />
               <div className="flex items-center gap-1.5 px-2 pb-1 pt-0.5">
-                <span className="min-w-0 flex-1 text-fine text-muted-foreground">
+                <span className="min-w-0 flex-1 text-callout text-muted-foreground">
                   {t("scene.partialHint", { fields: config.scenePendingFields.join(", ") })}
                 </span>
                 <Button
@@ -260,38 +261,37 @@ export function ScenePicker({
                   }}
                 />
               </div>
-              <Button
+              <TooltipButton
+                label={`${t("sceneEditor.duplicate")}: ${sceneTitle(scene, locale)}`}
+                tooltip={t("sceneEditor.duplicate")}
                 variant="ghost"
                 size="icon-sm"
                 className="shrink-0 text-muted-foreground"
-                title={t("sceneEditor.duplicate")}
-                aria-label={`${t("sceneEditor.duplicate")}: ${sceneTitle(scene, locale)}`}
                 onClick={() => onDuplicate(scene)}
               >
                 <Copy />
-              </Button>
+              </TooltipButton>
               {(scene.source === "user" || scene.source === "project") && (
-                <Button
+                <TooltipButton
+                  label={`${t("sceneEditor.edit")}: ${sceneTitle(scene, locale)}`}
+                  tooltip={t("sceneEditor.edit")}
                   variant="ghost"
                   size="icon-sm"
                   className="shrink-0 text-muted-foreground"
-                  title={t("sceneEditor.edit")}
-                  aria-label={`${t("sceneEditor.edit")}: ${sceneTitle(scene, locale)}`}
                   onClick={() => onEdit(scene)}
                 >
                   <Pencil />
-                </Button>
+                </TooltipButton>
               )}
-              <Button
+              <TooltipButton
+                label={t("scene.exportSkill")}
                 variant="ghost"
                 size="icon-sm"
                 className="shrink-0 text-muted-foreground"
-                title={t("scene.exportSkill")}
-                aria-label={t("scene.exportSkill")}
                 onClick={() => void exportSkill(scene)}
               >
                 <Download />
-              </Button>
+              </TooltipButton>
             </div>
           ))}
         </div>

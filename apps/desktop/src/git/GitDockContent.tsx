@@ -25,7 +25,7 @@ export function GitDockContent({
 
   return (
     <ScrollArea className="h-full min-h-0 flex-1">
-      <div className="space-y-module-inset p-4 text-hint">
+      <div className="space-y-module-inset p-4 text-metadata">
         {status?.is_repo ? (
           <>
             <GitHubPullRequestPanel
@@ -38,8 +38,8 @@ export function GitDockContent({
             <section className="space-y-module-inset pt-3" aria-label={t("dock.workingTree")}>
               <div className="flex items-center gap-2">
                 <GitBranch className="size-3.5" />
-                <h3 className="text-ui font-semibold">{t("dock.workingTree")}</h3>
-                <span className="min-w-0 truncate font-mono text-cap text-muted-foreground">
+                <h3 className="text-body font-semibold">{t("dock.workingTree")}</h3>
+                <span className="min-w-0 truncate font-mono text-metadata text-muted-foreground">
                   {status.branch || "?"}
                 </span>
                 {status.ahead > 0 && <span className="text-primary">↑{status.ahead}</span>}
@@ -54,7 +54,7 @@ export function GitDockContent({
                     <div key={file.path} className="flex items-center gap-2">
                       <span
                         className={cn(
-                          "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-cap font-bold",
+                          "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-metadata font-bold",
                           file.staged
                             ? "bg-success/15 text-success"
                             : "bg-warning/15 text-warning",
@@ -63,7 +63,7 @@ export function GitDockContent({
                       >
                         {file.state.charAt(0).toUpperCase()}
                       </span>
-                      <span className="truncate font-mono text-fine text-muted-foreground">
+                      <span className="truncate font-mono text-callout text-muted-foreground">
                         {file.path}
                       </span>
                     </div>

@@ -78,7 +78,7 @@ describe("turn actions", () => {
     await flush();
 
     for (const row of view.container.querySelectorAll("[data-turn-actions]")) {
-      expect(row.classList.contains("text-fine")).toBe(true);
+      expect(row.classList.contains("text-callout")).toBe(true);
       expect(row.classList.contains("text-meta")).toBe(false);
     }
     view.unmount();

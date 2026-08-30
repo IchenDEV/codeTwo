@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useLanguage, useT } from "../i18n";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export interface ChartSeries {
@@ -166,12 +167,15 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
       {spec.series.length > 1 ? (
         <div className="mb-1.5 flex flex-wrap gap-x-3 gap-y-1" aria-label={t("chart.series")}>
           {spec.series.map((series, index) => (
-            <button
+            <Button
               key={series.name}
               type="button"
+              variant="ghost"
+              size="compact"
+              focusStyle="inset"
               aria-pressed={visible[index]}
               className={cn(
-                "flex items-center gap-1.5 text-fine text-foreground disabled:opacity-50",
+                "flex items-center gap-1.5 text-callout text-foreground disabled:opacity-50",
                 visible[index] ? "opacity-100" : "opacity-50",
               )}
               onClick={() =>
@@ -185,7 +189,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
                 aria-hidden="true"
               />
               {series.name}
-            </button>
+            </Button>
           ))}
         </div>
       ) : null}
@@ -223,7 +227,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
               y={y(tick)}
               textAnchor="end"
               dominantBaseline="middle"
-              className="fill-muted-foreground text-fine"
+              className="fill-muted-foreground text-callout"
             >
               {numberFormatter.format(tick)}
             </text>
@@ -235,14 +239,14 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
             x={x(index)}
             y={margin.top + plotHeight + 18}
             textAnchor="middle"
-            className="fill-muted-foreground text-fine"
+            className="fill-muted-foreground text-callout"
           >
             {compactLabel(label)}
           </text>
         ))}
         <text
           data-axis="x"
-          className="axis-title fill-foreground text-fine"
+          className="axis-title fill-foreground text-callout"
           x={margin.left + plotWidth / 2}
           y={height - 8}
           textAnchor="middle"
@@ -251,7 +255,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
         </text>
         <text
           data-axis="y"
-          className="axis-title fill-foreground text-fine"
+          className="axis-title fill-foreground text-callout"
           transform={`translate(14 ${margin.top + plotHeight / 2}) rotate(-90)`}
           textAnchor="middle"
         >

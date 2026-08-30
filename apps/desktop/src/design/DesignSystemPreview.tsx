@@ -5,11 +5,23 @@ import {
   CircleHelp,
   Monitor,
   Moon,
+  RefreshCw,
   Search,
   Sun,
 } from "@/components/ui/icons";
 import { applyAppearanceSettings, useAppearanceSettings } from "@/appearance";
 import { ActivityOrb } from "@/components/ui/activity-orb";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,6 +35,25 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { RadioGroup } from "@/components/ui/radio-group";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuItemDescription,
+  DropdownMenuItemText,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -43,7 +74,8 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipButton, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ChoiceRow } from "@/components/business/choice-row";
 import { LoadFeedback } from "@/components/business/load-feedback";
 import { QuotaProgress } from "@/components/business/quota-progress";
 import { SelectableRow } from "@/components/business/selectable-row";
@@ -70,14 +102,15 @@ const colorTokens = [
 ] as const;
 
 const typeRoles = [
-  ["Large title", "26 / 32", "ds-type-large-title"],
-  ["Page title", "22 / 26", "ds-type-page-title"],
-  ["Section", "17 / 22", "ds-type-section"],
-  ["Dialog", "15 / 20", "ds-type-dialog"],
-  ["Body / control", "13 / 16", "ds-type-body"],
-  ["Callout", "12 / 15", "ds-type-callout"],
-  ["Metadata", "11 / 14", "ds-type-metadata"],
-  ["Caption / keycap", "10 / 13", "ds-type-caption"],
+  ["Large title", "28 / 34", "ds-type-large-title"],
+  ["Page title", "20 / 28", "ds-type-page-title"],
+  ["Section", "18 / 24", "ds-type-section"],
+  ["Dialog", "16 / 22", "ds-type-dialog"],
+  ["Body / control", "14 / 20", "ds-type-body"],
+  ["Prose", "14 / 23", "ds-type-prose"],
+  ["Callout", "13 / 18", "ds-type-callout"],
+  ["Metadata", "12 / 16", "ds-type-metadata"],
+  ["Caption / keycap", "11 / 14", "ds-type-caption"],
 ] as const;
 
 const spacingRoles = [
@@ -123,15 +156,18 @@ function ThemeChoice({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
       aria-label={label}
       aria-pressed={active}
+      variant="ghost"
+      size="icon-sm"
+      focusStyle="inset"
       className="ds-theme-choice"
       onClick={onClick}
       type="button"
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -151,6 +187,7 @@ export function DesignSystemPreview() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [boldText, setBoldText] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState("codex");
+  const [selectedChoice, setSelectedChoice] = useState("automatic");
   const [selectedBusinessView, setSelectedBusinessView] = useState("all");
   const [memoryCapture, setMemoryCapture] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -240,8 +277,8 @@ export function DesignSystemPreview() {
       <main className="ds-preview-main">
         <header className="ds-preview-toolbar">
           <div>
-            <span className="ds-toolbar-label">Compact desktop · 4px grid</span>
             <strong>Foundation preview</strong>
+            <span className="ds-toolbar-label">Codex desktop density · 4px grid</span>
           </div>
           <div className="ds-toolbar-actions">
             <div aria-label="Preview theme" className="ds-theme-switcher" role="group">
@@ -276,13 +313,12 @@ export function DesignSystemPreview() {
               <span className="ds-eyebrow">C2 DESIGN SYSTEM 0.9</span>
               <h1>Quiet structure.<br />Precise density.</h1>
               <p>
-                A compact desktop system that strengthens C2 without changing its character.
-                Solid neutral planes, fixed blue action, borderless elevation, and platform-native
-                typography.
+                A calm desktop system with the same readable density as Codex. Quiet neutral
+                planes, fixed blue action, one managed raised material, and platform-native typography.
               </p>
             </div>
             <div className="ds-principle-stack" aria-label="Core principles">
-              <div><span>01</span><strong>One density</strong><small>Compact desktop only</small></div>
+              <div><span>01</span><strong>One density</strong><small>Codex desktop rhythm</small></div>
               <div><span>02</span><strong>One grid</strong><small>4px with a 2px optical step</small></div>
               <div><span>03</span><strong>One language</strong><small>Semantic tokens, no visual overrides</small></div>
             </div>
@@ -305,20 +341,20 @@ export function DesignSystemPreview() {
             </div>
           </section>
 
-          <section className="ds-preview-section">
+          <section className="ds-preview-section" id="typography">
             <SectionHeading eyebrow="02 · Typography" title="Platform system faces, Mac rhythm" />
             <Card className="ds-type-specimen">
               {typeRoles.map(([role, metric, className]) => (
                 <div className="ds-type-row" key={role}>
                   <span className="ds-type-meta"><strong>{role}</strong><code>{metric}</code></span>
-                  <span className={className}>C2 stays compact and legible.</span>
+                  <span className={className}>C2 stays calm, readable, and coherent.</span>
                 </div>
               ))}
             </Card>
             <div className="ds-inline-facts">
               <span><strong>macOS</strong> SF Pro · SF Mono</span>
               <span><strong>Windows</strong> Segoe UI · Cascadia / Consolas</span>
-              <span><strong>Content</strong> 13 / 20 · code 12 / 18</span>
+              <span><strong>Content</strong> 14 / 23 · code 12 / 18</span>
             </div>
           </section>
 
@@ -353,13 +389,13 @@ export function DesignSystemPreview() {
           </section>
 
           <section className="ds-preview-section" id="surfaces">
-            <SectionHeading eyebrow="05 · Elevation" title="Shadow communicates real layers" />
+            <SectionHeading eyebrow="05 · Elevation" title="Transient layers use one material" />
             <div className="ds-elevation-grid">
-              <div className="ds-elevation-sample ds-elevation-surface"><strong>Surface</strong><span>cards · inputs · persistent panels</span></div>
-              <div className="ds-elevation-sample ds-elevation-raised"><strong>Raised</strong><span>menus · popovers · tooltips</span></div>
-              <div className="ds-elevation-sample ds-elevation-modal"><strong>Modal</strong><span>dialogs · blocking overlays</span></div>
+              <div className="ds-elevation-sample ds-elevation-surface"><strong>Surface</strong><span>flat · cards · inputs · panels</span></div>
+              <div className="ds-elevation-sample ds-elevation-raised raised-material"><strong>Raised</strong><span>frosted · menus · popovers · selects</span></div>
+              <div className="ds-elevation-sample ds-elevation-modal"><strong>Modal</strong><span>restrained · dialogs · blocking overlays</span></div>
             </div>
-            <p className="ds-rule-note">No hover lift, scale, shadow bloom, white hairline, or decorative border.</p>
+            <p className="ds-rule-note">Persistent planes stay flat. Menu-like layers share one subtle translucent material.</p>
           </section>
 
           <section className="ds-preview-section" id="components">
@@ -374,6 +410,9 @@ export function DesignSystemPreview() {
                   <Button variant="destructive" type="button">Delete</Button>
                   <Button variant="secondary" disabled type="button">Disabled</Button>
                   <Button disabled><Spinner data-icon="inline-start" />Saving</Button>
+                  <TooltipButton label="Refresh" variant="ghost" size="icon-sm">
+                    <RefreshCw />
+                  </TooltipButton>
                 </div>
                 <p>One primary action per area. Outline is not a variant.</p>
               </Card>
@@ -426,6 +465,27 @@ export function DesignSystemPreview() {
                   <Checkbox defaultChecked id="preview-keep-panel" />
                   <FieldLabel htmlFor="preview-keep-panel">Keep the panel visible</FieldLabel>
                 </Field>
+                <RadioGroup
+                  aria-label="Run mode"
+                  value={selectedChoice}
+                  onValueChange={setSelectedChoice}
+                  className="gap-control-group"
+                >
+                  <ChoiceRow
+                    kind="radio"
+                    value="automatic"
+                    label="Automatic"
+                    description="Choose the right mode for this task."
+                    selected={selectedChoice === "automatic"}
+                  />
+                  <ChoiceRow
+                    kind="radio"
+                    value="manual"
+                    label="Manual"
+                    description="Keep the current mode until changed."
+                    selected={selectedChoice === "manual"}
+                  />
+                </RadioGroup>
                 <div className="ds-status-row"><ActivityOrb state="searching" visualSize={14} aria-hidden="true" /> Refreshing provider quota</div>
                 <div className="ds-status-row"><ActivityOrb state="working" visualSize={14} aria-hidden="true" /> Agent working</div>
                 <div className="ds-status-row"><ActivityOrb state="listening" visualSize={14} aria-hidden="true" /> Listening to voice input</div>
@@ -558,6 +618,36 @@ export function DesignSystemPreview() {
                     </TooltipTrigger>
                     <TooltipContent>Available after the current limit resets</TooltipContent>
                   </Tooltip>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<Button variant="secondary" type="button" />}>
+                      Project actions
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem>
+                          <DropdownMenuItemText>
+                            New task
+                            <DropdownMenuItemDescription>Start in the current project</DropdownMenuItemDescription>
+                          </DropdownMenuItemText>
+                          <DropdownMenuShortcut>⌘N</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>Rename project</DropdownMenuItem>
+                        <DropdownMenuItem variant="destructive">Remove project</DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <ContextMenu>
+                    <ContextMenuTrigger render={<Button variant="secondary" type="button" />}>
+                      Context actions
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuGroup>
+                        <ContextMenuItem>Open in new task<ContextMenuShortcut>↵</ContextMenuShortcut></ContextMenuItem>
+                        <ContextMenuItem>Copy path<ContextMenuShortcut>⌘C</ContextMenuShortcut></ContextMenuItem>
+                        <ContextMenuItem variant="destructive">Remove</ContextMenuItem>
+                      </ContextMenuGroup>
+                    </ContextMenuContent>
+                  </ContextMenu>
                   <Button
                     onClick={() => {
                       const previousTheme = themeMode;
@@ -573,6 +663,23 @@ export function DesignSystemPreview() {
                     Use dark theme
                   </Button>
                   <Button onClick={() => setDialogOpen(true)} type="button">Open quota details</Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger render={<Button variant="destructive" type="button" />}>
+                      Remove project
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Remove this project?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          The project is removed from C2. Files on disk are not deleted.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive">Remove project</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
                 <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                   <DialogContent>
@@ -614,7 +721,7 @@ export function DesignSystemPreview() {
               <Card className="ds-access-list">
                 <div><Check className="ds-icon-list" /><span><strong>Reduced motion</strong><small>All four semantic durations collapse.</small></span></div>
                 <div><Check className="ds-icon-list" /><span><strong>Increased contrast</strong><small>Muted text and control fills strengthen.</small></span></div>
-                <div><Check className="ds-icon-list" /><span><strong>Reduced transparency</strong><small>Sidebar falls back to a solid plane.</small></span></div>
+                <div><Check className="ds-icon-list" /><span><strong>Reduced transparency</strong><small>Sidebar and raised material fall back to solid planes.</small></span></div>
                 <Field orientation="horizontal">
                   <Checkbox
                     checked={boldText}
@@ -628,7 +735,7 @@ export function DesignSystemPreview() {
           </section>
 
           <footer className="ds-preview-footer">
-            <span>800–999 compact · 1000–1399 standard · 1400+ wide</span>
+            <span>800–999 narrow · 1000–1399 standard · 1400+ wide</span>
             <span>Local container queries · no mobile layout</span>
           </footer>
         </div>

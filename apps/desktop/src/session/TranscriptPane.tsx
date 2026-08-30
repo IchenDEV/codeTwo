@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { ArrowDown, Loader2 } from "@/components/ui/icons";
+import { ArrowDown } from "@/components/ui/icons";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 
 import { TurnCard } from "./TurnCard";
@@ -8,6 +8,7 @@ import { SelectionActions } from "./SelectionActions";
 import type { Turn } from "./turns";
 import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { useTranscriptScroll } from "./useTranscriptScroll";
@@ -85,7 +86,7 @@ export function TranscriptPane({
           {loading ? (
             <p
               role="status"
-              className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground"
+              className="flex items-center justify-center gap-2 py-12 text-body text-muted-foreground"
             >
               <ActivityOrb state="connecting" aria-hidden="true" />
               {t("session.loading")}
@@ -102,7 +103,7 @@ export function TranscriptPane({
                     onClick={() => onLoadEarlier(scroll)}
                   >
                     {loadingEarlier ? (
-                      <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden />
+                      <Spinner data-icon="inline-start" />
                     ) : null}
                     {loadingEarlier
                       ? t("transcript.loadingEarlier")

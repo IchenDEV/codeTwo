@@ -48,6 +48,8 @@ import {
 } from "./schedule";
 import { Button } from "@/components/ui/button";
 import { SearchField } from "@/components/business/search-field";
+import { DetailMetric } from "@/components/business/detail-metric";
+import { MasterDetailRow } from "@/components/business/master-detail-row";
 import { StatusBadge } from "@/components/business/status-badge";
 import { ViewSwitcher } from "@/components/business/view-switcher";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,7 +59,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
-import { LiquidSelectionGroup } from "@/components/ui/tabs";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import "./automations.css";
@@ -167,16 +170,12 @@ function AutomationRow({
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-current={selected ? "true" : undefined}
-      onClick={onSelect}
-      className={cn(
-        "group grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-x-2 rounded-control px-3 py-module-inset text-left transition-colors hover:bg-accent/55 focus-visible:focus-ring",
-        selected && "bg-accent text-foreground",
-      )}
-    >
-      <span className="relative flex items-center justify-center text-muted-foreground">
+    <MasterDetailRow
+      label={automation.name}
+      selected={selected}
+      onSelect={onSelect}
+      className="px-3"
+      leading={<span className="relative flex size-6 items-center justify-center text-muted-foreground">
         <CalendarClock className="size-4" />
         <span
           className={cn(
@@ -184,25 +183,15 @@ function AutomationRow({
             automation.enabled ? "bg-success" : "bg-muted-foreground",
           )}
         />
-      </span>
-      <span className="min-w-0 truncate text-ui font-medium">{automation.name}</span>
-      <StatusBadge tone={automation.enabled ? "success" : "neutral"}>
+      </span>}
+      meta={<StatusBadge tone={automation.enabled ? "success" : "neutral"}>
         {status}
-      </StatusBadge>
-      <span className="col-start-2 col-end-4 mt-1 flex min-w-0 items-center gap-2 text-fine text-muted-foreground">
+      </StatusBadge>}
+      description={<span className="flex min-w-0 items-center gap-2">
         <span className="min-w-0 flex-1 truncate">{schedule}</span>
         <span className="truncate">{projectName}</span>
-      </span>
-    </button>
-  );
-}
-
-function DetailMetric({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-start gap-3 text-ui">
-      <span className="flex items-center gap-2 text-muted-foreground">{icon}{label}</span>
-      <span className="min-w-0 text-foreground/90">{children}</span>
-    </div>
+      </span>}
+    />
   );
 }
 
@@ -450,19 +439,23 @@ export function AutomationsPage({
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-3 pb-4" aria-live="polite">
             {loading && automations.length === 0 ? (
-              <div role="status" className="flex items-center justify-center gap-2 py-section text-ui text-muted-foreground"><Spinner />{t("automations.loading")}</div>
+              <div role="status" className="flex items-center justify-center gap-2 py-section text-body text-muted-foreground"><Spinner />{t("automations.loading")}</div>
             ) : automations.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-4 py-section text-center">
-                <CalendarClock className="size-4 text-muted-foreground" />
-                <p className="text-ui font-medium text-foreground">{t("automations.empty")}</p>
-                {!hasProjects ? <p className="text-hint text-muted-foreground">{t("automations.projectRequired")}</p> : null}
-                <Button variant="secondary" size="compact" onClick={primaryAction}><Plus className="size-3.5" />{primaryActionLabel}</Button>
-              </div>
+              <Empty className="py-section">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon"><CalendarClock /></EmptyMedia>
+                  <EmptyTitle>{t("automations.empty")}</EmptyTitle>
+                  {!hasProjects ? <EmptyDescription>{t("automations.projectRequired")}</EmptyDescription> : null}
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button variant="secondary" size="compact" onClick={primaryAction}><Plus className="size-3.5" />{primaryActionLabel}</Button>
+                </EmptyContent>
+              </Empty>
             ) : groups.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-ui text-muted-foreground"><Search className="size-4" /><p>{t("automations.noMatches")}</p></div>
+              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-body text-muted-foreground"><Search className="size-4" /><p>{t("automations.noMatches")}</p></div>
             ) : groups.map((group) => (
               <section key={group.id} className="pt-2">
-                <h2 className="px-3 pb-1 text-fine font-medium text-muted-foreground">{t(`automations.${group.id}`)}</h2>
+                <h2 className="px-3 pb-1 text-callout font-medium text-muted-foreground">{t(`automations.${group.id}`)}</h2>
                 <div className="flex flex-col gap-0.5">
                   {group.items.map((automation) => (
                     <AutomationRow
@@ -507,26 +500,25 @@ export function AutomationsPage({
             </Button>
           )}
           {draft ? (
-            <span className="text-ui font-medium">{draft.id ? t("automations.editTitle") : t("automations.createTitle")}</span>
+            <span className="text-body font-medium">{draft.id ? t("automations.editTitle") : t("automations.createTitle")}</span>
           ) : (
-            <LiquidSelectionGroup role="tablist" aria-label={t("automations.detailViews")} className="flex h-control items-center gap-1">
+            <Tabs
+              value={detailTab}
+              onValueChange={(value) => setDetailTab(value as typeof detailTab)}
+              className="gap-0"
+            >
+              <TabsList variant="toolbar" aria-label={t("automations.detailViews")}>
               {(["overview", "runs"] as const).map((value) => (
-                <button
+                <TabsTrigger
                   key={value}
-                  type="button"
-                  role="tab"
-                  aria-selected={detailTab === value}
+                  value={value}
                   disabled={!selected}
-                  onClick={() => setDetailTab(value)}
-                  className={cn(
-                    "h-control rounded-control px-module-inset text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:focus-ring-inset disabled:opacity-50",
-                    detailTab === value && "font-medium text-foreground hover:bg-transparent",
-                  )}
                 >
                   {t(`automations.detail.${value}`)}
-                </button>
+                </TabsTrigger>
               ))}
-            </LiquidSelectionGroup>
+              </TabsList>
+            </Tabs>
           )}
           <div className="electrobun-webkit-app-region-drag flex-1" />
           {selected && !draft ? (
@@ -555,7 +547,7 @@ export function AutomationsPage({
             />
           </ScrollArea>
         ) : !selected ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-ui text-muted-foreground">
+          <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-body text-muted-foreground">
             <div><CalendarClock className="mx-auto mb-3 size-4" /><p>{t("automations.select")}</p></div>
           </div>
         ) : (
@@ -565,7 +557,7 @@ export function AutomationsPage({
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <h1 className="text-page font-semibold text-foreground">{selected.name}</h1>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-ui text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-body text-muted-foreground">
                       <span className="flex items-center gap-1.5"><ProviderIcon provider={providerId(selected.provider)} className="size-4" />{providerLabel(selected.provider)}</span>
                       <span>·</span>
                       <span>{scheduleLabel(selected.cron)}</span>
@@ -579,38 +571,41 @@ export function AutomationsPage({
                 <div className="mt-8 grid gap-4">
                   <DetailMetric icon={<Folder className="size-3.5" />} label={t("automations.project")}><span title={selected.project_path}>{projectName(selected)}</span></DetailMetric>
                   <DetailMetric icon={<ProviderIcon provider={providerId(selected.provider)} className="size-3.5" />} label={t("automations.agent")}>{providerLabel(selected.provider)}</DetailMetric>
-                  <DetailMetric icon={<Clock3 className="size-3.5" />} label={t("automations.schedule")}><span>{scheduleLabel(selected.cron)}</span><span className="ml-2 text-fine text-muted-foreground">{selected.timezone}</span></DetailMetric>
+                  <DetailMetric icon={<Clock3 className="size-3.5" />} label={t("automations.schedule")}><span>{scheduleLabel(selected.cron)}</span><span className="ml-2 text-callout text-muted-foreground">{selected.timezone}</span></DetailMetric>
                   <DetailMetric icon={<GitBranch className="size-3.5" />} label={t("automations.workspace")}>{selected.use_worktree ? t("automations.isolated") : t("automations.local")}</DetailMetric>
                   <DetailMetric icon={<CalendarClock className="size-3.5" />} label={t("automations.status")}><StatusBadge tone={selected.enabled ? "success" : "neutral"}>{selected.enabled ? t("automations.active") : t("automations.paused")}</StatusBadge></DetailMetric>
                 </div>
 
                 <section className="mt-8">
                   <h2 className="mb-4 text-dialog font-semibold">{t("automations.instructions")}</h2>
-                  <p className="whitespace-pre-wrap text-ui leading-relaxed text-foreground/90">{selected.prompt}</p>
+                  <p className="whitespace-pre-wrap text-prose text-foreground/90">{selected.prompt}</p>
                 </section>
               </article>
             ) : (
               <div className="mx-auto w-full max-w-5xl px-6 pb-10 pt-5">
-                <div className="mb-4 flex items-center gap-2"><Clock3 className="size-4 text-muted-foreground" /><h1 className="text-section font-semibold">{t("automations.history")}</h1><span className="text-fine tabular-nums text-muted-foreground">{runs.length}</span></div>
+                <div className="mb-4 flex items-center gap-2"><Clock3 className="size-4 text-muted-foreground" /><h1 className="text-section font-semibold">{t("automations.history")}</h1><span className="text-callout tabular-nums text-muted-foreground">{runs.length}</span></div>
                 {runs.length === 0 ? (
-                  <p className="py-8 text-ui text-muted-foreground">{t("automations.noRuns")}</p>
+                  <p className="py-8 text-body text-muted-foreground">{t("automations.noRuns")}</p>
                 ) : (
                   <div className="flex flex-col gap-1">
                     {runs.map((run) => {
                       const Icon = runIcon(run.status);
                       const openable = run.session_id !== null;
                       return (
-                        <button
+                        <Button
                           key={run.id}
                           type="button"
+                          variant="ghost"
+                          size="row"
+                          focusStyle="inset"
                           disabled={!openable}
-                          className="grid min-h-(--ds-control-field) w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-control bg-fill-quiet px-3 py-2 text-left text-ui transition-colors enabled:hover:bg-accent/60 disabled:opacity-80"
+                          className="grid min-h-control-field w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 bg-fill-quiet px-3 py-2 disabled:opacity-80"
                           onClick={() => run.session_id && onOpenSession(run.session_id)}
                         >
                           {SPINNING_RUNS.has(run.status) ? <Spinner className="text-primary" /> : Icon ? <Icon className={cn("size-4", run.status === "needs_attention" && "text-warning", run.status === "succeeded" && "text-success", (run.status === "failed" || run.status === "interrupted") && "text-destructive")} /> : null}
-                          <span className="min-w-0"><span className="block font-medium">{t(`automations.status.${run.status}`)}</span><span className="block text-fine text-muted-foreground">{dateTime(run.started_at)}</span>{run.error ? <span className="mt-1 block text-hint text-destructive">{run.error}</span> : null}</span>
-                          {openable ? <span className="text-hint text-primary">{t("automations.openRun")}</span> : null}
-                        </button>
+                          <span className="min-w-0"><span className="block font-medium">{t(`automations.status.${run.status}`)}</span><span className="block text-callout text-muted-foreground">{dateTime(run.started_at)}</span>{run.error ? <span className="mt-1 block text-metadata text-destructive">{run.error}</span> : null}</span>
+                          {openable ? <span className="text-metadata text-primary">{t("automations.openRun")}</span> : null}
+                        </Button>
                       );
                     })}
                   </div>
@@ -665,7 +660,7 @@ function AutomationEditor({
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-page font-semibold">{draft.id ? draft.name : t("automations.createTitle")}</h1>
-          <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">{t("automations.formHint")}</p>
+          <p className="mt-2 max-w-2xl text-prose text-muted-foreground">{t("automations.formHint")}</p>
         </div>
         <Button variant="ghost" size="icon-sm" aria-label={t("automations.cancel")} onClick={onCancel}>
           <X />
@@ -759,7 +754,7 @@ function AutomationEditor({
               </Select>
             </div>
           )}
-          <p className="text-fine text-muted-foreground">{t("automations.timezone", { timezone: draft.timezone })}</p>
+          <p className="text-callout text-muted-foreground">{t("automations.timezone", { timezone: draft.timezone })}</p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
@@ -776,11 +771,11 @@ function AutomationEditor({
               </Select>
             </div>
             <div className="grid content-start gap-3 pt-6">
-              <Label className="items-start leading-relaxed">
+              <Label className="items-start">
                 <Checkbox checked={draft.useWorktree} onCheckedChange={(checked) => update("useWorktree", checked === true)} />
                 <span>
                   {t("automations.useWorktree")}
-                  <span className="mt-0.5 block text-fine font-normal text-muted-foreground">{t("automations.useWorktreeHint")}</span>
+                  <span className="mt-0.5 block text-callout font-normal text-muted-foreground">{t("automations.useWorktreeHint")}</span>
                 </span>
               </Label>
             </div>

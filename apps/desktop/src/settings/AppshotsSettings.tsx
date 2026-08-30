@@ -130,11 +130,11 @@ export function AppshotsSettingsPage({
         </SettingRow>
       </div>
 
-      {error && <p data-appshots-error className="pb-2 text-hint leading-relaxed text-destructive">{error}</p>}
+      {error && <p data-appshots-error className="pb-2 text-metadata text-destructive">{error}</p>}
       {!appshotSettings ? (
-        <p className="py-section text-ui text-muted-foreground">{t("settings.appshotsLoading")}</p>
+        <p className="py-section text-body text-muted-foreground">{t("settings.appshotsLoading")}</p>
       ) : !appshotSettings.available ? (
-        <p className="py-section text-ui text-muted-foreground">
+        <p className="py-section text-body text-muted-foreground">
           {appshotSettings.unavailable_reason ?? t("settings.appshotsUnavailable")}
         </p>
       ) : (
@@ -224,7 +224,7 @@ function PermissionRow({
   return (
     <Row compact label={label} hint={hint}>
       {allowed ? (
-        <span className="text-fine text-success">{t("settings.appshotsAllowed")}</span>
+        <span className="text-callout text-success">{t("settings.appshotsAllowed")}</span>
       ) : (
         <Button variant="outline" size="sm" onClick={onAllow}>{t("settings.appshotsAllow")}</Button>
       )}

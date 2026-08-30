@@ -144,7 +144,7 @@ export function ProviderSettingsPage({
     <Page title={t("settings.providers")} description={t("settings.providersHint")}>
       <div className="mb-2 flex items-center justify-end gap-2">
         {(operation?.action === "refresh" || message?.id === "*") && (
-          <span className="text-fine text-muted-foreground">
+          <span className="text-callout text-muted-foreground">
             {operation?.action === "refresh" ? t("settings.providerChecking") : message?.text}
           </span>
         )}
@@ -160,7 +160,7 @@ export function ProviderSettingsPage({
           {t("settings.providerRefresh")}
         </Button>
       </div>
-      {error?.id === "*" && <p className="mb-2 text-fine text-destructive">{error.text}</p>}
+      {error?.id === "*" && <p className="mb-2 text-callout text-destructive">{error.text}</p>}
       <div className="space-y-1">
         {providers.map((provider) => {
           const enabled = provider.enabled !== false;
@@ -192,10 +192,13 @@ export function ProviderSettingsPage({
               className="rounded-module bg-fill-quiet/40 px-3 transition-colors hover:bg-fill-quiet/70"
             >
               <div className="flex min-h-14 items-center gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="row"
+                  focusStyle="inset"
                   data-provider-disclosure={provider.id}
-                  className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left outline-none focus-visible:focus-ring"
+                  className="min-w-0 flex-1 gap-3 py-3"
                   aria-expanded={isExpanded}
                   aria-controls={`provider-details-${provider.id}`}
                   onClick={() => toggle(provider.id)}
@@ -213,15 +216,15 @@ export function ProviderSettingsPage({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-ui font-medium">{provider.display_name}</span>
+                      <span className="truncate text-body font-medium">{provider.display_name}</span>
                       {management.version && (
-                        <span className="shrink-0 font-mono text-cap text-muted-foreground">v{management.version}</span>
+                        <span className="shrink-0 font-mono text-metadata text-muted-foreground">v{management.version}</span>
                       )}
                     </span>
-                    <span className="mt-0.5 block truncate text-fine text-muted-foreground">{status}</span>
+                    <span className="mt-0.5 block truncate text-callout text-muted-foreground">{status}</span>
                   </span>
                   <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
-                </button>
+                </Button>
                 {!management.installed && management.install_supported && (
                   <Button
                     data-provider-action={`${provider.id}:install`}
@@ -261,13 +264,13 @@ export function ProviderSettingsPage({
                 />
               </div>
               {(message?.id === provider.id || error?.id === provider.id) && (
-                <p className={cn("ml-8 pb-2 text-fine", error?.id === provider.id ? "text-destructive" : "text-muted-foreground")}>
+                <p className={cn("ml-8 pb-2 text-callout", error?.id === provider.id ? "text-destructive" : "text-muted-foreground")}>
                   {error?.id === provider.id ? error.text : message?.text}
                 </p>
               )}
               {isExpanded && (
                 <div id={`provider-details-${provider.id}`} className="ml-8 pb-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-callout text-muted-foreground">
                     <span className="font-mono">{provider.id}</span>
                     <span>
                       {management.launch_mode === "installed"
@@ -285,15 +288,15 @@ export function ProviderSettingsPage({
                       className="flex items-start justify-between gap-6 py-module-inset"
                     >
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5 text-hint font-medium">
+                        <div className="flex flex-wrap items-center gap-1.5 text-metadata font-medium">
                           {CAPABILITY_LABELS[capability.id]}
                           {capability.experimental && <Badge variant="outline">Experimental</Badge>}
-                          {capability.version && <span className="font-mono text-cap text-muted-foreground">{capability.version}</span>}
+                          {capability.version && <span className="font-mono text-metadata text-muted-foreground">{capability.version}</span>}
                         </div>
-                        {capability.reason && <p className="mt-0.5 text-fine leading-relaxed text-muted-foreground">{capability.reason}</p>}
-                        {capability.fix && <p className="mt-0.5 text-fine leading-relaxed text-foreground/75">{capability.fix}</p>}
+                        {capability.reason && <p className="mt-0.5 text-callout text-muted-foreground">{capability.reason}</p>}
+                        {capability.fix && <p className="mt-0.5 text-callout text-foreground/75">{capability.fix}</p>}
                       </div>
-                      <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-fine capitalize text-muted-foreground">
+                      <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-callout capitalize text-muted-foreground">
                         <span className={cn("size-1.5 rounded-full", capability.state === "ready" && "bg-success", capability.state === "unverified" && "bg-warning")} />
                         {capability.state}
                       </span>

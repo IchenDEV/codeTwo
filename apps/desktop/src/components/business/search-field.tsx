@@ -1,13 +1,16 @@
-import { useId, useRef, type ChangeEventHandler } from "react"
+import { useId, useRef, type ChangeEventHandler, type ComponentProps } from "react"
 import { Search, X } from "@/components/ui/icons"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-interface SearchFieldBaseProps {
+import { cn } from "@/lib/utils"
+
+interface SearchFieldBaseProps
+  extends Omit<ComponentProps<typeof Input>, "type" | "value" | "onChange" | "size" | "className"> {
   label: string
   value: string
-  placeholder?: string
-  autoFocus?: boolean
+  className?: string
+  inputClassName?: string
   onChange: ChangeEventHandler<HTMLInputElement>
 }
 
@@ -22,9 +25,10 @@ function SearchField({
   clearLabel,
   onClear,
   value,
-  placeholder,
-  autoFocus,
+  className,
+  inputClassName,
   onChange,
+  ...inputProps
 }: SearchFieldProps) {
   const generatedId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -35,7 +39,7 @@ function SearchField({
     <div
       data-slot="search-field"
       data-custom-clear={onClear ? "true" : undefined}
-      className="relative"
+      className={cn("relative", className)}
     >
       <label className="sr-only" htmlFor={id}>
         {label}
@@ -49,11 +53,11 @@ function SearchField({
         id={id}
         type="search"
         size="compact"
+        aria-label={label}
         value={value}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
         onChange={onChange}
-        className={clearable ? "ps-page-section pe-page-section" : "ps-page-section"}
+        className={cn(clearable ? "ps-page-section pe-page-section" : "ps-page-section", inputClassName)}
+        {...inputProps}
       />
       {clearable ? (
         <Button

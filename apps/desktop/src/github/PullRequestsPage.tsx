@@ -29,6 +29,9 @@ import {
 } from "../bridge";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { DetailMetric } from "@/components/business/detail-metric";
+import { MasterDetailRow } from "@/components/business/master-detail-row";
 import { Spinner } from "@/components/ui/spinner";
 import {
   DropdownMenu,
@@ -39,7 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LiquidSelectionGroup } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
@@ -69,7 +72,7 @@ export interface PullRequestTaskLinkTarget {
 
 function avatar(login: string): ReactNode {
   return (
-    <span className="relative flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-fill-rest text-cap font-semibold uppercase text-muted-foreground">
+    <span className="relative flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-fill-rest text-metadata font-semibold uppercase text-muted-foreground">
       {login.slice(0, 1)}
       <img
         alt=""
@@ -146,15 +149,6 @@ function PullRequestBody({ body }: { body: string }) {
   return <div className="pull-request-body text-foreground/90">{blocks}</div>;
 }
 
-function DetailMetric({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-start gap-3 text-ui">
-      <span className="flex items-center gap-2 text-muted-foreground">{icon}{label}</span>
-      <span className="min-w-0 text-foreground/90">{children}</span>
-    </div>
-  );
-}
-
 function PullRequestRow({ item, selected, onSelect }: {
   item: GitHubPullRequestSummary;
   selected: boolean;
@@ -168,26 +162,21 @@ function PullRequestRow({ item, selected, onSelect }: {
         ? "bg-primary"
         : "bg-success";
   return (
-    <button
-      type="button"
-      aria-current={selected ? "true" : undefined}
-      onClick={onSelect}
-      className={cn(
-        "group grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-x-2 rounded-control px-3 py-2.5 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        selected && "bg-accent text-foreground",
-      )}
-    >
-      <span className="relative flex items-center justify-center text-muted-foreground">
+    <MasterDetailRow
+      label={item.title}
+      selected={selected}
+      onSelect={onSelect}
+      className="px-3"
+      leading={<span className="relative flex size-6 items-center justify-center text-muted-foreground">
         <GitPullRequest className="size-4" />
-        <span className={cn("absolute bottom-0 right-0 size-1.5 rounded-full ring-2 ring-sidebar", stateColor)} />
-      </span>
-      <span className="min-w-0 truncate text-ui font-medium">{item.title}</span>
-      <span className="text-fine tabular-nums text-muted-foreground">{shortPullRequestAge(item.updatedAt)}</span>
-      <span className="col-start-2 col-end-4 mt-1 flex min-w-0 items-center gap-2 text-fine text-muted-foreground">
+        <span className={cn("absolute bottom-0 right-0 size-1.5 rounded-full", stateColor)} />
+      </span>}
+      meta={<span className="text-callout tabular-nums text-muted-foreground">{shortPullRequestAge(item.updatedAt)}</span>}
+      description={<span className="flex min-w-0 items-center gap-2">
         <span className="truncate">{item.repository.nameWithOwner} #{item.number}</span>
         <span className="min-w-0 flex-1 truncate font-mono">{item.author.login}</span>
-      </span>
-    </button>
+      </span>}
+    />
   );
 }
 
@@ -318,35 +307,30 @@ export function PullRequestsPage({
           </Tooltip>
         </header>
         <div data-pull-requests-list-controls className="grid shrink-0 gap-2 px-4 pb-3">
-          <LiquidSelectionGroup
+          <Tabs
             data-pull-requests-views
-            role="tablist"
-            aria-label={t("pullRequests.views")}
-            className="ms-module-inset flex h-control min-w-0 max-w-full items-center gap-1"
+            value={view}
+            onValueChange={(value) => setView(value as PullRequestView)}
+            className="ms-module-inset min-w-0 gap-0"
           >
+            <TabsList variant="toolbar" aria-label={t("pullRequests.views")} className="min-w-0 overflow-x-auto">
             {(["all", "reviewing", "authored"] as const).map((id) => (
-              <button
+              <TabsTrigger
                 key={id}
-                type="button"
-                role="tab"
-                aria-selected={view === id}
-                onClick={() => setView(id)}
-                className={cn(
-                  "h-control rounded-control px-module-inset text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:focus-ring-inset",
-                  view === id && "font-medium text-foreground hover:bg-transparent",
-                )}
+                value={id}
               >
                 {t(`pullRequests.view.${id}`)}
-              </button>
+              </TabsTrigger>
             ))}
-          </LiquidSelectionGroup>
+            </TabsList>
+          </Tabs>
           <div data-pull-requests-search-row className="flex min-w-0 items-center gap-2">
             <div data-pull-requests-search className="ms-inline relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input size="compact" value={query} onChange={(event) => setQuery(event.currentTarget.value)} className="pl-8" placeholder={t("pullRequests.search")} aria-label={t("pullRequests.search")} />
             </div>
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("pullRequests.filterLabel")} title={readinessLabel}><SlidersHorizontal className="size-4" /></Button>} />
+              <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`${t("pullRequests.filterLabel")}: ${readinessLabel}`}><SlidersHorizontal className="size-4" /></Button>} />
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
                   {(["all", "ready", "draft"] as const).map((id) => (
@@ -363,14 +347,14 @@ export function PullRequestsPage({
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-3 pb-4">
             {loading && items.length === 0 ? (
-              <div role="status" className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground"><ActivityOrb state="searching" visualSize={14} />{t("pullRequests.loading")}</div>
+              <div role="status" className="flex items-center justify-center gap-2 py-12 text-body text-muted-foreground"><ActivityOrb state="searching" visualSize={14} />{t("pullRequests.loading")}</div>
             ) : error ? (
-              <div role="alert" className="mx-1 flex flex-col items-center gap-3 py-12 text-center text-ui text-muted-foreground"><CircleAlert className="size-4 text-destructive" /><p className="max-w-72 leading-relaxed">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload()}>{t("pullRequests.retry")}</Button></div>
+              <div role="alert" className="mx-1 flex flex-col items-center gap-3 py-12 text-center text-body text-muted-foreground"><CircleAlert className="size-4 text-destructive" /><p className="max-w-72">{error}</p><Button variant="secondary" size="compact" onClick={() => void reload()}>{t("pullRequests.retry")}</Button></div>
             ) : groups.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-section text-center"><GitPullRequest className="size-4 text-muted-foreground" /><p className="text-ui font-medium text-foreground">{query || readiness !== "all" ? t("pullRequests.noMatches") : t("pullRequests.empty")}</p></div>
+              <Empty className="py-section"><EmptyHeader><EmptyMedia variant="icon"><GitPullRequest /></EmptyMedia><EmptyTitle>{query || readiness !== "all" ? t("pullRequests.noMatches") : t("pullRequests.empty")}</EmptyTitle></EmptyHeader></Empty>
             ) : groups.map((group) => (
               <section key={group.id} className="pt-2">
-                <h2 className="px-3 pb-1 text-fine font-medium text-muted-foreground">{groupLabel(group.id)}</h2>
+                <h2 className="px-3 pb-1 text-callout font-medium text-muted-foreground">{groupLabel(group.id)}</h2>
                 <div className="flex flex-col gap-0.5">{group.items.map((item) => <PullRequestRow key={item.id} item={item} selected={item.id === selectedId} onSelect={() => { setSelectedId(item.id); setDetailTab("summary"); setCompactListVisible(false); }} />)}</div>
               </section>
             ))}
@@ -392,11 +376,13 @@ export function PullRequestsPage({
             </div>
           ) : null}
           {selectedId && <Button variant="ghost" size="icon-xs" className="pull-request-back" aria-label={t("pullRequests.backToList")} onClick={() => setCompactListVisible(true)}><ArrowLeft className="size-3.5" /></Button>}
-          <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.detailViews")} className="flex h-control items-center gap-1">
+          <Tabs value={detailTab} onValueChange={(value) => setDetailTab(value as typeof detailTab)} className="gap-0">
+            <TabsList variant="toolbar" aria-label={t("pullRequests.detailViews")}>
             {(["summary", "code"] as const).map((id) => (
-              <button key={id} type="button" role="tab" aria-selected={detailTab === id} disabled={!selected} onClick={() => setDetailTab(id)} className={cn("h-control rounded-control px-module-inset text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:focus-ring-inset disabled:opacity-50", detailTab === id && "font-medium text-foreground hover:bg-transparent")}>{t(`pullRequests.detail.${id}`)}</button>
+              <TabsTrigger key={id} value={id} disabled={!selected}>{t(`pullRequests.detail.${id}`)}</TabsTrigger>
             ))}
-          </LiquidSelectionGroup>
+            </TabsList>
+          </Tabs>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           {detail && <>
             <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.openGithub")} onClick={() => void openExternal(detail.url)}><ExternalLink className="size-3.5" /></Button>} /><TooltipContent>{t("pullRequests.openGithub")}</TooltipContent></Tooltip>
@@ -450,11 +436,11 @@ export function PullRequestsPage({
           </>}
         </header>
         {!selected ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center text-ui text-muted-foreground">{t("pullRequests.select")}</div>
+          <div className="flex min-h-0 flex-1 items-center justify-center text-body text-muted-foreground">{t("pullRequests.select")}</div>
         ) : detailState?.loading && !detail ? (
-          <div role="status" className="flex min-h-0 flex-1 items-center justify-center gap-2 text-ui text-muted-foreground"><ActivityOrb state="searching" visualSize={14} />{t("pullRequests.loadingDetail")}</div>
+          <div role="status" className="flex min-h-0 flex-1 items-center justify-center gap-2 text-body text-muted-foreground"><ActivityOrb state="searching" visualSize={14} />{t("pullRequests.loadingDetail")}</div>
         ) : detailState?.error ? (
-          <div role="alert" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center text-ui text-muted-foreground"><CircleAlert className="size-4 text-destructive" /><p>{detailState.error}</p><Button variant="secondary" size="compact" onClick={() => { const current = selected; setSelectedId(null); setTimeout(() => setSelectedId(current.id), 0); }}>{t("pullRequests.retry")}</Button></div>
+          <div role="alert" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center text-body text-muted-foreground"><CircleAlert className="size-4 text-destructive" /><p>{detailState.error}</p><Button variant="secondary" size="compact" onClick={() => { const current = selected; setSelectedId(null); setTimeout(() => setSelectedId(current.id), 0); }}>{t("pullRequests.retry")}</Button></div>
         ) : detail ? (
           <ScrollArea className="min-h-0 flex-1">
             {detailTab === "summary" ? (
@@ -462,7 +448,7 @@ export function PullRequestsPage({
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <h1 className="text-page font-semibold text-foreground">{detail.title}</h1>
-                    <div className="mt-2 flex items-center gap-2 text-ui text-muted-foreground">{avatar(detail.author.login)}<span>{detail.author.login}</span><span>·</span><span>{shortPullRequestAge(detail.createdAt)}</span><span>·</span><span>{detail.repository.nameWithOwner} #{detail.number}</span></div>
+                    <div className="mt-2 flex items-center gap-2 text-body text-muted-foreground">{avatar(detail.author.login)}<span>{detail.author.login}</span><span>·</span><span>{shortPullRequestAge(detail.createdAt)}</span><span>·</span><span>{detail.repository.nameWithOwner} #{detail.number}</span></div>
                   </div>
                   {detailState?.loading && <ActivityOrb state="searching" visualSize={14} />}
                 </div>
@@ -475,7 +461,7 @@ export function PullRequestsPage({
                 </div>
                 <section className="mt-8">
                   <h2 className="mb-5 flex items-center gap-1.5 text-dialog font-semibold"><span>{t("pullRequests.description")}</span><ChevronDown className="size-3.5 text-muted-foreground" /></h2>
-                  {detail.body.trim() ? <PullRequestBody body={detail.body} /> : <p className="text-ui text-muted-foreground">{t("pullRequests.noDescription")}</p>}
+                  {detail.body.trim() ? <PullRequestBody body={detail.body} /> : <p className="text-body text-muted-foreground">{t("pullRequests.noDescription")}</p>}
                 </section>
               </article>
             ) : (
@@ -483,7 +469,7 @@ export function PullRequestsPage({
                 <div className="mb-4 flex items-center gap-2"><Code2 className="size-4 text-muted-foreground" /><h1 className="text-section font-semibold">{t("pullRequests.changedFiles", { count: detail.changedFiles })}</h1></div>
                 <div className="flex flex-col gap-1">
                   {detail.files.map((file) => (
-                    <div key={file.path} className="grid min-h-(--ds-control-field) grid-cols-[1fr_auto_auto] items-center gap-3 rounded-control bg-fill-quiet px-3 py-2 text-ui">
+                    <div key={file.path} className="grid min-h-control-field grid-cols-[1fr_auto_auto] items-center gap-3 rounded-control bg-fill-quiet px-3 py-2 text-body">
                       <span className="flex min-w-0 items-center gap-2"><FileCode2 className="size-3.5 shrink-0 text-muted-foreground" /><span className="truncate font-mono text-callout">{file.path}</span></span>
                       <span className="text-success tabular-nums">+{file.additions}</span><span className="text-destructive tabular-nums">−{file.deletions}</span>
                     </div>

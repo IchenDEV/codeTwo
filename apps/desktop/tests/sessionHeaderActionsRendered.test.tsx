@@ -109,7 +109,9 @@ describe("SessionHeaderActions", () => {
     for (const action of Array.from(view.container.querySelectorAll("button"))) {
       expect(
         action.classList.contains("h-control") ||
+          action.classList.contains("h-control-mini") ||
           action.classList.contains("size-control") ||
+          action.classList.contains("size-control-mini") ||
           action.classList.contains("size-7"),
       ).toBe(true);
     }

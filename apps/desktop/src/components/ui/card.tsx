@@ -1,15 +1,33 @@
 import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+const cardVariants = cva("flex flex-col rounded-card text-card-foreground", {
+  variants: {
+    variant: {
+      surface: "bg-card shadow-surface",
+      flat: "bg-fill-quiet shadow-none",
+      raised: "bg-raised shadow-raised",
+    },
+    density: {
+      default: "gap-6 py-6",
+      compact: "gap-2 py-3",
+    },
+  },
+  defaultVariants: {
+    variant: "surface",
+    density: "default",
+  },
+})
+
+function Card({ className, variant, density, ...props }: React.ComponentProps<"div"> & VariantProps<typeof cardVariants>) {
   return (
     <div
       data-slot="card"
-      className={cn(
-        "flex flex-col gap-6 rounded-card bg-card py-6 text-card-foreground shadow-surface",
-        className
-      )}
+      data-variant={variant ?? "surface"}
+      data-density={density ?? "default"}
+      className={cn(cardVariants({ variant, density }), className)}
       {...props}
     />
   )
@@ -32,7 +50,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("leading-none font-semibold", className)}
+      className={cn("text-dialog font-semibold", className)}
       {...props}
     />
   )
@@ -42,7 +60,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-ui text-muted-foreground", className)}
+      className={cn("text-callout text-muted-foreground", className)}
       {...props}
     />
   )
@@ -89,4 +107,5 @@ export {
   CardAction,
   CardDescription,
   CardContent,
+  cardVariants,
 }

@@ -752,15 +752,17 @@ function TransientChatPanel({
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                 )}
               >
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="compact"
                   role="tab"
                   aria-selected={tab.localId === activeTab?.localId}
-                  className="min-w-0 flex-1 truncate px-2 text-ui"
+                  className="min-w-0 flex-1 truncate px-2 text-body"
                   onClick={() => setActiveTabId(tab.localId)}
                 >
                   {tab.title || t(labels.title)}
-                </button>
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"

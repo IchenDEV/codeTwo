@@ -9,11 +9,9 @@ import {
   Download,
   FolderDown,
   GitFork,
-  Loader2,
   MonitorCog,
   Package,
   RefreshCw,
-  Search,
   Server,
   Store,
   Webhook,
@@ -32,7 +30,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge, type StatusTone } from "@/components/business/status-badge";
+import { SearchField } from "@/components/business/search-field";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -46,7 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { LiquidSelectionGroup } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import { BundleAdministration } from "./BundleAdministration";
@@ -249,7 +250,7 @@ function CompactStatus({
   return (
     <span
       data-plugin-status={status}
-      className="flex shrink-0 items-center gap-1.5 text-fine text-muted-foreground"
+      className="flex shrink-0 items-center gap-1.5 text-callout text-muted-foreground"
     >
       <span
         className={cn("size-1.5 rounded-full", statusDotClass(status))}
@@ -445,25 +446,24 @@ function GithubInstaller({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <h2 className="text-title font-medium">{labels.installFromGithub}</h2>
+          <h2 className="text-dialog font-medium">{labels.installFromGithub}</h2>
           <p
             id="plugin-github-hint"
-            className="max-w-2xl text-fine leading-relaxed text-muted-foreground"
+            className="max-w-2xl text-callout text-muted-foreground"
           >
             {labels.githubHint}
           </p>
         </div>
-        <Button
+        <TooltipButton
+          label={labels.closeInstaller}
           type="button"
           size="icon-sm"
           variant="ghost"
-          title={labels.closeInstaller}
-          aria-label={labels.closeInstaller}
           disabled={busy}
           onClick={onClose}
         >
           <X />
-        </Button>
+        </TooltipButton>
       </div>
       <Field>
         <FieldLabel htmlFor="plugin-github-repository">
@@ -484,7 +484,7 @@ function GithubInstaller({
           />
           <Button type="submit" className="shrink-0" disabled={busy}>
             {busy ? (
-              <Loader2 data-icon="inline-start" className="animate-spin" />
+              <Spinner data-icon="inline-start" />
             ) : (
               <Download data-icon="inline-start" />
             )}
@@ -495,7 +495,7 @@ function GithubInstaller({
           <p
             id="plugin-github-error"
             role="alert"
-            className="flex items-start gap-2 text-ui text-destructive"
+            className="flex items-start gap-2 text-body text-destructive"
           >
             <CircleAlert
               className="mt-0.5 size-4 shrink-0"
@@ -536,7 +536,7 @@ function StateControl({
 
   if (scope.kind === "user" && !supportedScopes.includes("user")) {
     return (
-      <span className="text-fine text-muted-foreground">
+      <span className="text-callout text-muted-foreground">
         {labels.projectOnly}
       </span>
     );
@@ -545,7 +545,7 @@ function StateControl({
   if (scope.kind === "project") {
     if (!scopeSupportsProject(supportedScopes)) {
       return (
-        <span className="text-fine text-muted-foreground">
+        <span className="text-callout text-muted-foreground">
           {labels.userOnly}
         </span>
       );
@@ -616,7 +616,7 @@ function DetailList({ title, values }: { title: string; values?: string[] }) {
   if (!values?.length) return null;
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-hint font-medium text-muted-foreground">{title}</h3>
+      <h3 className="text-metadata font-medium text-muted-foreground">{title}</h3>
       <div className="flex flex-wrap gap-2">
         {values.map((value) => (
           <Badge key={value} variant="secondary">
@@ -645,7 +645,7 @@ function ScaffoldList({
 
   return (
     <section className="flex flex-col gap-2" aria-label={labels.applyScaffold}>
-      <h3 className="text-hint font-medium text-muted-foreground">
+      <h3 className="text-metadata font-medium text-muted-foreground">
         {labels.contribution("scaffolds", "Scaffolds")}
       </h3>
       <div className="divide-y rounded-module bg-fill-quiet px-3">
@@ -661,8 +661,8 @@ function ScaffoldList({
                 aria-hidden="true"
               />
               <div className="min-w-0 flex-1">
-                <p className="text-ui font-medium">{scaffold.name}</p>
-                <p className="text-fine text-muted-foreground">
+                <p className="text-body font-medium">{scaffold.name}</p>
+                <p className="text-callout text-muted-foreground">
                   {scaffold.description || labels.scaffoldFiles(scaffold.files)}
                 </p>
               </div>
@@ -674,7 +674,7 @@ function ScaffoldList({
                 onClick={() => void onApply(pluginId, scaffold.id)}
               >
                 {busyAction === key ? (
-                  <Loader2 data-icon="inline-start" className="animate-spin" />
+                  <Spinner data-icon="inline-start" />
                 ) : (
                   <FolderDown data-icon="inline-start" />
                 )}
@@ -732,7 +732,7 @@ function PluginList({
                   <CompactStatus status={plugin.state.status} labels={labels} />
                 )}
             </span>
-            <span className="truncate text-fine text-muted-foreground">
+            <span className="truncate text-callout text-muted-foreground">
                 {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
             </span>
           </span>
@@ -783,7 +783,7 @@ function ResourceList({
                 </span>
                 <CompactStatus status={resource.state.status} labels={labels} />
               </span>
-              <span className="truncate text-fine text-muted-foreground">
+              <span className="truncate text-callout text-muted-foreground">
                 {resource.pluginName}
               </span>
             </span>
@@ -829,7 +829,7 @@ function ResourceDetails({
               {labels.componentKind(resource.kind)}
             </Badge>
           </h1>
-          <p className="mt-2 max-w-3xl text-ui leading-relaxed text-muted-foreground">
+          <p className="mt-2 max-w-3xl text-prose text-muted-foreground">
             {resource.description || labels.noDescription}
           </p>
         </div>
@@ -864,12 +864,12 @@ function ResourceDetails({
       <div className="mt-8 flex flex-col gap-5">
         <StatusSummary state={resource.state} labels={labels} />
         {resource.state.error ? (
-          <p role="alert" className="flex items-start gap-2 text-ui text-destructive">
+          <p role="alert" className="flex items-start gap-2 text-body text-destructive">
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{resource.state.error}</span>
           </p>
         ) : null}
-        <dl className="grid grid-cols-1 gap-x-3 gap-y-2 text-ui sm:grid-cols-[8rem_minmax(0,1fr)]">
+        <dl className="grid grid-cols-1 gap-x-3 gap-y-2 text-body sm:grid-cols-[8rem_minmax(0,1fr)]">
           <dt className="text-muted-foreground">{labels.plugin}</dt>
           <dd className="min-w-0 break-words">{resource.pluginName}</dd>
           <dt className="text-muted-foreground">{labels.source}</dt>
@@ -877,11 +877,11 @@ function ResourceDetails({
             {sourceLabel(resource.source, labels, resource.sourceLabel)}
           </dd>
           <dt className="text-muted-foreground">{labels.identifier}</dt>
-          <dd className="min-w-0 break-all font-mono text-fine">{resource.id}</dd>
+          <dd className="min-w-0 break-all font-mono text-callout">{resource.id}</dd>
           {definition ? (
             <>
               <dt className="text-muted-foreground">{labels.definition}</dt>
-              <dd className="min-w-0 break-all font-mono text-fine">
+              <dd className="min-w-0 break-all font-mono text-callout">
                 {definition}
               </dd>
             </>
@@ -890,7 +890,7 @@ function ResourceDetails({
 
         {!individuallyManageable ? (
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-module bg-fill-quiet p-3">
-            <p className="max-w-2xl text-fine leading-relaxed text-muted-foreground">
+            <p className="max-w-2xl text-callout text-muted-foreground">
               {labels.managedByPlugin}
             </p>
             {canManagePlugin ? (
@@ -958,7 +958,7 @@ function PluginDetails({
             {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
           </Badge>
           </h1>
-          <p className="mt-2 max-w-3xl text-ui leading-relaxed text-muted-foreground">
+          <p className="mt-2 max-w-3xl text-prose text-muted-foreground">
             {plugin.description || labels.noDescription}
           </p>
         </div>
@@ -966,14 +966,14 @@ function PluginDetails({
           {trustRequired ? (
             <span
               data-plugin-trust-gate
-              className="text-fine text-muted-foreground"
+              className="text-callout text-muted-foreground"
             >
               {labels.trustBeforeEnabling}
             </span>
           ) : plugin.bundle &&
           !plugin.bundle.runtimeManaged &&
           !onSetBundleEnabled ? (
-            <span className="text-fine text-muted-foreground">
+            <span className="text-callout text-muted-foreground">
               {labels.bundleManagement}
             </span>
           ) : (
@@ -1013,7 +1013,7 @@ function PluginDetails({
         {plugin.state.error ? (
           <p
             role="alert"
-            className="flex items-start gap-2 text-ui text-destructive"
+            className="flex items-start gap-2 text-body text-destructive"
           >
             <CircleAlert
               className="mt-0.5 size-4 shrink-0"
@@ -1057,10 +1057,10 @@ function PluginDetails({
         <DetailList title={labels.services} values={plugin.services} />
         {plugin.state.activeResources?.length ? (
           <div className="flex flex-col gap-2">
-            <h3 className="text-hint font-medium text-muted-foreground">
+            <h3 className="text-metadata font-medium text-muted-foreground">
               {labels.activeResources}
             </h3>
-            <ul className="flex flex-col gap-1 text-ui">
+            <ul className="flex flex-col gap-1 text-body">
               {plugin.state.activeResources.map((resource) => (
                 <li key={resource.id}>
                   {resource.label}
@@ -1085,11 +1085,11 @@ function PluginDetails({
               <div className="flex flex-col gap-1">
                 <h3
                   id={`plugin-config-title-${plugin.id}`}
-                  className="text-title font-medium"
+                  className="text-dialog font-medium"
                 >
                   {labels.configuration}
                 </h3>
-                <p className="text-fine text-muted-foreground">
+                <p className="text-callout text-muted-foreground">
                   {labels.configurationHint}
                 </p>
               </div>
@@ -1107,7 +1107,7 @@ function PluginDetails({
         ) : null}
       </div>
       <Separator className="mt-8" />
-      <footer className="flex items-center justify-between gap-3 pt-4 text-fine text-muted-foreground">
+      <footer className="flex items-center justify-between gap-3 pt-4 text-callout text-muted-foreground">
         <span>
           {plugin.author ? `${plugin.author} · ` : ""}
           {plugin.category || plugin.id}
@@ -1142,16 +1142,16 @@ function MarketplaceSources({
       <Separator />
       {sources.map((source) => (
         <div key={source.id} className="rounded-control bg-fill-quiet px-3 py-2.5">
-          <h2 className="text-title font-medium">{source.name}</h2>
+          <h2 className="text-dialog font-medium">{source.name}</h2>
             {source.description ? (
-            <p className="mt-1 text-fine leading-relaxed text-muted-foreground">{source.description}</p>
+            <p className="mt-1 text-callout text-muted-foreground">{source.description}</p>
             ) : null}
           {source.diagnostics.length ? (
             <div className="mt-2 flex flex-col gap-1">
               {source.diagnostics.map((diagnostic) => (
                 <p
                   key={diagnostic}
-                  className="flex items-start gap-2 text-ui text-destructive"
+                  className="flex items-start gap-2 text-body text-destructive"
                 >
                   <CircleAlert
                     className="mt-0.5 size-4 shrink-0"
@@ -1182,28 +1182,31 @@ function MarketplaceList({
   return (
     <div className="flex flex-col gap-0.5" aria-label={labels.marketplace}>
       {items.map((item) => (
-        <button
+        <Button
           key={item.id}
           type="button"
+          variant="selectable"
+          size="row"
+          focusStyle="inset"
           data-selected={item.id === selectedId ? "true" : undefined}
           aria-pressed={item.id === selectedId}
           onClick={() => onSelect(item.id)}
           className={cn(
-            "group grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 rounded-control px-2.5 py-2 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            "group grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 px-module-inset py-2",
             item.id === selectedId && "bg-accent text-foreground",
           )}
         >
           <span className="row-span-2 flex size-8 items-center justify-center rounded-control bg-fill-quiet text-muted-foreground">
             <Store className="size-4" aria-hidden="true" />
           </span>
-          <span className="min-w-0 truncate text-ui font-medium">{item.name}</span>
-          <span className="text-fine text-muted-foreground">
+          <span className="min-w-0 truncate text-body font-medium">{item.name}</span>
+          <span className="text-callout text-muted-foreground">
             {item.installed ? labels.installed : item.version ? `v${item.version}` : ""}
           </span>
-          <span className="col-start-2 col-end-4 min-w-0 truncate text-fine text-muted-foreground">
+          <span className="col-start-2 col-end-4 min-w-0 truncate text-callout text-muted-foreground">
             {[item.kind, item.sourceLabel].filter(Boolean).join(" · ")}
           </span>
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -1236,7 +1239,7 @@ function MarketplaceDetails({
             {item.version ? <Badge variant="secondary">v{item.version}</Badge> : null}
             <Badge variant="secondary">{item.kind}</Badge>
           </h1>
-          <p className="mt-2 max-w-3xl text-ui leading-relaxed text-muted-foreground">
+          <p className="mt-2 max-w-3xl text-prose text-muted-foreground">
             {item.description || labels.noDescription}
           </p>
         </div>
@@ -1248,7 +1251,7 @@ function MarketplaceDetails({
           onClick={() => void onInstall({ itemId: item.id, scope })}
         >
           {busyId === item.id ? (
-            <Loader2 data-icon="inline-start" className="animate-spin" />
+            <Spinner data-icon="inline-start" />
           ) : (
             <Download data-icon="inline-start" />
           )}
@@ -1261,12 +1264,12 @@ function MarketplaceDetails({
       </div>
       <div className="mt-8 flex flex-col gap-5">
         {item.diagnostic ? (
-          <p role="status" className="flex items-start gap-2 text-ui text-destructive">
+          <p role="status" className="flex items-start gap-2 text-body text-destructive">
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{item.diagnostic}</span>
           </p>
         ) : null}
-        <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 text-ui">
+        <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 text-body">
           <span className="text-muted-foreground">{labels.source}</span>
           <span>{item.sourceLabel || item.id}</span>
           <span className="text-muted-foreground">{labels.scope}</span>
@@ -1311,10 +1314,10 @@ function ChangeConfirmation({
         </AlertDialogHeader>
         {plan?.affectedPlugins?.length ? (
           <div className="flex flex-col gap-2">
-            <h3 className="text-hint font-medium text-muted-foreground">
+            <h3 className="text-metadata font-medium text-muted-foreground">
               {labels.affectedPlugins}
             </h3>
-            <ul className="flex flex-col gap-1 text-ui">
+            <ul className="flex flex-col gap-1 text-body">
               {plan.affectedPlugins.map((plugin) => (
                 <li key={plugin.id}>
                   {plugin.name}
@@ -1336,10 +1339,10 @@ function ChangeConfirmation({
         ) : null}
         {plan?.activeResources?.length ? (
           <div className="flex flex-col gap-2">
-            <h3 className="text-hint font-medium text-muted-foreground">
+            <h3 className="text-metadata font-medium text-muted-foreground">
               {labels.activeResources}
             </h3>
-            <ul className="flex flex-col gap-1 text-ui">
+            <ul className="flex flex-col gap-1 text-body">
               {plan.activeResources.map((resource) => (
                 <li key={resource.id}>{resource.label}</li>
               ))}
@@ -1347,12 +1350,12 @@ function ChangeConfirmation({
           </div>
         ) : null}
         {plan?.warnings?.map((warning) => (
-          <p key={warning} className="text-ui text-destructive">
+          <p key={warning} className="text-body text-destructive">
             {warning}
           </p>
         ))}
         {error ? (
-          <p role="alert" className="text-ui text-destructive">
+          <p role="alert" className="text-body text-destructive">
             {error}
           </p>
         ) : null}
@@ -1368,7 +1371,7 @@ function ChangeConfirmation({
             onClick={() => onConfirm()}
           >
             {busy ? (
-              <Loader2 data-icon="inline-start" className="animate-spin" />
+              <Spinner data-icon="inline-start" />
             ) : null}
             {labels.confirm}
           </AlertDialogAction>
@@ -1706,34 +1709,27 @@ export function PluginManagerPage({
           <div className="electrobun-webkit-app-region-drag flex-1" />
         </header>
         <div data-plugin-manager-list-controls className="grid shrink-0 gap-2 px-4 pb-3">
-          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="plugin-manager-tabs ms-surface-inset flex h-control min-w-0 max-w-full items-center gap-1">
+          <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="ms-surface-inset min-w-0 gap-0">
+            <TabsList variant="toolbar" aria-label={labels.title} className="plugin-manager-tabs min-w-0 max-w-full overflow-x-auto">
             {(["plugins", "mcps", "skills", "hooks", "marketplace"] as const).map((id) => (
-              <button
+              <TabsTrigger
                 key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                onClick={() => setTab(id)}
-                className={cn(
-                  "plugin-manager-tab h-control shrink-0 rounded-control px-1 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:focus-ring-inset",
-                  tab === id && "font-medium text-foreground hover:bg-transparent",
-                )}
+                value={id}
+                className="plugin-manager-tab shrink-0 px-1"
               >
                 <span data-plugin-manager-tab-label>{labels[id]}</span>{" "}
-                <span className="plugin-manager-tab-count text-fine tabular-nums">{tabCounts[id]}</span>
-              </button>
+                <span className="plugin-manager-tab-count text-callout tabular-nums">{tabCounts[id]}</span>
+              </TabsTrigger>
             ))}
-          </LiquidSelectionGroup>
-          <div data-plugin-manager-search-field className="ms-inline relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input
+            </TabsList>
+          </Tabs>
+          <div data-plugin-manager-search-field className="ms-inline min-w-0 flex-1">
+            <SearchField
+              className="min-w-0"
               data-plugin-manager-search
-              type="search"
-              size="compact"
-              className="w-full pl-8"
               value={query}
               placeholder={labels.searchPlaceholder(tab)}
-              aria-label={labels.searchPlaceholder(tab)}
+              label={labels.searchPlaceholder(tab)}
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
           </div>
@@ -1743,13 +1739,13 @@ export function PluginManagerPage({
             {tab === "plugins" ? (
               visiblePlugins.length ? (
                 <PluginList plugins={visiblePlugins} selectedId={selectedPlugin?.id ?? null} labels={labels} onSelect={setSelectedPluginId} />
-              ) : <p className="py-12 text-center text-ui text-muted-foreground">{labels.noResults}</p>
+              ) : <p className="py-12 text-center text-body text-muted-foreground">{labels.noResults}</p>
             ) : tab === "marketplace" ? visibleMarketplace.length ? (
               <MarketplaceList items={visibleMarketplace} selectedId={selectedMarketplaceItem?.id ?? null} labels={labels} onSelect={setSelectedMarketplaceId} />
-            ) : <p className="py-12 text-center text-ui text-muted-foreground">{labels.noResults}</p>
+            ) : <p className="py-12 text-center text-body text-muted-foreground">{labels.noResults}</p>
             : isResourceTab(tab) && visibleResources.length ? (
               <ResourceList resources={visibleResources} tab={tab} selectedId={selectedResource?.id ?? null} labels={labels} onSelect={setSelectedResourceId} />
-            ) : <p className="py-12 text-center text-ui text-muted-foreground">{labels.noResults}</p>}
+            ) : <p className="py-12 text-center text-body text-muted-foreground">{labels.noResults}</p>}
           </div>
         </ScrollArea>
       </div>
@@ -1800,13 +1796,13 @@ export function PluginManagerPage({
             </Button>
           ) : null}
           {tab === "marketplace" && onRefreshMarketplace ? (
-            <Button type="button" variant="ghost" size="icon-xs" title={labels.refresh} aria-label={labels.refresh} disabled={refreshing} onClick={() => void refresh()}>
-              <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
-            </Button>
+            <TooltipButton label={labels.refresh} variant="ghost" size="icon-xs" disabled={refreshing} onClick={() => void refresh()}>
+              {refreshing ? <Spinner className="size-3.5" /> : <RefreshCw className="size-3.5" />}
+            </TooltipButton>
           ) : null}
           {tab === "marketplace" && onOpenMarketplace ? (
             <Button type="button" variant="secondary" size="compact" disabled={busyTarget === "marketplace-open"} onClick={() => void openMarketplace()}>
-              {busyTarget === "marketplace-open" ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <FolderDown data-icon="inline-start" />}
+              {busyTarget === "marketplace-open" ? <Spinner data-icon="inline-start" /> : <FolderDown data-icon="inline-start" />}
               {labels.openMarketplace}
             </Button>
           ) : null}
@@ -1844,7 +1840,7 @@ export function PluginManagerPage({
               <div
                 role="status"
                 data-plugin-recovery={recovery.kind}
-                className="mb-4 flex items-start gap-2 rounded-control border bg-warning/10 px-3 py-2 text-ui"
+                className="mb-4 flex items-start gap-2 rounded-control border bg-warning/10 px-3 py-2 text-body"
               >
                 <CircleAlert
                   className="mt-0.5 size-4 shrink-0 text-warning"
@@ -1855,7 +1851,7 @@ export function PluginManagerPage({
                     ? labels.safeMode
                     : labels.restoredLastGood}
                   {recovery.error ? (
-                    <span className="mt-0.5 block text-fine text-muted-foreground">
+                    <span className="mt-0.5 block text-callout text-muted-foreground">
                       {recovery.error}
                     </span>
                   ) : null}
@@ -1865,7 +1861,7 @@ export function PluginManagerPage({
             {actionError && !pendingPlan ? (
               <p
                 role="alert"
-                className="mb-4 flex items-start gap-2 text-ui text-destructive"
+                className="mb-4 flex items-start gap-2 text-body text-destructive"
               >
                 <CircleAlert
                   className="mt-0.5 size-4 shrink-0"
@@ -1878,7 +1874,7 @@ export function PluginManagerPage({
               <p
                 role="status"
                 aria-live="polite"
-                className="mb-4 flex items-start gap-2 text-ui text-success"
+                className="mb-4 flex items-start gap-2 text-body text-success"
               >
                 <Check className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                 <span>{actionNotice}</span>
@@ -1973,7 +1969,7 @@ export function PluginManagerPage({
             ((tab === "plugins" && !selectedPlugin) ||
               (tab === "marketplace" && !selectedMarketplaceItem) ||
               (isResourceTab(tab) && !selectedResource)) ? (
-              <div className="flex min-h-96 items-center justify-center px-6 text-ui text-muted-foreground">
+              <div className="flex min-h-96 items-center justify-center px-6 text-body text-muted-foreground">
                 {labels.noResults}
               </div>
             ) : null}

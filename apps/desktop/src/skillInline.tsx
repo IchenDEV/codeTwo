@@ -23,6 +23,8 @@ import { rehydrateEnvelope } from "./canvas/serialize";
 import { workspaceReferenceBlock } from "./editor/workspaceReference";
 import { SlotCardBlock, slotCardToDocBlocks, type SlotCardProps } from "./editor/slotCard";
 import { IssueRefBlock, issueRefToDocBlock, type IssueRefProps } from "./editor/issueBlock";
+import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 
 /** Props kept on the interactive BlockNote node. Scene JSON is intentionally not emitted by
  * `docToBlocks`; it is only an in-memory editing cache so an inline Canvas can reconnect without
@@ -420,13 +422,16 @@ export const BrowserNoteBlock = createReactBlockSpec(
             <span className="bn-annotation-dot" />
             <span className="bn-annotation-host">{host}</span>
             {selector && <code className="bn-annotation-sel">{selector}</code>}
-            <button
+            <TooltipButton
+              label="Remove"
+              type="button"
+              variant="ghost"
+              size="icon-xs"
               className="bn-annotation-x"
-              title="Remove"
               onClick={() => props.editor.removeBlocks([props.block])}
             >
               ×
-            </button>
+            </TooltipButton>
           </div>
           {selectedText && <div className="bn-annotation-quote">“{selectedText}”</div>}
           {note && <div className="bn-annotation-note">{note}</div>}
@@ -696,25 +701,26 @@ export function CanvasBlockView({
         name={block.props.title || "Canvas"}
       />
       {frozenRevision !== null ? (
-        <p className="mt-1 px-1 text-fine text-muted-foreground" role="status">
+        <p className="mt-1 px-1 text-callout text-muted-foreground" role="status">
           Frozen revision {frozenRevision}
         </p>
       ) : null}
       {error ? (
-        <div className="mt-1 flex flex-wrap items-center gap-2 px-1 text-fine text-warning" role="alert">
+        <div className="mt-1 flex flex-wrap items-center gap-2 px-1 text-callout text-warning" role="alert">
           <span>{error}</span>
           {pixelPolicy === "required" && errorKind === "provider_image" ? (
             <>
-              <button type="button" className="canvas-ui-control bg-fill-hover px-2 py-1 text-ui text-foreground" onClick={useStructureOnly}>
+              <Button type="button" variant="secondary" size="compact" onClick={useStructureOnly}>
                 Send structure only
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="canvas-ui-control bg-fill-hover px-2 py-1 text-ui text-foreground"
+                variant="secondary"
+                size="compact"
                 onClick={() => globalThis.window?.dispatchEvent(new Event("codetwo-open-provider-picker"))}
               >
                 Switch provider
-              </button>
+              </Button>
             </>
           ) : null}
         </div>

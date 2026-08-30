@@ -162,7 +162,7 @@ export function WorkspaceSearchModal({
         </DialogHeader>
 
         <div className="space-y-2">
-          <label htmlFor="workspace-content-query" className="text-ui font-medium">
+          <label htmlFor="workspace-content-query" className="text-body font-medium">
             Search text
           </label>
           <Input
@@ -211,7 +211,7 @@ export function WorkspaceSearchModal({
 
         <div
           id="workspace-search-status"
-          className="min-h-control-mini text-hint text-muted-foreground"
+          className="min-h-control-mini text-metadata text-muted-foreground"
           role="status"
           aria-live="polite"
         >
@@ -226,7 +226,7 @@ export function WorkspaceSearchModal({
         </div>
 
         {error && (
-          <p role="alert" className="text-hint text-destructive">
+          <p role="alert" className="text-metadata text-destructive">
             Search failed: {error}
           </p>
         )}
@@ -249,13 +249,13 @@ export function WorkspaceSearchModal({
                   onKeyDown={(event) => onResultKeyDown(event, index)}
                   onClick={() => openResult(match)}
                 >
-                  <span className="flex min-w-0 items-baseline gap-2 text-hint">
+                  <span className="flex min-w-0 items-baseline gap-2 text-metadata">
                     <span className="truncate font-mono font-medium text-foreground">{match.path}</span>
                     <span className="shrink-0 text-muted-foreground">
                       {match.line}:{match.column}
                     </span>
                   </span>
-                  <span className="mt-0.5 block truncate font-mono text-hint text-muted-foreground">
+                  <span className="mt-0.5 block truncate font-mono text-metadata text-muted-foreground">
                     {match.preview || "Blank matching line"}
                   </span>
                 </Button>
@@ -263,7 +263,7 @@ export function WorkspaceSearchModal({
             ))}
           </ul>
           {hasQuery && !visibleLoading && !error && result && matches.length === 0 && (
-            <p className="py-6 text-center text-ui text-muted-foreground">No matching content.</p>
+            <p className="py-6 text-center text-body text-muted-foreground">No matching content.</p>
           )}
         </ScrollArea>
 

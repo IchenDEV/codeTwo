@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "@/components/ui/icons";
+import { Spinner } from "@/components/ui/spinner";
 
 import { readBinary } from "../bridge";
 import { useT } from "../i18n";
@@ -54,12 +54,12 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
     };
   }, [cwd, path]);
 
-  if (error) return <p className="px-6 py-4 text-ui text-destructive">{error}</p>;
+  if (error) return <p className="px-6 py-4 text-body text-destructive">{error}</p>;
 
   if (!url) {
     return (
-      <p className="flex items-center gap-2 px-6 py-4 text-ui text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" />
+      <p className="flex items-center gap-2 px-6 py-4 text-body text-muted-foreground">
+        <Spinner className="size-3.5" />
         {t("files.loading")}
       </p>
     );
@@ -78,7 +78,7 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
           className="image-checker max-h-full max-w-full rounded-control object-contain shadow-sm"
         />
       </div>
-      <div className="flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5 text-fine text-muted-foreground">
+      <div className="flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5 text-callout text-muted-foreground">
         {dims && (
           <span>
             {dims.w} × {dims.h}

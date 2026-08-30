@@ -395,7 +395,7 @@ describe("PluginManagerPage", () => {
       '[data-plugin-ui-slot="rail.features"] button',
     );
     expect(railAction?.className).toContain("h-control");
-    expect(railAction?.className).toContain("text-ui");
+    expect(railAction?.className).toContain("text-body");
     expect(railAction?.className).toContain("text-foreground/75");
 
     const toolbar = view.container.querySelector('[data-plugin-ui-slot="composer.toolbar"]');
@@ -425,9 +425,9 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector(".plugin-manager-detail-header")?.className)
       .toContain("h-layout-titlebar");
     expect(view.container.querySelector(".plugin-manager-tabs")).not.toBeNull();
-    expect(view.container.querySelector(".plugin-manager-tabs")?.className)
+    expect(view.container.querySelector(".plugin-manager-tabs")?.closest('[data-slot="tabs"]')?.className)
       .toContain("ms-surface-inset");
-    expect(view.container.querySelector(".plugin-manager-tabs")?.className).not.toContain("overflow-x-auto");
+    expect(view.container.querySelector(".plugin-manager-tabs")?.className).toContain("overflow-x-auto");
     expect(view.container.querySelectorAll(".plugin-manager-tab-count")).toHaveLength(5);
     expect(view.container.querySelectorAll("[data-plugin-manager-tab-label]")).toHaveLength(5);
     const listControls = view.container.querySelector("[data-plugin-manager-list-controls]");

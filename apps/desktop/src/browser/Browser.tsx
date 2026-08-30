@@ -45,7 +45,10 @@ import {
   type Annotation,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
+import { CompositeActionRow } from "@/components/business/composite-action-row";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
 import { cn } from "@/lib/utils";
@@ -146,14 +149,18 @@ function MenuItem({
   checked?: boolean;
 }) {
   return (
-    <button
+    <Button
+      type="button"
+      variant="ghost"
+      size="row"
+      focusStyle="inset"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-control px-2.5 py-1.5 text-left text-hint transition-colors hover:bg-accent/50"
+      className="w-full gap-module-inset px-module-inset py-1.5 text-metadata"
     >
       <Icon className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="flex-1">{label}</span>
       {checked && <Check className="size-3.5 shrink-0 text-primary" />}
-    </button>
+    </Button>
   );
 }
 
@@ -472,96 +479,101 @@ export function BrowserPanel({
         {tabs.map((x) => {
           const name = x.url === BLANK ? null : x.title || hostOf(x.url);
           return (
-            <div
+            <CompositeActionRow
               key={x.id}
-              onClick={() => selectTab(x)}
+              accessibilityLabel={name ?? t("browser.newTab")}
+              current={x.id === activeId}
+              selected={x.id === activeId}
+              onSelect={() => selectTab(x)}
               className={cn(
-                "group flex min-w-0 max-w-44 cursor-pointer items-center gap-1.5 rounded-control px-2 py-1 text-fine transition-colors",
+                "min-w-0 max-w-44 gap-1.5 rounded-control px-2 py-1 text-callout transition-colors focus-within:bg-accent",
                 x.id === activeId
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground hover:bg-accent/50",
               )}
+              contentClassName="flex items-center gap-1.5"
+              actions={tabs.length > 1 ? (
+                <TooltipButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  label={t("browser.closeTab")}
+                  className="hidden shrink-0 group-hover:inline-flex group-focus-within:inline-flex"
+                  onClick={() => closeTab(x.id)}
+                >
+                  <X className="size-3" />
+                </TooltipButton>
+              ) : null}
             >
               <Globe className="size-3 shrink-0 opacity-60" />
               <span className="min-w-0 flex-1 truncate">{name ?? t("browser.newTab")}</span>
-              {tabs.length > 1 && (
-                <button
-                  title={t("browser.closeTab")}
-                  className="hidden shrink-0 rounded-control p-px hover:text-foreground group-hover:block"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(x.id);
-                  }}
-                >
-                  <X className="size-3" />
-                </button>
-              )}
-            </div>
+            </CompositeActionRow>
           );
         })}
-        <Button
+        <TooltipButton
           variant="ghost"
           size="icon"
           className="size-6 shrink-0 text-muted-foreground"
-          title={t("browser.newTab")}
+          label={t("browser.newTab")}
           onClick={() => openTab(BLANK)}
         >
           <Plus className="size-3.5" />
-        </Button>
+        </TooltipButton>
       </div>
 
       {/* ---- toolbar ---------------------------------------------------------------------- */}
       <div className="flex items-center gap-1 px-2 py-1.5">
         {/* Always enabled: the page owns its history and won't tell us how deep it is. */}
-        <Button
+        <TooltipButton
           variant="ghost"
           size="icon"
           className="size-7 text-muted-foreground disabled:opacity-30"
-          title={t("browser.back")}
+          label={t("browser.back")}
           disabled={blank}
           onClick={() => void browserHistory(activeLabel, -1)}
         >
           <ArrowLeft className="size-3.5" />
-        </Button>
-        <Button
+        </TooltipButton>
+        <TooltipButton
           variant="ghost"
           size="icon"
           className="size-7 text-muted-foreground disabled:opacity-30"
-          title={t("browser.forward")}
+          label={t("browser.forward")}
           disabled={blank}
           onClick={() => void browserHistory(activeLabel, 1)}
         >
           <ArrowRight className="size-3.5" />
-        </Button>
-        <Button
+        </TooltipButton>
+        <TooltipButton
           variant="ghost"
           size="icon"
           className="size-7 text-muted-foreground disabled:opacity-30"
-          title={t("browser.reload")}
+          label={t("browser.reload")}
           disabled={blank}
           onClick={() => void browserReload(activeLabel)}
         >
           <RotateCw className="size-3.5" />
-        </Button>
+        </TooltipButton>
 
-        <Button
+        <TooltipButton
           variant="ghost"
           size="icon"
           className={cn(
             "size-7 text-muted-foreground disabled:opacity-30",
             annotating && "bg-primary/15 text-primary hover:bg-primary/20",
           )}
-          title={t("browser.annotateMode")}
+          label={t("browser.annotateMode")}
+          aria-pressed={annotating}
           disabled={blank}
           onClick={() => setAnnotating((v) => !v)}
         >
           <SquareDashedMousePointer className="size-3.5" />
-        </Button>
+        </TooltipButton>
 
-        {/* A raw input: the shadcn one doesn't forward refs on React 18, and new-tab needs focus. */}
-        <input
+        <Input
           ref={addrRef}
-          className="h-7 min-w-0 flex-1 rounded-control bg-fill-quiet px-2.5 text-hint text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:bg-transparent focus:ring-2 focus:ring-ring/50"
+          size="compact"
+          className="min-w-0 flex-1 bg-fill-quiet text-metadata focus:bg-transparent"
           value={addr}
           onChange={(e) => setAddr(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addr.trim() && go(addr)}
@@ -573,7 +585,7 @@ export function BrowserPanel({
           <Button
             variant="outline"
             size="sm"
-            className="h-(--ds-control-normal) gap-1.5 px-2 text-fine"
+            className="h-(--ds-control-normal) gap-1.5 px-2 text-callout"
             title="Stop the agent lease and take control of this tab"
             onClick={() => void browserTakeControl(activeLabel)}
           >
@@ -588,7 +600,7 @@ export function BrowserPanel({
               variant="ghost"
               size="icon"
               className="size-7 text-muted-foreground"
-              title={t("browser.more")}
+              aria-label={t("browser.more")}
             >
               <MoreVertical className="size-3.5" />
             </Button>}
@@ -628,21 +640,24 @@ export function BrowserPanel({
                 });
               }}
             />
-            <div className="flex items-center gap-1 px-2.5 py-1.5 text-hint">
+            <div className="flex items-center gap-1 px-2.5 py-1.5 text-metadata">
               <span className="flex-1">{t("browser.zoom")}</span>
-              <Button variant="outline" size="icon" className="size-5" onClick={() => zoomBy(-0.1)}>
+              <TooltipButton label={t("browser.zoomOut")} variant="outline" size="icon" className="size-5" onClick={() => zoomBy(-0.1)}>
                 <Minus className="size-3" />
-              </Button>
-              <button
-                className="w-11 text-center font-mono text-fine text-muted-foreground hover:text-foreground"
-                title="100%"
+              </TooltipButton>
+              <Button
+                type="button"
+                variant="ghost"
+                size="compact"
+                className="w-11 px-0 font-mono text-callout text-muted-foreground"
+                aria-label={t("browser.zoomReset")}
                 onClick={() => setZoom(1)}
               >
                 {Math.round(zoom * 100)}%
-              </button>
-              <Button variant="outline" size="icon" className="size-5" onClick={() => zoomBy(0.1)}>
-                <Plus className="size-3" />
               </Button>
+              <TooltipButton label={t("browser.zoomIn")} variant="outline" size="icon" className="size-5" onClick={() => zoomBy(0.1)}>
+                <Plus className="size-3" />
+              </TooltipButton>
             </div>
           </PopoverContent>
         </Popover>
@@ -655,21 +670,24 @@ export function BrowserPanel({
       {annotating && !blank && (
         <div className="flex h-8 items-center gap-2 border-y border-primary/20 bg-primary/[0.06] px-2.5">
           <span className="size-1.5 shrink-0 rounded-full bg-primary" />
-          <span className="min-w-0 flex-1 truncate text-fine text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate text-callout text-muted-foreground">
             {pending === 0
               ? t("browser.annotateHint")
               : t("browser.annotateCount").replace("{n}", String(pending))}
           </span>
           {pending > 0 && (
             <>
-              <button
-                className="shrink-0 rounded-control p-0.5 text-muted-foreground transition-colors hover:text-destructive"
-                title={t("browser.clearAnnotations")}
+              <TooltipButton
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+                label={t("browser.clearAnnotations")}
                 onClick={() => void clearMarks()}
               >
                 <Trash2 className="size-3.5" />
-              </button>
-              <Button size="sm" className="h-6 px-2.5 text-fine" onClick={() => void annotate()}>
+              </TooltipButton>
+              <Button size="compact" className="px-module-inset text-callout" onClick={() => void annotate()}>
                 {t("browser.addToPrompt")}
               </Button>
             </>
@@ -687,19 +705,24 @@ export function BrowserPanel({
               { w: 768, label: t("browser.tablet") },
             ] as { w: number | null; label: string }[]
           ).map((d) => (
-            <button
+            <Button
               key={d.label}
+              type="button"
+              variant="selectable"
+              size="compact"
+              focusStyle="inset"
+              data-selected={device === d.w ? "true" : "false"}
               onClick={() => setDevice(d.w)}
               className={cn(
-                "rounded-control px-2 py-0.5 text-fine transition-colors",
+                "h-auto px-2 py-0.5 text-callout",
                 device === d.w ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
               {d.label}
-            </button>
+            </Button>
           ))}
           {device && (
-            <span className="ml-auto font-mono text-cap text-muted-foreground">{device}px</span>
+            <span className="ml-auto font-mono text-metadata text-muted-foreground">{device}px</span>
           )}
         </div>
       )}
@@ -733,54 +756,53 @@ export function BrowserPanel({
               <div className="w-full max-w-md">
                 <div className="mb-3 flex items-center gap-2">
                   <Globe className="size-4 text-muted-foreground" />
-                  <h3 className="text-ui font-semibold">{t("browser.recent")}</h3>
+                  <h3 className="text-body font-semibold">{t("browser.recent")}</h3>
                 </div>
                 <div className="space-y-1">
                   {recentSites.map((site) => (
-                    <div
+                    <CompositeActionRow
                       key={site.url}
-                      className="group flex min-w-0 items-center gap-2 rounded-control px-2 py-2 transition-colors hover:bg-accent/50"
+                      accessibilityLabel={site.title || hostOf(site.url) || site.url}
+                      onSelect={() => go(site.url)}
+                      className="min-w-0 gap-module-inset rounded-control px-module-inset py-module-inset transition-colors hover:bg-fill-hover"
+                      contentClassName="flex min-w-0 flex-1 flex-col"
+                      actions={(
+                        <TooltipButton
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                          label={t("browser.removeRecent")}
+                          onClick={() => {
+                            const project = projectPathRef.current;
+                            if (!project) return;
+                            updateHistory((current) => removeBrowserVisit(current, project, site.url));
+                          }}
+                        >
+                          <X className="size-3.5" />
+                        </TooltipButton>
+                      )}
                     >
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 text-left"
-                        title={site.url}
-                        onClick={() => go(site.url)}
-                      >
-                        <span className="block truncate text-ui font-medium">
-                          {site.title || hostOf(site.url) || site.url}
+                      <span className="block truncate text-body font-medium">
+                        {site.title || hostOf(site.url) || site.url}
+                      </span>
+                      <span className="mt-0.5 flex min-w-0 items-center gap-2 text-callout text-muted-foreground">
+                        <span className="truncate font-mono">{site.url}</span>
+                        <span
+                          className="shrink-0"
+                          title={new Date(site.last_visited_at).toLocaleString()}
+                        >
+                          {visitAge(site.last_visited_at) ?? t("browser.justNow")}
                         </span>
-                        <span className="mt-0.5 flex min-w-0 items-center gap-2 text-fine text-muted-foreground">
-                          <span className="truncate font-mono">{site.url}</span>
-                          <span
-                            className="shrink-0"
-                            title={new Date(site.last_visited_at).toLocaleString()}
-                          >
-                            {visitAge(site.last_visited_at) ?? t("browser.justNow")}
-                          </span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-control p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-                        aria-label={t("browser.removeRecent")}
-                        title={t("browser.removeRecent")}
-                        onClick={() => {
-                          const project = projectPathRef.current;
-                          if (!project) return;
-                          updateHistory((current) => removeBrowserVisit(current, project, site.url));
-                        }}
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    </div>
+                      </span>
+                    </CompositeActionRow>
                   ))}
                 </div>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 pt-[8vh]">
                 <Globe className="size-8 text-muted-foreground/40" />
-                <p className="text-hint text-muted-foreground">{t("browser.urlPlaceholder")}</p>
+                <p className="text-metadata text-muted-foreground">{t("browser.urlPlaceholder")}</p>
               </div>
             )}
           </div>
@@ -788,7 +810,7 @@ export function BrowserPanel({
         {!blank && !isDesktop && (
           // The standalone Vite renderer has no native side. Say so rather than showing a void.
           <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-            <p className="text-hint text-muted-foreground">{t("browser.desktopOnly")}</p>
+            <p className="text-metadata text-muted-foreground">{t("browser.desktopOnly")}</p>
           </div>
         )}
       </div>

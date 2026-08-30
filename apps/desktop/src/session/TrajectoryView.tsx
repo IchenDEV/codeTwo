@@ -6,10 +6,12 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { ArrowDown, ChevronDown, ChevronRight, Loader2 } from "@/components/ui/icons";
+import { ArrowDown, ChevronDown, ChevronRight } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { SearchField } from "@/components/business/search-field";
 import {
   Select,
   SelectContent,
@@ -90,10 +92,10 @@ function DetailBlock({ label, value }: { label: string; value: unknown }) {
   if (!detail) return null;
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-fine font-medium text-foreground">{label}</h3>
+      <h3 className="text-callout font-medium text-foreground">{label}</h3>
       <pre
         className={cn(
-          "max-h-72 overflow-auto rounded-control bg-fill-quiet p-3 text-fine whitespace-pre-wrap break-words text-foreground",
+          "max-h-72 overflow-auto rounded-control bg-fill-quiet p-3 text-callout whitespace-pre-wrap break-words text-foreground",
           detail.object ? "font-mono" : "font-sans",
         )}
       >
@@ -140,10 +142,10 @@ function Timeline({
   return (
     <section className="shrink-0 bg-fill-quiet px-4 py-3" aria-labelledby="trajectory-overview-title">
       <div className="mb-2 flex items-center justify-between gap-4">
-        <h2 id="trajectory-overview-title" className="text-ui font-medium">
+        <h2 id="trajectory-overview-title" className="text-body font-medium">
           {t("trajectory.overview")}
         </h2>
-        <span className="font-mono text-hint text-muted-foreground">
+        <span className="font-mono text-metadata text-muted-foreground">
           {formatTrajectoryDuration(span)}
         </span>
       </div>
@@ -153,7 +155,7 @@ function Timeline({
           const height = Math.max(24, packed.tracks * 12 + 8);
           return (
             <div key={lane} className="contents">
-              <span className="self-center pe-3 text-hint text-muted-foreground">
+              <span className="self-center pe-3 text-metadata text-muted-foreground">
                 {t(LANE_LABEL[lane])}
               </span>
               <div className="trajectory-lane bg-background" style={{ height }}>
@@ -162,11 +164,14 @@ function Timeline({
                   const width = ((Math.max(record.endAt, record.startAt) - record.startAt) / span) * 100;
                   const selected = record.id === selectedId;
                   return (
-                    <button
+                    <TooltipButton
                       key={record.id}
                       type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      focusStyle="inset"
                       className={cn(
-                        "trajectory-bar focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70",
+                        "trajectory-bar",
                         KIND_TONE[record.kind],
                         selected ? "opacity-100 ring-2 ring-foreground/50" : "opacity-60 hover:opacity-90",
                       )}
@@ -175,9 +180,9 @@ function Timeline({
                         width: `${width}%`,
                         insetBlockStart: track * 12 + 4,
                       }}
-                      aria-label={`${t(KIND_LABEL[record.kind])}: ${record.summary}`}
+                      label={`${t(KIND_LABEL[record.kind])}: ${record.summary}`}
+                      tooltip={`${record.title} · ${formatTrajectoryDuration(record.endAt - record.startAt)}`}
                       aria-pressed={selected}
-                      title={`${record.title} · ${formatTrajectoryDuration(record.endAt - record.startAt)}`}
                       onClick={() => onSelect(record)}
                     />
                   );
@@ -192,7 +197,7 @@ function Timeline({
 }
 
 function EventMarker({ kind }: { kind: TrajectoryKind }) {
-  return <span className={cn("size-2 shrink-0 rounded-micro", KIND_TONE[kind])} aria-hidden />;
+  return <span className={cn("size-2 shrink-0 rounded-control", KIND_TONE[kind])} aria-hidden />;
 }
 
 function LedgerRow({
@@ -206,32 +211,36 @@ function LedgerRow({
 }) {
   const t = useT();
   return (
-    <button
+    <Button
       type="button"
+      variant="selectable"
+      size="row"
+      focusStyle="inset"
+      data-selected={selected ? "true" : "false"}
       aria-pressed={selected}
       className={cn(
-        "trajectory-ledger-row w-full text-left outline-none transition-colors duration-(--ds-motion-feedback) ease-(--ds-ease-enter) hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60",
+        "trajectory-ledger-row w-full",
         selected ? "bg-fill-rest text-foreground" : "bg-background text-muted-foreground",
       )}
       style={{ contentVisibility: "auto", containIntrinsicSize: "36px" } as CSSProperties}
       onClick={onSelect}
     >
-      <span className="px-3 py-2 font-mono text-hint tabular-nums">
+      <span className="px-3 py-2 font-mono text-metadata tabular-nums">
         {String(record.index).padStart(3, "0")}
       </span>
-      <span className="flex min-w-0 items-center gap-2 px-3 py-2 text-fine">
+      <span className="flex min-w-0 items-center gap-2 px-3 py-2 text-callout">
         <EventMarker kind={record.kind} />
         <span className="truncate">{t(KIND_LABEL[record.kind])}</span>
       </span>
-      <span className="min-w-0 px-3 py-2 text-fine">
+      <span className="min-w-0 px-3 py-2 text-callout">
         <span className="block truncate text-foreground">{record.summary || record.title}</span>
         {record.status ? (
-          <span className="block truncate text-hint text-muted-foreground">
+          <span className="block truncate text-metadata text-muted-foreground">
             {record.title} · {record.status}
           </span>
         ) : null}
       </span>
-    </button>
+    </Button>
   );
 }
 
@@ -245,7 +254,7 @@ function Inspector({
   const t = useT();
   if (!record) {
     return (
-      <aside className="trajectory-inspector flex items-center justify-center bg-fill-quiet p-6 text-center text-fine text-muted-foreground">
+      <aside className="trajectory-inspector flex items-center justify-center bg-fill-quiet p-6 text-center text-callout text-muted-foreground">
         {t("trajectory.inspectHint")}
       </aside>
     );
@@ -255,17 +264,17 @@ function Inspector({
       <div className="flex items-start gap-2">
         <EventMarker kind={record.kind} />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-ui font-medium text-foreground">{record.title}</h2>
-          <p className="mt-1 text-fine text-muted-foreground">
+          <h2 className="truncate text-body font-medium text-foreground">{record.title}</h2>
+          <p className="mt-1 text-callout text-muted-foreground">
             {record.step > 0
               ? t("trajectory.turnStep", { turn: record.turn, step: record.step })
               : t("trajectory.turn", { turn: record.turn })}
           </p>
         </div>
-        {record.status ? <span className="shrink-0 text-hint text-muted-foreground">{record.status}</span> : null}
+        {record.status ? <span className="shrink-0 text-metadata text-muted-foreground">{record.status}</span> : null}
       </div>
 
-      <dl className="trajectory-timing mt-4 bg-background text-fine">
+      <dl className="trajectory-timing mt-4 bg-background text-callout">
         <div>
           <dt>{t("trajectory.started")}</dt>
           <dd>{formatClock(record.startAt)}</dd>
@@ -381,13 +390,11 @@ export function TrajectoryView({
   return (
     <section className="trajectory-view flex min-h-0 flex-1 flex-col bg-background" aria-label={t("trajectory.label")}>
       <header className="flex shrink-0 flex-wrap items-center gap-2 bg-background px-4 py-2">
-        <Input
-          type="search"
-          size="compact"
+        <SearchField
           className="min-w-48 flex-1"
           value={query}
           placeholder={t("trajectory.searchPlaceholder")}
-          aria-label={t("trajectory.search")}
+          label={t("trajectory.search")}
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
         <Select value={kind} onValueChange={(value) => value && setKind(value as TrajectoryKind | "all")}>
@@ -406,7 +413,7 @@ export function TrajectoryView({
             </SelectGroup>
           </SelectContent>
         </Select>
-        <span className="shrink-0 font-mono text-hint text-muted-foreground">
+        <span className="shrink-0 font-mono text-metadata text-muted-foreground">
           {t("trajectory.eventCount", { count: visibleRecords.length })}
           {usage
             ? ` · ${t("trajectory.tokens", {
@@ -423,7 +430,7 @@ export function TrajectoryView({
 
       <div className="trajectory-workbench min-h-0 flex-1">
         <section className="relative flex min-h-0 flex-col bg-background" aria-label={t("trajectory.ledger")}>
-          <div aria-hidden className="trajectory-ledger-row shrink-0 bg-fill-quiet text-hint font-medium text-muted-foreground">
+          <div aria-hidden className="trajectory-ledger-row shrink-0 bg-fill-quiet text-metadata font-medium text-muted-foreground">
             <span className="px-3 py-2">{t("trajectory.index")}</span>
             <span className="px-3 py-2">{t("trajectory.event")}</span>
             <span className="px-3 py-2">{t("trajectory.content")}</span>
@@ -439,28 +446,31 @@ export function TrajectoryView({
             {hasEarlier ? (
               <div className="flex justify-center px-3 py-2">
                 <Button type="button" size="compact" variant="ghost" disabled={loadingEarlier} onClick={onLoadEarlier}>
-                  {loadingEarlier ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : null}
+                  {loadingEarlier ? <Spinner data-icon="inline-start" /> : null}
                   {loadingEarlier ? t("transcript.loadingEarlier") : t("transcript.loadEarlier")}
                 </Button>
               </div>
             ) : null}
             {turnsWithRecords.length === 0 ? (
-              <p className="p-6 text-center text-fine text-muted-foreground">{t("trajectory.noEvents")}</p>
+              <p className="p-6 text-center text-callout text-muted-foreground">{t("trajectory.noEvents")}</p>
             ) : (
               turnsWithRecords.map(([turn, group]) => {
                 const collapsed = collapsedTurns.has(turn);
                 return (
                   <section key={turn} aria-label={t("trajectory.turn", { turn })}>
-                    <button
+                    <Button
                       type="button"
-                      className="flex w-full items-center gap-2 bg-fill-quiet px-3 py-2 text-left text-hint font-medium text-muted-foreground outline-none hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60"
+                      variant="ghost"
+                      size="row"
+                      focusStyle="inset"
+                      className="w-full gap-2 bg-fill-quiet px-3 py-2 text-metadata font-medium text-muted-foreground"
                       aria-expanded={!collapsed}
                       onClick={() => toggleTurn(turn)}
                     >
                       {collapsed ? <ChevronRight aria-hidden className="size-3" /> : <ChevronDown aria-hidden className="size-3" />}
                       <span>{t("trajectory.turn", { turn })}</span>
                       <span className="font-mono">{group.length}</span>
-                    </button>
+                    </Button>
                     {collapsed ? null : group.map((record) => (
                       <LedgerRow
                         key={record.id}

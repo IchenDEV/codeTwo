@@ -13,6 +13,7 @@ import { ContextBreakdown } from "./ContextBreakdown";
 import { contextTone, formatCost } from "./statusline.ts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +55,7 @@ export function Statusline({
   if (!contextWindow || !display) {
     if (!cost && !burn) return null;
     return (
-      <span className="flex shrink-0 items-center gap-1.5 px-0 py-1 text-hint text-muted-foreground @lg/composer:px-1.5">
+      <span className="flex shrink-0 items-center gap-1.5 px-0 py-1 text-metadata text-muted-foreground @lg/composer:px-1.5">
         {cost && <span>{cost}</span>}
         {burn && <span>{burn}</span>}
       </span>
@@ -110,8 +111,11 @@ export function Statusline({
         <PopoverTrigger
           render={
             <TooltipTrigger
-              render={<button
+              render={<Button
                 type="button"
+                variant="ghost"
+                size="compact"
+                focusStyle="inset"
                 role="meter"
                 aria-valuemin={0}
                 aria-valuemax={contextWindow.contextWindow}
@@ -119,14 +123,14 @@ export function Statusline({
                 aria-valuetext={exact}
                 aria-label={exact}
                 className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-control px-0 py-1 text-hint transition-colors hover:bg-accent/50 @lg/composer:px-1.5",
+                  "shrink-0 gap-1.5 px-0 text-metadata @lg/composer:px-1.5",
                   tone === "warn" && "text-warning",
                   tone === "critical" && "text-destructive",
                   (tone === "ok" || tone === null) && "text-muted-foreground",
                 )}
               >
                 {chipContent}
-              </button>}
+              </Button>}
             />
           }
         />

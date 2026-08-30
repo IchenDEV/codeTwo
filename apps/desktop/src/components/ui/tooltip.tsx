@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const TOOLTIP_FIRST_OPEN_DELAY = 600
@@ -59,7 +60,7 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "pop-layer z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-control bg-raised px-2 py-1 text-hint text-balance text-content shadow-raised",
+            "pop-layer z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-control bg-raised px-2 py-1 text-metadata text-balance text-content shadow-raised",
             className
           )}
           {...props}
@@ -72,11 +73,31 @@ function TooltipContent({
   )
 }
 
+interface TooltipButtonProps extends React.ComponentProps<typeof Button> {
+  label: string
+  tooltip?: React.ReactNode
+  tooltipSide?: TooltipPrimitive.Positioner.Props["side"]
+}
+
+/** One accessible name and one themed tooltip for icon-only product actions. */
+const TooltipButton = React.forwardRef<HTMLButtonElement, TooltipButtonProps>(
+  ({ label, tooltip = label, tooltipSide = "top", ...props }, ref) => (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Button ref={ref} type="button" aria-label={label} {...props} />}
+      />
+      <TooltipContent side={tooltipSide}>{tooltip}</TooltipContent>
+    </Tooltip>
+  ),
+)
+TooltipButton.displayName = "TooltipButton"
+
 export {
   TOOLTIP_FIRST_OPEN_DELAY,
   TOOLTIP_INSTANT_PHASE_TIMEOUT,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
+  TooltipButton,
   TooltipProvider,
 }

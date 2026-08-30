@@ -12,6 +12,7 @@ import {
 import type { SuggestionMenuProps } from "@blocknote/react";
 
 import { useT } from "../i18n";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** One workspace file, split for display. The core ranks these; this only draws them. */
@@ -78,7 +79,7 @@ function itemKey(item: AtItem): string {
 /** Muted group label — only drawn when the list actually mixes chats and files. */
 function GroupLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="px-2 pb-0.5 pt-1.5 text-cap text-muted-foreground first:pt-1">{children}</p>
+    <p className="px-2 pb-0.5 pt-1.5 text-metadata text-muted-foreground first:pt-1">{children}</p>
   );
 }
 
@@ -110,7 +111,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
 
   if (loadingState === "loading-initial") {
     return (
-      <div className="glass-raised w-[26rem] rounded-menu p-3 text-fine text-muted-foreground shadow-lg ring-1 ring-foreground/10">
+      <div className="raised-material w-menu-wide rounded-module p-3 text-callout text-muted-foreground shadow-menu">
         {t("files.searching")}
       </div>
     );
@@ -118,7 +119,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
 
   if (items.length === 0) {
     return (
-      <div className="glass-raised w-[26rem] rounded-menu p-3 text-fine text-muted-foreground shadow-lg ring-1 ring-foreground/10">
+      <div className="raised-material w-menu-wide rounded-module p-3 text-callout text-muted-foreground shadow-menu">
         {t("files.noMatches")}
       </div>
     );
@@ -131,68 +132,83 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
   return (
     <div
       ref={listRef}
-      className="glass-raised max-h-72 w-[26rem] overflow-y-auto rounded-menu p-1 shadow-lg ring-1 ring-foreground/10"
+      className="raised-material max-h-72 w-menu-wide overflow-y-auto rounded-menu p-menu shadow-menu"
     >
       {items.map((item, i) => {
         const row =
           item.kind === "artifact" ? (
-            <button
+            <Button
               key={`artifact-${item.recordId}`}
+              type="button"
+              variant="selectable"
+              size="row"
+              focusStyle="inset"
+              data-selected={i === selectedIndex ? "true" : "false"}
               data-row={i}
               onClick={() => onItemClick?.(item)}
               className={cn(
-                "flex w-full items-baseline gap-2 rounded-micro px-2 py-1 text-left transition-colors",
+                "w-full items-baseline gap-2 px-2 py-1",
                 i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
               )}
             >
               <Package className="size-3.5 shrink-0 self-center text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-ui">{item.title}</span>
-              <span className="shrink-0 text-fine text-muted-foreground/70">
+              <span className="min-w-0 flex-1 truncate text-body">{item.title}</span>
+              <span className="shrink-0 text-callout text-muted-foreground/70">
                 {item.artifactKind} · v{item.version}
               </span>
-            </button>
+            </Button>
           ) : item.kind === "chat" ? (
-            <button
+            <Button
               key={item.id}
+              type="button"
+              variant="selectable"
+              size="row"
+              focusStyle="inset"
+              data-selected={i === selectedIndex ? "true" : "false"}
               data-row={i}
               onClick={() => onItemClick?.(item)}
               className={cn(
-                "flex w-full items-baseline gap-2 rounded-control px-2 py-1 text-left transition-colors",
+                "w-full items-baseline gap-2 px-2 py-1",
                 i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
               )}
             >
               <MessageSquare className="size-3.5 shrink-0 self-center text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-ui">{item.title}</span>
-              <span className="shrink-0 text-fine text-muted-foreground/70">
+              <span className="min-w-0 flex-1 truncate text-body">{item.title}</span>
+              <span className="shrink-0 text-callout text-muted-foreground/70">
                 {new Date(item.when).toLocaleDateString()}
               </span>
-            </button>
+            </Button>
           ) : (
             (() => {
               const Icon = iconFor(item.name);
               const [before, match, after] = parts(item);
               return (
-                <button
+                <Button
                   key={item.path}
+                  type="button"
+                  variant="selectable"
+                  size="row"
+                  focusStyle="inset"
+                  data-selected={i === selectedIndex ? "true" : "false"}
                   data-row={i}
                   onClick={() => onItemClick?.(item)}
                   className={cn(
-                    "flex w-full items-baseline gap-2 rounded-control px-2 py-1 text-left transition-colors",
+                    "w-full items-baseline gap-2 px-2 py-1",
                     i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
                   )}
                 >
                   <Icon className="size-3.5 shrink-0 self-center text-muted-foreground" />
-                  <span className="shrink-0 truncate text-ui">
+                  <span className="shrink-0 truncate text-body">
                     {before}
                     <span className="text-primary">{match}</span>
                     {after}
                   </span>
                   {item.dir && (
-                    <span className="min-w-0 flex-1 truncate text-right text-fine text-muted-foreground/70">
+                    <span className="min-w-0 flex-1 truncate text-right text-callout text-muted-foreground/70">
                       {item.dir}
                     </span>
                   )}
-                </button>
+                </Button>
               );
             })()
           );

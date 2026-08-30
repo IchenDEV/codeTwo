@@ -261,8 +261,8 @@ function BuiltinLink({ href, children }: { href?: string; children?: ReactNode }
 const components: Components = {
   p: ({ children }) => <p className="my-2 break-words first:mt-0 last:mb-0">{children}</p>,
   h1: ({ children }) => <h1 className="mb-2 mt-5 text-section font-medium first:mt-0">{children}</h1>,
-  h2: ({ children }) => <h2 className="mb-2 mt-5 text-ui font-medium first:mt-0">{children}</h2>,
-  h3: ({ children }) => <h3 className="mb-1.5 mt-4 text-ui font-medium first:mt-0">{children}</h3>,
+  h2: ({ children }) => <h2 className="mb-2 mt-5 text-dialog font-medium first:mt-0">{children}</h2>,
+  h3: ({ children }) => <h3 className="mb-1.5 mt-4 text-body font-medium first:mt-0">{children}</h3>,
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 ps-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 ps-5">{children}</ol>,
   li: ({ children }) => <li className="ps-0.5">{children}</li>,
@@ -277,7 +277,7 @@ const components: Components = {
   img: ({ alt }) => <span className="text-muted-foreground">{alt ?? "Image"}</span>,
   table: ({ children }) => (
     <div className="my-3 max-w-full overflow-x-auto">
-      <table className="w-full border-collapse text-fine">{children}</table>
+      <table className="w-full border-collapse text-callout">{children}</table>
     </div>
   ),
   thead: ({ children }) => <thead className="text-foreground">{children}</thead>,
@@ -307,7 +307,7 @@ const components: Components = {
       }
     }
     return (
-      <pre className="my-3 max-w-full overflow-x-auto rounded-module border bg-fill-quiet p-3 text-code leading-relaxed">
+      <pre className="my-3 max-w-full overflow-x-auto rounded-module border bg-fill-quiet p-3 text-code">
         {children}
       </pre>
     );
@@ -326,7 +326,7 @@ export function MarkdownContent({
   const segments = splitRichText(text, streaming);
   return (
     <LinkActionsContext.Provider value={linkActions ?? {}}>
-      <div className="codetwo-markdown min-w-0 text-ui leading-[1.7] text-foreground/90">
+      <div className="codetwo-markdown min-w-0 text-prose text-foreground/90">
         {segments.map((segment, index) =>
           segment.kind === "visualization" ? (
             <VisualizationFrame

@@ -113,7 +113,9 @@ describe("TemplateDialog", () => {
     });
     const ids = fields(ID_LABELS).map((el) => el.value);
     expect(ids).toEqual(["slot-1", "slot-2"]);
-    const kind = [...dom.document.body.querySelectorAll("select")].map((el) => el.value);
+    const kind = [...dom.document.body.querySelectorAll(
+      'button[data-slot="select-trigger"]',
+    )].map((el) => el.textContent?.trim());
     expect(kind).toEqual(["text", "file"]);
   });
 

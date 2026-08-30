@@ -3,6 +3,8 @@ import { CornerUpLeft, Plus, X } from "@/components/ui/icons";
 
 import { onPtyTitle, ptyDump, ptyKill } from "../bridge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 import { TerminalPanel } from "./Terminal";
@@ -67,15 +69,20 @@ export function TerminalDockContent({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="dock-content-tabbar flex shrink-0 items-center gap-0.5 overflow-x-auto px-2">
         {slots.map((slot) => (
-          <button
+          <Button
             key={slot}
+            type="button"
+            variant="selectable"
+            size="row"
+            focusStyle="inset"
+            data-selected={slot === activeSlot ? "true" : "false"}
             title={titles[terminalId(sessionKey, slot, tmux)] || undefined}
             onClick={() => {
               setActiveSlot(slot);
               setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
             }}
             className={cn(
-              "group relative flex h-full max-w-40 shrink-0 items-center gap-1.5 px-module-inset text-hint transition-colors",
+              "group relative h-full max-w-40 shrink-0 gap-1.5 px-module-inset text-metadata",
               slot === activeSlot
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -96,11 +103,14 @@ export function TerminalDockContent({
             {slot === activeSlot && (
               <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-none bg-primary" />
             )}
-          </button>
+          </Button>
         ))}
-        <button
-          className="rounded-control p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          title={t("dock.newTerminal")}
+        <TooltipButton
+          label={t("dock.newTerminal")}
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground"
           onClick={() => {
             setSlots((current) => [...current, nextSlot]);
             setActiveSlot(nextSlot);
@@ -108,16 +118,19 @@ export function TerminalDockContent({
           }}
         >
           <Plus className="size-3" />
-        </button>
+        </TooltipButton>
         <div className="min-w-0 flex-1" />
-        <button
-          className="rounded-control p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          title={t("dock.sendTerminal")}
+        <TooltipButton
+          label={t("dock.sendTerminal")}
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground"
           onClick={() => void sendToAgent()}
         >
           <CornerUpLeft className="size-3" />
-        </button>
-        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 px-1 text-fine text-muted-foreground">
+        </TooltipButton>
+        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 px-1 text-callout text-muted-foreground">
           <Checkbox
             checked={tmux}
             onCheckedChange={(checked) => setTmux(checked === true)}

@@ -47,22 +47,22 @@ function StagePopover({
       data-testid={`stage-popover-${stage.id}`}
     >
       <PopoverTitle className="sr-only">{stage.title}</PopoverTitle>
-      <p className="px-1 pb-1 text-cap text-muted-foreground">{t("stage.artifacts")}</p>
+      <p className="px-1 pb-1 text-metadata text-muted-foreground">{t("stage.artifacts")}</p>
       {artifacts.length === 0 ? (
-        <p className="px-1 pb-1 text-hint text-muted-foreground">{t("stage.empty")}</p>
+        <p className="px-1 pb-1 text-metadata text-muted-foreground">{t("stage.empty")}</p>
       ) : (
         <ul className="pb-1">
           {artifacts.map((record) => (
-            <li key={record.id} className="flex items-baseline gap-1.5 px-1 py-0.5 text-ui">
+            <li key={record.id} className="flex items-baseline gap-1.5 px-1 py-0.5 text-body">
               <span className="min-w-0 flex-1 truncate">{record.title}</span>
-              <span className="shrink-0 text-hint text-muted-foreground">v{record.version}</span>
+              <span className="shrink-0 text-metadata text-muted-foreground">v{record.version}</span>
             </li>
           ))}
         </ul>
       )}
-      <p className="px-1 pb-1 text-cap text-muted-foreground">{t("stage.sessions")}</p>
+      <p className="px-1 pb-1 text-metadata text-muted-foreground">{t("stage.sessions")}</p>
       {stage.sessions.length === 0 ? (
-        <p className="px-1 text-hint text-muted-foreground">{t("stage.empty")}</p>
+        <p className="px-1 text-metadata text-muted-foreground">{t("stage.empty")}</p>
       ) : (
         stage.sessions.map((sessionId) => (
           <Button
@@ -127,7 +127,7 @@ export function StageTrack({
                 <span className="truncate">{stage.title}</span>
                 {stage.loop_count > 1 && (
                   <span
-                    className="shrink-0 text-cap text-muted-foreground"
+                    className="shrink-0 text-metadata text-muted-foreground"
                     data-testid={`stage-loop-${stage.id}`}
                     data-count={stage.loop_count}
                   >

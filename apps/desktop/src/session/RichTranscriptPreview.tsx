@@ -134,8 +134,8 @@ export function RichTranscriptPreview() {
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-2 bg-fill-quiet px-5 py-3">
-        <p className="text-ui font-medium">Rich conversation</p>
-        <span className="ms-auto text-fine text-muted-foreground">Streaming</span>
+        <p className="text-body font-medium">Rich conversation</p>
+        <span className="ms-auto text-callout text-muted-foreground">Streaming</span>
         <EnvironmentPopover
           project="codeTwo"
           projectPath="/tmp/codeTwo"
@@ -185,7 +185,7 @@ export function RichTranscriptPreview() {
         )}
       </main>
       <footer className="shrink-0 px-5 pb-4">
-        <div className="mx-auto max-w-3xl rounded-module border bg-card px-4 py-3 text-ui text-muted-foreground shadow-(--ds-elevation-surface)">
+        <div className="mx-auto max-w-3xl rounded-module border bg-card px-4 py-3 text-body text-muted-foreground shadow-(--ds-elevation-surface)">
           Ask a follow-up…
         </div>
       </footer>

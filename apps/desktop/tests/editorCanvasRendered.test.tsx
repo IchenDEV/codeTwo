@@ -676,7 +676,11 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
 
     expect(button(view.container, "Send structure only")).toBeTruthy();
     expect(button(view.container, "Switch provider")).toBeTruthy();
-    expect(view.container.querySelectorAll(".canvas-ui-control")).toHaveLength(2);
+    expect(
+      view.container.querySelectorAll(
+        '[role="alert"] button[data-slot="button"][data-size="compact"]',
+      ),
+    ).toHaveLength(2);
     expect(nonTargetHandleErrors).toEqual([]);
     expect(baseErrors).toEqual([
       ["canvas-target", "provider rejected images", "provider_image"],

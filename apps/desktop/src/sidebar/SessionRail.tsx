@@ -86,7 +86,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipButton, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
@@ -1061,7 +1061,7 @@ export function SessionRail({
                     <Input
                       autoFocus
                       size="compact"
-                      className="pointer-events-auto relative z-10 h-(--ds-control-mini) flex-1 text-ui leading-4"
+                      className="pointer-events-auto relative z-10 h-(--ds-control-mini) flex-1 text-body"
                       value={renaming.title}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
@@ -1082,7 +1082,7 @@ export function SessionRail({
                     <span
                       title={s.title}
                       className={cn(
-                        "min-w-0 flex-1 truncate text-ui leading-4",
+                        "min-w-0 flex-1 truncate text-body",
                         s.id === activeSession && "font-medium",
                       )}
                     >
@@ -1126,12 +1126,11 @@ export function SessionRail({
                       </span>
                     )}
                     {!isArchived && (
-                      <Button
+                      <TooltipButton
+                        label={s.pinned ? t("rail.unpin") : t("rail.pin")}
                         type="button"
                         variant="ghost"
                         size="icon-xs"
-                        title={s.pinned ? t("rail.unpin") : t("rail.pin")}
-                        aria-label={s.pinned ? t("rail.unpin") : t("rail.pin")}
                         aria-pressed={s.pinned}
                         className={cn(
                           "pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground",
@@ -1143,14 +1142,13 @@ export function SessionRail({
                         }}
                       >
                         <Pin data-icon="inline-start" />
-                      </Button>
+                      </TooltipButton>
                     )}
-                    <Button
+                    <TooltipButton
+                      label={t("rail.rename")}
                       type="button"
                       variant="ghost"
                       size="icon-xs"
-                      title={t("rail.rename")}
-                      aria-label={t("rail.rename")}
                       className="pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1158,13 +1156,12 @@ export function SessionRail({
                       }}
                     >
                       <Pencil data-icon="inline-start" />
-                    </Button>
-                    <Button
+                    </TooltipButton>
+                    <TooltipButton
+                      label={isArchived ? t("rail.unarchive") : t("rail.archive")}
                       type="button"
                       variant="ghost"
                       size="icon-xs"
-                      title={isArchived ? t("rail.unarchive") : t("rail.archive")}
-                      aria-label={isArchived ? t("rail.unarchive") : t("rail.archive")}
                       className="pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1174,7 +1171,7 @@ export function SessionRail({
                       {isArchived
                         ? <ArchiveRestore data-icon="inline-start" />
                         : <Archive data-icon="inline-start" />}
-                    </Button>
+                    </TooltipButton>
                   </span>
                 </div>
 
@@ -1182,7 +1179,7 @@ export function SessionRail({
                   <div
                     id={`session-preview-${s.id}`}
                     data-session-line="preview"
-                    className="mt-0.5 h-4 truncate text-fine leading-4 text-muted-foreground"
+                    className="mt-0.5 h-4 truncate text-callout text-muted-foreground"
                   >
                     {preview}
                   </div>
@@ -1191,7 +1188,7 @@ export function SessionRail({
                 {/* Workspace identity closes the hierarchy; provider and completed state stay quiet. */}
                 <div
                   data-session-line="workspace"
-                  className="mt-0.5 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground"
+                  className="mt-0.5 flex h-4 items-center gap-1.5 text-callout text-muted-foreground"
                 >
                   {showProjectIdentity ? (
                     <>
@@ -1580,7 +1577,7 @@ export function SessionRail({
               autoFocus
               size="compact"
               aria-label={t("rail.sectionName")}
-              className="h-control-mini min-w-0 flex-1 text-ui"
+              className="h-control-mini min-w-0 flex-1 text-body"
               value={renamingSection.name}
               onChange={(event) =>
                 setRenamingSection({ id: section.id, name: event.target.value })
@@ -1609,10 +1606,11 @@ export function SessionRail({
                 <GripVertical className="pointer-events-none size-3" />
               </span>
               <CollapsibleTrigger
+                render={<Button type="button" variant="ghost" size="compact" focusStyle="inset" />}
                 data-task-section-toggle={section.id}
                 draggable
                 title={t(open ? "rail.hideSection" : "rail.showSection", { name: section.name })}
-                className="flex min-w-0 items-center gap-1 rounded-control px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+                className="min-w-0 justify-start gap-1 font-normal text-foreground/55 hover:text-foreground"
               >
                 <span className="truncate">{section.name}</span>
                 <ChevronRight
@@ -1709,7 +1707,7 @@ export function SessionRail({
               {rows.map((row) => sessionRow(row, false))}
             </div>
           ) : (
-            <p className="px-2 py-1.5 text-fine text-foreground/35">{t("rail.sectionEmpty")}</p>
+            <p className="px-2 py-1.5 text-callout text-foreground/35">{t("rail.sectionEmpty")}</p>
           )}
         </CollapsibleContent>
       </Collapsible>
@@ -1741,7 +1739,7 @@ export function SessionRail({
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
       {/* Keep the collapse control in the title row, with enough clearance for macOS traffic
-          lights. Search gets a full-width launcher below; all panes share the same 40px baseline. */}
+          lights. Search gets a full-width launcher below; all panes share the same 46px baseline. */}
       <div
         data-rail-header
         className="window-titlebar window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 pr-2"
@@ -1764,21 +1762,24 @@ export function SessionRail({
         </Tooltip>
       </div>
 
-      <button
+      <Button
         type="button"
+        variant="selectable"
+        size="row"
+        focusStyle="inset"
         data-rail-search
-        className="mx-2 mb-1 flex h-control shrink-0 items-center gap-2 rounded-control bg-fill-quiet px-2 text-left text-ui text-muted-foreground outline-none transition-colors hover:bg-fill-hover hover:text-foreground focus-visible:focus-ring"
+        className="mx-2 mb-1 h-control shrink-0 gap-2 bg-fill-quiet px-2 text-muted-foreground"
         aria-label={t("rail.searchChats")}
         onClick={onOpenSearch}
       >
         <Search className="size-3.5 shrink-0" aria-hidden />
         <span className="min-w-0 flex-1 truncate">{t("rail.searchChats")}</span>
         {searchHint ? (
-          <kbd className="shrink-0 rounded-micro bg-background/45 px-1.5 py-0.5 font-mono text-fine leading-4 text-muted-foreground">
+          <kbd className="shrink-0 rounded-micro bg-background/45 px-1.5 py-0.5 font-mono text-callout text-muted-foreground">
             {searchHint}
           </kbd>
         ) : null}
-      </button>
+      </Button>
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}
       <div
@@ -1793,14 +1794,18 @@ export function SessionRail({
           aria-label={t("rail.newTask")}
           className="group/new-task flex h-control min-w-0 items-center rounded-control text-foreground/75 transition-colors hover:bg-fill-hover hover:text-foreground focus-within:bg-fill-hover focus-within:text-foreground"
         >
-          <button
-            className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-control pl-2 pr-1 text-left text-ui outline-none focus-visible:focus-ring-inset"
+          <Button
+            type="button"
+            variant="ghost"
+            size="row"
+            focusStyle="inset"
+            className="h-full min-w-0 flex-1 gap-2 pl-2 pr-1"
             title={`${t("rail.newTask")} ${newHint}`}
             onClick={onNew}
           >
             <SquarePen className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="min-w-0 flex-1 truncate">{t("rail.newTask")}</span>
-          </button>
+          </Button>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -1879,7 +1884,7 @@ export function SessionRail({
           {resourceSections}
           {recent.length === 0 && archived.length === 0 && projectEntries.length === 0 &&
           taskSections.sections.length === 0 && creatingSectionFor === undefined ? (
-            <p className="px-2 py-3 text-fine leading-relaxed text-muted-foreground">
+            <p className="px-2 py-3 text-callout text-muted-foreground">
               {t("rail.empty")} {t("rail.emptyHint")}
             </p>
           ) : (
@@ -1927,7 +1932,7 @@ export function SessionRail({
                     size="compact"
                     aria-label={t("rail.sectionName")}
                     placeholder={t("rail.sectionName")}
-                    className="h-control-mini text-ui"
+                    className="h-control-mini text-body"
                     value={sectionDraft}
                     onChange={(event) => setSectionDraft(event.target.value)}
                     onBlur={commitSectionCreation}
@@ -1975,9 +1980,10 @@ export function SessionRail({
               {archived.length > 0 && (
                 <Collapsible open={archivedOpen} onOpenChange={setArchivedOpen}>
                   <CollapsibleTrigger
+                    render={<Button type="button" variant="ghost" size="compact" focusStyle="inset" />}
                     data-rail-archive-toggle
                     title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
-                    className="flex items-center gap-1 rounded-control px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+                    className="justify-start gap-1 font-normal text-foreground/55 hover:text-foreground"
                   >
                     <span>{t("rail.groupArchived")}</span>
                     <ChevronRight

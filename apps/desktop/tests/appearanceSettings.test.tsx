@@ -128,6 +128,17 @@ describe("Appearance settings", () => {
     });
   });
 
+  test("migrates the former compact default without overriding a current explicit 13px choice", () => {
+    expect(normalizeAppearanceSettings({ version: 1, uiFontSize: 13 })).toMatchObject({
+      version: 2,
+      uiFontSize: 14,
+    });
+    expect(normalizeAppearanceSettings({ version: 2, uiFontSize: 13 })).toMatchObject({
+      version: 2,
+      uiFontSize: 13,
+    });
+  });
+
   test("renders the theme library and creates an editable theme copy", async () => {
     activateDom();
     installThemeTokens();

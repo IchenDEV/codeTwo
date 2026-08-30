@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LoaderCircle } from "@/components/ui/icons";
+import { Spinner } from "@/components/ui/spinner";
 
 import {
   providerLabel,
@@ -17,6 +17,7 @@ import {
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CompositeActionRow } from "@/components/business/composite-action-row";
 import {
   Dialog,
   DialogContent,
@@ -76,11 +77,11 @@ export function DiffStatCell({
   }, [session, fetchStat]);
 
   if (stat === undefined) {
-    return <LoaderCircle className="size-3 animate-spin text-muted-foreground" aria-hidden />;
+    return <Spinner className="size-3 text-muted-foreground" />;
   }
   if (stat === null) return <span className="text-muted-foreground">—</span>;
   return (
-    <span className="whitespace-nowrap text-fine tabular-nums">
+    <span className="whitespace-nowrap text-callout tabular-nums">
       <span className="text-success">+{stat.additions}</span>{" "}
       <span className="text-destructive">−{stat.deletions}</span>
       <span className="text-muted-foreground"> · {t("mission.files", { n: stat.files })}</span>
@@ -89,7 +90,7 @@ export function DiffStatCell({
 }
 
 /**
- * R6 (docs/archive/scenes-v1/roadmap.md): the cross-session overview answering "what needs me" — every session's
+ * R6 (docs/roadmap.md): the cross-session overview answering "what needs me" — every session's
  * state, scene, working-tree diff, and context occupancy, with one click into review.
  */
 export function MissionControlDialog({
@@ -119,13 +120,29 @@ export function MissionControlDialog({
     const s = r.session;
     const context = describeContextWindow(contextWindows[s.id] ?? null);
     return (
-      <div
+      <CompositeActionRow
         key={s.id}
-        onClick={() => {
+        accessibilityLabel={s.title}
+        onSelect={() => {
           onSelect(s.id);
           onClose();
         }}
-        className="group flex cursor-pointer items-center gap-3 rounded-control px-2 py-1.5 transition-colors hover:bg-accent/50"
+        className="gap-3 rounded-control px-2 py-1.5 transition-colors hover:bg-accent/50 focus-within:bg-accent/50"
+        contentClassName="flex items-center gap-3"
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              onSelect(s.id);
+              onReview(s.id);
+              onClose();
+            }}
+          >
+            {t("mission.review")}
+          </Button>
+        }
       >
         <span
           className={cn("size-2 shrink-0 rounded-full", DOT_CLASS[r.state])}
@@ -134,14 +151,14 @@ export function MissionControlDialog({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="min-w-0 truncate text-ui">{s.title}</span>
+            <span className="min-w-0 truncate text-body">{s.title}</span>
             {r.scene && (
-              <Badge variant="outline" className="shrink-0 text-cap text-muted-foreground">
+              <Badge variant="outline" className="shrink-0 text-metadata text-muted-foreground">
                 {sceneLabel(r.scene)}
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-1 text-fine text-muted-foreground">
+          <div className="flex items-center gap-1 text-callout text-muted-foreground">
             <ProviderIcon
               provider={providerLabel(s.provider)}
               className="size-3 shrink-0 opacity-70"
@@ -151,25 +168,12 @@ export function MissionControlDialog({
         </div>
         <DiffStatCell session={s.id} fetchStat={fetchStat} />
         <span
-          className="w-10 shrink-0 text-right text-fine tabular-nums text-muted-foreground"
+          className="w-10 shrink-0 text-right text-callout tabular-nums text-muted-foreground"
           title={context?.exact}
         >
           {r.contextPct === null ? "—" : `${Math.round(r.contextPct)}%`}
         </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(s.id);
-            onReview(s.id);
-            onClose();
-          }}
-        >
-          {t("mission.review")}
-        </Button>
-      </div>
+      </CompositeActionRow>
     );
   };
 
@@ -181,7 +185,7 @@ export function MissionControlDialog({
           <DialogDescription>{t("mission.hint")}</DialogDescription>
         </DialogHeader>
         {rows.length === 0 ? (
-          <p className="px-2 py-4 text-fine text-muted-foreground">{t("mission.empty")}</p>
+          <p className="px-2 py-4 text-callout text-muted-foreground">{t("mission.empty")}</p>
         ) : (
           <div className="max-h-96 space-y-px overflow-y-auto">{rows.map(row)}</div>
         )}

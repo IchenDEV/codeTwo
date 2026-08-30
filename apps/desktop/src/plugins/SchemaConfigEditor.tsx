@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { Loader2, Save } from "@/components/ui/icons";
+import { Save } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
@@ -283,7 +284,7 @@ export function SchemaConfigEditor({
   const actions = (
     <>
       {saveError ? (
-        <p role="alert" className="text-fine text-destructive">
+        <p role="alert" className="text-callout text-destructive">
           {saveError}
         </p>
       ) : null}
@@ -294,7 +295,7 @@ export function SchemaConfigEditor({
         onClick={() => void save()}
       >
         {saving ? (
-          <Loader2 data-icon="inline-start" className="animate-spin" />
+          <Spinner data-icon="inline-start" />
         ) : (
           <Save data-icon="inline-start" />
         )}
@@ -310,7 +311,7 @@ export function SchemaConfigEditor({
       </FieldLabel>
       <Textarea
         id="plugin-config-json"
-        className="min-h-64 font-mono text-fine"
+        className="min-h-64 font-mono text-callout"
         value={json}
         aria-invalid={Boolean(jsonError)}
         onChange={(event) => {

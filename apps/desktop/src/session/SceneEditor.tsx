@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Save, Trash2 } from "@/components/ui/icons";
+import { Plus, Save, Trash2 } from "@/components/ui/icons";
 
 import {
   deleteScene as bridgeDeleteScene,
@@ -11,6 +11,7 @@ import {
 } from "../bridge";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
+import { Spinner } from "@/components/ui/spinner";
 import {
   type SceneArtifactDef,
   type SceneDocument,
@@ -42,6 +43,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
@@ -156,17 +158,17 @@ function ListField({
 function SectionIntro({ title, description }: { title: string; description: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <h3 className="text-ui font-semibold">{title}</h3>
-      <p className="text-fine leading-relaxed text-muted-foreground">{description}</p>
+      <h3 className="text-body font-semibold">{title}</h3>
+      <p className="text-callout text-muted-foreground">{description}</p>
     </div>
   );
 }
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button type="button" variant="ghost" size="icon-sm" aria-label={label} title={label} onClick={onClick}>
+    <TooltipButton label={label} variant="ghost" size="icon-sm" onClick={onClick}>
       <Trash2 />
-    </Button>
+    </TooltipButton>
   );
 }
 
@@ -204,7 +206,7 @@ function InlineFragmentEditor({
         </Button>
       </div>
       {inline.length === 0 ? (
-        <p className="text-fine text-muted-foreground">{labels.empty}</p>
+        <p className="text-callout text-muted-foreground">{labels.empty}</p>
       ) : (
         <div className="flex flex-col gap-3">
           {inline.map((fragment, index) => (
@@ -266,7 +268,7 @@ function SlotEditor({
         </Button>
       </div>
       {slots.length === 0 ? (
-        <p className="text-fine text-muted-foreground">{t("sceneEditor.slotsEmpty")}</p>
+        <p className="text-callout text-muted-foreground">{t("sceneEditor.slotsEmpty")}</p>
       ) : (
         <div className="flex flex-col gap-3">
           {slots.map((slot, index) => (
@@ -305,7 +307,7 @@ function SlotEditor({
                   value={slot.default ?? ""}
                   onChange={(event) => setSlots(updateAt(slots, index, { default: event.currentTarget.value || undefined }))}
                 />
-                <label className="flex items-center gap-2 text-ui">
+                <label className="flex items-center gap-2 text-body">
                   <Checkbox checked={slot.required ?? false} onCheckedChange={(checked) => setSlots(updateAt(slots, index, { required: checked === true }))} />
                   {t("sceneEditor.required")}
                 </label>
@@ -331,7 +333,7 @@ function ArtifactEditor({ scene, onChange, t }: { scene: SceneDocument; onChange
           <Plus data-icon="inline-start" />{t("sceneEditor.addArtifact")}
         </Button>
       </div>
-      {artifacts.length === 0 ? <p className="text-fine text-muted-foreground">{t("sceneEditor.artifactsEmpty")}</p> : (
+      {artifacts.length === 0 ? <p className="text-callout text-muted-foreground">{t("sceneEditor.artifactsEmpty")}</p> : (
         <div className="flex flex-col gap-3">
           {artifacts.map((artifact, index) => (
             <div key={index} className="flex gap-2 rounded-control bg-fill-quiet p-3">
@@ -342,7 +344,7 @@ function ArtifactEditor({ scene, onChange, t }: { scene: SceneDocument; onChange
                   <SelectTrigger aria-label={t("sceneEditor.kind")} className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent position="popper"><SelectGroup>{kinds.map((kind) => <SelectItem key={kind.value} value={kind.value}>{kind.label}</SelectItem>)}</SelectGroup></SelectContent>
                 </Select>
-                <label className="flex items-center gap-2 text-ui">
+                <label className="flex items-center gap-2 text-body">
                   <Checkbox checked={artifact.required ?? false} onCheckedChange={(checked) => setArtifacts(updateAt(artifacts, index, { required: checked === true }))} />
                   {t("sceneEditor.required")}
                 </label>
@@ -368,7 +370,7 @@ function CriterionEditor({ scene, onChange, t }: { scene: SceneDocument; onChang
         <FieldLegend variant="label">{t("sceneEditor.criteria")}</FieldLegend>
         <Button type="button" variant="outline" size="sm" onClick={() => setCriteria(addAtEnd(criteria, defaultExitCriterion()))}><Plus data-icon="inline-start" />{t("sceneEditor.addCriterion")}</Button>
       </div>
-      {criteria.length === 0 ? <p className="text-fine text-muted-foreground">{t("sceneEditor.criteriaDefault")}</p> : (
+      {criteria.length === 0 ? <p className="text-callout text-muted-foreground">{t("sceneEditor.criteriaDefault")}</p> : (
         <div className="flex flex-col gap-2">
           {criteria.map((criterion, index) => (
             <div key={index} className="flex items-center gap-2 rounded-control bg-fill-quiet px-3 py-2">
@@ -399,7 +401,7 @@ function HookEditor({ scene, onChange, t }: { scene: SceneDocument; onChange: (s
         <FieldLegend variant="label">{t("sceneEditor.hooks")}</FieldLegend>
         <Button type="button" variant="outline" size="sm" onClick={() => setHooks(addAtEnd(hooks, defaultSceneHook()))}><Plus data-icon="inline-start" />{t("sceneEditor.addHook")}</Button>
       </div>
-      {hooks.length === 0 ? <p className="text-fine text-muted-foreground">{t("sceneEditor.hooksEmpty")}</p> : (
+      {hooks.length === 0 ? <p className="text-callout text-muted-foreground">{t("sceneEditor.hooksEmpty")}</p> : (
         <div className="flex flex-col gap-3">
           {hooks.map((hook, index) => (
             <div key={index} className="flex gap-2 rounded-control bg-fill-quiet p-3">
@@ -563,18 +565,18 @@ export function SceneEditor({
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-background" aria-label={editorTitle}>
       {loading ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-ui text-muted-foreground" role="status">
-            <Loader2 className="animate-spin" />{t("sceneEditor.loading")}
+          <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-body text-muted-foreground" role="status">
+            <Spinner />{t("sceneEditor.loading")}
           </div>
         ) : loadError ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-ui text-destructive">{t("sceneEditor.loadError")}</div>
+          <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-body text-destructive">{t("sceneEditor.loadError")}</div>
         ) : (
           <Tabs defaultValue="identity" className="min-h-0 flex-1 flex-col gap-0">
             <div className="shrink-0 bg-card/30">
               <div className="mx-auto w-full max-w-4xl px-8 pt-7">
                 <div className="flex flex-col gap-1">
-                  <h1 className="text-display font-semibold tracking-tight">{editorTitle}</h1>
-                  <p className="text-hint leading-relaxed text-muted-foreground">{t("sceneEditor.description")}</p>
+                  <h1 className="text-page font-semibold tracking-tight">{editorTitle}</h1>
+                  <p className="text-metadata text-muted-foreground">{t("sceneEditor.description")}</p>
                 </div>
                 <TabsList variant="line" className="mt-5 max-w-full justify-start overflow-x-auto pb-2">
                   {(["identity", "execution", "skills", "brief", "outputs", "automation", "json"] as const).map((tab) => (
@@ -701,7 +703,7 @@ export function SceneEditor({
                   <SectionIntro title={t("sceneEditor.jsonTitle")} description={t("sceneEditor.jsonDescription")} />
                   <Field data-invalid={Boolean(jsonError)}>
                     <FieldLabel htmlFor="scene-json">{t("sceneEditor.jsonDocument")}</FieldLabel>
-                    <Textarea id="scene-json" className="min-h-96 font-mono text-fine" value={json} aria-invalid={Boolean(jsonError)} onChange={(event) => { setJson(event.currentTarget.value); setJsonError(null); setJsonDirty(true); }} />
+                    <Textarea id="scene-json" className="min-h-96 font-mono text-callout" value={json} aria-invalid={Boolean(jsonError)} onChange={(event) => { setJson(event.currentTarget.value); setJsonError(null); setJsonDirty(true); }} />
                     {jsonError && <FieldError>{jsonError}</FieldError>}
                   </Field>
                   <Button type="button" variant="outline" onClick={applyJson}>{t("sceneEditor.applyJson")}</Button>
@@ -715,7 +717,7 @@ export function SceneEditor({
         <Separator />
         <footer className="flex shrink-0 items-center gap-2 bg-card/40 px-8 py-3">
           <div className="min-w-0 flex-1 text-left">
-            {(issueMessages.length > 0 || jsonDirty) && !loading && <p role="alert" className="truncate text-fine text-destructive" title={jsonDirty ? t("sceneEditor.jsonUnapplied") : issueMessages.join("\n")}>{t("sceneEditor.validationSummary", { count: issueMessages.length + (jsonDirty ? 1 : 0), error: jsonDirty ? t("sceneEditor.jsonUnapplied") : issueMessages[0] })}</p>}
+            {(issueMessages.length > 0 || jsonDirty) && !loading && <p role="alert" className="truncate text-callout text-destructive" title={jsonDirty ? t("sceneEditor.jsonUnapplied") : issueMessages.join("\n")}>{t("sceneEditor.validationSummary", { count: issueMessages.length + (jsonDirty ? 1 : 0), error: jsonDirty ? t("sceneEditor.jsonUnapplied") : issueMessages[0] })}</p>}
           </div>
           {editableOriginal && (
             <AlertDialog>
@@ -724,13 +726,13 @@ export function SceneEditor({
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader><AlertDialogTitle>{t("sceneEditor.deleteTitle")}</AlertDialogTitle><AlertDialogDescription>{t("sceneEditor.deleteDescription", { name: editableOriginal.title })}</AlertDialogDescription></AlertDialogHeader>
-                <AlertDialogFooter><AlertDialogCancel>{t("sceneEditor.cancel")}</AlertDialogCancel><AlertDialogAction variant="destructive" disabled={deleting} onClick={() => void remove()}>{deleting && <Loader2 data-icon="inline-start" className="animate-spin" />}{t("sceneEditor.delete")}</AlertDialogAction></AlertDialogFooter>
+                <AlertDialogFooter><AlertDialogCancel>{t("sceneEditor.cancel")}</AlertDialogCancel><AlertDialogAction variant="destructive" disabled={deleting} onClick={() => void remove()}>{deleting && <Spinner data-icon="inline-start" />}{t("sceneEditor.delete")}</AlertDialogAction></AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           )}
           <Button type="button" variant="ghost" onClick={onClose}>{t("sceneEditor.cancel")}</Button>
           <Button type="button" disabled={loading || saving || issues.length > 0 || Boolean(jsonError) || jsonDirty} onClick={() => void save()}>
-            {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
+            {saving ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
             {t("sceneEditor.save")}
           </Button>
         </footer>

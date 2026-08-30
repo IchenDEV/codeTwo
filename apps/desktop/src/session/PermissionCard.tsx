@@ -37,7 +37,7 @@ function PermissionDetails({ context }: { context: PermissionContext }) {
 
   if (context.kind === "acp") return null;
   return (
-    <div className="space-y-1 text-hint text-muted-foreground">
+    <div className="space-y-1 text-metadata text-muted-foreground">
       <p className="font-medium text-foreground">{contextLabel(context.kind, t)}</p>
       {details.map(([label, value]) => (
         <p key={label}>
@@ -85,21 +85,21 @@ export function PermissionCard({
           <div className="min-w-0 flex-1 space-y-3">
             <div className="space-y-0.5">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <h2 id="permission-card-title" className="text-ui font-semibold">
+                <h2 id="permission-card-title" className="text-body font-semibold">
                   {t("permission.requested")}
                 </h2>
                 {pendingCount > 1 && (
-                  <span className="text-cap text-muted-foreground">
+                  <span className="text-metadata text-muted-foreground">
                     {t("permission.pendingCount", { count: pendingCount })}
                   </span>
                 )}
               </div>
-              <p className="text-hint text-muted-foreground">
+              <p className="text-metadata text-muted-foreground">
                 {t("permission.sessionScope")}
               </p>
             </div>
 
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control bg-fill-quiet px-3 py-2 font-mono text-ui">
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control bg-fill-quiet px-3 py-2 font-mono text-body">
               {request.title}
             </pre>
 

@@ -127,7 +127,9 @@ describe("CheckoutBar", () => {
       expect(popup?.textContent).toContain("current");
       expect(popup?.textContent).toContain("worktree");
       expect(button(popup, "codeTwo, Project checkout").getAttribute("aria-pressed")).toBe("true");
-      expect(button(popup, "main, From the current ref").getAttribute("title")).toBe("main @ 3befbb7d");
+      const currentRef = button(popup, "main, From the current ref");
+      expect(currentRef.getAttribute("title")).toBeNull();
+      expect(currentRef.textContent).toContain("main @ 3befbb7d");
 
       click(button(popup, "main, From the current ref"));
       expect(selected).toBe("current");
@@ -203,7 +205,8 @@ describe("CheckoutBar", () => {
         "disabled:data-[selected=true]:opacity-100",
       );
       expect(popup?.textContent).toContain("main");
-      expect(selected.getAttribute("title")).toBe("main @ 3befbb7d");
+      expect(selected.getAttribute("title")).toBeNull();
+      expect(selected.textContent).toContain("main @ 3befbb7d");
       expect(popup?.textContent).toContain("exact local ref and commit");
     } finally {
       rendered.unmount();

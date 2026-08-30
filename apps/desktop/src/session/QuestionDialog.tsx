@@ -1,4 +1,4 @@
-import { Check, MessageCircleQuestion } from "@/components/ui/icons";
+import { MessageCircleQuestion } from "@/components/ui/icons";
 import { useState } from "react";
 
 import {
@@ -13,7 +13,7 @@ import {
 } from "./elicitation";
 import type { ElicitationAnswer, ElicitationField, ElicitationForm } from "../bridge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ChoiceRow } from "@/components/business/choice-row";
 import {
   Dialog,
   DialogContent,
@@ -22,53 +22,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
 
 /** happy-dom and React disagree about controlled inputs; the repo's fields drive them via onInput. */
 function noopChange() {}
-
-function OptionButton({
-  option,
-  selected,
-  multi,
-  onPick,
-}: {
-  option: { value: string; label: string; description?: string | null; preview?: string | null };
-  selected: boolean;
-  multi: boolean;
-  onPick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role={multi ? "checkbox" : "radio"}
-      aria-checked={selected}
-      onClick={onPick}
-      className={cn(
-        "flex w-full items-start gap-2 rounded-control border px-3 py-2 text-left transition-colors",
-        // Selection is carried by fill and a check mark rather than a border colour: the design
-        // system reserves static borders, and a tick reads at a glance in either theme.
-        selected ? "bg-primary/10" : "hover:bg-accent/50",
-      )}
-    >
-      <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
-        {selected && <Check className="size-3.5 text-primary" aria-hidden />}
-      </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-ui font-medium text-foreground">{option.label}</span>
-        {option.description && (
-          <span className="text-fine text-muted-foreground">{option.description}</span>
-        )}
-        {option.preview && selected && (
-          <pre className="mt-1 max-h-40 w-full overflow-auto whitespace-pre-wrap rounded-micro bg-fill-quiet px-2 py-1.5 font-mono text-cap text-muted-foreground">
-            {option.preview}
-          </pre>
-        )}
-      </span>
-    </button>
-  );
-}
 
 function Question({
   form,
@@ -91,45 +49,78 @@ function Question({
   return (
     <section className="flex min-w-0 flex-col gap-2">
       {field.title && (
-        <h3 className="text-cap font-medium uppercase text-muted-foreground">{field.title}</h3>
+        <h3 className="text-metadata font-medium uppercase text-muted-foreground">{field.title}</h3>
       )}
       {field.description && (
-        <p className="text-ui text-foreground/90">{field.description}</p>
+        <p className="text-body text-foreground/90">{field.description}</p>
       )}
 
       {(field.options?.length ?? 0) > 0 ? (
-        <div
-          role={multi ? "group" : "radiogroup"}
-          aria-label={field.title ?? field.description ?? field.key}
-          className="flex flex-col gap-1.5"
-        >
-          {field.options?.map((option) => (
-            <OptionButton
-              key={option.value}
-              option={option}
-              multi={multi}
-              selected={selected.includes(option.value)}
-              onPick={() =>
-                onChange(
-                  multi
-                    ? toggleOption(values, form, field.key, option.value)
-                    : selectOption(values, form, field.key, option.value),
-                )
-              }
-            />
-          ))}
-        </div>
-      ) : field.kind === "boolean" ? (
-        <label className="flex items-center gap-2 text-ui">
-          <Checkbox
+        multi ? (
+          <div
+            role="group"
             aria-label={field.title ?? field.description ?? field.key}
-            checked={value === true}
-            onCheckedChange={(checked) =>
-              onChange(setValue(values, field, checked === true))
+            className="flex flex-col gap-control-group"
+          >
+            {field.options?.map((option) => {
+              const optionSelected = selected.includes(option.value);
+              return (
+                <ChoiceRow
+                  key={option.value}
+                  kind="checkbox"
+                  label={option.label}
+                  description={option.description}
+                  selected={optionSelected}
+                  onCheckedChange={(checked) => {
+                    if (checked !== optionSelected) {
+                      onChange(toggleOption(values, form, field.key, option.value));
+                    }
+                  }}
+                  details={option.preview && optionSelected ? (
+                    <pre className="mt-inline max-h-40 w-full overflow-auto whitespace-pre-wrap rounded-micro bg-fill-quiet px-module-inset py-control-group font-mono text-metadata text-muted-foreground">
+                      {option.preview}
+                    </pre>
+                  ) : null}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <RadioGroup
+            value={selected[0] ?? ""}
+            onValueChange={(optionValue) =>
+              onChange(selectOption(values, form, field.key, optionValue))
             }
-          />
-          {field.title ?? field.key}
-        </label>
+            aria-label={field.title ?? field.description ?? field.key}
+          >
+            {field.options?.map((option) => {
+              const optionSelected = selected.includes(option.value);
+              return (
+                <ChoiceRow
+                  key={option.value}
+                  kind="radio"
+                  value={option.value}
+                  label={option.label}
+                  description={option.description}
+                  selected={optionSelected}
+                  details={option.preview && optionSelected ? (
+                    <pre className="mt-inline max-h-40 w-full overflow-auto whitespace-pre-wrap rounded-micro bg-fill-quiet px-module-inset py-control-group font-mono text-metadata text-muted-foreground">
+                      {option.preview}
+                    </pre>
+                  ) : null}
+                />
+              );
+            })}
+          </RadioGroup>
+        )
+      ) : field.kind === "boolean" ? (
+        <ChoiceRow
+          kind="checkbox"
+          label={field.title ?? field.key}
+          description={field.description}
+          selected={value === true}
+          onCheckedChange={(checked) => onChange(setValue(values, field, checked))}
+        />
       ) : (
         <Input
           aria-label={field.title ?? field.description ?? field.key}
@@ -152,7 +143,7 @@ function Question({
 
       {custom && (
         <label className="flex flex-col gap-1">
-          <span className="text-cap uppercase text-muted-foreground">
+          <span className="text-metadata uppercase text-muted-foreground">
             {custom.title || t("question.other")}
           </span>
           <Input

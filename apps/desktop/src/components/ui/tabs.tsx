@@ -9,7 +9,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type HTMLAttributes,
   type RefObject,
 } from "react"
@@ -20,7 +19,6 @@ type IndicatorKind = "pill" | "line"
 
 interface IndicatorBox {
   height: number
-  radius: string
   visible: boolean
   width: number
   x: number
@@ -29,7 +27,6 @@ interface IndicatorBox {
 
 const EMPTY_INDICATOR: IndicatorBox = {
   height: 0,
-  radius: "0px",
   visible: false,
   width: 0,
   x: 0,
@@ -45,15 +42,10 @@ function useLiquidIndicator(
   containerRef: RefObject<HTMLDivElement | null>,
   activeSelector: string,
   kind: IndicatorKind,
-  enabled = true,
 ) {
   const [box, setBox] = useState<IndicatorBox>(EMPTY_INDICATOR)
 
   const measure = useCallback(() => {
-    if (!enabled) {
-      setBox((current) => current.visible ? EMPTY_INDICATOR : current)
-      return
-    }
     const container = containerRef.current
     const active = container?.querySelector<HTMLElement>(activeSelector)
     if (!container || !active || active.getClientRects().length === 0) {
@@ -68,7 +60,6 @@ function useLiquidIndicator(
       ? vertical
         ? {
             height: rounded(activeRect.height),
-            radius: "0px",
             visible: true,
             width: 2,
             x: rounded(containerRect.width - 2),
@@ -76,7 +67,6 @@ function useLiquidIndicator(
           }
         : {
             height: 2,
-            radius: "0px",
             visible: true,
             width: rounded(activeRect.width),
             x: rounded(activeRect.left - containerRect.left),
@@ -84,7 +74,6 @@ function useLiquidIndicator(
           }
       : {
           height: rounded(activeRect.height),
-          radius: getComputedStyle(active).borderRadius || "12px",
           visible: true,
           width: rounded(activeRect.width),
           x: rounded(activeRect.left - containerRect.left),
@@ -93,7 +82,6 @@ function useLiquidIndicator(
 
     setBox((current) =>
       current.height === next.height &&
-      current.radius === next.radius &&
       current.visible === next.visible &&
       current.width === next.width &&
       current.x === next.x &&
@@ -101,10 +89,9 @@ function useLiquidIndicator(
         ? current
         : next,
     )
-  }, [activeSelector, containerRef, enabled, kind])
+  }, [activeSelector, containerRef, kind])
 
   useLayoutEffect(() => {
-    if (!enabled) return
     const container = containerRef.current
     if (!container) return
 
@@ -135,7 +122,7 @@ function useLiquidIndicator(
       mutationObserver.disconnect()
       resizeObserver?.disconnect()
     }
-  }, [containerRef, enabled, measure])
+  }, [containerRef, measure])
 
   return box
 }
@@ -166,12 +153,11 @@ function LiquidIndicator({
       >
         <span
           aria-hidden="true"
-          className="tabs-liquid-indicator block"
+          className="block rounded-control"
           style={{
-            "--tabs-indicator-radius": box.radius,
             height: box.height,
             width: box.width,
-          } as CSSProperties}
+          }}
         />
       </Liquid.Item>
     )
@@ -184,13 +170,12 @@ function LiquidIndicator({
     >
       <span
         aria-hidden="true"
-        className="tabs-liquid-indicator pointer-events-none absolute left-0 top-0 block"
+        className="pointer-events-none absolute left-0 top-0 block rounded-control"
         style={{
-          "--tabs-indicator-radius": box.radius,
           height: box.height,
           transform: `translate3d(${box.x}px, ${box.y}px, 0)`,
           width: box.width,
-        } as CSSProperties}
+        }}
       />
     </Liquid.Item>
   )
@@ -260,13 +245,13 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list relative isolate inline-flex w-fit items-center justify-center rounded-control p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
+  "group/tabs-list relative isolate inline-flex w-fit items-center justify-center rounded-control p-optical text-muted-foreground group-data-[orientation=horizontal]/tabs:h-control-field group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
   {
     variants: {
       variant: {
         default: "bg-muted",
         line: "gap-1 bg-transparent",
-        toolbar: "gap-1 bg-transparent p-0 group-data-[orientation=horizontal]/tabs:data-[variant=toolbar]:h-(--ds-control-normal)",
+        toolbar: "gap-1 bg-transparent p-0 group-data-[orientation=horizontal]/tabs:data-[variant=toolbar]:h-control",
       },
     },
     defaultVariants: {
@@ -284,13 +269,7 @@ function TabsList({
   VariantProps<typeof tabsListVariants>) {
   const listRef = useRef<HTMLDivElement>(null)
   const indicator = variant === "line" ? "line" : "pill"
-  const liquidIndicatorEnabled = LIQUID_AVAILABLE && variant !== "toolbar"
-  const box = useLiquidIndicator(
-    listRef,
-    "[data-active]",
-    indicator,
-    liquidIndicatorEnabled,
-  )
+  const box = useLiquidIndicator(listRef, "[data-active]", indicator)
   return (
     <TabsPrimitive.List
       ref={listRef}
@@ -299,17 +278,14 @@ function TabsList({
       className={cn(tabsListVariants({ variant }), className)}
       {...props}
     >
-      {liquidIndicatorEnabled && (
+      {LIQUID_AVAILABLE && (
         <Liquid
           aria-hidden="true"
           blur={indicator === "line" ? 2.5 : 3.5}
           contrast={20}
-          fill="currentColor"
+          fill={variant === "line" ? "var(--foreground)" : variant === "toolbar" ? "var(--secondary)" : "var(--background)"}
           filterPadding={12}
-          className={cn(
-            "pointer-events-none absolute inset-0",
-            variant === "line" ? "text-foreground" : "text-background",
-          )}
+          className="pointer-events-none absolute inset-0"
         >
           <LiquidIndicator box={box} />
         </Liquid>
@@ -327,11 +303,11 @@ function TabsTrigger({
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative z-10 inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-control px-2 py-1 text-ui font-medium whitespace-nowrap text-foreground/60 transition-colors group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative z-10 inline-flex h-full flex-1 items-center justify-center gap-1.5 rounded-control px-2 py-1 text-body font-medium whitespace-nowrap text-foreground/60 transition-colors group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:focus-ring disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         "group-data-[variant=default]/tabs-list:data-active:text-foreground dark:group-data-[variant=default]/tabs-list:data-active:text-foreground",
         "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent group-data-[variant=line]/tabs-list:data-active:text-foreground dark:group-data-[variant=line]/tabs-list:data-active:text-foreground",
-        "group-data-[variant=toolbar]/tabs-list:h-full group-data-[variant=toolbar]/tabs-list:flex-none group-data-[variant=toolbar]/tabs-list:rounded-control group-data-[variant=toolbar]/tabs-list:px-module-inset group-data-[variant=toolbar]/tabs-list:py-0 group-data-[variant=toolbar]/tabs-list:text-muted-foreground group-data-[variant=toolbar]/tabs-list:hover:bg-accent group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary group-data-[variant=toolbar]/tabs-list:data-active:text-primary group-data-[variant=toolbar]/tabs-list:data-active:shadow-none group-data-[variant=toolbar]/tabs-list:data-active:hover:bg-secondary dark:group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary",
-        !LIQUID_AVAILABLE && "group-data-[variant=default]/tabs-list:data-active:bg-background",
+        "group-data-[variant=toolbar]/tabs-list:h-full group-data-[variant=toolbar]/tabs-list:flex-none group-data-[variant=toolbar]/tabs-list:rounded-control group-data-[variant=toolbar]/tabs-list:px-module-inset group-data-[variant=toolbar]/tabs-list:py-0 group-data-[variant=toolbar]/tabs-list:text-muted-foreground group-data-[variant=toolbar]/tabs-list:hover:bg-accent group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent group-data-[variant=toolbar]/tabs-list:data-active:text-primary group-data-[variant=toolbar]/tabs-list:data-active:shadow-none group-data-[variant=toolbar]/tabs-list:data-active:hover:bg-transparent dark:group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent",
+        !LIQUID_AVAILABLE && "group-data-[variant=default]/tabs-list:data-active:bg-background group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary dark:group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary",
         className
       )}
       {...props}

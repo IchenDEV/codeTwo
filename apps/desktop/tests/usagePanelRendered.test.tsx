@@ -106,7 +106,7 @@ describe("UsagePanel", () => {
     expect(view.container.querySelector("h1")?.textContent).toBe("Usage");
     expect(view.container.textContent).toContain("quota for any provider");
     expect(view.container.textContent).toContain("Provider quota");
-    expect(view.container.querySelector('[title="Rescan"]')).toBeTruthy();
+    expect(view.container.querySelector('button[aria-label="Rescan"]')).toBeTruthy();
     expect(view.container.textContent).toContain("7d");
     expect(view.container.textContent).toContain("30d");
     expect(dom.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull();

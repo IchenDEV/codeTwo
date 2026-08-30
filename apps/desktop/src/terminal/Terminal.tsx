@@ -8,6 +8,8 @@ import { onPtyExit, onPtyOutput, ptyResize, ptySpawn, ptyWrite } from "../bridge
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { useTerminalSettings } from "./settings";
 
 const FALLBACK_MONO = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace';
@@ -252,8 +254,9 @@ export function TerminalPanel({
       {finding && (
         <>
           <div className="flex items-center gap-1 bg-muted/40 px-2 py-1.5">
-            <input
+            <Input
               autoFocus
+              size="compact"
               value={query}
               placeholder={t("terminal.search")}
               onChange={(e) => {
@@ -268,7 +271,7 @@ export function TerminalPanel({
                   termRef.current?.focus();
                 }
               }}
-              className="min-w-0 flex-1 bg-transparent text-fine outline-none placeholder:text-muted-foreground/60"
+              className="min-w-0 flex-1 bg-transparent text-callout outline-none placeholder:text-muted-foreground/60"
             />
             <FindButton title={t("terminal.findPrev")} onClick={() => find(false)}>
               <ArrowUp className="size-3" />
@@ -305,13 +308,14 @@ function FindButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      title={title}
+    <TooltipButton
+      label={title}
+      variant="ghost"
+      size="icon-xs"
       onClick={onClick}
-      className="rounded-control p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+      className="text-muted-foreground"
     >
       {children}
-    </button>
+    </TooltipButton>
   );
 }

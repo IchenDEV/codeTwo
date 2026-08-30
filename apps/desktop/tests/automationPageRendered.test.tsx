@@ -48,8 +48,8 @@ describe("AutomationsPage layout", () => {
     expect(view.container.querySelector("[data-automation-page] h1")?.textContent).toBe("Automations");
     expect(view.container.querySelector("[data-automation-page] h1")?.className).toContain("text-dialog");
     const emptyState = view.container.querySelector("[data-automation-list-pane] [aria-live]");
-    expect(emptyState?.querySelector("p")?.className).toContain("font-medium");
-    expect(emptyState?.querySelectorAll("p")[1]?.className).toContain("text-hint");
+    expect(emptyState?.querySelector('[data-slot="empty-title"]')?.className).toContain("font-semibold");
+    expect(emptyState?.querySelector('[data-slot="empty-description"]')?.className).toContain("text-body");
     const addProject = button(view.container, "Add project");
     expect(addProject).not.toBeNull();
     expect(addProject?.hasAttribute("disabled")).toBeFalse();
@@ -107,7 +107,7 @@ describe("AutomationsPage layout", () => {
     expect(switcher?.querySelectorAll('button[aria-pressed]').length).toBe(3);
     expect(switcher?.querySelectorAll('button[aria-pressed="true"]').length).toBe(1);
     expect(detailTabs?.querySelectorAll('[role="tab"]').length).toBe(2);
-    expect(detailTabs?.querySelectorAll('[role="tab"]:disabled').length).toBe(2);
+    expect(detailTabs?.querySelectorAll('[role="tab"][aria-disabled="true"]').length).toBe(2);
     expect(view.container.querySelector("[data-automation-task-center]")).toBeNull();
     expect(view.container.querySelector("[data-automation-inline-detail]")).toBeNull();
 

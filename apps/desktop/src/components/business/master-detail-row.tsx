@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 interface MasterDetailRowProps {
   label: string
@@ -9,6 +10,8 @@ interface MasterDetailRowProps {
   meta?: ReactNode
   selected: boolean
   disabled?: boolean
+  className?: string
+  descriptionClassName?: string
   onSelect: () => void
 }
 
@@ -19,6 +22,8 @@ function MasterDetailRow({
   meta,
   selected,
   disabled = false,
+  className,
+  descriptionClassName,
   onSelect,
 }: MasterDetailRowProps) {
   const descriptionId = useId()
@@ -41,7 +46,7 @@ function MasterDetailRow({
       aria-describedby={describedBy}
       disabled={disabled}
       onClick={onSelect}
-      className={description ? "items-start" : "items-center"}
+      className={cn(description ? "items-start" : "items-center", className)}
     >
       {leading ? (
         <span
@@ -60,7 +65,7 @@ function MasterDetailRow({
           <span
             id={descriptionId}
             data-slot="master-detail-row-description"
-            className="block truncate text-fine text-muted-foreground"
+            className={cn("mt-1 block truncate text-callout text-muted-foreground", descriptionClassName)}
           >
             {description}
           </span>

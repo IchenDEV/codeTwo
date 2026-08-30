@@ -115,12 +115,12 @@ export function SceneBanner({
     <div className="shrink-0 px-4 pb-2 pt-1" data-testid="scene-banner">
       <div className="mx-auto flex w-full items-start gap-3 rounded-module bg-surface px-4 py-3 shadow-surface">
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-ui text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             {source && banner.kind === "complete" ? `${sceneTitle(source, locale)} · ` : null}
             {text}
           </p>
           {banner.unverified.length > 0 && (
-            <p className="text-hint text-muted-foreground">
+            <p className="text-metadata text-muted-foreground">
               {t("sceneBanner.unverified", { items: banner.unverified.join(", ") })}
             </p>
           )}

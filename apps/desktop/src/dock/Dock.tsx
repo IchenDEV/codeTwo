@@ -148,20 +148,24 @@ export function Dock({
   });
 
   const renderSurfaceCard = ({ id, icon: Icon, titleKey, descKey }: DockSurfaceDefinition) => (
-    <button
+    <Button
       key={id}
+      type="button"
+      variant="ghost"
+      size="row"
+      focusStyle="inset"
       aria-label={t(titleKey)}
       onClick={() => onTab(id)}
-      className="dock-surface-card flex items-start gap-2 rounded-module bg-card p-3 text-left transition-colors hover:bg-accent/50 focus-visible:focus-ring"
+      className="dock-surface-card items-start gap-module-inset rounded-module bg-card p-3"
     >
       <Icon className="size-4 text-muted-foreground" />
       <span>
-        <span className="block text-ui font-semibold">{t(titleKey)}</span>
-        <span className="mt-0.5 block text-fine leading-relaxed text-muted-foreground">
+        <span className="block text-body font-semibold">{t(titleKey)}</span>
+        <span className="mt-0.5 block text-callout text-muted-foreground">
           {t(descKey)}
         </span>
       </span>
-    </button>
+    </Button>
   );
 
   return (
@@ -226,7 +230,7 @@ export function Dock({
         </>
       ) : (
       <Tabs value={shown} onValueChange={(v) => onTab(v as DockSurface)} className="flex min-h-0 flex-1 flex-col gap-0">
-        {/* The shared 40px height matches the main header, so this tab row and the breadcrumb
+        {/* The shared 46px height matches the main header, so this tab row and the breadcrumb
             share one vertical centre and one continuous bottom border. It drags the window for the
             same reason: the overlay title bar leaves nothing else to grab. */}
         <div

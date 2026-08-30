@@ -110,11 +110,11 @@ export function TaskPlanPanel({
       <Separator className="mb-2" />
       <div className="flex h-(--ds-control-normal) items-center gap-2 px-2">
         <ListTodo className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <h2 className="min-w-0 flex-1 truncate text-ui font-medium">{t("taskPlan.title")}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-body font-medium">{t("taskPlan.title")}</h2>
         <p
           role="status"
           aria-live="polite"
-          className="shrink-0 text-hint font-medium tabular-nums text-muted-foreground"
+          className="shrink-0 text-metadata font-medium tabular-nums text-muted-foreground"
         >
           {t("taskPlan.step", { current: currentStep, total: entries.length })}
         </p>
@@ -135,7 +135,7 @@ export function TaskPlanPanel({
               key={`${index}:${entry.content}`}
               data-task-plan-status={status}
               className={cn(
-                "flex items-start gap-2 rounded-control px-2 py-1.5 text-fine leading-snug",
+                "flex items-start gap-2 rounded-control px-2 py-1.5 text-callout",
                 status === "in_progress" && "bg-accent/50",
                 status === "completed" && "text-muted-foreground",
               )}

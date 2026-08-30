@@ -1,5 +1,6 @@
 import { createReactBlockSpec } from "@blocknote/react";
 import { Badge } from "@/components/ui/badge";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import type { DocBlock } from "../bridge";
 
@@ -78,11 +79,11 @@ function IssueRefCard({
         href={props.url}
         target="_blank"
         rel="noreferrer"
-        className="shrink-0 font-mono text-ui font-semibold text-primary no-underline"
+        className="shrink-0 font-mono text-body font-semibold text-primary no-underline"
       >
         #{props.issueId}
       </a>
-      <span className="min-w-0 flex-1 truncate text-ui">{props.title}</span>
+      <span className="min-w-0 flex-1 truncate text-body">{props.title}</span>
       {props.state && (
         <Badge variant="secondary" className="uppercase">
           {props.state}
@@ -91,15 +92,16 @@ function IssueRefCard({
       {props.delegatedScene && (
         <Badge variant="outline">{t("issueDeleg.pill", { scene: props.delegatedScene })}</Badge>
       )}
-      <button
+      <TooltipButton
+        label={t("issueDeleg.remove")}
         type="button"
-        className="shrink-0 text-ui text-muted-foreground"
-        title={t("issueDeleg.remove")}
-        aria-label={t("issueDeleg.remove")}
+        variant="ghost"
+        size="icon-xs"
+        className="shrink-0 text-muted-foreground"
         onClick={onRemove}
       >
         ×
-      </button>
+      </TooltipButton>
     </div>
   );
 }

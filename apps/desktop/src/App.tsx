@@ -435,6 +435,7 @@ import { useLanguage, useT } from "./i18n";
 import { currentDesktopPlatform } from "./platform";
 
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -454,6 +455,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
+  TooltipButton,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -7383,10 +7385,12 @@ export default function App() {
       <div className="animate-page-in flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
         {railOverlay && narrowRailOpen && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             aria-label={t("rail.collapse")}
-            className="fixed inset-0 z-40 bg-black/35"
+            className="fixed inset-0 z-40 size-auto rounded-none bg-black/35 hover:bg-black/35"
             onClick={() => setNarrowRailOpen(false)}
           />
         )}
@@ -7904,15 +7908,17 @@ export default function App() {
               </>
             )}
             {activeBoardTask ? (
-              <button
+              <TooltipButton
                 type="button"
-                className="rounded-control p-0.5 text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
-                aria-label={t("taskboard.open")}
-                title={activeBoardTask.id}
+                variant="ghost"
+                size="icon-xs"
+                className="text-primary"
+                label={t("taskboard.open")}
+                tooltip={activeBoardTask.id}
                 onClick={openTaskBoard}
               >
                 <SquareKanban className="size-3.5" aria-hidden />
-              </button>
+              </TooltipButton>
             ) : null}
             <span className="session-header-title electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
               {activeTitle}
@@ -7928,7 +7934,7 @@ export default function App() {
               </>
             ) : null}
             {!activeBoardTask && activeSession ? (
-              <span className="rounded-control bg-fill-rest px-2 py-0.5 text-cap text-muted-foreground">
+              <span className="rounded-control bg-fill-rest px-2 py-0.5 text-metadata text-muted-foreground">
                 {t("rail.newTemporarySession")}
               </span>
             ) : null}
@@ -7939,9 +7945,12 @@ export default function App() {
               {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                   is in flight — and the way back to the answer without leaving the mode for good. */}
               {docMode && hasConversationContent && (
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="compact"
                   onClick={() => toggleDocMode(false)}
-                  className="mr-1 flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                  className="mr-1 shrink-0 gap-1.5 text-callout text-muted-foreground"
                   title={t("header.showTranscript", { count: turns.length })}
                 >
                   {(running || sessionLoading) && (
@@ -7954,7 +7963,7 @@ export default function App() {
                       : running
                         ? t("header.running")
                         : t("header.turns", { count: turns.length })}
-                </button>
+                </Button>
               )}
 
               <div className="session-header-context-actions flex min-w-0 shrink-0 items-center gap-2">
@@ -8103,13 +8112,15 @@ export default function App() {
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
-                        <button
+                        <Button
                           type="button"
-                          className="rounded-micro underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                          variant="link"
+                          size="compact"
+                          className="h-auto px-0 py-0 text-inherit decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]"
                           title={activeProject ?? undefined}
                         >
                           {activeProjectName ?? t("rail.noProject")}
-                        </button>
+                        </Button>
                       }
                     />
                     <DropdownMenuContent side="top" align="center" className="w-60">
@@ -8146,7 +8157,11 @@ export default function App() {
                   BlockNote would take an in-progress draft with it. */}
               {activeArchived && (
                 <div className="shrink-0 px-6 pb-6 pt-3">
-                  <div className="mx-auto flex w-full max-w-3xl items-center gap-3 rounded-module border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)]">
+                  <Card
+                    variant="surface"
+                    density="compact"
+                    className="mx-auto w-full max-w-3xl flex-row items-center px-4"
+                  >
                     <Archive className="size-4 shrink-0 text-muted-foreground" />
                     <p className="min-w-0 flex-1 text-ui text-muted-foreground">
                       {t("archived.notice")}
@@ -8164,7 +8179,7 @@ export default function App() {
                     >
                       {t("archived.restore")}
                     </Button>
-                  </div>
+                  </Card>
                 </div>
               )}
               {/* Quiet scene banner (R8): stage completion / hook suggestions for the focused

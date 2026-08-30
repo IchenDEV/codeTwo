@@ -1300,9 +1300,12 @@ export function FeishuWorkspacePage({
       >
         <GripVertical className="size-3" />
       </span>
-      <button
+      <Button
         type="button"
-        className="flex min-w-0 items-center gap-1 rounded-control px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+        variant="ghost"
+        size="compact"
+        focusStyle="inset"
+        className="min-w-0 gap-1 px-2 text-body font-normal text-foreground/55"
         data-feishu-section-toggle={resourceTab}
         aria-expanded={!collapsedSections[resourceTab]}
         aria-label={collapsedSections[resourceTab]
@@ -1327,7 +1330,7 @@ export function FeishuWorkspacePage({
           className={cn("size-3.5 shrink-0 -rotate-90 motion-safe:transition-transform", !collapsedSections[resourceTab] && "rotate-0")}
           aria-hidden="true"
         />
-      </button>
+      </Button>
       {actions ? (
         <span data-feishu-section-actions className="ml-auto flex shrink-0 gap-0.5 opacity-0 group-hover/feishu-section:opacity-100 focus-within:opacity-100">
           {actions}
@@ -1752,7 +1755,7 @@ export function FeishuWorkspacePage({
             {related.length > 0 ? (
               <div className="flex shrink-0 flex-wrap items-center gap-inline px-section py-module-inset text-fine text-muted-foreground">
                 <span>{t("feishu.relatedResources")}</span>
-                {related.map((resource) => <button key={`${resource.kind}:${resource.id}`} type="button" className="rounded-control bg-fill-quiet px-module-inset py-inline text-foreground hover:bg-fill-hover focus-visible:focus-ring" onClick={() => { setTab(resource.kind === "document" ? "documents" : "bases"); setSelection((current) => ({ ...current, [resource.kind === "document" ? "documents" : "bases"]: resource.id })); }}>{resource.name || resource.id}</button>)}
+                {related.map((resource) => <Button key={`${resource.kind}:${resource.id}`} type="button" variant="secondary" size="compact" onClick={() => { setTab(resource.kind === "document" ? "documents" : "bases"); setSelection((current) => ({ ...current, [resource.kind === "document" ? "documents" : "bases"]: resource.id })); }}>{resource.name || resource.id}</Button>)}
               </div>
             ) : null}
             <ScrollArea className="min-h-0 flex-1">

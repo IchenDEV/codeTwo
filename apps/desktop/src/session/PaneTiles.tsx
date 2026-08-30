@@ -1,7 +1,6 @@
 import {
   useRef,
   type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 
@@ -10,14 +9,11 @@ import {
   computeDividers,
   computePaneRects,
   listPanes,
-  MIN_RATIO,
-  type DividerRect,
   type PaneLayout,
 } from "./paneLayout";
+import { PaneDivider } from "./PaneDivider";
 
 const percent = (value: number): string => `${value * 100}%`;
-const clampRatio = (ratio: number): number =>
-  Math.min(1 - MIN_RATIO, Math.max(MIN_RATIO, ratio));
 
 export interface PaneTilesProps {
   layout: PaneLayout;
@@ -48,30 +44,6 @@ export function PaneTiles({
   // A lone pane fills the workspace, so a focus ring would just outline the whole column; only
   // show it once tiling actually splits the space.
   const multiPane = paneIds.length > 1;
-
-  const beginResize =
-    (divider: DividerRect) => (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      const container = containerRef.current;
-      if (!container) return;
-      const move = (moveEvent: PointerEvent) => {
-        const bounds = container.getBoundingClientRect();
-        if (bounds.width === 0 || bounds.height === 0) return;
-        const ratio =
-          divider.direction === "row"
-            ? (moveEvent.clientX - bounds.left - divider.rect.x * bounds.width) /
-              (divider.rect.w * bounds.width)
-            : (moveEvent.clientY - bounds.top - divider.rect.y * bounds.height) /
-              (divider.rect.h * bounds.height);
-        onResizeSplit(divider.splitId, clampRatio(ratio));
-      };
-      const end = () => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", end);
-      };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", end);
-    };
 
   return (
     <div
@@ -106,63 +78,15 @@ export function PaneTiles({
           </div>
         );
       })}
-      {dividers.map((divider) => {
-        const vertical = divider.direction === "row";
-        const boundary = vertical
-          ? divider.rect.x + divider.rect.w * divider.ratio
-          : divider.rect.y + divider.rect.h * divider.ratio;
-        const handleStyle: CSSProperties = vertical
-          ? {
-              position: "absolute",
-              left: percent(boundary),
-              top: percent(divider.rect.y),
-              height: percent(divider.rect.h),
-              width: 8,
-              transform: "translateX(-50%)",
-              cursor: "col-resize",
-              touchAction: "none",
-            }
-          : {
-              position: "absolute",
-              top: percent(boundary),
-              left: percent(divider.rect.x),
-              width: percent(divider.rect.w),
-              height: 8,
-              transform: "translateY(-50%)",
-              cursor: "row-resize",
-              touchAction: "none",
-            };
-        const lineStyle: CSSProperties = vertical
-          ? {
-              position: "absolute",
-              left: "50%",
-              top: 0,
-              bottom: 0,
-              width: 1,
-              transform: "translateX(-50%)",
-            }
-          : {
-              position: "absolute",
-              top: "50%",
-              left: 0,
-              right: 0,
-              height: 1,
-              transform: "translateY(-50%)",
-            };
-        return (
-          <div
-            key={divider.splitId}
-            data-divider-id={divider.splitId}
-            role="separator"
-            aria-orientation={vertical ? "vertical" : "horizontal"}
-            className="z-10"
-            style={handleStyle}
-            onPointerDown={beginResize(divider)}
-          >
-            <div className="bg-border transition-colors hover:bg-primary" style={lineStyle} />
-          </div>
-        );
-      })}
+      {dividers.map((divider) => (
+        <PaneDivider
+          key={divider.splitId}
+          divider={divider}
+          containerRef={containerRef}
+          className="group z-10"
+          onResize={(ratio) => onResizeSplit(divider.splitId, ratio)}
+        />
+      ))}
     </div>
   );
 }

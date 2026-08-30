@@ -38,25 +38,27 @@ function DelegationTrail({
     };
   }, [issue.source, issue.id]);
 
-  if (rows === null) return <p className="px-2 pb-1 text-fine text-muted-foreground">…</p>;
+  if (rows === null) return <p className="px-2 pb-1 text-callout text-muted-foreground">…</p>;
   if (rows.length === 0)
-    return <p className="px-2 pb-1 text-fine text-muted-foreground">{t("issueDeleg.none")}</p>;
+    return <p className="px-2 pb-1 text-callout text-muted-foreground">{t("issueDeleg.none")}</p>;
   return (
     <div className="space-y-0.5 px-2 pb-1">
       {rows.map((row) => (
-        <div key={row.id} className="flex items-center gap-2 text-fine text-muted-foreground">
-          <Badge variant="outline" className="shrink-0 text-cap">
+        <div key={row.id} className="flex items-center gap-2 text-callout text-muted-foreground">
+          <Badge variant="outline" className="shrink-0 text-metadata">
             {row.scene_title || row.scene_ref}
           </Badge>
           <span className="shrink-0">{new Date(row.created_at).toLocaleString()}</span>
           {row.session_id && onOpenSession && (
-            <button
+            <Button
               type="button"
-              className="shrink-0 text-primary hover:underline"
+              variant="link"
+              size="compact"
+              className="h-auto shrink-0 px-0 py-0 text-primary"
               onClick={() => onOpenSession(row.session_id!)}
             >
               {t("issueDeleg.openSession")}
-            </button>
+            </Button>
           )}
           {row.comment_url && (
             <a
@@ -116,17 +118,19 @@ export function IssuesModal({
           <DialogTitle>GitHub Issues</DialogTitle>
         </DialogHeader>
 
-        {loading && <p className="text-hint text-muted-foreground">Loading via gh…</p>}
-        {err && <p className="text-hint text-destructive">{err}</p>}
+        {loading && <p className="text-metadata text-muted-foreground">Loading via gh…</p>}
+        {err && <p className="text-metadata text-destructive">{err}</p>}
 
         <ScrollArea className="max-h-dialog-content pe-3">
           <div className="space-y-1.5">
             {issues.map((it) => (
               <div key={`${it.source}-${it.id}`} className="rounded-module bg-fill-quiet p-surface-inset">
               <div className="flex items-center gap-3">
-                <button
+                <Button
                   type="button"
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="shrink-0 text-muted-foreground"
                   aria-label={t("issueDeleg.activity")}
                   aria-expanded={expanded === `${it.source}-${it.id}`}
                   onClick={() =>
@@ -140,17 +144,17 @@ export function IssuesModal({
                   ) : (
                     <ChevronRight className="size-3.5" />
                   )}
-                </button>
+                </Button>
                 <a
                   href={it.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="shrink-0 font-mono text-ui font-semibold text-primary no-underline"
+                  className="shrink-0 font-mono text-body font-semibold text-primary no-underline"
                 >
                   #{it.id}
                 </a>
-                <span className="flex-1 truncate text-ui">{it.title}</span>
-                <span className="text-cap uppercase text-muted-foreground">{it.state}</span>
+                <span className="flex-1 truncate text-body">{it.title}</span>
+                <span className="text-metadata uppercase text-muted-foreground">{it.state}</span>
                 <Button size="sm" onClick={() => onInsert(it)}>
                   Add to prompt
                 </Button>
@@ -179,7 +183,7 @@ export function IssuesModal({
               </div>
             ))}
             {!loading && !err && issues.length === 0 && (
-              <p className="p-2 text-ui text-muted-foreground">
+              <p className="p-2 text-body text-muted-foreground">
                 No open issues (or this dir isn’t a GitHub repo).
               </p>
             )}
