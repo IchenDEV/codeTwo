@@ -1324,7 +1324,7 @@ export const en = {
   "settings.contrastHint": "Strengthens surface separation and secondary text.",
   "pet.label": "C2 desktop pet",
   "pet.wave": "Say hello to the pet",
-  "pet.hide": "Hide desktop pet",
+  "pet.close": "Close",
   "settings.language": "Language",
   "settings.languageHint":
     "System uses your OS language when C2 has a translation for it.",
@@ -3766,7 +3766,7 @@ export const zhCN: Record<StringKey, string> = {
   "settings.contrastHint": "增强表面层级与次要文字的区分。",
   "pet.label": "C2 桌面宠物",
   "pet.wave": "和宠物打招呼",
-  "pet.hide": "隐藏桌面宠物",
+  "pet.close": "关闭",
   "settings.language": "语言",
   "settings.languageHint": "「跟随系统」会在 C2 有对应翻译时使用系统语言。",
   "settings.terminal": "终端",

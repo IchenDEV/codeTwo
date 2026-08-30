@@ -54,6 +54,8 @@ describe("built-in component policy integration", () => {
   test("hosts the pet in a global desktop window instead of the transcript", () => {
     const host = source("electrobun/index.ts");
     const main = source("main.tsx");
+    const desktopPet = source("pet/DesktopPet.tsx");
+    const pet = source("pet/CodeTwoPet.tsx");
     const transcript = source("session/TranscriptPane.tsx");
     const petEntry = readFileSync(resolve(desktop, "desktop-pet.html"), "utf8");
     const viteConfig = readFileSync(resolve(desktop, "vite.config.ts"), "utf8");
@@ -63,9 +65,17 @@ describe("built-in component policy integration", () => {
     expect(host).not.toContain('views://main/index.html#desktop-pet');
     expect(host).toContain("desktopPetWindow.setAlwaysOnTop(true)");
     expect(host).toContain("desktopPetWindow.setVisibleOnAllWorkspaces(true)");
+    expect(host).toContain("desktopPetWindow.setFrame(frame.x, y, desktopPetWidth, height)");
+    expect(host).toContain("desktopPetState.bubble ? desktopPetBubbleHeight : 0");
     expect(host).toContain("passthrough: false");
     expect(host).not.toContain("passthrough: true");
+    expect(host).toContain("desktopPetRpc.send.event({ name: \"native-context-menu-action\"");
     expect(host).toContain('mainWindow.on("close", () => desktopPetWindow?.close())');
+    expect(desktopPet).toContain("showNativeContextMenu(desktopPetContextMenu");
+    expect(desktopPet).toContain("if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet()");
+    expect(pet).toContain("codetwo-pet-bubble");
+    expect(pet).not.toContain("codetwo-pet-controls");
+    expect(pet).not.toContain("ChevronDown");
     expect(main).toContain('meta[name="codetwo-surface"][content="desktop-pet"]');
     expect(main).toContain("? DesktopPetWindow");
     expect(petEntry).toContain('<meta name="codetwo-surface" content="desktop-pet" />');

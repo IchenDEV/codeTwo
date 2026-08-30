@@ -323,7 +323,10 @@ import type { TranscriptScrollController } from "./session/useTranscriptScroll";
 import { DesktopPetBridge } from "./pet/DesktopPet";
 import { PaneToolbar } from "./session/PaneChrome";
 import { PaneTiles } from "./session/PaneTiles";
-import { petAnimationForActivity } from "./pet/state";
+import {
+  petAnimationForActivity,
+  petConversationBubbleForActivity,
+} from "./pet/state";
 import {
   applyEvent,
   canvasAcceptedRequestKey,
@@ -1342,13 +1345,18 @@ export default function App() {
     : null;
   const awaitingInput = activeRunState?.kind === "awaiting_input";
   const latestTurn = turns[turns.length - 1];
-  const petAnimation = petAnimationForActivity({
+  const petActivity = {
     loading: sessionLoading,
     running,
     awaitingInput,
     failed: activeRunState?.kind === "failed" || Boolean(latestTurn?.error),
     completed: Boolean(latestTurn?.endedAt),
-  });
+  };
+  const petAnimation = petAnimationForActivity(petActivity);
+  const petConversationBubble = petConversationBubbleForActivity(
+    petActivity,
+    latestTurn?.text ?? "",
+  );
   // The right panel's file editor: open tabs in open order, and which one is showing. Every tab
   // is directly editable — unsaved-ness lives in files/dirty.ts, which the close guard reads.
   const [openFiles, setOpenFiles] = useState<string[]>([]);
@@ -7311,7 +7319,7 @@ export default function App() {
 
   return (
     <div className="app-shell flex h-screen flex-col overflow-hidden text-foreground">
-      <DesktopPetBridge animation={petAnimation} />
+      <DesktopPetBridge animation={petAnimation} bubble={petConversationBubble} />
       {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
           Back row at its foot is the way home. */}
       {showSettings ? (

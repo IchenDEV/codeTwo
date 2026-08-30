@@ -2,7 +2,10 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
 
-import { petAnimationForActivity } from "./state";
+import {
+  petAnimationForActivity,
+  petConversationBubbleForActivity,
+} from "./state";
 
 const idle = {
   loading: false,
@@ -30,5 +33,27 @@ describe("C2 pet session state", () => {
       }),
     ).toBe("waiting");
     expect(petAnimationForActivity({ ...idle, loading: true, running: true })).toBe("waiting");
+  });
+
+  test("shows normalized assistant text only during an active conversation", () => {
+    expect(petConversationBubbleForActivity({ ...idle, running: true }, "  Hello\n\nworld  "))
+      .toBe("Hello world");
+    expect(petConversationBubbleForActivity({ ...idle, awaitingInput: true }, "Need your choice"))
+      .toBe("Need your choice");
+    expect(petConversationBubbleForActivity({ ...idle, running: true }, "   ")).toBeNull();
+    expect(petConversationBubbleForActivity(idle, "Finished response")).toBeNull();
+    expect(petConversationBubbleForActivity({ ...idle, completed: true }, "Finished response"))
+      .toBeNull();
+  });
+
+  test("keeps the latest 160 Unicode characters for a glanceable bubble", () => {
+    const bubble = petConversationBubbleForActivity(
+      { ...idle, loading: true },
+      `${"旧".repeat(12)}${"新".repeat(170)}`,
+    );
+
+    expect(Array.from(bubble ?? "")).toHaveLength(160);
+    expect(bubble?.startsWith("…")).toBe(true);
+    expect(bubble?.endsWith("新".repeat(159))).toBe(true);
   });
 });

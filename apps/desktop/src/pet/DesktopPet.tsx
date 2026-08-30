@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+
+import { useT } from "@/i18n";
 
 import { setAppearanceSettings, useAppearanceSettings } from "../appearance";
 import {
@@ -7,19 +9,38 @@ import {
   desktopUpdatePetState,
   isElectrobun,
   listenDesktop,
+  nativeContextMenusAvailable,
+  showNativeContextMenu,
   type DesktopPetState,
+  type NativeContextMenuItem,
 } from "../container";
 import { CodeTwoPet } from "./CodeTwoPet";
 import type { CodeTwoPetAnimation } from "./state";
 
-export function DesktopPetBridge({ animation }: { animation: CodeTwoPetAnimation }) {
+const PET_STATE_UPDATE_INTERVAL_MS = 160;
+export const DESKTOP_PET_CLOSE_ACTION = "close";
+
+export function desktopPetContextMenu(closeLabel: string): NativeContextMenuItem[] {
+  return [{ type: "item", label: closeLabel, action: DESKTOP_PET_CLOSE_ACTION }];
+}
+
+export function DesktopPetBridge({
+  animation,
+  bubble,
+}: {
+  animation: CodeTwoPetAnimation;
+  bubble: string | null;
+}) {
   const appearance = useAppearanceSettings();
+  const pendingState = useRef<DesktopPetState | null>(null);
+  const updateTimer = useRef<number>();
 
   useEffect(() => {
     if (!isElectrobun) return;
-    void desktopUpdatePetState({
+    pendingState.current = {
       visible: appearance.petEnabled,
       animation,
+      bubble,
       appearance: {
         petActivityEnabled: appearance.petActivityEnabled,
         petSize: appearance.petSize,
@@ -27,7 +48,13 @@ export function DesktopPetBridge({ animation }: { animation: CodeTwoPetAnimation
         petId: appearance.petId,
         petName: appearance.petName,
       },
-    }).catch(() => undefined);
+    };
+    if (updateTimer.current !== undefined) return;
+    updateTimer.current = window.setTimeout(() => {
+      updateTimer.current = undefined;
+      const state = pendingState.current;
+      if (state) void desktopUpdatePetState(state).catch(() => undefined);
+    }, PET_STATE_UPDATE_INTERVAL_MS);
   }, [
     animation,
     appearance.petActivityEnabled,
@@ -36,7 +63,15 @@ export function DesktopPetBridge({ animation }: { animation: CodeTwoPetAnimation
     appearance.petName,
     appearance.petSize,
     appearance.petSource,
+    bubble,
   ]);
+
+  useEffect(
+    () => () => {
+      if (updateTimer.current !== undefined) window.clearTimeout(updateTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!isElectrobun) return;
@@ -52,6 +87,7 @@ export function DesktopPetBridge({ animation }: { animation: CodeTwoPetAnimation
 }
 
 export function DesktopPetWindow() {
+  const t = useT();
   const [state, setState] = useState<DesktopPetState | null>(null);
 
   useEffect(() => {
@@ -70,16 +106,28 @@ export function DesktopPetWindow() {
 
   if (!state) return null;
 
+  const openContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    if (!nativeContextMenusAvailable) return;
+    void showNativeContextMenu(desktopPetContextMenu(t("pet.close")), (action) => {
+      if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet();
+    });
+  };
+
   return (
-    <main className="desktop-pet-window">
+    <main
+      className="desktop-pet-window"
+      data-slot="context-menu-trigger"
+      onContextMenu={openContextMenu}
+    >
       <div
         className="desktop-pet-drag-handle electrobun-webkit-app-region-drag"
         aria-hidden="true"
       />
       <CodeTwoPet
         animation={state.animation}
+        bubble={state.bubble}
         appearance={state.appearance}
-        onHide={() => void desktopHidePet()}
       />
     </main>
   );
