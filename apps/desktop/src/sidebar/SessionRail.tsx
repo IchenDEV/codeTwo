@@ -37,6 +37,7 @@ import {
   Settings,
   SquareKanban,
   SquarePen,
+  Smartphone,
   Trash2,
 } from "@/components/ui/icons";
 
@@ -46,9 +47,7 @@ import {
   showNativeContextMenu,
   type NativeContextMenuItem,
 } from "../container";
-import { ProviderIcon } from "../providers/ProviderIcon";
 import { NavigationRow } from "@/components/business/navigation-row";
-import { QuotaProgress } from "@/components/business/quota-progress";
 import { Button } from "@/components/ui/button";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import {
@@ -97,6 +96,45 @@ import {
 type ContextMenuTriggerElement = ReactElement<{
   render: ReactElement<HTMLAttributes<HTMLDivElement>>;
 }>;
+
+function RailUtilityButton({
+  label,
+  selected = false,
+  busy = false,
+  onSelect,
+  children,
+}: {
+  label: string;
+  selected?: boolean;
+  busy?: boolean;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          data-slot="rail-utility-button"
+          data-selected={selected ? "true" : "false"}
+          aria-current={selected ? "page" : undefined}
+          aria-label={label}
+          aria-busy={busy || undefined}
+          onClick={onSelect}
+          className={cn(
+            "rounded-full text-muted-foreground hover:text-foreground",
+            selected && "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary",
+          )}
+        >
+          {children}
+        </Button>}
+      />
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 function SessionContextMenu({
   items,
@@ -151,6 +189,9 @@ export function SessionRail({
   displayProvider,
   onOpenMarket,
   onOpenAutomations,
+  deviceConnectionsAvailable,
+  deviceConnectionsOpen,
+  onOpenDeviceConnections,
   newHint,
   searchHint,
   onOpenSearch,
@@ -203,6 +244,10 @@ export function SessionRail({
   displayProvider: (p: SessionInfo["provider"]) => string;
   onOpenMarket: () => void;
   onOpenAutomations: () => void;
+  /** The built-in remote component is live and can open its pairing surface. */
+  deviceConnectionsAvailable: boolean;
+  deviceConnectionsOpen: boolean;
+  onOpenDeviceConnections: () => void;
   newHint: string;
   /** The palette's shortcut, shown in the search box. */
   searchHint: string;
@@ -1254,51 +1299,48 @@ export function SessionRail({
       </ScrollArea>
 
       {/* ---- 4 · utilities ------------------------------------------------------------------ */}
-      <div data-rail-utilities className="flex shrink-0 flex-col gap-0.5 px-2 pb-2 pt-1.5">
-        <div data-rail-feature="usage">
-          <NavigationRow
-            label={quickQuota ? quickQuotaWindow : t("quota.quick")}
-            busy={quickQuotaLoading}
-            accessibilityLabel={quickQuotaTitle}
-            title={quickQuotaTitle}
-            onSelect={onOpenUsage}
-            leading={quickQuota ? (
-              <span
-                data-quota-provider={quickQuota.provider}
-                className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-              >
-                <ProviderIcon provider={quickQuota.provider} className="size-4" />
-              </span>
-            ) : (
-              <ChartNoAxesColumn className="size-4" />
-            )}
-            meta={quickQuota ? (
-              <span className="flex shrink-0 items-center gap-1.5">
-                <QuotaProgress
-                  density="rail"
-                  label={t("quota.remainingLabel", { window: quickQuotaWindow })}
-                  remainingPercent={quickQuota.remainingPercent}
-                />
-                <span className="w-7 text-right text-fine font-medium tabular-nums">
-                  {quickQuota.remainingPercent}%
-                </span>
-              </span>
-            ) : (
-              <span className="shrink-0 text-fine tabular-nums text-muted-foreground">
-                {quickQuotaLoading ? (
-                  <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
-                ) : "—"}
-              </span>
-            )}
-          />
-        </div>
+      <div
+        data-rail-utilities
+        data-layout="icon-toolbar"
+        className="flex min-h-control-field shrink-0 items-center gap-1 px-3 py-1.5"
+      >
         <div data-rail-feature="settings">
-          <NavigationRow
-            label={t("header.settings")}
-            leading={<Settings className="size-4" />}
-            onSelect={onOpenSettings}
-          />
+          <RailUtilityButton label={t("header.settings")} onSelect={onOpenSettings}>
+            <Settings className="size-4" aria-hidden="true" />
+          </RailUtilityButton>
         </div>
+        <div data-rail-feature="usage">
+          <RailUtilityButton
+            label={quickQuotaTitle}
+            busy={quickQuotaLoading}
+            onSelect={onOpenUsage}
+          >
+            {quickQuotaLoading ? (
+              <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
+            ) : (
+              <ChartNoAxesColumn
+                data-quota-provider={quickQuota?.provider}
+                className="size-4"
+                aria-hidden="true"
+              />
+            )}
+          </RailUtilityButton>
+        </div>
+        {deviceConnectionsAvailable ? (
+          <div data-rail-feature="device-connections" className="ml-auto">
+            <RailUtilityButton
+              label={t("rail.deviceConnections")}
+              selected={deviceConnectionsOpen}
+              onSelect={onOpenDeviceConnections}
+            >
+              <Smartphone
+                data-device-connections-icon="phone"
+                className="size-4"
+                aria-hidden="true"
+              />
+            </RailUtilityButton>
+          </div>
+        ) : null}
       </div>
       </div>
     </aside>

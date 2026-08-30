@@ -71,6 +71,9 @@ function renderRail(overrides = {}) {
           displayProvider={() => "OpenAI Codex"}
           onOpenMarket={() => {}}
           onOpenAutomations={() => {}}
+          deviceConnectionsAvailable={false}
+          deviceConnectionsOpen={false}
+          onOpenDeviceConnections={() => {}}
           newHint="⌘N"
           searchHint="⌘K"
           onOpenSearch={() => {}}
@@ -341,8 +344,8 @@ describe("SessionRail row layout", () => {
     ) ?? [])];
     const sessionScroll = view.container.querySelector("[data-rail-session-scroll]");
     const utilities = view.container.querySelector("[data-rail-utilities]");
-    const utilityRows = [...(utilities?.querySelectorAll(
-      ':scope > [data-rail-feature] > [data-slot="navigation-row"]',
+    const utilityButtons = [...(utilities?.querySelectorAll(
+      ':scope > [data-rail-feature] > [data-slot="rail-utility-button"]',
     ) ?? [])];
 
     expect(rows.map((row) => {
@@ -356,10 +359,11 @@ describe("SessionRail row layout", () => {
       "Scheduled tasks",
       "Plugins",
     ]);
-    expect(utilityRows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
-      "Weekly limit42%",
+    expect(utilityButtons.map((button) => button.getAttribute("aria-label"))).toEqual([
       "Settings",
+      "OpenAI Codex · Weekly limit · 42% left · Open Usage settings",
     ]);
+    expect(utilities?.getAttribute("data-layout")).toBe("icon-toolbar");
     expect(sessionScroll?.nextElementSibling).toBe(utilities);
     expect(features?.querySelector('[data-rail-feature="task-board"] [data-slot="navigation-row"]')?.getAttribute("aria-current"))
       .toBe("page");
@@ -370,27 +374,65 @@ describe("SessionRail row layout", () => {
     expect(features?.querySelector('[data-rail-feature="pull-requests"] [data-slot="navigation-row-leading"]')?.getAttribute("class"))
       .toContain("text-muted-foreground");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
-    for (const row of [...rows, ...utilityRows]) click(row);
-    expect(opened).toEqual(["new", "pull-requests", "tasks", "scheduled", "plugins", "usage", "settings"]);
+    for (const row of [...rows, ...utilityButtons]) click(row);
+    expect(opened).toEqual(["new", "pull-requests", "tasks", "scheduled", "plugins", "settings", "usage"]);
     expect(features?.querySelector('[data-rail-feature="mission-control"]')).toBeNull();
     const quotaButton = utilities?.querySelector(
-      '[data-rail-feature="usage"] [data-slot="navigation-row"]',
+      '[data-rail-feature="usage"] [data-slot="rail-utility-button"]',
     );
-    const quotaMeter = quotaButton?.querySelector('[data-slot="quota-progress"]');
     expect(quotaButton?.getAttribute("aria-label"))
       .toBe("OpenAI Codex · Weekly limit · 42% left · Open Usage settings");
     expect(quotaButton?.querySelector('[role="progressbar"]')).toBeNull();
-    expect(quotaMeter?.tagName).toBe("SPAN");
-    expect(quotaMeter?.getAttribute("aria-hidden")).toBe("true");
-    expect(quotaMeter?.querySelector('[data-slot="progress-indicator"]')?.getAttribute("style"))
-      .toContain("width: 42%");
     expect(utilities?.querySelector('[data-rail-feature="usage"] [data-quota-provider]')?.getAttribute("data-quota-provider"))
       .toBe("codex");
-    for (const row of [...rows.slice(1), ...utilityRows]) {
+    for (const row of rows.slice(1)) {
       expect(row.getAttribute("data-slot")).toBe("navigation-row");
       expect(row.className).toContain("min-h-control");
       expect(row.className).toContain("rounded-control");
     }
+    for (const button of utilityButtons) {
+      expect(button.className).toContain("size-control");
+      expect(button.className).toContain("rounded-full");
+      expect(button.textContent?.trim()).toBe("");
+    }
+
+    view.unmount();
+  });
+
+  test("keeps device connections in the lower-left utility group with a phone icon", () => {
+    activateDom();
+    const opened = [];
+    const view = renderRail({
+      deviceConnectionsAvailable: true,
+      deviceConnectionsOpen: true,
+      onOpenDeviceConnections: () => opened.push("device-connections"),
+    });
+
+    const features = view.container.querySelector("[data-rail-features]");
+    const utilities = view.container.querySelector("[data-rail-utilities]");
+    const button = utilities?.querySelector(
+      '[data-rail-feature="device-connections"] [data-slot="rail-utility-button"]',
+    );
+
+    expect(features?.querySelector('[data-rail-feature="device-connections"]')).toBeNull();
+    expect(button?.textContent?.trim()).toBe("");
+    expect(button?.getAttribute("aria-label")).toBe("Device connections");
+    expect(button?.getAttribute("aria-current")).toBe("page");
+    expect(button?.getAttribute("data-selected")).toBe("true");
+    expect(button?.className).toContain("rounded-full");
+    expect(button?.querySelector('[data-device-connections-icon="phone"]')).toBeTruthy();
+    expect(button?.parentElement?.previousElementSibling?.getAttribute("data-rail-feature")).toBe("usage");
+    click(button);
+    expect(opened).toEqual(["device-connections"]);
+
+    view.unmount();
+  });
+
+  test("removes the device-connections row when its plugin component is unavailable", () => {
+    activateDom();
+    const view = renderRail({ deviceConnectionsAvailable: false });
+
+    expect(view.container.querySelector('[data-rail-feature="device-connections"]')).toBeNull();
 
     view.unmount();
   });
@@ -556,7 +598,7 @@ describe("SessionRail row layout", () => {
     expect(quotaOrb?.style.width).toBe("14px");
     expect(
       view.container
-        .querySelector('[data-rail-feature="usage"] [data-slot="navigation-row"]')
+        .querySelector('[data-rail-feature="usage"] [data-slot="rail-utility-button"]')
         ?.getAttribute("aria-busy"),
     ).toBe("true");
 
