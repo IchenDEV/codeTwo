@@ -1,0 +1,104 @@
+/* Light "paper terminal" palette for the landing page.
+   Scoped under html.home-light, which the pre-paint head script sets from
+   the stored appearance (or the system preference). The dark palette in
+   custom.css is untouched, so dark rendering cannot regress while this
+   class is absent. */
+
+html.home-light body:has(.codetwo-home),
+html.home-light body:has(.codetwo-home) #app {
+  background: #ccd2c7;
+}
+
+html.home-light .codetwo-home {
+  --home-bg: #f1f3ec;
+  --home-surface: #eaede3;
+  --home-surface-raised: #e1e5d9;
+  --home-ink: #1a241b;
+  --home-muted: #55605a;
+  --home-green: #157a2c;
+  --home-green-dim: rgb(21 122 44 / 55%);
+  --home-line: rgb(21 90 45 / 30%);
+  color-scheme: light;
+  border-color: #98a48f;
+  box-shadow: 0 18px 48px rgb(31 42 33 / 16%);
+}
+
+html.home-light .codetwo-home ::selection {
+  color: #fff;
+  background: var(--home-green);
+}
+
+/* The default logo strokes are tuned for the dark background; swap to the
+   ink/green variant in light mode. */
+
+html.home-light .codetwo-home .brand-mark {
+  content: url("/codeTwo/logo-ink.svg");
+}
+
+html.home-light .codetwo-home .window-bar {
+  color: #6d756c;
+  background: #e7eadf;
+  border-bottom-color: #ccd3c6;
+}
+
+html.home-light .codetwo-home .site-header {
+  background: #f0f2ea;
+}
+
+html.home-light .codetwo-home .desktop-nav .nav-cta:hover {
+  border-color: var(--home-green);
+  color: var(--home-green);
+  background: #e0eee0;
+}
+
+html.home-light .codetwo-home .mobile-nav nav {
+  border-color: var(--home-line);
+  background: #edf0e7;
+}
+
+/* Soft daylight scanlines */
+
+html.home-light .codetwo-home .hero::before {
+  opacity: 0.5;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 7px,
+    rgb(21 122 44 / 7%) 8px
+  );
+}
+
+html.home-light .codetwo-home .hero-copy > .hero-meta {
+  color: #707a70;
+}
+
+html.home-light .codetwo-home .hero-capabilities li {
+  color: #3d453e;
+}
+
+html.home-light .codetwo-home .button:hover {
+  background: #d9ecd9;
+}
+
+html.home-light .codetwo-home .button-secondary {
+  border-color: rgb(26 36 27 / 45%);
+  color: var(--home-ink);
+  background: transparent;
+}
+
+html.home-light .codetwo-home .screenshot-frame {
+  box-shadow: 0 24px 80px rgb(31 42 33 / 20%);
+}
+
+html.home-light .codetwo-home .provider-index {
+  color: #7d867c;
+}
+
+html.home-light .codetwo-home .architecture-node::before,
+html.home-light .codetwo-home .output-node::before {
+  background: var(--home-bg);
+}
+
+html.home-light .codetwo-home .site-footer nav {
+  color: #4a534b;
+}

@@ -7,9 +7,11 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
 <script setup>
 import { onMounted } from "vue";
 import { initLandingMotion } from "../.vitepress/theme/motion";
+import { initLandingAppearance } from "../.vitepress/theme/appearance";
 
 onMounted(() => {
   initLandingMotion();
+  initLandingAppearance();
 });
 </script>
 
@@ -32,6 +34,15 @@ onMounted(() => {
         <a href="#providers">提供方</a>
         <a href="./guide/getting-started">文档</a>
         <a class="locale-link" href="../" lang="en-US">English</a>
+        <button class="theme-toggle" type="button" aria-label="切换浅色 / 深色模式" aria-pressed="false">
+          <svg class="icon-sun" aria-hidden="true" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="4.3" />
+            <path d="M12 2.6v2.1M12 19.3v2.1M2.6 12h2.1M19.3 12h2.1M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" />
+          </svg>
+          <svg class="icon-moon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M20.4 14.2A8.5 8.5 0 0 1 9.8 3.6a8.5 8.5 0 1 0 10.6 10.6Z" />
+          </svg>
+        </button>
         <a class="nav-cta" href="https://github.com/IchenDEV/codeTwo">GitHub</a>
       </nav>
       <details class="mobile-nav">
@@ -46,6 +57,16 @@ onMounted(() => {
           <a href="./guide/getting-started">文档</a>
           <a class="locale-link" href="../" lang="en-US">English</a>
           <a href="https://github.com/IchenDEV/codeTwo">GitHub</a>
+          <button class="theme-toggle" type="button" aria-label="切换浅色 / 深色模式" aria-pressed="false">
+            <svg class="icon-sun" aria-hidden="true" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4.3" />
+              <path d="M12 2.6v2.1M12 19.3v2.1M2.6 12h2.1M19.3 12h2.1M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" />
+            </svg>
+            <svg class="icon-moon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M20.4 14.2A8.5 8.5 0 0 1 9.8 3.6a8.5 8.5 0 1 0 10.6 10.6Z" />
+            </svg>
+            <span>浅色 / 深色</span>
+          </button>
         </nav>
       </details>
     </div>
