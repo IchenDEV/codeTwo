@@ -103,6 +103,7 @@ TurnCard renderer rather than restarting the user's already-running native deskt
 
 ## Review and release
 
+Review handoff: [Draft PR #204](https://github.com/IchenDEV/codeTwo/pull/204).
 Approval: pending human review of the verified local change.
 Release target: none.
 Release identity: not applicable until released.

@@ -89,6 +89,7 @@ intentionally unchanged to preserve historical wording.
 
 ## Review and release
 
+Review handoff: [Draft PR #204](https://github.com/IchenDEV/codeTwo/pull/204).
 Approval: pending human review.
 Release target: none.
 Release identity: not applicable until released.
