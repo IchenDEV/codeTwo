@@ -134,13 +134,15 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                     json!([
                         { "name": "mock.echo", "schema": { "type": "array" } },
                         { "name": "mock.viaHost" },
-                        { "name": "mock.internalViaHost" }
+                        { "name": "mock.internalViaHost" },
+                        { "name": "mock.emitConnector" }
                     ])
                 } else {
                     json!([
                         { "name": "mock.echo", "description": "Echo the arguments back." },
                         { "name": "mock.viaHost" },
-                        { "name": "mock.internalViaHost" }
+                        { "name": "mock.internalViaHost" },
+                        { "name": "mock.emitConnector" }
                     ])
                 };
                 let result = json!({
@@ -167,6 +169,28 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                         send(
                             &mut writer,
                             json!({ "jsonrpc": "2.0", "id": id, "result": args }),
+                        )
+                        .await;
+                    }
+                    "mock.emitConnector" => {
+                        send(
+                            &mut writer,
+                            json!({
+                                "jsonrpc": "2.0",
+                                "method": "event/emit",
+                                "params": {
+                                    "name": "connector/event",
+                                    "payload": {
+                                        "connectorId": "workspace",
+                                        "kind": "message.created"
+                                    }
+                                }
+                            }),
+                        )
+                        .await;
+                        send(
+                            &mut writer,
+                            json!({ "jsonrpc": "2.0", "id": id, "result": {} }),
                         )
                         .await;
                     }
@@ -268,6 +292,12 @@ fn static_commands() -> Vec<PluginRuntimeCommand> {
         PluginRuntimeCommand {
             id: "mock.internalViaHost".into(),
             title: "Try internal host command".into(),
+            description: String::new(),
+            args_schema: None,
+        },
+        PluginRuntimeCommand {
+            id: "mock.emitConnector".into(),
+            title: "Emit connector event".into(),
             description: String::new(),
             args_schema: None,
         },
@@ -668,6 +698,32 @@ async fn a_plugin_can_call_back_into_the_host() {
 }
 
 #[tokio::test]
+async fn connector_events_are_attributed_to_the_runtime_that_emitted_them() {
+    let (fixture, _fork) = load_static(Behaviour::default()).await;
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let captured = received.clone();
+    fixture
+        .app
+        .ctx()
+        .on::<codetwo_plugins::events::ConnectorEvent, _>(move |event| {
+            captured.lock().unwrap().push((*event).clone());
+            None
+        });
+
+    fixture
+        .app
+        .call("mock.emitConnector", Value::Null)
+        .await
+        .unwrap();
+
+    let events = received.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].plugin_id, "mock");
+    assert_eq!(events[0].event["connectorId"], "workspace");
+    assert!(events[0].event.get("plugin_id").is_none());
+}
+
+#[tokio::test]
 async fn a_plugin_cannot_call_an_internal_host_command_even_if_it_knows_the_name() {
     let (fixture, _fork) = load(Behaviour::default()).await;
 
@@ -800,15 +856,33 @@ fn install_record(plugins_dir: &std::path::Path, id: &str, trusted: bool) {
         "author": "C2",
         "source": "github",
         "repository": "https://github.com/example/plugin",
-        "standard_version": "1.0.0",
+        "standard_version": "1.2.0",
         "enabled": true,
         "trusted": trusted,
         "scope": "user",
-        "counts": { "skills": 0, "subagents": 0, "mcp_servers": 0, "scaffolds": 0, "runtime": 1 },
+        "counts": {
+            "skills": 0,
+            "subagents": 0,
+            "mcp_servers": 0,
+            "scaffolds": 0,
+            "commands": 0,
+            "runtime_commands": 1,
+            "hooks": 0,
+            "lsp_servers": 0,
+            "monitors": 0,
+            "apps": 0,
+            "ui": 0,
+            "connectors": 0,
+            "scenes": 0,
+            "pipelines": 0,
+            "runtime": 1
+        },
         "components": [],
         "scaffolds": [],
         "extension_components": [],
+        "runtime_commands": [{ "id": "fixture.ping", "title": "Ping fixture" }],
         "ui_contributions": [],
+        "connector_contributions": [],
         "lsp_servers": [],
         "diagnostics": [],
         "runtime": {

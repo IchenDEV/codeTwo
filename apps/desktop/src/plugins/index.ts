@@ -5,6 +5,7 @@ export {
 } from "./localization";
 export { PluginUiSlot } from "./PluginUiSlot";
 export {
+  activePluginConnectorContributions,
   activePluginLanguageServers,
   activePluginUiContributions,
 } from "./contributions";

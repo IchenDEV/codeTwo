@@ -9,7 +9,7 @@
   "keywords": ["docker", "containers", "developer-tools"],
   "extensions": {
     "dev.codetwo": {
-      "standardVersion": "1.1.0",
+      "standardVersion": "1.2.0",
       "commands": [
         {
           "id": "docker.status",

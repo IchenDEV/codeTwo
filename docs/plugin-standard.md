@@ -1,4 +1,4 @@
-# C2 Plugin Standard 1.1.0
+# C2 Plugin Standard 1.2.0
 
 Status: **normative for every C2 plugin bundle**. The root package schema is
 [Agent Plugins 1.0.0](https://agent-plugins.org/specification), extended by the mandatory
@@ -47,10 +47,9 @@ Host adapter ──capabilities and native services──┘
 ## 2. Bundle manifest
 
 Every bundle MUST put identity in root `plugin.json` using Agent Plugins 1.0.0. C2-specific data
-MUST live under the reverse-domain namespace `extensions.dev.codetwo`; new bundles use
-`standardVersion: "1.1.0"`. C2 continues to read legacy `1.0.0` bundles, whose process commands are
-discovered eagerly during `initialize`. Unknown top-level or version-specific C2 fields invalidate
-the bundle.
+MUST live under the reverse-domain namespace `extensions.dev.codetwo` and use
+`standardVersion: "1.2.0"`. Any other C2 standard version, unknown top-level field, or unknown C2
+field invalidates the bundle.
 
 ```json
 {
@@ -60,12 +59,24 @@ the bundle.
   "description": "One sentence describing the user value.",
   "extensions": {
     "dev.codetwo": {
-      "standardVersion": "1.1.0",
+      "standardVersion": "1.2.0",
       "commands": [{
         "id": "review.run",
         "title": "Review workspace",
         "description": "Review the current workspace.",
         "argsSchema": { "type": "object", "additionalProperties": false }
+      }, {
+        "id": "chat.connector",
+        "title": "Invoke team chat connector",
+        "argsSchema": {
+          "type": "object",
+          "properties": {
+            "operation": { "type": "string" },
+            "input": { "type": "object" }
+          },
+          "required": ["operation"],
+          "additionalProperties": false
+        }
       }],
       "runtime": {
         "protocol": "1.0.0",
@@ -85,6 +96,12 @@ the bundle.
         "input": { "mode": "working-tree" },
         "order": 10
       }],
+      "connectors": [{
+        "id": "workspace",
+        "provider": "example-chat",
+        "command": "chat.connector",
+        "capabilities": ["connection", "conversations", "messaging"]
+      }],
       "languageServers": [{
         "id": "zls",
         "languages": ["zig"],
@@ -97,14 +114,15 @@ the bundle.
 }
 ```
 
-`extensions.dev.codetwo` has these fields in 1.1.0:
+`extensions.dev.codetwo` has these fields in 1.2.0:
 
 | Field | Required | Contract |
 | --- | --- | --- |
-| `standardVersion` | yes | MUST equal `1.1.0` for the static contract. `1.0.0` remains a legacy compatibility mode. |
-| `commands` | for a 1.1 process runtime | Declares the complete command surface before code runs. |
+| `standardVersion` | yes | MUST equal `1.2.0`. |
+| `commands` | for a process runtime | Declares the complete command surface before code runs. |
 | `runtime` | no | Declares one process implementation using the C2 Plugin Protocol. |
 | `ui` | no | Declares host-rendered action descriptors. A UI action requires `runtime` and may reference only a command in the same bundle's `commands` array. |
+| `connectors` | no | Declares host-rendered external-system connectors. A connector requires `runtime` and one command in the same bundle's `commands` array. |
 | `languageServers` | no | Declares trusted stdio language-server processes selected by Monaco language ID. |
 
 Every `commands` entry has a unique namespaced `id`, a non-empty `title` of at most 80 characters,
@@ -143,6 +161,44 @@ The host chooses the markup, component, spacing, focus behavior, and accessibili
 activation it invokes the declared command with `{ context, input }`, after verifying that the
 contribution belongs to the bundle, the selected realm is active, and that same runtime registered
 the command. A descriptor cannot invoke another plugin's command.
+
+The `connectors` array declares integrations that need a richer host-rendered surface than one UI
+action. Every connector has a stable bundle-local `id`, a provider identifier, a non-empty capability
+set, and one bundle-owned `command`. `provider` selects the matching host adapter: a bundle cannot
+ship renderer code or cause an unrelated provider to be rendered by an existing adapter. C2 currently
+ships the `feishu` provider adapter.
+
+The supported capabilities are `connection`, `conversations`, `documents`, `tables`, `messaging`,
+and `turn_notifications`. Add another capability only when a host adapter and a bundle implement its
+operation namespace.
+
+The host invokes the connector command with `{ operation, input }`. `operation` is a stable dotted
+name selected by the host renderer and `input` contains operation data. The host MUST verify bundle
+enablement, trust, contribution
+ownership, command ownership, and command realm before dispatch. Provider-specific authentication,
+pagination, source formats, and remote errors stay inside the adapter. Bundles never provide
+renderer code.
+
+A connector Runtime may emit the reserved process-protocol event `connector/event` for provider
+notifications. C2 adds the authenticated owning bundle id and keeps the event on the typed internal
+bus; a host adapter must also match the connector's bundle-local id before updating its UI. This
+event route is not a new capability namespace and cannot invoke commands or inject renderer code.
+See [The C2 Plugin Protocol](plugin-protocol.md#events) for the envelope and confidentiality rules.
+
+The capability declaration bounds the operation namespaces the host may invoke:
+
+| Capability | Operations |
+| --- | --- |
+| `connection` | `connection.*` |
+| `conversations` | `resources.list`, `conversation.*` |
+| `documents` | `resources.list`, `document.*` |
+| `tables` | `resources.list`, `table.*` |
+| `messaging` | `message.*` |
+| `turn_notifications` | `notification.*` |
+
+The provider adapter defines the exact operation names and input/output shapes within those
+namespaces. Unknown namespaces and operations outside the declared capabilities fail closed before
+the plugin command runs.
 
 The `languageServers` array contains stdio server descriptors:
 
@@ -214,7 +270,7 @@ The lifecycle is one transaction across configuration and runtime state:
 1. Installation validates and atomically stores a bundle. It MUST NOT run repository scripts or the
    declared runtime.
 2. A C2 process runtime and plugin LSP remain ineligible until the bundle is both **enabled** and
-   **trusted**. For a 1.1 process runtime this registers dormant host stubs; its child starts only
+   **trusted**. For a process runtime this registers dormant host stubs; its child starts only
    when a declared command is first invoked. MCP starts only through separate, explicit session
    composition; installation alone never starts it.
 3. `plugins.plan_change` validates scope, configuration schema, graph/config revisions, dependents,
@@ -243,19 +299,20 @@ with only essential management plugins. `plugins.reset` is the recovery operatio
 
 ## 5. Contribution conformance
 
-| Contribution | C2 1.1 status | Required behavior |
+| Contribution | C2 1.2 status | Required behavior |
 | --- | --- | --- |
 | Agent Skills | supported | `skills/<name>/SKILL.md`; inline fallback across providers |
 | Subagents | supported with fallback | `agents/*.md`; provider delegation when available, otherwise the same bounded contract is followed inline |
 | MCP | supported | Root `mcp.json` using Agent Plugins 1.0.0; stdio, Streamable HTTP, and SSE are capability-checked |
 | Prompt commands | supported as content | `commands/*.md` compiles to the Skill fallback |
 | Runtime commands | supported statically | `extensions.dev.codetwo.commands` is host-readable and activates its process implementation on first invocation |
+| External-system connectors | host-rendered | `extensions.dev.codetwo.connectors`; one owned command, declared capabilities, and no bundle-supplied renderer code |
 | Scenes and Pipelines | supported on Rust core hosts | Versioned schemas, library commands, assignment, hooks, scheduling, artifacts, and pipeline execution |
 | Scaffolds | supported | Explicit project target, complete conflict check, no overwrite |
 | LSP | stdio supported | Declared only in `extensions.dev.codetwo.languageServers`; explicit trust, matching language mapping, owned lifecycle |
 | Hooks and monitors | inventoried | Only `hooks/hooks.json` and `monitors/monitors.json`; no runtime adapter yet, so they MUST be displayed as unsupported |
 | Other files | stored, inactive | Preserved as bundle data but MUST NOT be inferred or reported as contributions |
-| UI contributions | C2-owned descriptors only | Third-party React, HTML, or arbitrary web code MUST NOT execute in the renderer in 1.0 |
+| UI contributions | C2-owned descriptors only | Third-party React, HTML, or arbitrary web code MUST NOT execute in the renderer |
 
 An MCP server is session composition, not a live graph runtime: installing does not start it, and an
 already-created ACP session does not silently change when its MCP set changes. A process `runtime`,
@@ -282,7 +339,7 @@ Plugin boundaries for current features are fixed as follows:
 
 ## 7. Host capability profiles
 
-The Rust core is the reference C2 1.1 runtime. The TUI and server may intentionally omit UI or
+The Rust core is the reference C2 1.2 runtime. The TUI and server may intentionally omit UI or
 host-native plugins through configuration while retaining the same graph and command semantics.
 
 The Electrobun desktop packages the reference runtime as `codetwo-desktop-host`. That executable
@@ -310,7 +367,7 @@ host may register a fail-closed placeholder to preserve the typed bridge.
 
 ## 8. Security and resource limits
 
-- A trusted process has the user's OS permissions. C2 1.1 provides lifecycle isolation, not an OS
+- A trusted process has the user's OS permissions. C2 1.2 provides lifecycle isolation, not an OS
   sandbox, filesystem jail, network policy, or secret boundary.
 - The JSON event bus is host-wide and MUST NOT be treated as project-confidential.
 - Bundle discovery MUST reject traversal, escape through symlinks, oversized files/bundles, and
@@ -329,8 +386,8 @@ Three versions evolve independently:
 | Version | Location | Loading rule |
 | --- | --- | --- |
 | Agent Plugins | root `$schema` | Only locally recognized schema versions load |
-| C2 Plugin Standard | `extensions.dev.codetwo.standardVersion` | `1.1.0` is current; `1.0.0` loads through the legacy eager path |
-| C2 Plugin Protocol | manifest `runtime.protocol` and `initialize.protocolVersion` | Handshake major must match; in 1.1 the Manifest command set is authoritative |
+| C2 Plugin Standard | `extensions.dev.codetwo.standardVersion` | Only `1.2.0` loads |
+| C2 Plugin Protocol | manifest `runtime.protocol` and `initialize.protocolVersion` | Handshake major must match; the Manifest command set is authoritative |
 
 A different Agent Plugins schema or C2 standard version is a different package contract and does
 not load. Unknown fields, malformed runtime/UI/LSP declarations, duplicate contribution IDs, and

@@ -5,7 +5,7 @@ explains that internal mechanism, how plugin-independent Core capabilities becom
 and where the public extension boundary begins.
 
 For the normative package, naming, lifecycle, scope, security, versioning, and host-capability
-rules, see the [C2 Plugin Standard 1.1.0](plugin-standard.md). This document focuses on the graph's
+rules, see the [C2 Plugin Standard 1.2.0](plugin-standard.md). This document focuses on the graph's
 implementation and rationale.
 
 The internal model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
@@ -236,13 +236,20 @@ removing, changing trust, or replacing the installed record reconciles the dynam
 immediately. A removed runtime is unloaded and its commands disappear; a changed runtime is
 rebuilt even when its stable `bundle:<id>` name did not change.
 
-The same installed record may contribute safe UI actions and stdio language servers. UI actions
+The same installed record may contribute safe UI actions, external-system connectors, and stdio
+language servers. UI actions
 render only in the C2-owned `rail.features`, `session.header`, `transcript.before`,
 `composer.above`, or `composer.toolbar` slots and route back to a command owned by the bundle's
 active process runtime; bundles never inject React or HTML into the renderer. LSP
 descriptors add language routing to the existing editor client, while the desktop host owns process
 startup, standard LSP framing, project cwd, conflict rejection, and teardown when bundle policy or
 trust changes.
+
+Connector descriptors use the same trust, policy, realm, and ownership checks as UI actions but
+route a host-rendered integration through one bundle-owned runtime command. The desktop discovers
+the descriptor from the active catalog; it does not recognize a bundle name or call
+provider-specific commands directly. Provider authentication and data access remain inside the
+bundle adapter.
 
 That unification currently applies to the bundle's **process runtime**. Skills and other data-only
 extension components shipped in the same bundle remain user-wide contributions. The unified page

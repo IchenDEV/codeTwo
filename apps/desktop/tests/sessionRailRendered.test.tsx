@@ -99,6 +99,22 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
+  test("renders external resource Sections in the same flat scroll flow", () => {
+    activateDom();
+    const view = renderRail({ resourceSections: <section>Feishu resources</section> });
+
+    const sessionScroll = view.container.querySelector("[data-rail-session-scroll]");
+    const resources = Array.from(sessionScroll?.querySelectorAll("section") ?? [])
+      .find((section) => section.textContent?.includes("Feishu resources"));
+    expect(resources).toBeTruthy();
+    expect(sessionScroll?.contains(resources ?? null)).toBe(true);
+    expect(view.container.querySelector("[data-rail-project-switcher]")).toBeNull();
+    expect(view.container.textContent).toContain("Punctuation");
+    expect(view.container.textContent).toContain("Settings");
+
+    view.unmount();
+  });
+
   test("sorts the cross-project feed by automatic Highlight then global recency", () => {
     activateDom();
     const pinned = {
@@ -695,6 +711,21 @@ describe("SessionRail row layout", () => {
     await waitFor(() => {
       expect(dom.document.body.textContent).toContain("Copy session ID");
     });
+
+    view.unmount();
+  });
+
+  test("switches session tabs with an immediate row-local selection surface", () => {
+    activateDom();
+    const view = renderRail();
+    const list = view.container.querySelector("[data-session-list]");
+    const activeRow = view.container.querySelector('[data-session-id="punctuation"]');
+    const inactiveRow = view.container.querySelector('[data-session-id="meaningful"]');
+
+    expect(list?.getAttribute("data-session-selection")).toBe("instant");
+    expect(activeRow?.className.split(/\s+/)).toContain("bg-fill-hover");
+    expect(activeRow?.className).not.toContain("transition-[background-color");
+    expect(inactiveRow?.className.split(/\s+/)).not.toContain("bg-fill-hover");
 
     view.unmount();
   });

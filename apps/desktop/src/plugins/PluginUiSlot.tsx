@@ -3,6 +3,7 @@ import { Loader2, Puzzle } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import type { PluginUiSlotId } from "../bridge";
 import type { ActivePluginUiContribution } from "./contributions";
@@ -11,10 +12,12 @@ export function PluginUiSlot({
   slot,
   contributions,
   onInvoke,
+  activeCommand,
 }: {
   slot: PluginUiSlotId;
   contributions: ActivePluginUiContribution[];
   onInvoke: (contribution: ActivePluginUiContribution) => Promise<void>;
+  activeCommand?: string;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   if (contributions.length === 0) return null;
@@ -35,11 +38,17 @@ export function PluginUiSlot({
       <div data-plugin-ui-slot={slot} role="group" aria-label="Plugin actions" className="flex flex-col gap-0.5">
         {contributions.map((contribution) => {
           const key = `${contribution.pluginId}:${contribution.id}`;
+          const current = contribution.command === activeCommand;
           return (
             <button
               key={key}
               type="button"
-              className="flex h-(--ds-control-normal) w-full items-center gap-2 rounded-(--ds-radius-control) px-2 text-left text-ui text-foreground/75 transition-colors hover:bg-accent/50 hover:text-foreground"
+              data-selected={current || undefined}
+              aria-current={current ? "page" : undefined}
+              className={cn(
+                "flex h-control w-full items-center gap-2 rounded-control px-2 text-left text-ui text-foreground/75 transition-colors hover:bg-accent/50 hover:text-foreground",
+                current && "bg-fill-rest text-foreground",
+              )}
               title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
               aria-label={`${contribution.pluginName}: ${contribution.label}`}
               disabled={busy !== null}

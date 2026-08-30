@@ -6,6 +6,8 @@
 //! working — which is the property a giant `AppState` could never give us.
 
 use codetwo_kernel::{CommandRealm, Event};
+use serde::Serialize;
+use serde_json::Value;
 use std::path::PathBuf;
 
 /// The skill library was rebuilt (a skill was saved or deleted, a plugin was toggled, the
@@ -31,6 +33,22 @@ pub struct PluginsChanged;
 impl Event for PluginsChanged {
     type Output = ();
     const NAME: &'static str = "plugins/changed";
+}
+
+/// A provider event emitted by an installed connector Runtime.
+///
+/// External processes cannot publish typed kernel events directly. The protocol host adds the
+/// authenticated plugin id before emitting this internal event, so consumers never trust a bundle
+/// id supplied in the extension payload.
+#[derive(Clone, Serialize)]
+pub struct ConnectorEvent {
+    pub plugin_id: String,
+    pub event: Value,
+}
+
+impl Event for ConnectorEvent {
+    type Output = ();
+    const NAME: &'static str = "connector/event";
 }
 
 /// A plugin or component policy changed without necessarily rebuilding the plugin graph.

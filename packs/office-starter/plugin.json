@@ -8,7 +8,7 @@
   "keywords": ["office", "scenes", "pipeline", "incident-retro", "release-notes", "design-review"],
   "extensions": {
     "dev.codetwo": {
-      "standardVersion": "1.0.0"
+      "standardVersion": "1.2.0"
     }
   }
 }

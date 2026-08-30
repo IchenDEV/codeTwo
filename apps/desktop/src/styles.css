@@ -433,7 +433,7 @@
     background: transparent;
   }
   .window-titlebar {
-    height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));
+    height: var(--ds-titlebar-height);
     box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--border);
   }
   .window-controls-safe-main {

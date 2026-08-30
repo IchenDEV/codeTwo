@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import {
   ArrowLeft,
@@ -912,6 +912,7 @@ function ResourceDetails({
 
 function PluginDetails({
   plugin,
+  detailsExtension,
   scope,
   labels,
   busy,
@@ -925,6 +926,7 @@ function PluginDetails({
   onReset,
 }: {
   plugin: PluginManagerPlugin;
+  detailsExtension?: ReactNode;
   scope: PluginManagerScope;
   labels: PluginManagerLabels;
   busy: boolean;
@@ -1038,6 +1040,12 @@ function PluginDetails({
               busyAction={busyAction}
               onApply={onApplyScaffold}
             />
+          </>
+        ) : null}
+        {detailsExtension ? (
+          <>
+            <Separator />
+            {detailsExtension}
           </>
         ) : null}
         <DetailList
@@ -1372,7 +1380,7 @@ function ChangeConfirmation({
 
 /**
  * Data-only plugin management surface. It never imports or renders code supplied by a bundle;
- * integrations provide descriptors and lifecycle callbacks through props.
+ * plugin detail extensions are host-owned React content supplied by the desktop app.
  */
 export function PluginManagerPage({
   plugins,
@@ -1383,6 +1391,8 @@ export function PluginManagerPage({
   scope,
   projects = [],
   initialTab = "plugins",
+  initialPluginId,
+  pluginDetailsExtension,
   recovery,
   labels: labelOverrides,
   onScopeChange,
@@ -1407,7 +1417,7 @@ export function PluginManagerPage({
   const [query, setQuery] = useState("");
   const [selectedPluginId, setSelectedPluginId] = useState<
     string | null | undefined
-  >(plugins[0]?.id);
+  >(initialPluginId ?? plugins[0]?.id);
   const [selectedMarketplaceId, setSelectedMarketplaceId] = useState<
     string | null | undefined
   >(marketplaceItems[0]?.id);
@@ -1871,6 +1881,11 @@ export function PluginManagerPage({
             {tab === "plugins" && selectedPlugin ? (
               <PluginDetails
                 plugin={selectedPlugin}
+                detailsExtension={
+                  pluginDetailsExtension?.pluginId === selectedPlugin.id
+                    ? pluginDetailsExtension.content
+                    : undefined
+                }
                 scope={scope}
                 labels={labels}
                 busy={

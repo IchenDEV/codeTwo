@@ -214,7 +214,9 @@
   --ds-control-mini: var(--ds-foundation-control-24);
   --ds-control-normal: var(--ds-foundation-control-28);
   --ds-control-field: var(--ds-foundation-control-32);
-  --ds-layout-titlebar-height: var(--ds-foundation-chrome-48);
+  --ds-layout-titlebar-height: calc(
+    var(--ds-foundation-chrome-48) + var(--ds-foundation-space-8)
+  );
 
   /* Semantic motion. */
   --ds-motion-feedback: var(--ds-foundation-motion-120);
@@ -282,7 +284,7 @@
   --ds-menu-item-height: var(--ds-control-normal);
   --ds-menu-padding: var(--ds-space-control-group);
   --ds-menu-elevation: var(--ds-elevation-raised);
-  --ds-titlebar-height: calc(var(--ds-control-field) + var(--ds-space-section));
+  --ds-titlebar-height: var(--ds-layout-titlebar-height);
   --ds-panel-strip-height: calc(var(--ds-control-normal) + var(--ds-space-module-inset));
 
 }

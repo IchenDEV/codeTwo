@@ -92,7 +92,7 @@ struct FingerprintMaterial<'a> {
     description: &'a str,
     trusted: bool,
     runtime: &'a PluginRuntimeSpec,
-    runtime_commands: &'a Option<Vec<PluginRuntimeCommand>>,
+    runtime_commands: &'a [PluginRuntimeCommand],
     plugins_root: String,
 }
 
@@ -127,7 +127,7 @@ struct BundleRuntimePlugin {
     metadata: PluginMetadata,
     trusted: bool,
     runtime: PluginRuntimeSpec,
-    runtime_commands: Option<Vec<PluginRuntimeCommand>>,
+    runtime_commands: Vec<PluginRuntimeCommand>,
     bundle_dir: PathBuf,
     data_root: PathBuf,
 }
@@ -189,9 +189,7 @@ impl Plugin for BundleRuntimePlugin {
         let (ctx, data_dir) = self.context_and_data_dir(ctx);
         let mut protocol =
             ProtocolPlugin::from_spec(&self.name, &self.runtime, self.bundle_dir.clone(), data_dir);
-        if let Some(commands) = &self.runtime_commands {
-            protocol = protocol.with_declared_commands(commands.clone());
-        }
+        protocol = protocol.with_declared_commands(self.runtime_commands.clone());
         if !self.description.is_empty() {
             protocol = protocol.with_description(self.description.clone());
         }
@@ -215,7 +213,7 @@ mod tests {
             "description": "A fixture process",
             "source": "local-test",
             "repository": "fixture",
-            "standard_version": "1.0.0",
+            "standard_version": "1.2.0",
             "enabled": true,
             "trusted": trusted,
             "scope": "user",
@@ -224,12 +222,27 @@ mod tests {
                 "subagents": 0,
                 "mcp_servers": 0,
                 "scaffolds": 0,
+                "commands": 0,
+                "runtime_commands": 1,
+                "hooks": 0,
+                "lsp_servers": 0,
+                "monitors": 0,
+                "apps": 0,
+                "ui": 0,
+                "connectors": 0,
+                "scenes": 0,
+                "pipelines": 0,
                 "runtime": 1
             },
             "components": [],
             "scaffolds": [],
             "extension_components": [],
+            "runtime_commands": [{
+                "id": "fixture.ping",
+                "title": "Ping fixture"
+            }],
             "ui_contributions": [],
+            "connector_contributions": [],
             "lsp_servers": [],
             "diagnostics": [],
             "runtime": {
@@ -273,18 +286,17 @@ mod tests {
         );
 
         let mut static_commands = installed(true);
-        static_commands.standard_version = "1.1.0".into();
-        static_commands.runtime_commands = Some(vec![PluginRuntimeCommand {
+        static_commands.runtime_commands = vec![PluginRuntimeCommand {
             id: "fixture.run".into(),
             title: "Run fixture".into(),
             description: "Run the fixture command.".into(),
             args_schema: None,
-        }]);
+        }];
         let static_fingerprint = bundle_runtime_descriptor(&static_commands, root.path())
             .unwrap()
             .fingerprint;
         assert_ne!(descriptor.fingerprint, static_fingerprint);
-        static_commands.runtime_commands.as_mut().unwrap()[0].description = "Changed".into();
+        static_commands.runtime_commands[0].description = "Changed".into();
         assert_ne!(
             static_fingerprint,
             bundle_runtime_descriptor(&static_commands, root.path())

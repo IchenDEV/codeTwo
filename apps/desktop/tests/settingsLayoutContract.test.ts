@@ -81,7 +81,7 @@ describe("Settings page layout contract", () => {
     );
   });
 
-  test("keeps every settings tab on the shared 48px titlebar", () => {
+  test("keeps every settings tab on the shared titlebar", () => {
     expect(source).toMatch(
       /<header[\s\S]*?data-settings-titlebar[\s\S]*?className="[^"]*\bsettings-titlebar\b[^"]*\bshrink-0\b[^"]*"/,
     );

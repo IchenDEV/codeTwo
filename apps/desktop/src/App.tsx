@@ -75,6 +75,7 @@ import {
   githubImportPlugin,
   installMarketplacePlugin,
   importPromptImage,
+  invokePluginConnector,
   invokePluginUi,
   commentIssue,
   issueContext,
@@ -99,6 +100,7 @@ import {
   onAppshotCaptured,
   onAppshotFailed,
   onDeviceSyncChanged,
+  onPluginConnectorEvent,
   onPluginsChanged,
   onEngineEvent,
   openProject,
@@ -207,6 +209,7 @@ import { makeTranscriptHandler } from "./voice/VoiceButton";
 import {
   PluginManagerPage,
   PluginUiSlot,
+  activePluginConnectorContributions,
   activePluginLanguageServers,
   activePluginUiContributions,
   buildPluginManagerCatalog,
@@ -225,6 +228,12 @@ import {
   applyPluginManagerChange,
   planPluginManagerChange,
 } from "./plugins/lifecycle";
+import {
+  FeishuWorkspacePage,
+  type CollaborationConnectorCaller,
+  type CollaborationConnectorEvent,
+  type CollaborationConnectorSubscriber,
+} from "./feishu/FeishuWorkspacePage";
 import { SettingsPage, type SettingsTab } from "./settings/SettingsPage";
 import { ProjectIcon } from "./projects/ProjectIcon";
 import { SourceControlModal } from "./git/SourceControl";
@@ -1034,6 +1043,10 @@ export default function App() {
   const [capturing, setCapturing] = useState<string | null>(null);
   const [showPluginManager, setShowPluginManager] = useState(false);
   const [showDocker, setShowDocker] = useState(false);
+  const [showFeishu, setShowFeishu] = useState(false);
+  const [feishuRailHost, setFeishuRailHost] = useState<HTMLDivElement | null>(null);
+  const [feishuSettingsHost, setFeishuSettingsHost] = useState<HTMLDivElement | null>(null);
+  const [pluginManagerInitialPluginId, setPluginManagerInitialPluginId] = useState<string | null>(null);
   const [market, setMarket] = useState<MarketItem[]>([]);
   const [localPluginMarketplace, setLocalPluginMarketplace] =
     useState<PluginMarketplace | null>(null);
@@ -1406,6 +1419,7 @@ export default function App() {
     setShowPluginManager(false);
     setShowPullRequests(false);
     setShowDocker(false);
+    setShowFeishu(false);
     setShowTaskBoard(true);
     if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -3972,6 +3986,7 @@ export default function App() {
     setShowTaskBoard(false);
     setShowPullRequests(false);
     setShowDocker(false);
+    setShowFeishu(false);
     const paneId = focusedPaneRef.current;
     sessionLoadSeqByPaneRef.current.set(
       paneId,
@@ -4511,6 +4526,7 @@ export default function App() {
       id: string,
       requestedPaneId = focusedPaneRef.current,
       reloadTranscript = true,
+      preserveFeaturePages = false,
     ) => {
       flushActiveComposerDraft();
       const alreadyBoundPane = paneBoundToSession(paneContentsRef.current, id) ?? undefined;
@@ -4526,9 +4542,12 @@ export default function App() {
         (alreadyBoundPane === undefined || alreadyBoundPane === requestedPaneId);
       // Navigation replaces creation only in this pane. A draft creating in another pane keeps its
       // ownership and may finish while this session is focused.
-      setShowTaskBoard(false);
-      setShowPullRequests(false);
-      setShowDocker(false);
+      if (!preserveFeaturePages) {
+        setShowTaskBoard(false);
+        setShowPullRequests(false);
+        setShowDocker(false);
+        setShowFeishu(false);
+      }
       invalidatePendingCreation(paneId);
       const stored =
         sessions.find((s) => s.id === id) ??
@@ -4731,7 +4750,7 @@ export default function App() {
     (paneId: string) => {
       const session = paneContentsRef.current[paneId]?.sessionId ?? null;
       if (session) {
-        void selectSession(session, paneId, false);
+        void selectSession(session, paneId, false, true);
         return;
       }
       flushActiveComposerDraft();
@@ -4793,7 +4812,7 @@ export default function App() {
       refreshProjects();
       const session = activeSessionRef.current;
       if (session && !runningSessionsRef.current.has(session)) {
-        void selectSession(session);
+        void selectSession(session, focusedPaneRef.current, true, true);
       }
     }).then((unlisten) => {
       dispose = unlisten;
@@ -5086,14 +5105,16 @@ export default function App() {
     ? normalizePluginProjectPath(activeProject)
     : null;
   const pluginUiActions = useMemo(
-    () =>
-      activeComponentPolicyReady
+    () => {
+      const actions = activeComponentPolicyReady
       ? activePluginUiContributions(
           plugins,
           activePluginModel.plugins,
           activePluginModel.components,
         )
-      : activePluginUiContributions([], []),
+      : activePluginUiContributions([], []);
+      return actions;
+    },
     [
       activeComponentPolicyReady,
       activePluginModel.components,
@@ -5113,6 +5134,46 @@ export default function App() {
     async <T,>(name: string, args?: unknown) => call<T>(name, args, null),
     [],
   );
+  const collaborationConnector = useMemo(
+    () => activePluginConnectorContributions(
+      plugins,
+      activePluginModel.plugins,
+    ).find((connector) => connector.provider === "feishu") ?? null,
+    [activePluginModel.plugins, plugins],
+  );
+  const callFeishu = useCallback<CollaborationConnectorCaller>(
+    async <T,>(operation: string, input?: unknown) => {
+      if (!collaborationConnector) throw new Error("Collaboration connector is unavailable.");
+      return invokePluginConnector(
+        collaborationConnector.pluginId,
+        collaborationConnector.id,
+        operation,
+        input ?? {},
+        lspProjectPath,
+      ) as Promise<T>;
+    },
+    [collaborationConnector, lspProjectPath],
+  );
+  const subscribeFeishuEvents = useCallback<CollaborationConnectorSubscriber>(async (callback) => {
+    if (!collaborationConnector) return () => {};
+    return onPluginConnectorEvent((envelope) => {
+      if (envelope.plugin_id !== collaborationConnector.pluginId) return;
+      const event = envelope.event;
+      if (!event || typeof event !== "object" || Array.isArray(event)) return;
+      const candidate = event as Partial<CollaborationConnectorEvent>;
+      const eventKinds: CollaborationConnectorEvent["kind"][] = [
+        "message.created",
+        "message.changed",
+        "document.changed",
+        "base.changed",
+        "connection.changed",
+      ];
+      if (candidate.connectorId !== collaborationConnector.id
+        || !eventKinds.includes(candidate.kind as CollaborationConnectorEvent["kind"])
+        || typeof candidate.eventId !== "string") return;
+      callback(candidate as CollaborationConnectorEvent);
+    });
+  }, [collaborationConnector]);
   const pluginLanguageServers = useMemo(
     () =>
       activeComponentPolicyReady
@@ -5376,7 +5437,7 @@ export default function App() {
       });
   }, [cwd]);
 
-  const openPluginManager = useCallback(() => {
+  const openPluginManagerFor = useCallback((pluginId: string | null) => {
     const normalizedActiveProject = activeProject
       ? normalizePluginProjectPath(activeProject)
       : null;
@@ -5397,10 +5458,12 @@ export default function App() {
       .catch(() => {});
     void refreshManagedCatalogs(scope).catch(() => {});
     refreshSkills();
+    setPluginManagerInitialPluginId(pluginId);
     setShowAutomations(false);
     setShowTaskBoard(false);
     setShowPullRequests(false);
     setShowDocker(false);
+    setShowFeishu(false);
     setShowPluginManager(true);
     if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -5413,6 +5476,13 @@ export default function App() {
     refreshSkills,
     setRailCollapsedRaw,
   ]);
+  const openPluginManager = useCallback(() => {
+    openPluginManagerFor(null);
+  }, [openPluginManagerFor]);
+  const openFeishuPluginSettings = useCallback(() => {
+    if (!collaborationConnector) return;
+    openPluginManagerFor(`bundle:${collaborationConnector.pluginId}`);
+  }, [collaborationConnector, openPluginManagerFor]);
 
   const refreshPluginManagerData = useCallback(
     async (scope: PluginManagerScope = pluginManagerScope) => {
@@ -5509,6 +5579,7 @@ export default function App() {
     setShowPluginManager(false);
     setShowPullRequests(false);
     setShowDocker(false);
+    setShowFeishu(false);
     setShowAutomations(true);
     if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -5529,6 +5600,7 @@ export default function App() {
     setShowPluginManager(false);
     setShowTaskBoard(false);
     setShowDocker(false);
+    setShowFeishu(false);
     readPullRequestTasks();
     setShowPullRequests(true);
     if (railOverlay) setNarrowRailOpen(false);
@@ -5547,7 +5619,19 @@ export default function App() {
     setShowPluginManager(false);
     setShowPullRequests(false);
     setShowTaskBoard(false);
+    setShowFeishu(false);
     setShowDocker(true);
+    if (railOverlay) setNarrowRailOpen(false);
+    else if (railCollapsed) setRailCollapsedRaw(0);
+  }, [railOverlay, railCollapsed, setRailCollapsedRaw]);
+
+  const openFeishu = useCallback(() => {
+    setShowAutomations(false);
+    setShowPluginManager(false);
+    setShowPullRequests(false);
+    setShowTaskBoard(false);
+    setShowDocker(false);
+    setShowFeishu(true);
     if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
   }, [railOverlay, railCollapsed, setRailCollapsedRaw]);
@@ -6575,6 +6659,7 @@ export default function App() {
           setShowAutomations(false);
           setShowPullRequests(false);
           setShowDocker(false);
+          setShowFeishu(false);
           setSettingsInitialTab("general");
           setShowSettings(true);
           break;
@@ -6597,6 +6682,7 @@ export default function App() {
           setShowAutomations(false);
           setShowPullRequests(false);
           setShowDocker(false);
+          setShowFeishu(false);
           setSettingsInitialTab("usage");
           setShowSettings(true);
           break;
@@ -6767,6 +6853,7 @@ export default function App() {
         setShowAutomations(false);
         setShowPullRequests(false);
         setShowDocker(false);
+        setShowFeishu(false);
         setSettingsInitialTab("usage");
         setShowSettings(true);
       },
@@ -6817,6 +6904,7 @@ export default function App() {
       run: () => {
         setShowPullRequests(false);
         setShowDocker(false);
+        setShowFeishu(false);
         setSettingsInitialTab("general");
         setShowSettings(true);
       },
@@ -7307,6 +7395,9 @@ export default function App() {
             setShowTaskBoard(false);
             setShowPluginManager(false);
             setShowAutomations(false);
+            setShowPullRequests(false);
+            setShowDocker(false);
+            setShowFeishu(false);
             void selectSession(id);
             if (railOverlay) setNarrowRailOpen(false);
           }}
@@ -7314,6 +7405,9 @@ export default function App() {
             setShowTaskBoard(false);
             setShowPluginManager(false);
             setShowAutomations(false);
+            setShowPullRequests(false);
+            setShowDocker(false);
+            setShowFeishu(false);
             createTaskDraft();
             if (railOverlay) setNarrowRailOpen(false);
           }}
@@ -7321,6 +7415,9 @@ export default function App() {
             setShowTaskBoard(false);
             setShowPluginManager(false);
             setShowAutomations(false);
+            setShowPullRequests(false);
+            setShowDocker(false);
+            setShowFeishu(false);
             createTemporarySession();
             if (railOverlay) setNarrowRailOpen(false);
           }}
@@ -7359,6 +7456,7 @@ export default function App() {
             setShowAutomations(false);
             setShowPullRequests(false);
             setShowDocker(false);
+            setShowFeishu(false);
             setSettingsInitialTab("general");
             if (railOverlay) setNarrowRailOpen(false);
             setShowSettings(true);
@@ -7396,11 +7494,12 @@ export default function App() {
             setShowAutomations(false);
             setShowPullRequests(false);
             setShowDocker(false);
+            setShowFeishu(false);
             setSettingsInitialTab("usage");
             if (railOverlay) setNarrowRailOpen(false);
             setShowSettings(true);
           }}
-            pluginActions={
+          pluginActions={
             <PluginUiSlot
               slot="rail.features"
               contributions={pluginUiActions["rail.features"]}
@@ -7409,7 +7508,8 @@ export default function App() {
                 if (railOverlay) setNarrowRailOpen(false);
               }}
             />
-            }
+          }
+          resourceSections={collaborationConnector ? <div ref={setFeishuRailHost} /> : null}
         />
 
           {showDocker && dockerPlugin ? (
@@ -7418,6 +7518,24 @@ export default function App() {
               callCommand={callDocker}
               onOpenPluginManager={openPluginManager}
               headerLeadingAction={railExpandAction}
+            />
+          ) : null}
+
+          {collaborationConnector ? (
+            <FeishuWorkspacePage
+              enabled
+              detailVisible={showFeishu}
+              sessionId={activeSession}
+              callCommand={callFeishu}
+              subscribeEvents={subscribeFeishuEvents}
+              onHandoff={async (prompt) => {
+                await run([{ type: "text", text: prompt }]);
+              }}
+              onOpenPluginManager={openFeishuPluginSettings}
+              headerLeadingAction={railExpandAction}
+              navigationHost={feishuRailHost}
+              settingsHost={feishuSettingsHost}
+              onSelectResource={openFeishu}
             />
           ) : null}
 
@@ -7472,6 +7590,11 @@ export default function App() {
             labels={pluginManagerLabels}
             scope={pluginManagerScope}
             projects={pluginManagerProjects}
+            initialPluginId={pluginManagerInitialPluginId}
+            pluginDetailsExtension={collaborationConnector ? {
+              pluginId: `bundle:${collaborationConnector.pluginId}`,
+              content: <div ref={setFeishuSettingsHost} />,
+            } : null}
             recovery={(selectedManagedCatalog ?? managedUserCatalog)?.recovery}
             onScopeChange={(scope) => {
               const normalized =
@@ -7600,6 +7723,7 @@ export default function App() {
             showAutomations ||
             showPullRequests ||
             showDocker ||
+            showFeishu ||
             undefined
           }
           className={
@@ -7607,7 +7731,8 @@ export default function App() {
             showPluginManager ||
             showAutomations ||
             showPullRequests ||
-            showDocker
+            showDocker ||
+            showFeishu
               ? "hidden"
               : "contents"
           }
@@ -7844,7 +7969,8 @@ export default function App() {
                 showPluginManager ||
                 showAutomations ||
                 showPullRequests ||
-                showDocker
+                showDocker ||
+                showFeishu
               }
               project={activeProjectName}
               projectPath={activeProjectName ? activeProject : null}

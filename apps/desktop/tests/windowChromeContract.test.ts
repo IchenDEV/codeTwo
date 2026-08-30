@@ -21,11 +21,11 @@ const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffect
 const themeSource = source("../src/theme.tsx");
 
 describe("macOS window chrome contract", () => {
-  test("centers the native macOS traffic lights in the 40px titlebar", () => {
+  test("centers the native macOS traffic lights in the shared titlebar", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toContain("trafficLightOffset");
     expect(electrobunHost).toMatch(
-      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 13\);[\s\S]*?\}\s*rendererReady = true;/,
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 21\);[\s\S]*?\}\s*rendererReady = true;/,
     );
   });
 
@@ -113,14 +113,14 @@ describe("macOS window chrome contract", () => {
     );
   });
 
-  test("keeps the rail, workspace, and both dock states on one 40px titlebar baseline", () => {
+  test("keeps the rail, workspace, and both dock states on one shared titlebar baseline", () => {
     const titlebarClasses = Array.from(
       dockSource.matchAll(/data-dock-titlebar[\s\S]*?className="([^"]+)"/g),
       (match) => match[1].split(/\s+/),
     );
 
     expect(styles).toMatch(
-      /\.window-titlebar\s*{[^}]*height:\s*calc\(var\(--ds-control-normal\) \+ var\(--ds-space-surface-inset\)\);/s,
+      /\.window-titlebar\s*{[^}]*height:\s*var\(--ds-titlebar-height\);/s,
     );
     expect(styles).toMatch(
       /\.window-titlebar\s*{[^}]*box-shadow:\s*inset 0 calc\(-1 \* var\(--hairline-width\)\) 0 var\(--border\);/s,

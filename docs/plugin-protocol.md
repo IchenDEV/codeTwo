@@ -4,7 +4,7 @@ Version **1.0.0**.
 
 This document defines the process wire format. Bundle terminology, manifest namespacing, trust,
 policy, contribution support, and host capability rules are normative in the
-[C2 Plugin Standard 1.1.0](plugin-standard.md).
+[C2 Plugin Standard 1.2.0](plugin-standard.md).
 
 An external extension runtime is a process. C2 speaks JSON-RPC 2.0 to it over stdio. Its commands
 are declared statically in the Bundle Manifest; `initialize` confirms their implementation and may
@@ -32,11 +32,10 @@ inventing a third.
 
 ## Handshake
 
-On the first invocation of a 1.1 static command, the host starts the process, sends `initialize`
+On the first invocation of a declared command, the host starts the process, sends `initialize`
 first, and waits **10 seconds**. Answer it promptly. A process that misses the window is killed and
 that scope generation's activation fails; its dormant command stubs remain fail-closed until the
-plugin is reloaded or disabled and re-enabled. Legacy 1.0 Bundles retain eager initialization for
-compatibility, with the same bounded wait.
+plugin is reloaded or disabled and re-enabled.
 
 **Host → plugin**
 
@@ -64,7 +63,7 @@ compatibility, with the same bounded wait.
 }}
 ```
 
-For a 1.1 Bundle, `commands` MUST contain exactly the IDs and schemas declared by
+For a C2 1.2 bundle, `commands` MUST contain exactly the IDs and schemas declared by
 `extensions.dev.codetwo.commands`. It is implementation confirmation, not a second contribution
 source: missing, extra, duplicate, or changed schemas are refused and the process is killed. The
 host uses Manifest titles and descriptions.
@@ -145,14 +144,34 @@ You receive only the events you name in `events`. The host publishes:
 This list is the contract. Typed Rust events do not cross a pipe, so each entry is a deliberate
 decision to expose one — see `publish_host_events` in
 `crates/plugins/src/app/plugins/extensions.rs`.
-Because 1.1 activation is command-driven, event subscriptions begin only after the first command
+Because activation is command-driven, event subscriptions begin only after the first command
 has successfully initialized the process; events emitted while the runtime is dormant are not
 buffered or replayed.
 
-Your own `event/emit` goes onto the host's JSON bus, where other plugins (in or out of process) can
-subscribe to it. The JSON bus is currently host-wide, not project-confidential: project process
-isolation does not filter events by realm. Do not put project secrets on an event merely because
-the sender or subscriber is a project-scoped runtime.
+Your own `event/emit` normally goes onto the host's JSON bus, where other plugins (in or out of
+process) can subscribe to it. The JSON bus is currently host-wide, not project-confidential:
+project process isolation does not filter events by realm. Do not put project secrets on an event
+merely because the sender or subscriber is a project-scoped runtime.
+
+`connector/event` is reserved for a host-rendered connector's provider notifications. It does not
+enter that public JSON bus. The host wraps the payload in a typed internal event and adds the
+authenticated installed-bundle id; any `plugin_id` supplied by the process is ignored. Desktop
+adapters must match that owner and the active connector's bundle-local `connectorId` before using
+the event. A connector event payload uses this minimum envelope:
+
+```json
+{
+  "connectorId": "workspace",
+  "eventId": "provider-event-or-message-id",
+  "kind": "message.created",
+  "createdAt": "1724900000000"
+}
+```
+
+Provider-specific resource ids and bounded summaries may be added. The process must deduplicate
+at-least-once provider delivery before emitting; the host-rendered adapter repeats that guard before
+changing local activity state. Event payloads are not a way to inject UI or bypass connector command
+ownership.
 
 ## Declaring a plugin
 
@@ -166,7 +185,7 @@ runtime under C2's client-extension namespace; a top-level `runtime` field inval
   "version": "1.0.0",
   "extensions": {
     "dev.codetwo": {
-      "standardVersion": "1.1.0",
+      "standardVersion": "1.2.0",
       "commands": [{
         "id": "my.greet",
         "title": "Say hello",
@@ -199,9 +218,9 @@ one independently managed process, command realm, `dataDir`, and `projectPath` p
 The bundle's skills and other data-only extension components are not made project-scoped by this
 field; they remain user-only and are managed through Bundle Tools.
 
-A 1.1 process runtime declares at least one sibling `commands` entry. UI action descriptors are
+A process runtime declares at least one sibling `commands` entry. UI action descriptors are
 declared beside both under `extensions.dev.codetwo.ui`; they do not alter this wire protocol or load
-third-party renderer code. A legacy 1.0 runtime without static commands remains valid and eager.
+third-party renderer code.
 
 `extensions.dev.codetwo.languageServers` is a separate host-owned stdio LSP contribution. Language
 servers use standard `Content-Length` LSP framing, not this newline-delimited plugin protocol. They
@@ -212,7 +231,7 @@ may exist without a C2 process runtime and still share bundle trust, enablement,
 **Installing a bundle executes nothing.** That property of the Plugin Hub is not weakened by this
 protocol — it is the reason the protocol is shaped this way.
 
-An enabled and **trusted** 1.1 bundle is eligible: its host adapter and dormant command stubs become
+An enabled and **trusted** bundle is eligible: its host adapter and dormant command stubs become
 ready, but the process does not start until the first declared command invocation. Trust is a
 separate, deliberate user action, and installing a bundle that ships a C2 runtime raises a
 diagnostic saying so. Until then the plugin is listed by `extensions.list` under `untrusted`.
