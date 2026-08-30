@@ -71,7 +71,8 @@ reintroduced.
 ## Review and release
 
 The user explicitly authorized creating and merging the repository pull request on 2026-08-30.
-Repository integration remains pending until the pull request checks pass and the merge is observed.
+[PR #181](https://github.com/IchenDEV/codeTwo/pull/181) carries the implementation; repository
+integration remains pending until its checks pass and the merge is observed.
 
 ## Feedback
 
