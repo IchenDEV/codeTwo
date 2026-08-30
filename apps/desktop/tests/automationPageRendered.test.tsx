@@ -41,6 +41,9 @@ describe("AutomationsPage layout", () => {
     await flush();
 
     expect(view.container.querySelector('button[aria-label="Expand the sidebar"]')).not.toBeNull();
+    expect(view.container.querySelector("[data-automation-list-header]")?.className).toContain("window-controls-safe-main");
+    expect(view.container.querySelector("[data-automation-detail-header]")?.className).toContain("window-controls-safe-compact-main");
+    expect(view.container.querySelector("[data-automation-detail-leading-action] button")?.getAttribute("aria-label")).toBe("Expand the sidebar");
     expect(view.container.textContent).toContain("Add a project before creating an automation.");
     expect(view.container.querySelector("[data-automation-page] h1")?.textContent).toBe("Automations");
     expect(view.container.querySelector("[data-automation-page] h1")?.className).toContain("text-dialog");
@@ -86,7 +89,11 @@ describe("AutomationsPage layout", () => {
     expect([...view.container.querySelectorAll("button")].some((item) => item.textContent?.trim() === "Back")).toBeFalse();
     expect(listPane?.className).toContain("automation-list-pane");
     expect(listPane?.className).toContain("bg-sidebar");
+    expect(listPane?.querySelector("[data-automation-list-header]")?.className).toContain("pl-3");
+    expect(listPane?.querySelector("[data-automation-list-header]")?.className).not.toContain("window-controls-safe-main");
     expect(detailPane?.className).toContain("automation-detail-pane");
+    expect(detailPane?.querySelector("[data-automation-detail-header]")?.className).toContain("pl-4");
+    expect(detailPane?.querySelector("[data-automation-detail-leading-action]")).toBeNull();
     expect(detailPane?.textContent).toContain("Select an automation");
     expect(search?.querySelector('input[type="search"]')).not.toBeNull();
     const switcher = filters?.querySelector('[data-slot="view-switcher"]');

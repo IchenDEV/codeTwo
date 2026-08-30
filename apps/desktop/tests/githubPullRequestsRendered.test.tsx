@@ -115,6 +115,42 @@ describe("PullRequestsPage", () => {
     expect(chatted).toEqual(detail);
   });
 
+  test("keeps the visible split header clear of macOS window controls", async () => {
+    activateDom();
+    disableCanvasDrawing();
+    dom.window.localStorage.setItem("codetwo.language", "en");
+    const view = mount(
+      <I18nProvider>
+        <PullRequestsPage
+          headerLeadingAction={<button aria-label="Expand the sidebar" />}
+          loadPullRequests={async () => [summary]}
+          loadPullRequest={async () => detail}
+          onChat={() => {}}
+        />
+      </I18nProvider>,
+    );
+    mounted.push(view);
+
+    await waitFor(() => expect(dom.document.body.textContent).toContain("Build the GitHub panel"));
+
+    const page = view.container.querySelector(".pull-requests-page");
+    const listHeader = view.container.querySelector("[data-pull-requests-list-header]");
+    const detailHeader = view.container.querySelector("[data-pull-request-detail-header]");
+    expect(page?.getAttribute("data-compact-detail")).toBe("false");
+    expect(listHeader?.className).toContain("window-controls-safe-main");
+    expect(detailHeader?.className).toContain("window-controls-safe-compact-main");
+    expect(view.container.querySelector("[data-pull-request-detail-leading-action] button")?.getAttribute("aria-label")).toBe("Expand the sidebar");
+
+    const row = [...view.container.querySelectorAll("button")]
+      .find((candidate) => candidate.textContent?.includes("Build the GitHub panel"));
+    expect(row).not.toBeUndefined();
+    await reactAct(async () => click(row));
+    expect(page?.getAttribute("data-compact-detail")).toBe("true");
+
+    await reactAct(async () => click(button(view.container, "Back to pull requests")));
+    expect(page?.getAttribute("data-compact-detail")).toBe("false");
+  });
+
   test("keeps the selected detail inside the filtered result set", async () => {
     activateDom();
     disableCanvasDrawing();
