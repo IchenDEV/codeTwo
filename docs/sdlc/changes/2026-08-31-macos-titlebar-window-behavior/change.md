@@ -2,7 +2,7 @@
 id: change-2026-08-31-macos-titlebar-window-behavior
 kind: change
 schema: 2
-status: verified
+status: executing
 risk: medium
 owner: codex
 approvers: [chenli]
@@ -11,12 +11,12 @@ created: 2026-08-31
 updated: 2026-08-31
 source: direct user reports and screenshot feedback in this task on 2026-08-31
 inputs: live C2-dev reproduction, user screenshots, fixed 56px titlebar contract, macOS window preferences
-outputs: native titlebar double-click behavior, fixed traffic-light placement, and regression coverage
-scope: apps/desktop/native/window-effects/CodeTwoWindowEffects.m, apps/desktop/src/electrobun, apps/desktop/src/main.tsx, apps/desktop/tests, docs/sdlc/changes/2026-08-31-macos-titlebar-window-behavior
-next_trigger: human review of the authorized pull request
+outputs: native titlebar double-click behavior, fixed traffic-light placement, regression coverage, and CI gate repair
+scope: apps/desktop/native/window-effects/CodeTwoWindowEffects.m, apps/desktop/src/container.ts, apps/desktop/src/electrobun, apps/desktop/src/main.tsx, apps/desktop/tests, docs/catalog.json, docs/sdlc/changes/2026-08-31-macos-titlebar-window-behavior, script/verify/checks.test.ts, script/verify/docs.ts
+next_trigger: PR CI passes and human review continues
 verification_mode: owner
-verified_by: codex
-verified_at: 2026-08-31
+verified_by: pending
+verified_at: pending
 ---
 
 # Preserve native macOS titlebar window behavior
@@ -62,6 +62,8 @@ focused tests, then restores the prior single fixed button-position call.
       and have the user-approved leading spacing without runtime geometry measurement.
 - [x] AC-5: Focused DOM/AppKit/window-chrome tests, the full desktop package build, documentation,
       lifecycle, and diff checks pass on the latest upstream base.
+- [ ] AC-6: PR validation and cross-platform jobs pass without violating the desktop container
+      boundary or rejecting colocated change evidence.
 
 ## Decision and gates
 
@@ -90,6 +92,10 @@ release, deployment, and production mutation remain unauthorized.
   the host contains no titlebar measurement, observer, or adaptive positioning calculation.
 - Focused DOM, Objective-C/AppKit, and source-contract tests protect the interaction and fixed
   geometry contracts.
+- The renderer now installs the desktop-only titlebar action through `container.ts`, preserving
+  the repository's single desktop-shell import boundary without changing the interaction.
+- The documentation catalog now classifies referenced files colocated under a change bundle's
+  `evidence/` directory, matching the lifecycle contract and retaining orphan-image checks.
 
 ## Verification
 
@@ -106,6 +112,15 @@ because this worktree's installed packages predated the updated upstream lockfil
 --frozen-lockfile` installed the locked lint dependencies, and the unchanged build command then
 passed lint, TypeScript, the 6,402-module Vite build, native helpers, and Electrobun packaging.
 
+PR #194's first hosted run failed because `main.tsx` imported two Electrobun implementation
+modules directly and because the latest `main` added eight referenced change-evidence screenshots
+without a matching catalog class. After rebasing, `bun test
+apps/desktop/tests/containerBoundary.test.ts` and `bun script/verify/docs.ts` reproduced those exact
+failures locally. Routing installation through `container.ts` and adding the `change-evidence`
+classification made both loops pass. The full suite then exposed one stale source-contract
+assertion for the former direct import; updating it to assert the new container route restored the
+complete test suite.
+
 ### Acceptance evidence
 
 - AC-1: PASS — `bun test apps/desktop/tests/titlebarDoubleClick.test.ts apps/desktop/tests/nativeTitlebarDoubleClick.test.ts apps/desktop/tests/windowChromeContract.test.ts`; live packaged C2 changed from 1152×768 to 1188×768 and restored to 1152×768 through the titlebar action.
@@ -113,6 +128,9 @@ passed lint, TypeScript, the 6,402-module Vite build, native helpers, and Electr
 - AC-3: PASS — `bun test apps/desktop/tests/nativeTitlebarDoubleClick.test.ts apps/desktop/tests/windowChromeContract.test.ts` compiles and runs the production AppKit harness for None, Fill/restore, Zoom, Minimize, and unknown values while preserving the missing-preference fallback.
 - AC-4: PASS — `bun test apps/desktop/tests/windowChromeContract.test.ts`; the packaged host contains exactly two literal `(28, 21)` calls and no geometry measurement, and the fresh user-reviewed C2 screenshot shows the native group centered in the shared titlebar with the adjusted leading inset.
 - AC-5: PASS — the focused suite, full `bun run build` desktop package, `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts`, `bun script/verify/sdlc.ts --worktree`, and `git diff --check` pass on the rebased branch.
+- AC-6: pending — local equivalents pass (`bun test` reports 760 passing tests and no failures;
+  `cd apps/desktop && bun run build` passes lint, TypeScript, the 6,402-module Vite build, native
+  helpers, and Electrobun packaging). Hosted PR validation will rerun after push.
 
 Residual risk: the live machine exercised the current Zoom fallback. Minimize, Fill, None, and
 unknown preference values are verified in the production AppKit harness rather than by changing

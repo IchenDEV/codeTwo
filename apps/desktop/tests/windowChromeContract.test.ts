@@ -10,6 +10,7 @@ const electrobunHost = source("../src/electrobun/index.ts");
 const styles = source("../src/styles.css");
 const appSource = source("../src/App.tsx");
 const mainSource = source("../src/main.tsx");
+const containerSource = source("../src/container.ts");
 const railSource = source("../src/sidebar/SessionRail.tsx");
 const sceneStudioSource = source("../src/session/SceneStudio.tsx");
 const dockSource = source("../src/dock/Dock.tsx");
@@ -40,10 +41,13 @@ describe("macOS window chrome contract", () => {
   });
 
   test("routes custom titlebar double-clicks through the user's macOS window action", () => {
-    expect(mainSource).toContain("installTitlebarDoubleClick(document");
+    expect(mainSource).toContain("installDesktopTitlebarDoubleClick(document");
     expect(mainSource).toContain(
-      '!showDesktopPet && currentDesktopPlatform() === "macos" && isElectrobun',
+      '!showDesktopPet && currentDesktopPlatform() === "macos"',
     );
+    expect(containerSource).toContain("if (!desktopContainerAvailable) return () => {}");
+    expect(containerSource).toContain("installTitlebarDoubleClick(document");
+    expect(containerSource).toContain("performTitlebarDoubleClick().catch(onError)");
     expect(titlebarSource).toContain("electrobun-webkit-app-region-drag");
     expect(titlebarSource).toContain("electrobun-webkit-app-region-no-drag");
     expect(rpcSource).toContain("titlebarDoubleClick: { params: undefined; response: boolean }");
