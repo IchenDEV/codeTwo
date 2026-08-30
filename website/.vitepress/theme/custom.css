@@ -1232,3 +1232,66 @@ body:has(.codetwo-home) #app {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------- */
+/* Light/dark header toggle (landing pages; palette swap lives in    */
+/* light.css under html.home-light)                                  */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home .theme-toggle {
+  display: inline-flex;
+  width: 40px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--home-green-dim);
+  border-radius: 4px;
+  color: var(--home-ink);
+  background: transparent;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.codetwo-home .theme-toggle:hover {
+  border-color: var(--home-green);
+  color: var(--home-green);
+}
+
+.codetwo-home .theme-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+
+.codetwo-home .theme-toggle .icon-moon {
+  display: none;
+}
+
+html.home-light .codetwo-home .theme-toggle .icon-sun {
+  display: none;
+}
+
+html.home-light .codetwo-home .theme-toggle .icon-moon {
+  display: block;
+}
+
+.codetwo-home .mobile-nav nav .theme-toggle {
+  width: 100%;
+  height: auto;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 0;
+  justify-content: flex-start;
+  gap: 10px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 16px;
+}
+
+.codetwo-home .theme-toggle:focus-visible {
+  outline: 2px solid var(--home-green);
+  outline-offset: 4px;
+}

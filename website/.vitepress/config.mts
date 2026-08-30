@@ -117,6 +117,14 @@ export default defineConfig({
     ],
     ["link", { rel: "apple-touch-icon", href: "/codeTwo/apple-touch-icon.png" }],
     ["meta", { name: "theme-color", content: "#030504" }],
+    [
+      "script",
+      {},
+      // Apply the landing color scheme before first paint: stored choice
+      // wins, otherwise follow the system preference. Docs pages are
+      // unaffected because every consumer selector is scoped to the landing.
+      'try{var s=localStorage.getItem("vitepress-theme-appearance");var l=s==="light"||((!s||s==="auto")&&window.matchMedia("(prefers-color-scheme: light)").matches);if(l)document.documentElement.classList.add("home-light")}catch(e){}',
+    ],
     ["meta", { property: "og:site_name", content: "C2" }],
     ["meta", { property: "og:type", content: "website" }],
     [
