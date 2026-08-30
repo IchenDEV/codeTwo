@@ -12,6 +12,8 @@ describe("buildFeishuExecutionPrompt", () => {
         id: "m1",
         senderId: "ou_alice",
         senderType: "user",
+        senderName: "林小满",
+        senderAvatarUrl: "https://example.invalid/lin-avatar.png",
         type: "text",
         text: "缺陷表还有 12 条待验收。",
         createdAt: "1724900000000",
@@ -19,7 +21,7 @@ describe("buildFeishuExecutionPrompt", () => {
       related: [{ id: "doc1", name: "需求说明", type: "docx", url: "https://tenant.feishu.cn/docx/doc1", kind: "document" }],
     });
     expect(prompt).toContain("## 飞书对话：插件评审群");
-    expect(prompt).toContain("ou_alice: 缺陷表还有 12 条待验收。");
+    expect(prompt).toContain("林小满: 缺陷表还有 12 条待验收。");
     expect(prompt).toContain("云文档：需求说明");
   });
 

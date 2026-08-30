@@ -194,6 +194,48 @@ describe("FeishuWorkspacePage", () => {
     view.unmount();
   });
 
+  test("renders resolved sender names and avatars instead of internal Feishu ids", async () => {
+    activateDom();
+    dom.window.localStorage.setItem("codetwo.language", "en");
+    const view = renderFeishu(async (name) => {
+      if (name === "connection.status") {
+        return { ...partialConnection, authorized: true, needsUserAuthorization: false };
+      }
+      if (name === "resources.list") {
+        return {
+          configured: true,
+          problem: "",
+          chats: [{ id: "chat-1", name: "Design review", description: "", latestMessage: "Hello", avatarUrl: "", mode: "group", type: "group" }],
+          documents: [],
+          bases: [],
+          warnings: [],
+        };
+      }
+      if (name === "conversation.messages") {
+        return {
+          messages: [{
+            id: "message-1",
+            senderId: "ou_79dcab",
+            senderType: "user",
+            senderName: "Lin Xiaoman",
+            senderAvatarUrl: "https://example.invalid/lin.png",
+            type: "text",
+            text: "Hello",
+            createdAt: "1724900000000",
+          }],
+          hasMore: false,
+        };
+      }
+      throw new Error(`unexpected command: ${name}`);
+    });
+
+    await waitFor(() => expect(text(view.container, "Lin Xiaoman")).not.toBeNull());
+    expect(view.container.textContent).not.toContain("Member · 79dcab");
+    expect(view.container.querySelector('[data-feishu-message-avatar] img')?.getAttribute("src"))
+      .toBe("https://example.invalid/lin.png");
+    view.unmount();
+  });
+
   test("renders Feishu document content as Markdown", async () => {
     activateDom();
     dom.window.localStorage.setItem("codetwo.language", "en");

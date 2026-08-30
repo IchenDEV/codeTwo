@@ -144,6 +144,8 @@ interface ChatMessageSummary {
   id: string;
   senderId: string;
   senderType: string;
+  senderName: string;
+  senderAvatarUrl: string;
   type: string;
   text: string;
   createdAt: string;
@@ -319,7 +321,7 @@ export function buildFeishuExecutionPrompt(input: {
   ];
   if (input.tab === "messages") {
     const messages = (input.messages ?? []).map((message) => {
-      const sender = message.senderId || message.senderType || "unknown";
+      const sender = message.senderName || message.senderId || message.senderType || "unknown";
       return `- [${message.createdAt || "unknown time"}] ${sender}: ${message.text || `[${message.type}]`}`;
     });
     sections.push(`\n## ${sourceLabel(input.tab, input.sourceName)}\n${messages.join("\n") || "(没有可见消息)"}`);
@@ -386,16 +388,36 @@ function ChatAvatar({ chat }: { chat: ChatSummary }) {
   );
 }
 
-function MessageAvatar({ label }: { label: string }) {
+function MessageAvatar({ label, src }: { label: string; src: string }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => setFailed(false), [src]);
+
   return (
     <span
       data-feishu-message-avatar
       className="flex size-control shrink-0 items-center justify-center overflow-hidden rounded-full bg-fill-quiet text-cap font-semibold text-muted-foreground"
       aria-hidden
     >
-      {Array.from(label.trim())[0]?.toLocaleUpperCase() || "?"}
+      {src && !failed ? (
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="size-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : Array.from(label.trim())[0]?.toLocaleUpperCase() || "?"}
     </span>
   );
+}
+
+function messageSenderLabel(message: ChatMessageSummary, memberLabel: string): string {
+  const name = message.senderName?.trim();
+  if (name) return name;
+  if (message.senderId) return `${memberLabel} · ${message.senderId.slice(-6)}`;
+  return message.senderType || memberLabel;
 }
 
 export function FeishuWorkspacePage({
@@ -1530,8 +1552,11 @@ export function FeishuWorkspacePage({
                 {!detailLoading && messages.length === 0 ? <p className="py-section text-center text-ui text-muted-foreground">{t("feishu.noMessages")}</p> : null}
                 {messages.map((message) => (
                   <article key={message.id} data-feishu-message className="grid grid-cols-[auto_1fr_auto] gap-x-module-inset gap-y-inline border-b border-border/70 py-section last:border-b-0">
-                    <MessageAvatar label={message.senderId || message.senderType || t("feishu.member")} />
-                    <p className="truncate text-ui font-medium">{message.senderId ? `${t("feishu.member")} · ${message.senderId.slice(-6)}` : message.senderType || t("feishu.member")}</p>
+                    <MessageAvatar
+                      label={messageSenderLabel(message, t("feishu.member"))}
+                      src={message.senderAvatarUrl || ""}
+                    />
+                    <p className="truncate text-ui font-medium">{messageSenderLabel(message, t("feishu.member"))}</p>
                     <time className="text-fine tabular-nums text-muted-foreground">{displayTime(message.createdAt)}</time>
                     <div dir="auto" className="col-start-2 col-end-4 min-w-0 text-body leading-relaxed">
                       <MarkdownContent text={visibleMessageText(message, t)} />

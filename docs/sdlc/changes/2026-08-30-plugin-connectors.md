@@ -53,6 +53,8 @@ Only C2 Plugin Standard 1.2 bundles and installed records are accepted.
 - [x] Feishu app setup and account authorization live in the Feishu plugin details rather than the
       collaboration workspace; successful authorization restores the existing resource directory.
 - [ ] The authorization boundary is covered in English and Chinese and checked in the rendered desktop.
+- [x] Conversation messages render the sender display name and avatar resolved by the connector; internal
+      Feishu identifiers appear only as a last-resort fallback when no user profile is available.
 - [ ] Focused Rust, renderer, community-plugin, build, SDLC, and real-window checks pass.
 
 ## Decision and gates
@@ -92,6 +94,10 @@ second setup surface.
 - Added a host-owned plugin-details extension point and moved Feishu app creation, account authorization,
   reauthorization, and disconnect controls into the owning community bundle's plugin details. The
   unauthorized rail and workspace now expose only a concise sign-in route and no resource groups.
+- Extended the Feishu connector message result with `senderName` and `senderAvatarUrl`. The community
+  adapter resolves every unique human sender in one Contacts batch, falls back to the basic-name batch
+  when profile visibility blocks avatars, and leaves app/bot senders on the existing last-resort label.
+  The desktop now uses that identity in the conversation, circular avatar, and Agent handoff prompt.
 
 ## Verification
 
@@ -106,6 +112,14 @@ second setup surface.
   three resource groups, exact plugin selection, settings-host authorization controls, and the preserved
   authorized directory. `bunx tsc --noEmit`, `git diff --check`, and `bun run build:renderer` passed;
   the build retained only the existing large-chunk warning.
+- Sender-identity regression run on 2026-08-31: the focused desktop rendered and prompt suites passed
+  13 tests / 0 failures, including a red-to-green case that rejects `Member · <open_id>` when the
+  connector supplies a name and avatar. `bunx tsc --noEmit` and `bun run build:renderer` passed; the
+  build retained only the existing large-chunk warning.
+- Community adapter 0.5.1 passed `npm run check` (69 tests, typecheck, source/client/bundle builds) and
+  `CODETWO_RUNTIME_BUNDLE=1 npx vitest run tests/codetwo-runtime.spec.ts` (11 tests). The packaged-runtime
+  test confirms a single tenant-authenticated Contacts batch returns `林小满` and her avatar for both
+  messages, rather than exposing `ou_lin`; C2's validator accepted version 0.5.1 with one connector.
 - Draft-PR preflight on 2026-08-31: the eight affected desktop suites passed 94 tests / 0 failures;
   `DOCS_RS=1 cargo check -p codetwo-plugins --tests` passed; and
   `DOCS_RS=1 cargo test -p codetwo-plugins --lib` passed 38 tests / 0 failures.
