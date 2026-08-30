@@ -75,7 +75,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
@@ -659,8 +658,8 @@ export function SessionRail({
                   ?.focus({ preventScroll: true })
               }
               className={cn(
-                "group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-[background-color,box-shadow] hover:bg-fill-quiet focus-within:bg-fill-quiet data-[popup-open]:bg-fill-hover",
-                s.id === activeSession && typeof ResizeObserver === "undefined" && "bg-fill-hover",
+                "group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-shadow hover:bg-fill-quiet focus-within:bg-fill-quiet data-[popup-open]:bg-fill-hover",
+                s.id === activeSession && "bg-fill-hover",
               )}
             >
               <Button
@@ -1178,10 +1177,9 @@ export function SessionRail({
 
       {/* ---- 3 · Tasks ---------------------------------------------------------------------- */}
       <ScrollArea data-rail-session-scroll className="min-h-0 flex-1">
-        <LiquidSelectionGroup
+        <div
           data-session-list
-          activeSelector='[aria-current="page"]'
-          fill="var(--color-fill-hover)"
+          data-session-selection="instant"
           className="px-2 pb-4"
         >
           {resourceSections}
@@ -1273,7 +1271,7 @@ export function SessionRail({
               )}
             </>
           )}
-        </LiquidSelectionGroup>
+        </div>
       </ScrollArea>
 
       {/* ---- 4 · utilities ------------------------------------------------------------------ */}

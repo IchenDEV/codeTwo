@@ -715,6 +715,21 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
+  test("switches session tabs with an immediate row-local selection surface", () => {
+    activateDom();
+    const view = renderRail();
+    const list = view.container.querySelector("[data-session-list]");
+    const activeRow = view.container.querySelector('[data-session-id="punctuation"]');
+    const inactiveRow = view.container.querySelector('[data-session-id="meaningful"]');
+
+    expect(list?.getAttribute("data-session-selection")).toBe("instant");
+    expect(activeRow?.className.split(/\s+/)).toContain("bg-fill-hover");
+    expect(activeRow?.className).not.toContain("transition-[background-color");
+    expect(inactiveRow?.className.split(/\s+/)).not.toContain("bg-fill-hover");
+
+    view.unmount();
+  });
+
   test("confirms clipboard actions instead of failing silently", async () => {
     activateDom();
     const copied = [];
