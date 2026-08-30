@@ -5,7 +5,7 @@ status: verified
 owner: codex
 created: 2026-08-30
 updated: 2026-08-30
-next_trigger: human product review
+next_trigger: PR #182 merge verification
 ---
 
 # Redesign the Memory settings workspace
@@ -91,7 +91,9 @@ actions, editing, and the existing narrow detail dialog are unchanged.
 
 ## Review and release
 
-No PR, merge, or release requested. Human product review remains the next lifecycle gate.
+PR [#182](https://github.com/IchenDEV/codeTwo/pull/182) contains the verified change. The user's
+2026-08-30 request explicitly authorizes creating and merging the PR. No versioned release was
+requested.
 
 ## Feedback
 
