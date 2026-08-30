@@ -1401,6 +1401,7 @@ pre {
 }
 
 .plugin-manager-list-pane {
+  container: plugin-manager-list / inline-size;
   width: clamp(20rem, 38cqw, 31rem);
   box-shadow: inset -1px 0 0 var(--border);
 }
@@ -1413,17 +1414,12 @@ pre {
   display: none;
 }
 
-@container plugin-manager (max-width: 50rem) {
-  .plugin-manager-list-header {
-    gap: 0;
-    padding-inline: var(--ds-space-module-inset);
-  }
-
+@container plugin-manager-list (max-width: 24rem) {
   .plugin-manager-tabs {
-    gap: 0;
+    gap: var(--ds-space-optical);
   }
 
-  .plugin-manager-tab {
+  .plugin-manager-tab:not(:first-of-type) {
     padding-inline: var(--ds-space-optical);
   }
 

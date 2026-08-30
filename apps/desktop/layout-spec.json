@@ -89,7 +89,10 @@
       "listMinWidth": 320,
       "listPreferredWidth": "38cqw",
       "listMaxWidth": 496,
-      "collapseAt": 704
+      "collapseAt": 704,
+      "listContentLine": 32,
+      "listControlsOuterInset": 16,
+      "listContentBehavior": "Split-list titles, first selection labels, and search icons share the pageSection content line; collapsed-sidebar recovery actions remain shell chrome."
     }
   },
   "verticalRhythm": {

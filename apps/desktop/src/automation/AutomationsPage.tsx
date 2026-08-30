@@ -411,12 +411,20 @@ export function AutomationsPage({
           data-automation-list-header
           className={cn(
             "electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-2 pr-3",
-            headerLeadingAction ? "window-controls-safe-main" : "pl-3",
+            headerLeadingAction ? "window-controls-safe-main" : "pl-page-section",
           )}
         >
           {headerLeadingAction ? <div data-automation-leading-action className="shrink-0">{headerLeadingAction}</div> : null}
           <h1 className="shrink-0 text-dialog font-semibold">{t("automations.title")}</h1>
-          <div data-automation-filters className="min-w-0 shrink">
+          <div className="electrobun-webkit-app-region-drag flex-1" />
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={primaryActionLabel} onClick={primaryAction}><Plus className="size-3.5" /></Button>} />
+            <TooltipContent>{primaryActionLabel}</TooltipContent>
+          </Tooltip>
+        </header>
+
+        <div data-automation-list-controls className="grid shrink-0 gap-2 px-4 pb-3">
+          <div data-automation-filters className="min-w-0">
             <ViewSwitcher
               label={t("automations.filterLabel")}
               value={filter}
@@ -427,15 +435,7 @@ export function AutomationsPage({
               onValueChange={setFilter}
             />
           </div>
-          <div className="electrobun-webkit-app-region-drag hidden flex-1 sm:block" />
-          <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={primaryActionLabel} onClick={primaryAction}><Plus className="size-3.5" /></Button>} />
-            <TooltipContent>{primaryActionLabel}</TooltipContent>
-          </Tooltip>
-        </header>
-
-        <div className="flex shrink-0 items-center gap-2 px-4 py-3">
-          <div data-automation-search className="min-w-0 flex-1">
+          <div data-automation-search className="ms-inline min-w-0 flex-1">
             <SearchField
               label={t("automations.searchPlaceholder")}
               value={query}

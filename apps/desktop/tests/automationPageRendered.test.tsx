@@ -79,6 +79,8 @@ describe("AutomationsPage layout", () => {
     const page = view.container.querySelector("[data-automation-page]");
     const listPane = view.container.querySelector("[data-automation-list-pane]");
     const detailPane = view.container.querySelector("[data-automation-detail-pane]");
+    const listHeader = listPane?.querySelector("[data-automation-list-header]");
+    const listControls = listPane?.querySelector("[data-automation-list-controls]");
     const search = view.container.querySelector("[data-automation-search]");
     const filters = view.container.querySelector("[data-automation-filters]");
     const detailTabs = detailPane?.querySelector('[role="tablist"]');
@@ -89,8 +91,12 @@ describe("AutomationsPage layout", () => {
     expect([...view.container.querySelectorAll("button")].some((item) => item.textContent?.trim() === "Back")).toBeFalse();
     expect(listPane?.className).toContain("automation-list-pane");
     expect(listPane?.className).toContain("bg-sidebar");
-    expect(listPane?.querySelector("[data-automation-list-header]")?.className).toContain("pl-3");
-    expect(listPane?.querySelector("[data-automation-list-header]")?.className).not.toContain("window-controls-safe-main");
+    expect(listHeader?.className).toContain("pl-page-section");
+    expect(listHeader?.className).not.toContain("window-controls-safe-main");
+    expect(listHeader?.contains(filters)).toBeFalse();
+    expect(listControls?.contains(filters)).toBeTrue();
+    expect(listControls?.contains(search)).toBeTrue();
+    expect(search?.className).toContain("ms-inline");
     expect(detailPane?.className).toContain("automation-detail-pane");
     expect(detailPane?.querySelector("[data-automation-detail-header]")?.className).toContain("pl-4");
     expect(detailPane?.querySelector("[data-automation-detail-leading-action]")).toBeNull();
