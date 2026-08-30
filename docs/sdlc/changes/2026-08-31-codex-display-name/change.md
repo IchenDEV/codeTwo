@@ -71,7 +71,8 @@ Verdict: verified.
 
 ### Acceptance evidence
 
-- AC-1: PASS — `bun test` in `apps/desktop` passed 766 tests with 0 failures; the seven focused
+- AC-1: PASS — after rebasing onto the latest `origin/main`, `bun test` in `apps/desktop` passed
+  774 tests with 0 failures; the seven focused
   display-name files passed 51 tests with 0 failures; `cargo test -p codetwo-core provider::tests`
   passed 8 tests with 0 failures, including the explicit `Codex` registry assertion.
 - AC-2: PASS — `rg -n -F "OpenAI Codex" apps crates website docs/reference` returned no active

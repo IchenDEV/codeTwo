@@ -91,7 +91,8 @@ large-chunk notice remained non-failing and are unrelated to this deletion.
   `codetwo.turnFeedback`, `feedbackKey`, turn-feedback helpers, helpful/unhelpful translations, or
   thumbs icon exports; the only remaining `THUMBSUP` fixture belongs to the explicitly out-of-scope
   Feishu message-reaction feature.
-- AC-3: PASS — `bun test` passed 766 tests across 131 files with 3,647 expectations and zero
+- AC-3: PASS — after rebasing onto the latest `origin/main`, `bun test` passed 774 tests across 134
+  files with 3,682 expectations and zero
   failures; `bunx tsc --noEmit` and `bun run build:renderer` passed; Browser checks passed in dark,
   light, and 560x760 narrow states with no framework overlay, relevant console warning/error, or
   response-row overflow; `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts`,

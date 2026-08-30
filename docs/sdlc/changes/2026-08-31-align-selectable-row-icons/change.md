@@ -84,7 +84,8 @@ Verdict: verified.
   `/tmp/codetwo-provider-icons-aligned-desktop.png` and
   `/tmp/codetwo-provider-icons-aligned-narrow.png`.
 - AC-3: PASS — `bun test tests/designSystemBusinessComponents.test.tsx` passed 8 tests with 56
-  expectations; full `bun test` passed 766 tests with 3,640 expectations and zero failures;
+  expectations; after rebasing onto the latest `origin/main`, full `bun test` passed 774 tests with
+  3,682 expectations and zero failures;
   `bunx tsc --noEmit` and `bun run build:renderer` passed. Browser checks at desktop and 560x760
   verified page identity, meaningful content, no framework overlay, no horizontal overflow, and no
   console warning/error. Repository lifecycle checks are recorded by the final Gate run after this
