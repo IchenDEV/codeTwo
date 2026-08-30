@@ -121,6 +121,7 @@ the user's system preference. Native traffic-light artwork and diameter remain A
 ## Review and release
 
 Approval: the user authorized opening a pull request on 2026-08-31; merge remains pending.
+Review surface: [PR #194](https://github.com/IchenDEV/codeTwo/pull/194).
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
