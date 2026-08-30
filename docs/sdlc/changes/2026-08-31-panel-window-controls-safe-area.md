@@ -9,7 +9,7 @@ updated: 2026-08-31
 source: user-supplied Pull requests and Automations overlap screenshots on 2026-08-31
 inputs: direct implementation request, screenshots, existing macOS window-controls safe-area contract
 outputs: scoped split-panel header adaptation, focused regression coverage, and rendered evidence
-next_trigger: human review of the Draft PR
+next_trigger: merge authorized Draft PR 186 after refreshed required checks pass
 ---
 
 # Keep panel headers clear of macOS window controls
@@ -54,8 +54,8 @@ container-query and safe-area classes instead of adding device-specific JavaScri
 
 The user's direct screenshot-backed implementation request is Intent and visible-design approval.
 The implementation reuses the established `window-controls-safe-main` contract and the two pages'
-existing container queries. Human review remains the next Gate after verification. No merge,
-release, deployment, or production mutation is authorized.
+existing container queries. The user's direct `merge` instruction on 2026-08-31 accepts the Review
+and Merge Gate for PR #186. It does not authorize release, deployment, or production mutation.
 
 ## Plan
 
@@ -112,13 +112,14 @@ must not be launched while another worktree owns the default data directory.
 
 ## Review and release
 
-Approval: pending human review in the Draft PR.
+Approval: the user authorized merging PR #186 through a direct `merge` instruction on 2026-08-31.
 Review surface: [Draft PR #186](https://github.com/IchenDEV/codeTwo/pull/186).
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
 Rollback: revert the scoped PR commit.
-No release: pending review disposition.
+No release: repository integration is authorized, but no package, deployment, or versioned release
+was requested.
 
 ## Feedback
 
