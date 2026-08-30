@@ -72,6 +72,17 @@
         "auxiliaryAt": 480,
         "auxiliarySchemeColumns": 1,
         "auxiliaryThemeColumns": 1
+      },
+      "memory": {
+        "sectionGap": 16,
+        "workbenchMinHeight": 544,
+        "listFraction": 1.08,
+        "detailFraction": 0.92,
+        "detailMinWidth": 320,
+        "detailCollapseAt": 1024,
+        "toolbarColumns": 4,
+        "compactToolbarColumns": 2,
+        "compactViewBehavior": "wrap"
       }
     },
     "workbench": {

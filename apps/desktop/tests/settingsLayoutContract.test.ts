@@ -7,6 +7,8 @@ const primitivesSource = readFileSync(new URL("../src/settings/SettingsPrimitive
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/settings/settings-page.css", import.meta.url), "utf8");
 const appearanceStyles = readFileSync(new URL("../src/settings/appearance-settings.css", import.meta.url), "utf8");
+const memorySource = readFileSync(new URL("../src/settings/MemorySettings.tsx", import.meta.url), "utf8");
+const memoryStyles = readFileSync(new URL("../src/settings/memory-settings.css", import.meta.url), "utf8");
 const petSource = readFileSync(new URL("../src/settings/PetSettings.tsx", import.meta.url), "utf8");
 const petStyles = readFileSync(new URL("../src/settings/pet-settings.css", import.meta.url), "utf8");
 const layoutSpec = JSON.parse(readFileSync(new URL("../layout-spec.json", import.meta.url), "utf8"));
@@ -206,6 +208,45 @@ describe("Settings page layout contract", () => {
     expect(source).toContain('current === "memory" ? "general" : current');
     expect(source).toMatch(
       /\{tab === "memory" && memoryEnabled && \([\s\S]*?<MemorySettingsPage[\s\S]*?projectPath=\{projectPath\}[\s\S]*?projects=\{projects\}[\s\S]*?onOpenSession=\{onOpenSession\}[\s\S]*?\/>(?:[\s\S]*?)\)\}/,
+    );
+  });
+
+  test("groups the Memory library into one neutral workbench", () => {
+    expect(layoutSpec.content.settings.memory).toMatchObject({
+      sectionGap: 16,
+      workbenchMinHeight: 544,
+      listFraction: 1.08,
+      detailFraction: 0.92,
+      detailMinWidth: 320,
+      detailCollapseAt: 1024,
+      toolbarColumns: 4,
+      compactToolbarColumns: 2,
+      compactViewBehavior: "wrap",
+    });
+    expect(memorySource).toContain("<PageHeader");
+    expect(memorySource).toContain('className="memory-workbench"');
+    expect(memorySource).toContain('className="memory-view-switcher"');
+    expect(memorySource).toContain('{ value: "conflicts", key: "memory.view.conflicts" }');
+    expect(memoryStyles).toMatch(
+      /\.memory-workbench\s*{[^}]*overflow:\s*clip;[^}]*background:\s*var\(--background\);/s,
+    );
+    expect(memoryStyles).toMatch(
+      /\.memory-detail-panel\s*{[^}]*background:\s*var\(--background\);[^}]*box-shadow:\s*inset/s,
+    );
+    expect(memoryStyles).toMatch(
+      /\.memory-management-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1\.08fr\) minmax\(20rem, 0\.92fr\);/s,
+    );
+    expect(memoryStyles).toMatch(
+      /@media \(max-width:\s*64rem\)[\s\S]*?\.memory-detail-panel\s*{[^}]*display:\s*none;/,
+    );
+    expect(memoryStyles).toMatch(
+      /@media \(max-width:\s*50rem\)[\s\S]*?\.memory-view-switcher > \[data-slot="view-switcher"\]\s*{[^}]*flex-wrap:\s*wrap;/,
+    );
+    expect(memoryStyles).toMatch(
+      /\.memory-view-switcher \[data-slot="button"\]\[data-selected="true"\]::after\s*{[^}]*height:\s*var\(--ds-space-optical\);[^}]*background:\s*var\(--primary\);[^}]*content:\s*"";/s,
+    );
+    expect(memoryStyles).not.toMatch(
+      /\.memory-view-switcher \[data-slot="button"\]\[data-selected="true"\]\s*{[^}]*box-shadow:\s*inset/s,
     );
   });
 
