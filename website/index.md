@@ -77,7 +77,10 @@ onMounted(() => {
         <div class="section-command" data-motion="type" aria-hidden="true">$ code2 --compose</div>
         <h1 id="hero-title" data-motion>
           The document-first<br />
-          coding agent<span class="terminal-period">.</span>
+          coding agent<span class="terminal-period">.</span><span
+            class="hero-cursor"
+            aria-hidden="true"
+          ></span>
         </h1>
         <p data-motion style="--motion-delay: 120ms">
           Compose structured prompts, weave in reusable skills, and run Claude

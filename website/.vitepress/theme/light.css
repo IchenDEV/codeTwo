@@ -86,6 +86,22 @@ html.home-light .codetwo-home .button-secondary {
   background: transparent;
 }
 
+/* UI detail polish equivalents (green-tinted buttons, CTA hover) */
+
+html.home-light .codetwo-home .button-primary {
+  background: rgb(21 122 44 / 10%);
+}
+
+html.home-light .codetwo-home .button-primary:hover {
+  background: rgb(21 122 44 / 14%);
+}
+
+html.home-light .codetwo-home .desktop-nav .nav-cta:hover {
+  border-color: var(--home-green);
+  color: var(--home-green);
+  background: rgb(21 122 44 / 8%);
+}
+
 html.home-light .codetwo-home .screenshot-frame {
   box-shadow: 0 24px 80px rgb(31 42 33 / 20%);
 }
