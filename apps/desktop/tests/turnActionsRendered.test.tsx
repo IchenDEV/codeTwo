@@ -42,7 +42,6 @@ function renderTurn(onFork = () => {}) {
         <ToastProvider>
           <TurnCard
             turn={turn}
-            feedbackKey="codetwo.turnFeedback:test:17"
             onFork={onFork}
           />
         </ToastProvider>
@@ -84,24 +83,17 @@ describe("turn actions", () => {
     view.unmount();
   });
 
-  test("keeps one local feedback state and invokes the branch action", async () => {
+  test("keeps copy and branch actions without response feedback controls", async () => {
     activateDom();
     const forked = [];
     const view = renderTurn((selected) => forked.push(selected));
     await flush();
 
-    const helpful = button(view.container, "Helpful");
-    const unhelpful = button(view.container, "Not helpful");
-    click(helpful);
-    await flush();
-    expect(helpful.getAttribute("aria-pressed")).toBe("true");
-    expect(dom.localStorage.getItem("codetwo.turnFeedback:test:17")).toBe("helpful");
-
-    click(unhelpful);
-    await flush();
-    expect(helpful.getAttribute("aria-pressed")).toBe("false");
-    expect(unhelpful.getAttribute("aria-pressed")).toBe("true");
-    expect(dom.localStorage.getItem("codetwo.turnFeedback:test:17")).toBe("unhelpful");
+    const actionLabels = Array.from(
+      view.container.querySelectorAll('[data-turn-actions="response"] button'),
+      (action) => action.getAttribute("aria-label"),
+    );
+    expect(actionLabels).toEqual(["Copy response", "Branch into a new task"]);
 
     click(button(view.container, "Branch into a new task"));
     expect(forked).toEqual([turn]);

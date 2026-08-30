@@ -23,7 +23,7 @@ const providers = [
   },
   {
     id: "codex",
-    display_name: "OpenAI Codex",
+    display_name: "Codex",
     available: true,
     needs_node: true,
     models: [],
@@ -127,7 +127,6 @@ describe("Computer Use settings", () => {
 
     expect(view.container.querySelectorAll("[data-computer-use-selection]")).toHaveLength(1);
     expect(view.container.textContent).not.toContain("Claude Code");
-    expect(view.container.textContent).not.toContain("OpenAI Codex");
     const trigger = view.container.querySelector("[data-computer-use-selection]");
     expect(trigger?.textContent).toContain("Automatic");
     await openSelect(trigger);
@@ -205,7 +204,6 @@ describe("Browser Use settings", () => {
     });
     expect(view.container.querySelectorAll("[data-browser-use-selection]")).toHaveLength(1);
     expect(view.container.textContent).not.toContain("Claude Code");
-    expect(view.container.textContent).not.toContain("OpenAI Codex");
     const trigger = view.container.querySelector("[data-browser-use-selection]");
     await openSelect(trigger);
     expect(dom.document.body.textContent).toContain("No external backend");

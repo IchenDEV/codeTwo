@@ -26,7 +26,7 @@ what the active ACP endpoint actually reports rather than inventing parity.
 | Provider | Connection | C2 launches | Prerequisite |
 | --- | --- | --- | --- |
 | **Claude Code** | ACP adapter | `npx -y @agentclientprotocol/claude-agent-acp` | Node and an authenticated Claude Code setup |
-| **OpenAI Codex** | App Server ACP adapter | `npx -y @agentclientprotocol/codex-acp@1.7.0` | Node and a local Codex runtime/login |
+| **Codex** | App Server ACP adapter | `npx -y @agentclientprotocol/codex-acp@1.7.0` | Node and a local Codex runtime/login |
 | **Grok** | Native ACP | `grok agent stdio` | Authenticated `grok` CLI on `PATH` |
 | **Cursor** | CLI ACP mode | `cursor-agent acp` | Authenticated `cursor-agent` on `PATH` |
 | **OpenCode 1** | CLI ACP mode | `opencode acp` | Authenticated `opencode` on `PATH` |

@@ -202,7 +202,7 @@ pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provi
         },
         Provider {
             id: ProviderId::Codex,
-            display_name: "OpenAI Codex".into(),
+            display_name: "Codex".into(),
             launch: codex_launch,
             needs_node: true,
         },
@@ -387,6 +387,8 @@ mod tests {
         assert!(reg
             .iter()
             .any(|p| p.id == ProviderId::ClaudeCode && p.needs_node));
+        let codex = reg.iter().find(|p| p.id == ProviderId::Codex).unwrap();
+        assert_eq!(codex.display_name, "Codex");
         assert!(reg.iter().any(|p| p.id == ProviderId::Cursor));
         assert!(reg.iter().any(|p| p.id == ProviderId::OpenCode));
         assert!(reg.iter().any(|p| p.id == ProviderId::OpenCode2));

@@ -69,7 +69,7 @@ function renderRail(overrides = {}) {
           onRename={() => {}}
           onPin={() => {}}
           onArchive={() => {}}
-          displayProvider={() => "OpenAI Codex"}
+          displayProvider={() => "Codex"}
           onOpenMarket={() => {}}
           onOpenAutomations={() => {}}
           deviceConnectionsAvailable={false}
@@ -92,7 +92,7 @@ function renderRail(overrides = {}) {
           pluginManagerOpen={false}
           quickQuota={{ provider: "codex", remainingPercent: 42, windowMinutes: 10_080, resetsAt: null }}
           quickQuotaLoading={false}
-          quickQuotaProviderName="OpenAI Codex"
+          quickQuotaProviderName="Codex"
           onOpenUsage={() => {}}
           {...overrides}
         />
@@ -427,7 +427,7 @@ describe("SessionRail row layout", () => {
     ]);
     expect(utilityButtons.map((button) => button.getAttribute("aria-label"))).toEqual([
       "Settings",
-      "OpenAI Codex · Weekly limit · 42% left · Open Usage settings",
+      "Codex · Weekly limit · 42% left · Open Usage settings",
     ]);
     expect(utilities?.getAttribute("data-layout")).toBe("icon-toolbar");
     expect(sessionScroll?.nextElementSibling).toBe(utilities);
@@ -447,7 +447,7 @@ describe("SessionRail row layout", () => {
       '[data-rail-feature="usage"] [data-slot="rail-utility-button"]',
     );
     expect(quotaButton?.getAttribute("aria-label"))
-      .toBe("OpenAI Codex · Weekly limit · 42% left · Open Usage settings");
+      .toBe("Codex · Weekly limit · 42% left · Open Usage settings");
     expect(quotaButton?.querySelector('[role="progressbar"]')).toBeNull();
     expect(utilities?.querySelector('[data-rail-feature="usage"] [data-quota-provider]')?.getAttribute("data-quota-provider"))
       .toBe("codex");

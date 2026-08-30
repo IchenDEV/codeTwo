@@ -40,7 +40,7 @@ function renderEditor(props = {}) {
       <SceneEditor
         request={{ kind: "create" }}
         scenes={[]}
-        providers={[{ id: "codex", display_name: "OpenAI Codex", available: true, needs_node: false, models: [], capabilities: [] }]}
+        providers={[{ id: "codex", display_name: "Codex", available: true, needs_node: false, models: [], capabilities: [] }]}
         skills={[{ id: "reviewer", name: "Reviewer", description: "", icon: null, kind: "fragment", source: null }]}
         cwd="/tmp/project"
         onSaved={() => {}}

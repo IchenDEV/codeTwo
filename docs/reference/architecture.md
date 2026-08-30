@@ -3,7 +3,7 @@
 Status: **current implementation contract**. Source code wins when this document and the live
 checkout disagree.
 
-C2 drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
+C2 drives existing coding CLIs (Claude Code, Codex, Grok) over the **Agent Client
 Protocol (ACP)** and presents them through a **document-first** UI. The desktop, TUI, and server all
 compose the same plugin-independent Rust Core through one plugin runtime. Electrobun is a
 desktop-shell adapter, not a second business runtime.
