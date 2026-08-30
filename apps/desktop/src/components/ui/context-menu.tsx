@@ -1,7 +1,11 @@
 import * as React from "react";
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
+import { ChevronRight } from "@/components/ui/icons";
 
 import { cn } from "@/lib/utils";
+
+const contextMenuItemStyles =
+  "relative flex min-h-menu-item cursor-default select-none items-center gap-module-inset rounded-menu-item px-2 py-1.5 text-ui leading-4 outline-none transition-colors duration-feedback ease-enter focus:bg-fill-hover focus:text-content data-highlighted:bg-fill-hover data-highlighted:text-content data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-icon-list [&_svg:not([class*='text-'])]:text-muted-foreground";
 
 function ContextMenu(props: ContextMenuPrimitive.Root.Props) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
@@ -12,7 +16,7 @@ function ContextMenuTrigger({ className, ...props }: ContextMenuPrimitive.Trigge
     <ContextMenuPrimitive.Trigger
       data-slot="context-menu-trigger"
       className={cn(
-        "transition-colors duration-(--ds-motion-feedback) ease-(--ds-ease-enter) data-[popup-open]:bg-(--ds-color-fill-hover)",
+        "transition-colors duration-feedback ease-enter data-[popup-open]:bg-fill-hover",
         className,
       )}
       {...props}
@@ -44,7 +48,7 @@ function ContextMenuContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-content"
           className={cn(
-            "pop-layer z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-(--ds-menu-radius) bg-(--ds-color-raised) p-(--ds-menu-padding) text-(--ds-color-text) shadow-(--ds-menu-elevation) outline-none",
+            "pop-layer z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu bg-raised p-menu text-content shadow-menu outline-none",
             className,
           )}
           {...props}
@@ -58,6 +62,10 @@ function ContextMenuGroup(props: ContextMenuPrimitive.Group.Props) {
   return <ContextMenuPrimitive.Group data-slot="context-menu-group" {...props} />;
 }
 
+function ContextMenuSub(props: ContextMenuPrimitive.SubmenuRoot.Props) {
+  return <ContextMenuPrimitive.SubmenuRoot data-slot="context-menu-sub" {...props} />;
+}
+
 function ContextMenuItem({
   className,
   variant,
@@ -68,13 +76,67 @@ function ContextMenuItem({
       data-slot="context-menu-item"
       data-variant={variant ?? "default"}
       className={cn(
-        "relative flex min-h-(--ds-menu-item-height) cursor-default select-none items-center gap-2.5 rounded-(--ds-menu-item-radius) px-2 py-1.5 text-ui leading-4 outline-none transition-colors duration-(--ds-motion-feedback) ease-(--ds-ease-enter)",
-        "focus:bg-(--ds-color-fill-hover) focus:text-(--ds-color-text) data-highlighted:bg-(--ds-color-fill-hover) data-highlighted:text-(--ds-color-text) data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-(--ds-icon-list) [&_svg:not([class*='text-'])]:text-muted-foreground",
-        "data-[variant=destructive]:text-(--ds-color-destructive) data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:data-highlighted:bg-destructive/10",
+        contextMenuItemStyles,
+        "data-[variant=destructive]:text-status-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:data-highlighted:bg-destructive/10",
         className,
       )}
       {...props}
     />
+  );
+}
+
+function ContextMenuSubTrigger({
+  className,
+  children,
+  ...props
+}: ContextMenuPrimitive.SubmenuTrigger.Props) {
+  return (
+    <ContextMenuPrimitive.SubmenuTrigger
+      data-slot="context-menu-sub-trigger"
+      className={cn(
+        contextMenuItemStyles,
+        "data-[popup-open]:bg-fill-hover data-[popup-open]:text-content",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronRight className="ml-auto size-3.5 text-muted-foreground" aria-hidden="true" />
+    </ContextMenuPrimitive.SubmenuTrigger>
+  );
+}
+
+function ContextMenuSubContent({
+  className,
+  align = "start",
+  alignOffset = -4,
+  side = "right",
+  sideOffset = 2,
+  ...props
+}: ContextMenuPrimitive.Popup.Props &
+  Pick<
+    ContextMenuPrimitive.Positioner.Props,
+    "align" | "alignOffset" | "side" | "sideOffset"
+  >) {
+  return (
+    <ContextMenuPrimitive.Portal>
+      <ContextMenuPrimitive.Positioner
+        className="isolate z-50 outline-none"
+        align={align}
+        alignOffset={alignOffset}
+        side={side}
+        sideOffset={sideOffset}
+      >
+        <ContextMenuPrimitive.Popup
+          data-slot="context-menu-sub-content"
+          className={cn(
+            "pop-layer z-50 max-h-(--available-height) min-w-44 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu bg-raised p-menu text-content shadow-menu outline-none",
+            className,
+          )}
+          {...props}
+        />
+      </ContextMenuPrimitive.Positioner>
+    </ContextMenuPrimitive.Portal>
   );
 }
 
@@ -107,6 +169,9 @@ export {
   ContextMenuContent,
   ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuSeparator,
   ContextMenuShortcut,
 };

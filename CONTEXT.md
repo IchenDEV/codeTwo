@@ -10,6 +10,13 @@ session used to achieve it.
 A user-owned goal whose status, result contract, work history, and artifacts are tracked together.
 _Avoid_: Session, workflow, pipeline
 
+**Task Section**:
+A collapsible sidebar organization over Tasks, independent of Project, working directory, and
+provider Session. A user Section has explicit membership; a system Section has explainable,
+rule-derived membership. Explicit user membership takes precedence, and folding or deleting a
+Section never changes the Task itself.
+_Avoid_: Project group, folder group, Session ownership
+
 **Result Contract**:
 The task's current goal, required outcomes, evidence expectations, and boundaries. It may be
 refined as facts emerge, but its requirements cannot be silently weakened.

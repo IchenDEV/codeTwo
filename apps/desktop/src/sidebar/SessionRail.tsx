@@ -3,6 +3,7 @@ import {
   cloneElement,
   isValidElement,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
@@ -19,16 +20,15 @@ import {
   Check,
   CircleAlert,
   Container,
-  ChevronDown,
   ChevronRight,
   Copy,
   Folder,
   FolderOpen,
-  FolderPlus,
   FolderX,
   GitPullRequest,
   Hash,
   MessageSquarePlus,
+  MoreHorizontal,
   PanelLeft,
   Pencil,
   Pin,
@@ -40,7 +40,7 @@ import {
   Trash2,
 } from "@/components/ui/icons";
 
-import { openNativePath, providerLabel, type Project, type SessionInfo } from "../bridge";
+import { openNativePath, type Project, type SessionInfo } from "../bridge";
 import {
   nativeContextMenusAvailable,
   showNativeContextMenu,
@@ -62,18 +62,15 @@ import {
   ContextMenuGroup,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuItemDescription,
-  DropdownMenuItemText,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -84,20 +81,19 @@ import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
-import { sessionActivity, sessionProjectPath } from "../session/sessionEvents";
+import { sessionActivity } from "../session/sessionEvents";
 import type { QuickQuotaSummary } from "../usage/quickQuota";
 import { useToast } from "../ui/toast";
-import { ProjectIcon } from "../projects/ProjectIcon";
-
-/** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
-function shortAge(ts: number): string {
-  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (s < 60) return "now";
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86_400) return `${Math.floor(s / 3600)}h`;
-  if (s < 7 * 86_400) return `${Math.floor(s / 86_400)}d`;
-  return `${Math.floor(s / (7 * 86_400))}w`;
-}
+import {
+  assignTaskSection,
+  createSidebarTaskSection,
+  deleteSidebarTaskSection,
+  loadSidebarTaskSections,
+  renameSidebarTaskSection,
+  saveSidebarTaskSections,
+  setSidebarTaskSectionCollapsed,
+  type SidebarTaskSection,
+} from "./sidebarSections";
 
 type ContextMenuTriggerElement = ReactElement<{
   render: ReactElement<HTMLAttributes<HTMLDivElement>>;
@@ -134,18 +130,12 @@ function SessionContextMenu({
  *
  * 1. Title — sidebar controls on the traffic-light line, with search directly below it.
  * 2. Features — the app's primary destinations as compact, labeled source-list rows.
- * 3. Recent chats — the active project's sessions, newest first, with the project itself as a
- *    switcher dropdown in the section header (selection, add, rename, remove all live there).
+ * 3. Tasks — one cross-Project feed with optional user Sections and automatic Highlight.
  * 4. Utilities — quota and settings stay reachable at the bottom while recent chats scroll.
  * The active model remains available in the composer, where it can also be changed.
  */
 export function SessionRail({
   projects,
-  activeProject,
-  onSelectProject,
-  onAddProject,
-  onRenameProject,
-  onRemoveProject,
   sessions,
   archivedSessions,
   previews,
@@ -188,14 +178,9 @@ export function SessionRail({
   pluginActions,
 }: {
   projects: Project[];
-  activeProject: string | null;
-  onSelectProject: (path: string) => void;
-  onAddProject: () => void;
-  onRenameProject: (path: string, name: string) => void;
-  onRemoveProject: (path: string) => void;
-  /** Every live session; the rail shows the active project's, newest first. */
+  /** Every live Task session; the rail shows one cross-Project feed, newest first. */
   sessions: SessionInfo[];
-  /** Archived sessions, shown as their own collapsible group below the live ones. */
+  /** Every archived Task session, shown in one collapsible system Section. */
   archivedSessions: SessionInfo[];
   /** Newest text per session id — shown as a bounded conversation summary below the title. */
   previews: Record<string, string>;
@@ -254,7 +239,19 @@ export function SessionRail({
   const t = useT();
   const toast = useToast();
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
-  const [renamingProject, setRenamingProject] = useState<string | null>(null);
+  const [taskSections, setTaskSections] = useState(() =>
+    loadSidebarTaskSections(typeof localStorage === "undefined" ? null : localStorage),
+  );
+  const [creatingSectionFor, setCreatingSectionFor] = useState<string | undefined>();
+  const [sectionDraft, setSectionDraft] = useState("");
+  const [renamingSection, setRenamingSection] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    saveSidebarTaskSections(
+      typeof localStorage === "undefined" ? null : localStorage,
+      taskSections,
+    );
+  }, [taskSections]);
 
   // Clamped on every render, not just while dragging, so a width saved on one display comes back
   // usable on another.
@@ -329,42 +326,66 @@ export function SessionRail({
     onEnd: () => setDragging(false),
   });
 
-  const activeProjectRecord = projects.find((p) => p.path === activeProject) ?? null;
-  const activeProjectName = activeProjectRecord?.name ?? null;
-  const runningProjectPaths = new Set(
-    sessions
-      .filter((session) =>
-        runningSessions.has(session.id) || sessionActivity(session).state.kind === "running"
-      )
-      .map(sessionProjectPath),
+  const projectNames = useMemo(
+    () => new Map(projects.map((project) => [project.path, project.name])),
+    [projects],
   );
 
   // "Recent" follows deliberate re-entry into work, not background chunks or the original
   // creation date. Archived history keeps its stable creation order.
-  const forProject = useCallback(
-    (list: SessionInfo[], activeList: boolean) =>
-      list
-        .filter((s) => sessionProjectPath(s) === activeProject)
-        .sort(
-          (a, b) =>
-            Number(b.pinned) - Number(a.pinned) ||
-            (activeList
-              ? (b.last_active_at ?? b.created_at) - (a.last_active_at ?? a.created_at)
-              : b.created_at - a.created_at),
-        ),
-    [activeProject],
+  const recent = useMemo(
+    () => [...sessions].sort(
+      (a, b) =>
+        Number(b.pinned) - Number(a.pinned) ||
+        (b.last_active_at ?? b.created_at) - (a.last_active_at ?? a.created_at),
+    ),
+    [sessions],
   );
-  const recent = useMemo(() => forProject(sessions, true), [forProject, sessions]);
   const archived = useMemo(
-    () => forProject(archivedSessions, false),
-    [forProject, archivedSessions],
+    () => [...archivedSessions].sort((a, b) => b.created_at - a.created_at),
+    [archivedSessions],
   );
-  const pinned = useMemo(() => recent.filter((s) => s.pinned), [recent]);
-  const active = useMemo(() => recent.filter((s) => !s.pinned), [recent]);
+
+  const manualSectionIds = useMemo(
+    () => new Set(taskSections.sections.map((section) => section.id)),
+    [taskSections.sections],
+  );
+  const assignedSection = useCallback(
+    (session: SessionInfo) => {
+      const id = taskSections.assignments[session.id];
+      return id && manualSectionIds.has(id) ? id : null;
+    },
+    [manualSectionIds, taskSections.assignments],
+  );
+  const belongsInHighlight = useCallback(
+    (session: SessionInfo) => {
+      if (assignedSection(session)) return false;
+      const kind = sessionActivity(session).state.kind;
+      return session.pinned || runningSessions.has(session.id) ||
+        kind === "running" || kind === "awaiting_input" || kind === "failed";
+    },
+    [assignedSection, runningSessions],
+  );
+  const highlighted = useMemo(
+    () => recent.filter(belongsInHighlight),
+    [belongsInHighlight, recent],
+  );
+  const unsectioned = useMemo(
+    () => recent.filter((session) => !assignedSection(session) && !belongsInHighlight(session)),
+    [assignedSection, belongsInHighlight, recent],
+  );
+  const sectionRows = useMemo(
+    () => new Map(taskSections.sections.map((section) => [
+      section.id,
+      recent.filter((session) => assignedSection(session) === section.id),
+    ])),
+    [assignedSection, recent, taskSections.sections],
+  );
 
   // Folded by default: archived threads are reference material, not the working set, so they
   // shouldn't compete with the live rows for attention. The fold survives a restart.
   const [archivedOpen, setArchivedOpen] = usePersistedBoolean("rail.archivedOpen", false);
+  const [highlightOpen, setHighlightOpen] = usePersistedBoolean("rail.highlightOpen", true);
 
   const copyToClipboard = useCallback(
     async (value: string, confirmation: string) => {
@@ -390,17 +411,32 @@ export function SessionRail({
     [t, toast],
   );
 
-  /** Muted label over a group of rows — Active, Archived. */
-  const groupLabel = (label: string) => (
-    <p
-      data-rail-group-label
-      className="px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55"
-    >
-      {label}
-    </p>
-  );
+  const beginSectionCreation = useCallback((taskId: string) => {
+    setSectionDraft("");
+    setCreatingSectionFor(taskId);
+  }, []);
 
-  /** One thread: title, optional latest-message summary, agent, and status on one icon axis. */
+  const commitSectionCreation = useCallback(() => {
+    const name = sectionDraft.trim();
+    if (name) {
+      const id = `section:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+      setTaskSections((current) =>
+        createSidebarTaskSection(current, name, id, creatingSectionFor),
+      );
+    }
+    setCreatingSectionFor(undefined);
+    setSectionDraft("");
+  }, [creatingSectionFor, sectionDraft]);
+
+  const commitSectionRename = useCallback(() => {
+    if (!renamingSection) return;
+    setTaskSections((current) =>
+      renameSidebarTaskSection(current, renamingSection.id, renamingSection.name),
+    );
+    setRenamingSection(null);
+  }, [renamingSection]);
+
+  /** One quiet source-list row: task title, workspace identity, and only actionable status. */
   const sessionRow = (s: SessionInfo, isArchived: boolean) => {
     const activity = sessionActivity(s).state;
     const isAwaitingInput = activity.kind === "awaiting_input";
@@ -421,6 +457,10 @@ export function SessionRail({
     const hasUsefulPreview = Boolean(
       preview && /[\p{L}\p{N}]/u.test(preview) && preview !== s.title.trim(),
     );
+    const workspacePath = s.project_path ?? s.worktree_path ?? s.cwd;
+    const workspaceName = (s.project_path ? projectNames.get(s.project_path) : null)
+      ?? workspacePath.split(/[\\/]/).filter(Boolean).pop()
+      ?? workspacePath;
 
     const commitRename = () => {
       if (renaming?.id !== s.id) return;
@@ -434,7 +474,28 @@ export function SessionRail({
       setTimeout(() => setRenaming({ id: s.id, title: s.title }), 0);
     };
 
+    const currentSectionId = assignedSection(s);
+    const assignSection = (sectionId: string | null) => {
+      setTaskSections((current) => assignTaskSection(current, s.id, sectionId));
+    };
+    const startSectionCreationForTask = () => {
+      // Native and rendered menus both restore focus before the inline Section field mounts.
+      setTimeout(() => beginSectionCreation(s.id), 0);
+    };
+
     const runContextMenuAction = (action: string) => {
+      if (action === "section:none") {
+        assignSection(null);
+        return;
+      }
+      if (action === "section:new") {
+        startSectionCreationForTask();
+        return;
+      }
+      if (action.startsWith("section:")) {
+        assignSection(action.slice("section:".length));
+        return;
+      }
       switch (action) {
         case "pin":
           onPin(s.id, !s.pinned);
@@ -463,6 +524,32 @@ export function SessionRail({
       }
     };
 
+    const nativeSectionMenu: NativeContextMenuItem = {
+      type: "item",
+      label: t("rail.section"),
+      action: "section-menu",
+      submenu: [
+        {
+          type: "item",
+          label: t("rail.noSection"),
+          action: "section:none",
+          checked: currentSectionId === null,
+        },
+        ...taskSections.sections.map((section) => ({
+          type: "item" as const,
+          label: section.name,
+          action: `section:${section.id}`,
+          checked: currentSectionId === section.id,
+        })),
+        { type: "separator" },
+        {
+          type: "item",
+          label: t("rail.newSection"),
+          action: "section:new",
+        },
+      ],
+    };
+
     const nativeMenuItems: NativeContextMenuItem[] = [
       ...(!isArchived
         ? [
@@ -474,6 +561,7 @@ export function SessionRail({
           ]
         : []),
       { type: "item", label: t("rail.rename"), action: "rename" },
+      ...(!isArchived ? [nativeSectionMenu] : []),
       {
         type: "item",
         label: isArchived ? t("rail.unarchive") : t("rail.archive"),
@@ -568,8 +656,7 @@ export function SessionRail({
                   ?.focus({ preventScroll: true })
               }
               className={cn(
-                "group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-[background-color,box-shadow] hover:bg-accent/50 data-[popup-open]:bg-accent/70",
-                s.id === activeSession && "bg-fill-rest",
+                "group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-[background-color,box-shadow] hover:bg-fill-quiet focus-within:bg-fill-quiet data-[popup-open]:bg-fill-hover",
                 s.id === activeSession && typeof ResizeObserver === "undefined" && "bg-fill-hover",
               )}
             >
@@ -589,33 +676,8 @@ export function SessionRail({
                 className="absolute inset-0 z-0 h-auto rounded-(--ds-radius-control) p-0 hover:bg-transparent"
               />
               <div className="pointer-events-none relative z-10">
-                {/* 1 — title, with the age (or the actions, on hover) at its shoulder */}
-                <div data-session-line="title" className="flex h-6 items-center gap-1.5">
-                  <span
-                    data-session-icon-column
-                    className="flex size-6 shrink-0 items-center justify-center"
-                  >
-                    {!isArchived && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        title={s.pinned ? t("rail.unpin") : t("rail.pin")}
-                        aria-label={s.pinned ? t("rail.unpin") : t("rail.pin")}
-                        aria-pressed={s.pinned}
-                        className={cn(
-                          "pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground",
-                          s.pinned && "text-primary",
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPin(s.id, !s.pinned);
-                        }}
-                      >
-                        <Pin />
-                      </Button>
-                    )}
-                  </span>
+                {/* Title owns the row. Routine controls appear on demand. */}
+                <div data-session-line="title" className="flex h-control-mini items-center gap-1.5">
                   {renaming?.id === s.id ? (
                     <Input
                       autoFocus
@@ -648,10 +710,51 @@ export function SessionRail({
                       {s.title}
                     </span>
                   )}
-                  <span className="shrink-0 text-fine leading-4 text-muted-foreground group-hover:hidden group-focus-within:hidden group-data-[popup-open]:hidden">
-                    {shortAge(s.created_at)}
-                  </span>
-                  <span className="hidden shrink-0 gap-0.5 group-hover:flex group-focus-within:flex group-data-[popup-open]:flex">
+                  {(isAwaitingInput || isFailed || isRunning) && (
+                    <span
+                      data-session-status
+                      aria-label={statusLabel}
+                      title={isFailed ? activity.message : statusLabel}
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center text-muted-foreground group-hover:hidden group-focus-within:hidden group-data-[popup-open]:hidden",
+                        isAwaitingInput && "text-warning",
+                        isFailed && "text-destructive",
+                        isRunning && !isAwaitingInput && "text-primary",
+                      )}
+                    >
+                      {isAwaitingInput ? (
+                        <span className="size-1.5 animate-pulse rounded-full bg-warning" />
+                      ) : isFailed ? (
+                        <CircleAlert className="size-3" />
+                      ) : (
+                        <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
+                      )}
+                    </span>
+                  )}
+                  <span
+                    data-session-actions
+                    className="hidden shrink-0 gap-0.5 group-hover:flex group-focus-within:flex group-data-[popup-open]:flex"
+                  >
+                    {!isArchived && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        title={s.pinned ? t("rail.unpin") : t("rail.pin")}
+                        aria-label={s.pinned ? t("rail.unpin") : t("rail.pin")}
+                        aria-pressed={s.pinned}
+                        className={cn(
+                          "pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground",
+                          s.pinned && "text-primary",
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPin(s.id, !s.pinned);
+                        }}
+                      >
+                        <Pin data-icon="inline-start" />
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"
@@ -664,7 +767,7 @@ export function SessionRail({
                         setRenaming({ id: s.id, title: s.title });
                       }}
                     >
-                      <Pencil />
+                      <Pencil data-icon="inline-start" />
                     </Button>
                     <Button
                       type="button"
@@ -678,68 +781,30 @@ export function SessionRail({
                         requestArchive(s.id, !isArchived);
                       }}
                     >
-                      {isArchived ? <ArchiveRestore /> : <Archive />}
+                      {isArchived
+                        ? <ArchiveRestore data-icon="inline-start" />
+                        : <Archive data-icon="inline-start" />}
                     </Button>
                   </span>
                 </div>
 
-                {/* 2 — latest conversation text; one glanceable line keeps the rail scannable. */}
                 {hasUsefulPreview && (
                   <div
                     id={`session-preview-${s.id}`}
                     data-session-line="preview"
-                    className="mt-1 flex min-h-4 items-start gap-1.5 text-fine leading-4 text-muted-foreground"
+                    className="mt-0.5 h-4 truncate text-fine leading-4 text-muted-foreground"
                   >
-                    <span
-                      data-session-icon-column
-                      aria-hidden="true"
-                      className="h-4 w-6 shrink-0"
-                    />
-                    <span className="min-w-0 flex-1 truncate">{preview}</span>
+                    {preview}
                   </div>
                 )}
 
-                {/* 3 — assigned agent on the left, current state in the free space on the right. */}
+                {/* Workspace identity closes the hierarchy; provider and completed state stay quiet. */}
                 <div
-                  data-session-line="provider"
-                  className="mt-1 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground"
+                  data-session-line="workspace"
+                  className="mt-0.5 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground"
                 >
-                  <span
-                    data-session-icon-column
-                    className="flex h-4 w-6 shrink-0 items-center justify-center"
-                  >
-                    <ProviderIcon
-                      provider={providerLabel(s.provider)}
-                      className="size-3 opacity-70"
-                    />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">
-                    {displayProvider(s.provider)}
-                  </span>
-                  <span
-                    data-session-line="status"
-                    aria-label={statusLabel}
-                    title={isFailed ? activity.message : undefined}
-                    className={cn(
-                      "ml-auto flex h-4 shrink-0 items-center gap-1.5 pl-2 text-fine leading-4 text-muted-foreground",
-                      isAwaitingInput && "text-warning",
-                      isFailed && "text-destructive",
-                      isRunning && "text-primary",
-                    )}
-                  >
-                    <span className="flex size-4 shrink-0 items-center justify-center">
-                      {isAwaitingInput ? (
-                        <span className="size-1.5 animate-pulse rounded-full bg-warning" />
-                      ) : isFailed ? (
-                        <CircleAlert className="size-3" />
-                      ) : isRunning ? (
-                        <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
-                      ) : (
-                        <Check className="size-3" />
-                      )}
-                    </span>
-                    <span className="min-w-0 truncate">{statusLabel}</span>
-                  </span>
+                  <Folder className="size-3 shrink-0 opacity-70" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
                 </div>
               </div>
             </div>
@@ -757,6 +822,34 @@ export function SessionRail({
               <Pencil />
               {t("rail.rename")}
             </ContextMenuItem>
+            {!isArchived ? (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>
+                  <Hash />
+                  {t("rail.section")}
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent>
+                  <ContextMenuItem onClick={() => assignSection(null)}>
+                    <Check className={cn(currentSectionId !== null && "opacity-0")} />
+                    {t("rail.noSection")}
+                  </ContextMenuItem>
+                  {taskSections.sections.map((section) => (
+                    <ContextMenuItem
+                      key={section.id}
+                      onClick={() => assignSection(section.id)}
+                    >
+                      <Check className={cn(currentSectionId !== section.id && "opacity-0")} />
+                      {section.name}
+                    </ContextMenuItem>
+                  ))}
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={startSectionCreationForTask}>
+                    <Plus />
+                    {t("rail.newSection")}
+                  </ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            ) : null}
             <ContextMenuItem onClick={() => requestArchive(s.id, !isArchived)}>
               {isArchived ? (
                 <ArchiveRestore />
@@ -807,6 +900,105 @@ export function SessionRail({
           ) : null}
         </ContextMenuContent>
       </SessionContextMenu>
+    );
+  };
+
+  const renderManualSection = (section: SidebarTaskSection) => {
+    const open = !section.collapsed;
+    const rows = sectionRows.get(section.id) ?? [];
+    return (
+      <Collapsible
+        key={section.id}
+        open={open}
+        onOpenChange={(nextOpen) =>
+          setTaskSections((current) =>
+            setSidebarTaskSectionCollapsed(current, section.id, !nextOpen),
+          )
+        }
+      >
+        <div
+          data-task-section-header={section.id}
+          className="group/section flex min-h-control-mini items-center pr-2 pb-1 pt-2"
+        >
+          {renamingSection?.id === section.id ? (
+            <Input
+              autoFocus
+              size="compact"
+              aria-label={t("rail.sectionName")}
+              className="h-control-mini min-w-0 flex-1 text-ui"
+              value={renamingSection.name}
+              onChange={(event) =>
+                setRenamingSection({ id: section.id, name: event.target.value })
+              }
+              onFocus={(event) => event.currentTarget.select()}
+              onBlur={commitSectionRename}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitSectionRename();
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  setRenamingSection(null);
+                }
+              }}
+            />
+          ) : (
+            <CollapsibleTrigger
+              data-task-section-toggle={section.id}
+              title={t(open ? "rail.hideSection" : "rail.showSection", { name: section.name })}
+              className="flex min-w-0 items-center gap-1 rounded px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+            >
+              <span className="truncate">{section.name}</span>
+              <ChevronRight
+                className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")}
+                aria-hidden="true"
+              />
+            </CollapsibleTrigger>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  data-task-section-actions={section.id}
+                  aria-label={t("rail.sectionActions", { name: section.name })}
+                  className="ml-auto opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100"
+                >
+                  <MoreHorizontal />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() =>
+                  setTimeout(() => setRenamingSection({ id: section.id, name: section.name }), 0)
+                }
+              >
+                <Pencil />
+                {t("rail.renameSection")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() =>
+                  setTaskSections((current) => deleteSidebarTaskSection(current, section.id))
+                }
+              >
+                <Trash2 />
+                {t("rail.deleteSection")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <CollapsibleContent data-task-section-content={section.id}>
+          {rows.length > 0 ? (
+            <div className="flex flex-col gap-0.5">{rows.map((row) => sessionRow(row, false))}</div>
+          ) : (
+            <p className="px-2 py-1.5 text-fine text-foreground/35">{t("rail.sectionEmpty")}</p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
     );
   };
 
@@ -981,103 +1173,7 @@ export function SessionRail({
         {pluginActions}
       </div>
 
-      {/* ---- 3 · recent chats --------------------------------------------------------------- */}
-      {/* The section header carries the project switcher: which project's chats these are, and
-          every project operation, behind one chip instead of a whole tree. */}
-      <div className="flex items-center gap-1 px-2 pb-1 pt-2">
-        <span
-          data-rail-section-label="recent"
-          className="shrink-0 px-2 text-ui font-normal leading-4 text-foreground/55"
-        >
-          {t("rail.recent")}
-        </span>
-        <div className="min-w-0 flex-1" />
-        {renamingProject !== null && activeProject ? (
-          <Input
-            autoFocus
-            className="h-6 w-36 text-hint"
-            value={renamingProject}
-            onChange={(e) => setRenamingProject(e.target.value)}
-            onBlur={() => setRenamingProject(null)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                onRenameProject(activeProject, renamingProject);
-                setRenamingProject(null);
-              } else if (e.key === "Escape") setRenamingProject(null);
-            }}
-          />
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<button
-                data-rail-project-switcher
-                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-ui leading-4 text-foreground/60 transition-colors hover:bg-accent/50 hover:text-foreground data-[popup-open]:bg-accent/70 data-[popup-open]:text-foreground"
-                title={activeProject ?? undefined}
-              >
-                {activeProjectRecord ? (
-                  <ProjectIcon project={activeProjectRecord} size={16} />
-                ) : (
-                  <Folder className="size-3.5 shrink-0" />
-                )}
-                <span className="truncate">{activeProjectName ?? t("rail.noProject")}</span>
-                <ChevronDown className="size-3 shrink-0 opacity-50" />
-              </button>}
-            />
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuRadioGroup value={activeProject ?? undefined} onValueChange={onSelectProject}>
-                {projects.map((p) => (
-                  <DropdownMenuRadioItem key={p.path} value={p.path}>
-                    <ProjectIcon
-                      project={p}
-                      size={20}
-                      className={cn(p.path === activeProject && "text-primary ring-primary/35")}
-                    />
-                    <DropdownMenuItemText title={p.path}>
-                      <span className="truncate">{p.name}</span>
-                      <DropdownMenuItemDescription>{p.path}</DropdownMenuItemDescription>
-                    </DropdownMenuItemText>
-                    {runningProjectPaths.has(p.path) && (
-                      <ActivityOrb
-                        data-project-running=""
-                        state="working"
-                        visualSize={14}
-                        aria-label={t("session.running")}
-                        title={t("session.running")}
-                      />
-                    )}
-                    <span className="shrink-0 text-fine text-muted-foreground">
-                      {shortAge(p.last_opened_at)}
-                    </span>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem onClick={onAddProject}>
-                  <FolderPlus />
-                  {t("rail.addProject")}
-                </DropdownMenuItem>
-                {activeProject && (
-                  <>
-                    <DropdownMenuItem onClick={() => setRenamingProject(activeProjectName ?? "")}>
-                      <Pencil />
-                      {t("rail.renameProject")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => onRemoveProject(activeProject)}
-                    >
-                      <Trash2 />
-                      {t("rail.removeProject")}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-
+      {/* ---- 3 · Tasks ---------------------------------------------------------------------- */}
       <ScrollArea data-rail-session-scroll className="min-h-0 flex-1">
         <LiquidSelectionGroup
           data-session-list
@@ -1085,46 +1181,88 @@ export function SessionRail({
           fill="var(--color-fill-hover)"
           className="px-2 pb-4"
         >
-          {projects.length === 0 ? (
-            <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
-              {t("rail.projectsEmpty")}
-            </p>
-          ) : recent.length === 0 && archived.length === 0 ? (
+          {recent.length === 0 && archived.length === 0 &&
+          taskSections.sections.length === 0 && creatingSectionFor === undefined ? (
             <p className="px-2 py-3 text-fine leading-relaxed text-muted-foreground">
               {t("rail.empty")} {t("rail.emptyHint")}
             </p>
           ) : (
             <>
-              {pinned.length > 0 && (
-                <>
-                  {groupLabel(t("rail.groupPinned"))}
-                  <div className="flex flex-col gap-0.5">{pinned.map((s) => sessionRow(s, false))}</div>
-                </>
+              {highlighted.length > 0 && (
+                <Collapsible open={highlightOpen} onOpenChange={setHighlightOpen}>
+                  <CollapsibleTrigger
+                    data-task-section-toggle="system:highlight"
+                    title={t(highlightOpen ? "rail.hideSection" : "rail.showSection", {
+                      name: t("rail.highlight"),
+                    })}
+                    className="flex items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+                  >
+                    <span>{t("rail.highlight")}</span>
+                    <ChevronRight
+                      className={cn(
+                        "size-3.5 shrink-0 transition-transform",
+                        highlightOpen && "rotate-90",
+                      )}
+                      aria-hidden="true"
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent data-task-section-content="system:highlight">
+                    <div className="flex flex-col gap-0.5">
+                      {highlighted.map((session) => sessionRow(session, false))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
-              {active.length > 0 && (
-                <>
-                  {groupLabel(t("rail.groupActive"))}
-                  <div className="flex flex-col gap-0.5">{active.map((s) => sessionRow(s, false))}</div>
-                </>
-              )}
+              {taskSections.sections.map(renderManualSection)}
+              {creatingSectionFor !== undefined ? (
+                <div data-task-section-creation className="px-2 pb-1 pt-2">
+                  <Input
+                    autoFocus
+                    size="compact"
+                    aria-label={t("rail.sectionName")}
+                    placeholder={t("rail.sectionName")}
+                    className="h-control-mini text-ui"
+                    value={sectionDraft}
+                    onChange={(event) => setSectionDraft(event.target.value)}
+                    onBlur={commitSectionCreation}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        commitSectionCreation();
+                      } else if (event.key === "Escape") {
+                        event.preventDefault();
+                        setCreatingSectionFor(undefined);
+                        setSectionDraft("");
+                      }
+                    }}
+                  />
+                </div>
+              ) : null}
+              {unsectioned.length > 0 ? (
+                <div data-unsectioned-tasks className="flex flex-col gap-0.5 pt-1">
+                  {unsectioned.map((session) => sessionRow(session, false))}
+                </div>
+              ) : null}
               {archived.length > 0 && (
                 <Collapsible open={archivedOpen} onOpenChange={setArchivedOpen}>
-                  {/* Same face as a group label, but it folds — archived rows only take space
-                      (and attention) when asked for. */}
                   <CollapsibleTrigger
                     data-rail-archive-toggle
                     title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
-                    className="flex w-full items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 transition-colors hover:text-foreground"
+                    className="flex items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
                   >
-                    <ChevronRight
-                      className={cn("size-3.5 shrink-0 transition-transform", archivedOpen && "rotate-90")}
-                    />
                     <span>{t("rail.groupArchived")}</span>
+                    <ChevronRight
+                      className={cn(
+                        "size-3.5 shrink-0 transition-transform",
+                        archivedOpen && "rotate-90",
+                      )}
+                      aria-hidden="true"
+                    />
                     <span className="font-normal text-foreground/40">{archived.length}</span>
                   </CollapsibleTrigger>
                   <CollapsibleContent data-rail-archive-list className="rail-archive-panel">
                     <div className="flex flex-col gap-0.5">
-                      {archived.map((s) => sessionRow(s, true))}
+                      {archived.map((session) => sessionRow(session, true))}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
