@@ -1295,3 +1295,77 @@ html.home-light .codetwo-home .theme-toggle .icon-moon {
   outline: 2px solid var(--home-green);
   outline-offset: 4px;
 }
+
+/* ---------------------------------------------------------------- */
+/* UI detail polish (reference: Utter landing)                       */
+/* ---------------------------------------------------------------- */
+
+/* Blinking block cursor after the hero headline period */
+
+.codetwo-home .hero-cursor {
+  display: inline-block;
+  width: 0.45ch;
+  height: 0.74em;
+  margin-left: 0.14ch;
+  background: var(--home-green);
+  animation: codetwo-cursor 1.05s steps(1) infinite;
+}
+
+/* Monospace hero body copy */
+
+.codetwo-home .hero-copy > p:not(.hero-meta) {
+  max-width: 700px;
+  margin: 30px 0 0;
+  color: var(--home-muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "PingFang SC", monospace;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  line-height: 1.7;
+}
+
+/* Quieter navigation with a bordered locale chip */
+
+.codetwo-home .desktop-nav {
+  gap: 36px;
+  font-size: 15px;
+}
+
+.codetwo-home .desktop-nav a {
+  color: var(--home-muted);
+}
+
+.codetwo-home .desktop-nav .locale-link {
+  padding: 6px 12px;
+  border: 1px solid var(--home-line);
+  border-radius: 4px;
+  color: var(--home-muted);
+}
+
+.codetwo-home .desktop-nav .locale-link:hover {
+  border-color: var(--home-green-dim);
+  color: var(--home-green);
+}
+
+.codetwo-home .desktop-nav .nav-cta {
+  color: var(--home-green);
+}
+
+.codetwo-home .desktop-nav .nav-cta:hover {
+  border-color: var(--home-green);
+  color: var(--home-green);
+  background: rgb(89 239 105 / 10%);
+}
+
+/* Green-tinted primary buttons with a slightly rounder corner */
+
+.codetwo-home .button {
+  border-radius: 6px;
+}
+
+.codetwo-home .button-primary {
+  background: rgb(89 239 105 / 9%);
+}
+
+.codetwo-home .button-primary:hover {
+  background: rgb(89 239 105 / 15%);
+}

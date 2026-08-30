@@ -77,7 +77,10 @@ onMounted(() => {
         <div class="section-command" data-motion="type" aria-hidden="true">$ code2 --compose</div>
         <h1 id="hero-title" data-motion>
           以文档为中心的<br />
-          编程智能体<span class="terminal-period">。</span>
+          编程智能体<span class="terminal-period">。</span><span
+            class="hero-cursor"
+            aria-hidden="true"
+          ></span>
         </h1>
         <p data-motion style="--motion-delay: 120ms">
           编写结构化提示词，组合可复用技能，并在一个本地界面中运行 Claude Code、Codex、Grok、Cursor、OpenCode 1 或 2、Pi、Kimi 或 GLM。
