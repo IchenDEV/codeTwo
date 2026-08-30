@@ -156,6 +156,7 @@ renames, but their ids, states, claim boundaries, and original outcomes remain i
 ## Review and release
 
 Approval: user approved pull-request creation and merge on 2026-08-31.
+Pull request: [#189](https://github.com/IchenDEV/codeTwo/pull/189).
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
