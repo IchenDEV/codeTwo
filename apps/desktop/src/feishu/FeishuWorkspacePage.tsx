@@ -15,6 +15,7 @@ import {
   EyeOff,
   ExternalLink,
   FileText,
+  GripVertical,
   Lock,
   MessageSquare,
   Pin,
@@ -66,6 +67,15 @@ import { useT } from "../i18n";
 import { MarkdownContent } from "../session/MarkdownContent";
 import { useToast } from "../ui/toast";
 import { FeishuDocumentView } from "./FeishuDocumentView";
+import {
+  FEISHU_RESOURCE_TABS,
+  loadFeishuSidebarOrder,
+  moveFeishuResource,
+  moveFeishuSection,
+  saveFeishuSidebarOrder,
+  sortFeishuResources,
+  type FeishuResourceTab,
+} from "./sidebarOrder";
 import "./feishu-workspace.css";
 
 export type CollaborationConnectorCaller = <T = unknown>(
@@ -91,7 +101,7 @@ export type CollaborationConnectorSubscriber = (
   callback: (event: CollaborationConnectorEvent) => void,
 ) => Promise<() => void>;
 
-type ResourceTab = "messages" | "documents" | "bases";
+type ResourceTab = FeishuResourceTab;
 
 interface ChatSummary {
   id: string;
@@ -173,12 +183,34 @@ type ResourceActivityMap = Record<ResourceTab, string[]>;
 const ASSOCIATIONS_KEY = "codetwo.feishu.associations.v1";
 const RESOURCE_SECTIONS_KEY = "codetwo.feishu.sections.v1";
 const RESOURCE_PINS_KEY = "codetwo.feishu.pins.v1";
-const RESOURCE_TABS: ResourceTab[] = ["messages", "documents", "bases"];
+const RESOURCE_TABS: readonly ResourceTab[] = FEISHU_RESOURCE_TABS;
 const RESOURCE_LIMITS: Record<ResourceTab, number> = {
   messages: 4,
   documents: 2,
   bases: 2,
 };
+const FEISHU_DRAG_TYPE = "application/x-codetwo-feishu-sidebar-item";
+
+type FeishuDragItem =
+  | { kind: "section"; tab: ResourceTab }
+  | { kind: "resource"; tab: ResourceTab; id: string };
+
+function writeFeishuDrag(event: React.DragEvent, item: FeishuDragItem): void {
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData(FEISHU_DRAG_TYPE, JSON.stringify(item));
+  event.dataTransfer.setData("text/plain", item.kind === "section" ? item.tab : item.id);
+}
+
+function readFeishuDrag(event: React.DragEvent): FeishuDragItem | null {
+  try {
+    const value = JSON.parse(event.dataTransfer.getData(FEISHU_DRAG_TYPE)) as FeishuDragItem;
+    if (value.kind === "section" && RESOURCE_TABS.includes(value.tab)) return value;
+    if (value.kind === "resource" && RESOURCE_TABS.includes(value.tab) && value.id) return value;
+  } catch {
+    // Ignore drags from other sidebar surfaces and other applications.
+  }
+  return null;
+}
 
 function readCollapsedSections(): ResourceSectionState {
   try {
@@ -471,6 +503,10 @@ export function FeishuWorkspacePage({
     bases: false,
   });
   const [pinnedResources, setPinnedResources] = useState<PinnedResourceMap>(readPinnedResources);
+  const [sidebarOrder, setSidebarOrder] = useState(() =>
+    loadFeishuSidebarOrder(typeof localStorage === "undefined" ? null : localStorage),
+  );
+  const [dragItem, setDragItem] = useState<FeishuDragItem | null>(null);
   const [resourceActivity, setResourceActivity] = useState<ResourceActivityMap>({
     messages: [],
     documents: [],
@@ -497,6 +533,13 @@ export function FeishuWorkspacePage({
   const subscriptionAttemptsRef = useRef(new Set<string>());
   const subscriptionWarningsRef = useRef(new Set<string>());
   const refreshTimersRef = useRef(new Map<string, number>());
+
+  useEffect(() => {
+    saveFeishuSidebarOrder(
+      typeof localStorage === "undefined" ? null : localStorage,
+      sidebarOrder,
+    );
+  }, [sidebarOrder]);
 
   const reload = useCallback(async () => {
     if (!enabled) return;
@@ -991,9 +1034,55 @@ export function FeishuWorkspacePage({
     });
   };
 
+  const commitResourceMove = (
+    resourceTab: ResourceTab,
+    resourceId: string,
+    beforeResourceId: string | null,
+    visibleResourceIds: readonly string[],
+  ) => {
+    setSidebarOrder((current) => moveFeishuResource(
+      current,
+      resourceTab,
+      resourceId,
+      beforeResourceId,
+      visibleResourceIds,
+    ));
+    setDragItem(null);
+  };
+
+  const moveResourceBy = (
+    resourceTab: ResourceTab,
+    resourceId: string,
+    offset: -1 | 1,
+    visibleResourceIds: readonly string[],
+  ) => {
+    const currentIndex = visibleResourceIds.indexOf(resourceId);
+    const nextIndex = Math.min(
+      visibleResourceIds.length - 1,
+      Math.max(0, currentIndex + offset),
+    );
+    if (currentIndex < 0 || currentIndex === nextIndex) return;
+    const remaining = visibleResourceIds.filter((id) => id !== resourceId);
+    commitResourceMove(resourceTab, resourceId, remaining[nextIndex] ?? null, visibleResourceIds);
+  };
+
+  const moveSectionBy = (resourceTab: ResourceTab, offset: -1 | 1) => {
+    const currentIndex = sidebarOrder.sectionOrder.indexOf(resourceTab);
+    const nextIndex = Math.min(
+      sidebarOrder.sectionOrder.length - 1,
+      Math.max(0, currentIndex + offset),
+    );
+    if (currentIndex < 0 || currentIndex === nextIndex) return;
+    const remaining = sidebarOrder.sectionOrder.filter((tab) => tab !== resourceTab);
+    setSidebarOrder((current) =>
+      moveFeishuSection(current, resourceTab, remaining[nextIndex] ?? null),
+    );
+  };
+
   const renderResourceRow = (
     resourceTab: ResourceTab,
     resource: ChatSummary | CloudResourceSummary,
+    visibleResourceIds: readonly string[],
   ) => {
     const selected = detailVisible
       && tab === resourceTab
@@ -1011,7 +1100,28 @@ export function FeishuWorkspacePage({
       <div
         key={resource.id}
         data-feishu-resource={`${resourceTab}:${resource.id}`}
-        className="group/resource relative min-w-0"
+        data-sidebar-dragging={dragItem?.kind === "resource" && dragItem.id === resource.id ? "true" : undefined}
+        draggable
+        onDragStart={(event) => {
+          const item = { kind: "resource", tab: resourceTab, id: resource.id } as const;
+          writeFeishuDrag(event, item);
+          setDragItem(item);
+        }}
+        onDragEnd={() => setDragItem(null)}
+        onDragOver={(event) => {
+          const item = readFeishuDrag(event);
+          if (item?.kind !== "resource" || item.tab !== resourceTab) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          const item = readFeishuDrag(event);
+          if (item?.kind !== "resource" || item.tab !== resourceTab) return;
+          event.preventDefault();
+          event.stopPropagation();
+          commitResourceMove(resourceTab, item.id, resource.id, visibleResourceIds);
+        }}
+        className="group/resource relative min-w-0 cursor-grab transition-opacity active:cursor-grabbing data-[sidebar-dragging=true]:opacity-45"
       >
         <Button
           variant="selectable"
@@ -1020,6 +1130,17 @@ export function FeishuWorkspacePage({
           className="min-h-0 gap-2 rounded-control px-2 py-1.5 pr-control hover:bg-fill-quiet data-[selected=true]:bg-fill-hover"
           data-selected={selected}
           aria-current={selected ? "true" : undefined}
+          title={t("feishu.dragResource", { name })}
+          onKeyDown={(event) => {
+            if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+            event.preventDefault();
+            moveResourceBy(
+              resourceTab,
+              resource.id,
+              event.key === "ArrowUp" ? -1 : 1,
+              visibleResourceIds,
+            );
+          }}
           onClick={() => {
             setTab(resourceTab);
             setSelection((current) => ({ ...current, [resourceTab]: resource.id }));
@@ -1081,12 +1202,20 @@ export function FeishuWorkspacePage({
     resources: Array<ChatSummary | CloudResourceSummary>,
   ) => {
     const resourcesById = new Map(resources.map((resource) => [resource.id, resource]));
+    const explicitOrder = sidebarOrder.resourceOrder[resourceTab];
     const ordered = [
-      ...pinnedResources[resourceTab]
+      ...sortFeishuResources(
+        pinnedResources[resourceTab]
         .map((id) => resourcesById.get(id))
         .filter((resource): resource is ChatSummary | CloudResourceSummary => Boolean(resource)),
-      ...resources.filter((resource) => !pinnedResources[resourceTab].includes(resource.id)),
+        explicitOrder,
+      ),
+      ...sortFeishuResources(
+        resources.filter((resource) => !pinnedResources[resourceTab].includes(resource.id)),
+        explicitOrder,
+      ),
     ];
+    const orderedIds = ordered.map((resource) => resource.id);
     const visibleWhenLimited = Math.max(
       RESOURCE_LIMITS[resourceTab],
       ordered.filter((resource) => pinnedResources[resourceTab].includes(resource.id)).length,
@@ -1096,8 +1225,23 @@ export function FeishuWorkspacePage({
     const hiddenCount = Math.max(0, ordered.length - visibleWhenLimited);
 
     return (
-      <>
-        {visible.map((resource) => renderResourceRow(resourceTab, resource))}
+      <div
+        data-feishu-resource-list={resourceTab}
+        className="flex flex-col gap-0.5"
+        onDragOver={(event) => {
+          const item = readFeishuDrag(event);
+          if (item?.kind !== "resource" || item.tab !== resourceTab) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          const item = readFeishuDrag(event);
+          if (item?.kind !== "resource" || item.tab !== resourceTab) return;
+          event.preventDefault();
+          commitResourceMove(resourceTab, item.id, null, orderedIds);
+        }}
+      >
+        {visible.map((resource) => renderResourceRow(resourceTab, resource, orderedIds))}
         {hiddenCount > 0 ? (
           <Button
             variant="ghost"
@@ -1111,7 +1255,7 @@ export function FeishuWorkspacePage({
             {expanded ? t("feishu.showLess") : t("feishu.showMore", { count: hiddenCount })}
           </Button>
         ) : null}
-      </>
+      </div>
     );
   };
 
@@ -1120,7 +1264,42 @@ export function FeishuWorkspacePage({
     label: string,
     actions: ReactNode = null,
   ) => (
-    <div className="group/feishu-section flex min-h-control-mini items-center pr-2 pb-1 pt-2">
+    <div
+      data-feishu-section-header={resourceTab}
+      data-sidebar-dragging={dragItem?.kind === "section" && dragItem.tab === resourceTab ? "true" : undefined}
+      draggable
+      onDragStart={(event) => {
+        if (event.target instanceof Element && event.target.closest("[data-feishu-section-actions]")) {
+          event.preventDefault();
+          return;
+        }
+        const item = { kind: "section", tab: resourceTab } as const;
+        writeFeishuDrag(event, item);
+        setDragItem(item);
+      }}
+      onDragEnd={() => setDragItem(null)}
+      onDragOver={(event) => {
+        if (readFeishuDrag(event)?.kind !== "section") return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      }}
+      onDrop={(event) => {
+        const item = readFeishuDrag(event);
+        if (item?.kind !== "section") return;
+        event.preventDefault();
+        event.stopPropagation();
+        setSidebarOrder((current) => moveFeishuSection(current, item.tab, resourceTab));
+        setDragItem(null);
+      }}
+      className="group/feishu-section relative flex min-h-control-mini items-center pr-2 pb-1 pt-2 transition-opacity data-[sidebar-dragging=true]:opacity-45"
+    >
+      <span
+        title={t("feishu.dragSection", { section: label })}
+        className="absolute left-0 flex size-4 cursor-grab items-center justify-center text-foreground/35 opacity-0 group-hover/feishu-section:opacity-100 active:cursor-grabbing"
+        aria-hidden="true"
+      >
+        <GripVertical className="size-3" />
+      </span>
       <button
         type="button"
         className="flex min-w-0 items-center gap-1 rounded-control px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
@@ -1129,6 +1308,11 @@ export function FeishuWorkspacePage({
         aria-label={collapsedSections[resourceTab]
           ? t("feishu.expandSection", { section: label })
           : t("feishu.collapseSection", { section: label })}
+        onKeyDown={(event) => {
+          if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+          event.preventDefault();
+          moveSectionBy(resourceTab, event.key === "ArrowUp" ? -1 : 1);
+        }}
         onClick={() => toggleSection(resourceTab)}
       >
         <span className="min-w-0 truncate">{label}</span>
@@ -1145,7 +1329,7 @@ export function FeishuWorkspacePage({
         />
       </button>
       {actions ? (
-        <span className="ml-auto flex shrink-0 gap-0.5 opacity-0 group-hover/feishu-section:opacity-100 focus-within:opacity-100">
+        <span data-feishu-section-actions className="ml-auto flex shrink-0 gap-0.5 opacity-0 group-hover/feishu-section:opacity-100 focus-within:opacity-100">
           {actions}
         </span>
       ) : null}
@@ -1157,68 +1341,93 @@ export function FeishuWorkspacePage({
     && overview!.documents.length === 0
     && overview!.bases.length === 0;
   const resourceNavigation = authStatus?.authorized ? (
-    <nav className="feishu-rail-navigator pb-1" aria-label={t("feishu.resources")}>
-      <section data-feishu-section="contacts">
-        {sectionHeader("messages", t("feishu.section.contacts"), (
-          <>
-            <Tooltip>
-              <TooltipTrigger
-                render={<Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={t("feishu.refresh")}
-                  disabled={loading}
-                  onClick={() => void reload()}
-                >
-                  {loading ? <Spinner /> : <RefreshCw />}
-                </Button>}
-              />
-              <TooltipContent>{t("feishu.refresh")}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={<Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={t("feishu.connectionSettings")}
-                  onClick={onOpenPluginManager}
-                >
-                  <CircleCheck />
-                </Button>}
-              />
-              <TooltipContent>{authStatus.user?.name || authStatus.user?.openId || t("feishu.connectionSettings")}</TooltipContent>
-            </Tooltip>
-          </>
-        ))}
-        {!collapsedSections.messages ? <div className="flex flex-col gap-0.5 pb-1">
-          {loading && !overview ? (
-            <div role="status" className="flex items-center justify-center gap-module-inset py-section text-ui text-muted-foreground"><Spinner />{t("feishu.loading")}</div>
-          ) : error && !overview ? (
-            <div role="alert" className="flex items-center gap-module-inset rounded-control px-module-inset py-control-group text-ui text-destructive"><CircleAlert /> <span className="truncate">{error}</span></div>
-          ) : allResourcesEmpty ? (
-            <div className="flex flex-col items-center gap-module-inset px-surface-inset py-section text-center text-ui text-muted-foreground">
-              <MessageSquare />
-              <p className="font-medium text-foreground">{overview?.warnings.length ? t("feishu.loadFailed") : t("feishu.empty")}</p>
-              <p className="max-w-64 text-fine leading-relaxed">{overview?.warnings.length ? t("feishu.loadFailedHint") : t("feishu.emptyHint")}</p>
-              {overview?.warnings.length ? <Button variant="secondary" size="compact" onClick={() => void reauthorize()}><ShieldCheck />{t("feishu.reauthorize")}</Button> : null}
-            </div>
-          ) : overview ? renderResourceList("messages", overview.chats) : null}
-        </div> : null}
-      </section>
-
-      <section data-feishu-section="documents">
-        {sectionHeader("documents", t("feishu.tab.documents"))}
-        {!collapsedSections.documents ? <div className="flex flex-col gap-0.5 pb-1">
-          {authStatus?.authorized && overview ? renderResourceList("documents", overview.documents) : null}
-        </div> : null}
-      </section>
-
-      <section data-feishu-section="bases">
-        {sectionHeader("bases", t("feishu.tab.bases"))}
-        {!collapsedSections.bases ? <div className="flex flex-col gap-0.5">
-          {authStatus?.authorized && overview ? renderResourceList("bases", overview.bases) : null}
-        </div> : null}
-      </section>
+    <nav
+      className="feishu-rail-navigator pb-1"
+      aria-label={t("feishu.resources")}
+      onDragOver={(event) => {
+        if (readFeishuDrag(event)?.kind !== "section") return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      }}
+      onDrop={(event) => {
+        const item = readFeishuDrag(event);
+        if (item?.kind !== "section") return;
+        event.preventDefault();
+        setSidebarOrder((current) => moveFeishuSection(current, item.tab, null));
+        setDragItem(null);
+      }}
+    >
+      {sidebarOrder.sectionOrder.map((resourceTab) => {
+        if (resourceTab === "messages") {
+          return (
+            <section key={resourceTab} data-feishu-section="contacts">
+              {sectionHeader("messages", t("feishu.section.contacts"), (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={<Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t("feishu.refresh")}
+                        disabled={loading}
+                        onClick={() => void reload()}
+                      >
+                        {loading ? <Spinner /> : <RefreshCw />}
+                      </Button>}
+                    />
+                    <TooltipContent>{t("feishu.refresh")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={<Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t("feishu.connectionSettings")}
+                        onClick={onOpenPluginManager}
+                      >
+                        <CircleCheck />
+                      </Button>}
+                    />
+                    <TooltipContent>{authStatus.user?.name || authStatus.user?.openId || t("feishu.connectionSettings")}</TooltipContent>
+                  </Tooltip>
+                </>
+              ))}
+              {!collapsedSections.messages ? <div className="flex flex-col gap-0.5 pb-1">
+                {loading && !overview ? (
+                  <div role="status" className="flex items-center justify-center gap-module-inset py-section text-ui text-muted-foreground"><Spinner />{t("feishu.loading")}</div>
+                ) : error && !overview ? (
+                  <div role="alert" className="flex items-center gap-module-inset rounded-control px-module-inset py-control-group text-ui text-destructive"><CircleAlert /> <span className="truncate">{error}</span></div>
+                ) : allResourcesEmpty ? (
+                  <div className="flex flex-col items-center gap-module-inset px-surface-inset py-section text-center text-ui text-muted-foreground">
+                    <MessageSquare />
+                    <p className="font-medium text-foreground">{overview?.warnings.length ? t("feishu.loadFailed") : t("feishu.empty")}</p>
+                    <p className="max-w-64 text-fine leading-relaxed">{overview?.warnings.length ? t("feishu.loadFailedHint") : t("feishu.emptyHint")}</p>
+                    {overview?.warnings.length ? <Button variant="secondary" size="compact" onClick={() => void reauthorize()}><ShieldCheck />{t("feishu.reauthorize")}</Button> : null}
+                  </div>
+                ) : overview ? renderResourceList("messages", overview.chats) : null}
+              </div> : null}
+            </section>
+          );
+        }
+        if (resourceTab === "documents") {
+          return (
+            <section key={resourceTab} data-feishu-section="documents">
+              {sectionHeader("documents", t("feishu.tab.documents"))}
+              {!collapsedSections.documents ? <div className="flex flex-col gap-0.5 pb-1">
+                {overview ? renderResourceList("documents", overview.documents) : null}
+              </div> : null}
+            </section>
+          );
+        }
+        return (
+          <section key={resourceTab} data-feishu-section="bases">
+            {sectionHeader("bases", t("feishu.tab.bases"))}
+            {!collapsedSections.bases ? <div className="flex flex-col gap-0.5">
+              {overview ? renderResourceList("bases", overview.bases) : null}
+            </div> : null}
+          </section>
+        );
+      })}
     </nav>
   ) : (
     <nav
