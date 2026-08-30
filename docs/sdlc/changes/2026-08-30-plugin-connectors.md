@@ -158,6 +158,7 @@ the same-bundle desktop collision before accepting native integration and left-r
 ## Review and release
 
 Approval: implementation approved by chenli through the user request.
+Draft PR: https://github.com/IchenDEV/codeTwo/pull/185
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
