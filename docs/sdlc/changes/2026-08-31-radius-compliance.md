@@ -90,11 +90,16 @@ from their eventual repository diff; no stored data or external state is changed
 - The design-system scanner now reads embedded CSS declarations, rejects unknown radius variables,
   legacy utilities, and non-square `rounded-full`, while allowing only documented semantic roles,
   structural zero, and true 50% circles. Focused tests protect those failure modes.
+- Rebasing onto the latest `origin/main` brought in a Feishu section toggle that still used bare
+  `rounded`; the same semantic migration changed it to `rounded-control` before PR verification.
 
 ## Verification
 
 Verdict: verified.
 
+- A clean post-rebase `bun run lint:code` first failed only on the newly merged Feishu section
+  toggle's bare `rounded` class. Migrating that control to `rounded-control` closes the mainline
+  integration gap; the complete post-rebase verification below covers the corrected snapshot.
 - Direct source scan reported `radiusViolations: 0`; the radius allowlist and radius-specific legacy
   baseline are empty. `bun run check:design` passed with 0 new violations and all contrast contracts
   passing; 485 unrelated pre-existing design-debt findings remain tracked.
