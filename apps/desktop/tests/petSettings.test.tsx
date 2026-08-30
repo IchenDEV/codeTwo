@@ -115,7 +115,7 @@ describe("Pet settings", () => {
     setAppearanceSettings({ petActivityEnabled: false, petSize: "large" });
     const view = mount(
       <I18nProvider>
-        <CodeTwoPet animation="failed" voiceEnabled={false} onVoiceText={() => undefined} />
+        <CodeTwoPet animation="failed" />
       </I18nProvider>,
     );
     await flush();
@@ -138,7 +138,7 @@ describe("Pet settings", () => {
     setAppearanceSettings({ petSource: "petshare", petId: "columbina", petName: "Columbina" });
     const view = mount(
       <I18nProvider>
-        <CodeTwoPet animation="idle" voiceEnabled={false} onVoiceText={() => undefined} />
+        <CodeTwoPet animation="idle" />
       </I18nProvider>,
     );
     await flush();
@@ -146,6 +146,24 @@ describe("Pet settings", () => {
     expect(view.container.querySelector<HTMLElement>(".codex-pet")?.style
       .getPropertyValue("--codex-pet-src"))
       .toContain("https://petshare.idevlab.dev/pets/columbina/spritesheet.webp");
+
+    view.unmount();
+  });
+
+  test("shows a visible greeting when the desktop pet is clicked", async () => {
+    activateDom();
+    const view = mount(
+      <I18nProvider>
+        <CodeTwoPet animation="idle" />
+      </I18nProvider>,
+    );
+    await flush();
+
+    view.container.querySelector<HTMLButtonElement>('[aria-label="Say hello to the pet"]')?.click();
+    await flush();
+
+    expect(view.container.querySelector(".codex-pet")?.getAttribute("data-animation"))
+      .toBe("waving");
 
     view.unmount();
   });

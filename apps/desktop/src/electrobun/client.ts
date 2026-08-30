@@ -174,10 +174,6 @@ export async function desktopHidePet(): Promise<void> {
   await (await client()).request.desktopPetHide();
 }
 
-export async function desktopSendPetVoiceText(text: string): Promise<void> {
-  await (await client()).request.desktopPetVoiceText({ text });
-}
-
 export async function desktopOpenDevtools(): Promise<void> {
   await (await client()).request.openDevtools();
 }

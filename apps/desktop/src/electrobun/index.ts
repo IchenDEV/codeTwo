@@ -130,7 +130,6 @@ const desktopPetHeights = { small: 156, medium: 180, large: 204 } as const;
 let desktopPetState: DesktopPetState = {
   visible: false,
   animation: "idle",
-  voiceEnabled: false,
   appearance: {
     petActivityEnabled: true,
     petSize: "medium",
@@ -292,10 +291,6 @@ desktopPetRpc = BrowserView.defineRPC<CodeTwoRPC>({
         applyDesktopPetState();
         rpc.send.event({ name: "desktop-pet-hidden", payload: null });
       },
-      desktopPetVoiceText: ({ text }) => {
-        const value = text.trim().slice(0, 10_000);
-        if (value) rpc.send.event({ name: "desktop-pet-voice-text", payload: value });
-      },
     },
     messages: {},
   },
@@ -333,7 +328,7 @@ desktopPetWindow = new BrowserWindow({
   rpc: desktopPetRpc,
   titleBarStyle: "hidden",
   transparent: true,
-  passthrough: true,
+  passthrough: false,
   hidden: true,
   activate: false,
   styleMask: {

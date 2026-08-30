@@ -1,5 +1,7 @@
 import { PetX } from "@petx/react";
+import { Button } from "@/components/ui/button";
 import { ChevronDown } from "@/components/ui/icons";
+import { useT } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -8,9 +10,6 @@ import {
   type AppearanceSettings,
   type PetSize,
 } from "../appearance";
-import { VoiceButton } from "../voice/VoiceButton";
-import { Button } from "@/components/ui/button";
-import { useT } from "@/i18n";
 import type { CodeTwoPetAnimation } from "./state";
 import { BUILTIN_PET, petSpritesheetUrl } from "./store";
 
@@ -62,14 +61,10 @@ export function CodeTwoPetSprite({
 
 export function CodeTwoPet({
   animation,
-  voiceEnabled,
-  onVoiceText,
   appearance: providedAppearance,
   onHide,
 }: {
   animation: CodeTwoPetAnimation;
-  voiceEnabled: boolean;
-  onVoiceText: (text: string) => void;
   appearance?: CodeTwoPetAppearance;
   onHide?: () => void;
 }) {
@@ -117,7 +112,6 @@ export function CodeTwoPet({
       </button>
 
       <div className="codetwo-pet-controls">
-        {voiceEnabled ? <VoiceButton onText={onVoiceText} /> : null}
         <Button
           type="button"
           variant="secondary"

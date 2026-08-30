@@ -7225,11 +7225,7 @@ export default function App() {
 
   return (
     <div className="app-shell flex h-screen flex-col overflow-hidden text-foreground">
-      <DesktopPetBridge
-        animation={petAnimation}
-        voiceEnabled={voiceComposerEnabled}
-        onVoiceText={(text) => insertTextRef.current?.(text)}
-      />
+      <DesktopPetBridge animation={petAnimation} />
       {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
           Back row at its foot is the way home. */}
       {showSettings ? (

@@ -21,10 +21,11 @@ describe("built-in component policy integration", () => {
     expect(app).toContain('componentEnabled("memory.settings")');
     expect(app).toContain('componentEnabled("scenes.surface")');
     expect(app).toContain('componentEnabled("lsp.runtime")');
-    expect(app.match(/voiceEnabled=\{voiceComposerEnabled\}/g)).toHaveLength(2);
+    expect(app.match(/voiceEnabled=\{voiceComposerEnabled\}/g)).toHaveLength(1);
     expect(composer).toContain("{voiceEnabled ? (");
-    expect(desktopPet).toContain("voiceEnabled={state.voiceEnabled}");
-    expect(pet).toContain("{voiceEnabled ? <VoiceButton");
+    expect(desktopPet).not.toContain("voiceEnabled");
+    expect(desktopPet).not.toContain("desktopSendPetVoiceText");
+    expect(pet).not.toContain("VoiceButton");
 
     expect(app.match(/componentEnabledRef\.current\("memory\.settings"\)/g)?.length).toBeGreaterThanOrEqual(4);
     expect(app.match(/componentEnabledRef\.current\("scenes\.surface"\)/g)?.length).toBeGreaterThanOrEqual(8);
@@ -62,6 +63,8 @@ describe("built-in component policy integration", () => {
     expect(host).not.toContain('views://main/index.html#desktop-pet');
     expect(host).toContain("desktopPetWindow.setAlwaysOnTop(true)");
     expect(host).toContain("desktopPetWindow.setVisibleOnAllWorkspaces(true)");
+    expect(host).toContain("passthrough: false");
+    expect(host).not.toContain("passthrough: true");
     expect(host).toContain('mainWindow.on("close", () => desktopPetWindow?.close())');
     expect(main).toContain('meta[name="codetwo-surface"][content="desktop-pet"]');
     expect(main).toContain("? DesktopPetWindow");

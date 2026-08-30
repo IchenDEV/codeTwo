@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { setAppearanceSettings, useAppearanceSettings } from "../appearance";
 import {
   desktopGetPetState,
   desktopHidePet,
-  desktopSendPetVoiceText,
   desktopUpdatePetState,
   isElectrobun,
   listenDesktop,
@@ -13,25 +12,14 @@ import {
 import { CodeTwoPet } from "./CodeTwoPet";
 import type { CodeTwoPetAnimation } from "./state";
 
-export function DesktopPetBridge({
-  animation,
-  voiceEnabled,
-  onVoiceText,
-}: {
-  animation: CodeTwoPetAnimation;
-  voiceEnabled: boolean;
-  onVoiceText: (text: string) => void;
-}) {
+export function DesktopPetBridge({ animation }: { animation: CodeTwoPetAnimation }) {
   const appearance = useAppearanceSettings();
-  const voiceTextRef = useRef(onVoiceText);
-  voiceTextRef.current = onVoiceText;
 
   useEffect(() => {
     if (!isElectrobun) return;
     void desktopUpdatePetState({
       visible: appearance.petEnabled,
       animation,
-      voiceEnabled,
       appearance: {
         petActivityEnabled: appearance.petActivityEnabled,
         petSize: appearance.petSize,
@@ -48,19 +36,14 @@ export function DesktopPetBridge({
     appearance.petName,
     appearance.petSize,
     appearance.petSource,
-    voiceEnabled,
   ]);
 
   useEffect(() => {
     if (!isElectrobun) return;
-    const stopVoice = listenDesktop<string>("desktop-pet-voice-text", (text) => {
-      voiceTextRef.current(text);
-    });
     const stopHidden = listenDesktop("desktop-pet-hidden", () => {
       setAppearanceSettings({ petEnabled: false });
     });
     return () => {
-      stopVoice();
       stopHidden();
     };
   }, []);
@@ -95,8 +78,6 @@ export function DesktopPetWindow() {
       />
       <CodeTwoPet
         animation={state.animation}
-        voiceEnabled={state.voiceEnabled}
-        onVoiceText={(text) => void desktopSendPetVoiceText(text)}
         appearance={state.appearance}
         onHide={() => void desktopHidePet()}
       />
