@@ -14,6 +14,8 @@ import {
 import {
   Archive,
   ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
   Blocks,
   CalendarClock,
   ChartNoAxesColumn,
@@ -25,7 +27,10 @@ import {
   Folder,
   FolderOpen,
   FolderX,
+  GitBranch,
+  GitMerge,
   GitPullRequest,
+  GripVertical,
   Hash,
   MessageSquarePlus,
   MoreHorizontal,
@@ -41,7 +46,13 @@ import {
   Trash2,
 } from "@/components/ui/icons";
 
-import { openNativePath, type Project, type SessionInfo } from "../bridge";
+import {
+  githubCurrentPullRequest,
+  openNativePath,
+  type GitHubPullRequest,
+  type Project,
+  type SessionInfo,
+} from "../bridge";
 import {
   nativeContextMenusAvailable,
   showNativeContextMenu,
@@ -70,6 +81,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -87,11 +99,55 @@ import {
   createSidebarTaskSection,
   deleteSidebarTaskSection,
   loadSidebarTaskSections,
+  moveSidebarTask,
+  moveSidebarTaskSection,
+  projectTaskOrderKey,
   renameSidebarTaskSection,
   saveSidebarTaskSections,
   setSidebarTaskSectionCollapsed,
+  sortSidebarTasks,
+  UNSECTIONED_TASK_ORDER_KEY,
   type SidebarTaskSection,
 } from "./sidebarSections";
+import {
+  ROOT_PROJECT_ORDER_KEY,
+  loadSidebarProjects,
+  moveSidebarProject,
+  releaseSidebarSectionProjects,
+  saveSidebarProjects,
+  setSidebarProjectCollapsed,
+  sortSidebarProjects,
+} from "./sidebarProjects";
+import {
+  loadSidebarPullRequests,
+  type SidebarPullRequestStatus,
+} from "./sidebarGitStatus";
+
+const SIDEBAR_DRAG_TYPE = "application/x-codetwo-sidebar-item";
+
+type SidebarDragItem =
+  | { kind: "task"; id: string }
+  | { kind: "section"; id: string }
+  | { kind: "project"; id: string };
+
+function writeSidebarDrag(event: React.DragEvent, item: SidebarDragItem): void {
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData(SIDEBAR_DRAG_TYPE, JSON.stringify(item));
+  event.dataTransfer.setData("text/plain", item.id);
+}
+
+function readSidebarDrag(event: React.DragEvent): SidebarDragItem | null {
+  try {
+    const value = JSON.parse(event.dataTransfer.getData(SIDEBAR_DRAG_TYPE)) as SidebarDragItem;
+    if (
+      (value.kind === "task" || value.kind === "section" || value.kind === "project")
+      && value.id
+    ) return value;
+  } catch {
+    // Ignore drags from other applications and older renderers.
+  }
+  return null;
+}
 
 type ContextMenuTriggerElement = ReactElement<{
   render: ReactElement<HTMLAttributes<HTMLDivElement>>;
@@ -167,7 +223,7 @@ function SessionContextMenu({
  *
  * 1. Title — sidebar controls on the traffic-light line, with search directly below it.
  * 2. Features — the app's primary destinations as compact, labeled source-list rows.
- * 3. Tasks — one cross-Project feed with optional user Sections and automatic Highlight.
+ * 3. Tasks — user-created Sections contain ordered Projects, which contain ordered Tasks.
  * 4. Utilities — quota and settings stay reachable at the bottom while recent chats scroll.
  * The active model remains available in the composer, where it can also be changed.
  */
@@ -216,9 +272,10 @@ export function SessionRail({
   onOpenUsage,
   pluginActions,
   resourceSections,
+  loadPullRequest = githubCurrentPullRequest,
 }: {
   projects: Project[];
-  /** Every live Task session; the rail shows one cross-Project feed, newest first. */
+  /** Every live Task session; the rail nests it under its Project unless explicitly Sectioned. */
   sessions: SessionInfo[];
   /** Every archived Task session, shown in one collapsible system Section. */
   archivedSessions: SessionInfo[];
@@ -279,6 +336,8 @@ export function SessionRail({
   pluginActions?: ReactNode;
   /** External resources render as peer Sections in the same scroll flow as Tasks. */
   resourceSections?: ReactNode;
+  /** Injectable for deterministic rendered tests; production resolves the current branch via GitHub. */
+  loadPullRequest?: (path: string) => Promise<GitHubPullRequest | null>;
 }) {
   const t = useT();
   const toast = useToast();
@@ -286,9 +345,15 @@ export function SessionRail({
   const [taskSections, setTaskSections] = useState(() =>
     loadSidebarTaskSections(typeof localStorage === "undefined" ? null : localStorage),
   );
-  const [creatingSectionFor, setCreatingSectionFor] = useState<string | undefined>();
+  const [creatingSectionFor, setCreatingSectionFor] = useState<
+    { kind: "task" | "project"; id: string } | undefined
+  >();
   const [sectionDraft, setSectionDraft] = useState("");
   const [renamingSection, setRenamingSection] = useState<{ id: string; name: string } | null>(null);
+  const [dragItem, setDragItem] = useState<SidebarDragItem | null>(null);
+  const [projectOrganization, setProjectOrganization] = useState(() =>
+    loadSidebarProjects(typeof localStorage === "undefined" ? null : localStorage),
+  );
 
   useEffect(() => {
     saveSidebarTaskSections(
@@ -296,6 +361,13 @@ export function SessionRail({
       taskSections,
     );
   }, [taskSections]);
+
+  useEffect(() => {
+    saveSidebarProjects(
+      typeof localStorage === "undefined" ? null : localStorage,
+      projectOrganization,
+    );
+  }, [projectOrganization]);
 
   // Clamped on every render, not just while dragging, so a width saved on one display comes back
   // usable on another.
@@ -389,6 +461,33 @@ export function SessionRail({
     () => [...archivedSessions].sort((a, b) => b.created_at - a.created_at),
     [archivedSessions],
   );
+  const gitTargetPaths = useMemo(
+    () => [...new Set(recent.slice(0, 48).map((session) => session.worktree_path ?? session.cwd))],
+    [recent],
+  );
+  const gitTargetKey = gitTargetPaths.join("\u0000");
+  const [gitRefresh, setGitRefresh] = useState(0);
+  const [pullRequestsByPath, setPullRequestsByPath] = useState<
+    ReadonlyMap<string, SidebarPullRequestStatus | null>
+  >(() => new Map());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setGitRefresh((current) => current + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadSidebarPullRequests(
+      gitTargetPaths.map((path) => ({ path })),
+      loadPullRequest,
+    ).then((statuses) => {
+      if (active) setPullRequestsByPath(statuses);
+    });
+    return () => {
+      active = false;
+    };
+  }, [gitRefresh, gitTargetKey, loadPullRequest]);
 
   const manualSectionIds = useMemo(
     () => new Set(taskSections.sections.map((section) => section.id)),
@@ -401,35 +500,82 @@ export function SessionRail({
     },
     [manualSectionIds, taskSections.assignments],
   );
-  const belongsInHighlight = useCallback(
-    (session: SessionInfo) => {
-      if (assignedSection(session)) return false;
-      const kind = sessionActivity(session).state.kind;
-      return session.pinned || runningSessions.has(session.id) ||
-        kind === "running" || kind === "awaiting_input" || kind === "failed";
-    },
-    [assignedSection, runningSessions],
+  const projectPathForSession = useCallback(
+    (session: SessionInfo) => session.project_path
+      ?? (projectNames.has(session.cwd) ? session.cwd : null),
+    [projectNames],
   );
-  const highlighted = useMemo(
-    () => recent.filter(belongsInHighlight),
-    [belongsInHighlight, recent],
+  const projectEntries = useMemo(() => {
+    const entries = new Map(projects.map((project) => [project.path, project]));
+    for (const session of recent) {
+      const path = projectPathForSession(session);
+      if (!path || entries.has(path)) continue;
+      entries.set(path, {
+        path,
+        name: path.split(/[\\/]/).filter(Boolean).pop() ?? path,
+        last_opened_at: session.last_active_at ?? session.created_at,
+        default_worktree_mode: null,
+      });
+    }
+    return [...entries.values()].sort((left, right) => right.last_opened_at - left.last_opened_at);
+  }, [projectPathForSession, projects, recent]);
+  const assignedProjectSection = useCallback(
+    (path: string) => {
+      const id = projectOrganization.assignments[path];
+      return id && manualSectionIds.has(id) ? id : null;
+    },
+    [manualSectionIds, projectOrganization.assignments],
   );
   const unsectioned = useMemo(
-    () => recent.filter((session) => !assignedSection(session) && !belongsInHighlight(session)),
-    [assignedSection, belongsInHighlight, recent],
+    () => sortSidebarTasks(
+      recent.filter((session) => !assignedSection(session) && !projectPathForSession(session)),
+      taskSections.taskOrder[UNSECTIONED_TASK_ORDER_KEY],
+    ),
+    [assignedSection, projectPathForSession, recent, taskSections.taskOrder],
   );
   const sectionRows = useMemo(
     () => new Map(taskSections.sections.map((section) => [
       section.id,
-      recent.filter((session) => assignedSection(session) === section.id),
+      sortSidebarTasks(
+        recent.filter((session) => assignedSection(session) === section.id),
+        taskSections.taskOrder[section.id],
+      ),
     ])),
-    [assignedSection, recent, taskSections.sections],
+    [assignedSection, recent, taskSections.sections, taskSections.taskOrder],
+  );
+  const projectRows = useMemo(
+    () => new Map(projectEntries.map((project) => [
+      project.path,
+      sortSidebarTasks(
+        recent.filter((session) =>
+          !assignedSection(session) && projectPathForSession(session) === project.path,
+        ),
+        taskSections.taskOrder[projectTaskOrderKey(project.path)],
+      ),
+    ])),
+    [assignedSection, projectEntries, projectPathForSession, recent, taskSections.taskOrder],
+  );
+  const rootProjects = useMemo(
+    () => sortSidebarProjects(
+      projectEntries.filter((project) => !assignedProjectSection(project.path)),
+      projectOrganization.order[ROOT_PROJECT_ORDER_KEY],
+    ),
+    [assignedProjectSection, projectEntries, projectOrganization.order],
+  );
+  const sectionProjects = useMemo(
+    () => new Map(taskSections.sections.map((section) => [
+      section.id,
+      sortSidebarProjects(
+        projectEntries.filter((project) => assignedProjectSection(project.path) === section.id),
+        projectOrganization.order[section.id],
+      ),
+    ])),
+    [assignedProjectSection, projectEntries, projectOrganization.order, taskSections.sections],
   );
 
   // Folded by default: archived threads are reference material, not the working set, so they
   // shouldn't compete with the live rows for attention. The fold survives a restart.
   const [archivedOpen, setArchivedOpen] = usePersistedBoolean("rail.archivedOpen", false);
-  const [highlightOpen, setHighlightOpen] = usePersistedBoolean("rail.highlightOpen", true);
 
   const copyToClipboard = useCallback(
     async (value: string, confirmation: string) => {
@@ -457,7 +603,12 @@ export function SessionRail({
 
   const beginSectionCreation = useCallback((taskId: string) => {
     setSectionDraft("");
-    setCreatingSectionFor(taskId);
+    setCreatingSectionFor({ kind: "task", id: taskId });
+  }, []);
+
+  const beginProjectSectionCreation = useCallback((path: string) => {
+    setSectionDraft("");
+    setCreatingSectionFor({ kind: "project", id: path });
   }, []);
 
   const commitSectionCreation = useCallback(() => {
@@ -465,8 +616,18 @@ export function SessionRail({
     if (name) {
       const id = `section:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
       setTaskSections((current) =>
-        createSidebarTaskSection(current, name, id, creatingSectionFor),
+        createSidebarTaskSection(
+          current,
+          name,
+          id,
+          creatingSectionFor?.kind === "task" ? creatingSectionFor.id : undefined,
+        ),
       );
+      if (creatingSectionFor?.kind === "project") {
+        setProjectOrganization((current) =>
+          moveSidebarProject(current, creatingSectionFor.id, id, null, []),
+        );
+      }
     }
     setCreatingSectionFor(undefined);
     setSectionDraft("");
@@ -480,8 +641,102 @@ export function SessionRail({
     setRenamingSection(null);
   }, [renamingSection]);
 
+  const taskIdsForSection = useCallback(
+    (sectionId: string | null) => (sectionId === null ? unsectioned : sectionRows.get(sectionId) ?? [])
+      .map((session) => session.id),
+    [sectionRows, unsectioned],
+  );
+  const taskIdsForProject = useCallback(
+    (path: string) => (projectRows.get(path) ?? []).map((session) => session.id),
+    [projectRows],
+  );
+
+  const dropTask = useCallback((
+    taskId: string,
+    sectionId: string | null,
+    beforeTaskId: string | null,
+    destinationTaskIds: readonly string[],
+    destinationOrderKey: string,
+    projectPath: string | null = null,
+  ) => {
+    if (projectPath) {
+      const source = recent.find((session) => session.id === taskId);
+      if (!source || projectPathForSession(source) !== projectPath) return;
+    }
+    setTaskSections((current) => moveSidebarTask(
+      current,
+      taskId,
+      sectionId,
+      beforeTaskId,
+      destinationTaskIds,
+      destinationOrderKey,
+    ));
+    setDragItem(null);
+  }, [projectPathForSession, recent]);
+
+  const moveTaskBy = useCallback((session: SessionInfo, offset: -1 | 1) => {
+    const sectionId = assignedSection(session);
+    const projectPath = sectionId === null ? projectPathForSession(session) : null;
+    const ids = projectPath ? taskIdsForProject(projectPath) : taskIdsForSection(sectionId);
+    const currentIndex = ids.indexOf(session.id);
+    const nextIndex = Math.min(ids.length - 1, Math.max(0, currentIndex + offset));
+    if (currentIndex < 0 || nextIndex === currentIndex) return;
+    const remaining = ids.filter((id) => id !== session.id);
+    const beforeTaskId = remaining[nextIndex] ?? null;
+    dropTask(
+      session.id,
+      sectionId,
+      beforeTaskId,
+      ids,
+      projectPath ? projectTaskOrderKey(projectPath) : sectionId ?? UNSECTIONED_TASK_ORDER_KEY,
+      projectPath,
+    );
+  }, [assignedSection, dropTask, projectPathForSession, taskIdsForProject, taskIdsForSection]);
+
+  const projectPathsForSection = useCallback(
+    (sectionId: string | null) => (sectionId === null
+      ? rootProjects
+      : sectionProjects.get(sectionId) ?? []).map((project) => project.path),
+    [rootProjects, sectionProjects],
+  );
+
+  const dropProject = useCallback((
+    path: string,
+    sectionId: string | null,
+    beforePath: string | null,
+  ) => {
+    setProjectOrganization((current) => moveSidebarProject(
+      current,
+      path,
+      sectionId,
+      beforePath,
+      projectPathsForSection(sectionId),
+    ));
+    setDragItem(null);
+  }, [projectPathsForSection]);
+
+  const moveProjectBy = useCallback((path: string, offset: -1 | 1) => {
+    const sectionId = assignedProjectSection(path);
+    const paths = projectPathsForSection(sectionId);
+    const currentIndex = paths.indexOf(path);
+    const nextIndex = Math.min(paths.length - 1, Math.max(0, currentIndex + offset));
+    if (currentIndex < 0 || nextIndex === currentIndex) return;
+    const remaining = paths.filter((candidate) => candidate !== path);
+    dropProject(path, sectionId, remaining[nextIndex] ?? null);
+  }, [assignedProjectSection, dropProject, projectPathsForSection]);
+
+  const moveSectionBy = useCallback((section: SidebarTaskSection, offset: -1 | 1) => {
+    const ids = taskSections.sections.map((candidate) => candidate.id);
+    const currentIndex = ids.indexOf(section.id);
+    const nextIndex = Math.min(ids.length - 1, Math.max(0, currentIndex + offset));
+    if (currentIndex < 0 || nextIndex === currentIndex) return;
+    const remaining = ids.filter((id) => id !== section.id);
+    const beforeId = remaining[nextIndex] ?? null;
+    setTaskSections((current) => moveSidebarTaskSection(current, section.id, beforeId));
+  }, [taskSections.sections]);
+
   /** One quiet source-list row: task title, workspace identity, and only actionable status. */
-  const sessionRow = (s: SessionInfo, isArchived: boolean) => {
+  const sessionRow = (s: SessionInfo, isArchived: boolean, showProjectIdentity = true) => {
     const activity = sessionActivity(s).state;
     const isAwaitingInput = activity.kind === "awaiting_input";
     const isFailed = activity.kind === "failed";
@@ -505,6 +760,19 @@ export function SessionRail({
     const workspaceName = (s.project_path ? projectNames.get(s.project_path) : null)
       ?? workspacePath.split(/[\\/]/).filter(Boolean).pop()
       ?? workspacePath;
+    const checkoutPath = s.worktree_path ?? s.cwd;
+    const isWorktree = s.worktree_path !== null && !s.worktree_discarded;
+    const pullRequest = pullRequestsByPath.get(checkoutPath) ?? null;
+    const pullRequestLabel = pullRequest
+      ? t(`rail.pullRequest.${pullRequest.state}`)
+      : null;
+    const pullRequestTone = pullRequest?.state === "merged"
+      ? "text-success"
+      : pullRequest?.state === "conflicting" || pullRequest?.state === "ci_failed"
+        ? "text-destructive"
+        : pullRequest?.state === "ci_running"
+          ? "text-warning"
+          : "text-muted-foreground";
 
     const commitRename = () => {
       if (renaming?.id !== s.id) return;
@@ -519,6 +787,16 @@ export function SessionRail({
     };
 
     const currentSectionId = assignedSection(s);
+    const currentProjectPath = currentSectionId === null ? projectPathForSession(s) : null;
+    const currentTaskIds = currentProjectPath
+      ? taskIdsForProject(currentProjectPath)
+      : taskIdsForSection(currentSectionId);
+    const currentTaskOrderKey = currentProjectPath
+      ? projectTaskOrderKey(currentProjectPath)
+      : currentSectionId ?? UNSECTIONED_TASK_ORDER_KEY;
+    const currentTaskIndex = currentTaskIds.indexOf(s.id);
+    const canMoveUp = !isArchived && currentTaskIndex > 0;
+    const canMoveDown = !isArchived && currentTaskIndex >= 0 && currentTaskIndex < currentTaskIds.length - 1;
     const assignSection = (sectionId: string | null) => {
       setTaskSections((current) => assignTaskSection(current, s.id, sectionId));
     };
@@ -546,6 +824,12 @@ export function SessionRail({
           break;
         case "rename":
           startRename();
+          break;
+        case "move-up":
+          moveTaskBy(s, -1);
+          break;
+        case "move-down":
+          moveTaskBy(s, 1);
           break;
         case "archive":
           requestArchive(s.id, !isArchived);
@@ -605,6 +889,22 @@ export function SessionRail({
           ]
         : []),
       { type: "item", label: t("rail.rename"), action: "rename" },
+      ...(!isArchived
+        ? [
+            {
+              type: "item",
+              label: t("rail.moveUp"),
+              action: "move-up",
+              enabled: canMoveUp,
+            } as const,
+            {
+              type: "item",
+              label: t("rail.moveDown"),
+              action: "move-down",
+              enabled: canMoveDown,
+            } as const,
+          ]
+        : []),
       ...(!isArchived ? [nativeSectionMenu] : []),
       {
         type: "item",
@@ -685,7 +985,41 @@ export function SessionRail({
           render={
             <div
               data-session-id={s.id}
+              data-sidebar-dragging={dragItem?.kind === "task" && dragItem.id === s.id ? "true" : undefined}
               data-session-density="compact"
+              draggable={!isArchived && renaming?.id !== s.id}
+              onDragStart={(event) => {
+                if (
+                  event.target instanceof Element
+                  && event.target.closest("input, [data-session-actions] button")
+                ) {
+                  event.preventDefault();
+                  return;
+                }
+                const item = { kind: "task", id: s.id } as const;
+                writeSidebarDrag(event, item);
+                setDragItem(item);
+              }}
+              onDragEnd={() => setDragItem(null)}
+              onDragOver={(event) => {
+                if (readSidebarDrag(event)?.kind !== "task" || isArchived) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(event) => {
+                const item = readSidebarDrag(event);
+                if (item?.kind !== "task" || isArchived) return;
+                event.preventDefault();
+                event.stopPropagation();
+                dropTask(
+                  item.id,
+                  currentSectionId,
+                  s.id,
+                  currentTaskIds,
+                  currentTaskOrderKey,
+                  currentProjectPath,
+                );
+              }}
               data-session-archive-motion={archiveMotion.has(s.id)
                 ? isArchived ? "restore" : "archive"
                 : undefined}
@@ -700,7 +1034,7 @@ export function SessionRail({
                   ?.focus({ preventScroll: true })
               }
               className={cn(
-                "group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-shadow hover:bg-fill-quiet focus-within:bg-fill-quiet data-[popup-open]:bg-fill-hover",
+                "group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-[box-shadow,opacity] hover:bg-fill-quiet focus-within:bg-fill-quiet data-[popup-open]:bg-fill-hover data-[sidebar-dragging=true]:opacity-45",
                 s.id === activeSession && "bg-fill-hover",
               )}
             >
@@ -708,6 +1042,7 @@ export function SessionRail({
                 type="button"
                 variant="ghost"
                 data-session-select
+                draggable={!isArchived && renaming?.id !== s.id}
                 aria-current={s.id === activeSession ? "page" : undefined}
                 aria-describedby={hasUsefulPreview ? `session-preview-${s.id}` : undefined}
                 aria-label={t("rail.sessionAccessibility", {
@@ -780,6 +1115,17 @@ export function SessionRail({
                     className="hidden shrink-0 gap-0.5 group-hover:flex group-focus-within:flex group-data-[popup-open]:flex"
                   >
                     {!isArchived && (
+                      <span
+                        data-session-drag-handle
+                        draggable
+                        title={t("rail.dragTask")}
+                        className="pointer-events-auto flex size-5 cursor-grab items-center justify-center text-muted-foreground active:cursor-grabbing"
+                        aria-hidden="true"
+                      >
+                        <GripVertical className="pointer-events-none size-3" />
+                      </span>
+                    )}
+                    {!isArchived && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -847,8 +1193,43 @@ export function SessionRail({
                   data-session-line="workspace"
                   className="mt-0.5 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground"
                 >
-                  <Folder className="size-3 shrink-0 opacity-70" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
+                  {showProjectIdentity ? (
+                    <>
+                      <Folder className="size-3 shrink-0 opacity-70" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
+                    </>
+                  ) : (
+                    <span className="min-w-0 flex-1" />
+                  )}
+                  <span
+                    data-session-checkout-kind={isWorktree ? "worktree" : "checkout"}
+                    title={t(isWorktree ? "rail.gitWorktreeHint" : "rail.gitCheckoutHint")}
+                    aria-label={t(isWorktree ? "rail.gitWorktreeHint" : "rail.gitCheckoutHint")}
+                    className="flex shrink-0 items-center gap-0.5 rounded-micro bg-fill-quiet px-1 text-fine leading-4 text-foreground/55"
+                  >
+                    <GitBranch className="size-2.5" aria-hidden="true" />
+                    {t(isWorktree ? "rail.gitWorktree" : "rail.gitCheckout")}
+                  </span>
+                  {pullRequest && pullRequestLabel ? (
+                    <span
+                      data-session-pull-request={pullRequest.state}
+                      title={`#${pullRequest.number} · ${pullRequestLabel}`}
+                      aria-label={`#${pullRequest.number} · ${pullRequestLabel}`}
+                      className={cn(
+                        "flex shrink-0 items-center gap-0.5 rounded-micro bg-fill-quiet px-1 text-fine leading-4",
+                        pullRequestTone,
+                      )}
+                    >
+                      {pullRequest.state === "merged" ? (
+                        <GitMerge className="size-2.5" aria-hidden="true" />
+                      ) : pullRequest.state === "ci_running" ? (
+                        <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
+                      ) : (
+                        <GitPullRequest className="size-2.5" aria-hidden="true" />
+                      )}
+                      #{pullRequest.number} {pullRequestLabel}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -866,6 +1247,18 @@ export function SessionRail({
               <Pencil />
               {t("rail.rename")}
             </ContextMenuItem>
+            {!isArchived ? (
+              <>
+                <ContextMenuItem disabled={!canMoveUp} onClick={() => moveTaskBy(s, -1)}>
+                  <ArrowUp />
+                  {t("rail.moveUp")}
+                </ContextMenuItem>
+                <ContextMenuItem disabled={!canMoveDown} onClick={() => moveTaskBy(s, 1)}>
+                  <ArrowDown />
+                  {t("rail.moveDown")}
+                </ContextMenuItem>
+              </>
+            ) : null}
             {!isArchived ? (
               <ContextMenuSub>
                 <ContextMenuSubTrigger>
@@ -947,9 +1340,187 @@ export function SessionRail({
     );
   };
 
+  const renderProject = (project: Project) => {
+    const rows = projectRows.get(project.path) ?? [];
+    const sectionId = assignedProjectSection(project.path);
+    const paths = projectPathsForSection(sectionId);
+    const projectIndex = paths.indexOf(project.path);
+    const canMoveUp = projectIndex > 0;
+    const canMoveDown = projectIndex >= 0 && projectIndex < paths.length - 1;
+    const open = projectOrganization.collapsed[project.path] !== true;
+    const taskIds = rows.map((row) => row.id);
+    const moveToSection = (nextSectionId: string | null) =>
+      dropProject(project.path, nextSectionId, null);
+
+    return (
+      <Collapsible
+        key={project.path}
+        open={open}
+        onOpenChange={(nextOpen) =>
+          setProjectOrganization((current) =>
+            setSidebarProjectCollapsed(current, project.path, !nextOpen),
+          )
+        }
+        data-project-group={project.path}
+      >
+        <div
+          data-project-header={project.path}
+          data-sidebar-dragging={dragItem?.kind === "project" && dragItem.id === project.path
+            ? "true"
+            : undefined}
+          draggable
+          onDragStart={(event) => {
+            if (event.target instanceof Element && event.target.closest("[data-project-actions]")) {
+              event.preventDefault();
+              return;
+            }
+            const item = { kind: "project", id: project.path } as const;
+            writeSidebarDrag(event, item);
+            setDragItem(item);
+          }}
+          onDragEnd={() => setDragItem(null)}
+          onDragOver={(event) => {
+            const item = readSidebarDrag(event);
+            if (!item || item.kind === "section") return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            const item = readSidebarDrag(event);
+            if (!item || item.kind === "section") return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (item.kind === "project") {
+              dropProject(item.id, sectionId, project.path);
+            } else {
+              dropTask(
+                item.id,
+                null,
+                null,
+                taskIds,
+                projectTaskOrderKey(project.path),
+                project.path,
+              );
+            }
+          }}
+          className="group/project relative flex min-h-control items-center rounded-control pr-1 transition-[background-color,opacity] hover:bg-fill-quiet data-[sidebar-dragging=true]:opacity-45"
+        >
+          <span
+            data-project-drag-handle={project.path}
+            title={t("rail.dragProject")}
+            draggable
+            className="absolute left-0 flex size-4 cursor-grab items-center justify-center text-foreground/35 opacity-0 group-hover/project:opacity-100 active:cursor-grabbing"
+            aria-hidden="true"
+          >
+            <GripVertical className="pointer-events-none size-3" />
+          </span>
+          <CollapsibleTrigger
+            data-project-toggle={project.path}
+            draggable
+            title={t(open ? "rail.hideProject" : "rail.showProject", { name: project.name })}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-ui leading-4 outline-none focus-visible:focus-ring-inset"
+          >
+            <Folder className="size-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-left">{project.name}</span>
+            <ChevronRight
+              className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")}
+              aria-hidden="true"
+            />
+          </CollapsibleTrigger>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  data-project-actions={project.path}
+                  aria-label={t("rail.projectActions", { name: project.name })}
+                  className="opacity-0 group-hover/project:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100"
+                >
+                  <MoreHorizontal />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={!canMoveUp} onClick={() => moveProjectBy(project.path, -1)}>
+                <ArrowUp />
+                {t("rail.moveUp")}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!canMoveDown} onClick={() => moveProjectBy(project.path, 1)}>
+                <ArrowDown />
+                {t("rail.moveDown")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => moveToSection(null)}>
+                <Check className={cn(sectionId !== null && "opacity-0")} />
+                {t("rail.noSection")}
+              </DropdownMenuItem>
+              {taskSections.sections.map((section) => (
+                <DropdownMenuItem key={section.id} onClick={() => moveToSection(section.id)}>
+                  <Check className={cn(sectionId !== section.id && "opacity-0")} />
+                  {section.name}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setTimeout(() => beginProjectSectionCreation(project.path), 0)}
+              >
+                <Plus />
+                {t("rail.newSection")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <CollapsibleContent
+          data-project-content={project.path}
+          className="ml-6"
+          onDragOver={(event) => {
+            if (readSidebarDrag(event)?.kind !== "task") return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            const item = readSidebarDrag(event);
+            if (item?.kind !== "task") return;
+            event.preventDefault();
+            event.stopPropagation();
+            dropTask(
+              item.id,
+              null,
+              null,
+              taskIds,
+              projectTaskOrderKey(project.path),
+              project.path,
+            );
+          }}
+        >
+          {rows.length > 0 ? (
+            <div className="flex flex-col gap-0.5">
+              {rows.map((row) => sessionRow(row, false, false))}
+            </div>
+          ) : (
+            <p className="px-2 py-1.5 text-fine text-foreground/35">{t("rail.projectEmpty")}</p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
+
   const renderManualSection = (section: SidebarTaskSection) => {
     const open = !section.collapsed;
     const rows = sectionRows.get(section.id) ?? [];
+    const sectionProjectRows = sectionProjects.get(section.id) ?? [];
+    const sectionIndex = taskSections.sections.findIndex((candidate) => candidate.id === section.id);
+    const canMoveUp = sectionIndex > 0;
+    const canMoveDown = sectionIndex >= 0 && sectionIndex < taskSections.sections.length - 1;
+    const archiveSection = async () => {
+      const tasks = [
+        ...rows,
+        ...sectionProjectRows.flatMap((project) => projectRows.get(project.path) ?? []),
+      ];
+      await Promise.all(tasks.map((row) => Promise.resolve(onArchive(row.id, true))));
+    };
     return (
       <Collapsible
         key={section.id}
@@ -962,7 +1533,47 @@ export function SessionRail({
       >
         <div
           data-task-section-header={section.id}
-          className="group/section flex min-h-control-mini items-center pr-2 pb-1 pt-2"
+          data-sidebar-dragging={dragItem?.kind === "section" && dragItem.id === section.id ? "true" : undefined}
+          draggable={renamingSection?.id !== section.id}
+          onDragStart={(event) => {
+            if (event.target instanceof Element && event.target.closest("input, [data-task-section-actions]")) {
+              event.preventDefault();
+              return;
+            }
+            const item = { kind: "section", id: section.id } as const;
+            writeSidebarDrag(event, item);
+            setDragItem(item);
+          }}
+          onDragEnd={() => setDragItem(null)}
+          onDragOver={(event) => {
+            const item = readSidebarDrag(event);
+            if (!item) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            const item = readSidebarDrag(event);
+            if (!item) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (item.kind === "section") {
+              setTaskSections((current) =>
+                moveSidebarTaskSection(current, item.id, section.id),
+              );
+              setDragItem(null);
+            } else if (item.kind === "project") {
+              dropProject(item.id, section.id, null);
+            } else {
+              dropTask(
+                item.id,
+                section.id,
+                null,
+                rows.map((row) => row.id),
+                section.id,
+              );
+            }
+          }}
+          className="group/section relative flex min-h-control-mini items-center pr-2 pb-1 pt-2 transition-opacity data-[sidebar-dragging=true]:opacity-45"
         >
           {renamingSection?.id === section.id ? (
             <Input
@@ -987,17 +1598,29 @@ export function SessionRail({
               }}
             />
           ) : (
-            <CollapsibleTrigger
-              data-task-section-toggle={section.id}
-              title={t(open ? "rail.hideSection" : "rail.showSection", { name: section.name })}
-              className="flex min-w-0 items-center gap-1 rounded-control px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
-            >
-              <span className="truncate">{section.name}</span>
-              <ChevronRight
-                className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")}
+            <>
+              <span
+                data-section-drag-handle={section.id}
+                draggable
+                title={t("rail.dragSection")}
+                className="absolute left-0 flex size-4 cursor-grab items-center justify-center text-foreground/35 opacity-0 group-hover/section:opacity-100 active:cursor-grabbing"
                 aria-hidden="true"
-              />
-            </CollapsibleTrigger>
+              >
+                <GripVertical className="pointer-events-none size-3" />
+              </span>
+              <CollapsibleTrigger
+                data-task-section-toggle={section.id}
+                draggable
+                title={t(open ? "rail.hideSection" : "rail.showSection", { name: section.name })}
+                className="flex min-w-0 items-center gap-1 rounded-control px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+              >
+                <span className="truncate">{section.name}</span>
+                <ChevronRight
+                  className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")}
+                  aria-hidden="true"
+                />
+              </CollapsibleTrigger>
+            </>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -1021,13 +1644,33 @@ export function SessionRail({
                 }
               >
                 <Pencil />
-                {t("rail.renameSection")}
+                {t("rail.editSection")}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!canMoveUp} onClick={() => moveSectionBy(section, -1)}>
+                <ArrowUp />
+                {t("rail.moveUp")}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!canMoveDown} onClick={() => moveSectionBy(section, 1)}>
+                <ArrowDown />
+                {t("rail.moveDown")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={rows.length === 0 && sectionProjectRows.every(
+                  (project) => (projectRows.get(project.path) ?? []).length === 0,
+                )}
+                onClick={() => void archiveSection()}
+              >
+                <Archive />
+                {t("rail.archiveSection")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
-                onClick={() =>
-                  setTaskSections((current) => deleteSidebarTaskSection(current, section.id))
-                }
+                onClick={() => {
+                  setTaskSections((current) => deleteSidebarTaskSection(current, section.id));
+                  setProjectOrganization((current) =>
+                    releaseSidebarSectionProjects(current, section.id),
+                  );
+                }}
               >
                 <Trash2 />
                 {t("rail.deleteSection")}
@@ -1035,9 +1678,36 @@ export function SessionRail({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <CollapsibleContent data-task-section-content={section.id}>
-          {rows.length > 0 ? (
-            <div className="flex flex-col gap-0.5">{rows.map((row) => sessionRow(row, false))}</div>
+        <CollapsibleContent
+          data-task-section-content={section.id}
+          onDragOver={(event) => {
+            const item = readSidebarDrag(event);
+            if (!item || item.kind === "section") return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            const item = readSidebarDrag(event);
+            if (!item || item.kind === "section") return;
+            event.preventDefault();
+            if (item.kind === "project") {
+              dropProject(item.id, section.id, null);
+            } else {
+              dropTask(
+                item.id,
+                section.id,
+                null,
+                rows.map((row) => row.id),
+                section.id,
+              );
+            }
+          }}
+        >
+          {sectionProjectRows.length > 0 || rows.length > 0 ? (
+            <div className="flex flex-col gap-0.5">
+              {sectionProjectRows.map(renderProject)}
+              {rows.map((row) => sessionRow(row, false))}
+            </div>
           ) : (
             <p className="px-2 py-1.5 text-fine text-foreground/35">{t("rail.sectionEmpty")}</p>
           )}
@@ -1207,39 +1877,49 @@ export function SessionRail({
           className="px-2 pb-4"
         >
           {resourceSections}
-          {recent.length === 0 && archived.length === 0 &&
+          {recent.length === 0 && archived.length === 0 && projectEntries.length === 0 &&
           taskSections.sections.length === 0 && creatingSectionFor === undefined ? (
             <p className="px-2 py-3 text-fine leading-relaxed text-muted-foreground">
               {t("rail.empty")} {t("rail.emptyHint")}
             </p>
           ) : (
             <>
-              {highlighted.length > 0 && (
-                <Collapsible open={highlightOpen} onOpenChange={setHighlightOpen}>
-                  <CollapsibleTrigger
-                    data-task-section-toggle="system:highlight"
-                    title={t(highlightOpen ? "rail.hideSection" : "rail.showSection", {
-                      name: t("rail.highlight"),
-                    })}
-                    className="flex items-center gap-1 rounded-control px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
-                  >
-                    <span>{t("rail.highlight")}</span>
-                    <ChevronRight
-                      className={cn(
-                        "size-3.5 shrink-0 transition-transform",
-                        highlightOpen && "rotate-90",
-                      )}
-                      aria-hidden="true"
-                    />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent data-task-section-content="system:highlight">
-                    <div className="flex flex-col gap-0.5">
-                      {highlighted.map((session) => sessionRow(session, false))}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-              {taskSections.sections.map(renderManualSection)}
+              <div
+                data-task-section-list
+                onDragOver={(event) => {
+                  if (readSidebarDrag(event)?.kind !== "section") return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  const item = readSidebarDrag(event);
+                  if (item?.kind !== "section") return;
+                  event.preventDefault();
+                  setTaskSections((current) => moveSidebarTaskSection(current, item.id, null));
+                  setDragItem(null);
+                }}
+              >
+                {taskSections.sections.map(renderManualSection)}
+              </div>
+              {rootProjects.length > 0 || dragItem?.kind === "project" ? (
+                <div
+                  data-project-list="root"
+                  className={cn(rootProjects.length === 0 && "min-h-control")}
+                  onDragOver={(event) => {
+                    if (readSidebarDrag(event)?.kind !== "project") return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    const item = readSidebarDrag(event);
+                    if (item?.kind !== "project") return;
+                    event.preventDefault();
+                    dropProject(item.id, null, null);
+                  }}
+                >
+                  {rootProjects.map(renderProject)}
+                </div>
+              ) : null}
               {creatingSectionFor !== undefined ? (
                 <div data-task-section-creation className="px-2 pb-1 pt-2">
                   <Input
@@ -1264,8 +1944,31 @@ export function SessionRail({
                   />
                 </div>
               ) : null}
-              {unsectioned.length > 0 ? (
-                <div data-unsectioned-tasks className="flex flex-col gap-0.5 pt-1">
+              {unsectioned.length > 0 || dragItem?.kind === "task" ? (
+                <div
+                  data-unsectioned-tasks
+                  className={cn(
+                    "flex flex-col gap-0.5 pt-1",
+                    unsectioned.length === 0 && "min-h-control-mini",
+                  )}
+                  onDragOver={(event) => {
+                    if (readSidebarDrag(event)?.kind !== "task") return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    const item = readSidebarDrag(event);
+                    if (item?.kind !== "task") return;
+                    event.preventDefault();
+                    dropTask(
+                      item.id,
+                      null,
+                      null,
+                      unsectioned.map((session) => session.id),
+                      UNSECTIONED_TASK_ORDER_KEY,
+                    );
+                  }}
+                >
                   {unsectioned.map((session) => sessionRow(session, false))}
                 </div>
               ) : null}

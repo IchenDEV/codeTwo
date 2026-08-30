@@ -6,6 +6,7 @@ activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { SessionRail } = await import("../src/sidebar/SessionRail");
 const { SIDEBAR_SECTIONS_STORAGE_KEY } = await import("../src/sidebar/sidebarSections");
+const { SIDEBAR_PROJECTS_STORAGE_KEY } = await import("../src/sidebar/sidebarProjects");
 const { ToastProvider } = await import("../src/ui/toast");
 
 let restoreCanvasContext: (() => void) | null = null;
@@ -100,6 +101,25 @@ function renderRail(overrides = {}) {
   );
 }
 
+function dragAndDrop(source: Element, target: Element) {
+  const values = new Map<string, string>();
+  const dataTransfer = {
+    effectAllowed: "none",
+    dropEffect: "none",
+    setData: (type: string, value: string) => values.set(type, value),
+    getData: (type: string) => values.get(type) ?? "",
+  };
+  const dispatch = (node: Element, type: string) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    node.dispatchEvent(event);
+  };
+  dispatch(source, "dragstart");
+  dispatch(target, "dragover");
+  dispatch(target, "drop");
+  dispatch(source, "dragend");
+}
+
 describe("SessionRail row layout", () => {
   test("renders external resource Sections in the same flat scroll flow", () => {
     activateDom();
@@ -117,7 +137,7 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("sorts the cross-project feed by automatic Highlight then global recency", () => {
+  test("keeps pinned Tasks ahead of global recency without inventing a Highlight Section", () => {
     activateDom();
     const pinned = {
       ...session("pinned", "Pinned chat"),
@@ -144,11 +164,12 @@ describe("SessionRail row layout", () => {
     const text = view.container.textContent ?? "";
     expect(text.indexOf("Pinned chat")).toBeLessThan(text.indexOf("Revived chat"));
     expect(text.indexOf("Revived chat")).toBeLessThan(text.indexOf("Newer chat"));
+    expect(view.container.querySelector('[data-task-section-toggle="system:highlight"]')).toBeNull();
 
     view.unmount();
   });
 
-  test("shows Tasks from every Project without Project or folder partitions", () => {
+  test("shows every Project as an ordered folder with its own Tasks", () => {
     activateDom();
     dom.window.localStorage.setItem("rail.archivedOpen", "1");
     const local = { ...session("local", "Local task"), last_active_at: 200 };
@@ -175,21 +196,24 @@ describe("SessionRail row layout", () => {
       previews: {},
     });
 
-    const rows = Array.from(
-      view.container.querySelectorAll("[data-unsectioned-tasks] [data-session-id]"),
-    );
-    expect(rows.map((row) => row.getAttribute("data-session-id"))).toEqual(["other", "local"]);
-    expect(rows[0]?.querySelector('[data-session-line="workspace"]')?.textContent).toBe("other");
-    expect(rows[1]?.querySelector('[data-session-line="workspace"]')?.textContent).toBe("repo");
+    const projectPaths = Array.from(view.container.querySelectorAll("[data-project-group]"))
+      .map((group) => group.getAttribute("data-project-group"));
+    expect(projectPaths).toEqual(["/tmp/other", "/tmp/repo"]);
+    expect(view.container.querySelector(
+      '[data-project-content="/tmp/other"] [data-session-id="other"]',
+    )).toBeTruthy();
+    expect(view.container.querySelector(
+      '[data-project-content="/tmp/repo"] [data-session-id="local"]',
+    )).toBeTruthy();
     expect(
       view.container.querySelector('[data-rail-archive-list] [data-session-id="archived-other"]'),
     ).toBeTruthy();
-    expect(view.container.querySelector("[data-project-group]")).toBeNull();
+    expect(view.container.querySelectorAll("[data-project-group]")).toHaveLength(2);
 
     view.unmount();
   });
 
-  test("gives explicit Sections precedence over automatic Highlight without duplicating Tasks", async () => {
+  test("keeps explicit Sections separate from the ordinary unsectioned feed", async () => {
     activateDom();
     disableCanvasDrawing();
     dom.window.localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify({
@@ -207,12 +231,11 @@ describe("SessionRail row layout", () => {
       previews: {},
     });
 
-    const highlight = view.container.querySelector('[data-task-section-content="system:highlight"]');
     const work = view.container.querySelector('[data-task-section-content="work"]');
-    const flat = view.container.querySelector("[data-unsectioned-tasks]");
-    expect(highlight?.textContent).toContain("Pinned task");
-    expect(highlight?.textContent).not.toContain("Running task");
+    const flat = view.container.querySelector('[data-project-content="/tmp/repo"]');
+    expect(view.container.querySelector('[data-task-section-content="system:highlight"]')).toBeNull();
     expect(work?.textContent).toContain("Running task");
+    expect(flat?.textContent).toContain("Pinned task");
     expect(flat?.textContent).toContain("Flat task");
 
     const ids = Array.from(view.container.querySelectorAll("[data-session-id]"))
@@ -235,6 +258,49 @@ describe("SessionRail row layout", () => {
       expect(dom.document.body.querySelector('[data-slot="context-menu-sub-trigger"]')?.textContent)
         .toContain("Section");
     });
+
+    view.unmount();
+  });
+
+  test("applies direct drag ordering to Tasks and Projects", async () => {
+    activateDom();
+    const first = { ...session("first", "First task"), last_active_at: 300 };
+    const second = { ...session("second", "Second task"), last_active_at: 200 };
+    const view = renderRail({
+      projects: [
+        { name: "repo", path: "/tmp/repo", last_opened_at: 1 },
+        { name: "other", path: "/tmp/other", last_opened_at: 2 },
+      ],
+      sessions: [first, second],
+      activeSession: null,
+      previews: {},
+    });
+
+    dragAndDrop(
+      view.container.querySelector('[data-session-id="second"] [data-session-drag-handle]'),
+      view.container.querySelector('[data-session-id="first"]'),
+    );
+    await waitFor(() => {
+      expect(Array.from(view.container.querySelectorAll(
+        '[data-project-content="/tmp/repo"] [data-session-id]',
+      )).map((row) => row.getAttribute("data-session-id"))).toEqual(["second", "first"]);
+    });
+
+    dragAndDrop(
+      view.container.querySelector('[data-project-drag-handle="/tmp/repo"]'),
+      view.container.querySelector('[data-project-header="/tmp/other"]'),
+    );
+    await waitFor(() => {
+      expect(Array.from(view.container.querySelectorAll('[data-project-list="root"] > [data-project-group]'))
+        .map((group) => group.getAttribute("data-project-group")))
+        .toEqual(["/tmp/repo", "/tmp/other"]);
+    });
+    expect(view.container.querySelector(
+      '[data-session-id="second"] [data-session-drag-handle]',
+    )?.getAttribute("draggable")).toBe("true");
+    expect(view.container.querySelector(
+      '[data-session-id="second"] [data-session-drag-handle] svg',
+    )?.getAttribute("class")).toContain("pointer-events-none");
 
     view.unmount();
   });
@@ -467,8 +533,20 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("omits the redundant recent/project header and keeps Section controls neutral", () => {
+  test("treats a user-created Highlight like every other editable Section", async () => {
     activateDom();
+    dom.window.localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify({
+      version: 2,
+      sections: [{ id: "highlight", name: "Highlight", collapsed: false }],
+      assignments: {},
+      taskOrder: {},
+    }));
+    dom.window.localStorage.setItem(SIDEBAR_PROJECTS_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      assignments: { "/tmp/repo": "highlight" },
+      order: { highlight: ["/tmp/repo"] },
+      collapsed: {},
+    }));
     const view = renderRail({
       sessions: [{ ...session("highlight", "Highlighted task"), pinned: true }],
       archivedSessions: [session("archived", "Archived task")],
@@ -476,7 +554,7 @@ describe("SessionRail row layout", () => {
 
     const recent = view.container.querySelector('[data-rail-section-label="recent"]');
     const project = view.container.querySelector("[data-rail-project-switcher]");
-    const highlight = view.container.querySelector('[data-task-section-toggle="system:highlight"]');
+    const highlight = view.container.querySelector('[data-task-section-toggle="highlight"]');
     const archived = view.container.querySelector("[data-rail-archive-toggle]");
 
     expect(recent).toBeNull();
@@ -495,8 +573,21 @@ describe("SessionRail row layout", () => {
     }
     expect(highlight?.children[0]?.textContent).toBe("Highlight");
     expect(highlight?.children[1]?.tagName).toBe("svg");
+    expect(view.container.querySelector(
+      '[data-task-section-content="highlight"] [data-project-group="/tmp/repo"]',
+    )).toBeTruthy();
+    expect(view.container.querySelector('[data-task-section-actions="highlight"]')).toBeTruthy();
+    expect(view.container.querySelector('[data-task-section-toggle="system:highlight"]')).toBeNull();
     expect(archived?.children[0]?.textContent).toBe("Archived");
     expect(archived?.children[1]?.tagName).toBe("svg");
+
+    click(view.container.querySelector('[data-task-section-actions="highlight"]'));
+    await waitFor(() => {
+      const menu = dom.document.body.querySelector('[role="menu"]');
+      expect(menu?.textContent).toContain("Edit section");
+      expect(menu?.textContent).toContain("Archive all tasks");
+      expect(menu?.textContent).toContain("Delete section");
+    });
 
     view.unmount();
   });
@@ -522,7 +613,10 @@ describe("SessionRail row layout", () => {
 
     for (const row of [punctuation, meaningful]) {
       const workspace = row?.querySelector('[data-session-line="workspace"]');
-      expect(workspace?.textContent).toBe("repo");
+      expect(view.container.querySelector('[data-project-toggle="/tmp/repo"]')?.textContent)
+        .toContain("repo");
+      expect(workspace?.firstElementChild?.textContent).toBe("");
+      expect(workspace?.querySelector('[data-session-checkout-kind="checkout"]')).toBeTruthy();
       expect(workspace?.querySelector("svg")).toBeTruthy();
       expect(row?.querySelector('[data-session-line="provider"]')).toBeNull();
       expect(row?.querySelector("[data-session-status]")).toBeNull();
@@ -553,6 +647,69 @@ describe("SessionRail row layout", () => {
     expect(row?.querySelector("[data-session-select]")?.getAttribute("aria-label"))
       .toContain("OpenCode 2 (Beta)");
     expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(2);
+
+    view.unmount();
+  });
+
+  test("shows regular checkout/worktree provenance and the linked PR outcome", async () => {
+    activateDom();
+    const regular = session("regular", "Regular checkout");
+    const isolated = {
+      ...session("isolated", "Isolated worktree"),
+      cwd: "/tmp/repo-worktree",
+      worktree_path: "/tmp/repo-worktree",
+      last_active_at: Date.now() + 1,
+    };
+    const loadPullRequest = async (path: string) => ({
+      number: path.endsWith("worktree") ? 84 : 83,
+      title: "Sidebar status",
+      url: `https://github.com/example/repo/pull/${path.endsWith("worktree") ? 84 : 83}`,
+      state: path.endsWith("worktree") ? "MERGED" : "OPEN",
+      is_draft: false,
+      head_ref: "feature",
+      base_ref: "main",
+      additions: 1,
+      deletions: 0,
+      changed_files: 1,
+      body: "",
+      review_decision: null,
+      mergeable: "MERGEABLE",
+      merge_state_status: "CLEAN",
+      author: "author",
+      comments_count: 0,
+      reviews_count: 0,
+      checks: path.endsWith("worktree") ? [] : [{
+        name: "test",
+        status: "COMPLETED",
+        conclusion: "FAILURE",
+        details_url: null,
+        workflow_name: null,
+      }],
+      created_at: "2026-08-31T00:00:00Z",
+      updated_at: "2026-08-31T00:00:00Z",
+    });
+    const view = renderRail({
+      sessions: [regular, isolated],
+      previews: {},
+      activeSession: null,
+      loadPullRequest,
+    });
+
+    expect(view.container.querySelector(
+      '[data-session-id="isolated"] [data-session-checkout-kind="worktree"]',
+    )?.textContent).toContain("Worktree");
+    expect(view.container.querySelector(
+      '[data-session-id="regular"] [data-session-checkout-kind="checkout"]',
+    )?.textContent).toContain("Checkout");
+
+    await waitFor(() => {
+      expect(view.container.querySelector(
+        '[data-session-id="isolated"] [data-session-pull-request="merged"]',
+      )?.textContent).toContain("#84 Merged");
+      expect(view.container.querySelector(
+        '[data-session-id="regular"] [data-session-pull-request="ci_failed"]',
+      )?.textContent).toContain("#83 CI failed");
+    });
 
     view.unmount();
   });
