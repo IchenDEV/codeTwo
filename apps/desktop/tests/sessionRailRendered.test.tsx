@@ -112,7 +112,7 @@ describe("SessionRail row layout", () => {
     expect(sessionScroll?.contains(resources ?? null)).toBe(true);
     expect(view.container.querySelector("[data-rail-project-switcher]")).toBeNull();
     expect(view.container.textContent).toContain("Punctuation");
-    expect(view.container.textContent).toContain("Settings");
+    expect(view.container.querySelector('[data-rail-utilities] [aria-label="Settings"]')).toBeTruthy();
 
     view.unmount();
   });

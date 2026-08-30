@@ -110,8 +110,8 @@ stored data, credentials, protocol state, or migrations are changed.
 
 Verdict: verified
 
-The compact-toolbar follow-up meets all observable acceptance criteria; human review is the next
-Gate.
+The compact-toolbar follow-up meets all observable acceptance criteria; the user approved merge,
+and refreshed required checks are the next Gate.
 
 - The first test invocation stopped before the product seam because this fresh worktree had no
   frontend dependencies. `bun install --frozen-lockfile` under `apps/desktop` installed the locked
@@ -161,6 +161,17 @@ Gate.
   failed with `Script not found "build:renderer"`. Running the same workspace script from
   `apps/desktop` passed the design check with 0 new violations, TypeScript, the 6,397-module Vite
   production build, and the built-selector check.
+
+- After merge approval, `main` advanced twice. Refreshed CI run `33326789622` tested the newer
+  synthetic merge ref and failed Linux, macOS, and Windows at the Feishu resource-section test:
+  that newly inherited assertion still required visible `Settings` text after this change had
+  intentionally converted utility rows into icon-only buttons. Rebasing onto `b82b2060` reproduced
+  the failure with CI's Bun 1.4.0 (20 passed, 1 failed). Replacing the stale visible-text assertion
+  with the Settings toolbar button's localized accessible-label contract preserved both Settings
+  availability and the resource-section layout check; the same Bun 1.4.0 test then passed 21/21.
+- On that refreshed base, `bunx bun@1.4.0 test` passed all 757 desktop tests across 124 files with
+  3,683 expectations. `bunx bun@1.4.0 run build:renderer` also passed the source design check with
+  0 new violations, TypeScript, a 6,401-module Vite production build, and the built-selector check.
 
 Residual risk: icon-only controls rely on hover/focus labels for first-time discoverability, which
 is the accepted density tradeoff in the supplied reference. Physical two-device pairing and the
