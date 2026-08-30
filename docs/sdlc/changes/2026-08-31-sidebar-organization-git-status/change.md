@@ -148,8 +148,8 @@ Verdict: verified.
   resources.
 - AC-7: mapping and rendered tests cover worktree/checkout provenance plus merged, open,
   conflicting, CI failed, CI running, closed, and failed-lookup fixtures.
-- AC-8: after rebasing onto `origin/main`, `bun test` passed 759 tests across 127 files with
-  3,582 expectations and zero failures;
+- AC-8: after rebasing onto current `origin/main`, `bun test` passed 762 tests across 129 files
+  with 3,619 expectations and zero failures;
   `bunx tsc --noEmit`, `bun run lint:code`, `bun run lint:styles`, and
   `bun run build:renderer` all passed.
 - Browser inspection covered light and dark themes at 320 px and 220 px sidebar widths. At 220 px,
@@ -177,9 +177,10 @@ Verdict: verified.
   `bun run lint:styles`, `bun run build:renderer`, and rendered Browser inspection all passed.
 
 Post-rebase lifecycle checks `bun script/verify/sdlc.ts` and
-`bun script/verify/sdlc.ts --worktree` passed. `bun script/verify/docs.ts` is blocked by eight
-unclassified website evidence PNGs already present at `origin/main`; GitHub main run 33331339486
-shows the same failure before this branch is pushed.
+`bun script/verify/sdlc.ts --worktree` passed. The initial `bun script/verify/docs.ts` failure on
+eight unclassified website evidence PNGs matched GitHub main run 33331339486. Current main now
+contains the catalog repair in commit `f74ae5ee`; after rebasing, `bun script/verify/docs.ts` and
+`bun test script/verify/checks.test.ts` both pass without a duplicate branch-local fix.
 
 Residual risk: organization order is intentionally renderer-local and does not sync across
 machines. GitHub status is best effort and requires a working `gh` authentication/network path;
@@ -187,16 +188,12 @@ on failure the UI deliberately retains only the accurate local checkout badge. T
 driver did not synthesize a native HTML5 `dragstart` from a physical mouse gesture, even against a
 plain draggable probe, so drag handlers are protected by rendered `DragEvent` tests and the handles
 were visually inspected, but the final physical macOS pointer gesture still needs human acceptance.
-The repository-wide documentation Gate is currently red on `origin/main` because the website
-evidence files above are absent from its catalog. This branch does not mix that unrelated repair
-into the sidebar change, so its Draft PR will inherit the baseline failure until main is corrected.
 
 ## Review and release
 
 Approval: the user authorized Draft PR creation on 2026-08-31; human code review and merge
 approval remain pending.
-Review surface: [Draft PR #195](https://github.com/IchenDEV/codeTwo/pull/195); merge is additionally
-blocked by the existing main documentation-catalog failure.
+Review surface: [Draft PR #195](https://github.com/IchenDEV/codeTwo/pull/195).
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
