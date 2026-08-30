@@ -309,7 +309,7 @@ function FindButton({
       type="button"
       title={title}
       onClick={onClick}
-      className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+      className="rounded-control p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       {children}
     </button>

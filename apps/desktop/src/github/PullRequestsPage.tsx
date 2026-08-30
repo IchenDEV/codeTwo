@@ -86,7 +86,7 @@ function inlineMarkdown(value: string): ReactNode[] {
   const parts = value.split(/(`[^`]+`|https?:\/\/[^\s)]+)/g).filter(Boolean);
   return parts.map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
-      return <code key={index} className="rounded-(--ds-radius-micro) bg-fill-quiet px-1 font-mono text-callout">{part.slice(1, -1)}</code>;
+      return <code key={index} className="rounded-micro bg-fill-quiet px-1 font-mono text-callout">{part.slice(1, -1)}</code>;
     }
     if (/^https?:\/\//.test(part)) {
       return <a key={index} className="text-primary underline-offset-2 hover:underline" href={part} onClick={(event) => { event.preventDefault(); void openExternal(part); }}>{part}</a>;
@@ -173,7 +173,7 @@ function PullRequestRow({ item, selected, onSelect }: {
       aria-current={selected ? "true" : undefined}
       onClick={onSelect}
       className={cn(
-        "group grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-x-2 rounded-(--ds-radius-control) px-3 py-2.5 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "group grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-x-2 rounded-control px-3 py-2.5 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         selected && "bg-accent text-foreground",
       )}
     >
@@ -476,7 +476,7 @@ export function PullRequestsPage({
                 <div className="mb-4 flex items-center gap-2"><Code2 className="size-4 text-muted-foreground" /><h1 className="text-section font-semibold">{t("pullRequests.changedFiles", { count: detail.changedFiles })}</h1></div>
                 <div className="flex flex-col gap-1">
                   {detail.files.map((file) => (
-                    <div key={file.path} className="grid min-h-(--ds-control-field) grid-cols-[1fr_auto_auto] items-center gap-3 rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2 text-ui">
+                    <div key={file.path} className="grid min-h-(--ds-control-field) grid-cols-[1fr_auto_auto] items-center gap-3 rounded-control bg-fill-quiet px-3 py-2 text-ui">
                       <span className="flex min-w-0 items-center gap-2"><FileCode2 className="size-3.5 shrink-0 text-muted-foreground" /><span className="truncate font-mono text-callout">{file.path}</span></span>
                       <span className="text-success tabular-nums">+{file.additions}</span><span className="text-destructive tabular-nums">−{file.deletions}</span>
                     </div>

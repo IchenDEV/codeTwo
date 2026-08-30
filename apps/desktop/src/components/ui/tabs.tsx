@@ -9,6 +9,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type HTMLAttributes,
   type RefObject,
 } from "react"
@@ -62,7 +63,7 @@ function useLiquidIndicator(
       ? vertical
         ? {
             height: rounded(activeRect.height),
-            radius: "999px",
+            radius: "0px",
             visible: true,
             width: 2,
             x: rounded(containerRect.width - 2),
@@ -70,7 +71,7 @@ function useLiquidIndicator(
           }
         : {
             height: 2,
-            radius: "999px",
+            radius: "0px",
             visible: true,
             width: rounded(activeRect.width),
             x: rounded(activeRect.left - containerRect.left),
@@ -78,7 +79,7 @@ function useLiquidIndicator(
           }
       : {
           height: rounded(activeRect.height),
-          radius: getComputedStyle(active).borderRadius || "6px",
+          radius: getComputedStyle(active).borderRadius || "12px",
           visible: true,
           width: rounded(activeRect.width),
           x: rounded(activeRect.left - containerRect.left),
@@ -159,12 +160,12 @@ function LiquidIndicator({
       >
         <span
           aria-hidden="true"
-          className="block"
+          className="tabs-liquid-indicator block"
           style={{
-            borderRadius: box.radius,
+            "--tabs-indicator-radius": box.radius,
             height: box.height,
             width: box.width,
-          }}
+          } as CSSProperties}
         />
       </Liquid.Item>
     )
@@ -177,13 +178,13 @@ function LiquidIndicator({
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-0 block"
+        className="tabs-liquid-indicator pointer-events-none absolute left-0 top-0 block"
         style={{
-          borderRadius: box.radius,
+          "--tabs-indicator-radius": box.radius,
           height: box.height,
           transform: `translate3d(${box.x}px, ${box.y}px, 0)`,
           width: box.width,
-        }}
+        } as CSSProperties}
       />
     </Liquid.Item>
   )
@@ -253,7 +254,7 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list relative isolate inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
+  "group/tabs-list relative isolate inline-flex w-fit items-center justify-center rounded-control p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
@@ -311,10 +312,10 @@ function TabsTrigger({
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative z-10 inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-ui font-medium whitespace-nowrap text-foreground/60 transition-colors group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative z-10 inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-control px-2 py-1 text-ui font-medium whitespace-nowrap text-foreground/60 transition-colors group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         "group-data-[variant=default]/tabs-list:data-active:text-foreground dark:group-data-[variant=default]/tabs-list:data-active:text-foreground",
         "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent group-data-[variant=line]/tabs-list:data-active:text-foreground dark:group-data-[variant=line]/tabs-list:data-active:text-foreground",
-        "group-data-[variant=toolbar]/tabs-list:h-full group-data-[variant=toolbar]/tabs-list:flex-none group-data-[variant=toolbar]/tabs-list:rounded-(--ds-radius-control) group-data-[variant=toolbar]/tabs-list:px-2.5 group-data-[variant=toolbar]/tabs-list:py-0 group-data-[variant=toolbar]/tabs-list:text-muted-foreground group-data-[variant=toolbar]/tabs-list:hover:bg-accent group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent group-data-[variant=toolbar]/tabs-list:data-active:text-primary group-data-[variant=toolbar]/tabs-list:data-active:shadow-none group-data-[variant=toolbar]/tabs-list:data-active:hover:bg-transparent dark:group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent",
+        "group-data-[variant=toolbar]/tabs-list:h-full group-data-[variant=toolbar]/tabs-list:flex-none group-data-[variant=toolbar]/tabs-list:rounded-control group-data-[variant=toolbar]/tabs-list:px-2.5 group-data-[variant=toolbar]/tabs-list:py-0 group-data-[variant=toolbar]/tabs-list:text-muted-foreground group-data-[variant=toolbar]/tabs-list:hover:bg-accent group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent group-data-[variant=toolbar]/tabs-list:data-active:text-primary group-data-[variant=toolbar]/tabs-list:data-active:shadow-none group-data-[variant=toolbar]/tabs-list:data-active:hover:bg-transparent dark:group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent",
         !LIQUID_AVAILABLE && "group-data-[variant=default]/tabs-list:data-active:bg-background group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary dark:group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary",
         className
       )}

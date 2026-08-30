@@ -63,9 +63,8 @@ function renderRail(overrides = {}) {
           runningSessions={new Set()}
           onSelect={() => {}}
           onNew={() => {}}
-          onNewTemporary={() => {}}
-          sideChatOpen={false}
-          onToggleSideChat={() => {}}
+          quickChatOpen={false}
+          onToggleQuickChat={() => {}}
           onRename={() => {}}
           onPin={() => {}}
           onArchive={() => {}}
@@ -396,32 +395,31 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("combines tracked, temporary, and side-chat creation in one source-list control", () => {
+  test("keeps one Quick Chat action beside the tracked Task action", () => {
     activateDom();
     const created = [];
     const view = renderRail({
       onNew: () => created.push("task"),
-      onNewTemporary: () => created.push("temporary"),
-      onToggleSideChat: () => created.push("side-chat"),
+      onToggleQuickChat: () => created.push("quick-chat"),
     });
 
     const control = view.container.querySelector('[data-rail-feature="new-task"]');
     const primary = control?.querySelector("button:first-of-type");
-    const quickSession = control?.querySelector('button[data-rail-quick-session]');
-    const sideChat = control?.querySelector('button[data-rail-side-chat]');
+    const quickChat = control?.querySelector('button[data-rail-quick-chat]');
 
     expect(control?.getAttribute("role")).toBe("group");
     expect(control?.className).toContain("h-control");
     expect(control?.className).toContain("hover:bg-fill-hover");
     expect(primary?.textContent?.trim()).toBe("New task");
-    expect(quickSession?.getAttribute("aria-label")).toBe("Temporary session");
-    expect(sideChat?.getAttribute("aria-label")).toBe("Toggle side chat");
-    expect(sideChat?.getAttribute("aria-pressed")).toBe("false");
+    expect(control?.querySelectorAll("button")).toHaveLength(2);
+    expect(control?.querySelector('[data-rail-quick-session]')).toBeNull();
+    expect(control?.querySelector('[data-rail-side-chat]')).toBeNull();
+    expect(quickChat?.getAttribute("aria-label")).toBe("Toggle Quick Chat");
+    expect(quickChat?.getAttribute("aria-pressed")).toBe("false");
 
     click(primary);
-    click(quickSession);
-    click(sideChat);
-    expect(created).toEqual(["task", "temporary", "side-chat"]);
+    click(quickChat);
+    expect(created).toEqual(["task", "quick-chat"]);
     expect(dom.document.body.querySelector('[role="menu"]')).toBeNull();
 
     view.unmount();

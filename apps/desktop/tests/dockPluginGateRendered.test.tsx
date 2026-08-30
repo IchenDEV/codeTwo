@@ -20,7 +20,7 @@ function renderDock(
   availableSurfaces,
   tab = "home",
   open = true,
-  onOpenSideChat = () => {},
+  onTab = () => {},
 ) {
   return mount(
     <I18nProvider>
@@ -28,12 +28,14 @@ function renderDock(
         open={open}
         tab={tab}
         availableSurfaces={availableSurfaces}
-        onTab={() => {}}
-        onOpenSideChat={onOpenSideChat}
+        onTab={onTab}
         onClose={() => {}}
         content={{
           trajectory: (
             <div aria-label="Execution trajectory">No events match this view.</div>
+          ),
+          "side-chat": (
+            <div aria-label="Side chat conversation">Ask anything</div>
           ),
         }}
         width={440}
@@ -69,12 +71,12 @@ describe("Dock plugin component gate", () => {
 
   test("opens side chat from the right-panel surface picker", async () => {
     activateDom();
-    let opens = 0;
+    const opened = [];
     const view = renderDock(
-      ["trajectory", "browser", "terminal", "files", "git"],
+      ["trajectory", "browser", "terminal", "side-chat", "files", "git"],
       "home",
       true,
-      () => { opens += 1; },
+      (surface) => opened.push(surface),
     );
     await flush();
 
@@ -87,7 +89,19 @@ describe("Dock plugin component gate", () => {
     expect(cards.every((card) => !card.className.includes("ring-foreground"))).toBe(true);
     expect(cards.every((card) => card.querySelector("svg")?.classList.contains("size-4"))).toBe(true);
     click(button(view.container, "Side chat"));
-    expect(opens).toBe(1);
+    expect(opened).toEqual(["side-chat"]);
+
+    view.unmount();
+  });
+
+  test("renders side chat inside the right Dock rather than as a floating dialog", async () => {
+    activateDom();
+    const view = renderDock(["side-chat"], "side-chat");
+    await flush();
+
+    expect(view.container.querySelector('[data-dock-placement="right"]')).not.toBeNull();
+    expect(view.container.querySelector('[aria-label="Side chat conversation"]')).not.toBeNull();
+    expect(view.container.querySelector('[role="dialog"]')).toBeNull();
 
     view.unmount();
   });

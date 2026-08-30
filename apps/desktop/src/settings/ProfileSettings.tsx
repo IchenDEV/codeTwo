@@ -413,9 +413,9 @@ export function ProfileSettings({
                         <span className="min-w-0 flex-1 truncate">{providerNames[provider.source] ?? provider.source}</span>
                         <span className="font-mono tabular-nums text-muted-foreground">{fmtTokens(provider.total_tokens)}</span>
                       </div>
-                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-fill-rest">
+                      <div className="mt-1.5 h-1 overflow-hidden rounded-control bg-fill-rest">
                         <div
-                          className="h-full rounded-full bg-primary"
+                          className="h-full rounded-control bg-primary"
                           style={{ width: `${summary.totalTokens > 0 ? Math.min(100, provider.total_tokens / summary.totalTokens * 100) : 0}%` }}
                         />
                       </div>

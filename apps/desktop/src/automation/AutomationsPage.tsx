@@ -604,7 +604,7 @@ export function AutomationsPage({
                           key={run.id}
                           type="button"
                           disabled={!openable}
-                          className="grid min-h-(--ds-control-field) w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2 text-left text-ui transition-colors enabled:hover:bg-accent/60 disabled:opacity-80"
+                          className="grid min-h-(--ds-control-field) w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-control bg-fill-quiet px-3 py-2 text-left text-ui transition-colors enabled:hover:bg-accent/60 disabled:opacity-80"
                           onClick={() => run.session_id && onOpenSession(run.session_id)}
                         >
                           {SPINNING_RUNS.has(run.status) ? <Spinner className="text-primary" /> : Icon ? <Icon className={cn("size-4", run.status === "needs_attention" && "text-warning", run.status === "succeeded" && "text-success", (run.status === "failed" || run.status === "interrupted") && "text-destructive")} /> : null}

@@ -119,7 +119,7 @@ export function Statusline({
                 aria-valuetext={exact}
                 aria-label={exact}
                 className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-(--ds-radius-control) px-0 py-1 text-hint transition-colors hover:bg-accent/50 @lg/composer:px-1.5",
+                  "flex shrink-0 items-center gap-1.5 rounded-control px-0 py-1 text-hint transition-colors hover:bg-accent/50 @lg/composer:px-1.5",
                   tone === "warn" && "text-warning",
                   tone === "critical" && "text-destructive",
                   (tone === "ok" || tone === null) && "text-muted-foreground",

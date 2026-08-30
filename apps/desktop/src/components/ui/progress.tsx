@@ -60,11 +60,11 @@ function Progress({
         data-size={size}
         data-tone={tone}
         aria-hidden="true"
-        className={cn("inline-flex overflow-hidden rounded-full", trackClassName, className)}
+        className={cn("inline-flex overflow-hidden rounded-control", trackClassName, className)}
       >
         <span
           data-slot="progress-indicator"
-          className={cn("block h-full rounded-full transition-all", indicatorClassName)}
+          className={cn("block h-full rounded-control transition-all", indicatorClassName)}
           style={{ width: `${normalizedValue}%` }}
         />
       </span>
@@ -93,7 +93,7 @@ function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
     <ProgressPrimitive.Track
       data-slot="progress-track"
       className={cn(
-        "relative flex items-center overflow-x-hidden rounded-full",
+        "relative flex items-center overflow-x-hidden rounded-control",
         className
       )}
       {...props}
@@ -108,7 +108,7 @@ function ProgressIndicator({
   return (
     <ProgressPrimitive.Indicator
       data-slot="progress-indicator"
-      className={cn("h-full rounded-full transition-all", className)}
+      className={cn("h-full rounded-control transition-all", className)}
       {...props}
     />
   )

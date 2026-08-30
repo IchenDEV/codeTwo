@@ -147,7 +147,7 @@ export function TranscriptPane({
           type="button"
           size="sm"
           variant="secondary"
-          className="absolute bottom-4 start-1/2 -translate-x-1/2 rounded-full shadow-lg"
+          className="absolute bottom-4 start-1/2 -translate-x-1/2 rounded-control shadow-lg"
           onClick={scroll.jumpToLatest}
         >
           <ArrowDown data-icon="inline-start" aria-hidden />

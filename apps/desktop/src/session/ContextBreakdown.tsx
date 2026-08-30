@@ -33,7 +33,7 @@ function CategoryRow({ category }: { category: ContextCategory }) {
   return (
     <div className="flex items-center gap-3 py-1">
       <span
-        className="size-2.5 shrink-0 rounded-(--ds-radius-micro)"
+        className="size-2.5 shrink-0 rounded-micro"
         style={{ background: categoryColor(category.id) }}
       />
       <span className="min-w-0 flex-1 truncate text-ui text-foreground/90">{label}</span>
@@ -57,7 +57,7 @@ function SegmentedBar({
 }) {
   if (capacity <= 0) return null;
   return (
-    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted/60">
+    <div className="flex h-2.5 w-full overflow-hidden rounded-control bg-muted/60">
       {categories.map((cat) => {
         const pct = (cat.tokens / capacity) * 100;
         if (pct < 0.2) return null;
@@ -114,7 +114,7 @@ export function ContextBreakdown({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded-(--ds-radius-micro) p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+          className="shrink-0 rounded-micro p-0.5 text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Close"
         >
           <X className="size-3.5" />
@@ -135,10 +135,10 @@ export function ContextBreakdown({
       ) : (
         <>
           <div className="mt-3">
-            <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted/60">
+            <div className="flex h-2.5 w-full overflow-hidden rounded-control bg-muted/60">
               <div
                 className={cn(
-                  "h-full rounded-full transition-[width] duration-(--ds-motion-page)",
+                  "h-full rounded-control transition-[width] duration-(--ds-motion-page)",
                   percentLabel > 85
                     ? "bg-destructive"
                     : percentLabel > 60

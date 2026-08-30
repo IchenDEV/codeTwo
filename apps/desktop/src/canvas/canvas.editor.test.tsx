@@ -234,6 +234,9 @@ describe("CanvasEditor behavioral interaction contract", () => {
       expect(canvasStyles).toContain(`var(--ds-${token},`);
     }
     expect(canvasStyles.match(/var\(--ds-[^,)\s]+\)/g) ?? []).toEqual([]);
+    expect(canvasStyles).toContain("--canvas-radius-module: var(--ds-radius-module, 16px);");
+    expect(canvasStyles).toContain("--canvas-radius-control: var(--ds-radius-control, 12px);");
+    expect(canvasStyles).toContain("--canvas-button-radius: var(--ds-button-radius, 12px);");
     expect(canvasStyles).toContain('.canvas-editor[data-canvas-theme="light"]');
   });
 

@@ -340,7 +340,7 @@ export function DockerPage({
           ) : null}
 
           {error ? (
-            <div role="alert" className="mb-5 flex items-center gap-3 rounded-(--ds-radius-control) bg-destructive/10 px-4 py-3 text-ui text-destructive">
+            <div role="alert" className="mb-5 flex items-center gap-3 rounded-control bg-destructive/10 px-4 py-3 text-ui text-destructive">
               <CircleAlert className="size-4 shrink-0" />
               <span className="min-w-0 flex-1 break-words">{t("docker.loadFailed", { error })}</span>
               <Button variant="outline" size="compact" onClick={() => void refresh()}>{t("docker.retry")}</Button>
@@ -366,7 +366,7 @@ export function DockerPage({
                   placeholder={t("docker.filterContainers")}
                 />
               </div>
-              <div className="overflow-x-auto rounded-(--ds-radius-control) ring-1 ring-border">
+              <div className="overflow-x-auto rounded-control ring-1 ring-border">
                 <table className="w-full min-w-3xl border-collapse text-left text-ui">
                   <thead className="bg-fill-quiet text-muted-foreground">
                     <tr>
@@ -447,7 +447,7 @@ export function DockerPage({
                   placeholder={t("docker.filterImages")}
                 />
               </div>
-              <div className="overflow-x-auto rounded-(--ds-radius-control) ring-1 ring-border">
+              <div className="overflow-x-auto rounded-control ring-1 ring-border">
                 <table className="w-full min-w-4xl border-collapse text-left text-ui">
                   <thead className="bg-fill-quiet text-muted-foreground">
                     <tr>
@@ -502,7 +502,7 @@ export function DockerPage({
               {t("docker.loading")}
             </div>
           ) : (
-            <pre className="max-h-96 min-h-48 overflow-auto rounded-(--ds-radius-control) bg-fill-quiet p-4 text-callout leading-relaxed whitespace-pre-wrap break-words">{detail?.content || t("docker.noOutput")}</pre>
+            <pre className="max-h-96 min-h-48 overflow-auto rounded-control bg-fill-quiet p-4 text-callout leading-relaxed whitespace-pre-wrap break-words">{detail?.content || t("docker.noOutput")}</pre>
           )}
         </DialogContent>
       </Dialog>

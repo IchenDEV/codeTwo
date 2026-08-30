@@ -125,7 +125,7 @@ export function MissionControlDialog({
           onSelect(s.id);
           onClose();
         }}
-        className="group flex cursor-pointer items-center gap-3 rounded-(--ds-radius-control) px-2 py-1.5 transition-colors hover:bg-accent/50"
+        className="group flex cursor-pointer items-center gap-3 rounded-control px-2 py-1.5 transition-colors hover:bg-accent/50"
       >
         <span
           className={cn("size-2 shrink-0 rounded-full", DOT_CLASS[r.state])}

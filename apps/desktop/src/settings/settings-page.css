@@ -192,14 +192,11 @@
 }
 
 .profile-editor {
-  padding: var(--ds-space-page-section);
-  box-shadow: var(--ds-elevation-surface);
-}
-
-.profile-editor {
   display: flex;
   flex-direction: column;
   gap: var(--ds-space-page-section);
+  padding: var(--ds-space-page-section);
+  box-shadow: var(--ds-elevation-surface);
 }
 
 .profile-activity-surface {

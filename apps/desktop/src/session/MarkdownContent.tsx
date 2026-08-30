@@ -267,7 +267,7 @@ const components: Components = {
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 ps-5">{children}</ol>,
   li: ({ children }) => <li className="ps-0.5">{children}</li>,
   blockquote: ({ children }) => (
-    <blockquote className="my-3 rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2 text-muted-foreground">
+    <blockquote className="my-3 rounded-control bg-fill-quiet px-3 py-2 text-muted-foreground">
       {children}
     </blockquote>
   ),
@@ -288,7 +288,7 @@ const components: Components = {
       className={
         className
           ? `${className} font-mono text-code`
-          : "rounded bg-fill-quiet px-1 py-0.5 font-mono text-code text-foreground"
+          : "rounded-control bg-fill-quiet px-1 py-0.5 font-mono text-code text-foreground"
       }
     >
       {children}
@@ -307,7 +307,7 @@ const components: Components = {
       }
     }
     return (
-      <pre className="my-3 max-w-full overflow-x-auto rounded-(--ds-radius-module) border bg-fill-quiet p-3 text-code leading-relaxed">
+      <pre className="my-3 max-w-full overflow-x-auto rounded-module border bg-fill-quiet p-3 text-code leading-relaxed">
         {children}
       </pre>
     );

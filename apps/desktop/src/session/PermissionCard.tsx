@@ -75,8 +75,7 @@ export function PermissionCard({
   return (
     <div className="shrink-0 px-6 pb-1 pt-3" data-testid="permission-card">
       <section
-        className="mx-auto w-full max-w-3xl border bg-card px-4 py-3 shadow-raised"
-        style={{ borderRadius: "var(--ds-radius-module)" }}
+        className="mx-auto w-full max-w-3xl rounded-module border bg-card px-4 py-3 shadow-raised"
         aria-labelledby="permission-card-title"
         aria-busy={answering}
         aria-live="polite"
@@ -100,7 +99,7 @@ export function PermissionCard({
               </p>
             </div>
 
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2 font-mono text-ui">
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control bg-fill-quiet px-3 py-2 font-mono text-ui">
               {request.title}
             </pre>
 

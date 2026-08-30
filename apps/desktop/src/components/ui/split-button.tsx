@@ -73,11 +73,10 @@ function SplitButton({
   return (
     <span
       className={cn(
-        "inline-flex items-stretch",
+        "inline-flex items-stretch rounded-control",
         disabled && "pointer-events-none opacity-50",
         className,
       )}
-      style={{ borderRadius: "var(--ds-button-radius)" }}
     >
       <button
         type="button"

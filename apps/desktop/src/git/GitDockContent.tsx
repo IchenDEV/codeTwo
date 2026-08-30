@@ -54,7 +54,7 @@ export function GitDockContent({
                     <div key={file.path} className="flex items-center gap-2">
                       <span
                         className={cn(
-                          "inline-flex size-4 shrink-0 items-center justify-center rounded text-cap font-bold",
+                          "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-cap font-bold",
                           file.staged
                             ? "bg-success/15 text-success"
                             : "bg-warning/15 text-warning",

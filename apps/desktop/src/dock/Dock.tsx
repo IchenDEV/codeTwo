@@ -15,7 +15,7 @@ import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
-export type DockSurface = "trajectory" | "terminal" | "browser" | "files" | "git";
+export type DockSurface = "trajectory" | "terminal" | "browser" | "side-chat" | "files" | "git";
 /** "home" is the dock open with nothing chosen yet — the surface picker. */
 export type DockTab = DockSurface | "home";
 export type DockContentMap = Partial<Record<DockSurface, ReactNode>>;
@@ -34,7 +34,6 @@ type DockProps = {
   /** null while closed; the last surface stays rendered underneath the collapse animation. */
   tab: DockTab | null;
   onTab: (surface: DockSurface) => void;
-  onOpenSideChat?: () => void;
   onClose: () => void;
   width: number;
   onWidth: (width: number) => void;
@@ -51,6 +50,7 @@ const SURFACES: DockSurfaceDefinition[] = [
   { id: "trajectory", icon: Activity, titleKey: "trajectory.label", descKey: "dock.trajectoryDesc" },
   { id: "browser", icon: Globe, titleKey: "dock.browser", descKey: "dock.browserDesc" },
   { id: "terminal", icon: TerminalIcon, titleKey: "dock.terminal", descKey: "dock.terminalDesc" },
+  { id: "side-chat", icon: MessageSquare, titleKey: "sideChat.title", descKey: "sideChat.temporary" },
   { id: "files", icon: FolderTree, titleKey: "dock.files", descKey: "dock.filesDesc" },
   { id: "git", icon: GitBranch, titleKey: "dock.git", descKey: "dock.gitDesc" },
 ];
@@ -75,7 +75,6 @@ export function Dock({
   open,
   tab,
   onTab,
-  onOpenSideChat,
   onClose,
   width,
   onWidth,
@@ -151,8 +150,9 @@ export function Dock({
   const renderSurfaceCard = ({ id, icon: Icon, titleKey, descKey }: DockSurfaceDefinition) => (
     <button
       key={id}
+      aria-label={t(titleKey)}
       onClick={() => onTab(id)}
-      className="dock-surface-card flex items-start gap-2.5 rounded-(--ds-radius-module) bg-card p-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="dock-surface-card flex items-start gap-2 rounded-module bg-card p-3 text-left transition-colors hover:bg-accent/50 focus-visible:focus-ring"
     >
       <Icon className="size-4 text-muted-foreground" />
       <span>
@@ -219,24 +219,7 @@ export function Dock({
                 {t("dock.openSurfaceHint")}
               </p>
               <div className="dock-surface-grid">
-                {visibleSurfaces.slice(0, 3).map(renderSurfaceCard)}
-                {onOpenSideChat ? (
-                  <button
-                    type="button"
-                    aria-label={t("sideChat.title")}
-                    onClick={onOpenSideChat}
-                    className="dock-surface-card flex items-start gap-2.5 rounded-(--ds-radius-module) bg-card p-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                  >
-                    <MessageSquare className="size-4 text-muted-foreground" aria-hidden />
-                    <span>
-                      <span className="block text-ui font-semibold">{t("sideChat.title")}</span>
-                      <span className="mt-0.5 block text-fine leading-relaxed text-muted-foreground">
-                        {t("sideChat.temporary")}
-                      </span>
-                    </span>
-                  </button>
-                ) : null}
-                {visibleSurfaces.slice(3).map(renderSurfaceCard)}
+                {visibleSurfaces.map(renderSurfaceCard)}
               </div>
             </div>
           </div>

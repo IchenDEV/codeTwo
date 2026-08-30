@@ -27,7 +27,7 @@
   height: var(--ds-space-module-inset);
   content: "";
   background: color-mix(in oklch, var(--ds-color-text) 12%, transparent);
-  border-radius: 50%;
+  border-radius: var(--ds-radius-control);
   filter: blur(var(--ds-space-module-inset));
   opacity: 0.48;
 }

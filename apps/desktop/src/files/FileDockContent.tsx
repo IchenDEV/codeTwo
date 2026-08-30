@@ -67,7 +67,7 @@ export function FileDockContent({
                   }}
                 />
                 {active && (
-                  <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-full bg-primary" />
+                  <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-none bg-primary" />
                 )}
               </button>
             );

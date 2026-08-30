@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useT } from "../i18n";
 
 /**
@@ -225,7 +226,7 @@ export function TemplateDialog({
 
         {proposing ? (
           <div className="relative">
-            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-(--ds-radius-control) border bg-fill-quiet px-3 py-2 text-fine text-muted-foreground">
+            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-control border bg-fill-quiet px-3 py-2 text-fine text-muted-foreground">
               {source}
             </pre>
             <span
@@ -271,9 +272,9 @@ export function TemplateDialog({
               <span className="text-cap font-medium uppercase text-muted-foreground">
                 {t("templateFrom.template")}
               </span>
-              <textarea
+              <Textarea
                 aria-label={t("templateFrom.template")}
-                className="min-h-24 w-full rounded-(--ds-radius-control) border bg-transparent px-3 py-2 font-mono text-ui outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="font-mono"
                 value={template}
                 onChange={noopChange}
                 onInput={(e) => setTemplate(e.currentTarget.value)}
@@ -351,7 +352,7 @@ export function TemplateDialog({
                     <button
                       type="button"
                       aria-label={t("templateFrom.removeSlot")}
-                      className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:focus-ring"
+                      className="rounded-control p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:focus-ring"
                       onClick={() =>
                         setSlots((current) => current.filter((_, at) => at !== index))
                       }

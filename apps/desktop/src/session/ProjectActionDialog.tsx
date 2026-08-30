@@ -165,7 +165,7 @@ export function ProjectActionDialog({
             <Field>
               <FieldLabel htmlFor="action-name">{t("actionDialog.name")}</FieldLabel>
               <div className="flex gap-2">
-                <div className="grid size-9 shrink-0 place-items-center rounded-(--ds-radius-control) bg-fill-quiet text-muted-foreground">
+                <div className="grid size-9 shrink-0 place-items-center rounded-control bg-fill-quiet text-muted-foreground">
                   {draft.kind === "prompt" ? (
                     <MessageSquareText className="size-4" aria-hidden />
                   ) : (

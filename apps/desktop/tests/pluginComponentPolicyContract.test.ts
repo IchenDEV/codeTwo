@@ -21,7 +21,7 @@ describe("built-in component policy integration", () => {
     expect(app).toContain('componentEnabled("memory.settings")');
     expect(app).toContain('componentEnabled("scenes.surface")');
     expect(app).toContain('componentEnabled("lsp.runtime")');
-    expect(app.match(/voiceEnabled=\{voiceComposerEnabled\}/g)).toHaveLength(1);
+    expect(app.match(/voiceEnabled=\{voiceComposerEnabled\}/g)).toHaveLength(3);
     expect(composer).toContain("{voiceEnabled ? (");
     expect(desktopPet).not.toContain("voiceEnabled");
     expect(desktopPet).not.toContain("desktopSendPetVoiceText");

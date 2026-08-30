@@ -4,7 +4,7 @@ Companion to `docs/scenes.md` and `docs/design/scenes-impl-core.md`. Implementin
 this and note deviations in their handoff. Paths relative to repo root. Schemas at
 `crates/core/schemas/agent-scenes/1.0.0/` are frozen; slot/artifact vocabulary copies them
 verbatim. Tests: `bun test` in `apps/desktop/tests/` with `domTestHarness.ts`; all new JSX passes
-`apps/desktop/scripts/check-design-system.ts` (copy tokens from `Chip`, Composer.tsx:104).
+`apps/desktop/src/design/tokens.css` and the desktop lint configuration (copy tokens from `Chip`, Composer.tsx:104).
 
 **i18n discipline:** every item appends its keys at the END of both `en` and `zh` dicts in
 `apps/desktop/src/i18n/strings.ts` under its own prefix, one contiguous block, never touching

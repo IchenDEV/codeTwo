@@ -9,6 +9,7 @@ import { useToast } from "../ui/toast";
 import { ImagePreview } from "./ImagePreview";
 import { imageTypeOf } from "./imageTypes";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type MonacoModule = typeof import("./monaco");
@@ -346,14 +347,15 @@ export function FileViewer({
 
         {/* The comment card floats over the code, top-right — the GitHub-review gesture. */}
         {draft && (
-          <div className="glass-raised absolute right-4 top-3 z-10 w-80 rounded-xl border p-3 font-sans shadow-lg">
+          <div className="glass-raised absolute right-4 top-3 z-10 w-80 rounded-module border p-3 font-sans shadow-lg">
             <div className="flex items-center gap-2 text-hint font-medium">
               <MessageSquarePlus className="size-3.5 text-primary" />
               {t("files.commentTitle")}
             </div>
             <div className="mt-0.5 text-fine text-muted-foreground">{t("files.commentOn", { range })}</div>
-            <textarea
+            <Textarea
               autoFocus
+              size="compact"
               value={draft.note}
               onChange={(e) => setDraft((d) => (d ? { ...d, note: e.target.value } : d))}
               onKeyDown={(e) => {
@@ -368,7 +370,7 @@ export function FileViewer({
                 }
               }}
               placeholder={t("files.commentPlaceholder")}
-              className="mt-2 min-h-16 w-full resize-y rounded-md border bg-transparent px-2.5 py-1.5 text-hint outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="mt-2 min-h-16"
             />
             <div className="mt-2 flex justify-end gap-2">
               <Button variant="ghost" size="sm" className="h-7 text-hint" onClick={() => setDraft(null)}>

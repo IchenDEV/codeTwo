@@ -53,7 +53,7 @@ export function ProjectIcon({
       data-project-icon
       aria-hidden="true"
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-(--ds-radius-control) bg-foreground/[0.055] text-muted-foreground ring-1 ring-foreground/10",
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-control bg-foreground/[0.055] text-muted-foreground ring-1 ring-foreground/10",
         className,
       )}
       style={{ width: size, height: size }}

@@ -115,7 +115,7 @@ function DiffPreview({ result }: { result: GitHubPullRequestDiff }) {
     return <p className="p-3 text-hint text-muted-foreground">{t("githubPr.noChanges")}</p>;
   }
   return (
-    <div className="overflow-x-auto rounded-(--ds-radius-module) bg-muted/40">
+    <div className="overflow-x-auto rounded-module bg-muted/40">
       {(result.truncated || preview.truncated) && (
         <p role="status" className="sticky top-0 z-10 bg-warning/10 px-3 py-2 text-cap text-warning-foreground">
           {t("githubPr.diffTruncated")}
@@ -375,7 +375,7 @@ export function GitHubPullRequestPanel({
             <div className="flex items-start gap-2">
               <button
                 type="button"
-                className="min-w-0 flex-1 rounded text-start text-ui font-semibold leading-snug outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-w-0 flex-1 rounded-control text-start text-ui font-semibold leading-snug outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={t("githubPr.openOnGithub", { number: pullRequest.number })}
                 title={pullRequest.url}
                 disabled={phase !== "idle"}
@@ -411,11 +411,11 @@ export function GitHubPullRequestPanel({
             </div>
           </div>
 
-          <div className="flex gap-1 rounded-(--ds-radius-control) bg-fill-quiet p-0.5">
+          <div className="flex gap-1 rounded-control bg-fill-quiet p-0.5">
             <button
               type="button"
               className={cn(
-                "rounded-(--ds-radius-micro) px-2 py-1.5 text-hint outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "rounded-micro px-2 py-1.5 text-hint outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 view === "overview"
                   ? "bg-fill-hover text-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -428,7 +428,7 @@ export function GitHubPullRequestPanel({
             <button
               type="button"
               className={cn(
-                "rounded-(--ds-radius-micro) px-2 py-1.5 text-hint outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "rounded-micro px-2 py-1.5 text-hint outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 view === "changes"
                   ? "bg-fill-hover text-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -485,13 +485,13 @@ export function GitHubPullRequestPanel({
                         <button
                           key={`${check.name}:${index}`}
                           type="button"
-                          className="flex w-full items-center gap-2 rounded-(--ds-radius-control) bg-fill-quiet px-2.5 py-2 text-start text-hint outline-none hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring"
+                          className="flex w-full items-center gap-2 rounded-control bg-fill-quiet px-2.5 py-2 text-start text-hint outline-none hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => void apiRef.current.open(check.details_url!)}
                         >
                           {content}
                         </button>
                       ) : (
-                        <div key={`${check.name}:${index}`} className="flex items-center gap-2 rounded-(--ds-radius-control) bg-fill-quiet px-2.5 py-2 text-hint">
+                        <div key={`${check.name}:${index}`} className="flex items-center gap-2 rounded-control bg-fill-quiet px-2.5 py-2 text-hint">
                           {content}
                         </div>
                       );

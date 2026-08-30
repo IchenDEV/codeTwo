@@ -5,7 +5,6 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: var(--ds-radius-control);
   --hairline-width: 0.5px;
 
   /* ---- legacy motion aliases (see docs/design.md) ----------------------------------------------
@@ -211,11 +210,6 @@
   --color-term-bg: var(--term-bg);
   --color-term-fg: var(--term-fg);
 
-  --radius-xs: var(--ds-radius-control);
-  --radius-sm: var(--ds-radius-control);
-  --radius-md: var(--ds-radius-control);
-  --radius-lg: var(--ds-radius-control);
-  --radius-xl: var(--ds-radius-module);
   --radius-micro: var(--ds-radius-micro);
   --radius-control: var(--ds-radius-control);
   --radius-module: var(--ds-radius-module);
@@ -253,6 +247,7 @@
   /* One restrained elevation for transient UI. The hairline ring defines the edge; the shadow
      only separates the layer from the page instead of drawing a dark halo around it. */
   --shadow-surface: var(--ds-elevation-surface);
+  --shadow-control: 0 1px 2px var(--ds-color-shadow);
   --shadow-raised: var(--ds-elevation-raised);
   --shadow-modal: var(--ds-elevation-modal);
   --shadow-menu: var(--ds-menu-elevation);
@@ -296,18 +291,6 @@
   --text-heading: var(--ds-type-section-size);
   --text-display: var(--ds-type-page-title-size);
   --text-display--line-height: var(--ds-type-page-title-leading);
-}
-
-/* Legacy Tailwind radius names remain in production while callers migrate to semantic roles.
-   Keep their rendered floor aligned with the shared control token instead of preserving the old
-   4–10px geometry. Joined-edge `rounded-*-none` utilities remain untouched. */
-@layer utilities {
-  .rounded,
-  .rounded-sm,
-  .rounded-md,
-  .rounded-lg {
-    border-radius: var(--ds-radius-control);
-  }
 }
 
 /* The desktop shell uses macOS-style hairlines. Keep the bare Tailwind border utilities on the
@@ -384,18 +367,16 @@
     position: fixed;
     inset: 0;
     width: 100%;
-  }
-  /* Let `.app-shell` own the window surface and corner radius. */
-  html,
-  body {
-    background: transparent;
-  }
-  body {
     color: var(--foreground);
     font-family: var(--appearance-font-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+  }
+  /* Let `.app-shell` own the window surface and corner radius. */
+  html,
+  body {
+    background: transparent;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -403,7 +384,7 @@
   }
   ::-webkit-scrollbar-thumb {
     background: var(--border);
-    border-radius: 999px;
+    border-radius: var(--ds-radius-control);
     border: 3px solid transparent;
     background-clip: content-box;
   }
@@ -421,12 +402,16 @@
    viewer, the terminal surface, and the pane splitter.
    ------------------------------------------------------------------------ */
 @layer components {
+  .tabs-liquid-indicator {
+    border-radius: var(--tabs-indicator-radius);
+  }
+
   /* ---- window shell ------------------------------------------------------------------------
      Other platforms and browser previews keep the solid shell. The macOS Electrobun window lets
      the desktop show through only where an individual pane supplies a translucent surface. */
   .app-shell {
     background: var(--background);
-    border-radius: 12px;
+    border-radius: var(--ds-radius-control);
     overflow: hidden;
   }
   .macos-window-glass .app-shell {
@@ -799,7 +784,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border-radius: var(--radius-md);
+    border-radius: var(--ds-radius-control);
     padding: 0 6px;
     font-size: var(--text-hint);
     font-weight: 600;
@@ -814,7 +799,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border-radius: var(--radius-md);
+    border-radius: var(--ds-radius-control);
     padding: 0 6px;
     font-family: var(--font-mono);
     font-size: 12px;
@@ -831,7 +816,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border-radius: var(--radius-md);
+    border-radius: var(--ds-radius-control);
     padding: 0 6px;
     font-size: var(--text-hint);
     font-weight: 500;
@@ -850,7 +835,7 @@
     width: 100%;
     margin: 2px 0;
     padding: 6px 10px 7px;
-    border-radius: var(--radius-md);
+    border-radius: var(--ds-radius-module);
     box-shadow: inset 0 0 0 var(--hairline-width)
       color-mix(in oklch, var(--primary) 22%, transparent);
     border-left: 3px solid color-mix(in oklch, var(--primary) 55%, transparent);
@@ -867,7 +852,7 @@
     flex: none;
     width: 6px;
     height: 6px;
-    border-radius: 999px;
+    border-radius: 50%;
     background: var(--primary);
   }
   .bn-annotation-host {
@@ -928,7 +913,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border-radius: 999px;
+    border-radius: var(--ds-radius-control);
     padding: 1px 7px;
     font-family: var(--font-mono);
     font-size: var(--text-cap);
@@ -970,7 +955,7 @@
     transform: translateX(-50%);
     width: 32px;
     height: 3px;
-    border-radius: 999px;
+    border-radius: var(--ds-radius-control);
     background: var(--muted-foreground);
     opacity: 0;
     transition: opacity var(--motion-fast) ease-out;
@@ -1005,7 +990,7 @@
     top: 12px;
     bottom: 12px;
     width: 2px;
-    border-radius: 999px;
+    border-radius: 0;
     background: color-mix(in oklch, var(--primary) 55%, transparent);
     opacity: 0;
     transition: opacity var(--motion-fast) ease-out;
@@ -1014,34 +999,38 @@
     opacity: 1;
   }
 
-  /* Side chat is a persistent, nonmodal macOS-style panel: it floats above the workspace without
-     obscuring the whole app with a backdrop or changing the workspace's geometry. */
-  .side-chat-panel {
-    --side-chat-header-inset: var(--ds-radius-control);
-    --side-chat-tab-radius: var(--ds-radius-control);
-    --side-chat-panel-radius: calc(
-      var(--side-chat-header-inset) + var(--side-chat-tab-radius)
-    );
+  /* Quick Chat is a persistent nonmodal panel. Pointer movement writes only these offsets, so the
+     conversation tree does not re-render on every drag frame. */
+  .quick-chat-panel {
     inset-inline-start: 50%;
     top: 50%;
     width: min(640px, calc(100vw - 48px));
     height: min(720px, calc(100vh - 80px));
-    border-radius: var(--side-chat-panel-radius);
+    border-radius: var(--ds-radius-module);
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 8px)) scale(0.98);
+    transform: translate(
+      calc(-50% + var(--quick-chat-offset-x, 0px)),
+      calc(-50% + var(--quick-chat-offset-y, 0px) + 8px)
+    ) scale(0.98);
     transition:
       opacity var(--motion-normal) ease-out,
       transform var(--motion-normal) var(--ease-standard);
   }
-  .side-chat-panel[data-open] {
+  .quick-chat-panel[data-open] {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(
+      calc(-50% + var(--quick-chat-offset-x, 0px)),
+      calc(-50% + var(--quick-chat-offset-y, 0px))
+    ) scale(1);
   }
-  .side-chat-header {
-    padding: var(--side-chat-header-inset);
+  .quick-chat-panel[data-moving] {
+    transition: none;
   }
-  .side-chat-tab {
-    border-radius: var(--side-chat-tab-radius);
+  .transient-chat-header {
+    padding: var(--ds-radius-control);
+  }
+  .transient-chat-tab {
+    border-radius: var(--ds-radius-control);
   }
 
   /* Keep the rail's right edge as an invisible resize target. A full-height hover line is too
@@ -1137,7 +1126,7 @@
   }
   .terminal .xterm-viewport::-webkit-scrollbar-thumb {
     background: transparent;
-    border-radius: 999px;
+    border-radius: var(--ds-radius-control);
     border: 2px solid transparent;
     background-clip: content-box;
     transition: background-color var(--motion-fast) ease-out;
@@ -1165,14 +1154,14 @@
 }
 
 @media (max-width: 960px) {
-  .side-chat-panel {
+  .quick-chat-panel {
     width: min(560px, calc(100vw - 32px));
     height: min(680px, calc(100vh - 32px));
   }
 }
 
 @media (max-width: 639px) {
-  .side-chat-panel {
+  .quick-chat-panel {
     width: calc(100vw - 16px);
     height: calc(100vh - 16px);
   }

@@ -93,7 +93,7 @@ function DetailBlock({ label, value }: { label: string; value: unknown }) {
       <h3 className="text-fine font-medium text-foreground">{label}</h3>
       <pre
         className={cn(
-          "max-h-72 overflow-auto rounded-(--ds-radius-control) bg-fill-quiet p-3 text-fine whitespace-pre-wrap break-words text-foreground",
+          "max-h-72 overflow-auto rounded-control bg-fill-quiet p-3 text-fine whitespace-pre-wrap break-words text-foreground",
           detail.object ? "font-mono" : "font-sans",
         )}
       >
@@ -192,7 +192,7 @@ function Timeline({
 }
 
 function EventMarker({ kind }: { kind: TrajectoryKind }) {
-  return <span className={cn("size-2 shrink-0 rounded-(--ds-radius-micro)", KIND_TONE[kind])} aria-hidden />;
+  return <span className={cn("size-2 shrink-0 rounded-micro", KIND_TONE[kind])} aria-hidden />;
 }
 
 function LedgerRow({
