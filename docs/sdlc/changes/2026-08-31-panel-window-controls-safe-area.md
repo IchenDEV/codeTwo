@@ -113,6 +113,7 @@ must not be launched while another worktree owns the default data directory.
 ## Review and release
 
 Approval: pending human review in the Draft PR.
+Review surface: [Draft PR #186](https://github.com/IchenDEV/codeTwo/pull/186).
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
