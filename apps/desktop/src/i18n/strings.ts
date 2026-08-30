@@ -275,6 +275,16 @@ export const en = {
     "Side chats are temporary and disappear when you close CodeTwo.",
   "sideChat.placeholder": "Ask anything",
   "sideChat.send": "Send message",
+  "quickChat.toggle": "Toggle Quick Chat",
+  "quickChat.title": "Quick Chat",
+  "quickChat.new": "New Quick Chat",
+  "quickChat.closeTab": "Close Quick Chat",
+  "quickChat.hide": "Hide Quick Chat",
+  "quickChat.temporary":
+    "Quick Chats are temporary and disappear when you close CodeTwo.",
+  "quickChat.placeholder": "Ask anything",
+  "quickChat.send": "Send message",
+  "transientChat.add": "Add to the conversation",
 
   // project actions
   "actionDialog.title": "Add Action",
@@ -2775,6 +2785,15 @@ export const zhCN: Record<StringKey, string> = {
   "sideChat.temporary": "侧边对话是临时的，关闭 CodeTwo 后会自动消失。",
   "sideChat.placeholder": "随便问点什么",
   "sideChat.send": "发送消息",
+  "quickChat.toggle": "切换快捷对话",
+  "quickChat.title": "快捷对话",
+  "quickChat.new": "新建快捷对话",
+  "quickChat.closeTab": "关闭快捷对话",
+  "quickChat.hide": "隐藏快捷对话",
+  "quickChat.temporary": "快捷对话是临时的，关闭 CodeTwo 后会自动消失。",
+  "quickChat.placeholder": "随便问点什么",
+  "quickChat.send": "发送消息",
+  "transientChat.add": "向对话添加内容",
 
   "actionDialog.title": "添加动作",
   "actionDialog.description": "动作可从顶部栏或快捷键运行项目命令，或发送预设提示词。",

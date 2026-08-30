@@ -68,7 +68,7 @@ export function SelectionToolbar({
         variant="ghost"
         size="compact"
         tabIndex={tabStop === 0 ? 0 : -1}
-        className="rounded-(--ds-radius-micro)"
+        className="rounded-micro"
         onFocus={() => setTabStop(0)}
         onClick={() => onAdd(text)}
       >
@@ -80,7 +80,7 @@ export function SelectionToolbar({
         variant="ghost"
         size="compact"
         tabIndex={tabStop === 1 ? 0 : -1}
-        className="rounded-(--ds-radius-micro)"
+        className="rounded-micro"
         onFocus={() => setTabStop(1)}
         onClick={() => onDetails(text)}
       >
@@ -92,7 +92,7 @@ export function SelectionToolbar({
         variant="ghost"
         size="compact"
         tabIndex={tabStop === 2 ? 0 : -1}
-        className="rounded-(--ds-radius-micro)"
+        className="rounded-micro"
         onFocus={() => setTabStop(2)}
         onClick={() => onAskInSideChat(text)}
       >

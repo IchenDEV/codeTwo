@@ -436,7 +436,7 @@ function GithubInstaller({
   return (
     <form
       data-plugin-github-installer
-      className="flex flex-col gap-3 rounded-(--ds-radius-module) bg-fill-quiet p-3"
+      className="flex flex-col gap-3 rounded-module bg-fill-quiet p-3"
       aria-busy={busy}
       onSubmit={(event) => {
         event.preventDefault();
@@ -648,7 +648,7 @@ function ScaffoldList({
       <h3 className="text-hint font-medium text-muted-foreground">
         {labels.contribution("scaffolds", "Scaffolds")}
       </h3>
-      <div className="divide-y rounded-(--ds-radius-module) bg-fill-quiet px-3">
+      <div className="divide-y rounded-module bg-fill-quiet px-3">
         {scaffolds.map((scaffold) => {
           const key = `scaffold:${pluginId}:${scaffold.id}`;
           return (
@@ -889,7 +889,7 @@ function ResourceDetails({
         </dl>
 
         {!individuallyManageable ? (
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-(--ds-radius-module) bg-fill-quiet p-3">
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-module bg-fill-quiet p-3">
             <p className="max-w-2xl text-fine leading-relaxed text-muted-foreground">
               {labels.managedByPlugin}
             </p>
@@ -1141,7 +1141,7 @@ function MarketplaceSources({
     <section className="flex flex-col gap-3 pt-5" aria-label={labels.marketplace}>
       <Separator />
       {sources.map((source) => (
-        <div key={source.id} className="rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2.5">
+        <div key={source.id} className="rounded-control bg-fill-quiet px-3 py-2.5">
           <h2 className="text-title font-medium">{source.name}</h2>
             {source.description ? (
             <p className="mt-1 text-fine leading-relaxed text-muted-foreground">{source.description}</p>
@@ -1189,11 +1189,11 @@ function MarketplaceList({
           aria-pressed={item.id === selectedId}
           onClick={() => onSelect(item.id)}
           className={cn(
-            "group grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 rounded-(--ds-radius-control) px-2.5 py-2 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            "group grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 rounded-control px-2.5 py-2 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
             item.id === selectedId && "bg-accent text-foreground",
           )}
         >
-          <span className="row-span-2 flex size-8 items-center justify-center rounded-(--ds-radius-control) bg-fill-quiet text-muted-foreground">
+          <span className="row-span-2 flex size-8 items-center justify-center rounded-control bg-fill-quiet text-muted-foreground">
             <Store className="size-4" aria-hidden="true" />
           </span>
           <span className="min-w-0 truncate text-ui font-medium">{item.name}</span>
@@ -1837,7 +1837,7 @@ export function PluginManagerPage({
               <div
                 role="status"
                 data-plugin-recovery={recovery.kind}
-                className="mb-4 flex items-start gap-2 rounded-(--ds-radius-control) border bg-warning/10 px-3 py-2 text-ui"
+                className="mb-4 flex items-start gap-2 rounded-control border bg-warning/10 px-3 py-2 text-ui"
               >
                 <CircleAlert
                   className="mt-0.5 size-4 shrink-0 text-warning"

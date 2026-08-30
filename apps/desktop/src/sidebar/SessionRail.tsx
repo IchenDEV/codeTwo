@@ -142,9 +142,8 @@ export function SessionRail({
   runningSessions,
   onSelect,
   onNew,
-  onNewTemporary,
-  sideChatOpen,
-  onToggleSideChat,
+  quickChatOpen,
+  onToggleQuickChat,
   onRename,
   onPin,
   onArchive,
@@ -190,11 +189,9 @@ export function SessionRail({
   onSelect: (id: string) => void;
   /** Opens the default Task-owned draft. */
   onNew: () => void;
-  /** Explicit escape hatch for work the user does not want tracked as a Task. */
-  onNewTemporary: () => void;
   /** App-lifetime quick chat that stays outside the tracked task list. */
-  sideChatOpen: boolean;
-  onToggleSideChat: () => void;
+  quickChatOpen: boolean;
+  onToggleQuickChat: () => void;
   onRename: (id: string, title: string) => void;
   /** Keeps an active session above the recency list until explicitly unpinned. */
   onPin: (id: string, pinned: boolean) => void;
@@ -675,7 +672,7 @@ export function SessionRail({
                 })}
                 onClick={() => onSelect(s.id)}
                 onKeyDown={onRowKeyDown}
-                className="absolute inset-0 z-0 h-auto rounded-(--ds-radius-control) p-0 hover:bg-transparent"
+                className="absolute inset-0 z-0 h-auto rounded-control p-0 hover:bg-transparent"
               />
               <div className="pointer-events-none relative z-10">
                 {/* Title owns the row. Routine controls appear on demand. */}
@@ -948,7 +945,7 @@ export function SessionRail({
             <CollapsibleTrigger
               data-task-section-toggle={section.id}
               title={t(open ? "rail.hideSection" : "rail.showSection", { name: section.name })}
-              className="flex min-w-0 items-center gap-1 rounded px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+              className="flex min-w-0 items-center gap-1 rounded-control px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
             >
               <span className="truncate">{section.name}</span>
               <ChevronRight
@@ -1096,38 +1093,20 @@ export function SessionRail({
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  data-rail-quick-session
-                  className="mr-1 size-control-mini rounded-control text-muted-foreground hover:bg-fill-hover hover:text-foreground group-hover/new-task:text-foreground"
-                  aria-label={t("rail.newTemporarySession")}
-                  onClick={onNewTemporary}
-                >
-                  <Plus className="size-3" aria-hidden />
-                </Button>
-              }
-            />
-            <TooltipContent side="right">{t("rail.newTemporarySession")}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  data-rail-side-chat
+                  data-rail-quick-chat
                   className={cn(
                     "mr-1 size-control-mini rounded-control text-muted-foreground hover:bg-fill-hover hover:text-foreground group-hover/new-task:text-foreground",
-                    sideChatOpen && "bg-fill-hover text-foreground",
+                    quickChatOpen && "bg-fill-hover text-foreground",
                   )}
-                  aria-label={t("sideChat.toggle")}
-                  aria-pressed={sideChatOpen}
-                  onClick={onToggleSideChat}
+                  aria-label={t("quickChat.toggle")}
+                  aria-pressed={quickChatOpen}
+                  onClick={onToggleQuickChat}
                 >
                   <MessageSquarePlus className="size-4" aria-hidden />
                 </Button>
               }
             />
-            <TooltipContent side="right">{t("sideChat.title")}</TooltipContent>
+            <TooltipContent side="right">{t("quickChat.title")}</TooltipContent>
           </Tooltip>
         </div>
         <div data-rail-feature="pull-requests">
@@ -1197,7 +1176,7 @@ export function SessionRail({
                     title={t(highlightOpen ? "rail.hideSection" : "rail.showSection", {
                       name: t("rail.highlight"),
                     })}
-                    className="flex items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+                    className="flex items-center gap-1 rounded-control px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
                   >
                     <span>{t("rail.highlight")}</span>
                     <ChevronRight
@@ -1250,7 +1229,7 @@ export function SessionRail({
                   <CollapsibleTrigger
                     data-rail-archive-toggle
                     title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
-                    className="flex items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+                    className="flex items-center gap-1 rounded-control px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
                   >
                     <span>{t("rail.groupArchived")}</span>
                     <ChevronRight

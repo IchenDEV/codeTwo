@@ -35,7 +35,7 @@ function AlertDialogContent({ className, ...props }: AlertDialogPrimitive.Popup.
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cn(
-          "dialog-layer fixed top-1/2 left-1/2 z-50 grid w-full max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-(--ds-radius-modal) bg-background p-6 shadow-(--ds-elevation-modal) ring-1 ring-foreground/10 outline-none",
+          "dialog-layer fixed top-1/2 left-1/2 z-50 grid w-full max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-modal bg-background p-6 shadow-(--ds-elevation-modal) ring-1 ring-foreground/10 outline-none",
           className,
         )}
         {...props}

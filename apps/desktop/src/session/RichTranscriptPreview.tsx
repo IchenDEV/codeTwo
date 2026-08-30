@@ -185,7 +185,7 @@ export function RichTranscriptPreview() {
         )}
       </main>
       <footer className="shrink-0 px-5 pb-4">
-        <div className="mx-auto max-w-3xl rounded-(--ds-radius-module) border bg-card px-4 py-3 text-ui text-muted-foreground shadow-(--ds-elevation-surface)">
+        <div className="mx-auto max-w-3xl rounded-module border bg-card px-4 py-3 text-ui text-muted-foreground shadow-(--ds-elevation-surface)">
           Ask a follow-up…
         </div>
       </footer>

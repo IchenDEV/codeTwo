@@ -83,18 +83,18 @@
   // ---- overlay --------------------------------------------------------------------------------
 
   const CSS_TEXT = `
-    :host { all: initial; }
+    :host { all: initial; --annotation-radius-control: 12px; --annotation-radius-module: 16px; }
     .box { position: fixed; pointer-events: none; z-index: 2147483646;
-           border: 2px solid #3b82f6; background: rgba(59,130,246,0.14); border-radius: 2px; }
+           border: 2px solid #3b82f6; background: rgba(59,130,246,0.14); border-radius: 0; }
     .tag { position: fixed; z-index: 2147483646; pointer-events: none;
            font: 500 11px ui-sans-serif, system-ui, sans-serif; color: #fff; background: #3b82f6;
-           padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
-    .pin { position: fixed; z-index: 2147483646; width: 20px; height: 20px; border-radius: 999px;
+           padding: 1px 6px; border-radius: var(--annotation-radius-control); white-space: nowrap; }
+    .pin { position: fixed; z-index: 2147483646; width: 20px; height: 20px; border-radius: 50%;
            background: #3b82f6; color: #fff; border: 2px solid #fff; cursor: pointer;
            font: 600 11px ui-sans-serif, system-ui, sans-serif; display: flex;
            align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
     .card { position: fixed; z-index: 2147483647; width: 300px; max-height: 78vh; overflow: auto;
-            background: #fff; color: #1c1c1f; border-radius: 14px;
+            background: #fff; color: #1c1c1f; border-radius: var(--annotation-radius-module);
             box-shadow: 0 12px 40px rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.06);
             font: 13px ui-sans-serif, system-ui, sans-serif; }
     .card textarea { width: 100%; box-sizing: border-box; border: 0; outline: none; resize: none;
@@ -105,17 +105,17 @@
            font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #6b6b74; }
     .row { display: flex; align-items: center; gap: 10px; padding: 7px 14px; }
     .row > span { flex: 1; color: #6b6b74; }
-    .row input, .row select { border: 1px solid #e3e3e8; border-radius: 8px; background: #fff;
+    .row input, .row select { border: 1px solid #e3e3e8; border-radius: var(--annotation-radius-control); background: #fff;
                               color: inherit; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
                               padding: 5px 8px; width: 150px; box-sizing: border-box; outline: none; }
     .row input:focus, .row select:focus { border-color: #3b82f6; }
     .swatch { display: flex; align-items: center; gap: 8px; width: 150px;
-              border: 1px solid #e3e3e8; border-radius: 8px; padding: 3px 8px; box-sizing: border-box; }
-    .swatch input[type=color] { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 999px;
+              border: 1px solid #e3e3e8; border-radius: var(--annotation-radius-control); padding: 3px 8px; box-sizing: border-box; }
+    .swatch input[type=color] { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
                                 background: none; flex: none; }
     .swatch input[type=text] { border: 0; padding: 0; width: 100%; }
     .acts { display: flex; align-items: center; gap: 8px; padding: 10px 14px 14px; }
-    .acts button { border: 0; border-radius: 999px; padding: 7px 14px; font: 500 13px ui-sans-serif,
+    .acts button { border: 0; border-radius: var(--annotation-radius-control); padding: 7px 14px; font: 500 13px ui-sans-serif,
                    system-ui, sans-serif; cursor: pointer; }
     .cancel { background: #f1f1f4; color: #1c1c1f; }
     .ok { margin-left: auto; background: #3b82f6; color: #fff; }

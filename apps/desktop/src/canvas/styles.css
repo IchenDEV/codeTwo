@@ -24,9 +24,9 @@
   --canvas-ui-fill-hover: var(--ds-color-fill-hover, var(--canvas-fallback-fill-hover));
   --canvas-ui-primary-text: var(--ds-color-primary-text, var(--canvas-fallback-primary-text));
   --canvas-ui-destructive: var(--ds-color-destructive, var(--canvas-fallback-destructive));
-  --canvas-radius-module: var(--ds-radius-module, 0.5rem);
-  --canvas-radius-control: var(--ds-radius-control, 0.375rem);
-  --canvas-button-radius: var(--ds-button-radius, 0.5rem);
+  --canvas-radius-module: var(--ds-radius-module, 16px);
+  --canvas-radius-control: var(--ds-radius-control, 12px);
+  --canvas-button-radius: var(--ds-button-radius, 12px);
   --canvas-space-inline: var(--ds-space-inline, 0.375rem);
   --canvas-space-control-group: var(--ds-space-control-group, 0.5rem);
   --canvas-space-section: var(--ds-space-section, 0.75rem);

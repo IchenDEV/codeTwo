@@ -84,7 +84,7 @@ export function BundleAdministration({
       <section
         data-bundle-administration
         aria-labelledby={`bundle-management-${bundle.id}`}
-        className="flex flex-col gap-4 rounded-(--ds-radius-module) bg-fill-quiet p-3"
+        className="flex flex-col gap-4 rounded-module bg-fill-quiet p-3"
       >
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2">

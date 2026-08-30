@@ -110,7 +110,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
 
   if (loadingState === "loading-initial") {
     return (
-      <div className="glass-raised w-[26rem] rounded-lg p-3 text-fine text-muted-foreground shadow-lg ring-1 ring-foreground/10">
+      <div className="glass-raised w-[26rem] rounded-menu p-3 text-fine text-muted-foreground shadow-lg ring-1 ring-foreground/10">
         {t("files.searching")}
       </div>
     );
@@ -118,7 +118,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
 
   if (items.length === 0) {
     return (
-      <div className="glass-raised w-[26rem] rounded-lg p-3 text-fine text-muted-foreground shadow-lg ring-1 ring-foreground/10">
+      <div className="glass-raised w-[26rem] rounded-menu p-3 text-fine text-muted-foreground shadow-lg ring-1 ring-foreground/10">
         {t("files.noMatches")}
       </div>
     );
@@ -131,7 +131,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
   return (
     <div
       ref={listRef}
-      className="glass-raised max-h-72 w-[26rem] overflow-y-auto rounded-lg p-1 shadow-lg ring-1 ring-foreground/10"
+      className="glass-raised max-h-72 w-[26rem] overflow-y-auto rounded-menu p-1 shadow-lg ring-1 ring-foreground/10"
     >
       {items.map((item, i) => {
         const row =
@@ -141,7 +141,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
               data-row={i}
               onClick={() => onItemClick?.(item)}
               className={cn(
-                "flex w-full items-baseline gap-2 rounded-(--ds-radius-micro) px-2 py-1 text-left transition-colors",
+                "flex w-full items-baseline gap-2 rounded-micro px-2 py-1 text-left transition-colors",
                 i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
               )}
             >
@@ -157,7 +157,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
               data-row={i}
               onClick={() => onItemClick?.(item)}
               className={cn(
-                "flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left transition-colors",
+                "flex w-full items-baseline gap-2 rounded-control px-2 py-1 text-left transition-colors",
                 i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
               )}
             >
@@ -177,7 +177,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
                   data-row={i}
                   onClick={() => onItemClick?.(item)}
                   className={cn(
-                    "flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left transition-colors",
+                    "flex w-full items-baseline gap-2 rounded-control px-2 py-1 text-left transition-colors",
                     i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
                   )}
                 >

@@ -150,7 +150,7 @@ export function VisualizationFrame({
     return (
       <p
         role="alert"
-        className="my-3 flex items-center gap-2 rounded-(--ds-radius-control) bg-destructive/10 px-3 py-2 text-fine text-destructive"
+        className="my-3 flex items-center gap-2 rounded-control bg-destructive/10 px-3 py-2 text-fine text-destructive"
       >
         <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
         {t("visualization.unavailable")}

@@ -8,10 +8,9 @@ This document applies to `apps/desktop` only. The website has its own system; on
 assets may be shared. The machine-readable source is
 `apps/desktop/src/design/tokens.css`. Do not copy token values into TypeScript.
 
-Phase 1 established the system, development preview, automated contrast checks, and a no-growth
-baseline for existing visual debt. Phase 2 migrates production UI in coherent feature cohorts.
-Each cohort lands or reuses the shared pattern first, replaces every selected legacy call site, and
-ratchets the baseline down. The baseline is removed only after the final cohort reaches zero.
+Phase 1 established the system and development preview. Phase 2 migrates production UI in coherent
+feature cohorts. Each cohort lands or reuses the shared pattern first and replaces every selected
+legacy call site. Maintained source uses ordinary lint rules rather than a generated debt baseline.
 
 Open the development-only preview with:
 
@@ -84,7 +83,7 @@ The desktop system has five product-facing parts and one verification layer:
 4. **Business components** in `src/components/business` compose primitives into repeated C2
    patterns. They accept semantic content and behavior, not visual escape hatches.
 5. **Product surfaces** own domain state, copy, data loading, and feature-specific layout.
-6. **Preview, tests, and `check:design`** make the contract visible and prevent new local styling.
+6. **Preview, tests, and lint** make the contract visible and prevent new local styling.
 
 `src/main.tsx` loads `styles.css` once for every renderer path; that Tailwind entry imports
 `tokens.css`. Feature modules must not import the global token source as a side effect of mounting
@@ -172,8 +171,8 @@ always solid. Reduced Transparency forces the macOS sidebar to its solid token.
 
 C2 blue is fixed for primary actions. Use no more than one primary action per local area.
 Success, warning, destructive, and neutral keyboard focus have dedicated roles. A color change must
-be made centrally, pass the light and dark contrast contracts, and land in an isolated visual-token
-commit with light, dark, and narrow screenshots.
+be made centrally, demonstrate the light and dark contrast contract, and land in an isolated
+visual-token commit with light, dark, and narrow screenshots.
 
 Dark mode separates planes with lightness and tighter dark shadows. Do not add a white hairline,
 inner glow, or translucent glass to recover separation.
@@ -222,14 +221,19 @@ Spacing is a 4px grid with one controlled 2px optical step:
 | 24 | dialog and page gutter |
 | 32 | large page section |
 
-The visible semantic radius floor is 12px:
+The product radius scale is 0 / 12 / 16 / 24px:
 
-- 12: checkbox, status mark, micro element, button, input, menu item, and list row.
+- 0: joined structural edges and straight selection indicators.
+- 12: checkbox, status mark, micro element, button, input, menu item, list row, track, and pill.
 - 16: card, popover, sidebar module, dialog, and large panel.
 - 24: Composer, whose larger content surface keeps its own fixed semantic radius.
 
-Fully round geometry is reserved for intrinsically circular objects. Icons are exactly 12 / 14 /
-16px for inline, list, and control roles. Standard UI does not use 20px icons.
+Fully round geometry is reserved for intrinsically circular, square objects such as status dots,
+avatars, and circular icon controls. Non-square badges, switches, progress tracks, and capsules use
+the semantic 12px control radius; CSS naturally clamps it to half the element height. Standalone
+surfaces that cannot inherit the app token sheet use exact 12px control and 16px module fallbacks.
+Icons are exactly 12 / 14 / 16px for inline, list, and control roles. Standard UI does not use 20px
+icons.
 
 Control heights are 24px for mini/icon/inline controls, 28px for normal buttons, menus, and
 toolbars, and 32px for inputs, selects, and important controls. A taller element is content input
@@ -346,14 +350,15 @@ Terminal, Monaco/Shiki, and BlockNote are controlled content-renderer exceptions
 - Monaco/Shiki may own syntax colors and editor content typography;
 - BlockNote may own document typography inside the document surface.
 
-Every exception is file-scoped with a reason in `scripts/design-system-allowlist.json`.
+Every lint exception is narrow and carries its reason beside the suppression. There is no generated
+design-debt baseline or separate design-system allowlist.
 
 ## Accessibility
 
 Version 1 includes Reduced Motion, Reduced Transparency, Increased Contrast, and Bold Text. Bold
 Text is represented by `data-ds-bold-text` until Phase 2 wires the native desktop preference. There
 is no independent UI zoom in v1; the product retains one compact density. Semantic colors are
-checked in both schemes by `bun run check:design`.
+reviewed in both schemes through the development Preview and rendered accessibility checks.
 
 ## Behavioral laws retained from C2
 
@@ -370,27 +375,25 @@ checked in both schemes by `bun run check:design`.
 Run from `apps/desktop`:
 
 ```bash
-bun run check:design
+bun run lint
 bun test
-bun run build
+bun run build:renderer
 ```
 
-The checker reads CSS tokens directly, verifies declared contrast pairs, and scans product CSS,
-JavaScript, TypeScript, and TSX for raw color, arbitrary values, off-scale type and Tailwind
-spacing, radii, shadow, motion, borders, direct design-token or foundation-token use, visual
-`!important`, and non-contract control heights. Errors include file, line, matched value, and the
-expected replacement. Renderer builds also inspect compiled CSS for representative semantic
-selectors and unresolved Tailwind token rules. Physical and logical spacing directions share the
-same scale; arbitrary border/ring values and pointer-focus rings are debt. The scanner admits only
-the exact 2px keyboard-focus and invalid-state forms defined by the state contract.
+ESLint checks TypeScript, React Hook ordering, raw product textareas, inline radius styles, and
+restricted Tailwind radius classes. Stylelint parses maintained CSS, catches structural CSS errors,
+and restricts `border-radius` declarations to the documented semantic values. TypeScript and
+Vite/Tailwind compilation own type safety and generated CSS validity; there is no second
+compiled-CSS scanner. Physical and logical spacing directions share the same scale. Arbitrary
+border/ring values and pointer-focus rings remain design debt handled by ordinary review when a
+standard lint rule cannot express the semantic distinction.
 
-`scripts/design-system-baseline.json` records the remaining accepted debt by rule, path, value,
-and source-context occurrence. CI allows debt to decrease but rejects both count growth and moving
-an accepted value into new code. New system files have zero baseline allowance. Each Phase 2
-cohort removes the fingerprints it owns; the final cohort deletes the empty baseline.
+There is no generated design-debt baseline. Lint rules apply to the maintained source directly;
+rules that cannot be expressed by mature lint tooling are reviewed through the Preview and rendered
+acceptance instead of being recreated as repository-specific source scanners.
 
 Pixel-diff CI is intentionally deferred because platform system-font rasterization differs. CI
-enforces rules and contrast; the development preview is manually checked in light, dark, narrow,
+enforces lint, type, test, and build rules; the development preview is manually checked in light, dark, narrow,
 Reduced Motion, Increased Contrast, and Bold Text. After the migration, evaluate separate macOS
 and Windows visual baselines.
 

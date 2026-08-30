@@ -410,7 +410,7 @@ export interface SessionInfo {
   title_origin: "default" | "automatic" | "manual";
   /** Pinned sessions stay above the active recency list for their project. */
   pinned: boolean;
-  /** App-lifetime sessions used by side chat. They never appear in normal history/search. */
+  /** App-lifetime sessions used by Quick Chat and Side Chat. They never appear in history/search. */
   transient?: boolean;
   provider: string | { custom: string };
   model: string | null;

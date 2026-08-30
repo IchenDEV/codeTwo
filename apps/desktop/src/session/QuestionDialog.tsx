@@ -46,7 +46,7 @@ function OptionButton({
       aria-checked={selected}
       onClick={onPick}
       className={cn(
-        "flex w-full items-start gap-2 rounded-(--ds-radius-control) border px-3 py-2 text-left transition-colors",
+        "flex w-full items-start gap-2 rounded-control border px-3 py-2 text-left transition-colors",
         // Selection is carried by fill and a check mark rather than a border colour: the design
         // system reserves static borders, and a tick reads at a glance in either theme.
         selected ? "bg-primary/10" : "hover:bg-accent/50",
@@ -61,7 +61,7 @@ function OptionButton({
           <span className="text-fine text-muted-foreground">{option.description}</span>
         )}
         {option.preview && selected && (
-          <pre className="mt-1 max-h-40 w-full overflow-auto whitespace-pre-wrap rounded-(--ds-radius-micro) bg-fill-quiet px-2 py-1.5 font-mono text-cap text-muted-foreground">
+          <pre className="mt-1 max-h-40 w-full overflow-auto whitespace-pre-wrap rounded-micro bg-fill-quiet px-2 py-1.5 font-mono text-cap text-muted-foreground">
             {option.preview}
           </pre>
         )}

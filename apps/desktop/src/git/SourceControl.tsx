@@ -119,10 +119,10 @@ function GitFileRow({
   const displayState = gitFileDisplayState(file, scope);
   const indexAction = staged ? `Unstage ${file.path}` : `Stage ${file.path}`;
   return (
-    <div className="group flex min-w-0 items-center gap-1 rounded hover:bg-accent/50 focus-within:bg-accent/50">
+    <div className="group flex min-w-0 items-center gap-1 rounded-control hover:bg-accent/50 focus-within:bg-accent/50">
       <button
         type="button"
-        className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
+        className="inline-flex size-7 shrink-0 items-center justify-center rounded-control text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
         aria-label={indexAction}
         title={indexAction}
         disabled={disabled}
@@ -133,7 +133,7 @@ function GitFileRow({
       <button
         type="button"
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-start text-hint outline-none focus-visible:focus-ring",
+          "flex min-w-0 flex-1 items-center gap-2 rounded-control px-1 py-1 text-start text-hint outline-none focus-visible:focus-ring",
           selected && "bg-accent text-foreground",
         )}
         aria-pressed={selected}
@@ -142,7 +142,7 @@ function GitFileRow({
       >
         <span
           className={cn(
-            "inline-flex size-4 shrink-0 items-center justify-center rounded text-cap font-bold",
+            "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-cap font-bold",
             staged ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
           )}
           aria-hidden="true"
@@ -558,7 +558,7 @@ export function SourceControlModal({
                   <dd className="min-w-0">
                     <button
                       type="button"
-                      className="block max-w-full truncate rounded text-start text-primary underline underline-offset-2 outline-none focus-visible:focus-ring"
+                      className="block max-w-full truncate rounded-control text-start text-primary underline underline-offset-2 outline-none focus-visible:focus-ring"
                       title={currentSourceControl.info.web_url}
                       onClick={() => void openRepository()}
                     >
@@ -590,7 +590,7 @@ export function SourceControlModal({
             <button
               type="button"
               className={cn(
-                "w-full rounded px-1.5 py-1 text-start text-hint outline-none hover:bg-accent/50 focus-visible:focus-ring",
+                "w-full rounded-control px-1.5 py-1 text-start text-hint outline-none hover:bg-accent/50 focus-visible:focus-ring",
                 selected("all", null) && "bg-accent text-foreground",
               )}
               aria-pressed={selected("all", null)}
@@ -740,7 +740,7 @@ export function SourceControlModal({
             <p className="pb-1 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
               {selection.label}
             </p>
-            <ScrollArea className="min-h-0 flex-1 rounded-lg bg-muted/40">
+            <ScrollArea className="min-h-0 flex-1 rounded-module bg-muted/40">
               <DiffView state={diffState} />
             </ScrollArea>
           </section>
@@ -819,7 +819,7 @@ export function SourceControlModal({
           {prUrl && (
             <button
               type="button"
-              className="block max-w-full break-all rounded text-start text-hint text-primary underline underline-offset-2 outline-none focus-visible:focus-ring"
+              className="block max-w-full break-all rounded-control text-start text-hint text-primary underline underline-offset-2 outline-none focus-visible:focus-ring"
               onClick={() => void openCreatedChangeRequest()}
               aria-label={`Open created ${changeRequest.label}: ${prUrl}`}
             >

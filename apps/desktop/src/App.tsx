@@ -281,7 +281,11 @@ import {
 } from "./session/SceneBanner";
 import { SessionHeaderActions } from "./session/SessionHeaderActions";
 import { TaskHandoffDialog } from "./session/TaskHandoffDialog";
-import { SideChatPanel, type SideChatSeed } from "./session/SideChatPanel";
+import {
+  QuickChatPanel,
+  SideChatPanel,
+  type TransientChatSeed,
+} from "./session/SideChatPanel";
 import { ProjectActionDialog } from "./session/ProjectActionDialog";
 import { projectActionBindings } from "./session/projectActions";
 import { StageTrack } from "./session/StageTrack";
@@ -1076,8 +1080,8 @@ export default function App() {
   const [showPullRequests, setShowPullRequests] = useState(false);
   const [pullRequestTasks, setPullRequestTasks] = useState<BoardTask[]>([]);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
-  const [sideChatOpen, setSideChatOpen] = useState(false);
-  const [sideChatSeed, setSideChatSeed] = useState<SideChatSeed | null>(null);
+  const [quickChatOpen, setQuickChatOpen] = useState(false);
+  const [sideChatSeed, setSideChatSeed] = useState<TransientChatSeed | null>(null);
   // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
@@ -1825,7 +1829,6 @@ export default function App() {
   // ---- R10 dock follow ----
   useEffect(() => {
     dockTabRef.current = dockTab;
-    if (dockTab !== null) setSideChatOpen(false);
   }, [dockTab]);
 
   /** The one dock-follow chokepoint: reduce, apply an emitted switch, mirror the badge hint. */
@@ -4077,11 +4080,6 @@ export default function App() {
     toast(t("turn.forked"), "success");
   }, [activeSessionTitle, createTaskDraft, t, toast]);
 
-  const createTemporarySession = useCallback(() => {
-    setTaskContext(null, true);
-    createSession();
-  }, [createSession, setTaskContext]);
-
   const startBoardTask = useCallback((task: BoardTask) => {
     setTaskContext(task, false);
     createSession();
@@ -4247,8 +4245,7 @@ export default function App() {
     (text: string) => {
       const markdown = `${t("selection.askInSideChatPrompt")}\n\n${selectedExcerptMarkdown(text)}`;
       setSideChatSeed({ id: globalThis.crypto.randomUUID(), text: markdown });
-      setSideChatOpen(true);
-      manualDockTab(null);
+      manualDockTab("side-chat");
     },
     [manualDockTab, t],
   );
@@ -5239,6 +5236,7 @@ export default function App() {
       "trajectory",
       ...(componentEnabled("browser.dock") ? ["browser" as const] : []),
       ...(componentEnabled("terminal.dock") ? ["terminal" as const] : []),
+      "side-chat",
       ...(componentEnabled("files.surface") ? ["files" as const] : []),
       ...(componentEnabled("git.surface") ? ["git" as const] : []),
     ],
@@ -7411,21 +7409,9 @@ export default function App() {
             createTaskDraft();
             if (railOverlay) setNarrowRailOpen(false);
           }}
-          onNewTemporary={() => {
-            setShowTaskBoard(false);
-            setShowPluginManager(false);
-            setShowAutomations(false);
-            setShowPullRequests(false);
-            setShowDocker(false);
-            setShowFeishu(false);
-            createTemporarySession();
-            if (railOverlay) setNarrowRailOpen(false);
-          }}
-          sideChatOpen={sideChatOpen}
-          onToggleSideChat={() => {
-            const nextOpen = !sideChatOpen;
-            if (nextOpen) manualDockTab(null);
-            setSideChatOpen(nextOpen);
+          quickChatOpen={quickChatOpen}
+          onToggleQuickChat={() => {
+            setQuickChatOpen((current) => !current);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onRename={(id, title) =>
@@ -7906,7 +7892,7 @@ export default function App() {
             {activeBoardTask ? (
               <button
                 type="button"
-                className="rounded p-0.5 text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
+                className="rounded-control p-0.5 text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
                 aria-label={t("taskboard.open")}
                 title={activeBoardTask.id}
                 onClick={openTaskBoard}
@@ -7928,7 +7914,7 @@ export default function App() {
               </>
             ) : null}
             {!activeBoardTask && activeSession ? (
-              <span className="rounded-full bg-fill-rest px-2 py-0.5 text-cap text-muted-foreground">
+              <span className="rounded-control bg-fill-rest px-2 py-0.5 text-cap text-muted-foreground">
                 {t("rail.newTemporarySession")}
               </span>
             ) : null}
@@ -7947,7 +7933,7 @@ export default function App() {
             {docMode && hasConversationContent && (
               <button
                 onClick={() => toggleDocMode(false)}
-                className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                className="mr-1 flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 title={t("header.showTranscript", { count: turns.length })}
               >
                 {(running || sessionLoading) && (
@@ -8007,7 +7993,7 @@ export default function App() {
 
             <SessionHeaderActions
               canCommit={git?.is_repo === true}
-              panelActive={dockTab !== null || sideChatOpen}
+              panelActive={dockTab !== null}
               actions={scripts}
               editorLaunchersAvailable={editorLaunchersAvailable}
               fileManagerLabel={fileManagerLabel}
@@ -8024,9 +8010,7 @@ export default function App() {
               onCheckpoint={() => void doCheckpoint()}
               onPush={() => void doPush().catch(() => {})}
               onTogglePanel={() => {
-                const panelOpen = dockTab !== null || sideChatOpen;
-                setSideChatOpen(false);
-                manualDockTab(panelOpen ? null : "home");
+                manualDockTab(dockTab !== null ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
               onMoveTask={() => activeSession && setShowTaskHandoff(true)}
@@ -8106,7 +8090,7 @@ export default function App() {
                       render={
                         <button
                           type="button"
-                          className="rounded-(--ds-radius-micro) underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                          className="rounded-micro underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                           title={activeProject ?? undefined}
                         >
                           {activeProjectName ?? t("rail.noProject")}
@@ -8147,7 +8131,7 @@ export default function App() {
                   BlockNote would take an in-progress draft with it. */}
               {activeArchived && (
                 <div className="shrink-0 px-6 pb-6 pt-3">
-                  <div className="mx-auto flex w-full max-w-3xl items-center gap-3 rounded-2xl border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)]">
+                  <div className="mx-auto flex w-full max-w-3xl items-center gap-3 rounded-module border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)]">
                     <Archive className="size-4 shrink-0 text-muted-foreground" />
                     <p className="min-w-0 flex-1 text-ui text-muted-foreground">
                       {t("archived.notice")}
@@ -8397,10 +8381,6 @@ export default function App() {
               tab={dockTab}
               availableSurfaces={availableDockSurfaces}
               onTab={manualDockTab}
-              onOpenSideChat={() => {
-                manualDockTab(null);
-                setSideChatOpen(true);
-              }}
               onClose={() => manualDockTab(null)}
               autoTab={dockAutoHint?.surface ?? null}
               content={{
@@ -8428,6 +8408,26 @@ export default function App() {
                     projectPath={lspProjectPath}
                     sessionKey={activeSession ?? "main"}
                     onSendText={(text) => insertTextRef.current?.(text)}
+                  />
+                ),
+                "side-chat": (
+                  <SideChatPanel
+                    open={dockTab === "side-chat"}
+                    onClose={() => manualDockTab(null)}
+                    provider={provider}
+                    providers={providers}
+                    cwd={cwd || "."}
+                    model={currentModel}
+                    mode={mode}
+                    sandbox={sandbox}
+                    voiceEnabled={voiceComposerEnabled}
+                    seed={sideChatSeed}
+                    onSeedHandled={(id) =>
+                      setSideChatSeed((current) =>
+                        current?.id === id ? null : current,
+                      )
+                    }
+                    linkActions={builtinLinkActions}
                   />
                 ),
                 files: (
@@ -8464,21 +8464,18 @@ export default function App() {
       </div>
       )}
 
-      <SideChatPanel
-        open={sideChatOpen}
-        onClose={() => setSideChatOpen(false)}
+      <QuickChatPanel
+        open={quickChatOpen}
+        onClose={() => setQuickChatOpen(false)}
         provider={provider}
         providers={providers}
         cwd={cwd || "."}
         model={currentModel}
         mode={mode}
         sandbox={sandbox}
-        seed={sideChatSeed}
-        onSeedHandled={(id) =>
-          setSideChatSeed((current) =>
-            current?.id === id ? null : current,
-          )
-        }
+        voiceEnabled={voiceComposerEnabled}
+        seed={null}
+        onSeedHandled={() => {}}
         linkActions={builtinLinkActions}
       />
 

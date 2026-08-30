@@ -351,7 +351,7 @@ export function FilePanel({
                   }}
                   onContextMenu={() => setSelected(entry.path)}
                   className={cn(
-                    "group flex cursor-default items-center gap-1 rounded-md pr-1 transition-colors",
+                    "group flex cursor-default items-center gap-1 rounded-control pr-1 transition-colors",
                     openPath === entry.path
                       ? "bg-accent"
                       : selected === entry.path
@@ -377,7 +377,7 @@ export function FilePanel({
                         onInsert(entry.path);
                       }}
                       title={t("files.insert")}
-                      className="ml-auto hidden shrink-0 rounded p-1 text-muted-foreground hover:text-primary group-hover:block"
+                      className="ml-auto hidden shrink-0 rounded-control p-1 text-muted-foreground hover:text-primary group-hover:block"
                     >
                       <AtSign className="size-3" />
                     </button>

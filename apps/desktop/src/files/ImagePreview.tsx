@@ -75,7 +75,7 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
             setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
           }
           onError={() => setError(t("files.imageFailed"))}
-          className="image-checker max-h-full max-w-full rounded-md object-contain shadow-sm"
+          className="image-checker max-h-full max-w-full rounded-control object-contain shadow-sm"
         />
       </div>
       <div className="flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5 text-fine text-muted-foreground">

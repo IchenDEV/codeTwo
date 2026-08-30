@@ -208,7 +208,7 @@ function InlineFragmentEditor({
       ) : (
         <div className="flex flex-col gap-3">
           {inline.map((fragment, index) => (
-            <div key={index} className="flex gap-2 rounded-(--ds-radius-control) bg-fill-quiet p-3">
+            <div key={index} className="flex gap-2 rounded-control bg-fill-quiet p-3">
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <Input
                   aria-label={labels.name}
@@ -270,7 +270,7 @@ function SlotEditor({
       ) : (
         <div className="flex flex-col gap-3">
           {slots.map((slot, index) => (
-            <div key={index} className="flex gap-2 rounded-(--ds-radius-control) bg-fill-quiet p-3">
+            <div key={index} className="flex gap-2 rounded-control bg-fill-quiet p-3">
               <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
                 <Input
                   aria-label={t("sceneEditor.id")}
@@ -334,7 +334,7 @@ function ArtifactEditor({ scene, onChange, t }: { scene: SceneDocument; onChange
       {artifacts.length === 0 ? <p className="text-fine text-muted-foreground">{t("sceneEditor.artifactsEmpty")}</p> : (
         <div className="flex flex-col gap-3">
           {artifacts.map((artifact, index) => (
-            <div key={index} className="flex gap-2 rounded-(--ds-radius-control) bg-fill-quiet p-3">
+            <div key={index} className="flex gap-2 rounded-control bg-fill-quiet p-3">
               <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
                 <Input aria-label={t("sceneEditor.id")} placeholder={t("sceneEditor.id")} value={artifact.id} onChange={(event) => setArtifacts(updateAt(artifacts, index, { id: event.currentTarget.value }))} />
                 <Input aria-label={t("sceneEditor.titleField")} placeholder={t("sceneEditor.titleField")} value={artifact.title} onChange={(event) => setArtifacts(updateAt(artifacts, index, { title: event.currentTarget.value }))} />
@@ -371,7 +371,7 @@ function CriterionEditor({ scene, onChange, t }: { scene: SceneDocument; onChang
       {criteria.length === 0 ? <p className="text-fine text-muted-foreground">{t("sceneEditor.criteriaDefault")}</p> : (
         <div className="flex flex-col gap-2">
           {criteria.map((criterion, index) => (
-            <div key={index} className="flex items-center gap-2 rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2">
+            <div key={index} className="flex items-center gap-2 rounded-control bg-fill-quiet px-3 py-2">
               <Select items={kinds} value={criterion.kind} onValueChange={(value) => value && setCriteria(updateAt(criteria, index, { kind: value as SceneExitCriterion["kind"] }))}>
                 <SelectTrigger aria-label={t("sceneEditor.kind")} className="w-52"><SelectValue /></SelectTrigger>
                 <SelectContent position="popper"><SelectGroup>{kinds.map((kind) => <SelectItem key={kind.value} value={kind.value}>{kind.label}</SelectItem>)}</SelectGroup></SelectContent>
@@ -402,7 +402,7 @@ function HookEditor({ scene, onChange, t }: { scene: SceneDocument; onChange: (s
       {hooks.length === 0 ? <p className="text-fine text-muted-foreground">{t("sceneEditor.hooksEmpty")}</p> : (
         <div className="flex flex-col gap-3">
           {hooks.map((hook, index) => (
-            <div key={index} className="flex gap-2 rounded-(--ds-radius-control) bg-fill-quiet p-3">
+            <div key={index} className="flex gap-2 rounded-control bg-fill-quiet p-3">
               <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
                 <Select items={events} value={hook.on} onValueChange={(value) => value && setHooks(updateAt(hooks, index, { on: value as SceneHook["on"] }))}>
                   <SelectTrigger aria-label={t("sceneEditor.hookEvent")} className="w-full"><SelectValue /></SelectTrigger>

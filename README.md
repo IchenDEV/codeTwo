@@ -176,7 +176,7 @@ Run desktop checks from `apps/desktop`:
 
 ```sh
 bun install --frozen-lockfile
-bun run check:design
+bun run lint
 bun test
 bun run build
 ```

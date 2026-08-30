@@ -1123,7 +1123,7 @@ export function FeishuWorkspacePage({
     <div className="group/feishu-section flex min-h-control-mini items-center pr-2 pb-1 pt-2">
       <button
         type="button"
-        className="flex min-w-0 items-center gap-1 rounded px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
+        className="flex min-w-0 items-center gap-1 rounded-control px-2 text-ui font-normal leading-4 text-foreground/55 outline-none transition-colors hover:text-foreground focus-visible:focus-ring-inset"
         data-feishu-section-toggle={resourceTab}
         aria-expanded={!collapsedSections[resourceTab]}
         aria-label={collapsedSections[resourceTab]

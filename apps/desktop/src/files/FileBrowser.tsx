@@ -52,7 +52,7 @@ export function FileBrowserModal({
                 key={p}
                 onClick={() => onInsert(p)}
                 title="Add to prompt"
-                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left font-mono text-hint hover:bg-accent/50"
+                className="flex w-full items-center justify-between rounded-control px-2.5 py-1.5 text-left font-mono text-hint hover:bg-accent/50"
               >
                 <span className="truncate">{p}</span>
                 <AtSign className="size-3.5 shrink-0 text-primary" />

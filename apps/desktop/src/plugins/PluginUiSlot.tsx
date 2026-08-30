@@ -96,7 +96,7 @@ export function PluginUiSlot({
   if (slot === "transcript.before") {
     return (
       <section data-plugin-ui-slot={slot} aria-label="Plugin actions" className="pb-3">
-        <div className="flex flex-wrap items-center gap-1.5 rounded-(--ds-radius-module) bg-card/70 p-2 ring-1 ring-foreground/[0.07]">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-module bg-card/70 p-2 ring-1 ring-foreground/[0.07]">
           {contributions.map((contribution) => {
             const key = `${contribution.pluginId}:${contribution.id}`;
             return (
@@ -168,7 +168,7 @@ export function PluginUiSlot({
             return (
               <div
                 key={key}
-                className="flex flex-wrap items-center gap-3 rounded-(--ds-radius-module) bg-card px-4 py-3 ring-1 ring-foreground/[0.07]"
+                className="flex flex-wrap items-center gap-3 rounded-module bg-card px-4 py-3 ring-1 ring-foreground/[0.07]"
               >
                 <Puzzle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <div className="min-w-0 flex-1">

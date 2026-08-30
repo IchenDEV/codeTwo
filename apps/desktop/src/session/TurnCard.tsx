@@ -193,7 +193,7 @@ function PromptImageThumbnail({ image }: { image: PromptImage }) {
   return (
     <figure
       data-prompt-image={image.id}
-      className="flex min-h-24 min-w-0 max-w-80 items-center justify-center overflow-hidden rounded-(--ds-radius-module) bg-background/25 ring-[0.5px] ring-foreground/10"
+      className="flex min-h-24 min-w-0 max-w-80 items-center justify-center overflow-hidden rounded-module bg-background/25 ring-[0.5px] ring-foreground/10"
     >
       {src && !failed ? (
         <img
@@ -262,7 +262,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   }, [artifact.id, artifact.mime_type]);
 
   return (
-    <figure className="min-w-0 overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet">
+    <figure className="min-w-0 overflow-hidden rounded-module border bg-fill-quiet">
       <div className="image-checker flex min-h-32 items-center justify-center">
         {url ? (
           <img
@@ -283,7 +283,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
         <span>{prettySize(artifact.bytes)}</span>
         <button
           type="button"
-          className="rounded p-1 hover:bg-accent hover:text-foreground"
+          className="rounded-control p-1 hover:bg-accent hover:text-foreground"
           title="Save As"
           onClick={() => {
             setActionError(null);
@@ -296,7 +296,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
         </button>
         <button
           type="button"
-          className="rounded p-1 hover:bg-accent hover:text-foreground"
+          className="rounded-control p-1 hover:bg-accent hover:text-foreground"
           title="Reveal in file manager"
           onClick={() => {
             setActionError(null);
@@ -373,7 +373,7 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
     >
       <CollapsibleTrigger
         className={cn(
-          "group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          "group flex w-full min-w-0 items-center gap-2 rounded-control px-1 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
           compact ? "py-1" : "py-1.5",
         )}
       >
@@ -382,7 +382,7 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
       </CollapsibleTrigger>
       <CollapsibleContent
         className={cn(
-          "min-w-0 divide-y divide-border overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet",
+          "min-w-0 divide-y divide-border overflow-hidden rounded-module border bg-fill-quiet",
           compact ? "mb-1 ms-5 mt-0.5" : "mt-1.5",
         )}
       >
@@ -407,7 +407,7 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
                 <button
                   key={link.uri}
                   type="button"
-                  className="flex min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-2 py-1.5 text-left text-fine transition-colors hover:bg-accent/50"
+                  className="flex min-w-0 items-center gap-2 rounded-control px-2 py-1.5 text-left text-fine transition-colors hover:bg-accent/50"
                   title={link.uri}
                   onClick={() => void openExternal(link.uri)}
                 >
@@ -453,7 +453,7 @@ function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
       className="my-3 min-w-0"
       data-tool-call-group={tools[0].id}
     >
-      <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-2 rounded-control px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <LatestIcon className="size-3.5 shrink-0" aria-hidden />
         <span className="min-w-0 flex-1 truncate" title={latest.title}>
           {latest.title}
@@ -564,7 +564,7 @@ function Detail({
   if (count === 0) return null;
   return (
     <Collapsible defaultOpen={defaultOpen} className={cn("min-w-0", wide && "basis-full")}>
-      <CollapsibleTrigger className="group -ms-1 flex items-center gap-1.5 rounded px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group -ms-1 flex items-center gap-1.5 rounded-control px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
         {label} ({count})
@@ -810,7 +810,7 @@ export const TurnCard = memo(function TurnCard({
                 render={<button
                   type="button"
                   aria-label={t("templateFrom.menu")}
-                  className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
+                  className="mt-1 rounded-control p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
                 >
                   <MoreHorizontal className="size-3.5" aria-hidden />
                 </button>}
@@ -822,7 +822,7 @@ export const TurnCard = memo(function TurnCard({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
+          <div className="max-w-[86%] rounded-module bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
             {promptImages.length > 0 && (
               <div
                 data-prompt-images
@@ -850,7 +850,7 @@ export const TurnCard = memo(function TurnCard({
                 type="button"
                 aria-expanded={promptExpanded}
                 onClick={() => setPromptExpanded((value) => !value)}
-                className="mt-1.5 flex items-center gap-1 rounded-sm text-fine font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="mt-1.5 flex items-center gap-1 rounded-control text-fine font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 {promptExpanded ? (
                   <ChevronUp className="size-3" aria-hidden />
@@ -892,7 +892,7 @@ export const TurnCard = memo(function TurnCard({
                     <img
                       src={canvasExportDataUrl(thumbnail)}
                       alt={`${canvas.title} thumbnail`}
-                      className="size-14 shrink-0 rounded border object-cover"
+                      className="size-14 shrink-0 rounded-control border object-cover"
                     />
                   )}
                   <div className="min-w-0 flex-1">
@@ -967,7 +967,7 @@ export const TurnCard = memo(function TurnCard({
       )}
 
       {turn.error && (
-        <p className="mt-3.5 flex items-start gap-1.5 rounded-(--ds-radius-control) bg-destructive/10 px-3 py-2 text-ui text-destructive">
+        <p className="mt-3.5 flex items-start gap-1.5 rounded-control bg-destructive/10 px-3 py-2 text-ui text-destructive">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
         </p>
@@ -1010,7 +1010,7 @@ export const TurnCard = memo(function TurnCard({
                       ? `${item.source.session_id.slice(0, 8)}:${item.source.part_seq}`
                       : t("memory.manual");
                     return (
-                      <li key={item.id} className="rounded-md bg-fill-quiet px-2 py-1.5">
+                      <li key={item.id} className="rounded-control bg-fill-quiet px-2 py-1.5">
                         <div className="flex items-center gap-1.5 text-cap text-muted-foreground">
                           <span className="font-mono">{item.layer}</span>
                           <span aria-hidden="true">·</span>

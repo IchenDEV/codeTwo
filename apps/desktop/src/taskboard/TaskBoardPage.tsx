@@ -287,12 +287,12 @@ function TaskCard({
     <article
       data-task-card={task.id}
       data-task-lane={lane}
-      className="group rounded-(--ds-radius-module) bg-card p-4 shadow-(--ds-elevation-surface) transition-colors hover:bg-accent/30"
+      className="group rounded-module bg-card p-4 shadow-(--ds-elevation-surface) transition-colors hover:bg-accent/30"
     >
       <div className="flex min-w-0 items-start gap-2">
         <button
           type="button"
-          className="line-clamp-2 min-w-0 flex-1 rounded-(--ds-radius-micro) text-left text-title font-semibold leading-snug outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+          className="line-clamp-2 min-w-0 flex-1 rounded-micro text-left text-title font-semibold leading-snug outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={t("taskboard.cardAction", { action: primaryActionLabel, title: task.title })}
           onClick={primaryAction}
         >
@@ -478,7 +478,7 @@ function BoardColumn({
     <section
       data-task-column={lane}
       aria-labelledby={`taskboard-column-${lane}`}
-      className="flex min-h-full w-72 min-w-72 flex-1 flex-col rounded-(--ds-radius-module) bg-fill-quiet p-3"
+      className="flex min-h-full w-72 min-w-72 flex-1 flex-col rounded-module bg-fill-quiet p-3"
     >
       <header className="sticky top-0 z-10 -mx-1 mb-2 flex shrink-0 items-center gap-2 bg-fill-quiet px-1 py-2">
         <h2

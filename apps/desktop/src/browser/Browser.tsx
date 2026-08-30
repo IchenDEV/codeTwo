@@ -148,7 +148,7 @@ function MenuItem({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-hint transition-colors hover:bg-accent/50"
+      className="flex w-full items-center gap-2.5 rounded-control px-2.5 py-1.5 text-left text-hint transition-colors hover:bg-accent/50"
     >
       <Icon className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="flex-1">{label}</span>
@@ -476,7 +476,7 @@ export function BrowserPanel({
               key={x.id}
               onClick={() => selectTab(x)}
               className={cn(
-                "group flex min-w-0 max-w-44 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-fine transition-colors",
+                "group flex min-w-0 max-w-44 cursor-pointer items-center gap-1.5 rounded-control px-2 py-1 text-fine transition-colors",
                 x.id === activeId
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground hover:bg-accent/50",
@@ -487,7 +487,7 @@ export function BrowserPanel({
               {tabs.length > 1 && (
                 <button
                   title={t("browser.closeTab")}
-                  className="hidden shrink-0 rounded p-px hover:text-foreground group-hover:block"
+                  className="hidden shrink-0 rounded-control p-px hover:text-foreground group-hover:block"
                   onClick={(e) => {
                     e.stopPropagation();
                     closeTab(x.id);
@@ -561,7 +561,7 @@ export function BrowserPanel({
         {/* A raw input: the shadcn one doesn't forward refs on React 18, and new-tab needs focus. */}
         <input
           ref={addrRef}
-          className="h-7 min-w-0 flex-1 rounded-lg bg-fill-quiet px-2.5 text-hint text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:bg-transparent focus:ring-2 focus:ring-ring/50"
+          className="h-7 min-w-0 flex-1 rounded-control bg-fill-quiet px-2.5 text-hint text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:bg-transparent focus:ring-2 focus:ring-ring/50"
           value={addr}
           onChange={(e) => setAddr(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addr.trim() && go(addr)}
@@ -663,7 +663,7 @@ export function BrowserPanel({
           {pending > 0 && (
             <>
               <button
-                className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+                className="shrink-0 rounded-control p-0.5 text-muted-foreground transition-colors hover:text-destructive"
                 title={t("browser.clearAnnotations")}
                 onClick={() => void clearMarks()}
               >
@@ -691,7 +691,7 @@ export function BrowserPanel({
               key={d.label}
               onClick={() => setDevice(d.w)}
               className={cn(
-                "rounded-md px-2 py-0.5 text-fine transition-colors",
+                "rounded-control px-2 py-0.5 text-fine transition-colors",
                 device === d.w ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -739,7 +739,7 @@ export function BrowserPanel({
                   {recentSites.map((site) => (
                     <div
                       key={site.url}
-                      className="group flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-accent/50"
+                      className="group flex min-w-0 items-center gap-2 rounded-control px-2 py-2 transition-colors hover:bg-accent/50"
                     >
                       <button
                         type="button"
@@ -762,7 +762,7 @@ export function BrowserPanel({
                       </button>
                       <button
                         type="button"
-                        className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                        className="rounded-control p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
                         aria-label={t("browser.removeRecent")}
                         title={t("browser.removeRecent")}
                         onClick={() => {

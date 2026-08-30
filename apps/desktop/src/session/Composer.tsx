@@ -420,14 +420,24 @@ interface PickerRow {
  * isolation toggles — a settings dashboard behind every chip in the row, so clicking "Auto-edit"
  * asked you about four other things first. Each control row chip now opens only its own list.
  */
-export function ModePicker({ config }: { config: SessionConfig }) {
+export function SessionModePicker({
+  mode,
+  sandbox,
+  disabled = false,
+  onMode,
+}: {
+  mode: SessionConfig["mode"];
+  sandbox: SessionConfig["sandbox"];
+  disabled?: boolean;
+  onMode: SessionConfig["onSessionMode"];
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const active = sessionMode(config.mode, config.sandbox);
+  const active = sessionMode(mode, sandbox);
 
   useEffect(() => {
-    if (config.modeChangeDisabled) setOpen(false);
-  }, [config.modeChangeDisabled]);
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -435,10 +445,10 @@ export function ModePicker({ config }: { config: SessionConfig }) {
         render={<Chip
           tone={active === "full_access" ? "warning" : undefined}
           title={t("config.mode")}
-          disabled={config.modeChangeDisabled}
-          aria-busy={config.modeChangeDisabled}
+          disabled={disabled}
+          aria-busy={disabled}
           aria-label={`${t("config.mode")}: ${t(`mode.${active}` as "mode.ask")}`}
-          className={cn(config.modeChangeDisabled && "cursor-wait opacity-60 hover:bg-transparent")}
+          className={cn(disabled && "cursor-wait opacity-60 hover:bg-transparent")}
         >
           {active === "full_access" ? (
             <LockOpen className="size-3 shrink-0" />
@@ -457,15 +467,26 @@ export function ModePicker({ config }: { config: SessionConfig }) {
             selected={m.id === active}
             label={t(`mode.${m.id}` as "mode.ask")}
             description={t(`mode.${m.id}Hint` as "mode.askHint")}
-            disabled={config.modeChangeDisabled}
+            disabled={disabled}
             onSelect={() => {
-              config.onSessionMode(m.id);
+              onMode(m.id);
               setOpen(false);
             }}
           />
         ))}
       </PopoverContent>
     </Popover>
+  );
+}
+
+export function ModePicker({ config }: { config: SessionConfig }) {
+  return (
+    <SessionModePicker
+      mode={config.mode}
+      sandbox={config.sandbox}
+      disabled={config.modeChangeDisabled}
+      onMode={config.onSessionMode}
+    />
   );
 }
 
@@ -878,8 +899,9 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
  * Both APIs are optional and many adapters skip both, in which case the flat list is the core's
  * built-in one for that provider rather than the agent's own — same shape either way. Only a
  * provider we have no list for (a custom one) falls through to the note explaining that its CLI
- * config decides. Before a session exists, only providers with an advertised model list show the
- * picker; provider-owned config options still arrive after session creation.
+ * config decides. Before a session exists, the main composer only shows providers with an
+ * advertised model list; host surfaces may keep the explicit affordance visible while metadata is
+ * loading. Provider-owned config options still arrive after session creation.
  */
 export function ModelPicker({
   models,
@@ -890,6 +912,7 @@ export function ModelPicker({
   configOptions,
   onConfigOption,
   hasSession,
+  showWhenUnavailable = false,
   disabled = false,
 }: {
   models: ModelChoice[];
@@ -900,6 +923,8 @@ export function ModelPicker({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   hasSession: boolean;
+  /** Keep an explicit model affordance while a host surface is waiting for provider metadata. */
+  showWhenUnavailable?: boolean;
   /** A live turn owns its provider runtime; model and effort changes wait until it ends. */
   disabled?: boolean;
 }) {
@@ -913,7 +938,7 @@ export function ModelPicker({
       setEffortOpen(false);
     }
   }, [disabled]);
-  if (!hasSession && models.length === 0) return null;
+  if (!hasSession && models.length === 0 && !showWhenUnavailable) return null;
 
   const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
 
@@ -1432,7 +1457,7 @@ export function Composer({
 
       {running ? (
         <>
-          <div className="flex shrink-0 items-center rounded-full border bg-background">
+          <div className="flex shrink-0 items-center rounded-control border bg-background">
             <Tooltip>
               <TooltipTrigger
                 render={<Button

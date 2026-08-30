@@ -135,7 +135,7 @@ export function TaskPlanPanel({
               key={`${index}:${entry.content}`}
               data-task-plan-status={status}
               className={cn(
-                "flex items-start gap-2 rounded-(--ds-radius-control) px-2 py-1.5 text-fine leading-snug",
+                "flex items-start gap-2 rounded-control px-2 py-1.5 text-fine leading-snug",
                 status === "in_progress" && "bg-accent/50",
                 status === "completed" && "text-muted-foreground",
               )}

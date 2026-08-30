@@ -116,7 +116,7 @@ function ToolPreview({ preview }: { preview: InteractiveToolPreview }) {
     <figure
       data-tool-preview={preview.kind}
       data-artifact-id={preview.artifact.id}
-      className="overflow-hidden rounded-(--ds-radius-module) bg-fill-quiet"
+      className="overflow-hidden rounded-module bg-fill-quiet"
     >
       <figcaption className="flex min-h-8 items-center gap-2 bg-fill-rest px-2 py-1.5 text-fine">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />

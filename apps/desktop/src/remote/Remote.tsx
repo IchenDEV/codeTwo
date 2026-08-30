@@ -205,7 +205,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
           <DialogTitle>Device connections</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-2 rounded-md border p-3">
+        <div className="space-y-2 rounded-module border p-3">
           <p className="text-ui font-medium">Pair this C2 with another device</p>
           <p className="text-hint leading-relaxed text-muted-foreground">
             Paste a one-time link created on the other C2 device. Conversations, projects, and saved memory sync after pairing.
@@ -283,7 +283,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
             </div>
 
             {link ? (
-              <div className="space-y-2 rounded-md border p-3" aria-busy={linkBusy}>
+              <div className="space-y-2 rounded-module border p-3" aria-busy={linkBusy}>
                 <p className="text-hint text-muted-foreground">
                   {clientProtocol === "c2"
                     ? "Paste this complete link into Device connections on the other C2 device. "
@@ -295,7 +295,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                   The link is one-time and expires in {Math.round(link.expires_in / 60)} minutes.
                 </p>
                 {link.qr_svg && (
-                  <div className="mx-auto w-fit rounded-md bg-white p-2">
+                  <div className="mx-auto w-fit rounded-control bg-white p-2">
                     <img
                       className="block size-44"
                       alt="Pairing QR code"
@@ -303,7 +303,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                     />
                   </div>
                 )}
-                <div className="break-all rounded-md bg-primary/10 px-3 py-2 font-mono text-hint">{link.url}</div>
+                <div className="break-all rounded-control bg-primary/10 px-3 py-2 font-mono text-hint">{link.url}</div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" disabled={linkBusy} onClick={() => void copy()}>
                     {copied ? "Copied ✓" : "Copy link"}
@@ -346,7 +346,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-1.5">
             <p className="text-ui font-medium">Paired devices</p>
             {devices.map((device) => (
-              <div key={device.id} className="flex items-center justify-between rounded-(--ds-radius-control) border px-3 py-1.5">
+              <div key={device.id} className="flex items-center justify-between rounded-control border px-3 py-1.5">
                 <div>
                   <p className="text-ui">{device.name}</p>
                   <p className="text-hint text-muted-foreground">

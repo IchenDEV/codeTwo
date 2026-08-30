@@ -4,20 +4,26 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { ArrowUp, MessageSquare, Plus, Square, X } from "@/components/ui/icons";
 
 import {
   cancelTurn,
   closeTransientSession,
+  importPromptImage,
   newSession,
   onEngineEvent,
   setConfigOption,
+  setExecutionPolicy,
   setModel,
   setSessionMemoryPolicy,
   submitPrompt,
+  type AppshotCapture,
   type ConfigOptionInfo,
   type CoreEvent,
+  type DocBlock,
   type ModelChoice,
   type PermissionMode,
   type ProviderInfo,
@@ -29,18 +35,21 @@ import { LiquidSelectionGroup } from "../components/ui/tabs";
 import { Textarea } from "../components/ui/textarea";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
-import { ModelPicker } from "./Composer";
-import { sessionMode } from "./mode";
+import { VoiceButton } from "../voice/VoiceButton";
+import { ModelPicker, SessionModePicker } from "./Composer";
+import { SESSION_MODES, type SessionMode } from "./mode";
 import { TurnCard } from "./TurnCard";
 import type { BuiltinLinkActions } from "./MarkdownContent";
 import { applyEvent, newTurn, type Turn } from "./turns";
 
-export interface SideChatSeed {
+export interface TransientChatSeed {
   id: string;
   text: string;
 }
 
-interface SideChatTab {
+export type SideChatSeed = TransientChatSeed;
+
+interface TransientChatTab {
   localId: string;
   title: string | null;
   draft: string;
@@ -57,13 +66,32 @@ interface SideChatTab {
   mode: PermissionMode;
   sandbox: Sandbox;
   controlError: string | null;
+  attachments: AppshotCapture[];
+  attaching: boolean;
 }
 
 interface PendingCreation {
   tabId: string;
-  prompt: string;
+  doc: DocBlock[];
+  attachments: AppshotCapture[];
   promptRequestId: string;
 }
+
+interface PanelOffset {
+  x: number;
+  y: number;
+}
+
+interface ActivePanelMove {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startOffset: PanelOffset;
+  width: number;
+  height: number;
+}
+
+const QUICK_CHAT_VIEWPORT_INSET = 8;
 
 let localTabSequence = 0;
 
@@ -80,6 +108,7 @@ function makeTab({
   sandbox,
   models,
   draft = "",
+  idPrefix,
 }: {
   provider: string;
   cwd: string;
@@ -88,9 +117,10 @@ function makeTab({
   sandbox: Sandbox;
   models: ModelChoice[];
   draft?: string;
-}): SideChatTab {
+  idPrefix: "quick-chat" | "side-chat";
+}): TransientChatTab {
   return {
-    localId: localId("side-chat"),
+    localId: localId(idPrefix),
     title: null,
     draft,
     sessionId: null,
@@ -106,7 +136,15 @@ function makeTab({
     mode,
     sandbox,
     controlError: null,
+    attachments: [],
+    attaching: false,
   };
+}
+
+function privateImageBlock(capture: AppshotCapture): DocBlock {
+  return capture.kind === "attachment"
+    ? { type: "attachment", id: capture.id, name: capture.window_title }
+    : { type: "appshot", id: capture.id, title: capture.window_title };
 }
 
 const TURN_EVENTS = new Set<CoreEvent["event"]>([
@@ -120,7 +158,30 @@ const TURN_EVENTS = new Set<CoreEvent["event"]>([
   "error",
 ]);
 
-export function SideChatPanel({
+interface TransientChatPanelProps {
+  open: boolean;
+  onClose: () => void;
+  provider: string;
+  providers: ProviderInfo[];
+  cwd: string;
+  model: string | null;
+  mode: PermissionMode;
+  sandbox: Sandbox;
+  seed: TransientChatSeed | null;
+  onSeedHandled: (id: string) => void;
+  linkActions?: BuiltinLinkActions;
+  voiceEnabled?: boolean;
+}
+
+export function QuickChatPanel(props: TransientChatPanelProps) {
+  return <TransientChatPanel {...props} surface="quick" />;
+}
+
+export function SideChatPanel(props: TransientChatPanelProps) {
+  return <TransientChatPanel {...props} surface="side" />;
+}
+
+function TransientChatPanel({
   open,
   onClose,
   provider,
@@ -132,27 +193,123 @@ export function SideChatPanel({
   seed,
   onSeedHandled,
   linkActions,
-}: {
-  open: boolean;
-  onClose: () => void;
-  provider: string;
-  providers: ProviderInfo[];
-  cwd: string;
-  model: string | null;
-  mode: PermissionMode;
-  sandbox: Sandbox;
-  seed: SideChatSeed | null;
-  onSeedHandled: (id: string) => void;
-  linkActions?: BuiltinLinkActions;
-}) {
+  voiceEnabled = true,
+  surface,
+}: TransientChatPanelProps & { surface: "quick" | "side" }) {
   const t = useT();
-  const [tabs, setTabs] = useState<SideChatTab[]>([]);
+  const floating = surface === "quick";
+  const labels = surface === "quick"
+    ? {
+        title: "quickChat.title" as const,
+        new: "quickChat.new" as const,
+        closeTab: "quickChat.closeTab" as const,
+        hide: "quickChat.hide" as const,
+        temporary: "quickChat.temporary" as const,
+        placeholder: "quickChat.placeholder" as const,
+        send: "quickChat.send" as const,
+      }
+    : {
+        title: "sideChat.title" as const,
+        new: "sideChat.new" as const,
+        closeTab: "sideChat.closeTab" as const,
+        hide: "sideChat.hide" as const,
+        temporary: "sideChat.temporary" as const,
+        placeholder: "sideChat.placeholder" as const,
+        send: "sideChat.send" as const,
+      };
+  const [tabs, setTabs] = useState<TransientChatTab[]>([]);
   const tabsRef = useRef(tabs);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const pendingCreationsRef = useRef(new Map<string, PendingCreation>());
   const handledSeedsRef = useRef(new Set<string>());
+  const initialTabPendingRef = useRef(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  const panelOffsetRef = useRef<PanelOffset>({ x: 0, y: 0 });
+  const activePanelMoveRef = useRef<ActivePanelMove | null>(null);
+
+  const clampPanelOffset = useCallback(
+    (offset: PanelOffset, width: number, height: number): PanelOffset => {
+      const centeredLeft = (window.innerWidth - width) / 2;
+      const centeredTop = (window.innerHeight - height) / 2;
+      const minX = QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
+      const maxX = window.innerWidth - width - QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
+      const minY = QUICK_CHAT_VIEWPORT_INSET - centeredTop;
+      const maxY = window.innerHeight - height - QUICK_CHAT_VIEWPORT_INSET - centeredTop;
+      return {
+        x: Math.round(Math.min(Math.max(minX, maxX), Math.max(Math.min(minX, maxX), offset.x))),
+        y: Math.round(Math.min(Math.max(minY, maxY), Math.max(Math.min(minY, maxY), offset.y))),
+      };
+    },
+    [],
+  );
+
+  const applyPanelOffset = useCallback((offset: PanelOffset) => {
+    panelOffsetRef.current = offset;
+    const panel = panelRef.current;
+    if (!panel) return;
+    panel.style.setProperty("--quick-chat-offset-x", `${offset.x}px`);
+    panel.style.setProperty("--quick-chat-offset-y", `${offset.y}px`);
+  }, []);
+
+  const finishPanelMove = useCallback((header: HTMLElement, pointerId: number) => {
+    const active = activePanelMoveRef.current;
+    if (!active || active.pointerId !== pointerId) return;
+    activePanelMoveRef.current = null;
+    document.body.classList.remove("moving-quick-chat");
+    panelRef.current?.removeAttribute("data-moving");
+    if (header.hasPointerCapture(pointerId)) header.releasePointerCapture(pointerId);
+  }, []);
+
+  const onPanelPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    if (!floating || event.button !== 0 || activePanelMoveRef.current) return;
+    const target = event.target as Element;
+    if (target.closest("button, a, input, textarea, select, [role='tab']")) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    event.preventDefault();
+    activePanelMoveRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffset: panelOffsetRef.current,
+      width: rect.width,
+      height: rect.height,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add("moving-quick-chat");
+    panel.setAttribute("data-moving", "");
+  }, [floating]);
+
+  const onPanelPointerMove = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    const active = activePanelMoveRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    applyPanelOffset(clampPanelOffset({
+      x: active.startOffset.x + event.clientX - active.startX,
+      y: active.startOffset.y + event.clientY - active.startY,
+    }, active.width, active.height));
+  }, [applyPanelOffset, clampPanelOffset]);
+
+  useEffect(() => {
+    if (!floating) return;
+    const keepPanelVisible = () => {
+      const rect = panelRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      applyPanelOffset(clampPanelOffset(panelOffsetRef.current, rect.width, rect.height));
+    };
+    window.addEventListener("resize", keepPanelVisible);
+    return () => window.removeEventListener("resize", keepPanelVisible);
+  }, [applyPanelOffset, clampPanelOffset, floating]);
+
+  useEffect(() => {
+    if (!floating) return;
+    return () => {
+      activePanelMoveRef.current = null;
+      document.body.classList.remove("moving-quick-chat");
+    };
+  }, [floating]);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -166,13 +323,16 @@ export function SideChatPanel({
   }, [open]);
 
   const providerModels = useCallback(
-    (providerId: string) =>
-      providers.find((candidate) => candidate.id === providerId)?.models ?? [],
-    [providers],
+    (providerId: string) => {
+      const advertised = providers.find((candidate) => candidate.id === providerId)?.models ?? [];
+      if (advertised.length > 0 || providerId !== provider || !model) return advertised;
+      return [{ id: model, name: model, description: null }];
+    },
+    [model, provider, providers],
   );
 
   const createLocalTab = useCallback(
-    (draft = "") => {
+    (draft = "", replaceExisting = false) => {
       const tab = makeTab({
         provider,
         cwd: cwd || ".",
@@ -181,17 +341,36 @@ export function SideChatPanel({
         sandbox,
         models: providerModels(provider),
         draft,
+        idPrefix: surface === "quick" ? "quick-chat" : "side-chat",
       });
-      setTabs((current) => [...current, tab]);
+      const previous = tabsRef.current;
+      const next = replaceExisting ? [tab] : [...previous, tab];
+      tabsRef.current = next;
+      setTabs(next);
       setActiveTabId(tab.localId);
+      if (replaceExisting) {
+        for (const existing of previous) {
+          if (existing.sessionId) void closeTransientSession(existing.sessionId);
+        }
+      }
       return tab.localId;
     },
-    [cwd, mode, model, provider, providerModels, sandbox],
+    [cwd, mode, model, provider, providerModels, sandbox, surface],
   );
 
   useEffect(() => {
-    if (open && tabs.length === 0) createLocalTab();
-  }, [createLocalTab, open, tabs.length]);
+    if (!open) {
+      initialTabPendingRef.current = false;
+      return;
+    }
+    if (tabs.length > 0) {
+      initialTabPendingRef.current = false;
+      return;
+    }
+    if (seed || initialTabPendingRef.current) return;
+    initialTabPendingRef.current = true;
+    createLocalTab();
+  }, [createLocalTab, open, seed, tabs.length]);
 
   useEffect(() => {
     setTabs((current) =>
@@ -220,13 +399,13 @@ export function SideChatPanel({
         ),
       );
     } else {
-      createLocalTab(seed.text);
+      createLocalTab(seed.text, surface === "side");
     }
     onSeedHandled(seed.id);
-  }, [activeTabId, createLocalTab, onSeedHandled, seed]);
+  }, [activeTabId, createLocalTab, onSeedHandled, seed, surface]);
 
   const updateTab = useCallback(
-    (tabId: string, update: (tab: SideChatTab) => SideChatTab) => {
+    (tabId: string, update: (tab: TransientChatTab) => TransientChatTab) => {
       setTabs((current) =>
         current.map((tab) => (tab.localId === tabId ? update(tab) : tab)),
       );
@@ -235,11 +414,17 @@ export function SideChatPanel({
   );
 
   const failPrompt = useCallback(
-    (tabId: string, requestId: string, message: string) => {
+    (
+      tabId: string,
+      requestId: string,
+      message: string,
+      attachments: AppshotCapture[] = [],
+    ) => {
       updateTab(tabId, (tab) => ({
         ...tab,
         running: false,
         creationRequestId: null,
+        attachments: tab.attachments.length > 0 ? tab.attachments : attachments,
         turns: applyEvent(tab.turns, {
           event: "error",
           session: tab.sessionId,
@@ -271,7 +456,7 @@ export function SideChatPanel({
           creationRequestId: null,
         }));
         void (async () => {
-          // Side chat can use project memory for context, but app-lifetime conversations never
+          // Transient chat can use project memory for context, but app-lifetime conversations never
           // write durable memories of their own.
           await setSessionMemoryPolicy(event.session, "inherit", "deny");
           if (!tabsRef.current.some((candidate) => candidate.localId === pending.tabId)) {
@@ -280,11 +465,16 @@ export function SideChatPanel({
           }
           await submitPrompt(
             event.session,
-            [{ type: "text", text: pending.prompt }],
+            pending.doc,
             pending.promptRequestId,
           );
         })().catch((error) =>
-          failPrompt(pending.tabId, pending.promptRequestId, String(error)),
+          failPrompt(
+            pending.tabId,
+            pending.promptRequestId,
+            String(error),
+            pending.attachments,
+          ),
         );
         return;
       }
@@ -293,7 +483,12 @@ export function SideChatPanel({
         const pending = pendingCreationsRef.current.get(event.request_id);
         if (!pending) return;
         pendingCreationsRef.current.delete(event.request_id);
-        failPrompt(pending.tabId, pending.promptRequestId, event.message);
+        failPrompt(
+          pending.tabId,
+          pending.promptRequestId,
+          event.message,
+          pending.attachments,
+        );
         return;
       }
 
@@ -352,7 +547,7 @@ export function SideChatPanel({
   }, [activeTab?.localId, open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !floating) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       event.preventDefault();
@@ -360,35 +555,98 @@ export function SideChatPanel({
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose, open]);
+  }, [floating, onClose, open]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [activeTab?.turns]);
 
+  const attachImages = useCallback(async (files: readonly File[]) => {
+    const tab = tabsRef.current.find((candidate) => candidate.localId === activeTabId);
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (!tab || tab.running || images.length === 0) return;
+    updateTab(tab.localId, (current) => ({
+      ...current,
+      attaching: true,
+      controlError: null,
+    }));
+    const results = await Promise.allSettled(
+      images.map(async (file) =>
+        importPromptImage(
+          new Uint8Array(await file.arrayBuffer()),
+          file.type || null,
+          file.name || "Image.png",
+        )),
+    );
+    const attachments = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    updateTab(tab.localId, (current) => ({
+      ...current,
+      attaching: false,
+      attachments: [...current.attachments, ...attachments],
+      controlError: failure
+        ? t("toast.imageAttachFailed", { error: String(failure.reason) })
+        : null,
+    }));
+  }, [activeTabId, t, updateTab]);
+
+  const changeMode = useCallback((nextMode: SessionMode) => {
+    const tab = tabsRef.current.find((candidate) => candidate.localId === activeTabId);
+    const preset = SESSION_MODES.find((candidate) => candidate.id === nextMode);
+    if (!tab || !preset || tab.running) return;
+    const previous = { mode: tab.mode, sandbox: tab.sandbox };
+    updateTab(tab.localId, (current) => ({
+      ...current,
+      mode: preset.mode,
+      sandbox: preset.sandbox,
+      controlError: null,
+    }));
+    if (!tab.sessionId) return;
+    const requestId = globalThis.crypto.randomUUID();
+    void setExecutionPolicy(
+      tab.sessionId,
+      preset.mode,
+      preset.sandbox,
+      requestId,
+    ).catch((error) =>
+      updateTab(tab.localId, (current) => ({
+        ...current,
+        ...previous,
+        controlError: `Could not update execution policy: ${String(error)}`,
+      })),
+    );
+  }, [activeTabId, updateTab]);
+
   const send = useCallback(async () => {
     const tab = tabsRef.current.find((candidate) => candidate.localId === activeTabId);
-    if (!tab || tab.running) return;
+    if (!tab || tab.running || tab.attaching) return;
     const prompt = tab.draft.trim();
-    if (!prompt) return;
-    const promptRequestId = localId("side-prompt");
+    if (!prompt && tab.attachments.length === 0) return;
+    const doc: DocBlock[] = [
+      ...(prompt ? [{ type: "text" as const, text: prompt }] : []),
+      ...tab.attachments.map(privateImageBlock),
+    ];
+    const summary = prompt || tab.attachments.map((attachment) => attachment.window_title).join(", ");
+    const sentAttachments = tab.attachments;
+    const promptRequestId = localId(surface === "quick" ? "quick-prompt" : "side-prompt");
     updateTab(tab.localId, (current) => ({
       ...current,
       draft: "",
+      attachments: [],
       running: true,
-      turns: [...current.turns, newTurn(prompt, promptRequestId)],
+      turns: [...current.turns, newTurn(summary, promptRequestId)],
     }));
 
     if (tab.sessionId) {
       try {
-        await submitPrompt(
-          tab.sessionId,
-          [{ type: "text", text: prompt }],
-          promptRequestId,
-        );
+        await submitPrompt(tab.sessionId, doc, promptRequestId);
       } catch (error) {
-        failPrompt(tab.localId, promptRequestId, String(error));
+        failPrompt(tab.localId, promptRequestId, String(error), sentAttachments);
       }
       return;
     }
@@ -396,7 +654,8 @@ export function SideChatPanel({
     const creationRequestId = promptRequestId;
     pendingCreationsRef.current.set(creationRequestId, {
       tabId: tab.localId,
-      prompt,
+      doc,
+      attachments: sentAttachments,
       promptRequestId,
     });
     updateTab(tab.localId, (current) => ({
@@ -416,10 +675,10 @@ export function SideChatPanel({
       );
     } catch (error) {
       if (pendingCreationsRef.current.delete(creationRequestId)) {
-        failPrompt(tab.localId, promptRequestId, String(error));
+        failPrompt(tab.localId, promptRequestId, String(error), sentAttachments);
       }
     }
-  }, [activeTabId, failPrompt, updateTab]);
+  }, [activeTabId, failPrompt, surface, updateTab]);
 
   const closeTab = useCallback(
     (tabId: string) => {
@@ -440,78 +699,103 @@ export function SideChatPanel({
   );
 
   return (
-    <aside
+    <section
       ref={panelRef}
-      role="dialog"
-      aria-modal="false"
-      aria-label={t("sideChat.title")}
+      role={floating ? "dialog" : undefined}
+      aria-modal={floating ? "false" : undefined}
+      aria-label={t(labels.title)}
       aria-hidden={!open}
       data-open={open ? "" : undefined}
+      data-chat-surface={surface}
+      data-chat-count={tabs.length}
       className={cn(
-        "side-chat-panel fixed z-50 flex min-h-0 flex-col overflow-hidden bg-background shadow-(--ds-elevation-modal) ring-1 ring-foreground/10",
+        "flex min-h-0 flex-col overflow-hidden bg-background",
+        floating
+          ? "quick-chat-panel fixed z-50 shadow-raised"
+          : "side-chat-surface relative size-full",
         !open && "pointer-events-none",
       )}
+      style={floating
+        ? {
+            "--quick-chat-offset-x": `${panelOffsetRef.current.x}px`,
+            "--quick-chat-offset-y": `${panelOffsetRef.current.y}px`,
+          } as CSSProperties
+        : undefined}
     >
-      <header className="side-chat-header flex shrink-0 items-center gap-1">
-        <LiquidSelectionGroup
-          activeSelector='[data-selected="true"]'
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
-          role="tablist"
+      {floating ? (
+        <header
+          data-quick-chat-drag-handle=""
+          data-transient-chat-tabs=""
+          className={cn(
+            "transient-chat-header flex shrink-0 items-center gap-1",
+            floating && "cursor-move touch-none select-none",
+          )}
+          onPointerDown={onPanelPointerDown}
+          onPointerMove={onPanelPointerMove}
+          onPointerUp={(event) => finishPanelMove(event.currentTarget, event.pointerId)}
+          onPointerCancel={(event) => finishPanelMove(event.currentTarget, event.pointerId)}
+          onLostPointerCapture={(event) => finishPanelMove(event.currentTarget, event.pointerId)}
         >
-          {tabs.map((tab) => (
-            <div
-              key={tab.localId}
-              data-selected={tab.localId === activeTab?.localId}
-              className={cn(
-                "side-chat-tab flex max-w-48 shrink-0 items-center py-0.5 ps-1 transition-colors",
-                tab.localId === activeTab?.localId
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
+          <LiquidSelectionGroup
+            activeSelector='[data-selected="true"]'
+            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+            role="tablist"
+          >
+            {tabs.map((tab) => (
+              <div
+                key={tab.localId}
+                data-selected={tab.localId === activeTab?.localId}
+                className={cn(
+                  "transient-chat-tab flex max-w-48 shrink-0 items-center py-0.5 ps-1 transition-colors",
+                  tab.localId === activeTab?.localId
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab.localId === activeTab?.localId}
+                  className="min-w-0 flex-1 truncate px-2 text-ui"
+                  onClick={() => setActiveTabId(tab.localId)}
+                >
+                  {tab.title || t(labels.title)}
+                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 shrink-0"
+                  aria-label={t(labels.closeTab)}
+                  onClick={() => closeTab(tab.localId)}
+                >
+                  <X className="size-3.5" aria-hidden />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0"
+              aria-label={t(labels.new)}
+              onClick={() => createLocalTab()}
             >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab.localId === activeTab?.localId}
-                className="min-w-0 flex-1 truncate px-2 text-ui"
-                onClick={() => setActiveTabId(tab.localId)}
-              >
-                {tab.title || t("sideChat.title")}
-              </button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-6 shrink-0"
-                aria-label={t("sideChat.closeTab")}
-                onClick={() => closeTab(tab.localId)}
-              >
-                <X className="size-3.5" aria-hidden />
-              </Button>
-            </div>
-          ))}
+              <Plus className="size-4" aria-hidden />
+            </Button>
+          </LiquidSelectionGroup>
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className="size-7 shrink-0"
-            aria-label={t("sideChat.new")}
-            onClick={() => createLocalTab()}
+            aria-label={t(labels.hide)}
+            onClick={onClose}
           >
-            <Plus className="size-4" aria-hidden />
+            <X className="size-4" aria-hidden />
           </Button>
-        </LiquidSelectionGroup>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0"
-          aria-label={t("sideChat.hide")}
-          onClick={onClose}
-        >
-          <X className="size-4" aria-hidden />
-        </Button>
-      </header>
+        </header>
+      ) : null}
 
       <div ref={viewportRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {activeTab && activeTab.turns.length > 0 ? (
@@ -530,9 +814,9 @@ export function SideChatPanel({
             <span className="mb-4 flex size-10 items-center justify-center rounded-full border bg-fill-quiet text-muted-foreground">
               <MessageSquare className="size-5" aria-hidden />
             </span>
-            <h2 className="text-ui font-medium">{t("sideChat.title")}</h2>
+            <h2 className="text-ui font-medium">{t(labels.title)}</h2>
             <p className="mt-2 max-w-72 text-ui leading-relaxed text-muted-foreground">
-              {t("sideChat.temporary")}
+              {t(labels.temporary)}
             </p>
           </div>
         )}
@@ -551,14 +835,68 @@ export function SideChatPanel({
               {activeTab.controlError}
             </p>
           ) : null}
-          <div className="rounded-(--ds-radius-module) bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] focus-within:ring-ring/20">
+          <div
+            data-transient-chat-composer=""
+            className="rounded-module bg-card shadow-control focus-within:focus-ring-inset"
+          >
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+              multiple
+              hidden
+              onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                event.currentTarget.value = "";
+                if (files.length > 0) void attachImages(files);
+              }}
+            />
+            {activeTab.attachments.length > 0 ? (
+              <div
+                data-transient-chat-attachments=""
+                className="flex gap-2 overflow-x-auto px-3 pt-3"
+              >
+                {activeTab.attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="group relative w-24 shrink-0 overflow-hidden rounded-control bg-fill-quiet shadow-surface"
+                  >
+                    <img
+                      src={attachment.preview_data_url}
+                      alt=""
+                      className="aspect-5/3 w-full object-cover"
+                    />
+                    <p className="truncate px-2 py-1.5 text-fine text-muted-foreground">
+                      {attachment.window_title}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      className="absolute right-1 top-1 size-6 rounded-full opacity-85"
+                      aria-label={t("composer.removeImage", { title: attachment.window_title })}
+                      onClick={() =>
+                        updateTab(activeTab.localId, (tab) => ({
+                          ...tab,
+                          attachments: tab.attachments.filter(
+                            (candidate) => candidate.id !== attachment.id,
+                          ),
+                        }))}
+                    >
+                      <X className="size-3.5" aria-hidden />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <Textarea
               value={activeTab.draft}
               disabled={activeTab.running}
+              focusRing={false}
               rows={3}
-              aria-label={t("sideChat.placeholder")}
-              placeholder={t("sideChat.placeholder")}
-              className="max-h-48 min-h-20 resize-none bg-transparent px-4 pb-2 pt-3 shadow-none focus-visible:focus-ring-inset"
+              aria-label={t(labels.placeholder)}
+              placeholder={t(labels.placeholder)}
+              className="max-h-48 min-h-20 resize-none bg-transparent px-4 pb-2 pt-3 shadow-none"
               onChange={(event) => {
                 const draft = event.currentTarget.value;
                 updateTab(activeTab.localId, (tab) => ({ ...tab, draft }));
@@ -574,55 +912,85 @@ export function SideChatPanel({
                 }
               }}
             />
-            <div className="flex items-center gap-2 px-3 pb-2 pt-1">
-              <span className="shrink-0 rounded-(--ds-radius-control) bg-muted/50 px-2 py-1 text-fine text-muted-foreground">
-                {t(`mode.${sessionMode(activeTab.mode, activeTab.sandbox)}` as "mode.ask")}
-              </span>
-              <div className="min-w-0 flex-1" />
-              <ModelPicker
-                models={activeTab.models}
-                current={activeTab.currentModel}
-                defaultModel={activeTab.defaultModel}
-                provider={activeTab.provider}
-                configOptions={activeTab.configOptions}
-                hasSession={activeTab.sessionId !== null}
+            <div className="flex min-w-0 items-center gap-1.5 px-3 pb-2 pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0 rounded-full"
+                aria-label={t("transientChat.add")}
+                disabled={activeTab.running || activeTab.attaching}
+                onClick={() => imageInputRef.current?.click()}
+              >
+                {activeTab.attaching ? (
+                  <ActivityOrb state="connecting" aria-hidden="true" />
+                ) : (
+                  <Plus className="size-4" aria-hidden />
+                )}
+              </Button>
+              <SessionModePicker
+                mode={activeTab.mode}
+                sandbox={activeTab.sandbox}
                 disabled={activeTab.running}
-                onModel={(nextModel) => {
-                  const previousModel = activeTab.currentModel;
-                  updateTab(activeTab.localId, (tab) => ({
-                    ...tab,
-                    currentModel: nextModel,
-                    controlError: null,
-                  }));
-                  if (activeTab.sessionId) {
-                    void setModel(activeTab.sessionId, nextModel).catch((error) =>
+                onMode={changeMode}
+              />
+              <div className="min-w-0 flex-1" />
+              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                <ModelPicker
+                  models={activeTab.models}
+                  current={activeTab.currentModel}
+                  defaultModel={activeTab.defaultModel}
+                  provider={activeTab.provider}
+                  configOptions={activeTab.configOptions}
+                  hasSession={activeTab.sessionId !== null}
+                  disabled={activeTab.running}
+                  onModel={(nextModel) => {
+                    const previousModel = activeTab.currentModel;
+                    updateTab(activeTab.localId, (tab) => ({
+                      ...tab,
+                      currentModel: nextModel,
+                      controlError: null,
+                    }));
+                    if (activeTab.sessionId) {
+                      void setModel(activeTab.sessionId, nextModel).catch((error) =>
+                        updateTab(activeTab.localId, (tab) => ({
+                          ...tab,
+                          currentModel: previousModel,
+                          controlError: t("toast.modelFailed", { error: String(error) }),
+                        })),
+                      );
+                    }
+                  }}
+                  onConfigOption={(configId, value) => {
+                    if (!activeTab.sessionId) return;
+                    const previousOptions = activeTab.configOptions;
+                    updateTab(activeTab.localId, (tab) => ({
+                      ...tab,
+                      controlError: null,
+                      configOptions: tab.configOptions.map((option) =>
+                        option.id === configId ? { ...option, current: value } : option,
+                      ),
+                    }));
+                    void setConfigOption(activeTab.sessionId, configId, value).catch((error) =>
                       updateTab(activeTab.localId, (tab) => ({
                         ...tab,
-                        currentModel: previousModel,
+                        configOptions: previousOptions,
                         controlError: t("toast.modelFailed", { error: String(error) }),
                       })),
                     );
-                  }
-                }}
-                onConfigOption={(configId, value) => {
-                  if (!activeTab.sessionId) return;
-                  const previousOptions = activeTab.configOptions;
-                  updateTab(activeTab.localId, (tab) => ({
-                    ...tab,
-                    controlError: null,
-                    configOptions: tab.configOptions.map((option) =>
-                      option.id === configId ? { ...option, current: value } : option,
-                    ),
-                  }));
-                  void setConfigOption(activeTab.sessionId, configId, value).catch((error) =>
+                  }}
+                  showWhenUnavailable
+                />
+              </div>
+              {voiceEnabled ? (
+                <VoiceButton
+                  onText={(text) =>
                     updateTab(activeTab.localId, (tab) => ({
                       ...tab,
-                      configOptions: previousOptions,
-                      controlError: t("toast.modelFailed", { error: String(error) }),
-                    })),
-                  );
-                }}
-              />
+                      draft: `${tab.draft}${tab.draft && !/\s$/.test(tab.draft) ? " " : ""}${text}`,
+                    }))}
+                />
+              ) : null}
               {activeTab.running ? (
                 activeTab.sessionId ? (
                   <Button
@@ -651,9 +1019,10 @@ export function SideChatPanel({
                 <Button
                   type="submit"
                   size="icon"
-                  variant={activeTab.draft.trim() ? "default" : "secondary"}
+                  variant={activeTab.draft.trim() || activeTab.attachments.length > 0 ? "default" : "secondary"}
                   className="size-8 shrink-0 rounded-full"
-                  aria-label={t("sideChat.send")}
+                  aria-label={t(labels.send)}
+                  disabled={activeTab.attaching}
                 >
                   <ArrowUp className="size-4" aria-hidden />
                 </Button>
@@ -662,6 +1031,6 @@ export function SideChatPanel({
           </div>
         </form>
       )}
-    </aside>
+    </section>
   );
 }
