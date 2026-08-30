@@ -135,6 +135,10 @@ Verdict: verified.
 All acceptance criteria are checked; merge, publication, and release remain a separate human
 disposition.
 
+- Final post-rebase repository verification passed ESLint, Stylelint, all 743 desktop tests with
+  3,482 expectations, TypeScript, and the production Vite build with 6,405 transformed modules.
+  `git diff --check` and the SDLC contract also passed.
+
 - The focus-ring follow-up began with a deterministic rendered failure: the nested textarea owned
   both its shared default focus ring and a local inset ring while the outer composer also owned a
   `focus-within` ring. After making the nested ring explicitly optional, the focused test passed

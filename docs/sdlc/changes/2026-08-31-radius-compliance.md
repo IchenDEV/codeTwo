@@ -97,6 +97,8 @@ from their eventual repository diff; no stored data or external state is changed
 
 Verdict: verified.
 
+- Final post-rebase verification passed ESLint, Stylelint, all 743 desktop tests with 3,482
+  expectations, TypeScript, and the production Vite build with 6,405 transformed modules.
 - A clean post-rebase `bun run lint:code` first failed only on the newly merged Feishu section
   toggle's bare `rounded` class. Migrating that control to `rounded-control` closes the mainline
   integration gap; the complete post-rebase verification below covers the corrected snapshot.

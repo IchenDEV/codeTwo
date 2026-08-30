@@ -98,21 +98,19 @@ Verdict: verified.
 - `bun test tests/designSystem.test.ts tests/designSystemBusinessComponents.test.tsx
   tests/templateDialog.test.tsx tests/dockArchitecture.test.ts
   tests/dockPluginGateRendered.test.tsx` — 25 passed, 0 failed, 149 expectations.
-- `bun run build:renderer` — lint, TypeScript, and Vite passed; 6,401 modules transformed. Vite kept
-  its existing advisory about chunks larger than 500 kB.
+- Post-rebase `bun run build:renderer` — lint, TypeScript, and Vite passed; 6,405 modules
+  transformed. Vite kept its existing advisory about chunks larger than 500 kB.
 - Active-reference search for the deleted checker command, script, baseline, allowlist, and
   compiled-CSS flag — no active references; historical change records were intentionally excluded.
 - `git diff --check` — passed.
-- `bun test` — 724 passed and 1 failed across 122 files. The failing pre-existing component-policy
-  contract expects exactly one `voiceEnabled={voiceComposerEnabled}` occurrence while the current
-  unrelated Quick/Side Chat work renders three. A focused rerun reproduced that exact mismatch;
-  this migration does not modify the test or that product policy.
+- Post-rebase `bun test` — 743 passed, 0 failed, and 3,482 expectations across 124 files. The
+  component-policy contract now covers the main Composer, Quick Chat, and Side Chat voice gates.
 
 Residual risk: ordinary lint cannot prove that every `50%` radius is applied to square geometry,
 evaluate color contrast, or inspect arbitrary CSS embedded inside JavaScript strings without
 reintroducing custom parsing. Those checks move to rendered accessibility review and focused tests.
-The current checkout also retains the unrelated component-policy test failure and existing React
-`act(...)` warnings. No user data, native Core ownership, or runtime persistence changed.
+Existing React `act(...)` warnings remain non-failing. No user data, native Core ownership, or
+runtime persistence changed.
 
 ## Review and release
 
