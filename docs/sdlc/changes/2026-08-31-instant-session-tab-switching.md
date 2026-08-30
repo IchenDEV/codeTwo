@@ -9,7 +9,7 @@ updated: 2026-08-31
 source: user request in this task, "移除 tab 之间切换的多余的动画"
 inputs: the current session rail selection treatment and the user-supplied sidebar screenshot
 outputs: immediate session-tab selection without a sliding or morphing indicator
-next_trigger: human review in PR #185
+next_trigger: merge PR #185 after required checks pass
 ---
 
 # Make session tab switching immediate
@@ -38,7 +38,8 @@ local state change rather than delaying tab selection. Other tab groups are outs
 ## Decision and gates
 
 The user's direct implementation request approves Intent and execution, with chenli as the named
-approver. It extends the active sidebar work on PR #185 and does not authorize merge or release.
+approver. It extends the active sidebar work on PR #185. The user explicitly authorized the PR's
+merge on 2026-08-31; no release is authorized.
 
 ## Plan
 
@@ -83,7 +84,8 @@ and rendered assertions.
 
 ## Review and release
 
-Pending human review in PR #185. No merge or release requested.
+Human review and merge approval for PR #185 were explicitly granted by chenli on 2026-08-31.
+No release was requested.
 
 ## Feedback
 

@@ -5,7 +5,7 @@ status: executing
 owner: codex
 approvers: chenli
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-08-31
 source: user request in this task, "云文档的渲染考虑使用飞书云文档组件或者说是 iframe 来接"
 inputs: the official Feishu Docs Component, the community Feishu Runtime, and the C2 document detail surface
 outputs: an official-component-first Feishu document viewer with a readable Markdown fallback
@@ -56,7 +56,8 @@ existing OpenAPI-to-Markdown rendering visible and offers the canonical Feishu l
 ## Decision and gates
 
 The user's direct implementation request approves this Intent and Spec, with chenli as the named
-approver. No PR, merge, publication, deployment, permission approval, or release is authorized.
+approver. The user later authorized PR #185 and explicitly authorized its merge on 2026-08-31.
+No publication, deployment, permission approval, or release is authorized.
 
 ## Plan
 
@@ -127,6 +128,7 @@ that the live component itself succeeded.
 ## Review and release
 
 Approval: implementation approved by chenli through the user request.
+Merge approval: PR #185 explicitly approved for merge by chenli on 2026-08-31.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.

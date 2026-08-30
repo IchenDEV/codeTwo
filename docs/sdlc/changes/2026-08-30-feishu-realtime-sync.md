@@ -5,7 +5,7 @@ status: executing
 owner: codex
 approvers: chenli
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-08-31
 source: user request in this task, "支持飞书新消息的同步……有红点……立即更新，而不是通过轮询"
 inputs: the Feishu collaboration connector, C2 process-runtime events, and the host-rendered Feishu sidebar
 outputs: event-driven Feishu message and document updates with local unread/change indicators
@@ -63,7 +63,8 @@ OAuth completion polling remains a separate short-lived authorization mechanism.
 ## Decision and gates
 
 The user's direct implementation request approves this Intent and Spec, with chenli as the named
-approver. No PR, merge, publication, deployment, or release is authorized.
+approver. The user later authorized PR #185 and explicitly authorized its merge on 2026-08-31.
+No publication, deployment, or release is authorized.
 
 ## Plan
 
@@ -138,6 +139,7 @@ activity and falls back to refresh-on-open for uncovered resources.
 ## Review and release
 
 Approval: implementation approved by chenli through the user request.
+Merge approval: PR #185 explicitly approved for merge by chenli on 2026-08-31.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.

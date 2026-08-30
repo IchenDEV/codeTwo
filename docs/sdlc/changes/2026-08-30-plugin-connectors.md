@@ -60,7 +60,8 @@ Only C2 Plugin Standard 1.2 bundles and installed records are accepted.
 ## Decision and gates
 
 The user's direct implementation request approves this Intent and Spec, with chenli as the named
-approver. No PR, merge, publication, deployment, or release is authorized.
+approver. The user later authorized PR #185 and explicitly authorized its merge on 2026-08-31.
+No publication, deployment, or release is authorized.
 
 ## Plan
 
@@ -173,6 +174,7 @@ the same-bundle desktop collision before accepting native integration and left-r
 
 Approval: implementation approved by chenli through the user request.
 Draft PR: https://github.com/IchenDEV/codeTwo/pull/185
+Merge approval: explicitly granted by chenli on 2026-08-31.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.

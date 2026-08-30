@@ -5,7 +5,7 @@ status: executing
 owner: codex
 approvers: chenli
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-08-31
 source: user request in this task, "文档 md 渲染"
 inputs: existing Feishu document detail and shared Markdown renderer
 outputs: Feishu document, conversation, emoji, and reaction rendering with focused tests and rendered evidence
@@ -54,7 +54,8 @@ message without making the pill interactive.
 ## Decision and gates
 
 The user's direct implementation request approves this narrowly scoped Intent and Spec, with
-chenli as the named approver. No PR, merge, publication, deployment, or release is authorized.
+chenli as the named approver. The user later authorized PR #185 and explicitly authorized its merge
+on 2026-08-31. No publication, deployment, or release is authorized.
 
 ## Plan
 
@@ -112,11 +113,12 @@ the fetched source representation.
 ## Review and release
 
 Approval: implementation approved by chenli through the user request.
+Merge approval: PR #185 explicitly approved for merge by chenli on 2026-08-31.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
 Rollback: restore the prior plain-text Feishu document body rendering.
-No release: pending human review; no release was requested.
+No release: repository integration was approved; no release was requested.
 
 ## Feedback
 
