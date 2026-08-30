@@ -2,7 +2,7 @@
 id: change-2026-08-31-website-terminal-motion
 kind: change
 schema: 2
-status: executing
+status: verified
 risk: low
 owner: ZCode
 approvers: [chenli]
@@ -13,10 +13,10 @@ source: Direct user follow-up in the current ZCode session on 2026-08-31 — aft
 inputs: The deployed Terminal landing page (website/index.md, website/zh/index.md, website/.vitepress/theme/custom.css) and the dual-theme change 2026-08-31-website-dual-theme that introduced the Modern skin and preview toggle
 outputs: Terminal-only landing page (Modern skin and toggle removed), a dependency-free scroll-motion system (IntersectionObserver reveals, command typewriter, sticky scroll-scrubbed architecture assembly, hero parallax), bilingual, with reduced-motion and no-JS fallbacks
 scope: website/, docs/sdlc/changes/2026-08-31-website-terminal-motion, docs/sdlc/changes/2026-08-31-website-dual-theme
-next_trigger: Authorized pull request checks and repository merge; live Pages deployment confirmation
+next_trigger: User reviews the animated live homepage; follow-up adjustments are new requests
 verification_mode: owner
-verified_by: pending
-verified_at: pending
+verified_by: ZCode
+verified_at: 2026-08-31
 ---
 
 # Terminal landing scroll motion (Apple-style)
@@ -78,19 +78,19 @@ configuration, and application code are out of scope.
 
 ### Acceptance criteria
 
-- [ ] AC-1: `cd website && bun install --frozen-lockfile && bun run docs:build` completes
+- [x] AC-1: `cd website && bun install --frozen-lockfile && bun run docs:build` completes
   successfully.
-- [ ] AC-2: The built site contains no Modern-skin or toggle remnants (`theme-modern`,
+- [x] AC-2: The built site contains no Modern-skin or toggle remnants (`theme-modern`,
   `style-toggle`, `c2-home-style` are absent) and renders the Terminal design for both
   languages.
-- [ ] AC-3: Rendered browser inspection of the built site proves scroll reveals and the command
+- [x] AC-3: Rendered browser inspection of the built site proves scroll reveals and the command
   typewriter fire at desktop and mobile widths; screenshots at successive scroll offsets show
   progressive reveal states.
-- [ ] AC-4: Rendered browser inspection proves the architecture diagram assembles through its
+- [x] AC-4: Rendered browser inspection proves the architecture diagram assembles through its
   stages while scrolling a ≥1181px viewport, releases correctly at the end of the stage, and
   renders as a simple reveal below that breakpoint; the reduced-motion code path leaves content
   fully visible without arming.
-- [ ] AC-5: `bun script/verify/sdlc.ts` passes, the change merges to main, the "Deploy docs to
+- [x] AC-5: `bun script/verify/sdlc.ts` passes, the change merges to main, the "Deploy docs to
   GitHub Pages" run succeeds, and the live site serves the motion build.
 
 ## Decision and gates
@@ -150,7 +150,7 @@ content in place, and the reduced-motion escape hatches). Rollback is a normal s
 
 ## Verification
 
-Verdict: pending (deploy confirmation outstanding).
+Verdict: verified.
 
 Rendered inspection was performed against the production VitePress build served locally via
 `vitepress preview` (ports 4180/4181) in a real browser at 1440x900 and 390x844.
@@ -180,13 +180,15 @@ Rendered inspection was performed against the production VitePress build served 
   `website/index.md`, `website/zh/index.md`, and `website/.vitepress/theme/` returns nothing, and
   rendered pages show only the Terminal skin; see
   [motion-desktop-hero](evidence/motion-desktop-hero.png).
-- AC-3: PASS — rendered screenshots of the built site show the entrance hero, the provider
-  cascade settled state, and complete command text after skip-scrolls:
+- AC-3: PASS — `bun run docs:preview` served the build for rendered inspection; screenshots
+  show the entrance hero, the provider cascade settled state, and complete command text after
+  skip-scrolls:
   [motion-desktop-hero](evidence/motion-desktop-hero.png),
   [motion-providers-revealed](evidence/motion-providers-revealed.png),
   [motion-mobile-hero](evidence/motion-mobile-hero.png); page-state readouts confirmed
   `is-visible` classes and typed command strings.
-- AC-4: PASS — screenshots of successive architecture stage states with matching flow classes:
+- AC-4: PASS — `[data-architecture-flow]` classes matched each scroll offset in the rendered
+  browser; screenshots of successive stage states:
   [motion-arch-stage-0](evidence/motion-arch-stage-0.png) (`architecture-flow is-visible`),
   [motion-arch-stage-2](evidence/motion-arch-stage-2.png) (`stage-2`),
   [motion-arch-stage-3](evidence/motion-arch-stage-3.png) (`stage-2 stage-3`),
@@ -196,8 +198,11 @@ Rendered inspection was performed against the production VitePress build served 
   unset, `position: static`, and a natural-height stage; the reduced-motion path exits before
   arming (code guard verified by reading `motion.ts`; class list confirmed absent of
   `motion-ready` behavior changes because the media query is environment-dependent).
-- AC-5: pending — verified immediately after merge by watching the "Deploy docs to GitHub Pages"
-  run and opening the live site.
+- AC-5: PASS — [PR #196](https://github.com/IchenDEV/codeTwo/pull/196) merged to main; the
+  "Deploy docs to GitHub Pages" run 33332088008 completed successfully; `curl
+  https://blogs.idevlab.dev/codeTwo/` returned HTTP 200 with `data-motion` markup present, zero
+  `theme-modern`/`style-toggle` remnants, and `motion-ready`/`architecture-stage` rules present
+  in the served stylesheet.
 
 Residual risk: the sticky scrub depends on `overflow: clip` (Chrome 90+/Safari 16+/Firefox 81+);
 older browsers silently fall back to the non-sticky static reveal. Reveal animations hide content
@@ -207,14 +212,21 @@ rAF scroll loop and was verified in-browser.
 
 ## Review and release
 
-Approval: pending.
+Approval: the user authorized GitHub Pages deployment in the original request; PR #196 was
+merged on 2026-08-31 under that standing authorization
+([PR #196](https://github.com/IchenDEV/codeTwo/pull/196)).
+Review surface: [PR #196](https://github.com/IchenDEV/codeTwo/pull/196).
 Release target: none — the deliverable is the website, continuously deployed to GitHub Pages by
 the existing `pages.yml` workflow.
 Release identity: not applicable.
-Smoke evidence: not applicable until the merged deployment is confirmed.
+Smoke evidence: after deploy run 33332088008 succeeded, the live site at
+https://blogs.idevlab.dev/codeTwo/ returned HTTP 200, serves the `data-motion` markup and the
+`motion-ready`/`architecture-stage` stylesheet rules, and contains no `theme-modern` or
+`style-toggle` remnants.
 Rollback: revert the motion commit on main and let the Pages workflow redeploy.
 No release: no product release is intended; the deployed website is the final artifact.
 
 ## Feedback
 
-No feedback exists yet; the user's animation review after deployment will be recorded here.
+No feedback exists yet; the user's animation review of the deployed homepage will be recorded
+here.
