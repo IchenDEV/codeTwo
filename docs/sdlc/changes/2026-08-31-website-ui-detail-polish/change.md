@@ -2,7 +2,7 @@
 id: change-2026-08-31-website-ui-detail-polish
 kind: change
 schema: 2
-status: executing
+status: verified
 risk: low
 owner: ZCode
 approvers: [chenli]
@@ -13,10 +13,10 @@ source: Direct user request in the current ZCode session on 2026-08-31 — refin
 inputs: The deployed Terminal landing page (custom.css, motion.css, light.css, both index.md files) and the supplied reference screenshot
 outputs: Blinking block cursor on the hero headline, monospace hero body copy, muted nav links with a bordered locale chip, green-text GitHub CTA, and green-tinted primary buttons with a 6px radius — in dark and light modes, both languages
 scope: website/, docs/sdlc/changes/2026-08-31-website-ui-detail-polish
-next_trigger: User reviews the polished landing on the live site; follow-up adjustments are new requests
+next_trigger: User reviews the polished landing on the live site
 verification_mode: owner
-verified_by: pending
-verified_at: pending
+verified_by: ZCode
+verified_at: 2026-08-31
 ---
 
 # Landing UI detail polish (reference: Utter landing)
@@ -60,16 +60,16 @@ deployment, and application code are out of scope.
 
 ### Acceptance criteria
 
-- [ ] AC-1: `cd website && bun install --frozen-lockfile && bun run docs:build` completes
+- [x] AC-1: `cd website && bun install --frozen-lockfile && bun run docs:build` completes
   successfully.
-- [ ] AC-2: Rendered screenshots prove the five details in dark mode (blinking cursor present in
+- [x] AC-2: Rendered screenshots prove the five details in dark mode (blinking cursor present in
   DOM and styled, mono hero paragraph, muted nav + locale chip + green CTA, tinted 6px primary
   buttons) with no layout breakage at 1440x900 and 390x844.
-- [ ] AC-3: Rendered screenshots prove the equivalent light-mode rendering (tinted buttons, chip,
+- [x] AC-3: Rendered screenshots prove the equivalent light-mode rendering (tinted buttons, chip,
   cursor) with readable contrast.
-- [ ] AC-4: `bun script/verify/sdlc.ts` passes, the change merges to main, the Pages deploy run
+- [x] AC-4: `bun script/verify/sdlc.ts` passes, the change merges to main, the Pages deploy run
   succeeds, and the live site serves the polished build.
-- [ ] AC-5: The cursor animation respects reduced motion (static rule present; page content
+- [x] AC-5: The cursor animation respects reduced motion (static rule present; page content
   unaffected).
 
 ## Decision and gates
@@ -106,7 +106,7 @@ modes. Rollback is a normal source revert.
 
 ## Verification
 
-Verdict: pending (deploy confirmation outstanding).
+Verdict: verified.
 
 Rendered inspection against the production build served by `vitepress preview`, real browser at
 1440x900 and 390x844, dark and light:
@@ -127,15 +127,19 @@ Rendered inspection against the production build served by `vitepress preview`, 
 
 - AC-1: PASS — `cd website && bun install --frozen-lockfile && bun run docs:build` completed
   ("build complete in 1.42s").
-- AC-2: PASS — rendered dark screenshots plus computed-style readouts:
+- AC-2: PASS — `bun run docs:preview` served the build for inspection; rendered dark screenshots
+  plus computed-style readouts:
   [polish-dark-hero](evidence/polish-dark-hero.png) (cursor, mono copy, muted nav, chip, green
   CTA, tinted buttons); mobile
   [polish-mobile-hero](evidence/polish-mobile-hero.png) with `scrollWidth == clientWidth`.
-- AC-3: PASS — light-mode toggle screenshots:
+- AC-3: PASS — `home-light` toggled via the header switch in the rendered browser; light-mode
+  screenshots:
   [polish-light-hero](evidence/polish-light-hero.png) with computed rgba(21,122,44,0.1) button
   and dark-green CTA.
-- AC-4: pending — verified immediately after merge by watching the "Deploy docs to GitHub Pages"
-  run and opening the live site.
+- AC-4: PASS — [PR #201](https://github.com/IchenDEV/codeTwo/pull/201) merged to main; the
+  "Deploy docs to GitHub Pages" run 33335173790 completed successfully; `curl
+  https://blogs.idevlab.dev/codeTwo/` returned HTTP 200 with the `hero-cursor` markup present and
+  the served stylesheet containing the `hero-cursor` polish rules.
 - AC-5: PASS — the reduced-motion block sets `.hero-cursor { animation: none }` and the page
   content (headline text, period) renders identically without the cursor animation.
 
@@ -150,10 +154,13 @@ Approval: the user authorized GitHub Pages deployment in the original request; P
 Release target: none — the deliverable is the website, continuously deployed to GitHub Pages by
 the existing `pages.yml` workflow.
 Release identity: not applicable.
-Smoke evidence: to be confirmed after the merged deployment (AC-4).
+Smoke evidence: after deploy run 33335173790 succeeded, the live site at
+https://blogs.idevlab.dev/codeTwo/ returned HTTP 200 and serves the polished build (hero-cursor
+markup and stylesheet rules present).
 Rollback: revert the polish commit on main and let the Pages workflow redeploy.
 No release: no product release is intended; the deployed website is the final artifact.
 
 ## Feedback
 
-No feedback exists yet; the user's review of the polished landing will be recorded here.
+No feedback exists yet; the user's review of the polished landing on the live site will be
+recorded here.
