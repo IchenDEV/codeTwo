@@ -2,7 +2,7 @@
 id: change-2026-08-31-stabilize-desktop-dom-harness
 kind: change
 schema: 2
-status: executing
+status: verified
 risk: low
 owner: codex
 approvers: [user]
@@ -13,10 +13,10 @@ source: user request to fix PR 198 CI on 2026-08-31
 inputs: PR 198 Desktop design system failure logs, shared happy-dom test harness, Base UI ScrollArea and Popover contracts
 outputs: browser API and frame-scheduler test compatibility with cross-platform desktop test evidence
 scope: apps/desktop/tests/domTestHarness.ts, apps/desktop/tests/domTestHarness.test.ts, docs/sdlc/changes/2026-08-31-stabilize-desktop-dom-harness
-next_trigger: PR 198 Desktop design system CI completes on all three platforms
+next_trigger: pull request review and explicit merge approval
 verification_mode: owner
-verified_by: pending
-verified_at: pending
+verified_by: codex
+verified_at: 2026-08-31
 ---
 
 # Stabilize the desktop DOM test harness
@@ -45,7 +45,7 @@ floating-position update loop monopolize Linux test execution.
 - [x] AC-2: The Bun 1.4.0 full desktop suite exits promptly on macOS and Linux without
       `viewport.getAnimations is not a function` or Popover timeout failures.
 - [x] AC-3: The renderer build and repository lifecycle checks pass with clean diff hygiene.
-- [ ] AC-4: PR 198's Desktop design system checks rerun successfully on Linux, macOS, and Windows.
+- [x] AC-4: PR 198's Desktop design system checks rerun successfully on Linux, macOS, and Windows.
 
 ## Decision and gates
 
@@ -76,7 +76,7 @@ tight Linux-only update loop.
 
 ## Verification
 
-Verdict: running.
+Verdict: verified.
 
 ### Acceptance evidence
 
@@ -88,14 +88,15 @@ Verdict: running.
   all 753 tests in 5.82 seconds with 0 failures after native happy-dom frame scheduling was restored.
 - AC-3: PASS — `bun run build:renderer` passed ESLint, Stylelint, TypeScript, and a 6,401-module
   Vite production build. `bun script/verify/sdlc.ts --worktree` and `git diff --check` passed.
-- AC-4: PENDING.
+- AC-4: PASS — PR 198 run `33333908779` passed Linux `validate` in 2m04s, macOS in 48s, and
+  Windows in 1m48s. SDLC run `33333908830` passed in 13s.
 
 `bun script/verify/docs.ts` still reports the 16 unclassified website evidence images already
 present on `origin/main`; this change introduces no new documentation-catalog error.
 
-Residual risk: remote runner timing still requires confirmation. The animation-query fallback
-deliberately models the no-active-animation case only, which is appropriate for happy-dom's
-animation-free environment.
+Residual risk: the animation-query fallback deliberately models the no-active-animation case only,
+which is appropriate for happy-dom's animation-free environment. Browser animation behavior remains
+covered by the real renderer rather than this unit-test DOM.
 
 ## Review and release
 
@@ -106,4 +107,5 @@ Preparing this section does not authorize merge, deployment, release, or product
 
 ## Feedback
 
-No post-review feedback exists yet. PR 198 CI is the next observation boundary.
+PR 198 CI exposed both a missing Web Animations query and a zero-delay frame-scheduler loop. The
+final rerun passed on Linux, macOS, and Windows. Merge remains a separate human Gate.
