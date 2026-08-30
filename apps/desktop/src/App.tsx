@@ -6893,7 +6893,7 @@ export default function App() {
         : "Collapse the sidebar",
       run: toggleDisplayedRail,
     },
-    { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
+    { id: "remote", label: t("rail.deviceConnections"), run: () => setShowRemote(true) },
     {
       id: "settings",
       category: "setting" as const,
@@ -7431,6 +7431,12 @@ export default function App() {
             openPluginManager();
           }}
           onOpenAutomations={openAutomations}
+          deviceConnectionsAvailable={componentEnabled("remote.modal")}
+          deviceConnectionsOpen={showRemote}
+          onOpenDeviceConnections={() => {
+            setShowRemote(true);
+            if (railOverlay) setNarrowRailOpen(false);
+          }}
           width={railWidth}
           onWidth={setRailWidth}
           newHint={hint("new_session")}
