@@ -306,12 +306,24 @@ export function PullRequestsPage({
           data-pull-requests-list-header
           className={cn(
             "electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-2 pr-3",
-            headerLeadingAction ? "window-controls-safe-main" : "pl-3",
+            headerLeadingAction ? "window-controls-safe-main" : "pl-page-section",
           )}
         >
           {headerLeadingAction ? <div data-pull-requests-leading-action className="shrink-0">{headerLeadingAction}</div> : null}
           <h1 className="shrink-0 text-dialog font-semibold">{t("pullRequests.title")}</h1>
-          <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.views")} className="flex h-control min-w-0 shrink items-center gap-1 overflow-x-auto">
+          <div className="electrobun-webkit-app-region-drag flex-1" />
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.refresh")} onClick={() => void reload()} disabled={loading}>{loading ? <Spinner /> : <RefreshCw />}</Button>} />
+            <TooltipContent>{t("pullRequests.refresh")}</TooltipContent>
+          </Tooltip>
+        </header>
+        <div data-pull-requests-list-controls className="grid shrink-0 gap-2 px-4 pb-3">
+          <LiquidSelectionGroup
+            data-pull-requests-views
+            role="tablist"
+            aria-label={t("pullRequests.views")}
+            className="ms-module-inset flex h-control min-w-0 max-w-full items-center gap-1"
+          >
             {(["all", "reviewing", "authored"] as const).map((id) => (
               <button
                 key={id}
@@ -328,30 +340,25 @@ export function PullRequestsPage({
               </button>
             ))}
           </LiquidSelectionGroup>
-          <div className="electrobun-webkit-app-region-drag hidden flex-1 sm:block" />
-          <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.refresh")} onClick={() => void reload()} disabled={loading}>{loading ? <Spinner /> : <RefreshCw />}</Button>} />
-            <TooltipContent>{t("pullRequests.refresh")}</TooltipContent>
-          </Tooltip>
-        </header>
-        <div className="flex shrink-0 items-center gap-2 px-4 py-3">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input size="compact" value={query} onChange={(event) => setQuery(event.currentTarget.value)} className="pl-8" placeholder={t("pullRequests.search")} aria-label={t("pullRequests.search")} />
+          <div data-pull-requests-search-row className="flex min-w-0 items-center gap-2">
+            <div data-pull-requests-search className="ms-inline relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input size="compact" value={query} onChange={(event) => setQuery(event.currentTarget.value)} className="pl-8" placeholder={t("pullRequests.search")} aria-label={t("pullRequests.search")} />
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("pullRequests.filterLabel")} title={readinessLabel}><SlidersHorizontal className="size-4" /></Button>} />
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  {(["all", "ready", "draft"] as const).map((id) => (
+                    <DropdownMenuItem key={id} onClick={() => setReadiness(id)}>
+                      <Check className={cn("size-3.5", readiness !== id && "opacity-0")} />
+                      {t(`pullRequests.filter.${id}`)}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("pullRequests.filterLabel")} title={readinessLabel}><SlidersHorizontal className="size-4" /></Button>} />
-            <DropdownMenuContent align="end">
-              <DropdownMenuGroup>
-                {(["all", "ready", "draft"] as const).map((id) => (
-                  <DropdownMenuItem key={id} onClick={() => setReadiness(id)}>
-                    <Check className={cn("size-3.5", readiness !== id && "opacity-0")} />
-                    {t(`pullRequests.filter.${id}`)}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-3 pb-4">

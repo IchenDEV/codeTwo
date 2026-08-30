@@ -1,11 +1,13 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { act as reactAct } from "react";
 
 import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { PluginManagerPage, PluginUiSlot, buildPluginManagerCatalog } = await import("../src/plugins");
+const desktopStyles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -295,6 +297,10 @@ describe("PluginManagerPage", () => {
     );
     expect(action).not.toBeNull();
     expect(action?.textContent).toContain("Expand sidebar");
+    expect(view.container.querySelector(".plugin-manager-list-header")?.className)
+      .toContain("pl-surface-inset");
+    expect(view.container.querySelector(".plugin-manager-list-header h1")?.className)
+      .not.toContain("ms-surface-inset");
     expect(detailAction).not.toBeNull();
     expect(detailAction?.textContent).toContain("Expand sidebar");
     click(action?.querySelector("button"));
@@ -406,16 +412,34 @@ describe("PluginManagerPage", () => {
     await flush();
 
     expect(view.container.querySelector("[data-plugin-manager-page]")?.tagName).toBe("MAIN");
-    expect(view.container.querySelector("header")?.querySelectorAll('[role="tab"]')).toHaveLength(5);
+    expect(view.container.querySelector(".plugin-manager-list-header")?.querySelectorAll('[role="tab"]')).toHaveLength(0);
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("@container/plugin-manager")).toBe(true);
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("plugin-manager-page")).toBe(true);
     expect(view.container.querySelector(".plugin-manager-list-pane")).not.toBeNull();
     expect(view.container.querySelector(".plugin-manager-list-header")?.className)
       .toContain("h-layout-titlebar");
+    expect(view.container.querySelector(".plugin-manager-list-header")?.className)
+      .toContain("pl-page-section");
+    expect(view.container.querySelector(".plugin-manager-list-header h1")?.className)
+      .not.toContain("ms-surface-inset");
     expect(view.container.querySelector(".plugin-manager-detail-header")?.className)
       .toContain("h-layout-titlebar");
     expect(view.container.querySelector(".plugin-manager-tabs")).not.toBeNull();
+    expect(view.container.querySelector(".plugin-manager-tabs")?.className)
+      .toContain("ms-surface-inset");
+    expect(view.container.querySelector(".plugin-manager-tabs")?.className).not.toContain("overflow-x-auto");
     expect(view.container.querySelectorAll(".plugin-manager-tab-count")).toHaveLength(5);
+    expect(view.container.querySelectorAll("[data-plugin-manager-tab-label]")).toHaveLength(5);
+    const listControls = view.container.querySelector("[data-plugin-manager-list-controls]");
+    expect(listControls?.querySelectorAll('[role="tab"]')).toHaveLength(5);
+    expect(listControls?.querySelector("[data-plugin-manager-search]")).not.toBeNull();
+    expect(listControls?.querySelector("[data-plugin-manager-search-field]")).not.toBeNull();
+    expect(listControls?.querySelector("[data-plugin-manager-search-field]")?.className)
+      .toContain("ms-inline");
+    expect(desktopStyles).toContain("container: plugin-manager-list / inline-size");
+    expect(desktopStyles).toContain("@container plugin-manager-list (max-width: 24rem)");
+    expect(desktopStyles).toContain(".plugin-manager-tab:not(:first-of-type)");
+    expect(desktopStyles).toContain("padding-inline: var(--ds-space-optical)");
     expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();
     expect(view.container.querySelector("[data-plugin-manager-page]")?.getAttribute("data-compact-detail")).toBe("true");
     expect(view.container.querySelector("[data-plugin-manager-scroll]")?.classList.contains("w-full")).toBe(true);

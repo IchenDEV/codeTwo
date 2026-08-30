@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { act as reactAct } from "react";
 
 import { activateDom, button, click, dom, flush, mount, waitFor } from "./domTestHarness";
@@ -11,6 +12,9 @@ const { I18nProvider } = await import("../src/i18n");
 const { PullRequestsPage } = await import("../src/github/PullRequestsPage");
 const { associateTaskPullRequest, createBoardTask } = await import("../src/taskboard/taskBoard");
 const { githubPullRequestReference } = await import("../src/github/pullRequests");
+const layoutSpec = JSON.parse(
+  readFileSync(new URL("../layout-spec.json", import.meta.url), "utf8"),
+);
 
 const mounted = [];
 let restoreCanvasContext = null;
@@ -98,8 +102,23 @@ describe("PullRequestsPage", () => {
     );
     mounted.push(view);
 
+    const listHeader = view.container.querySelector("[data-pull-requests-list-header]");
+    const listControls = view.container.querySelector("[data-pull-requests-list-controls]");
+    const views = view.container.querySelector("[data-pull-requests-views]");
+    const search = view.container.querySelector("[data-pull-requests-search]");
     expect(view.container.querySelector(".pull-requests-list-pane h1")?.textContent).toBe("Pull requests");
     expect(view.container.querySelector(".pull-requests-list-pane h1")?.className).toContain("text-dialog");
+    expect(layoutSpec.content.workbench).toMatchObject({
+      listContentLine: 32,
+      listControlsOuterInset: 16,
+    });
+    expect(listHeader?.className).toContain("pl-page-section");
+    expect(listHeader?.contains(views)).toBeFalse();
+    expect(listControls?.contains(views)).toBeTrue();
+    expect(listControls?.contains(search)).toBeTrue();
+    expect(views?.className).toContain("ms-module-inset");
+    expect(views?.className).not.toContain("overflow-x-auto");
+    expect(search?.className).toContain("ms-inline");
     await waitFor(() => {
       expect(dom.document.body.textContent).toContain("Build the GitHub panel");
       expect(dom.document.body.textContent).toContain("feature/github-panel");
@@ -138,6 +157,9 @@ describe("PullRequestsPage", () => {
     const detailHeader = view.container.querySelector("[data-pull-request-detail-header]");
     expect(page?.getAttribute("data-compact-detail")).toBe("false");
     expect(listHeader?.className).toContain("window-controls-safe-main");
+    expect(listHeader?.querySelector("[role='tablist']")).toBeNull();
+    expect(view.container.querySelector("[data-pull-requests-list-controls] [role='tablist']"))
+      .not.toBeNull();
     expect(detailHeader?.className).toContain("window-controls-safe-compact-main");
     expect(view.container.querySelector("[data-pull-request-detail-leading-action] button")?.getAttribute("aria-label")).toBe("Expand the sidebar");
 

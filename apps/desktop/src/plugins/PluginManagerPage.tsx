@@ -1691,14 +1691,22 @@ export function PluginManagerPage({
       aria-label={labels.title}
     >
       <div className="plugin-manager-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
-        <header className="plugin-manager-list-header electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-1 px-3">
+        <header
+          className={cn(
+            "plugin-manager-list-header electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-1 pr-surface-inset",
+            headerLeadingAction ? "pl-surface-inset" : "pl-page-section",
+          )}
+        >
           {headerLeadingAction ? (
             <div data-plugin-manager-leading-action className="shrink-0">
               {headerLeadingAction}
             </div>
           ) : null}
           <h1 className="shrink-0 text-dialog font-semibold">{labels.title}</h1>
-          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="plugin-manager-tabs flex h-control min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+          <div className="electrobun-webkit-app-region-drag flex-1" />
+        </header>
+        <div data-plugin-manager-list-controls className="grid shrink-0 gap-2 px-4 pb-3">
+          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="plugin-manager-tabs ms-surface-inset flex h-control min-w-0 max-w-full items-center gap-1">
             {(["plugins", "mcps", "skills", "hooks", "marketplace"] as const).map((id) => (
               <button
                 key={id}
@@ -1711,13 +1719,12 @@ export function PluginManagerPage({
                   tab === id && "font-medium text-foreground hover:bg-transparent",
                 )}
               >
-                {labels[id]} <span className="plugin-manager-tab-count text-fine tabular-nums">{tabCounts[id]}</span>
+                <span data-plugin-manager-tab-label>{labels[id]}</span>{" "}
+                <span className="plugin-manager-tab-count text-fine tabular-nums">{tabCounts[id]}</span>
               </button>
             ))}
           </LiquidSelectionGroup>
-        </header>
-        <div className="flex shrink-0 items-center gap-2 px-4 py-3">
-          <div className="relative min-w-0 flex-1">
+          <div data-plugin-manager-search-field className="ms-inline relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
               data-plugin-manager-search
