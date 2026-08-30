@@ -12,6 +12,14 @@ import { GlobalWindow } from "happy-dom";
  */
 export const dom = new GlobalWindow({ url: "http://localhost/" });
 
+if (typeof dom.Element.prototype.getAnimations !== "function") {
+  Object.defineProperty(dom.Element.prototype, "getAnimations", {
+    configurable: true,
+    writable: true,
+    value: () => [],
+  });
+}
+
 const DOM_KEYS = [
   "window",
   "document",
