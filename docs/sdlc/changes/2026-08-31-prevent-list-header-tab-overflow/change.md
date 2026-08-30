@@ -107,6 +107,9 @@ configuration, or external state is changed.
 
 ## Build
 
+[PR #191](https://github.com/IchenDEV/codeTwo/pull/191) carries the scoped implementation and its
+schema-2 lifecycle record.
+
 - Automations keeps its 48px title/action row and renders the existing accessible filter group plus
   search field in a dedicated list-control stack below it. The macOS safe-area class remains on the
   actual titlebar and the create action retains its accessible name and behavior.
@@ -188,7 +191,8 @@ plus the successful renderer build.
 ## Review and release
 
 Approval: the user explicitly authorized PR creation and merge on 2026-08-31 after the verified
-rendered handoff; repository checks must pass before merge.
+rendered handoff. [PR #191](https://github.com/IchenDEV/codeTwo/pull/191) is the authoritative
+review and integration record; repository checks must pass before merge.
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
