@@ -462,6 +462,9 @@
     );
     box-shadow: inset calc(-1 * var(--hairline-width)) 0 0 var(--sidebar-border);
   }
+  .session-rail [data-rail-header] {
+    box-shadow: none;
+  }
   .session-rail:not([data-dragging]) {
     transition: width var(--motion-slow) var(--ease-standard);
   }
@@ -1512,22 +1515,51 @@ pre {
   box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--border);
 }
 
-@container session-header (max-width: 44rem) {
+/* Primary actions pair one semantic icon with one label; context and layout stay icon-only. */
+.session-header-action-icon,
+.session-header-context-icon,
+.session-header-layout-icon,
+.session-header [data-plugin-ui-slot="session.header"] [data-icon="inline-start"] {
+  display: block;
+}
+
+.session-header-context-label,
+.session-header-layout-label,
+.session-header [data-plugin-ui-slot="session.header"] .session-header-action-label {
+  display: none;
+}
+
+.session-header [data-plugin-ui-slot="session.header"] {
+  min-width: var(--ds-control-normal);
+  scrollbar-width: none;
+}
+
+.session-header [data-plugin-ui-slot="session.header"]::-webkit-scrollbar {
+  display: none;
+}
+
+.session-header-context-main,
+.session-header-plugin-action,
+.session-header-layout-main {
+  flex: 0 0 var(--ds-control-normal);
+  width: var(--ds-control-normal);
+  min-width: var(--ds-control-normal);
+  max-width: var(--ds-control-normal);
+  justify-content: center;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+@container session-header (max-width: 36rem) {
+  .session-header-actions {
+    gap: var(--ds-space-surface-inset);
+  }
+
   .session-header-action-label {
     display: none;
   }
 
-  .session-header [data-plugin-ui-slot="session.header"] {
-    min-width: var(--ds-control-normal);
-    scrollbar-width: none;
-  }
-
-  .session-header [data-plugin-ui-slot="session.header"]::-webkit-scrollbar {
-    display: none;
-  }
-
-  .session-header-action-main,
-  .session-header-plugin-action {
+  .session-header-action-main {
     flex: 0 0 var(--ds-control-normal);
     width: var(--ds-control-normal);
     min-width: var(--ds-control-normal);
@@ -1535,6 +1567,7 @@ pre {
     justify-content: center;
     padding-right: 0;
     padding-left: 0;
+    background: transparent;
   }
 }
 
@@ -1553,11 +1586,4 @@ pre {
     gap: 0.25rem;
   }
 
-  .session-header-split-trigger {
-    display: none;
-  }
-
-  .session-header-split-group .session-header-action-main {
-    border-radius: var(--ds-radius-control);
-  }
 }

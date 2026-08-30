@@ -14,6 +14,7 @@ const railSource = source("../src/sidebar/SessionRail.tsx");
 const sceneStudioSource = source("../src/session/SceneStudio.tsx");
 const dockSource = source("../src/dock/Dock.tsx");
 const tabsSource = source("../src/components/ui/tabs.tsx");
+const sessionHeaderActionsSource = source("../src/session/SessionHeaderActions.tsx");
 const electrobunConfig = source("../electrobun.config.ts");
 const prepareElectrobun = source("../scripts/prepare-electrobun.ts");
 const patchMacOSInfo = source("../scripts/patch-macos-info.ts");
@@ -129,10 +130,41 @@ describe("macOS window chrome contract", () => {
       '"session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4"',
     );
     expect(appSource).toContain(
-      'className="session-header-toolbar flex min-w-0 shrink-0 items-center gap-1"',
+      'className="session-header-toolbar flex min-w-0 shrink-0 items-center gap-4 [&_svg]:text-muted-foreground"',
     );
+    expect(sessionHeaderActionsSource).toContain(
+      'className="session-header-actions flex shrink-0 items-center gap-2"',
+    );
+    expect(sessionHeaderActionsSource).toContain(
+      'session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground',
+    );
+    expect(styles).not.toMatch(
+      /\.session-header-actions\s*{[^}]*box-shadow:\s*inset 0 0 0 var\(--hairline-width\) var\(--border\);/s,
+    );
+    expect(styles).toMatch(
+      /\.session-header-context-label,[\s\S]*?\.session-header-layout-label,[\s\S]*?\[data-plugin-ui-slot="session\.header"\] \.session-header-action-label\s*{\s*display:\s*none;/s,
+    );
+    expect(styles).toMatch(
+      /\.session-header-action-icon,[\s\S]*?\.session-header-context-icon,[\s\S]*?\.session-header-layout-icon,[\s\S]*?\[data-plugin-ui-slot="session\.header"\] \[data-icon="inline-start"\]\s*{\s*display:\s*block;/s,
+    );
+    expect(styles).toMatch(
+      /\.session-header-context-main,[\s\S]*?\.session-header-plugin-action,[\s\S]*?\.session-header-layout-main\s*{[^}]*width:\s*var\(--ds-control-normal\);[^}]*justify-content:\s*center;/s,
+    );
+    expect(styles).toMatch(
+      /@container session-header \(max-width: 36rem\)[\s\S]*?\.session-header-action-label\s*{\s*display:\s*none;/s,
+    );
+    expect(appSource).toMatch(
+      /<EnvironmentPopover[\s\S]*?<SessionHeaderActions[\s\S]*?<PaneLayoutToolbar/,
+    );
+    expect(appSource).toContain('viewLabel={t("pane.viewMenu")}');
     expect(railSource).toContain(
       'className="window-titlebar window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 pr-2"',
+    );
+    expect(styles).toMatch(
+      /\.session-rail \[data-rail-header\]\s*{[^}]*box-shadow:\s*none;/s,
+    );
+    expect(styles).toMatch(
+      /\.glass-rail\s*{[^}]*box-shadow:\s*inset calc\(-1 \* var\(--hairline-width\)\) 0 0 var\(--sidebar-border\);/s,
     );
     expect(titlebarClasses).toHaveLength(2);
     expect(titlebarClasses.every((classes) => classes.includes("window-titlebar"))).toBe(true);
