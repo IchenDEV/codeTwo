@@ -30,7 +30,8 @@ body:has(.codetwo-home) #app {
   --home-green-dim: #2ea840;
   --home-line: rgb(89 239 105 / 28%);
   min-width: 320px;
-  overflow: hidden;
+  /* clip (not hidden) so the architecture flow can use position: sticky */
+  overflow: clip;
   border: 1px solid #536258;
   border-radius: 17px;
   color: var(--home-ink);
