@@ -29,16 +29,16 @@ describe("macOS window chrome contract", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toContain("trafficLightOffset");
     expect(electrobunHost).toMatch(
-      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(28, 21\);[\s\S]*?\}\s*rendererReady = true;/,
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 16\);[\s\S]*?\}\s*rendererReady = true;/,
     );
     expect(electrobunHost).toContain(
-      'mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(28, 21))',
+      'mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(22, 16))',
     );
     expect(electrobunHost).not.toContain("ResizeObserver");
     expect(electrobunHost).not.toContain("getBoundingClientRect");
     expect(
       Array.from(electrobunHost.matchAll(/setWindowButtonPosition\(([^)]*)\)/g), (match) => match[1]),
-    ).toEqual(["28, 21", "28, 21"]);
+    ).toEqual(["22, 16", "22, 16"]);
   });
 
   test("routes custom titlebar double-clicks through the user's macOS window action", () => {
@@ -226,7 +226,7 @@ describe("macOS window chrome contract", () => {
     expect(dockSource).toContain('<TabsList variant="toolbar">');
     expect(dockSource).not.toContain('data-[state=active]');
     expect(tabsSource).toContain(
-      'toolbar: "gap-1 bg-transparent p-0 group-data-[orientation=horizontal]/tabs:data-[variant=toolbar]:h-(--ds-control-normal)"',
+      'toolbar: "gap-1 bg-transparent p-0 group-data-[orientation=horizontal]/tabs:data-[variant=toolbar]:h-control"',
     );
     expect(tabsSource).toContain(
       "group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary",

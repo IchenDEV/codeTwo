@@ -59,6 +59,7 @@ import { SettingToggle } from "@/components/business/setting-toggle";
 import { ViewSwitcher } from "@/components/business/view-switcher";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -233,8 +234,12 @@ function StatButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="selectable"
+      size="row"
+      focusStyle="inset"
+      data-selected={active ? "true" : "false"}
       className={cn(
         "memory-stat",
         active && "is-active",
@@ -242,9 +247,9 @@ function StatButton({
       )}
       onClick={onClick}
     >
-      <strong className="font-mono text-ui tabular-nums">{value}</strong>
+      <strong className="font-mono text-body tabular-nums">{value}</strong>
       <span>{label}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -279,7 +284,14 @@ function MemoryRow({
         onCheckedChange={(value) => onCheck(value === true)}
         onClick={(event) => event.stopPropagation()}
       />
-      <button type="button" className="memory-row-main" onClick={onOpen}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="row"
+        focusStyle="inset"
+        className="memory-row-main"
+        onClick={onOpen}
+      >
         <span dir="auto" className="memory-row-content">
           {memory.content}
         </span>
@@ -298,7 +310,7 @@ function MemoryRow({
             {formatDate(locale, memoryActivityAt(memory))}
           </time>
         </span>
-      </button>
+      </Button>
       <div className="memory-row-signals">
         {memory.conflict_with_id && (
           <AlertTriangle
@@ -306,12 +318,11 @@ function MemoryRow({
             className="size-3.5 text-warning"
           />
         )}
-        <Button
+        <TooltipButton
+          label={memory.pinned ? t("memory.unpin") : t("memory.pin")}
           variant="ghost"
           size="icon-xs"
           className={memory.pinned ? "text-primary" : "text-muted-foreground"}
-          title={memory.pinned ? t("memory.unpin") : t("memory.pin")}
-          aria-label={memory.pinned ? t("memory.unpin") : t("memory.pin")}
           onClick={(event) => {
             event.stopPropagation();
             onPin();
@@ -322,7 +333,7 @@ function MemoryRow({
           ) : (
             <PinOff className="size-3" />
           )}
-        </Button>
+        </TooltipButton>
       </div>
     </article>
   );
@@ -376,7 +387,7 @@ function MemoryEditor({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <label className="block space-y-1.5 text-hint font-medium">
+          <label className="block space-y-1.5 text-metadata font-medium">
             <span>{t("memory.category")}</span>
             <Select
               value={category}
@@ -398,7 +409,7 @@ function MemoryEditor({
               </SelectContent>
             </Select>
           </label>
-          <label className="block space-y-1.5 text-hint font-medium">
+          <label className="block space-y-1.5 text-metadata font-medium">
             <span>{t("memory.content")}</span>
             <Textarea
               autoFocus
@@ -409,7 +420,7 @@ function MemoryEditor({
             />
           </label>
           {mode === "new" && (
-            <label className="flex items-center gap-2 text-hint">
+            <label className="flex items-center gap-2 text-metadata">
               <Checkbox
                 checked={pinned}
                 onCheckedChange={(value) => setPinned(value === true)}
@@ -499,22 +510,22 @@ function DetailPanel({
         <div className="flex items-center gap-1">
           {memory.active ? (
             <>
-              <Button
+              <TooltipButton
+                label={memory.pinned ? t("memory.unpin") : t("memory.pin")}
                 variant="ghost"
                 size="icon-xs"
-                title={memory.pinned ? t("memory.unpin") : t("memory.pin")}
                 onClick={onPin}
               >
                 {memory.pinned ? <PinOff /> : <Pin />}
-              </Button>
-              <Button
+              </TooltipButton>
+              <TooltipButton
+                label={t("memory.forget")}
                 variant="ghost"
                 size="icon-xs"
-                title={t("memory.forget")}
                 onClick={onForget}
               >
                 <Eraser />
-              </Button>
+              </TooltipButton>
             </>
           ) : (
             !memory.conflict_with_id && (
@@ -618,9 +629,12 @@ function DetailPanel({
           <p className="memory-detail-muted">{t("memory.noEvidence")}</p>
         ) : (
           evidence.map((item) => (
-            <button
+            <Button
               key={`${item.session_id}:${item.part_seq}`}
               type="button"
+              variant="ghost"
+              size="row"
+              focusStyle="inset"
               className="memory-history-item"
               onClick={() => onOpenSession(item.session_id)}
             >
@@ -639,7 +653,7 @@ function DetailPanel({
                 </span>
               </span>
               <ArrowUpRight className="size-3.5 shrink-0" />
-            </button>
+            </Button>
           ))
         )}
       </section>
@@ -649,9 +663,12 @@ function DetailPanel({
           <p className="memory-detail-muted">{t("memory.noUsage")}</p>
         ) : (
           usages.map((item) => (
-            <button
+            <Button
               key={`${item.session_id}:${item.user_part_seq}`}
               type="button"
+              variant="ghost"
+              size="row"
+              focusStyle="inset"
               className="memory-history-item"
               onClick={() => onOpenSession(item.session_id)}
             >
@@ -666,7 +683,7 @@ function DetailPanel({
                 </small>
               </span>
               <ArrowUpRight className="size-3.5 shrink-0" />
-            </button>
+            </Button>
           ))
         )}
       </section>
@@ -1073,7 +1090,7 @@ export function MemorySettingsPage({
           </div>
           <div className="memory-policy-column">
             <h2>{t("memory.projectOverrides")}</h2>
-            <p className="text-hint leading-relaxed text-muted-foreground">
+            <p className="text-metadata text-muted-foreground">
               {t("memory.projectOverridesHint")}
             </p>
             <PolicySelect

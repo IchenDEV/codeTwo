@@ -9,7 +9,6 @@ import {
   GitCommitHorizontal,
   Globe2,
   Laptop,
-  Loader2,
   Monitor,
   Settings,
   SlidersHorizontal,
@@ -23,6 +22,7 @@ import { TaskPlanPanel } from "../session/TaskPlanPanel";
 import type { InteractiveToolPreview } from "../session/toolActivity";
 import type { Turn } from "../session/turns";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -48,15 +48,15 @@ function EnvironmentRow({
     <>
       <Icon className={cn("size-4 shrink-0 text-muted-foreground", description && "mt-0.5 self-start")} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-ui">{label}</span>
+        <span className="block truncate text-body">{label}</span>
         {description && (
-          <span className="block truncate text-fine leading-snug text-muted-foreground">
+          <span className="block truncate text-callout text-muted-foreground">
             {description}
           </span>
         )}
       </span>
       {detail !== undefined && (
-        <span className="shrink-0 text-hint text-muted-foreground">{detail}</span>
+        <span className="shrink-0 text-metadata text-muted-foreground">{detail}</span>
       )}
       {active && <span className="size-1.5 shrink-0 rounded-full bg-primary" />}
     </>
@@ -118,7 +118,7 @@ function ToolPreview({ preview }: { preview: InteractiveToolPreview }) {
       data-artifact-id={preview.artifact.id}
       className="overflow-hidden rounded-module bg-fill-quiet"
     >
-      <figcaption className="flex min-h-8 items-center gap-2 bg-fill-rest px-2 py-1.5 text-fine">
+      <figcaption className="flex min-h-8 items-center gap-2 bg-fill-rest px-2 py-1.5 text-callout">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         <span className="shrink-0 font-medium text-foreground">{label}</span>
         <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden />
@@ -138,11 +138,11 @@ function ToolPreview({ preview }: { preview: InteractiveToolPreview }) {
           <span
             role="status"
             className={cn(
-              "flex items-center gap-2 px-3 py-8 text-fine text-muted-foreground",
+              "flex items-center gap-2 px-3 py-8 text-callout text-muted-foreground",
               failed && "text-destructive",
             )}
           >
-            {!failed && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+            {!failed && <Spinner className="size-3.5" />}
             {t(failed ? "environment.previewUnavailable" : "environment.previewLoading")}
           </span>
         )}
@@ -244,7 +244,6 @@ export function EnvironmentPopover({
             open && "bg-fill-rest",
           )}
           aria-label={t("header.environment")}
-          title={t("header.environment")}
         >
           <SlidersHorizontal className="session-header-context-icon size-4 text-muted-foreground" aria-hidden />
           <span className="session-header-context-label">{t("environment.title")}</span>
@@ -259,7 +258,7 @@ export function EnvironmentPopover({
         initialFocus={false}
       >
         <div className="mb-1 flex h-control-field items-center gap-module-inset px-module-inset">
-          <h2 className="min-w-0 flex-1 truncate text-title font-medium text-muted-foreground">
+          <h2 className="min-w-0 flex-1 truncate text-dialog font-medium text-muted-foreground">
             {t("environment.title")}
           </h2>
           <Button
@@ -293,11 +292,11 @@ export function EnvironmentPopover({
               title={projectPath ?? undefined}
             >
               <Laptop className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-ui font-medium">
+              <span className="min-w-0 flex-1 truncate text-body font-medium">
                 {t("environment.local")}
               </span>
               {project && (
-                <span className="max-w-28 truncate text-hint text-muted-foreground">{project}</span>
+                <span className="max-w-28 truncate text-metadata text-muted-foreground">{project}</span>
               )}
               {projectsOpen ? (
                 <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />

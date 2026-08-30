@@ -57,7 +57,7 @@ export function ProjectRow(props: RowProps) {
 
 export function GroupHeading({ children }: { children: ReactNode }) {
   return (
-    <h3 className="pt-section text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+    <h3 className="pt-section text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
       {children}
     </h3>
   );

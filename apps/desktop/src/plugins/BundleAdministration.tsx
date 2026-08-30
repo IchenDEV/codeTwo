@@ -95,11 +95,11 @@ export function BundleAdministration({
             <div className="min-w-0">
               <h3
                 id={`bundle-management-${bundle.id}`}
-                className="text-title font-medium"
+                className="text-dialog font-medium"
               >
                 {labels.bundleManagement}
               </h3>
-              <p className="mt-1 break-words text-fine leading-relaxed text-muted-foreground">
+              <p className="mt-1 break-words text-callout text-muted-foreground">
                 {bundle.repository || labels.installedBundle}
               </p>
             </div>
@@ -119,11 +119,11 @@ export function BundleAdministration({
         </div>
 
         {!userScope ? (
-          <p className="text-hint leading-relaxed text-muted-foreground">
+          <p className="text-metadata text-muted-foreground">
             {labels.bundleManagementUserOnly}
           </p>
         ) : bundle.requiresTrust && !bundle.trusted ? (
-          <p className="flex items-start gap-2 text-hint leading-relaxed text-muted-foreground">
+          <p className="flex items-start gap-2 text-metadata text-muted-foreground">
             <ShieldAlert
               className="mt-0.5 size-4 shrink-0 text-warning"
               aria-hidden="true"
@@ -134,7 +134,7 @@ export function BundleAdministration({
 
         {bundle.contributions.length ? (
           <div className="flex flex-col gap-2">
-            <h4 className="text-hint font-medium text-muted-foreground">
+            <h4 className="text-metadata font-medium text-muted-foreground">
               {labels.contributions}
             </h4>
             <div className="flex flex-wrap gap-2">
@@ -150,7 +150,7 @@ export function BundleAdministration({
 
         {bundle.diagnostics.length ? (
           <div className="flex flex-col gap-2">
-            <h4 className="text-hint font-medium text-muted-foreground">
+            <h4 className="text-metadata font-medium text-muted-foreground">
               {labels.diagnostics}
             </h4>
             <ul className="flex flex-col gap-2">
@@ -159,8 +159,8 @@ export function BundleAdministration({
                   key={`${diagnostic.component ?? "bundle"}:${index}`}
                   className={
                     diagnostic.level === "error"
-                      ? "flex items-start gap-2 text-ui text-destructive"
-                      : "flex items-start gap-2 text-ui text-muted-foreground"
+                      ? "flex items-start gap-2 text-body text-destructive"
+                      : "flex items-start gap-2 text-body text-muted-foreground"
                   }
                 >
                   <CircleAlert
@@ -170,7 +170,7 @@ export function BundleAdministration({
                   <span>
                     {diagnostic.message}
                     {diagnostic.component ? (
-                      <span className="block text-fine">
+                      <span className="block text-callout">
                         {diagnostic.component}
                       </span>
                     ) : null}

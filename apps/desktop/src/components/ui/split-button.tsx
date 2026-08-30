@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { buttonVariants } from "./button";
+import { Button } from "./button";
 
 interface SplitButtonAction {
   label: string;
@@ -34,12 +34,12 @@ interface SplitButtonProps {
   menuSide?: "top" | "bottom";
 }
 
-const separatorColor: Record<SplitButtonVariant, string> = {
-  default: "color-mix(in oklch, var(--primary-foreground) 25%, transparent)",
-  destructive: "color-mix(in oklch, white 25%, transparent)",
-  outline: "var(--border)",
-  secondary: "color-mix(in oklch, var(--secondary-foreground) 20%, transparent)",
-  ghost: "var(--border)",
+const separatorClass: Record<SplitButtonVariant, string> = {
+  default: "before:bg-primary-foreground/25",
+  destructive: "before:bg-destructive-foreground/25",
+  outline: "before:bg-border",
+  secondary: "before:bg-secondary-foreground/20",
+  ghost: "before:bg-border",
 };
 
 /**
@@ -59,14 +59,16 @@ function SplitButton({
 }: SplitButtonProps) {
   if (actions.length === 0) {
     return (
-      <button
+      <Button
         type="button"
+        variant={variant}
+        size={size}
         disabled={disabled}
-        className={cn(buttonVariants({ variant, size }), className)}
+        className={className}
         onClick={onClick}
       >
         {label}
-      </button>
+      </Button>
     );
   }
 
@@ -78,37 +80,33 @@ function SplitButton({
         className,
       )}
     >
-      <button
+      <Button
         type="button"
+        variant={variant}
+        size={size}
         disabled={disabled}
-        className={cn(
-          buttonVariants({ variant, size }),
-          "rounded-r-none focus-visible:z-10",
-        )}
-        style={{ borderRightWidth: 0 }}
+        className="rounded-r-none focus-visible:z-10"
         onClick={onClick}
       >
         {label}
-      </button>
+      </Button>
 
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <button
+            <Button
               type="button"
+              variant={variant}
+              size={size}
               disabled={disabled}
               aria-label="More actions"
               className={cn(
-                buttonVariants({ variant, size }),
-                "rounded-l-none px-1.5 focus-visible:z-10",
+                "relative rounded-l-none px-1.5 focus-visible:z-10 before:absolute before:left-0 before:h-4 before:w-px",
+                separatorClass[variant],
               )}
-              style={{
-                borderLeftWidth: "1px",
-                borderLeftColor: separatorColor[variant],
-              }}
             >
               <ChevronDown className="size-3.5" />
-            </button>
+            </Button>
           }
         />
         <DropdownMenuContent align={menuAlign} side={menuSide}>

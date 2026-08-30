@@ -322,7 +322,7 @@ export function SettingsPage({
           } as CSSProperties
         }
       >
-        {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
+        {/* Same 46px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />
         <Button
           data-settings-back
@@ -351,7 +351,7 @@ export function SettingsPage({
               <section key={group.id} aria-label={t(group.labelKey)} aria-labelledby={headingId}>
                 <h2
                   id={headingId}
-                  className="settings-nav-heading px-2 pb-2 text-hint font-medium text-muted-foreground"
+                  className="settings-nav-heading px-2 pb-2 text-metadata font-medium text-muted-foreground"
                 >
                   {t(group.labelKey)}
                 </h2>
@@ -365,7 +365,7 @@ export function SettingsPage({
                       leading={<Icon />}
                       current={id === tab}
                       accessibilityLabel={t(labelKey)}
-                      title={t(labelKey)}
+                      tooltip={t(labelKey)}
                       onSelect={() => setTab(id)}
                     />
                   ))}
@@ -379,12 +379,12 @@ export function SettingsPage({
 
       {/* ---- the page ---- */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        {/* The same 40px bar as the main shell's header, border and all. */}
+        {/* The same 46px bar as the main shell's header, border and all. */}
         <header
           data-settings-titlebar
           className="electrobun-webkit-app-region-drag settings-titlebar flex shrink-0 items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5"
         >
-          <span className="electrobun-webkit-app-region-drag text-ui font-medium text-muted-foreground">
+          <span className="electrobun-webkit-app-region-drag text-body font-medium text-muted-foreground">
             {tab === "profile" ? t("profile.title") : t("settings.title")}
           </span>
           <div className="electrobun-webkit-app-region-drag flex-1" />
@@ -392,7 +392,7 @@ export function SettingsPage({
             <Button
               variant="ghost"
               size="sm"
-              className="gap-control-group text-hint text-muted-foreground hover:text-foreground"
+              className="gap-control-group text-metadata text-muted-foreground hover:text-foreground"
               onClick={restore}
             >
               <RotateCcw className="size-3.5" />

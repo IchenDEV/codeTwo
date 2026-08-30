@@ -5,7 +5,7 @@ import { CheckIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 const menuItemStyles =
-  "group/dropdown-menu-item relative flex min-h-menu-item cursor-default select-none items-center gap-module-inset rounded-menu-item px-2 py-1.5 text-ui leading-4 outline-none transition-colors duration-feedback ease-enter focus:bg-fill-hover focus:text-content data-highlighted:bg-fill-hover data-highlighted:text-content data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-status-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:data-highlighted:bg-destructive/10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-icon-list [&_svg:not([class*='text-'])]:text-muted-foreground";
+  "group/dropdown-menu-item relative flex min-h-menu-item cursor-default select-none items-center gap-module-inset rounded-menu-item px-2 py-1.5 text-body outline-none transition-colors duration-feedback ease-enter focus:bg-fill-hover focus:text-content data-highlighted:bg-fill-hover data-highlighted:text-content data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-status-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:data-highlighted:bg-destructive/10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-icon-list [&_svg:not([class*='text-'])]:text-muted-foreground";
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
@@ -45,7 +45,7 @@ function DropdownMenuContent({
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cn(
-            "pop-layer z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu bg-raised p-menu text-content shadow-menu outline-none",
+            "pop-layer raised-material z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu p-menu text-content shadow-menu outline-none",
             className,
           )}
           {...props}
@@ -136,7 +136,7 @@ function DropdownMenuItemDescription({ className, ...props }: React.ComponentPro
   return (
     <span
       data-slot="dropdown-menu-item-description"
-      className={cn("truncate text-fine leading-3.5 text-muted-foreground", className)}
+      className={cn("truncate text-callout text-muted-foreground", className)}
       {...props}
     />
   );
@@ -159,7 +159,7 @@ function DropdownMenuSeparator({
 function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
-      className={cn("ml-auto shrink-0 font-mono text-cap text-muted-foreground", className)}
+      className={cn("ml-auto shrink-0 font-mono text-caption text-muted-foreground", className)}
       {...props}
     />
   );

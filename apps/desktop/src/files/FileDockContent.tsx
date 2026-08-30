@@ -4,6 +4,7 @@ import { FilePanel } from "./FilePanel";
 import { FileViewer, type FileRevealTarget } from "./FileViewer";
 import { dirtyKey, useDirtyPaths } from "./dirty";
 import { useT } from "../i18n";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type FileDockContentProps = {
@@ -43,12 +44,17 @@ export function FileDockContent({
             const name = path.split("/").pop() ?? path;
             const active = path === activeFile;
             return (
-              <button
+              <Button
                 key={path}
+                type="button"
+                variant="selectable"
+                size="row"
+                focusStyle="inset"
+                data-selected={active ? "true" : "false"}
                 onClick={() => onActiveFile(path)}
                 title={path}
                 className={cn(
-                  "group relative flex h-full max-w-48 shrink-0 items-center gap-1.5 px-module-inset text-hint transition-colors",
+                  "group relative h-full max-w-48 shrink-0 gap-1.5 px-module-inset text-metadata",
                   active
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground",
@@ -69,7 +75,7 @@ export function FileDockContent({
                 {active && (
                   <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-none bg-primary" />
                 )}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -86,7 +92,7 @@ export function FileDockContent({
           />
         ) : (
           <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-            <p className="text-center text-hint leading-relaxed text-muted-foreground">
+            <p className="text-center text-metadata text-muted-foreground">
               {t("files.noneOpen")}
             </p>
           </div>

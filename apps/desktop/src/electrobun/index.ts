@@ -400,8 +400,8 @@ if (process.platform === "darwin") {
     console.warn("The macOS system backdrop could not be installed");
   }
   // AppKit can reset standard-window-button frames during its own resize layout pass. Reapply the
-  // same fixed position afterward; the 56px titlebar has no runtime geometry to measure.
-  mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(28, 21));
+  // same fixed position afterward; the 46px titlebar has no runtime geometry to measure.
+  mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(22, 16));
 }
 
 mainWindow.webview.on("dom-ready", () => {
@@ -409,8 +409,8 @@ mainWindow.webview.on("dom-ready", () => {
     mainWindow.webview.executeJavascript(
       'document.documentElement.classList.add("macos-window-glass")',
     );
-    // The shared titlebar is a fixed 56px tall, so the native controls use one fixed position.
-    mainWindow.setWindowButtonPosition(28, 21);
+    // Center the 14px native controls in the shared 46px Codex-aligned title row.
+    mainWindow.setWindowButtonPosition(22, 16);
   }
   rendererReady = true;
   rpc.send.hostStatus({ ready: true });

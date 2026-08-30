@@ -16,13 +16,13 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  Search,
   Trash2,
   X,
 } from "@/components/ui/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { SearchField } from "@/components/business/search-field"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
@@ -32,7 +32,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -290,14 +289,17 @@ function TaskCard({
       className="group rounded-module bg-card p-4 shadow-(--ds-elevation-surface) transition-colors hover:bg-accent/30"
     >
       <div className="flex min-w-0 items-start gap-2">
-        <button
+        <Button
           type="button"
-          className="line-clamp-2 min-w-0 flex-1 rounded-micro text-left text-title font-semibold leading-snug outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+          variant="ghost"
+          size="row"
+          focusStyle="inset"
+          className="line-clamp-2 h-auto min-w-0 flex-1 justify-start px-0 py-0 text-dialog font-semibold hover:text-primary"
           aria-label={t("taskboard.cardAction", { action: primaryActionLabel, title: task.title })}
           onClick={primaryAction}
         >
           {task.title}
-        </button>
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -365,9 +367,11 @@ function TaskCard({
       </div>
 
       {pullRequest ? (
-        <button
+        <Button
           type="button"
-          className="mt-4 flex min-w-0 items-center gap-1.5 text-left text-hint text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
+          variant="link"
+          size="compact"
+          className="mt-4 h-auto min-w-0 justify-start gap-1.5 px-0 py-0 text-metadata text-muted-foreground hover:text-primary"
           title={pullRequest.url}
           onClick={() => void openExternal(pullRequest.url)}
         >
@@ -376,11 +380,11 @@ function TaskCard({
             {pullRequest.repository} #{pullRequest.number}
           </span>
           <ExternalLink aria-hidden className="size-3 shrink-0" />
-        </button>
+        </Button>
       ) : null}
 
       {lane === "queue" && (task.priority !== "none" || latestSession) ? (
-        <div className="mt-4 flex min-w-0 items-center gap-2 text-hint text-muted-foreground">
+        <div className="mt-4 flex min-w-0 items-center gap-2 text-metadata text-muted-foreground">
           {task.priority !== "none" ? (
             <span className={cn("inline-flex items-center gap-1", PRIORITY_TONES[task.priority])}>
               <Flag aria-hidden className="size-3" />
@@ -394,7 +398,7 @@ function TaskCard({
       ) : null}
 
       {lane === "running" ? (
-        <div className="mt-4 grid gap-2 text-hint text-muted-foreground">
+        <div className="mt-4 grid gap-2 text-metadata text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2">
             <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary animate-pulse" />
             <span className="font-medium text-primary">{t("taskboard.runningNow")}</span>
@@ -410,11 +414,11 @@ function TaskCard({
         <div className="mt-4 grid gap-3">
           <Badge
             variant="secondary"
-            className="w-fit bg-warning/10 text-hint font-medium text-warning shadow-none"
+            className="w-fit bg-warning/10 text-metadata font-medium text-warning shadow-none"
           >
             {attention.label}
           </Badge>
-          <p className="line-clamp-2 text-hint leading-relaxed text-muted-foreground">
+          <p className="line-clamp-2 text-metadata text-muted-foreground">
             {attention.description}
           </p>
           <Button type="button" size="compact" className="ml-auto" onClick={primaryAction}>
@@ -424,7 +428,7 @@ function TaskCard({
       ) : null}
 
       {lane === "done" ? (
-        <div className="mt-4 grid gap-2 text-hint text-muted-foreground">
+        <div className="mt-4 grid gap-2 text-metadata text-muted-foreground">
           <span className="inline-flex items-center gap-1.5 font-medium text-success">
             <CheckCircle2 aria-hidden className="size-3.5" />
             {t("taskboard.completed")}
@@ -483,12 +487,12 @@ function BoardColumn({
       <header className="sticky top-0 z-10 -mx-1 mb-2 flex shrink-0 items-center gap-2 bg-fill-quiet px-1 py-2">
         <h2
           id={`taskboard-column-${lane}`}
-          className={cn("text-title font-semibold", LANE_TONES[lane])}
+          className={cn("text-dialog font-semibold", LANE_TONES[lane])}
         >
           {laneLabel(t, lane)}
         </h2>
         <span
-          className="ml-auto text-hint tabular-nums text-muted-foreground"
+          className="ml-auto text-metadata tabular-nums text-muted-foreground"
           aria-label={filtered
             ? t("taskboard.visibleCount", { visible: tasks.length, total: totalCount })
             : t("taskboard.taskCount", { count: totalCount })}
@@ -529,7 +533,7 @@ function BoardColumn({
         ))}
 
         {tasks.length === 0 ? (
-          <p className="px-3 py-8 text-center text-hint text-muted-foreground">
+          <p className="px-3 py-8 text-center text-metadata text-muted-foreground">
             {filtered && totalCount > 0
               ? t("taskboard.emptyFiltered")
               : t("taskboard.emptyColumn")}
@@ -691,11 +695,11 @@ export function TaskBoardPage({
                 {headerLeadingAction}
               </div>
             ) : null}
-            <h1 className="shrink-0 text-display font-semibold tracking-tight">
+            <h1 className="shrink-0 text-page font-semibold tracking-tight">
               {t("taskboard.title")}
             </h1>
             {attentionCount > 0 ? (
-              <p className="flex min-w-0 items-center gap-2 text-hint text-muted-foreground">
+              <p className="flex min-w-0 items-center gap-2 text-metadata text-muted-foreground">
                 <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
                 <span className="truncate">
                   {t("taskboard.attentionSummary", { count: attentionCount })}
@@ -705,33 +709,16 @@ export function TaskBoardPage({
           </div>
 
           <div data-page-header-controls className="flex min-w-0 items-center gap-2 xl:justify-end">
-            <div className="relative min-w-0 max-w-sm flex-1">
-              <Search
-                aria-hidden
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                size="compact"
-                className="bg-fill-rest pl-9 pr-9 shadow-(--ds-elevation-surface)"
-                type="search"
-                aria-label={t("taskboard.search")}
+            <SearchField
+                className="min-w-0 max-w-sm flex-1"
+                inputClassName="bg-fill-rest shadow-surface"
+                label={t("taskboard.search")}
                 placeholder={t("taskboard.search")}
                 value={query}
+                clearLabel={t("taskboard.clearSearch")}
+                onClear={() => setQuery("")}
                 onChange={(event) => setQuery(event.currentTarget.value)}
               />
-              {query ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  className="absolute right-1 top-1/2 -translate-y-1/2"
-                  aria-label={t("taskboard.clearSearch")}
-                  onClick={() => setQuery("")}
-                >
-                  <X aria-hidden />
-                </Button>
-              ) : null}
-            </div>
 
             <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
               <PopoverTrigger
@@ -740,7 +727,7 @@ export function TaskBoardPage({
                     <Filter data-icon="inline-start" aria-hidden />
                     {t("taskboard.filter")}
                     {activeFilterCount > 0 ? (
-                      <Badge className="min-w-4 px-1 text-cap">{activeFilterCount}</Badge>
+                      <Badge className="min-w-4 px-1 text-metadata">{activeFilterCount}</Badge>
                     ) : null}
                   </Button>
                 }
@@ -755,11 +742,11 @@ export function TaskBoardPage({
                 </PopoverHeader>
 
                 <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-hint font-medium">
+                  <legend className="mb-1 text-metadata font-medium">
                     {t("taskboard.priority")}
                   </legend>
                   {PRIORITIES.map((priority) => (
-                    <label key={priority} className="flex items-center gap-2 text-ui">
+                    <label key={priority} className="flex items-center gap-2 text-body">
                       <Checkbox
                         checked={priorities.includes(priority)}
                         onCheckedChange={() =>
@@ -772,12 +759,12 @@ export function TaskBoardPage({
                 </fieldset>
 
                 <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-hint font-medium">
+                  <legend className="mb-1 text-metadata font-medium">
                     {t("taskboard.labels")}
                   </legend>
                   {availableLabels.length > 0 ? (
                     availableLabels.map((label) => (
-                      <label key={label} className="flex items-center gap-2 text-ui">
+                      <label key={label} className="flex items-center gap-2 text-body">
                         <Checkbox
                           checked={labels.includes(label)}
                           onCheckedChange={() =>
@@ -788,7 +775,7 @@ export function TaskBoardPage({
                       </label>
                     ))
                   ) : (
-                    <p className="text-hint text-muted-foreground">
+                    <p className="text-metadata text-muted-foreground">
                       {t("taskboard.noLabels")}
                     </p>
                   )}
@@ -820,7 +807,7 @@ export function TaskBoardPage({
       </header>
 
       {state.warning ? (
-        <p role="alert" className="bg-destructive/10 px-6 py-2 text-hint text-destructive">
+        <p role="alert" className="bg-destructive/10 px-6 py-2 text-metadata text-destructive">
           {warningText(state.warning, t)}
         </p>
       ) : null}

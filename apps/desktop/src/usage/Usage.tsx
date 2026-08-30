@@ -16,6 +16,7 @@ import { useLanguage, type Translate } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { QuotaProgress } from "@/components/business/quota-progress";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -107,8 +108,8 @@ export function ProviderQuotaMeter({
   return (
     <div className="py-3 first:pt-0 last:pb-0">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-ui font-semibold">{label}</span>
-        <span className="shrink-0 font-mono text-ui font-semibold tabular-nums">
+        <span className="text-body font-semibold">{label}</span>
+        <span className="shrink-0 font-mono text-body font-semibold tabular-nums">
           {t("quota.remaining", { percent: Math.round(remaining) })}
         </span>
       </div>
@@ -118,7 +119,7 @@ export function ProviderQuotaMeter({
           remainingPercent={remaining}
         />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-fine text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-callout text-muted-foreground">
         <span>{t("quota.used", { percent: Math.round(used) })}</span>
         <span className="font-mono tabular-nums">
           {quotaResetLabel(window.resets_at, locale, now, t)}
@@ -139,9 +140,9 @@ function LocalUsageWindow({ window }: { window: UsageWindow }) {
 
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-3 text-ui">
+      <div className="flex items-baseline justify-between gap-3 text-body">
         <span className="font-semibold">{label}</span>
-        <span className="text-right font-mono text-hint text-muted-foreground">
+        <span className="text-right font-mono text-metadata text-muted-foreground">
           {hasLimit
             ? t("usage.localRemaining", {
                 percent: Math.round(remainingPercent!),
@@ -158,9 +159,9 @@ function LocalUsageWindow({ window }: { window: UsageWindow }) {
           />
         </div>
       ) : (
-        <p className="my-1 text-fine text-muted-foreground">{t("usage.localLimitUnknown")}</p>
+        <p className="my-1 text-callout text-muted-foreground">{t("usage.localLimitUnknown")}</p>
       )}
-      <div className="font-mono text-fine text-muted-foreground">
+      <div className="font-mono text-callout text-muted-foreground">
         {t("usage.windowDetail", {
           input: fmtTokens(window.input_tokens),
           output: fmtTokens(window.output_tokens),
@@ -195,7 +196,7 @@ function TrendChart({ report, days }: { report: UsageHistoryReport; days: number
   );
 
   if (buckets.length === 0 || max === 0) {
-    return <p className="text-hint text-muted-foreground">{t("usage.trendEmpty")}</p>;
+    return <p className="text-metadata text-muted-foreground">{t("usage.trendEmpty")}</p>;
   }
 
   const slot = CHART_W / buckets.length;
@@ -207,9 +208,9 @@ function TrendChart({ report, days }: { report: UsageHistoryReport; days: number
   return (
     <div className="relative" onMouseLeave={() => setHover(null)}>
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="font-mono text-fine text-muted-foreground">{fmtTokens(max)}</span>
+        <span className="font-mono text-callout text-muted-foreground">{fmtTokens(max)}</span>
         {hovered && hovered.total > 0 && (
-          <span className="font-mono text-fine text-muted-foreground">
+          <span className="font-mono text-callout text-muted-foreground">
             {timeFmt.format(hovered.startMs)} · {fmtTokens(hovered.total)}
           </span>
         )}
@@ -263,13 +264,13 @@ function TrendChart({ report, days }: { report: UsageHistoryReport; days: number
           );
         })}
       </svg>
-      <div className="mt-1 flex justify-between text-fine text-muted-foreground">
+      <div className="mt-1 flex justify-between text-callout text-muted-foreground">
         <span>{dayFmt.format(buckets[0].startMs)}</span>
         <span>{dayFmt.format(buckets[buckets.length - 1].startMs)}</span>
       </div>
       {hovered && hovered.parts.length > 0 && (
         <div
-          className="pointer-events-none absolute top-6 z-10 rounded-micro bg-raised p-2 text-fine text-content shadow-raised"
+          className="pointer-events-none absolute top-6 z-10 rounded-micro bg-raised p-2 text-callout text-content shadow-raised"
           style={{
             left: `${Math.min(80, ((hover! + 0.5) / buckets.length) * 100)}%`,
           }}
@@ -296,19 +297,19 @@ function ProviderRow({ usage, t }: { usage: SourceUsage; t: ReturnType<typeof us
   const cost = fmtCost(usage.estimated_cost_usd);
   return (
     <div>
-      <div className="flex items-center gap-2 text-ui">
+      <div className="flex items-center gap-2 text-body">
         <span
           className={cn("size-2 shrink-0 rounded-full bg-current", seriesColorClass(usage.source))}
         />
         <span className="font-semibold">{usage.source}</span>
-        <span className="ml-auto font-mono text-hint text-muted-foreground">
+        <span className="ml-auto font-mono text-metadata text-muted-foreground">
           {fmtTokens(usage.total_tokens)}
         </span>
-        <span className={cn("w-20 text-right font-mono text-hint", cost ? "" : "text-muted-foreground")}>
+        <span className={cn("w-20 text-right font-mono text-metadata", cost ? "" : "text-muted-foreground")}>
           {cost ?? t("usage.costUnknown")}
         </span>
       </div>
-      <div className="pl-4 font-mono text-fine text-muted-foreground">
+      <div className="pl-4 font-mono text-callout text-muted-foreground">
         {t("usage.tokensDetail", {
           input: fmtTokens(usage.input_tokens),
           output: fmtTokens(usage.output_tokens),
@@ -354,11 +355,11 @@ function ProviderQuotaSection({
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <ProviderIcon provider={provider} className="size-5 shrink-0" />
         <div className="min-w-0 flex-1">
-          <h2 id="provider-quota-heading" className="truncate text-ui font-semibold">
+          <h2 id="provider-quota-heading" className="truncate text-body font-semibold">
             {t("quota.title")}
           </h2>
           {report?.plan && (
-            <p className="truncate text-fine text-muted-foreground">
+            <p className="truncate text-callout text-muted-foreground">
               {t("quota.plan", { plan: report.plan.replaceAll("_", " ") })}
             </p>
           )}
@@ -390,26 +391,26 @@ function ProviderQuotaSection({
             </SelectContent>
           </Select>
         ) : (
-          <span className="ml-auto shrink-0 text-fine text-muted-foreground">
+          <span className="ml-auto shrink-0 text-callout text-muted-foreground">
             {providerName}
           </span>
         )}
       </div>
 
       {loading && report == null ? (
-        <p className="py-4 text-center text-hint text-muted-foreground">
+        <p className="py-4 text-center text-metadata text-muted-foreground">
           {t("quota.checking", { provider: providerName })}
         </p>
       ) : unavailable ? (
         <div className="flex gap-2 bg-fill-quiet/40 px-3 py-3">
           <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
           <div>
-            <p className="text-ui font-medium">
+            <p className="text-body font-medium">
               {report?.status === "unsupported"
                 ? t("quota.unsupportedTitle")
                 : t("quota.unavailableTitle")}
             </p>
-            <p className="mt-1 text-hint leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-metadata text-muted-foreground">
               {quotaReasonLabel(unavailableReason, providerName, t)}
             </p>
           </div>
@@ -427,13 +428,13 @@ function ProviderQuotaSection({
               ))}
             </div>
           ) : (
-            <p className="text-hint text-muted-foreground">{t("quota.noWindows")}</p>
+            <p className="text-metadata text-muted-foreground">{t("quota.noWindows")}</p>
           )}
 
           {showCredits && credits && (
             <div className="mt-3 flex items-center gap-3 pt-3">
-              <span className="text-ui font-medium">{t("quota.credits")}</span>
-              <span className="ml-auto font-mono text-ui tabular-nums">
+              <span className="text-body font-medium">{t("quota.credits")}</span>
+              <span className="ml-auto font-mono text-body tabular-nums">
                 {credits.unlimited
                   ? t("quota.unlimited")
                   : t("quota.creditBalance", { balance: credits.balance ?? "—" })}
@@ -441,7 +442,7 @@ function ProviderQuotaSection({
             </div>
           )}
 
-          <p className="mt-3 pt-3 text-fine text-muted-foreground">
+          <p className="mt-3 pt-3 text-callout text-muted-foreground">
             {source && <>{source} · </>}
             {t("quota.updated", {
               time: new Intl.DateTimeFormat(locale, {
@@ -560,26 +561,25 @@ function UsageView({
   const refreshing = loading || quotaLoading;
   const controls = (
     <>
-      <Button
+      <TooltipButton
+        label={t("usage.rescan")}
         variant="ghost"
         size="icon-xs"
-        aria-label={t("usage.rescan")}
         disabled={refreshing}
         onClick={() => {
           loadLocal(days);
           void loadQuota();
         }}
-        title={t("usage.rescan")}
       >
         {refreshing ? <Spinner /> : <RefreshCw />}
-      </Button>
+      </TooltipButton>
       <span className="ml-auto flex gap-1">
         {([7, 30] as const).map((range) => (
           <Button
             key={range}
             variant={days === range ? "secondary" : "ghost"}
             size="compact"
-            className="px-2 text-fine"
+            className="px-2 text-callout"
             onClick={() => setDays(range)}
           >
             {t(range === 7 ? "usage.range7d" : "usage.range30d")}
@@ -601,10 +601,10 @@ function UsageView({
       ) : (
         <div className="pb-3">
           <div className="flex items-center gap-2">
-            <h1 className="text-display font-semibold tracking-tight">{t("usage.title")}</h1>
+            <h1 className="text-page font-semibold tracking-tight">{t("usage.title")}</h1>
             {controls}
           </div>
-          <p className="pt-1.5 text-hint leading-relaxed text-muted-foreground">
+          <p className="pt-1.5 text-metadata text-muted-foreground">
             {t("usage.description")}
           </p>
         </div>
@@ -621,16 +621,16 @@ function UsageView({
       />
 
       {loading && !report && (
-        <p className="mt-5 text-hint text-muted-foreground">{t("usage.scanning")}</p>
+        <p className="mt-5 text-metadata text-muted-foreground">{t("usage.scanning")}</p>
       )}
 
       {report && (
         <section aria-labelledby="local-activity-heading" className="mt-5 space-y-4">
           <div>
-            <h2 id="local-activity-heading" className="text-ui font-semibold">
+            <h2 id="local-activity-heading" className="text-body font-semibold">
               {t("usage.localTitle")}
             </h2>
-            <p className="mt-1 text-fine text-muted-foreground">{t("usage.localDescription")}</p>
+            <p className="mt-1 text-callout text-muted-foreground">{t("usage.localDescription")}</p>
           </div>
           <div className="space-y-3">
             {report.windows.map((w) => (
@@ -641,10 +641,10 @@ function UsageView({
           {history && (
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-ui font-semibold">{t("usage.trendTitle")}</span>
+                <span className="text-body font-semibold">{t("usage.trendTitle")}</span>
                 <span className="flex items-center gap-3">
                   {history.history.series.map((s) => (
-                    <span key={s.source} className="flex items-center gap-1 text-fine text-muted-foreground">
+                    <span key={s.source} className="flex items-center gap-1 text-callout text-muted-foreground">
                       <span
                         className={cn(
                           "size-2 shrink-0 rounded-full bg-current",
@@ -661,7 +661,7 @@ function UsageView({
           )}
 
           {bySource.length === 0 ? (
-            <p className="text-hint text-muted-foreground">{t("usage.noTranscripts")}</p>
+            <p className="text-metadata text-muted-foreground">{t("usage.noTranscripts")}</p>
           ) : (
             <div className="space-y-2">
               {bySource.map((usage) => (
@@ -670,7 +670,7 @@ function UsageView({
             </div>
           )}
 
-          <p className="text-fine text-muted-foreground">
+          <p className="text-callout text-muted-foreground">
             {t("usage.scannedTranscripts", { count: report.transcripts })} {t("usage.estimateNote")}
           </p>
         </section>

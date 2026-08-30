@@ -21,6 +21,10 @@ const voiceButton = readFileSync(
   new URL("../src/voice/VoiceButton.tsx", import.meta.url),
   "utf8",
 );
+const controlChip = readFileSync(
+  new URL("../src/components/ui/control-chip.tsx", import.meta.url),
+  "utf8",
+);
 describe("composer geometry contract", () => {
   test("paints the compact composer on the same DOM card as its interactive content", () => {
     expect(composer).not.toContain("function ComposerLiquidSurface");
@@ -38,7 +42,7 @@ describe("composer geometry contract", () => {
     expect(composer).toContain('"composer-mode-transition flex flex-col"');
     expect(composer).toContain('effect={reducedMotion ? undefined : "move"}');
     expect(composer).toContain(
-      '"glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"',
+      '"raised-material pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"',
     );
     expect(
       composer.match(
@@ -48,9 +52,12 @@ describe("composer geometry contract", () => {
     expect(
       composer.match(/className="size-7 shrink-0 rounded-full(?: text-muted-foreground)?"/g),
     ).toHaveLength(2);
-    expect(composer).toContain(
-      '"flex h-control-mini shrink-0 items-center gap-1.5 rounded-control px-2 text-hint',
+    expect(composer).toMatch(
+      /variant="ghost"[\s\S]*size="compact"[\s\S]*focusStyle="inset"/,
     );
+    expect(composer).toContain('import { ControlChip as Chip } from "@/components/ui/control-chip";');
+    expect(controlChip).toContain('size="compact"');
+    expect(controlChip).toContain('data-slot="control-chip"');
     expect(voiceButton).toContain('className="size-8 shrink-0 rounded-full"');
     expect(composer).toMatch(
       /fill="var\(--secondary\)"[\s\S]*variant="secondary"[\s\S]*onClick=\{onStop\}/,

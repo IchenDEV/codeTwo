@@ -61,7 +61,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { useToast } from "@/ui/toast";
 import { MarkdownContent, type BuiltinLinkActions } from "./MarkdownContent";
 
@@ -111,24 +111,16 @@ function TurnActionButton({
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={label}
-            aria-pressed={pressed}
-            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
-            onClick={onClick}
-          >
-            {children}
-          </Button>
-        }
-      />
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <TooltipButton
+      label={label}
+      variant="ghost"
+      size="icon-xs"
+      aria-pressed={pressed}
+      className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+      onClick={onClick}
+    >
+      {children}
+    </TooltipButton>
   );
 }
 
@@ -209,7 +201,7 @@ function PromptImageThumbnail({ image }: { image: PromptImage }) {
         <div
           role="img"
           aria-label={`${name} unavailable`}
-          className="flex min-w-0 items-center gap-2 px-3 py-8 text-fine text-muted-foreground"
+          className="flex min-w-0 items-center gap-2 px-3 py-8 text-callout text-muted-foreground"
         >
           <CircleAlert className="size-4 shrink-0" aria-hidden />
           <span className="truncate">{name}</span>
@@ -272,19 +264,20 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
             onError={() => setError(true)}
           />
         ) : (
-          <span className={cn("px-4 py-10 text-fine text-muted-foreground", error && "text-destructive")}>
+          <span className={cn("px-4 py-10 text-callout text-muted-foreground", error && "text-destructive")}>
             {error ? "Image unavailable" : "Loading image…"}
           </span>
         )}
       </div>
-      <figcaption className="flex flex-wrap items-center gap-2 bg-background/60 px-2.5 py-2 text-fine text-muted-foreground">
+      <figcaption className="flex flex-wrap items-center gap-2 bg-background/60 px-2.5 py-2 text-callout text-muted-foreground">
         <span className="min-w-0 flex-1 truncate text-foreground">{artifact.display_name}</span>
         <span>{artifact.width} × {artifact.height}</span>
         <span>{prettySize(artifact.bytes)}</span>
-        <button
+        <TooltipButton
           type="button"
-          className="rounded-control p-1 hover:bg-accent hover:text-foreground"
-          title="Save As"
+          variant="ghost"
+          size="icon-xs"
+          label="Save As"
           onClick={() => {
             setActionError(null);
             void saveArtifactAs(artifact.id, artifact.display_name).catch(() =>
@@ -293,18 +286,19 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
           }}
         >
           <Download className="size-3.5" />
-        </button>
-        <button
+        </TooltipButton>
+        <TooltipButton
           type="button"
-          className="rounded-control p-1 hover:bg-accent hover:text-foreground"
-          title="Reveal in file manager"
+          variant="ghost"
+          size="icon-xs"
+          label="Reveal in file manager"
           onClick={() => {
             setActionError(null);
             void revealArtifact(artifact.id).catch(() => setActionError("Could not reveal image"));
           }}
         >
           <FolderOpen className="size-3.5" />
-        </button>
+        </TooltipButton>
         {actionError && <span className="basis-full text-destructive">{actionError}</span>}
       </figcaption>
     </figure>
@@ -339,10 +333,10 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
         {tool.title}
       </span>
       {!compact && tool.kind ? (
-        <span className="shrink-0 font-mono text-cap text-muted-foreground">{tool.kind}</span>
+        <span className="shrink-0 font-mono text-metadata text-muted-foreground">{tool.kind}</span>
       ) : null}
       {!compact || tool.status !== "completed" ? (
-        <span className="flex shrink-0 items-center gap-1.5 text-fine">
+        <span className="flex shrink-0 items-center gap-1.5 text-callout">
           <span className={cn("size-1.5 rounded-full", toolStatusDot(tool.status))} aria-hidden />
           {tool.status}
         </span>
@@ -354,7 +348,7 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
     return (
       <div
         className={cn(
-          "flex min-w-0 items-center gap-2 px-1 text-ui text-muted-foreground",
+          "flex min-w-0 items-center gap-2 px-1 text-body text-muted-foreground",
           compact ? "py-1" : "my-3 py-1.5",
         )}
         data-tool-call={tool.id}
@@ -372,8 +366,9 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
       data-tool-call={tool.id}
     >
       <CollapsibleTrigger
+        render={<Button type="button" variant="ghost" size="compact" focusStyle="inset" />}
         className={cn(
-          "group flex w-full min-w-0 items-center gap-2 rounded-control px-1 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          "group h-auto w-full min-w-0 justify-start gap-2 text-muted-foreground hover:text-foreground",
           compact ? "py-1" : "py-1.5",
         )}
       >
@@ -389,7 +384,7 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
           {textOutputs.map((output, index) => (
             <pre
               key={index}
-              className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-code leading-relaxed"
+              className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-code"
             >
               <code>{output}</code>
             </pre>
@@ -404,19 +399,22 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
           {resourceLinks.length > 0 ? (
             <div className="flex flex-col gap-1.5 p-2" aria-label="Tool links">
               {resourceLinks.map((link) => (
-                <button
+                <Button
                   key={link.uri}
                   type="button"
-                  className="flex min-w-0 items-center gap-2 rounded-control px-2 py-1.5 text-left text-fine transition-colors hover:bg-accent/50"
+                  variant="ghost"
+                  size="row"
+                  focusStyle="inset"
+                  className="min-w-0 gap-2 px-2 py-1.5 text-callout"
                   title={link.uri}
                   onClick={() => void openExternal(link.uri)}
                 >
                   <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="min-w-0 flex-1 truncate font-medium text-foreground">{link.name}</span>
-                  <span className="max-w-52 truncate font-mono text-cap text-muted-foreground">
+                  <span className="max-w-52 truncate font-mono text-metadata text-muted-foreground">
                     {link.host}
                   </span>
-                </button>
+                </Button>
               ))}
             </div>
           ) : null}
@@ -453,14 +451,17 @@ function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
       className="my-3 min-w-0"
       data-tool-call-group={tools[0].id}
     >
-      <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-2 rounded-control px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+      <CollapsibleTrigger
+        render={<Button type="button" variant="ghost" size="compact" focusStyle="inset" />}
+        className="group h-auto w-full min-w-0 justify-start gap-2 py-1.5 text-muted-foreground hover:text-foreground"
+      >
         <LatestIcon className="size-3.5 shrink-0" aria-hidden />
         <span className="min-w-0 flex-1 truncate" title={latest.title}>
           {latest.title}
         </span>
         <span className="sr-only">{t("turn.tools")} ({tools.length}), {status}</span>
         {status === "failed" ? (
-          <span className="flex shrink-0 items-center gap-1.5 text-fine text-destructive">
+          <span className="flex shrink-0 items-center gap-1.5 text-callout text-destructive">
             <CircleAlert className="size-3.5" aria-hidden />
             {status}
           </span>
@@ -564,7 +565,10 @@ function Detail({
   if (count === 0) return null;
   return (
     <Collapsible defaultOpen={defaultOpen} className={cn("min-w-0", wide && "basis-full")}>
-      <CollapsibleTrigger className="group -ms-1 flex items-center gap-1.5 rounded-control px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+      <CollapsibleTrigger
+        render={<Button type="button" variant="ghost" size="xs" focusStyle="inset" />}
+        className="group -ms-1 h-auto gap-1.5 font-normal text-muted-foreground hover:text-foreground"
+      >
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
         {label} ({count})
@@ -618,7 +622,7 @@ function AgentRosterSection({
   if (agents.length === 0) return null;
   return (
     <div role="group" aria-label={label}>
-      <div className="flex items-center gap-2 px-2 py-1 text-cap font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 px-2 py-1 text-metadata font-medium uppercase tracking-wide text-muted-foreground">
         <span>{label}</span>
         <span className="tabular-nums">{agents.length}</span>
       </div>
@@ -638,18 +642,18 @@ function AgentRosterSection({
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="min-w-0 flex-1 truncate text-ui font-medium text-foreground">
+                  <span className="min-w-0 flex-1 truncate text-body font-medium text-foreground">
                     {agent.title}
                   </span>
-                  <span className="shrink-0 text-cap text-muted-foreground">{agent.role}</span>
+                  <span className="shrink-0 text-metadata text-muted-foreground">{agent.role}</span>
                 </div>
                 {agent.task && (
-                  <p className="mt-0.5 line-clamp-2 text-fine leading-relaxed text-muted-foreground">
+                  <p className="mt-0.5 line-clamp-2 text-callout text-muted-foreground">
                     {agent.task}
                   </p>
                 )}
               </div>
-              <div className="shrink-0 text-right text-cap leading-relaxed text-muted-foreground">
+              <div className="shrink-0 text-right text-metadata text-muted-foreground">
                 <span className="block" aria-live="polite" aria-atomic="true">
                   {agentStatusLabel(state, t)}
                 </span>
@@ -807,13 +811,15 @@ export const TurnCard = memo(function TurnCard({
           {onSaveTemplate && (
             <DropdownMenu>
               <DropdownMenuTrigger
-                render={<button
+                render={<Button
                   type="button"
+                  variant="ghost"
+                  size="icon-xs"
                   aria-label={t("templateFrom.menu")}
-                  className="mt-1 rounded-control p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
+                  className="mt-1 text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
                 >
                   <MoreHorizontal className="size-3.5" aria-hidden />
-                </button>}
+                </Button>}
               />
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
@@ -822,7 +828,7 @@ export const TurnCard = memo(function TurnCard({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <div className="max-w-[86%] rounded-module bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
+          <div className="max-w-[86%] rounded-module bg-secondary px-3.5 py-2 text-prose text-secondary-foreground">
             {promptImages.length > 0 && (
               <div
                 data-prompt-images
@@ -839,18 +845,21 @@ export const TurnCard = memo(function TurnCard({
             )}
             {visiblePrompt && <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>}
             {turn.delivery && (
-              <p className="mt-1.5 text-cap font-medium uppercase text-muted-foreground">
+              <p className="mt-1.5 text-metadata font-medium uppercase text-muted-foreground">
                 {turn.delivery === "queued"
                   ? t("turn.queued", { position: turn.queuePosition ?? 1 })
                   : t("turn.steered")}
               </p>
             )}
             {promptIsLong && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="compact"
+                focusStyle="inset"
                 aria-expanded={promptExpanded}
                 onClick={() => setPromptExpanded((value) => !value)}
-                className="mt-1.5 flex items-center gap-1 rounded-control text-fine font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="mt-1.5 h-auto gap-1 px-0 py-0 text-callout font-medium text-muted-foreground"
               >
                 {promptExpanded ? (
                   <ChevronUp className="size-3" aria-hidden />
@@ -858,13 +867,13 @@ export const TurnCard = memo(function TurnCard({
                   <ChevronDown className="size-3" aria-hidden />
                 )}
                 {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
-              </button>
+              </Button>
             )}
           </div>
         </div>
         <div
           data-turn-actions="prompt"
-          className="mt-1 flex min-h-(--ds-control-mini) items-center gap-1 text-fine text-muted-foreground"
+          className="mt-1 flex min-h-(--ds-control-mini) items-center gap-1 text-callout text-muted-foreground"
         >
           <time dateTime={new Date(turn.startedAt).toISOString()}>
             {clock.format(turn.startedAt)}
@@ -886,7 +895,7 @@ export const TurnCard = memo(function TurnCard({
             const snapshot = snapshots[canvasKey(canvas)];
             const thumbnail = snapshot?.exports.find((item) => item.kind === "overview") ?? snapshot?.exports[0];
             return (
-              <section key={canvasKey(canvas)} className="canvas-ui-module border bg-fill-quiet p-2.5 text-fine">
+              <section key={canvasKey(canvas)} className="canvas-ui-module border bg-fill-quiet p-2.5 text-callout">
                 <div className="flex items-start gap-2">
                   {thumbnail && (
                     <img
@@ -910,21 +919,25 @@ export const TurnCard = memo(function TurnCard({
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <button
+                  <Button
                     type="button"
-                    className="canvas-ui-control border px-2 py-1 text-cap text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    variant="secondary"
+                    size="compact"
+                    className="text-metadata text-muted-foreground"
                     disabled={!snapshot?.exports.length}
                     onClick={() => downloadCanvasPng(canvas, snapshot)}
                   >
                     Export PNG
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="canvas-ui-control border px-2 py-1 text-cap text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    variant="secondary"
+                    size="compact"
+                    className="text-metadata text-muted-foreground"
                     onClick={() => requestCanvasDuplicate(canvas)}
                   >
                     Duplicate into Composer
-                  </button>
+                  </Button>
                 </div>
               </section>
             );
@@ -956,7 +969,7 @@ export const TurnCard = memo(function TurnCard({
         <p
           role="status"
           aria-live="polite"
-          className="mt-3.5 flex items-center gap-2 text-ui text-muted-foreground"
+          className="mt-3.5 flex items-center gap-2 text-body text-muted-foreground"
         >
           <ActivityOrb
             state={turn.thoughts.length > 0 ? "solving" : "working"}
@@ -967,7 +980,7 @@ export const TurnCard = memo(function TurnCard({
       )}
 
       {turn.error && (
-        <p className="mt-3.5 flex items-start gap-1.5 rounded-control bg-destructive/10 px-3 py-2 text-ui text-destructive">
+        <p className="mt-3.5 flex items-start gap-1.5 rounded-control bg-destructive/10 px-3 py-2 text-body text-destructive">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
         </p>
@@ -987,7 +1000,7 @@ export const TurnCard = memo(function TurnCard({
           </Detail>
 
           <Detail icon={Brain} label={t("turn.thinking")} count={turn.thoughts.length}>
-            <div className="flex flex-col gap-1 text-fine italic text-muted-foreground">
+            <div className="flex flex-col gap-1 text-callout italic text-muted-foreground">
               {turn.thoughts.map((thought, i) => (
                 <p key={i} className="whitespace-pre-wrap">
                   {thought}
@@ -998,7 +1011,7 @@ export const TurnCard = memo(function TurnCard({
 
           <Detail icon={BrainCircuit} label={t("turn.memory")} count={turn.memory?.items.length ?? 0}>
             {turn.memory && (
-              <div className="flex flex-col gap-2 text-fine">
+              <div className="flex flex-col gap-2 text-callout">
                 <p className="text-muted-foreground">
                   {t("turn.memoryTokens", {
                     count: new Intl.NumberFormat(locale).format(turn.memory.estimated_tokens),
@@ -1011,7 +1024,7 @@ export const TurnCard = memo(function TurnCard({
                       : t("memory.manual");
                     return (
                       <li key={item.id} className="rounded-control bg-fill-quiet px-2 py-1.5">
-                        <div className="flex items-center gap-1.5 text-cap text-muted-foreground">
+                        <div className="flex items-center gap-1.5 text-metadata text-muted-foreground">
                           <span className="font-mono">{item.layer}</span>
                           <span aria-hidden="true">·</span>
                           <span>{item.category}</span>
@@ -1048,7 +1061,7 @@ export const TurnCard = memo(function TurnCard({
                 </StatusBadge>
               )
             )}
-            {dur && <span className="font-mono text-cap text-muted-foreground">{dur}</span>}
+            {dur && <span className="font-mono text-metadata text-muted-foreground">{dur}</span>}
           </span>
         </div>
       )}
@@ -1056,7 +1069,7 @@ export const TurnCard = memo(function TurnCard({
       {!running && turn.text && (
         <div
           data-turn-actions="response"
-          className="mt-2 flex min-h-(--ds-control-mini) items-center gap-1 text-fine text-muted-foreground"
+          className="mt-2 flex min-h-(--ds-control-mini) items-center gap-1 text-callout text-muted-foreground"
         >
           <TurnActionButton
             label={t(copied === "response" ? "turn.copiedResponse" : "turn.copyResponse")}

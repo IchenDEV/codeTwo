@@ -8,7 +8,7 @@
 
 .pull-request-body {
   font-size: var(--ds-type-body-size);
-  line-height: var(--ds-type-content-leading);
+  line-height: var(--ds-type-prose-leading);
 }
 
 .pull-request-body > * + * {

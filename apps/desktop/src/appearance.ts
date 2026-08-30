@@ -1,16 +1,21 @@
 import { useSyncExternalStore } from "react";
 
-export type ColorScheme = "light" | "dark";
+import {
+  DEFAULT_CODE_FONT_SIZE,
+  DEFAULT_UI_FONT_SIZE,
+  resolveTypographyProperties,
+} from "./design/typography";
+import {
+  resolveThemeColorProperties,
+  type ColorScheme,
+  type ThemePalette,
+} from "./design/theme";
+
+export type { ColorScheme, ThemePalette } from "./design/theme";
 export type ThemePreference = ColorScheme | "system";
 export type AppearanceColorKey = "accent" | "background" | "foreground";
 export type PetSize = "small" | "medium" | "large";
 export type PetSource = "builtin" | "petshare";
-
-export interface ThemePalette {
-  accent: string;
-  background: string;
-  foreground: string;
-}
 
 export interface AppearanceTheme {
   id: string;
@@ -21,7 +26,7 @@ export interface AppearanceTheme {
 }
 
 export interface AppearanceSettings {
-  version: 1;
+  version: 2;
   preference: ThemePreference;
   activeThemeId: string;
   customThemes: AppearanceTheme[];
@@ -97,7 +102,7 @@ export const BUILT_IN_THEMES: AppearanceTheme[] = [
 ];
 
 export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
-  version: 1,
+  version: 2,
   preference: "system",
   activeThemeId: "code2",
   customThemes: [],
@@ -109,8 +114,8 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   petName: "Naiwa",
   uiFont: "system",
   codeFont: "system-mono",
-  uiFontSize: 13,
-  codeFontSize: 12,
+  uiFontSize: DEFAULT_UI_FONT_SIZE,
+  codeFontSize: DEFAULT_CODE_FONT_SIZE,
   sidebarOpacity: 80,
   contrast: 45,
 };
@@ -182,7 +187,12 @@ function includesId<T extends readonly { id: string }[]>(items: T, value: unknow
 }
 
 export function normalizeAppearanceSettings(value: unknown): AppearanceSettings {
-  const candidate = value && typeof value === "object" ? value as Partial<AppearanceSettings> : {};
+  const candidate = value && typeof value === "object"
+    ? value as Omit<Partial<AppearanceSettings>, "version"> & { version?: number }
+    : {};
+  const uiFontSize = candidate.version !== 2 && candidate.uiFontSize === 13
+    ? DEFAULT_UI_FONT_SIZE
+    : candidate.uiFontSize;
   const requestedPetSource = isPetSource(candidate.petSource)
     ? candidate.petSource
     : DEFAULT_APPEARANCE_SETTINGS.petSource;
@@ -203,7 +213,7 @@ export function normalizeAppearanceSettings(value: unknown): AppearanceSettings 
   }
   const availableIds = new Set([...BUILT_IN_THEMES.map((theme) => theme.id), ...customThemes.map((theme) => theme.id)]);
   return {
-    version: 1,
+    version: 2,
     preference: isPreference(candidate.preference) ? candidate.preference : DEFAULT_APPEARANCE_SETTINGS.preference,
     activeThemeId: typeof candidate.activeThemeId === "string" && availableIds.has(candidate.activeThemeId)
       ? candidate.activeThemeId
@@ -223,7 +233,7 @@ export function normalizeAppearanceSettings(value: unknown): AppearanceSettings 
       : DEFAULT_APPEARANCE_SETTINGS.petName,
     uiFont: includesId(UI_FONTS, candidate.uiFont) ? candidate.uiFont : DEFAULT_APPEARANCE_SETTINGS.uiFont,
     codeFont: includesId(CODE_FONTS, candidate.codeFont) ? candidate.codeFont : DEFAULT_APPEARANCE_SETTINGS.codeFont,
-    uiFontSize: clamp(candidate.uiFontSize, 12, 16, DEFAULT_APPEARANCE_SETTINGS.uiFontSize),
+    uiFontSize: clamp(uiFontSize, 12, 16, DEFAULT_APPEARANCE_SETTINGS.uiFontSize),
     codeFontSize: clamp(candidate.codeFontSize, 11, 18, DEFAULT_APPEARANCE_SETTINGS.codeFontSize),
     sidebarOpacity: clamp(candidate.sidebarOpacity, 40, 100, DEFAULT_APPEARANCE_SETTINGS.sidebarOpacity),
     contrast: clamp(candidate.contrast, 0, 100, DEFAULT_APPEARANCE_SETTINGS.contrast),
@@ -414,10 +424,6 @@ function fontStack<T extends readonly { id: string; stack: string }[]>(items: T,
   return items.find((item) => item.id === id)?.stack ?? items[0].stack;
 }
 
-function mix(foreground: string, amount: number, background: string): string {
-  return `color-mix(in oklch, ${foreground} ${amount}%, ${background})`;
-}
-
 /** Applies validated appearance settings to both the legacy and new semantic token layers. */
 export function applyAppearanceSettings(
   root: HTMLElement,
@@ -426,65 +432,13 @@ export function applyAppearanceSettings(
 ): void {
   const selected = themeById(settings.activeThemeId, settings);
   const source = selected[scheme];
-  const accent = source.accent;
-  const background = source.background;
-  const foreground = source.foreground;
-  const surface = mix(foreground, scheme === "light" ? 2 : 7, background);
-  const raised = mix(foreground, scheme === "light" ? 4 : 11, background);
-  const sidebar = mix(foreground, scheme === "light" ? 3 : 5, background);
-  const muted = mix(foreground, scheme === "light" ? 6 : 14, background);
-  const mutedForeground = mix(foreground, 58 + Math.round(settings.contrast * 0.2), background);
-  const border = mix(foreground, 8 + Math.round(settings.contrast * 0.12), background);
-  const accentSurface = mix(accent, 12 + Math.round(settings.contrast * 0.04), background);
   const properties: Record<string, string> = {
-    "--background": background,
-    "--foreground": foreground,
-    "--card": surface,
-    "--card-foreground": foreground,
-    "--popover": raised,
-    "--popover-foreground": foreground,
-    "--primary": accent,
-    "--primary-foreground": background,
-    "--secondary": muted,
-    "--secondary-foreground": foreground,
-    "--muted": muted,
-    "--muted-foreground": mutedForeground,
-    "--accent": accentSurface,
-    "--accent-foreground": foreground,
-    "--border": border,
-    "--input": border,
-    "--ring": accent,
-    "--sidebar": sidebar,
-    "--sidebar-foreground": foreground,
-    "--sidebar-border": border,
-    "--terminal": mix(foreground, scheme === "light" ? 88 : 3, background),
-    "--ds-color-canvas": background,
-    "--ds-color-sidebar": sidebar,
-    "--ds-color-surface": surface,
-    "--ds-color-raised": raised,
-    "--ds-color-modal": raised,
-    "--ds-color-text": foreground,
-    "--ds-color-text-muted": mutedForeground,
-    "--ds-color-fill-quiet": mix(foreground, 4, background),
-    "--ds-color-fill-rest": mix(foreground, 6, background),
-    "--ds-color-fill-hover": mix(foreground, 9, background),
-    "--ds-color-primary": accent,
-    "--ds-color-primary-hover": mix(foreground, 8, accent),
-    "--ds-color-primary-text": background,
-    "--ds-color-focus": foreground,
+    ...resolveThemeColorProperties(source, scheme, settings.contrast),
     "--appearance-font-ui": fontStack(UI_FONTS, settings.uiFont),
     "--font-mono": fontStack(CODE_FONTS, settings.codeFont),
     "--ds-font-ui": fontStack(UI_FONTS, settings.uiFont),
     "--ds-font-mono": fontStack(CODE_FONTS, settings.codeFont),
-    "--text-cap": `${Math.max(10, settings.uiFontSize - 3)}px`,
-    "--text-fine": `${Math.max(11, settings.uiFontSize - 2)}px`,
-    "--text-hint": `${Math.max(12, settings.uiFontSize - 1)}px`,
-    "--text-ui": `${settings.uiFontSize}px`,
-    "--text-title": `${settings.uiFontSize + 2}px`,
-    "--text-heading": `${settings.uiFontSize + 4}px`,
-    "--text-display": `${settings.uiFontSize + 9}px`,
-    "--ds-type-body-size": `${settings.uiFontSize}px`,
-    "--appearance-code-size": `${settings.codeFontSize}px`,
+    ...resolveTypographyProperties(settings),
     "--appearance-sidebar-opacity": `${settings.sidebarOpacity}%`,
     "--appearance-macos-panel-tint-opacity": `${Math.round(settings.sidebarOpacity * 0.45)}%`,
   };

@@ -14,6 +14,7 @@ import { useLanguage, useT, type LanguagePreference } from "../i18n";
 import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
@@ -160,7 +161,7 @@ export function GeneralSettingsPage({
           value={terminal.fontFamily}
           placeholder={t("settings.termFontDefault")}
           onChange={(event) => setTerminalSettings({ fontFamily: event.target.value })}
-          className="w-44 text-hint"
+          className="w-44 text-metadata"
         />
       </Row>
       <Row label={t("settings.termFontSize")}>
@@ -171,7 +172,7 @@ export function GeneralSettingsPage({
           max={32}
           value={terminal.fontSize}
           onChange={(event) => setTerminalSettings({ fontSize: Number(event.target.value) })}
-          className="w-44 text-hint"
+          className="w-44 text-metadata"
         />
       </Row>
       <Row label={t("settings.termScrollback")} hint={t("settings.termScrollbackHint")}>
@@ -183,7 +184,7 @@ export function GeneralSettingsPage({
           step={1000}
           value={terminal.scrollback}
           onChange={(event) => setTerminalSettings({ scrollback: Number(event.target.value) })}
-          className="w-44 text-hint"
+          className="w-44 text-metadata"
         />
       </Row>
     </Page>
@@ -236,7 +237,7 @@ export function ImportSettingsPage({
           {importing ? t("settings.importing") : t("settings.chooseSessionFiles")}
         </Button>
       </Row>
-      {error && <p role="alert" className="mt-3 text-hint leading-relaxed text-destructive">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-metadata text-destructive">{error}</p>}
       {result && (
         <div
           data-session-import-result
@@ -245,18 +246,18 @@ export function ImportSettingsPage({
           className="session-import-result"
         >
           <div className="min-w-0">
-            <p className="text-ui font-medium">
+            <p className="text-body font-medium">
               {t("settings.importResult", {
                 imported: result.imported,
                 skipped: result.skipped,
                 failed: result.failed,
               })}
             </p>
-            <p className="mt-0.5 text-hint leading-relaxed text-muted-foreground">
+            <p className="mt-0.5 text-metadata text-muted-foreground">
               {t("settings.importedMessages", { count: result.messages })}
             </p>
             {result.errors.slice(0, 3).map((item) => (
-              <p key={`${item.path}:${item.message}`} className="mt-1 break-words text-hint text-destructive">
+              <p key={`${item.path}:${item.message}`} className="mt-1 break-words text-metadata text-destructive">
                 {item.path}: {item.message}
               </p>
             ))}
@@ -308,7 +309,7 @@ export function KeybindingsSettingsPage({
     return (
       <Row key={action} compact label={label}>
         {conflicts.has(key) && capturing !== action && (
-          <span className="text-cap text-warning" title={t("settings.conflictHint")}>
+          <span className="text-metadata text-warning" title={t("settings.conflictHint")}>
             {t("settings.conflict")}
           </span>
         )}
@@ -316,7 +317,7 @@ export function KeybindingsSettingsPage({
           variant="outline"
           size="sm"
           className={cn(
-            "min-w-24 justify-center font-mono text-fine",
+            "min-w-24 justify-center font-mono text-callout",
             capturing === action && "text-primary",
             conflicts.has(key) && capturing !== action && "text-warning",
           )}
@@ -325,15 +326,15 @@ export function KeybindingsSettingsPage({
           {capturing === action ? t("settings.capturing") : formatCombo(key)}
         </Button>
         {onReset && (
-          <Button
+          <TooltipButton
+            label={t("settings.reset")}
             variant="ghost"
             size="icon"
             className="size-7 text-muted-foreground"
-            title={t("settings.reset")}
             onClick={() => onReset(action)}
           >
             <RotateCcw className="size-3.5" />
-          </Button>
+          </TooltipButton>
         )}
       </Row>
     );

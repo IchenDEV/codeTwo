@@ -61,9 +61,9 @@ export function TaskHandoffDialog({
               value={destination}
               onChange={(event) => setDestination(event.target.value)}
             />
-            <p className="text-hint text-muted-foreground">Choose a new folder on the remote device.</p>
+            <p className="text-metadata text-muted-foreground">Choose a new folder on the remote device.</p>
           </div>
-          {error && <p className="text-hint text-destructive">{error}</p>}
+          {error && <p className="text-metadata text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>

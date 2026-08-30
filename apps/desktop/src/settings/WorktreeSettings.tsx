@@ -272,13 +272,13 @@ export function WorktreeSettingsPage({
             </Row>
           </>
         ) : (
-          <p className="px-4 py-4 text-hint text-muted-foreground">
+          <p className="px-4 py-4 text-metadata text-muted-foreground">
             {t("worktree.settingsLoading")}
           </p>
         )}
       </section>
       {worktreeSettingsError ? (
-        <p className="mt-2 text-hint leading-relaxed text-destructive" role="alert">
+        <p className="mt-2 text-metadata text-destructive" role="alert">
           {worktreeSettingsError}
         </p>
       ) : null}
@@ -296,9 +296,9 @@ export function WorktreeSettingsPage({
       </div>
 
       {projects.length === 0 ? (
-        <p className="py-6 text-ui text-muted-foreground">{t("worktree.manageNoProjects")}</p>
+        <p className="py-6 text-body text-muted-foreground">{t("worktree.manageNoProjects")}</p>
       ) : worktreesLoading && Object.keys(worktreesByProject).length === 0 ? (
-        <p className="py-6 text-ui text-muted-foreground">{t("worktree.manageLoading")}</p>
+        <p className="py-6 text-body text-muted-foreground">{t("worktree.manageLoading")}</p>
       ) : (
         projects.map((candidate) => {
           const state = worktreesByProject[candidate.path] ?? { entries: [], error: null };
@@ -311,8 +311,8 @@ export function WorktreeSettingsPage({
               <div className="worktree-project-header">
                 <ProjectIcon project={candidate} size={24} />
                 <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-ui font-semibold">{candidate.name}</h2>
-                  <p className="truncate font-mono text-fine text-muted-foreground" title={candidate.path}>
+                  <h2 className="truncate text-body font-semibold">{candidate.name}</h2>
+                  <p className="truncate font-mono text-callout text-muted-foreground" title={candidate.path}>
                     {candidate.path}
                   </p>
                 </div>
@@ -323,11 +323,11 @@ export function WorktreeSettingsPage({
 
               <div className="worktree-project-card">
                 {state.error ? (
-                  <p className="px-3 py-3 text-hint leading-relaxed text-destructive" role="alert">
+                  <p className="px-3 py-3 text-metadata text-destructive" role="alert">
                     {state.error}
                   </p>
                 ) : state.entries.length === 0 ? (
-                  <p className="px-3 py-3 text-hint text-muted-foreground">
+                  <p className="px-3 py-3 text-metadata text-muted-foreground">
                     {t("worktree.manageEmpty")}
                   </p>
                 ) : (

@@ -172,7 +172,7 @@ describe("TaskBoardPage rendered", () => {
     const boardContent = view.container.querySelector("[data-task-board-content]")
 
     expect(title?.textContent).toBe("任务看板")
-    expect(title?.className).toContain("text-display")
+    expect(title?.className).toContain("text-page")
     expect(title?.className).toContain("tracking-tight")
     expect(attention?.textContent).toContain("有 2 项任务需要你处理")
     expect(header?.className).toContain("py-4")

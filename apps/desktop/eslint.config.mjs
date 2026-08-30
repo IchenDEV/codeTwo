@@ -13,6 +13,10 @@ const rawTextareaRestriction = {
   message: "Use the shared Textarea component instead of a raw textarea.",
   selector: "JSXOpeningElement[name.name='textarea']",
 };
+const rawButtonRestriction = {
+  message: "Use the shared Button or TooltipButton component instead of a raw button.",
+  selector: "JSXOpeningElement[name.name='button']",
+};
 
 export default tseslint.config(
   {
@@ -66,6 +70,7 @@ export default tseslint.config(
       "no-regex-spaces": "off",
       "no-restricted-syntax": [
         "error",
+        rawButtonRestriction,
         rawTextareaRestriction,
         inlineRadiusRestriction,
       ],
@@ -76,6 +81,16 @@ export default tseslint.config(
     files: ["src/components/ui/textarea.tsx"],
     rules: {
       "no-restricted-syntax": ["error", inlineRadiusRestriction],
+    },
+  },
+  {
+    files: ["src/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        rawTextareaRestriction,
+        inlineRadiusRestriction,
+      ],
     },
   },
 );

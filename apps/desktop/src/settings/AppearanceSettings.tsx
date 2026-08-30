@@ -26,6 +26,7 @@ import { pickAppearanceThemeDocument, saveAppearanceThemeDocument } from "../bri
 import { useT } from "../i18n";
 import { SettingRow } from "@/components/business/setting-row";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -125,23 +126,32 @@ function ThemeCard({
   const t = useT();
   return (
     <div className="appearance-theme-card" data-selected={selected || undefined}>
-      <button className="appearance-theme-select" type="button" onClick={onSelect} aria-pressed={selected}>
+      <Button
+        className="appearance-theme-select"
+        type="button"
+        variant="selectable"
+        size="row"
+        focusStyle="inset"
+        data-selected={selected ? "true" : "false"}
+        onClick={onSelect}
+        aria-pressed={selected}
+      >
         <span className="appearance-theme-swatches">
           <ThemeSwatch palette={theme.light} scheme="light" />
           <ThemeSwatch palette={theme.dark} scheme="dark" />
         </span>
         <span className="appearance-theme-name">{theme.name}</span>
-      </button>
-      <Button
+      </Button>
+      <TooltipButton
+        label={t("settings.copyThemeNamed", { name: theme.name })}
+        tooltip={t("settings.copyTheme")}
         variant="ghost"
         size="icon-xs"
         className="appearance-theme-copy"
         onClick={onDuplicate}
-        title={t("settings.copyTheme")}
-        aria-label={t("settings.copyThemeNamed", { name: theme.name })}
       >
         <Copy />
-      </Button>
+      </TooltipButton>
     </div>
   );
 }
@@ -422,16 +432,15 @@ export function AppearanceSettings({
               {t("settings.exportTheme")}
             </Button>
             {!activeTheme.builtin && (
-              <Button
+              <TooltipButton
+                label={t("settings.deleteTheme")}
                 variant="ghost"
                 size="icon-sm"
                 className="text-status-destructive"
                 onClick={() => removeCustomTheme(activeTheme.id)}
-                title={t("settings.deleteTheme")}
-                aria-label={t("settings.deleteTheme")}
               >
                 <Trash2 />
-              </Button>
+              </TooltipButton>
             )}
           </div>
         </div>

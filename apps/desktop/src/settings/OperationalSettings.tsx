@@ -26,6 +26,7 @@ import {
 } from "../bridge";
 import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { SettingToggle } from "@/components/business/setting-toggle";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -119,13 +120,13 @@ function BackendSettingsPage({
 
   return (
     <Page title={copy.title} description={copy.description}>
-      <p className="pb-2 text-hint leading-relaxed text-muted-foreground">{copy.scope}</p>
-      {error && <p className="pb-2 text-hint leading-relaxed text-destructive">{error}</p>}
+      <p className="pb-2 text-metadata text-muted-foreground">{copy.scope}</p>
+      {error && <p className="pb-2 text-metadata text-destructive">{error}</p>}
       {settings?.errors.map((message) => (
-        <p key={message} className="pb-2 text-hint leading-relaxed text-destructive">{message}</p>
+        <p key={message} className="pb-2 text-metadata text-destructive">{message}</p>
       ))}
       {!settings ? (
-        <p className="py-section text-ui text-muted-foreground">{copy.loading}</p>
+        <p className="py-section text-body text-muted-foreground">{copy.loading}</p>
       ) : (
         <>
           {accessSaver && (
@@ -178,7 +179,7 @@ function BackendSettingsPage({
               label={backend.display_name}
               hint={backend.reason ?? <span className="font-mono">{backend.id}</span>}
             >
-              <span className="flex items-center gap-1.5 text-fine text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-callout text-muted-foreground">
                 <span className={cn("size-1.5 rounded-full", backend.available ? "bg-success" : "bg-border")} />
                 {backend.available ? copy.available : copy.unavailable}
               </span>
@@ -361,7 +362,7 @@ export function DeviceSyncSettingsPage({
         </Button>
       </Row>
       <GroupHeading>{t("settings.syncScope")}</GroupHeading>
-      <p className="pt-1.5 text-hint leading-relaxed text-muted-foreground">{t("settings.syncScopeHint")}</p>
+      <p className="pt-1.5 text-metadata text-muted-foreground">{t("settings.syncScopeHint")}</p>
     </Page>
   );
 }
@@ -520,7 +521,7 @@ export function DeveloperSettingsPage({
             : t("settings.exportDiagnosticsAction")}
         </Button>
       </Row>
-      {error && <p className="pt-2 text-hint text-destructive" role="alert">{error}</p>}
+      {error && <p className="pt-2 text-metadata text-destructive" role="alert">{error}</p>}
     </Page>
   );
 }
@@ -552,14 +553,14 @@ export function BrowserPermissionsSettingsPage() {
       </Row>
       <GroupHeading>Permanent website access</GroupHeading>
       {origins.length === 0 ? (
-        <p className="py-section text-ui text-muted-foreground">No origins have permanent access.</p>
+        <p className="py-section text-body text-muted-foreground">No origins have permanent access.</p>
       ) : origins.map((origin) => (
         <Row key={origin} compact label={origin} hint="Website content remains untrusted.">
-          <Button
+          <TooltipButton
+            label="Revoke"
             variant="ghost"
             size="icon"
             className="size-7 text-muted-foreground hover:text-destructive"
-            title="Revoke"
             onClick={() => {
               void browserRevokePermission(origin).then(() => {
                 setOrigins((current) => current.filter((item) => item !== origin));
@@ -567,7 +568,7 @@ export function BrowserPermissionsSettingsPage() {
             }}
           >
             <Trash2 className="size-3.5" />
-          </Button>
+          </TooltipButton>
         </Row>
       ))}
     </Page>

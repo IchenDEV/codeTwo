@@ -173,7 +173,7 @@ export function CommandPalette({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{command.label}</span>
                   {command.detail && (
-                    <span className="block truncate text-fine text-muted-foreground">{command.detail}</span>
+                    <span className="block truncate text-callout text-muted-foreground">{command.detail}</span>
                   )}
                 </span>
                 {command.hint && <CommandShortcut>{command.hint}</CommandShortcut>}
@@ -182,13 +182,13 @@ export function CommandPalette({
           </CommandGroup>
         ))}
         {searchStatus && (filter === "all" || filter === "session") && (
-          <p role="status" className="px-3 py-2 text-fine text-muted-foreground">
+          <p role="status" className="px-3 py-2 text-callout text-muted-foreground">
             {searchStatus}
           </p>
         )}
       </CommandList>
       <CommandSeparator className="mx-0" />
-      <div className="flex items-center gap-4 px-3 py-2 text-fine text-muted-foreground">
+      <div className="flex items-center gap-4 px-3 py-2 text-callout text-muted-foreground">
         <span><kbd className="font-mono text-foreground">↑↓</kbd> {t("palette.navigate")}</span>
         <span><kbd className="font-mono text-foreground">↵</kbd> {t("palette.open")}</span>
         <span className="ml-auto"><kbd className="font-mono text-foreground">esc</kbd> {t("palette.close")}</span>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AtSign, ChevronRight, Loader2, MessageSquarePlus, Save } from "@/components/ui/icons";
+import { AtSign, ChevronRight, MessageSquarePlus, Save } from "@/components/ui/icons";
 
 import { CODE_FONTS, useAppearanceSettings } from "../appearance";
 import { readText, writeText } from "../bridge";
@@ -9,8 +9,9 @@ import { useToast } from "../ui/toast";
 import { ImagePreview } from "./ImagePreview";
 import { imageTypeOf } from "./imageTypes";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipButton } from "@/components/ui/tooltip";
 
 type MonacoModule = typeof import("./monaco");
 type Editor = import("monaco-editor").editor.IStandaloneCodeEditor;
@@ -271,7 +272,7 @@ export function FileViewer({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <header className="flex items-center gap-2 border-b px-3 py-1.5">
         {/* Breadcrumb, not a raw path: the segments are how you know where you are. */}
-        <span className="flex min-w-0 flex-1 items-center gap-0.5 text-hint">
+        <span className="flex min-w-0 flex-1 items-center gap-0.5 text-metadata">
           {parts.map((p, i) =>
             i === parts.length - 1 ? (
               <span key={i} className="truncate font-medium">
@@ -288,34 +289,31 @@ export function FileViewer({
         </span>
 
         {!isImage && (
-          <Tooltip>
-            <TooltipTrigger
-              render={<Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                disabled={!hasSelection}
-                onClick={openDraft}
-              >
-                <MessageSquarePlus className="size-3.5" />
-              </Button>}
-            />
-            <TooltipContent>{t("files.comment")}</TooltipContent>
-          </Tooltip>
+          <TooltipButton
+            label={t("files.comment")}
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            disabled={!hasSelection}
+            onClick={openDraft}
+          >
+            <MessageSquarePlus className="size-3.5" />
+          </TooltipButton>
         )}
 
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button variant="ghost" size="icon" className="size-7" onClick={() => onInsert(path)}>
-              <AtSign className="size-3.5" />
-            </Button>}
-          />
-          <TooltipContent>{t("files.insert")}</TooltipContent>
-        </Tooltip>
+        <TooltipButton
+          label={t("files.insert")}
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          onClick={() => onInsert(path)}
+        >
+          <AtSign className="size-3.5" />
+        </TooltipButton>
 
         {(dirty || saving) && (
-          <Button size="sm" className="h-7 text-hint" disabled={saving} onClick={() => void save()}>
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+          <Button size="compact" className="text-metadata" disabled={saving} onClick={() => void save()}>
+            {saving ? <Spinner className="size-3.5" /> : <Save className="size-3.5" />}
             {t("files.save")}
           </Button>
         )}
@@ -337,22 +335,22 @@ export function FileViewer({
         <div ref={container} className="absolute inset-0" />
 
         {error ? (
-          <p className="absolute inset-x-0 top-0 px-6 py-4 text-ui text-destructive">{error}</p>
+          <p className="absolute inset-x-0 top-0 px-6 py-4 text-body text-destructive">{error}</p>
         ) : !mod ? (
-          <p className="absolute inset-x-0 top-0 flex items-center gap-2 px-6 py-4 text-ui text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
+          <p className="absolute inset-x-0 top-0 flex items-center gap-2 px-6 py-4 text-body text-muted-foreground">
+            <Spinner className="size-3.5" />
             {t("files.loading")}
           </p>
         ) : null}
 
         {/* The comment card floats over the code, top-right — the GitHub-review gesture. */}
         {draft && (
-          <div className="glass-raised absolute right-4 top-3 z-10 w-80 rounded-module border p-3 font-sans shadow-lg">
-            <div className="flex items-center gap-2 text-hint font-medium">
+          <div className="raised-material absolute right-4 top-3 z-10 w-80 rounded-module p-3 font-sans shadow-raised">
+            <div className="flex items-center gap-2 text-metadata font-medium">
               <MessageSquarePlus className="size-3.5 text-primary" />
               {t("files.commentTitle")}
             </div>
-            <div className="mt-0.5 text-fine text-muted-foreground">{t("files.commentOn", { range })}</div>
+            <div className="mt-0.5 text-callout text-muted-foreground">{t("files.commentOn", { range })}</div>
             <Textarea
               autoFocus
               size="compact"
@@ -370,13 +368,13 @@ export function FileViewer({
                 }
               }}
               placeholder={t("files.commentPlaceholder")}
-              className="mt-2 min-h-16"
+              className="mt-2 min-h-16 font-mono text-metadata"
             />
             <div className="mt-2 flex justify-end gap-2">
-              <Button variant="ghost" size="sm" className="h-7 text-hint" onClick={() => setDraft(null)}>
+              <Button variant="ghost" size="compact" className="text-metadata" onClick={() => setDraft(null)}>
                 {t("files.cancel")}
               </Button>
-              <Button size="sm" className="h-7 text-hint" disabled={!draft.note.trim()} onClick={submitDraft}>
+              <Button size="compact" className="text-metadata" disabled={!draft.note.trim()} onClick={submitDraft}>
                 {t("browser.addToPrompt")}
               </Button>
             </div>

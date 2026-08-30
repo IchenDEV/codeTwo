@@ -10,6 +10,7 @@ import { useToast } from "../ui/toast";
 import { PageHeader } from "@/components/business/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import {
   Card,
   CardAction,
@@ -60,7 +61,7 @@ function SceneCard({
     <Card>
       <CardHeader>
         <CardTitle className="truncate">{sceneTitle(scene, locale)}</CardTitle>
-        <CardDescription className="line-clamp-2 leading-relaxed">
+        <CardDescription className="line-clamp-2">
           {description || t("sceneStudio.noDescription")}
         </CardDescription>
         <CardAction>
@@ -96,16 +97,16 @@ function SceneCard({
           <Copy data-icon="inline-start" />
           {t("sceneEditor.duplicate")}
         </Button>
-        <Button
+        <TooltipButton
+          label={`${t("scene.exportSkill")}: ${sceneTitle(scene, locale)}`}
+          tooltip={t("scene.exportSkill")}
           type="button"
           size="icon-sm"
           variant="ghost"
-          aria-label={`${t("scene.exportSkill")}: ${sceneTitle(scene, locale)}`}
-          title={t("scene.exportSkill")}
           onClick={() => void exportSkill()}
         >
           <Download />
-        </Button>
+        </TooltipButton>
       </CardFooter>
     </Card>
   );
@@ -146,8 +147,8 @@ export function SceneStudio({
     return (
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <h2 className="text-title font-semibold">{title}</h2>
-          <p className="text-hint leading-relaxed text-muted-foreground">{description}</p>
+          <h2 className="text-dialog font-semibold">{title}</h2>
+          <p className="text-metadata text-muted-foreground">{description}</p>
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
           {items.map((scene) => (
@@ -172,11 +173,11 @@ export function SceneStudio({
           <ArrowLeft />
         </Button>
         <Clapperboard className="size-4 text-muted-foreground" />
-        <span className="electrobun-webkit-app-region-drag text-ui font-medium">{t("sceneStudio.title")}</span>
+        <span className="electrobun-webkit-app-region-drag text-body font-medium">{t("sceneStudio.title")}</span>
         {request && (
           <>
             <span className="electrobun-webkit-app-region-drag text-muted-foreground/50">/</span>
-            <span className="electrobun-webkit-app-region-drag truncate text-ui text-muted-foreground">
+            <span className="electrobun-webkit-app-region-drag truncate text-body text-muted-foreground">
               {request.kind === "edit" ? request.scene.title : request.kind === "duplicate" ? t("sceneEditor.duplicateTitle") : t("sceneEditor.createTitle")}
             </span>
           </>

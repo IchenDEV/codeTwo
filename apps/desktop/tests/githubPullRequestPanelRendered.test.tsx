@@ -82,8 +82,6 @@ describe("GitHubPullRequestPanel", () => {
       merge: async (...args) => merges.push(args),
       open: async (url) => opened.push(url),
     };
-    dom.window.confirm = () => true;
-
     const view = mount(
       <I18nProvider>
         <GitHubPullRequestPanel
@@ -113,6 +111,9 @@ describe("GitHubPullRequestPanel", () => {
 
     await waitFor(() => expect(button(view.container, "Merge").disabled).toBe(false));
     click(button(view.container, "Merge"));
+    expect(merges).toEqual([]);
+    await waitFor(() => expect(dom.document.body.querySelector('[data-slot="alert-dialog-content"]')).not.toBeNull());
+    click(dom.document.body.querySelector('[data-slot="alert-dialog-action"]')!);
     await waitFor(() => expect(merges).toEqual([["/repo", 42, "squash"]]));
     await waitFor(() => expect(refreshes).toBe(1));
     view.unmount();

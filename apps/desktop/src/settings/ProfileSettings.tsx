@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, LoaderCircle, Lock, Pencil, Share2, UserRound } from "@/components/ui/icons";
+import { Check, Lock, Pencil, Share2, UserRound } from "@/components/ui/icons";
 
 import {
   usageHistory,
@@ -13,6 +13,7 @@ import { useLanguage } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { fmtTokens, stackHistory, type StackedBucket } from "../usage/usageMath";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -212,9 +213,9 @@ export function ProfileSettings({
             )}
           </div>
           <div className="profile-identity-copy">
-            <h1 id="profile-name" className="text-display font-semibold tracking-tight">{displayName}</h1>
-            {handle && <p className="text-ui text-muted-foreground">@{handle}</p>}
-            <p className="profile-bio text-hint leading-relaxed text-muted-foreground">{bio}</p>
+            <h1 id="profile-name" className="text-page font-semibold tracking-tight">{displayName}</h1>
+            {handle && <p className="text-body text-muted-foreground">@{handle}</p>}
+            <p className="profile-bio text-metadata text-muted-foreground">{bio}</p>
           </div>
         </section>
 
@@ -243,7 +244,7 @@ export function ProfileSettings({
               {editing ? t("profile.closeEditor") : t("profile.edit")}
             </Button>
           </div>
-          <p className="profile-privacy text-hint text-muted-foreground">
+          <p className="profile-privacy text-metadata text-muted-foreground">
             <Lock className="size-3.5" aria-hidden />
             {t("profile.private")}
           </p>
@@ -276,7 +277,7 @@ export function ProfileSettings({
                 }}
               />
               {nameInvalid && (
-                <p id="profile-display-name-error" role="alert" className="text-fine text-destructive">
+                <p id="profile-display-name-error" role="alert" className="text-callout text-destructive">
                   {t("profile.nameRequired")}
                 </p>
               )}
@@ -329,25 +330,25 @@ export function ProfileSettings({
         </form>
       )}
 
-      {status && <p role="status" aria-live="polite" className="profile-status text-hint text-muted-foreground">{status}</p>}
+      {status && <p role="status" aria-live="polite" className="profile-status text-metadata text-muted-foreground">{status}</p>}
 
       {loading && !summary && (
-        <div className="flex items-center justify-center gap-2 py-16 text-hint text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" />
+        <div className="flex items-center justify-center gap-2 py-page-section text-metadata text-muted-foreground">
+          <Spinner />
           {t("profile.loading")}
         </div>
       )}
 
       {loadFailed && !summary && (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <p className="text-hint text-muted-foreground">{t("profile.loadFailed")}</p>
+        <div className="flex flex-col items-center gap-3 py-page-section text-center">
+          <p className="text-metadata text-muted-foreground">{t("profile.loadFailed")}</p>
           <Button variant="outline" size="sm" onClick={loadActivity}>{t("profile.retry")}</Button>
         </div>
       )}
 
       {summary && (
         <section className="profile-activity-surface" aria-labelledby="profile-summary-heading">
-          <h2 id="profile-summary-heading" className="profile-summary-title text-ui text-muted-foreground">
+          <h2 id="profile-summary-heading" className="profile-summary-title text-body text-muted-foreground">
             {t("profile.last90Days")}
           </h2>
 
@@ -355,7 +356,7 @@ export function ProfileSettings({
             <div className="profile-stat profile-primary-stat">
               <div className="profile-primary-value">
                 <strong className="font-mono tabular-nums">{fmtTokens(summary.totalTokens)}</strong>
-                <span className="text-ui text-muted-foreground">{t("profile.tokens")}</span>
+                <span className="text-body text-muted-foreground">{t("profile.tokens")}</span>
               </div>
             </div>
             {[
@@ -365,15 +366,15 @@ export function ProfileSettings({
               [fmtTokens(summary.peakTokens), t("profile.peakDay")],
             ].map(([value, label]) => (
               <div key={label} className="profile-stat">
-                <strong className="font-mono text-ui tabular-nums">{value}</strong>
-                <span className="text-fine text-muted-foreground">{label}</span>
+                <strong className="font-mono text-body tabular-nums">{value}</strong>
+                <span className="text-callout text-muted-foreground">{label}</span>
               </div>
             ))}
           </div>
 
           <div className="profile-activity-body">
             <section className="profile-activity-chart" aria-labelledby="profile-activity-heading">
-              <h3 id="profile-activity-heading" className="text-hint font-medium">{t("profile.tokenActivity")}</h3>
+              <h3 id="profile-activity-heading" className="text-metadata font-medium">{t("profile.tokenActivity")}</h3>
               <div
                 className="profile-activity-grid"
                 role="img"
@@ -397,18 +398,18 @@ export function ProfileSettings({
 
             {summary.activeDays === 0 ? (
               <div className="profile-empty-state">
-                <strong className="text-ui font-semibold">{t("profile.noActivity")}</strong>
-                <p className="max-w-xs text-center text-hint leading-relaxed text-muted-foreground">
+                <strong className="text-body font-semibold">{t("profile.noActivity")}</strong>
+                <p className="max-w-xs text-center text-metadata text-muted-foreground">
                   {t("profile.noActivityHint")}
                 </p>
               </div>
             ) : (
               <section className="profile-provider-activity" aria-labelledby="profile-provider-heading">
-                <h2 id="profile-provider-heading" className="text-ui font-semibold">{t("profile.providerActivity")}</h2>
+                <h2 id="profile-provider-heading" className="text-body font-semibold">{t("profile.providerActivity")}</h2>
                 <div className="mt-4 space-y-4">
                   {summary.providers.slice(0, 5).map((provider) => (
                     <div key={provider.source}>
-                      <div className="flex items-center gap-2 text-hint">
+                      <div className="flex items-center gap-2 text-metadata">
                         <ProviderIcon provider={provider.source} className="size-3.5" />
                         <span className="min-w-0 flex-1 truncate">{providerNames[provider.source] ?? provider.source}</span>
                         <span className="font-mono tabular-nums text-muted-foreground">{fmtTokens(provider.total_tokens)}</span>

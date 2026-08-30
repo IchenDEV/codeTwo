@@ -24,7 +24,7 @@ function FieldLegend({
       data-slot="field-legend"
       data-variant={variant}
       className={cn(
-        "mb-1.5 font-medium data-[variant=label]:text-ui data-[variant=legend]:text-title",
+        "mb-1.5 font-medium data-[variant=label]:text-body data-[variant=legend]:text-dialog",
         className,
       )}
       {...props}
@@ -75,7 +75,7 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="field-content"
-      className={cn("group/field-content flex flex-1 flex-col gap-0.5 leading-snug", className)}
+      className={cn("group/field-content flex flex-1 flex-col gap-0.5", className)}
       {...props}
     />
   )
@@ -86,7 +86,7 @@ function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>)
     <Label
       data-slot="field-label"
       className={cn(
-        "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50",
+        "group/field-label peer/field-label flex w-fit gap-2 group-data-[disabled=true]/field:opacity-50",
         className,
       )}
       {...props}
@@ -98,7 +98,7 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="field-label"
-      className={cn("flex w-fit items-center gap-2 text-ui font-medium", className)}
+      className={cn("flex w-fit items-center gap-2 text-body font-medium", className)}
       {...props}
     />
   )
@@ -108,7 +108,7 @@ function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
   return (
     <p
       data-slot="field-description"
-      className={cn("text-start text-fine leading-normal text-muted-foreground", className)}
+      className={cn("text-start text-callout text-muted-foreground", className)}
       {...props}
     />
   )
@@ -141,7 +141,7 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
-      className={cn("text-fine text-destructive", className)}
+      className={cn("text-callout text-destructive", className)}
       {...props}
     >
       {content}

@@ -8,6 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
@@ -214,9 +222,6 @@ interface SlotCardEditor {
   focus: () => void;
 }
 
-const FIELD_CLASSES =
-  "canvas-ui-control bg-fill-rest px-2 py-1 text-ui outline-none transition-[color,box-shadow,background-color] focus-visible:focus-ring";
-
 export function SlotCardView({
   block,
   editor,
@@ -311,27 +316,34 @@ export function SlotCardView({
         );
       case "select":
         return (
-          <select
-            data-slot-field
-            aria-label={label}
-            aria-required={slot.required || undefined}
-            className={FIELD_CLASSES}
+          <Select
+            items={(slot.options ?? []).map((option) => ({ value: option, label: option }))}
             value={value}
-            onChange={noopChange}
-            onInput={(event) => write(slot.id, event.currentTarget.value)}
+            onValueChange={(next) => write(slot.id, next ?? "")}
           >
-            <option value="">{t("slotCard.selectPlaceholder")}</option>
-            {(slot.options ?? []).map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              data-slot-field
+              aria-label={label}
+              aria-required={slot.required || undefined}
+              className="w-full min-w-0"
+            >
+              <SelectValue placeholder={t("slotCard.selectPlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {(slot.options ?? []).map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         );
       case "file":
         return runtime ? (
           <span className="inline-flex min-w-0 items-center gap-1.5">
-            {value && <span className="max-w-48 truncate font-mono text-fine text-foreground">{value}</span>}
+            {value && <span className="max-w-48 truncate font-mono text-callout text-foreground">{value}</span>}
             <Button
               data-slot-field
               type="button"
@@ -364,28 +376,38 @@ export function SlotCardView({
         const artifacts = runtime?.carriedArtifacts() ?? [];
         if (artifacts.length === 0 && !value) {
           return (
-            <span className="text-fine text-muted-foreground" data-slot-empty-artifacts>
+            <span className="text-callout text-muted-foreground" data-slot-empty-artifacts>
               {t("slotCard.noArtifacts")}
             </span>
           );
         }
         return (
-          <select
-            data-slot-field
-            aria-label={label}
-            aria-required={slot.required || undefined}
-            className={FIELD_CLASSES}
+          <Select
+            items={artifacts.map((artifact) => ({
+              value: artifact.id,
+              label: artifact.title,
+            }))}
             value={value}
-            onChange={noopChange}
-            onInput={(event) => write(slot.id, event.currentTarget.value)}
+            onValueChange={(next) => write(slot.id, next ?? "")}
           >
-            <option value="">{t("slotCard.selectPlaceholder")}</option>
-            {artifacts.map((artifact) => (
-              <option key={artifact.id} value={artifact.id}>
-                {artifact.title}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              data-slot-field
+              aria-label={label}
+              aria-required={slot.required || undefined}
+              className="w-full min-w-0"
+            >
+              <SelectValue placeholder={t("slotCard.selectPlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {artifacts.map((artifact) => (
+                  <SelectItem key={artifact.id} value={artifact.id}>
+                    {artifact.title}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         );
       }
       default:
@@ -415,14 +437,14 @@ export function SlotCardView({
     >
       <div className="flex items-center gap-1.5 pb-2">
         {block.props.icon && (
-          <span className="shrink-0 text-ui leading-none" aria-hidden>
+          <span className="shrink-0 text-body" aria-hidden>
             {block.props.icon}
           </span>
         )}
-        <span className="min-w-0 flex-1 truncate text-ui font-medium text-foreground">
+        <span className="min-w-0 flex-1 truncate text-body font-medium text-foreground">
           {block.props.title}
         </span>
-        <Badge variant="outline" className="shrink-0 text-cap text-muted-foreground">
+        <Badge variant="outline" className="shrink-0 text-metadata text-muted-foreground">
           {block.props.mode === "brief" ? t("slotCard.brief") : t("slotCard.macro")}
         </Badge>
         <Button
@@ -442,7 +464,7 @@ export function SlotCardView({
             return (
               <span
                 key={`text-${index}`}
-                className="whitespace-pre-wrap text-ui text-muted-foreground"
+                className="whitespace-pre-wrap text-body text-muted-foreground"
               >
                 {segment.text}
               </span>
@@ -452,7 +474,7 @@ export function SlotCardView({
           if (!slot) {
             // A placeholder without a slot definition stays visible as prose.
             return (
-              <span key={`orphan-${index}`} className="font-mono text-fine text-muted-foreground">
+              <span key={`orphan-${index}`} className="font-mono text-callout text-muted-foreground">
                 {`{{${segment.id}}}`}
               </span>
             );

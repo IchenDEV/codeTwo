@@ -17,11 +17,11 @@ import {
 import { confirmNative, copyPath, createDir, createFile, deletePath, listDir, renamePath, type DirEntry } from "../bridge";
 import { useToast } from "../ui/toast";
 import { useT } from "../i18n";
-import { Button } from "@/components/ui/button";
+import { CompositeActionRow } from "@/components/business/composite-action-row";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipButton } from "@/components/ui/tooltip";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -341,8 +341,9 @@ export function FilePanel({
           ) : (
             <ContextMenu>
               <ContextMenuTrigger
-                render={<div
-                  onClick={() => {
+                render={<CompositeActionRow
+                  accessibilityLabel={entry.name}
+                  onSelect={() => {
                     setSelected(entry.path);
                     // A plain click opens a directory or *views* a file. It never edits —
                     // editing is a deliberate act, so it lives in the menu.
@@ -351,7 +352,7 @@ export function FilePanel({
                   }}
                   onContextMenu={() => setSelected(entry.path)}
                   className={cn(
-                    "group flex cursor-default items-center gap-1 rounded-control pr-1 transition-colors",
+                    "gap-1 rounded-control pr-1 transition-colors focus-within:bg-accent",
                     openPath === entry.path
                       ? "bg-accent"
                       : selected === entry.path
@@ -359,6 +360,19 @@ export function FilePanel({
                         : "hover:bg-accent/50",
                   )}
                   style={{ paddingLeft: depth * 12 }}
+                  contentClassName="flex items-center gap-1"
+                  actions={!entry.is_dir ? (
+                    <TooltipButton
+                      label={t("files.insert")}
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => onInsert(entry.path)}
+                      className="ml-auto hidden shrink-0 text-muted-foreground hover:text-primary group-hover:inline-flex group-focus-within:inline-flex"
+                    >
+                      <AtSign className="size-3" />
+                    </TooltipButton>
+                  ) : null}
                 >
                   <ChevronRight
                     className={cn(
@@ -368,21 +382,9 @@ export function FilePanel({
                     )}
                   />
                   <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate py-1 text-hint">{entry.name}</span>
+                  <span className="truncate py-1 text-metadata">{entry.name}</span>
 
-                  {!entry.is_dir && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onInsert(entry.path);
-                      }}
-                      title={t("files.insert")}
-                      className="ml-auto hidden shrink-0 rounded-control p-1 text-muted-foreground hover:text-primary group-hover:block"
-                    >
-                      <AtSign className="size-3" />
-                    </button>
-                  )}
-                </div>}
+                </CompositeActionRow>}
               />
               {menuFor(entry)}
             </ContextMenu>
@@ -407,7 +409,7 @@ export function FilePanel({
       )}
       <Input
         ref={draftInput}
-        className="h-6 font-mono text-hint"
+        className="h-6 font-mono text-metadata"
         value={draft?.value ?? ""}
         onChange={(e) => setDraft((d) => (d ? { ...d, value: e.target.value } : d))}
         onBlur={() => void commitDraft()}
@@ -424,47 +426,40 @@ export function FilePanel({
       {/* The shared panel strip matches the viewer's file tabs across one continuous separator. */}
       <div className="flex h-panel-strip shrink-0 items-center gap-1 px-2">
         <Input
-          className="h-(--ds-control-mini) text-hint"
+          className="h-(--ds-control-mini) text-metadata"
           placeholder={t("files.filter")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0"
-              disabled={!cwd}
-              onClick={() => setDraft({ kind: "new-file", parent: "", value: "" })}
-            >
-              <FilePlus className="size-3.5" />
-            </Button>}
-          />
-          <TooltipContent>{t("files.newFile")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0"
-              disabled={!cwd}
-              onClick={() => setDraft({ kind: "new-folder", parent: "", value: "" })}
-            >
-              <FolderPlus className="size-3.5" />
-            </Button>}
-          />
-          <TooltipContent>{t("files.newFolder")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={() => void reload()}>
-              <RefreshCw className="size-3.5" />
-            </Button>}
-          />
-          <TooltipContent>{t("files.refresh")}</TooltipContent>
-        </Tooltip>
+        <TooltipButton
+          label={t("files.newFile")}
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          disabled={!cwd}
+          onClick={() => setDraft({ kind: "new-file", parent: "", value: "" })}
+        >
+          <FilePlus className="size-3.5" />
+        </TooltipButton>
+        <TooltipButton
+          label={t("files.newFolder")}
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          disabled={!cwd}
+          onClick={() => setDraft({ kind: "new-folder", parent: "", value: "" })}
+        >
+          <FolderPlus className="size-3.5" />
+        </TooltipButton>
+        <TooltipButton
+          label={t("files.refresh")}
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          onClick={() => void reload()}
+        >
+          <RefreshCw className="size-3.5" />
+        </TooltipButton>
       </div>
       <Separator />
 
@@ -473,9 +468,9 @@ export function FilePanel({
           {draft && draft.kind !== "rename" && draft.parent === "" && draftRow(0)}
 
           {error ? (
-            <p className="px-2 py-3 text-fine text-destructive">{error}</p>
+            <p className="px-2 py-3 text-callout text-destructive">{error}</p>
           ) : roots.length === 0 && !draft ? (
-            <p className="px-2 py-3 text-fine text-muted-foreground">
+            <p className="px-2 py-3 text-callout text-muted-foreground">
               {cwd ? t("files.empty") : t("files.noProject")}
             </p>
           ) : (

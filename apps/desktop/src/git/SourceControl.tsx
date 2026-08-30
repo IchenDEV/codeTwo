@@ -16,8 +16,19 @@ import {
   type GitStatus,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { SplitButton } from "@/components/ui/split-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -61,20 +72,20 @@ function DiffView({ state }: { state: DiffState }) {
   );
 
   if (state.loading) {
-    return <p role="status" className="p-surface-inset text-ui text-muted-foreground">Loading diff…</p>;
+    return <p role="status" className="p-surface-inset text-body text-muted-foreground">Loading diff…</p>;
   }
   if (state.error) {
-    return <p role="alert" className="p-surface-inset text-ui text-destructive">Diff failed: {state.error}</p>;
+    return <p role="alert" className="p-surface-inset text-body text-destructive">Diff failed: {state.error}</p>;
   }
   if (!state.result?.text.trim()) {
-    return <p className="p-surface-inset text-ui text-muted-foreground">No changes in this scope.</p>;
+    return <p className="p-surface-inset text-body text-muted-foreground">No changes in this scope.</p>;
   }
 
   return (
     <div>
       {(state.result.truncated || preview.truncated) && (
         <div className="sticky top-0 z-10">
-          <p role="status" className="bg-warning/10 px-surface-inset py-2 text-hint text-warning-foreground">
+          <p role="status" className="bg-warning/10 px-surface-inset py-2 text-metadata text-warning-foreground">
             {state.result.truncated
               ? `Preview truncated by the ${(state.result.truncation_reason ?? "resource").replaceAll("_", " ")} limit.`
               : "Preview rendering is limited to 4,000 lines."}
@@ -120,20 +131,25 @@ function GitFileRow({
   const indexAction = staged ? `Unstage ${file.path}` : `Stage ${file.path}`;
   return (
     <div className="group flex min-w-0 items-center gap-1 rounded-control hover:bg-accent/50 focus-within:bg-accent/50">
-      <button
+      <TooltipButton
+        label={indexAction}
         type="button"
-        className="inline-flex size-7 shrink-0 items-center justify-center rounded-control text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
-        aria-label={indexAction}
-        title={indexAction}
+        variant="ghost"
+        size="icon-xs"
+        className="size-7 shrink-0 text-muted-foreground hover:text-primary"
         disabled={disabled}
         onClick={onToggleIndex}
       >
         {staged ? <Minus className="size-3.5" /> : <Plus className="size-3.5" />}
-      </button>
-      <button
+      </TooltipButton>
+      <Button
         type="button"
+        variant="selectable"
+        size="row"
+        focusStyle="inset"
+        data-selected={selected ? "true" : "false"}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 rounded-control px-1 py-1 text-start text-hint outline-none focus-visible:focus-ring",
+          "min-w-0 flex-1 gap-2 px-1 py-1 text-metadata",
           selected && "bg-accent text-foreground",
         )}
         aria-pressed={selected}
@@ -142,7 +158,7 @@ function GitFileRow({
       >
         <span
           className={cn(
-            "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-cap font-bold",
+            "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-metadata font-bold",
             staged ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
           )}
           aria-hidden="true"
@@ -151,7 +167,7 @@ function GitFileRow({
         </span>
         <span className="sr-only">{staged ? "Staged" : "Unstaged"} {displayState}: </span>
         <span className="truncate font-mono text-muted-foreground">{file.path}</span>
-      </button>
+      </Button>
     </div>
   );
 }
@@ -188,6 +204,7 @@ export function SourceControlModal({
   const [messageError, setMessageError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [checkpointToRevert, setCheckpointToRevert] = useState<Checkpoint | null>(null);
   const [phase, setPhase] = useState<GitPhase>("idle");
   const [suggesting, setSuggesting] = useState(false);
   const [prUrl, setPrUrl] = useState<string | null>(null);
@@ -227,6 +244,7 @@ export function SourceControlModal({
     setMessageError(null);
     setActionError(null);
     setActionStatus(null);
+    setCheckpointToRevert(null);
     setPrUrl(null);
   }, [cwd]);
 
@@ -484,9 +502,7 @@ export function SourceControlModal({
   const revertCheckpoint = async (checkpoint: Checkpoint) => {
     if (checkpointBusy) return;
     const label = checkpoint.message || checkpoint.id.slice(0, 8);
-    if (!window.confirm(`Revert tracked files to checkpoint “${label}”? Uncommitted tracked changes will be overwritten.`)) {
-      return;
-    }
+    setCheckpointToRevert(null);
     setPhase("reverting");
     setActionError(null);
     setActionStatus(null);
@@ -518,28 +534,27 @@ export function SourceControlModal({
           <DialogTitle className="flex flex-wrap items-center gap-3">
             Source Control
             {status?.is_repo && (
-              <span className="flex items-center gap-1 text-hint font-semibold text-primary">
+              <span className="flex items-center gap-1 text-metadata font-semibold text-primary">
                 <GitBranch className="size-3.5" aria-hidden="true" />
                 {status.branch}
                 {status.ahead > 0 && ` ↑${status.ahead}`}
                 {status.behind > 0 && ` ↓${status.behind}`}
               </span>
             )}
-            <Button
+            <TooltipButton
+              label="Refresh source control"
               variant="ghost"
               size="icon"
               className="size-7"
               onClick={refreshSourceControl}
               disabled={busy || currentSourceControl.loading}
-              title="Refresh source control"
-              aria-label="Refresh source control"
             >
               <RefreshCw className="size-3.5" aria-hidden="true" />
-            </Button>
+            </TooltipButton>
           </DialogTitle>
         </DialogHeader>
 
-        <section className="space-y-1 text-hint" aria-label="Hosted source control">
+        <section className="space-y-1 text-metadata" aria-label="Hosted source control">
           {currentSourceControl.info && (
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
               <dt className="text-muted-foreground">Provider</dt>
@@ -556,14 +571,16 @@ export function SourceControlModal({
                 <>
                   <dt className="text-muted-foreground">Repository</dt>
                   <dd className="min-w-0">
-                    <button
+                    <Button
                       type="button"
-                      className="block max-w-full truncate rounded-control text-start text-primary underline underline-offset-2 outline-none focus-visible:focus-ring"
+                      variant="link"
+                      size="compact"
+                      className="h-auto max-w-full justify-start truncate px-0 py-0 text-primary"
                       title={currentSourceControl.info.web_url}
                       onClick={() => void openRepository()}
                     >
                       {currentSourceControl.info.web_url}
-                    </button>
+                    </Button>
                   </dd>
                 </>
               )}
@@ -584,13 +601,17 @@ export function SourceControlModal({
 
         <div className="flex h-[58vh] min-h-0 flex-col gap-3 sm:h-[52vh] sm:flex-row">
           <div className="max-h-48 w-full shrink-0 overflow-y-auto pe-2.5 sm:max-h-none sm:w-64">
-            <p className="pb-1 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="pb-1 pt-2 text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
               Review
             </p>
-            <button
+            <Button
               type="button"
+              variant="selectable"
+              size="row"
+              focusStyle="inset"
+              data-selected={selected("all", null) ? "true" : "false"}
               className={cn(
-                "w-full rounded-control px-1.5 py-1 text-start text-hint outline-none hover:bg-accent/50 focus-visible:focus-ring",
+                "w-full px-1.5 py-1 text-metadata",
                 selected("all", null) && "bg-accent text-foreground",
               )}
               aria-pressed={selected("all", null)}
@@ -598,21 +619,23 @@ export function SourceControlModal({
               onClick={() => selectDiff({ kind: "working", scope: "all", path: null, label: "All changes" })}
             >
               All changes
-            </button>
+            </Button>
 
             <div className="flex items-center justify-between pb-1 pt-3">
-              <span className="text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
                 Staged changes ({sections.staged.length})
               </span>
               {sections.staged.length > 0 && stagedPathspecs.length <= 256 && (
-                <button
+                <Button
                   type="button"
-                  className="min-h-control-mini rounded-control px-1.5 text-cap text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
+                  variant="ghost"
+                  size="compact"
+                  className="px-1.5 text-metadata text-muted-foreground hover:text-primary"
                   disabled={repositoryBusy}
                   onClick={() => void mutateIndex("unstaging", stagedPathspecs)}
                 >
                   Unstage all
-                </button>
+                </Button>
               )}
             </div>
             {sections.staged.map((file) => (
@@ -629,7 +652,7 @@ export function SourceControlModal({
               />
             ))}
             {sections.staged.length === 0 && (
-              <p className="px-1.5 text-hint text-muted-foreground" role={statusLoading ? "status" : undefined}>
+              <p className="px-1.5 text-metadata text-muted-foreground" role={statusLoading ? "status" : undefined}>
                 {statusLoading
                   ? "Loading this workspace’s Git status…"
                   : status?.is_repo
@@ -640,24 +663,26 @@ export function SourceControlModal({
               </p>
             )}
             {stagedPathspecs.length > 256 && (
-              <p className="px-1.5 text-cap text-muted-foreground">
+              <p className="px-1.5 text-metadata text-muted-foreground">
                 Unstage files individually; one operation is limited to 256 literal paths.
               </p>
             )}
 
             <div className="flex items-center justify-between pb-1 pt-3">
-              <span className="text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
                 Changes ({sections.unstaged.length})
               </span>
               {sections.unstaged.length > 0 && unstagedPathspecs.length <= 256 && (
-                <button
+                <Button
                   type="button"
-                  className="min-h-control-mini rounded-control px-1.5 text-cap text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
+                  variant="ghost"
+                  size="compact"
+                  className="px-1.5 text-metadata text-muted-foreground hover:text-primary"
                   disabled={repositoryBusy}
                   onClick={() => void mutateIndex("staging", unstagedPathspecs)}
                 >
                   Stage all
-                </button>
+                </Button>
               )}
             </div>
             {sections.unstaged.map((file) => (
@@ -674,45 +699,46 @@ export function SourceControlModal({
               />
             ))}
             {repositoryReady && sections.unstaged.length === 0 && (
-              <p className="px-1.5 text-hint text-muted-foreground">Working tree clean</p>
+              <p className="px-1.5 text-metadata text-muted-foreground">Working tree clean</p>
             )}
             {unstagedPathspecs.length > 256 && (
-              <p className="px-1.5 text-cap text-muted-foreground">
+              <p className="px-1.5 text-metadata text-muted-foreground">
                 Stage files individually; one operation is limited to 256 literal paths.
               </p>
             )}
 
             <div className="flex items-center justify-between pb-1 pt-4">
-              <span className="text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
                 Checkpoints
               </span>
-              <Button
+              <TooltipButton
+                label="Create checkpoint"
                 variant="ghost"
                 size="icon"
                 className="size-7"
                 disabled={checkpointBusy}
                 onClick={() => void createCheckpoint()}
-                title="Create checkpoint"
-                aria-label="Create checkpoint"
               >
                 <Plus className="size-3" aria-hidden="true" />
-              </Button>
+              </TooltipButton>
             </div>
             {checkpointsLoading ? (
-              <p className="px-1.5 text-hint text-muted-foreground" role="status">
+              <p className="px-1.5 text-metadata text-muted-foreground" role="status">
                 Loading this workspace’s checkpoints…
               </p>
             ) : checkpoints.length === 0 ? (
-              <p className="px-1.5 text-hint text-muted-foreground">None yet</p>
+              <p className="px-1.5 text-metadata text-muted-foreground">None yet</p>
             ) : null}
             {checkpoints.map((checkpoint) => (
-              <div key={checkpoint.id} className="flex items-center gap-1 py-0.5 text-hint">
+              <div key={checkpoint.id} className="flex items-center gap-1 py-0.5 text-metadata">
                 <span className="flex-1 truncate text-muted-foreground" title={checkpoint.message}>
                   {checkpoint.message || checkpoint.id.slice(0, 8)}
                 </span>
-                <button
+                <Button
                   type="button"
-                  className="min-h-control-mini rounded-control bg-fill-rest px-2 text-cap outline-none hover:text-primary focus-visible:focus-ring"
+                  variant="secondary"
+                  size="compact"
+                  className="px-2 text-metadata hover:text-primary"
                   disabled={checkpointBusy}
                   onClick={() =>
                     selectDiff({
@@ -723,21 +749,23 @@ export function SourceControlModal({
                   }
                 >
                   Diff
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="min-h-control-mini rounded-control bg-fill-rest px-2 text-cap outline-none hover:text-primary focus-visible:focus-ring"
+                  variant="secondary"
+                  size="compact"
+                  className="px-2 text-metadata hover:text-primary"
                   disabled={checkpointBusy}
-                  onClick={() => void revertCheckpoint(checkpoint)}
+                  onClick={() => setCheckpointToRevert(checkpoint)}
                 >
                   Revert
-                </button>
+                </Button>
               </div>
             ))}
           </div>
 
           <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={`Diff: ${selection.label}`}>
-            <p className="pb-1 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="pb-1 text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
               {selection.label}
             </p>
             <ScrollArea className="min-h-0 flex-1 rounded-module bg-muted/40">
@@ -746,8 +774,33 @@ export function SourceControlModal({
           </section>
         </div>
 
+        <AlertDialog
+          open={checkpointToRevert !== null}
+          onOpenChange={(open) => !open && setCheckpointToRevert(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Revert checkpoint?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Revert tracked files to checkpoint “
+                {checkpointToRevert?.message || checkpointToRevert?.id.slice(0, 8)}”? Uncommitted
+                tracked changes will be overwritten.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => checkpointToRevert && void revertCheckpoint(checkpointToRevert)}
+              >
+                Revert tracked files
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <div className="space-y-1.5">
-          <label htmlFor="source-control-commit-message" className="text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+          <label htmlFor="source-control-commit-message" className="text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
             Commit message
           </label>
           <div className="flex flex-wrap gap-2">
@@ -807,24 +860,26 @@ export function SourceControlModal({
             <Button variant="ghost" size="sm" onClick={onClose}>Done</Button>
           </div>
           {messageError && (
-            <p id="source-control-message-error" role="alert" className="text-hint text-destructive">
+            <p id="source-control-message-error" role="alert" className="text-metadata text-destructive">
               {messageError}
             </p>
           )}
           {phase !== "idle" && phase !== "committing" && phase !== "pushing" && phase !== "creating_pr" && (
-            <p role="status" className="text-hint text-muted-foreground">{gitPhaseLabel(phase, changeRequest.label)}</p>
+            <p role="status" className="text-metadata text-muted-foreground">{gitPhaseLabel(phase, changeRequest.label)}</p>
           )}
-          {actionError && <p role="alert" className="text-hint text-destructive">{actionError}</p>}
-          {actionStatus && <p role="status" className="text-hint text-muted-foreground">{actionStatus}</p>}
+          {actionError && <p role="alert" className="text-metadata text-destructive">{actionError}</p>}
+          {actionStatus && <p role="status" className="text-metadata text-muted-foreground">{actionStatus}</p>}
           {prUrl && (
-            <button
+            <Button
               type="button"
-              className="block max-w-full break-all rounded-control text-start text-hint text-primary underline underline-offset-2 outline-none focus-visible:focus-ring"
+              variant="link"
+              size="compact"
+              className="h-auto max-w-full justify-start break-all px-0 py-0 text-metadata text-primary"
               onClick={() => void openCreatedChangeRequest()}
               aria-label={`Open created ${changeRequest.label}: ${prUrl}`}
             >
               {prUrl}
-            </button>
+            </Button>
           )}
         </div>
       </DialogContent>

@@ -1,4 +1,5 @@
 import { PetX } from "@petx/react";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 
@@ -97,11 +98,12 @@ export function CodeTwoPet({
           <span>{bubble}</span>
         </p>
       ) : null}
-      <button
+      <TooltipButton
+        label={t("pet.wave")}
         type="button"
+        variant="ghost"
+        size="icon"
         className="codetwo-pet-mascot"
-        aria-label={t("pet.wave")}
-        title={t("pet.wave")}
         onClick={greet}
       >
         <CodeTwoPetSprite
@@ -111,7 +113,7 @@ export function CodeTwoPet({
           src={spritesheetUrl}
           title={appearance.petName || t("pet.label")}
         />
-      </button>
+      </TooltipButton>
     </section>
   );
 }

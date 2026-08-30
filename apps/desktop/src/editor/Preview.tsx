@@ -23,28 +23,28 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
         </DialogHeader>
 
         {unresolved.length > 0 && (
-          <p className="text-hint text-warning">Unresolved: {unresolved.join(", ")}</p>
+          <p className="text-metadata text-warning">Unresolved: {unresolved.join(", ")}</p>
         )}
 
         {(files.length > 0 || mcp.length > 0 || agentSkills.length > 0 || subagents.length > 0) && (
           <div className="flex flex-wrap gap-1.5">
             {files.map((f) => (
-              <Badge key={f} variant="outline" className="font-mono text-cap">
+              <Badge key={f} variant="outline" className="font-mono text-metadata">
                 @{f}
               </Badge>
             ))}
             {mcp.map((m) => (
-              <Badge key={m} variant="secondary" className="text-cap">
+              <Badge key={m} variant="secondary" className="text-metadata">
                 mcp: {m}
               </Badge>
             ))}
             {agentSkills.map((s) => (
-              <Badge key={s} variant="secondary" className="text-cap">
+              <Badge key={s} variant="secondary" className="text-metadata">
                 skill: {s}
               </Badge>
             ))}
             {subagents.map((agent) => (
-              <Badge key={agent} variant="secondary" className="text-cap">
+              <Badge key={agent} variant="secondary" className="text-metadata">
                 subagent: {agent}
               </Badge>
             ))}
@@ -55,11 +55,11 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
           <div className="canvas-ui-module flex flex-col gap-3 bg-fill-quiet p-3" aria-label="Canvas previews">
             {canvases.map((canvas) => (
               <section key={`${canvas.id}:${canvas.frozenRevision}`} className="flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-2 text-fine text-muted-foreground">
+                <div className="flex items-center justify-between gap-2 text-callout text-muted-foreground">
                   <h3 className="min-w-0 truncate font-medium text-foreground">{canvas.title || "Canvas"}</h3>
                   <span className="shrink-0 font-mono">rev {canvas.frozenRevision}</span>
                 </div>
-                <p className="whitespace-pre-wrap break-words text-fine leading-relaxed">{canvas.summary}</p>
+                <p className="whitespace-pre-wrap break-words text-callout">{canvas.summary}</p>
                 {canvas.exports.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Canvas images">
                     {canvas.exports.map((item) => (
@@ -79,7 +79,7 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
         )}
 
         <ScrollArea className="max-h-dialog-content rounded-module bg-fill-quiet">
-          <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-hint leading-relaxed">
+          <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-metadata">
             {preview.prompt || "(empty)"}
           </pre>
         </ScrollArea>

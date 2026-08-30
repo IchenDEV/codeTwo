@@ -13,6 +13,10 @@ interface ResizeHandleOptions {
   min: number;
   max: number;
   step?: number;
+  /** Maps pointer coordinates directly to the controlled value (for normalized split ratios). */
+  valueFromPointer?: (event: Pick<PointerEvent, "clientX" | "clientY">) => number;
+  /** Pixel handles use whole values; normalized handles opt out. */
+  round?: boolean;
   disabled?: boolean;
   onStart?: () => void;
   onResize: (value: number) => void;
@@ -27,8 +31,9 @@ interface ActiveResize {
   startValue: number;
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.round(Math.min(max, Math.max(min, value)));
+function clamp(value: number, min: number, max: number, round = true) {
+  const clamped = Math.min(max, Math.max(min, value));
+  return round ? Math.round(clamped) : clamped;
 }
 
 function bodyClassName(axis: ResizeHandleOptions["axis"]) {
@@ -86,13 +91,10 @@ export function useResizeHandle(options: ResizeHandleOptions) {
     if (!active || active.pointerId !== event.pointerId) return;
     const current = active.axis === "x" ? event.clientX : event.clientY;
     const options = optionsRef.current;
-    options.onResize(
-      clamp(
-        active.startValue + (current - active.start) * active.direction,
-        options.min,
-        options.max,
-      ),
-    );
+    const next = options.valueFromPointer
+      ? options.valueFromPointer(event)
+      : active.startValue + (current - active.start) * active.direction;
+    options.onResize(clamp(next, options.min, options.max, options.round));
   }, []);
 
   const onKeyDown = useCallback<KeyboardEventHandler<HTMLElement>>((event) => {
@@ -113,7 +115,7 @@ export function useResizeHandle(options: ResizeHandleOptions) {
 
     event.preventDefault();
     current.onStart?.();
-    current.onResize(clamp(next, current.min, current.max));
+    current.onResize(clamp(next, current.min, current.max, current.round));
     current.onEnd?.();
   }, []);
 
@@ -139,7 +141,7 @@ export function useResizeHandle(options: ResizeHandleOptions) {
     "aria-orientation": options.axis === "x" ? "vertical" as const : "horizontal" as const,
     "aria-valuemin": options.min,
     "aria-valuemax": options.max,
-    "aria-valuenow": clamp(options.value, options.min, options.max),
+    "aria-valuenow": clamp(options.value, options.min, options.max, options.round),
     onLostPointerCapture,
     onKeyDown,
     onPointerCancel,

@@ -28,16 +28,16 @@
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.546 0.215 262.881);
-  --primary-foreground: oklch(0.984 0.003 247.858);
+  --primary: var(--ds-color-primary);
+  --primary-foreground: var(--ds-color-primary-text);
   --secondary: oklch(0.968 0.007 247.896);
   --secondary-foreground: oklch(0.208 0.042 265.755);
   --muted: oklch(0.968 0.007 247.896);
   --muted-foreground: oklch(0.554 0.046 257.417);
   --accent: oklch(0.968 0.007 247.896);
   --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --destructive: var(--ds-color-destructive);
+  --destructive-foreground: var(--ds-color-destructive-text);
   --success: oklch(0.627 0.194 149.214);
   --warning: oklch(0.666 0.179 58.318);
   --viz-series-1: var(--primary);
@@ -101,8 +101,8 @@
   --card-foreground: oklch(0.955 0.004 250);
   --popover: oklch(0.222 0.006 265);
   --popover-foreground: oklch(0.955 0.004 250);
-  --primary: oklch(0.68 0.15 258);
-  --primary-foreground: oklch(0.16 0.01 265);
+  --primary: var(--ds-color-primary);
+  --primary-foreground: var(--ds-color-primary-text);
   --secondary: oklch(0.262 0.007 265);
   --secondary-foreground: oklch(0.955 0.004 250);
   --muted: oklch(0.262 0.007 265);
@@ -111,8 +111,8 @@
   --muted-foreground: oklch(0.715 0.008 260);
   --accent: oklch(0.288 0.008 265);
   --accent-foreground: oklch(0.98 0.003 250);
-  --destructive: oklch(0.68 0.19 22);
-  --destructive-foreground: oklch(0.98 0.003 247);
+  --destructive: var(--ds-color-destructive);
+  --destructive-foreground: var(--ds-color-destructive-text);
   --success: oklch(0.74 0.16 152);
   --warning: oklch(0.8 0.14 82);
   /* Visible enough to define a card edge without drawing a grid over the UI. */
@@ -156,6 +156,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--ds-color-primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -164,6 +165,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-hover: var(--ds-color-destructive-hover);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-viz-series-1: var(--ds-color-viz-series-1);
@@ -186,6 +188,7 @@
   --color-surface: var(--ds-color-surface);
   --color-raised: var(--ds-color-raised);
   --color-modal: var(--ds-color-modal);
+  --color-qr-surface: var(--ds-color-qr-surface);
   --color-overlay: var(--ds-color-overlay);
   --color-content: var(--ds-color-text);
   --color-content-muted: var(--ds-color-text-muted);
@@ -233,11 +236,13 @@
   --spacing-control-mini: var(--ds-control-mini);
   --spacing-control: var(--ds-control-normal);
   --spacing-control-field: var(--ds-control-field);
+  --spacing-navigation-row: var(--ds-navigation-row-height);
   --spacing-icon-inline: var(--ds-icon-inline);
   --spacing-icon-list: var(--ds-icon-list);
   --spacing-icon-control: var(--ds-icon-control);
   --spacing-menu: var(--ds-menu-padding);
   --spacing-menu-item: var(--ds-menu-item-height);
+  --spacing-menu-wide: var(--ds-menu-wide-width);
   --spacing-titlebar: var(--ds-titlebar-height);
   --spacing-layout-titlebar: var(--ds-layout-titlebar-height);
   --spacing-panel-strip: var(--ds-panel-strip-height);
@@ -274,6 +279,8 @@
   --text-dialog--line-height: var(--ds-type-dialog-leading);
   --text-body: var(--ds-type-body-size);
   --text-body--line-height: var(--ds-type-body-leading);
+  --text-prose: var(--ds-type-prose-size);
+  --text-prose--line-height: var(--ds-type-prose-leading);
   --text-callout: var(--ds-type-callout-size);
   --text-callout--line-height: var(--ds-type-callout-leading);
   --text-metadata: var(--ds-type-metadata-size);
@@ -284,8 +291,8 @@
   --text-code--line-height: var(--ds-type-code-leading);
 
   --text-cap: var(--ds-type-caption-size);
-  --text-fine: var(--ds-type-metadata-size);
-  --text-hint: var(--ds-type-callout-size);
+  --text-fine: var(--ds-type-callout-size);
+  --text-hint: var(--ds-type-metadata-size);
   --text-ui: var(--ds-type-body-size);
   --text-title: var(--ds-type-dialog-size);
   --text-heading: var(--ds-type-section-size);
@@ -306,6 +313,10 @@
 }
 @utility border-s {
   border-inline-start-width: var(--hairline-width);
+}
+
+@utility max-w-dialog-viewport {
+  max-width: calc(100% - var(--ds-space-page-section));
 }
 @utility border-e {
   border-inline-end-width: var(--hairline-width);
@@ -528,12 +539,26 @@
       display: none;
     }
   }
-  /* Floating *over* opaque content — the composer, popovers, toasts. Here the backdrop really is
-     page content, so the blur does what it looks like it does. */
-  .glass-raised {
-    background: color-mix(in oklch, var(--card) 82%, transparent);
-    backdrop-filter: blur(20px) saturate(135%);
-    -webkit-backdrop-filter: blur(20px) saturate(135%);
+  /* One managed material for menu-like transient layers. Shared primitives and the few external
+     positioning adapters use this class; feature code never chooses opacity or blur values. */
+  .raised-material {
+    background-color: var(--ds-material-raised-background);
+    backdrop-filter: var(--ds-material-raised-backdrop);
+    -webkit-backdrop-filter: var(--ds-material-raised-backdrop);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .raised-material {
+      background-color: var(--ds-color-raised);
+    }
+  }
+
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    .raised-material {
+      background-color: var(--ds-color-raised);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
   }
 
   /* Behind an image preview. Most of what a UI project stores is transparent PNGs, and a white
@@ -622,9 +647,8 @@
   .pop-layer[data-closed] {
     animation: layer-out var(--motion-fast) ease-in forwards;
   }
-  /* These layers are glass, and re-sampling a 28px backdrop blur under a changing transform every
-     frame is the expensive half of the jank. Promoting them gets the blur rasterised into its own
-     layer once, so the animation is a composite rather than a re-blur. */
+  /* Material layers re-sample a backdrop blur under a changing transform. Promotion rasterises
+     that blur into its own layer once, so the animation is a composite rather than a re-blur. */
   .pop-layer[data-state],
   .pop-layer[data-open],
   .pop-layer[data-closed] {
@@ -789,7 +813,7 @@
     gap: 4px;
     border-radius: var(--ds-radius-control);
     padding: 0 6px;
-    font-size: var(--text-hint);
+    font-size: var(--ds-type-metadata-size);
     font-weight: 600;
     white-space: nowrap;
     user-select: none;
@@ -805,7 +829,7 @@
     border-radius: var(--ds-radius-control);
     padding: 0 6px;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--ds-type-metadata-size);
     white-space: nowrap;
     user-select: none;
     background: color-mix(in oklch, var(--success) 14%, transparent);
@@ -821,7 +845,7 @@
     gap: 4px;
     border-radius: var(--ds-radius-control);
     padding: 0 6px;
-    font-size: var(--text-hint);
+    font-size: var(--ds-type-metadata-size);
     font-weight: 500;
     white-space: nowrap;
     user-select: none;
@@ -860,7 +884,7 @@
   }
   .bn-annotation-host {
     flex: none;
-    font-size: var(--text-fine);
+    font-size: var(--ds-type-callout-size);
     font-weight: 600;
     color: var(--primary);
   }
@@ -871,7 +895,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-mono);
-    font-size: var(--text-cap);
+    font-size: var(--ds-type-caption-size);
     color: var(--muted-foreground);
   }
   .bn-annotation-x {
@@ -880,7 +904,7 @@
     border: 0;
     background: none;
     padding: 0 2px;
-    font-size: 14px;
+    font-size: var(--ds-type-body-size);
     line-height: 1;
     color: var(--muted-foreground);
     cursor: pointer;
@@ -895,7 +919,7 @@
   }
   .bn-annotation-quote {
     margin-top: 3px;
-    font-size: var(--text-fine);
+    font-size: var(--ds-type-callout-size);
     color: var(--muted-foreground);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -903,7 +927,7 @@
   }
   .bn-annotation-note {
     margin-top: 3px;
-    font-size: var(--text-hint);
+    font-size: var(--ds-type-metadata-size);
     color: var(--foreground);
   }
   .bn-annotation-styles {
@@ -919,7 +943,7 @@
     border-radius: var(--ds-radius-control);
     padding: 1px 7px;
     font-family: var(--font-mono);
-    font-size: var(--text-cap);
+    font-size: var(--ds-type-caption-size);
     background: color-mix(in oklch, var(--primary) 10%, transparent);
     box-shadow: inset 0 0 0 var(--hairline-width)
       color-mix(in oklch, var(--primary) 20%, transparent);
@@ -1079,7 +1103,7 @@
   .diff {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: var(--text-fine);
+    font-size: var(--ds-type-callout-size);
     line-height: 1.5;
   }
   .diff-line {
@@ -1182,22 +1206,23 @@
 }
 .bn-editor {
   padding-inline: 12px;
-  font-size: 14px;
+  font-size: var(--ds-type-prose-size);
+  line-height: var(--ds-type-prose-leading);
 }
 .bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
-  font-size: 21px;
-  line-height: 1.35;
+  font-size: var(--ds-type-page-title-size);
+  line-height: var(--ds-type-page-title-leading);
 }
 .bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content {
-  font-size: 17px;
-  line-height: 1.4;
+  font-size: var(--ds-type-section-size);
+  line-height: var(--ds-type-section-leading);
 }
 .bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: var(--ds-type-dialog-size);
+  line-height: var(--ds-type-dialog-leading);
 }
 .bn-block-content[data-content-type="paragraph"] {
-  line-height: 1.6;
+  line-height: var(--ds-type-prose-leading);
 }
 /* The drag handle / + button gutter, tightened to reclaim horizontal space. */
 .bn-block-outer {
@@ -1209,7 +1234,8 @@
 .bn-block-content code,
 .bn-block-content pre {
   font-family: var(--font-mono);
-  font-size: var(--text-hint);
+  font-size: var(--ds-type-code-size);
+  line-height: var(--ds-type-code-leading);
 }
 /* The `/` picker. Discovered harness skills carry paragraph-length frontmatter descriptions,
    which stretched the menu to the window's width and a row to four lines: cap the menu and clamp
@@ -1305,22 +1331,26 @@ pre {
    centred-measure look kept a third of a wide pane empty on each side. */
 .bn-doc-mode .bn-editor {
   padding-inline: 36px 24px;
-  font-size: 15px;
+  font-size: var(--ds-type-prose-size);
+  line-height: var(--ds-type-prose-leading);
 }
 .bn-doc-mode .bn-block-content[data-content-type="paragraph"] {
-  line-height: 1.75;
+  line-height: var(--ds-type-prose-leading);
 }
 .bn-doc-mode .bn-editor [data-node-type="blockContainer"] {
   padding-block: 2px;
 }
 .bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
-  font-size: 25px;
+  font-size: var(--ds-type-large-title-size);
+  line-height: var(--ds-type-large-title-leading);
 }
 .bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content {
-  font-size: 20px;
+  font-size: var(--ds-type-page-title-size);
+  line-height: var(--ds-type-page-title-leading);
 }
 .bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
-  font-size: 17px;
+  font-size: var(--ds-type-section-size);
+  line-height: var(--ds-type-section-leading);
 }
 
 /* Trajectory is a profiler surface: one shared time ribbon, a dense event ledger, and an

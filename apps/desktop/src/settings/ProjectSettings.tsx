@@ -17,6 +17,7 @@ import { ProjectIcon } from "../projects/ProjectIcon";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { ModelPicker } from "../session/Composer";
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -187,7 +188,7 @@ export function ProjectSettingsPage({
               disabled={profileSaving}
               maxLength={80}
               size="compact"
-              className="w-full text-ui"
+              className="w-full text-body"
               onInput={(event) => setNameDraft(event.currentTarget.value)}
               onBlur={() => void saveName()}
               onKeyDown={(event) => {
@@ -209,40 +210,42 @@ export function ProjectSettingsPage({
               data-project-icon-picker
               className="flex h-control-field w-full items-stretch overflow-hidden rounded-control bg-fill-rest"
             >
-              <button
+              <Button
                 type="button"
-                className="group flex min-w-0 flex-1 items-center gap-module-inset px-2 text-left outline-none transition-colors hover:bg-fill-hover focus-visible:focus-ring-inset disabled:pointer-events-none disabled:opacity-50"
+                variant="ghost"
+                size="row"
+                focusStyle="inset"
+                className="group min-w-0 flex-1 px-2"
                 disabled={iconSaving}
                 onClick={() => void chooseIcon()}
               >
                 <ProjectIcon project={project} size={24} className="bg-background/70" />
-                <span className="min-w-0 flex-1 truncate text-ui font-medium">
+                <span className="min-w-0 flex-1 truncate text-body font-medium">
                   {project.has_icon
                     ? t("settings.projectIconChange")
                     : t("settings.projectIconChoose")}
                 </span>
                 <ImagePlus className="size-4 text-muted-foreground transition-colors group-hover:text-foreground" />
-              </button>
+              </Button>
               {project.has_icon ? (
                 <>
                   <span className="my-2 w-px shrink-0 bg-foreground/10" aria-hidden="true" />
-                  <Button
+                  <TooltipButton
+                    label={t("settings.projectIconRemove")}
                     variant="ghost"
                     size="icon-sm"
                     className="my-auto mx-1 text-muted-foreground"
-                    aria-label={t("settings.projectIconRemove")}
-                    title={t("settings.projectIconRemove")}
                     disabled={iconSaving}
                     onClick={() => void clearIcon()}
                   >
                     <Trash2 />
-                  </Button>
+                  </TooltipButton>
                 </>
               ) : null}
             </div>
           </ProjectRow>
           {error ? (
-            <p className="project-settings-error pt-1 text-hint leading-relaxed text-destructive">{error}</p>
+            <p className="project-settings-error pt-1 text-metadata text-destructive">{error}</p>
           ) : null}
 
           <GroupHeading>{t("settings.projectNewSessions")}</GroupHeading>
@@ -317,12 +320,11 @@ export function ProjectSettingsPage({
                     hasSession={false}
                   />
                   {project.default_model ? (
-                    <Button
+                    <TooltipButton
+                      label={t("settings.projectModelReset")}
                       variant="ghost"
                       size="icon-xs"
                       className="ms-auto"
-                      aria-label={t("settings.projectModelReset")}
-                      title={t("settings.projectModelReset")}
                       disabled={agentSaving}
                       onClick={() => void saveAgentDefaults(
                         projectDefaultProvider,
@@ -331,11 +333,11 @@ export function ProjectSettingsPage({
                       )}
                     >
                       <RotateCcw />
-                    </Button>
+                    </TooltipButton>
                   ) : null}
                 </div>
               ) : (
-                <span className="col-span-2 flex h-control-field min-w-0 items-center rounded-control bg-fill-rest px-3 text-hint text-muted-foreground">
+                <span className="col-span-2 flex h-control-field min-w-0 items-center rounded-control bg-fill-rest px-3 text-metadata text-muted-foreground">
                   {t("settings.projectModelDefault")}
                 </span>
               )}
@@ -435,15 +437,14 @@ export function ProjectSettingsPage({
           <GroupHeading>{t("settings.projectCheckout")}</GroupHeading>
           <ProjectRow label={t("settings.projectPath")} hint={t("settings.projectPathHint")}>
             <div className="flex h-control-field w-full min-w-0 items-center overflow-hidden rounded-control bg-fill-rest">
-              <span className="min-w-0 flex-1 truncate px-3 font-mono text-fine text-muted-foreground" title={project.path}>
+              <span className="min-w-0 flex-1 truncate px-3 font-mono text-callout text-muted-foreground" title={project.path}>
                 {project.path}
               </span>
-              <Button
+              <TooltipButton
+                label={t("settings.projectPathCopy")}
                 variant="ghost"
                 size="icon-sm"
                 className="text-muted-foreground"
-                aria-label={t("settings.projectPathCopy")}
-                title={t("settings.projectPathCopy")}
                 onClick={() => {
                   void navigator.clipboard.writeText(project.path).catch((error) => {
                     setError(t("settings.projectSaveFailed", { error: String(error) }));
@@ -451,13 +452,12 @@ export function ProjectSettingsPage({
                 }}
               >
                 <Copy />
-              </Button>
-              <Button
+              </TooltipButton>
+              <TooltipButton
+                label={t("settings.projectPathReveal")}
                 variant="ghost"
                 size="icon-sm"
                 className="text-muted-foreground"
-                aria-label={t("settings.projectPathReveal")}
-                title={t("settings.projectPathReveal")}
                 onClick={() => {
                   void openNativePath(project.path).then((opened) => {
                     if (!opened) throw new Error(t("settings.projectPathRevealUnavailable"));
@@ -467,7 +467,7 @@ export function ProjectSettingsPage({
                 }}
               >
                 <FolderOpen />
-              </Button>
+              </TooltipButton>
             </div>
           </ProjectRow>
 
@@ -502,7 +502,7 @@ export function ProjectSettingsPage({
           </ProjectRow>
         </>
       ) : (
-        <p className="py-6 text-ui text-muted-foreground">{t("settings.projectNone")}</p>
+        <p className="py-6 text-body text-muted-foreground">{t("settings.projectNone")}</p>
       )}
     </Page>
   );

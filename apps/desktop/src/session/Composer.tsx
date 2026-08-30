@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactElement, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type MutableRefObject, type ReactElement, type ReactNode } from "react";
 import { Liquid } from "liquid-gooey";
 import {
   ArrowUp,
@@ -47,6 +47,8 @@ import type { ContextWindow } from "./contextWindow";
 // Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
 import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ControlChip as Chip } from "@/components/ui/control-chip";
 import { Input } from "@/components/ui/input";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { SelectableRow } from "@/components/business/selectable-row";
@@ -252,21 +254,24 @@ export function CheckoutBar({
   return (
     <div
       data-checkout-bar
-      className="relative z-0 mx-page mt-2 flex min-h-control-field min-w-0 items-center rounded-module bg-fill-quiet px-1 py-1 text-hint text-muted-foreground"
+      className="relative z-0 mx-page mt-2 flex min-h-control-field min-w-0 items-center rounded-module bg-fill-quiet px-1 py-1 text-metadata text-muted-foreground"
     >
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
-          render={<button
+          render={<Button
             type="button"
-            className="flex h-control min-w-0 shrink items-center gap-1.5 rounded-control px-2 text-left outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:focus-ring"
+            variant="ghost"
+            size="compact"
+            focusStyle="inset"
+            className="min-w-0 shrink gap-1.5 px-2"
             title={t("checkout.choose")}
             aria-label={`${t("checkout.title")}: ${modeLabel}`}
             aria-expanded={open}
           >
             <Folder className="size-3.5 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 truncate text-ui text-foreground/85">{modeLabel}</span>
+            <span className="min-w-0 truncate text-body text-foreground/85">{modeLabel}</span>
             <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden="true" />
-          </button>}
+          </Button>}
         />
         <PopoverContent
           align="start"
@@ -287,7 +292,7 @@ export function CheckoutBar({
                   : config.activeWorktreeBaseline?.display ?? projectDetail}
                 onSelect={() => {}}
               />
-              <p className="px-2.5 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
+              <p className="px-2.5 pb-1 pt-1.5 text-callout text-muted-foreground">
                 {t("worktree.fixedForSession")}
               </p>
             </>
@@ -346,10 +351,13 @@ export function CheckoutBar({
       </Popover>
 
       {checkout.branch && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="compact"
+          focusStyle="inset"
           onClick={checkout.onOpen}
-          className="ml-auto flex h-control shrink-0 items-center gap-1.5 rounded-control bg-foreground/[0.04] px-module-inset font-mono text-fine text-foreground/80 outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:focus-ring"
+          className="ml-auto shrink-0 gap-1.5 bg-foreground/[0.04] px-module-inset font-mono text-callout text-foreground/80"
           aria-label={t("checkout.openSourceControl", { branch: checkout.branch })}
           title={t("checkout.openSourceControl", { branch: checkout.branch })}
         >
@@ -360,46 +368,24 @@ export function CheckoutBar({
               {checkout.dirty}
             </span>
           )}
-        </button>
+        </Button>
       )}
     </div>
   );
 }
 
-/**
- * A status chip in the control row — reads as text, behaves as a button. Forwards its ref so it can
- * be a Radix popover trigger.
- */
-export const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "warning" }>(
-  ({ children, tone, className, ...props }, ref) => (
-    <button
-      ref={ref}
-      type="button"
-      className={cn(
-        "flex h-control-mini shrink-0 items-center gap-1.5 rounded-control px-2 text-hint transition-colors hover:bg-accent/50",
-        tone === "warning" ? "text-warning" : "text-muted-foreground hover:text-foreground",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  ),
-);
-Chip.displayName = "Chip";
-
 /** Muted section header inside a picker menu — "Model", "Reasoning". */
 function MenuSection({ children }: { children: ReactNode }) {
-  return <p className="shrink-0 px-2.5 pb-1 pt-1.5 text-hint text-muted-foreground">{children}</p>;
+  return <p className="shrink-0 px-2.5 pb-1 pt-1.5 text-metadata text-muted-foreground">{children}</p>;
 }
 
 /** The small "Default" pill on the adapter's own pick. */
 function DefaultBadge() {
   const t = useT();
   return (
-    <span className="shrink-0 rounded-micro bg-muted/60 px-1.5 py-px text-cap text-muted-foreground">
+    <Badge variant="secondary" size="status">
       {t("composer.default")}
-    </span>
+    </Badge>
   );
 }
 
@@ -620,8 +606,8 @@ export function GoalPicker({
         {goal ? (
           <div className="space-y-2">
             <div className="px-1">
-              <p className="text-ui font-medium text-foreground">{goal.objective}</p>
-              <p className="mt-0.5 text-fine text-muted-foreground">{t(`goal.status.${goal.status}` as "goal.status.active")}</p>
+              <p className="text-body font-medium text-foreground">{goal.objective}</p>
+              <p className="mt-0.5 text-callout text-muted-foreground">{t(`goal.status.${goal.status}` as "goal.status.active")}</p>
             </div>
             <div className="flex gap-1.5">
               {goal.status === "paused" && can("resume") ? (
@@ -735,7 +721,7 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
               disabled
               onSelect={() => {}}
             />
-            <p className="px-2.5 pb-1 pt-2 text-fine leading-relaxed text-muted-foreground">
+            <p className="px-2.5 pb-1 pt-2 text-callout text-muted-foreground">
               {t("worktree.fixedForSession")}
             </p>
           </>
@@ -774,7 +760,7 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
             })}
           </>
         )}
-        <p className="px-2.5 pb-1 pt-2 text-fine leading-relaxed text-muted-foreground">
+        <p className="px-2.5 pb-1 pt-2 text-callout text-muted-foreground">
           {t("worktree.noFetch")}
         </p>
       </PopoverContent>
@@ -824,22 +810,24 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.provider")}</MenuSection>
         {config.providersStatus === "loading" && (
-          <p role="status" className="px-2.5 pb-2 text-fine text-muted-foreground">
+          <p role="status" className="px-2.5 pb-2 text-callout text-muted-foreground">
             {t("config.providersLoading")}
           </p>
         )}
         {config.providersStatus === "error" && (
-          <div className="mb-1 flex items-center gap-2 rounded-control bg-muted/60 px-module-inset py-2 text-fine">
+          <div className="mb-1 flex items-center gap-2 rounded-control bg-muted/60 px-module-inset py-2 text-callout">
             <span role="alert" className="min-w-0 flex-1 text-muted-foreground">
               {t("config.providersLoadFailed")}
             </span>
-            <button
+            <Button
               type="button"
-              className="shrink-0 font-medium text-foreground hover:underline"
+              variant="link"
+              size="compact"
+              className="shrink-0 px-0 font-medium text-foreground"
               onClick={config.onReloadProviders}
             >
               {t("config.retryProviders")}
-            </button>
+            </Button>
           </div>
         )}
         {providers.map((p) => (
@@ -1031,7 +1019,7 @@ export function ModelPicker({
           className="flex max-h-(--available-height) w-64 flex-col overflow-hidden p-1.5"
         >
           {modelRows.length === 0 ? (
-            <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
+            <p className="px-2 py-2 text-callout text-muted-foreground">
               {t("composer.noModels")}
             </p>
           ) : (
@@ -1382,7 +1370,7 @@ export function Composer({
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
-          <p className="px-2 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
+          <p className="px-2 pb-1 pt-1.5 text-callout text-muted-foreground">
             {t("composer.addHint")}
           </p>
         </DropdownMenuContent>
@@ -1450,7 +1438,7 @@ export function Composer({
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
       {composerEmpty && !running && !loading && runHint && (
-        <span className="mx-1 hidden shrink-0 whitespace-nowrap text-fine text-muted-foreground @2xl/composer:inline">
+        <span className="mx-1 hidden shrink-0 whitespace-nowrap text-callout text-muted-foreground @2xl/composer:inline">
           {t("composer.toSend", { key: runHint })}
         </span>
       )}
@@ -1624,9 +1612,9 @@ export function Composer({
                       className="aspect-5/3 w-20 shrink-0 rounded-control object-cover"
                     />
                     <div className="min-w-0 flex-1 pr-5">
-                      <p className="truncate text-hint font-medium">{appshot.window_title}</p>
+                      <p className="truncate text-metadata font-medium">{appshot.window_title}</p>
                       {appshot.kind === "attachment" ? (
-                        <p className="text-fine text-muted-foreground">
+                        <p className="text-callout text-muted-foreground">
                           {t("composer.imageDimensions", {
                             width: appshot.width,
                             height: appshot.height,
@@ -1634,8 +1622,8 @@ export function Composer({
                         </p>
                       ) : (
                         <>
-                          <p className="truncate text-fine text-muted-foreground">{appshot.app_name}</p>
-                          <p className="text-cap text-muted-foreground">
+                          <p className="truncate text-callout text-muted-foreground">{appshot.app_name}</p>
+                          <p className="text-metadata text-muted-foreground">
                             {t("composer.appshotText", { count: appshot.text_length })}
                           </p>
                         </>
@@ -1666,9 +1654,9 @@ export function Composer({
               in doc mode, where the card is `relative`. */}
           {showBriefOffer && config.activeScene && (
             <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
-              <div className="glass-raised canvas-ui-module pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 border px-3 py-2 shadow-raised">
+              <div className="raised-material canvas-ui-module pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 px-3 py-2 shadow-raised">
                 <ListChecks className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 truncate text-ui text-muted-foreground">
+                <span className="min-w-0 truncate text-body text-muted-foreground">
                   {t("brief.offer", { scene: config.activeScene.title })}
                 </span>
                 <Button size="sm" className="shrink-0" onClick={insertBrief}>
@@ -1694,7 +1682,7 @@ export function Composer({
               className={cn(
                 "flex flex-col gap-1",
                 docMode
-                  ? "glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"
+                  ? "raised-material pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"
                   : // Keep every outer edge 8px from the controls. The 24px surface radius then
                     // shares its bottom-right centre with the circular send/stop control.
                     "p-2",

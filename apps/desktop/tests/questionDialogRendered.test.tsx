@@ -50,9 +50,18 @@ function buttonByLabel(labels) {
 }
 
 function optionByText(text) {
-  return [...dom.document.body.querySelectorAll('[role="radio"], [role="checkbox"]')].find((el) =>
+  const row = [...dom.document.body.querySelectorAll('[data-slot="choice-row"]')].find((el) =>
     el.textContent?.includes(text),
   );
+  return row?.querySelector('[role="radio"], [role="checkbox"]');
+}
+
+function chooseOption(text) {
+  const control = optionByText(text);
+  const input = control?.parentElement?.querySelector('input[type="checkbox"], input[type="radio"]');
+  // Base UI keeps the native input visually hidden and forwards pointer clicks to it. happy-dom
+  // does not implement that forwarding, so exercise the same native input directly in this suite.
+  (input ?? control)?.click();
 }
 
 function field(labels) {
@@ -96,7 +105,7 @@ describe("QuestionDialog", () => {
     activateDom();
     const { rendered, answers } = renderDialog();
 
-    click(optionByText("OAuth"));
+    chooseOption("OAuth");
     await flush();
     expect(optionByText("OAuth").getAttribute("aria-checked")).toBe("true");
 
@@ -110,7 +119,7 @@ describe("QuestionDialog", () => {
     activateDom();
     const { rendered, answers } = renderDialog();
 
-    click(optionByText("OAuth"));
+    chooseOption("OAuth");
     await flush();
     setValue(field(OTHER_LABELS), "mTLS");
     await flush();
@@ -155,9 +164,9 @@ describe("QuestionDialog", () => {
       ],
     });
 
-    click(optionByText("Alpha"));
+    chooseOption("Alpha");
     await flush();
-    click(optionByText("Beta"));
+    chooseOption("Beta");
     await flush();
     click(buttonByLabel(SUBMIT_LABELS));
     await flush();

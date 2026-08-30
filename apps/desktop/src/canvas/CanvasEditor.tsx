@@ -14,6 +14,7 @@ import {
 import "./styles.css";
 
 import { Excalidraw, newImageElement, type AppState, type BinaryFileData, type BinaryFiles, type ExcalidrawElement, type ExcalidrawImperativeAPI, type ExcalidrawProps } from "./excalidrawAdapter";
+import { Button } from "@/components/ui/button";
 import { intakeCanvasMedia, mediaInputFromFile, mediaInputsFromClipboard, mediaInputsFromDataTransfer, type NormalizedCanvasMedia } from "./media";
 import { createEnvelope, deserializeEnvelope, rehydrateEnvelope, sanitizeElements } from "./serialize";
 import type {
@@ -502,8 +503,11 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(fu
   if (!expanded) {
     return (
       <div ref={rootRef} className={className ? `canvas-editor ${className}` : "canvas-editor"} data-canvas-mode={mode} data-canvas-theme={currentTheme} data-canvas-collapsed="true">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="row"
+          focusStyle="inset"
           className="canvas-editor__preview"
           aria-label={`Open ${name}`}
           aria-expanded="false"
@@ -514,7 +518,7 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(fu
             <span className="canvas-editor__preview-title">{name}</span>
             <span className="canvas-editor__preview-hint">{mode === "edit" ? "Click to expand and edit" : "Click to expand and view"}</span>
           </span>
-        </button>
+        </Button>
       </div>
     );
   }
@@ -542,38 +546,38 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(fu
               <div className="canvas-editor__presets" aria-label="Canvas style presets" data-canvas-owned>
                 <span className="canvas-editor__preset-label">Stroke</span>
                 {LIMITED_COLOR_PRESETS.map((color) => (
-                  <button key={`stroke-${color}`} type="button" className="canvas-editor__preset" aria-label={`Stroke color ${color}`} onClick={() => updatePreset({ currentItemStrokeColor: color })}>
+                  <Button key={`stroke-${color}`} type="button" variant="ghost" size="compact" className="canvas-editor__preset" aria-label={`Stroke color ${color}`} onClick={() => updatePreset({ currentItemStrokeColor: color })}>
                     {color}
-                  </button>
+                  </Button>
                 ))}
                 <span className="canvas-editor__preset-label">Width</span>
                 {LIMITED_STROKE_WIDTH_PRESETS.map((width) => (
-                  <button key={`width-${width}`} type="button" className="canvas-editor__preset" aria-label={`Stroke width ${width}`} onClick={() => updatePreset({ currentItemStrokeWidth: width })}>
+                  <Button key={`width-${width}`} type="button" variant="ghost" size="compact" className="canvas-editor__preset" aria-label={`Stroke width ${width}`} onClick={() => updatePreset({ currentItemStrokeWidth: width })}>
                     {width}
-                  </button>
+                  </Button>
                 ))}
                 <span className="canvas-editor__preset-label">Fill</span>
                 {LIMITED_FILL_PRESETS.map((fill) => (
-                  <button key={`fill-${fill}`} type="button" className="canvas-editor__preset" aria-label={`Fill color ${fill}`} onClick={() => updatePreset({ currentItemFillStyle: "solid", currentItemBackgroundColor: fill })}>
+                  <Button key={`fill-${fill}`} type="button" variant="ghost" size="compact" className="canvas-editor__preset" aria-label={`Fill color ${fill}`} onClick={() => updatePreset({ currentItemFillStyle: "solid", currentItemBackgroundColor: fill })}>
                     {fill}
-                  </button>
+                  </Button>
                 ))}
                 <span className="canvas-editor__preset-label">Font</span>
                 {LIMITED_FONT_PRESETS.map((font) => (
-                  <button key={`font-${font.value}`} type="button" className="canvas-editor__preset" aria-label={`Font ${font.label}`} onClick={() => updatePreset({ currentItemFontFamily: font.value })}>
+                  <Button key={`font-${font.value}`} type="button" variant="ghost" size="compact" className="canvas-editor__preset" aria-label={`Font ${font.label}`} onClick={() => updatePreset({ currentItemFontFamily: font.value })}>
                     {font.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
               <div data-canvas-owned>
                 <input className="canvas-editor__file-input" type="file" accept="image/png,image/webp,image/jpeg,image/gif,image/svg+xml" multiple onChange={handleFileInput} aria-label="Choose image files" />
-                <button type="button" className="canvas-editor__media-button" aria-label="Image" onClick={() => rootRef.current?.querySelector<HTMLInputElement>(".canvas-editor__file-input")?.click()}>
+                <Button type="button" variant="ghost" size="compact" className="canvas-editor__media-button" aria-label="Image" onClick={() => rootRef.current?.querySelector<HTMLInputElement>(".canvas-editor__file-input")?.click()}>
                   Image
-                </button>
+                </Button>
               </div>
             </>
           )}
-          <button type="button" className="canvas-editor__done" aria-label="Done" onClick={collapse}>Done</button>
+          <Button type="button" variant="secondary" size="compact" className="canvas-editor__done" aria-label="Done" onClick={collapse}>Done</Button>
         </div>
         {error ? <div className="canvas-editor__error" role="alert">{error}</div> : null}
       </div>

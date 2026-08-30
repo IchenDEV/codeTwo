@@ -7,7 +7,6 @@ import {
   PackagePlus,
   Play,
   RefreshCw,
-  Search,
   Square,
   Trash2,
 } from "@/components/ui/icons";
@@ -24,6 +23,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { StatusIndicator } from "@/components/business/status-indicator";
+import { SearchField } from "@/components/business/search-field";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +36,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
 import { cn } from "@/lib/utils";
@@ -99,23 +101,15 @@ function ActionButton({ label, busy, onClick, children }: {
   children: ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={label}
-            disabled={busy}
-            onClick={onClick}
-          />
-        }
-      >
-        {busy ? <ActivityOrb state="working" visualSize={14} aria-hidden="true" /> : children}
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <TooltipButton
+      label={label}
+      variant="ghost"
+      size="icon-sm"
+      disabled={busy}
+      onClick={onClick}
+    >
+      {busy ? <ActivityOrb state="working" visualSize={14} aria-hidden="true" /> : children}
+    </TooltipButton>
   );
 }
 
@@ -302,7 +296,7 @@ export function DockerPage({
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <CircleAlert className="size-5 text-warning" />
           <h2 className="text-section font-semibold">{t("docker.unavailableTitle")}</h2>
-          <p className="max-w-md text-ui leading-relaxed text-muted-foreground">{t("docker.unavailableHint")}</p>
+          <p className="max-w-md text-prose text-muted-foreground">{t("docker.unavailableHint")}</p>
           <Button variant="secondary" size="compact" onClick={onOpenPluginManager}>{t("docker.openPlugins")}</Button>
         </div>
       </section>
@@ -315,14 +309,11 @@ export function DockerPage({
         {headerLeadingAction}
         <h1 className="text-dialog font-semibold">{t("docker.title")}</h1>
         {status ? (
-          <span className="flex min-w-0 items-center gap-2 text-ui text-muted-foreground">
-            <span className="size-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
-            <span className="truncate">Docker {status.serverVersion ?? "—"} · {status.context ?? "—"}</span>
-          </span>
+          <StatusIndicator tone="success" label={`Docker ${status.serverVersion ?? "—"} · ${status.context ?? "—"}`} />
         ) : null}
         <div className="electrobun-webkit-app-region-drag flex-1" />
         <Button variant="secondary" size="compact" onClick={() => void refresh()} disabled={loading}>
-          <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+          {loading ? <Spinner className="size-3.5" /> : <RefreshCw className="size-3.5" />}
           {t("docker.refresh")}
         </Button>
       </header>
@@ -330,7 +321,7 @@ export function DockerPage({
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto w-full max-w-7xl px-5 pb-10 pt-5 sm:px-8">
           {status ? (
-            <div className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui text-muted-foreground" aria-live="polite">
+            <div className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-muted-foreground" aria-live="polite">
               <span>{t("docker.runningSummary", { count: status.containers.running })}</span>
               <span aria-hidden="true">·</span>
               <span>{t("docker.stoppedSummary", { count: status.containers.stopped })}</span>
@@ -340,7 +331,7 @@ export function DockerPage({
           ) : null}
 
           {error ? (
-            <div role="alert" className="mb-5 flex items-center gap-3 rounded-control bg-destructive/10 px-4 py-3 text-ui text-destructive">
+            <div role="alert" className="mb-5 flex items-center gap-3 rounded-control bg-destructive/10 px-4 py-3 text-body text-destructive">
               <CircleAlert className="size-4 shrink-0" />
               <span className="min-w-0 flex-1 break-words">{t("docker.loadFailed", { error })}</span>
               <Button variant="outline" size="compact" onClick={() => void refresh()}>{t("docker.retry")}</Button>
@@ -354,20 +345,15 @@ export function DockerPage({
             </TabsList>
 
             <TabsContent value="containers">
-              <div className="relative mb-4 max-w-lg">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="search"
-                  size="compact"
+              <SearchField
+                  className="mb-4 max-w-lg"
                   value={query}
                   onChange={(event) => setQuery(event.currentTarget.value)}
-                  className="pl-8"
-                  aria-label={t("docker.filterContainers")}
+                  label={t("docker.filterContainers")}
                   placeholder={t("docker.filterContainers")}
                 />
-              </div>
-              <div className="overflow-x-auto rounded-control ring-1 ring-border">
-                <table className="w-full min-w-3xl border-collapse text-left text-ui">
+              <div className="overflow-x-auto rounded-control bg-fill-quiet">
+                <table className="w-full min-w-3xl border-collapse text-left text-body">
                   <thead className="bg-fill-quiet text-muted-foreground">
                     <tr>
                       <th scope="col" className="px-4 py-3 font-medium">{t("docker.name")}</th>
@@ -411,7 +397,7 @@ export function DockerPage({
                   </tbody>
                 </table>
                 {!loading && filteredContainers.length === 0 ? (
-                  <div className="px-5 py-12 text-center text-ui text-muted-foreground">
+                  <div className="px-5 py-12 text-center text-body text-muted-foreground">
                     {query ? t("docker.noContainerMatches") : t("docker.emptyContainers")}
                   </div>
                 ) : null}
@@ -420,7 +406,7 @@ export function DockerPage({
 
             <TabsContent value="images">
               <form className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(event) => { event.preventDefault(); void pullImage(); }}>
-                <label className="min-w-0 flex-1 text-ui font-medium">
+                <label className="min-w-0 flex-1 text-body font-medium">
                   <span className="mb-1.5 block">{t("docker.imageReference")}</span>
                   <Input
                     size="compact"
@@ -435,20 +421,15 @@ export function DockerPage({
                   {t("docker.pull")}
                 </Button>
               </form>
-              <div className="relative mb-4 max-w-lg">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="search"
-                  size="compact"
+              <SearchField
+                  className="mb-4 max-w-lg"
                   value={query}
                   onChange={(event) => setQuery(event.currentTarget.value)}
-                  className="pl-8"
-                  aria-label={t("docker.filterImages")}
+                  label={t("docker.filterImages")}
                   placeholder={t("docker.filterImages")}
                 />
-              </div>
-              <div className="overflow-x-auto rounded-control ring-1 ring-border">
-                <table className="w-full min-w-4xl border-collapse text-left text-ui">
+              <div className="overflow-x-auto rounded-control bg-fill-quiet">
+                <table className="w-full min-w-4xl border-collapse text-left text-body">
                   <thead className="bg-fill-quiet text-muted-foreground">
                     <tr>
                       <th scope="col" className="px-4 py-3 font-medium">{t("docker.repository")}</th>
@@ -480,7 +461,7 @@ export function DockerPage({
                   </tbody>
                 </table>
                 {!loading && filteredImages.length === 0 ? (
-                  <div className="px-5 py-12 text-center text-ui text-muted-foreground">
+                  <div className="px-5 py-12 text-center text-body text-muted-foreground">
                     {query ? t("docker.noImageMatches") : t("docker.emptyImages")}
                   </div>
                 ) : null}
@@ -497,12 +478,12 @@ export function DockerPage({
             <DialogDescription>{detail?.description}</DialogDescription>
           </DialogHeader>
           {detail?.loading ? (
-            <div role="status" className="flex min-h-48 items-center justify-center gap-2 text-ui text-muted-foreground">
+            <div role="status" className="flex min-h-48 items-center justify-center gap-2 text-body text-muted-foreground">
               <ActivityOrb state="searching" visualSize={14} />
               {t("docker.loading")}
             </div>
           ) : (
-            <pre className="max-h-96 min-h-48 overflow-auto rounded-control bg-fill-quiet p-4 text-callout leading-relaxed whitespace-pre-wrap break-words">{detail?.content || t("docker.noOutput")}</pre>
+            <pre className="max-h-96 min-h-48 overflow-auto rounded-control bg-fill-quiet p-4 text-callout whitespace-pre-wrap break-words">{detail?.content || t("docker.noOutput")}</pre>
           )}
         </DialogContent>
       </Dialog>

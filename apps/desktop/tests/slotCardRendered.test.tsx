@@ -79,9 +79,11 @@ describe("SlotCardView", () => {
     expect(rendered.container.textContent).toContain("Do");
     expect(rendered.container.querySelector('input[aria-label="A"]')).toBeTruthy();
     expect(rendered.container.querySelector('textarea[aria-label="B"]')).toBeTruthy();
-    const select = rendered.container.querySelector('select[aria-label="C"]');
+    const select = rendered.container.querySelector(
+      'button[data-slot="select-trigger"][aria-label="C"]',
+    );
     expect(select).toBeTruthy();
-    expect(Array.from(select.querySelectorAll("option")).map((o) => o.value)).toEqual(["", "x", "y"]);
+    expect(select.getAttribute("role")).toBe("combobox");
     // Without a runtime seam the file slot degrades to a plain path field.
     expect(rendered.container.querySelector('input[aria-label="D"]')).toBeTruthy();
   });
@@ -92,7 +94,11 @@ describe("SlotCardView", () => {
     const rendered = renderCard(block, makeEditor());
     expect(rendered.container.textContent).toContain("Commit Message");
     expect(rendered.container.textContent).toContain("Macro");
-    expect(rendered.container.querySelector('select[aria-label="Style"]').value).toBe("descriptive");
+    expect(
+      rendered.container.querySelector(
+        'button[data-slot="select-trigger"][aria-label="Style"]',
+      ).textContent,
+    ).toContain("descriptive");
     expect(rendered.container.querySelector('input[aria-label="Scope"]').value).toBe("auth");
   });
 
@@ -121,10 +127,16 @@ describe("SlotCardView", () => {
       pickFile: async () => null,
       carriedArtifacts: () => [{ id: "plan-1", title: "Plan v1" }],
     };
-    const rendered = renderCard(block, makeEditor(), runtime);
-    const select = rendered.container.querySelector('select[aria-label="Prior"]');
+    const selectedBlock = {
+      ...block,
+      props: { ...block.props, values: JSON.stringify({ prior: "plan-1" }) },
+    };
+    const rendered = renderCard(selectedBlock, makeEditor(), runtime);
+    const select = rendered.container.querySelector(
+      'button[data-slot="select-trigger"][aria-label="Prior"]',
+    );
     expect(select).toBeTruthy();
-    expect(rendered.container.textContent).toContain("Plan v1");
+    expect(select.textContent).toContain("Plan v1");
   });
 
   test("brief mode is labeled as a brief", () => {

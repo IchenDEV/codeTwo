@@ -186,16 +186,25 @@ describe("PaneChrome", () => {
     await flush();
 
     const handle = rendered.container.querySelector("[data-divider-id]")!;
-    handle.dispatchEvent(new dom.window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    let capturedPointer = null;
+    handle.setPointerCapture = (pointerId) => { capturedPointer = pointerId; };
+    handle.hasPointerCapture = (pointerId) => capturedPointer === pointerId;
+    handle.releasePointerCapture = () => { capturedPointer = null; };
+    expect(handle.getAttribute("role")).toBe("separator");
+    expect(handle.getAttribute("aria-valuenow")).toBe("0.5");
+    handle.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    expect(ratios.at(-1)).toBeCloseTo(0.52, 5);
+
+    handle.dispatchEvent(new dom.window.PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 7, clientX: 500 }));
     // Drag to x = 300 → ratio 0.3.
-    dom.window.dispatchEvent(new dom.window.MouseEvent("pointermove", { clientX: 300, clientY: 250 }));
+    handle.dispatchEvent(new dom.window.PointerEvent("pointermove", { bubbles: true, pointerId: 7, clientX: 300, clientY: 250 }));
     // Drag past the left edge → clamped, never below the minimum.
-    dom.window.dispatchEvent(new dom.window.MouseEvent("pointermove", { clientX: -100, clientY: 250 }));
-    dom.window.dispatchEvent(new dom.window.MouseEvent("pointerup", {}));
+    handle.dispatchEvent(new dom.window.PointerEvent("pointermove", { bubbles: true, pointerId: 7, clientX: -100, clientY: 250 }));
+    handle.dispatchEvent(new dom.window.PointerEvent("pointerup", { bubbles: true, pointerId: 7 }));
     await flush();
 
     expect(ratios.length).toBeGreaterThanOrEqual(2);
-    expect(ratios[0]).toBeCloseTo(0.3, 5);
+    expect(ratios).toContainEqual(0.3);
     expect(ratios[ratios.length - 1]).toBeGreaterThanOrEqual(0.1);
     rendered.unmount();
   });

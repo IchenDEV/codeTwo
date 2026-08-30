@@ -39,7 +39,7 @@ const DialogOverlay = React.forwardRef<
     ref={ref}
     data-slot="dialog-overlay"
     className={cn(
-      "overlay-layer fixed inset-0 z-50 bg-black/50",
+      "overlay-layer fixed inset-0 z-50 bg-overlay",
       className
     )}
     {...props}
@@ -61,7 +61,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "dialog-layer fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-modal bg-background p-6 shadow-xl ring-1 ring-foreground/10 outline-none sm:max-w-lg",
+          "dialog-layer fixed top-1/2 left-1/2 z-50 grid w-full max-w-dialog-viewport -translate-x-1/2 -translate-y-1/2 gap-4 rounded-modal bg-modal p-6 shadow-modal outline-none sm:max-w-lg",
           className
         )}
         {...props}
@@ -125,7 +125,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-title leading-5 font-semibold", className)}
+      className={cn("text-dialog font-semibold", className)}
       {...props}
     />
   )
@@ -138,7 +138,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-ui text-muted-foreground", className)}
+      className={cn("text-body text-muted-foreground", className)}
       {...props}
     />
   )

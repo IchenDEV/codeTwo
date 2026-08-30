@@ -1,9 +1,10 @@
-import { Loader2, TriangleAlert } from "@/components/ui/icons";
+import { TriangleAlert } from "@/components/ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { confirmNative, openExternal, readVisualization } from "../bridge";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
+import { Spinner } from "@/components/ui/spinner";
 import {
   VISUALIZATION_THEME_VARIABLES,
   visualizationDocument,
@@ -150,7 +151,7 @@ export function VisualizationFrame({
     return (
       <p
         role="alert"
-        className="my-3 flex items-center gap-2 rounded-control bg-destructive/10 px-3 py-2 text-fine text-destructive"
+        className="my-3 flex items-center gap-2 rounded-control bg-destructive/10 px-3 py-2 text-callout text-destructive"
       >
         <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
         {t("visualization.unavailable")}
@@ -159,8 +160,8 @@ export function VisualizationFrame({
   }
   if (!source) {
     return (
-      <p role="status" className="my-3 flex items-center gap-2 text-fine text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+      <p role="status" className="my-3 flex items-center gap-2 text-callout text-muted-foreground">
+        <Spinner className="size-3.5" />
         {t("visualization.loading")}
       </p>
     );

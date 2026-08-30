@@ -1,4 +1,4 @@
-import { Loader2, Plus, Trash2 } from "@/components/ui/icons";
+import { Plus, Trash2 } from "@/components/ui/icons";
 import { useEffect, useState } from "react";
 
 import type { SceneSlotDef } from "./scene";
@@ -8,6 +8,7 @@ import {
   type Skill,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -17,6 +18,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "../i18n";
 
@@ -124,9 +133,6 @@ function toRow(slot: SceneSlotDef): SlotRow {
   };
 }
 
-const FIELD_CLASSES =
-  "canvas-ui-control w-full bg-fill-rest px-2 py-1 text-ui outline-none transition-[color,box-shadow,background-color] focus-visible:focus-ring";
-
 export function TemplateDialog({
   source,
   onClose,
@@ -226,21 +232,21 @@ export function TemplateDialog({
 
         {proposing ? (
           <div className="relative">
-            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-control border bg-fill-quiet px-3 py-2 text-fine text-muted-foreground">
+            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-control border bg-fill-quiet px-3 py-2 text-callout text-muted-foreground">
               {source}
             </pre>
             <span
               role="status"
-              className="absolute inset-0 flex items-center justify-center gap-2 bg-background/60 text-ui text-muted-foreground"
+              className="absolute inset-0 flex items-center justify-center gap-2 bg-background/60 text-body text-muted-foreground"
             >
-              <Loader2 className="size-4 animate-spin" aria-hidden />
+              <Spinner className="size-4" />
               {t("templateFrom.proposing")}
             </span>
           </div>
         ) : (
           <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
             {manual && (
-              <p className="text-fine text-muted-foreground">{t("templateFrom.manualHint")}</p>
+              <p className="text-callout text-muted-foreground">{t("templateFrom.manualHint")}</p>
             )}
 
             <div className="flex gap-2">
@@ -269,12 +275,12 @@ export function TemplateDialog({
             />
 
             <label className="flex flex-col gap-1">
-              <span className="text-cap font-medium uppercase text-muted-foreground">
+              <span className="text-metadata font-medium uppercase text-muted-foreground">
                 {t("templateFrom.template")}
               </span>
               <Textarea
                 aria-label={t("templateFrom.template")}
-                className="font-mono"
+                className="min-h-24 font-mono"
                 value={template}
                 onChange={noopChange}
                 onInput={(e) => setTemplate(e.currentTarget.value)}
@@ -282,7 +288,7 @@ export function TemplateDialog({
             </label>
 
             <div className="flex items-center justify-between">
-              <span className="text-cap font-medium uppercase text-muted-foreground">
+              <span className="text-metadata font-medium uppercase text-muted-foreground">
                 {t("templateFrom.slots")}
               </span>
               <Button type="button" variant="ghost" size="sm" onClick={addSlot}>
@@ -312,21 +318,26 @@ export function TemplateDialog({
                       onChange={noopChange}
                       onInput={(e) => updateSlot(index, { label: e.currentTarget.value })}
                     />
-                    <select
-                      aria-label={t("templateFrom.kind")}
-                      className={FIELD_CLASSES}
+                    <Select
+                      items={SLOT_KINDS.map((kind) => ({ value: kind, label: kind }))}
                       value={row.kind}
-                      onChange={noopChange}
-                      onInput={(e) =>
-                        updateSlot(index, { kind: e.currentTarget.value as SlotRow["kind"] })
+                      onValueChange={(next) =>
+                        next && updateSlot(index, { kind: next as SlotRow["kind"] })
                       }
                     >
-                      {SLOT_KINDS.map((kind) => (
-                        <option key={kind} value={kind}>
-                          {kind}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger aria-label={t("templateFrom.kind")} className="min-w-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {SLOT_KINDS.map((kind) => (
+                            <SelectItem key={kind} value={kind}>
+                              {kind}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                     <Input
                       aria-label={t("templateFrom.options")}
                       placeholder={t("templateFrom.options")}
@@ -349,23 +360,25 @@ export function TemplateDialog({
                       onChange={noopChange}
                       onInput={(e) => updateSlot(index, { default: e.currentTarget.value })}
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-sm"
                       aria-label={t("templateFrom.removeSlot")}
-                      className="rounded-control p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:focus-ring"
+                      className="text-muted-foreground"
                       onClick={() =>
                         setSlots((current) => current.filter((_, at) => at !== index))
                       }
                     >
                       <Trash2 className="size-3.5" aria-hidden />
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
             )}
 
             {errors.length > 0 && (
-              <ul className="flex flex-col gap-0.5 text-fine text-destructive">
+              <ul className="flex flex-col gap-0.5 text-callout text-destructive">
                 {errors.map((error) => (
                   <li key={error}>{error}</li>
                 ))}

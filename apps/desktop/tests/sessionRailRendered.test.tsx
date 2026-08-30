@@ -246,7 +246,7 @@ describe("SessionRail row layout", () => {
     const workToggle = view.container.querySelector('[data-task-section-toggle="work"]');
     expect(workToggle?.children[0]?.textContent).toBe("Work");
     expect(workToggle?.children[1]?.tagName).toBe("svg");
-    expect(workToggle?.className).toContain("px-2");
+    expect(workToggle?.className).toContain("px-surface-inset");
     expect(workToggle?.parentElement?.className).toContain("pr-2");
     expect(workToggle?.parentElement?.className).not.toContain("px-2");
 
@@ -390,7 +390,7 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("groups primary features into compact labeled navigation rows", () => {
+  test("groups primary features into Codex-aligned labeled navigation rows", () => {
     activateDom();
     const opened = [];
     const view = renderRail({
@@ -453,7 +453,7 @@ describe("SessionRail row layout", () => {
       .toBe("codex");
     for (const row of rows.slice(1)) {
       expect(row.getAttribute("data-slot")).toBe("navigation-row");
-      expect(row.className).toContain("min-h-control");
+      expect(row.className).toContain("min-h-navigation-row");
       expect(row.className).toContain("rounded-control");
     }
     for (const button of utilityButtons) {
@@ -562,10 +562,10 @@ describe("SessionRail row layout", () => {
     expect(view.container.querySelector("[data-new-task-section]")).toBeNull();
 
     for (const label of [highlight, archived]) {
-      expect(label?.className).toContain("text-ui");
+      expect(label?.className).toContain("text-body");
       expect(label?.className).toContain("font-normal");
       expect(label?.className).toContain("text-foreground/55");
-      expect(label?.className).toContain("px-2");
+      expect(label?.className).toContain("px-surface-inset");
       expect(label?.className).not.toContain("px-4");
       expect(label?.className).not.toContain("font-medium");
       expect(label?.className).not.toContain("uppercase");

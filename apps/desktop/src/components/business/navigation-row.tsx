@@ -1,6 +1,7 @@
 import { type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 interface NavigationRowProps {
@@ -11,7 +12,7 @@ interface NavigationRowProps {
   disabled?: boolean
   busy?: boolean
   accessibilityLabel?: string
-  title?: string
+  tooltip?: string
   className?: string
   labelClassName?: string
   onSelect: () => void
@@ -25,12 +26,12 @@ function NavigationRow({
   disabled = false,
   busy = false,
   accessibilityLabel,
-  title,
+  tooltip,
   className,
   labelClassName,
   onSelect,
 }: NavigationRowProps) {
-  return (
+  const row = (
     <Button
       type="button"
       variant="selectable"
@@ -41,7 +42,6 @@ function NavigationRow({
       aria-current={current ? "page" : undefined}
       aria-label={accessibilityLabel}
       aria-busy={busy || undefined}
-      title={title}
       disabled={disabled}
       onClick={onSelect}
       className={cn("min-w-0 items-center", className)}
@@ -71,6 +71,14 @@ function NavigationRow({
         </span>
       ) : null}
     </Button>
+  )
+
+  if (!tooltip) return row
+  return (
+    <Tooltip>
+      <TooltipTrigger render={row} />
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
   )
 }
 

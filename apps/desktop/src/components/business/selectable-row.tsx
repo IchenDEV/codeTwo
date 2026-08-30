@@ -48,7 +48,6 @@ function SelectableRow({
       aria-label={accessibleName}
       aria-describedby={describedBy}
       aria-pressed={selected}
-      title={description ?? undefined}
       disabled={disabled}
       onClick={onSelect}
       className={description ? "items-start" : "items-center"}

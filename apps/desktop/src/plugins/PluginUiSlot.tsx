@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Loader2, Puzzle } from "@/components/ui/icons";
+import { Puzzle } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -40,13 +41,16 @@ export function PluginUiSlot({
           const key = `${contribution.pluginId}:${contribution.id}`;
           const current = contribution.command === activeCommand;
           return (
-            <button
+            <Button
               key={key}
               type="button"
               data-selected={current || undefined}
               aria-current={current ? "page" : undefined}
+              variant="ghost"
+              size="row"
+              focusStyle="inset"
               className={cn(
-                "flex h-control w-full items-center gap-2 rounded-control px-2 text-left text-ui text-foreground/75 transition-colors hover:bg-accent/50 hover:text-foreground",
+                "h-control w-full gap-2 px-2 text-foreground/75",
                 current && "bg-fill-rest text-foreground",
               )}
               title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
@@ -55,12 +59,12 @@ export function PluginUiSlot({
               onClick={() => void invoke(contribution)}
             >
               {busy === key ? (
-                <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+                <Spinner className="size-4 shrink-0" aria-hidden="true" />
               ) : (
                 <Puzzle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               )}
               <span className="min-w-0 flex-1 truncate">{contribution.label}</span>
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -84,7 +88,7 @@ export function PluginUiSlot({
               disabled={busy !== null}
               onClick={() => void invoke(contribution)}
             >
-              {busy === key ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Puzzle data-icon="inline-start" />}
+              {busy === key ? <Spinner data-icon="inline-start" /> : <Puzzle data-icon="inline-start" />}
               <span className="session-header-action-label truncate">{contribution.label}</span>
             </Button>
           );
@@ -111,7 +115,7 @@ export function PluginUiSlot({
                 onClick={() => void invoke(contribution)}
               >
                 {busy === key ? (
-                  <Loader2 data-icon="inline-start" className="animate-spin" />
+                  <Spinner data-icon="inline-start" />
                 ) : (
                   <Puzzle data-icon="inline-start" />
                 )}
@@ -144,7 +148,7 @@ export function PluginUiSlot({
                     onClick={() => void invoke(contribution)}
                   >
                     {busy === key ? (
-                      <Loader2 className="size-3.5 animate-spin" />
+                      <Spinner className="size-3.5" />
                     ) : (
                       <Puzzle className="size-3.5" />
                     )}
@@ -172,9 +176,9 @@ export function PluginUiSlot({
               >
                 <Puzzle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-ui font-medium">{contribution.label}</p>
+                  <p className="text-body font-medium">{contribution.label}</p>
                   {contribution.description ? (
-                    <p className="mt-0.5 text-fine leading-relaxed text-muted-foreground">{contribution.description}</p>
+                    <p className="mt-0.5 text-callout text-muted-foreground">{contribution.description}</p>
                   ) : null}
                 </div>
                 <Button
@@ -184,7 +188,7 @@ export function PluginUiSlot({
                   disabled={busy !== null}
                   onClick={() => void invoke(contribution)}
                 >
-                  {busy === key ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
+                  {busy === key ? <Spinner data-icon="inline-start" /> : null}
                   Run
                 </Button>
               </div>
