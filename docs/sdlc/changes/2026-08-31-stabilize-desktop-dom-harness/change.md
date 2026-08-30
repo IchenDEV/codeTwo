@@ -10,8 +10,8 @@ approved_at: 2026-08-31
 created: 2026-08-31
 updated: 2026-08-31
 source: user request to fix PR 198 CI on 2026-08-31
-inputs: PR 198 Desktop design system failure logs, shared happy-dom test harness, Base UI ScrollArea contract
-outputs: Web Animations API test compatibility and cross-platform desktop test evidence
+inputs: PR 198 Desktop design system failure logs, shared happy-dom test harness, Base UI ScrollArea and Popover contracts
+outputs: browser API and frame-scheduler test compatibility with cross-platform desktop test evidence
 scope: apps/desktop/tests/domTestHarness.ts, apps/desktop/tests/domTestHarness.test.ts, docs/sdlc/changes/2026-08-31-stabilize-desktop-dom-harness
 next_trigger: PR 198 Desktop design system CI completes on all three platforms
 verification_mode: owner
@@ -35,13 +35,15 @@ workflow runner versions remain unchanged.
 The shared DOM harness must expose the browser `Element.getAnimations()` shape required by Base UI.
 Because happy-dom does not simulate Web Animations, the fallback returns an empty animation list.
 The fallback must stay scoped to the harness-owned window and must not replace a native
-implementation if happy-dom adds one later.
+implementation if happy-dom adds one later. The harness must also delegate animation-frame work to
+happy-dom's scheduler instead of converting every frame into a zero-delay timer, which can make a
+floating-position update loop monopolize Linux test execution.
 
 ### Acceptance criteria
 
 - [x] AC-1: A harness-owned element exposes `getAnimations()` and returns an empty animation list.
-- [x] AC-2: The Bun 1.4.0 full desktop suite no longer reports
-      `viewport.getAnimations is not a function`.
+- [x] AC-2: The Bun 1.4.0 full desktop suite exits promptly on macOS and Linux without
+      `viewport.getAnimations is not a function` or Popover timeout failures.
 - [x] AC-3: The renderer build and repository lifecycle checks pass with clean diff hygiene.
 - [ ] AC-4: PR 198's Desktop design system checks rerun successfully on Linux, macOS, and Windows.
 
@@ -54,8 +56,10 @@ separate Gates.
 ## Plan
 
 1. Add a focused regression for the Web Animations method required by ScrollArea.
-2. Add the smallest harness-owned compatibility implementation without touching production code.
-3. Run the focused test, the Bun 1.4.0 full suite, renderer build, lifecycle checks, and PR CI.
+2. Add the smallest harness-owned compatibility implementation and retain browser-like frame
+   scheduling without touching production code.
+3. Run focused tests, macOS and Linux Bun 1.4.0 full suites, renderer build, lifecycle checks, and
+   PR CI.
 
 Rollback removes the harness fallback and regression test. No product data or runtime behavior is
 affected.
@@ -66,7 +70,9 @@ affected.
 does not provide it. The compatibility implementation returns an empty list, matching the
 no-running-animation state Base UI's ScrollArea already handles. A focused test locks down the
 exact method call and `{ subtree: true }` option that failed in CI. No production source or runner
-configuration changed.
+configuration changed. Global animation-frame calls now delegate to happy-dom's own scheduler and
+canceller instead of zero-delay timers, preventing Base UI Popover positioning from entering a
+tight Linux-only update loop.
 
 ## Verification
 
@@ -76,8 +82,10 @@ Verdict: running.
 
 - AC-1: PASS — `npx -y bun@1.4.0 test ./tests/domTestHarness.test.ts` first failed with
   `element.getAnimations is not a function`, then passed after the harness fallback.
-- AC-2: PASS — `npx -y bun@1.4.0 test` passed 753 tests across 126 files with 0 failures and 3,569
-  expectations; the pre-fix command reproduced 3 failures with the CI exception.
+- AC-2: PASS — macOS `npx -y bun@1.4.0 test` passed 753 tests across 126 files with 0 failures and
+  3,569 expectations; the pre-fix command reproduced 3 failures with the CI exception. A clean
+  `oven/bun:1.4.0` Linux container initially reproduced an EnvironmentPopover timeout, then passed
+  all 753 tests in 5.82 seconds with 0 failures after native happy-dom frame scheduling was restored.
 - AC-3: PASS — `bun run build:renderer` passed ESLint, Stylelint, TypeScript, and a 6,401-module
   Vite production build. `bun script/verify/sdlc.ts --worktree` and `git diff --check` passed.
 - AC-4: PENDING.
@@ -85,8 +93,9 @@ Verdict: running.
 `bun script/verify/docs.ts` still reports the 16 unclassified website evidence images already
 present on `origin/main`; this change introduces no new documentation-catalog error.
 
-Residual risk: remote runner timing still requires confirmation. The fallback deliberately models
-the no-active-animation case only, which is appropriate for happy-dom's animation-free environment.
+Residual risk: remote runner timing still requires confirmation. The animation-query fallback
+deliberately models the no-active-animation case only, which is appropriate for happy-dom's
+animation-free environment.
 
 ## Review and release
 

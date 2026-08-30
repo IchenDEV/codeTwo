@@ -55,8 +55,9 @@ function installDom(): void {
     (globalThis as Record<string, unknown>)[key] = (dom as unknown as Record<string, unknown>)[key];
   }
   globalThis.getComputedStyle = dom.getComputedStyle.bind(dom);
-  globalThis.requestAnimationFrame = (callback: FrameRequestCallback) => setTimeout(callback, 0) as unknown as number;
-  globalThis.cancelAnimationFrame = (id: number) => clearTimeout(id);
+  // Preserve frame pacing so floating-position effects cannot spin on zero-delay timers.
+  globalThis.requestAnimationFrame = dom.requestAnimationFrame.bind(dom);
+  globalThis.cancelAnimationFrame = dom.cancelAnimationFrame.bind(dom);
   globalThis.btoa = dom.btoa.bind(dom);
   globalThis.devicePixelRatio = 1;
 }
