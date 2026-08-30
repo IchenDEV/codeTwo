@@ -4,13 +4,13 @@ on:
   pull_request:
     paths:
       - "apps/desktop/**"
-      - "docs/design.md"
+      - "docs/design/system.md"
       - ".github/workflows/desktop-design-system.yml"
   push:
     branches: [main]
     paths:
       - "apps/desktop/**"
-      - "docs/design.md"
+      - "docs/design/system.md"
       - ".github/workflows/desktop-design-system.yml"
 
 permissions:

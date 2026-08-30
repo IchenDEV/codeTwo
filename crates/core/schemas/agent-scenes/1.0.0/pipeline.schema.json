@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-scenes.org/schemas/1.0.0/pipeline.schema.json",
   "title": "Agent Scene Pipeline",
-  "description": "Machine-readable schema for *.pipeline.json in Agent Scenes 1.0.0. A pipeline is an ordered set of stages, each bound to a scene, with gated transitions and artifact carry between stages. The Agent Scenes specification (docs/scenes.md) defines the semantic and operational requirements.",
+  "description": "Machine-readable schema for *.pipeline.json in Agent Scenes 1.0.0. A pipeline is an ordered set of stages, each bound to a scene, with gated transitions and artifact carry between stages. The Agent Scenes specification (docs/reference/scenes.md) defines the semantic and operational requirements.",
   "type": "object",
   "properties": {
     "$schema": { "const": "https://agent-scenes.org/schemas/1.0.0/pipeline.schema.json" },

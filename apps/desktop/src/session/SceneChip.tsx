@@ -198,7 +198,7 @@ export function ScenePicker({
   const t = useT();
   const { locale } = useLanguage();
   const toast = useToast();
-  // Lossy SKILL.md export (docs/scenes.md §Interop), downloaded as a Blob through a transient
+  // Lossy SKILL.md export (docs/reference/scenes.md §Interop), downloaded as a Blob through a transient
   // anchor — deliberately no native save-dialog plumbing for a plain text file.
   const exportSkill = async (scene: SceneInfo) => {
     const md = await exportSceneSkillMd(scene.reference);
@@ -301,7 +301,7 @@ export function ScenePicker({
 }
 
 /**
- * The escalation confirmation (docs/scenes.md §Security): a scene may never loosen permissions
+ * The escalation confirmation (docs/reference/scenes.md §Security): a scene may never loosen permissions
  * silently — this dialog names both modes and the user decides.
  */
 export function SceneEscalationDialog({

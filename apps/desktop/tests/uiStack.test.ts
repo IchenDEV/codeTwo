@@ -60,7 +60,7 @@ describe("desktop UI stack", () => {
   });
 
   test("documents selected AI Elements as the AI-native presentation source", () => {
-    const designLaw = read("../../docs/design.md");
+    const designLaw = read("../../docs/design/system.md");
 
     expect(designLaw).toContain("selected AI Elements");
     expect(designLaw).toContain("C2 tokens and ACP data");

@@ -70,7 +70,7 @@ interface EditorProps {
   >;
   openSkillPickerRef: MutableRefObject<(() => void) | null>;
   // Active scene's skill palette: pinned skills lead the `/` picker; with suppress_unpinned the
-  // rest hide behind a "show all" row (always reachable, per docs/scenes.md).
+  // rest hide behind a "show all" row (always reachable, per docs/reference/scenes.md).
   sceneSkills?: { pinned: string[]; suppressUnpinned: boolean } | null;
   // Plugin Hub inserts a specific component directly instead of reopening the slash picker.
   insertSkillRef: MutableRefObject<((skill: SkillInfo) => void) | null>;

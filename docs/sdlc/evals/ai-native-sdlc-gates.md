@@ -5,9 +5,9 @@ status: active
 owner: repository maintainers
 approvers: user via the 2026-08-30 lifecycle migration request
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-08-31
 source: change-2026-08-30-ai-native-sdlc-migration
-inputs: isolated temporary Git repositories and the live Artifact tree
+inputs: isolated temporary repositories, the live Artifact tree, and the documentation catalog
 outputs: deterministic success and failure-path assertions
 next_trigger: any project instruction, lifecycle checker, template, CI Gate, or release Gate change
 ---
@@ -17,15 +17,20 @@ next_trigger: any project instruction, lifecycle checker, template, CI Gate, or 
 ## Provenance
 
 This Eval comes from the real
-[AI-native SDLC migration](../changes/2026-08-30-ai-native-sdlc-migration.md), which replaces a
+[AI-native SDLC migration](../changes/2026-08-30-ai-native-sdlc-migration/change.md), which replaces a
 shape-only checker that could accept implementation before Intent approval and did not close
-verification, release, Incident, or Eval evidence.
+verification, release, Incident, or Eval evidence. The
+[strict schema-2 hardening](../changes/2026-08-31-strict-sdlc-v2/change.md) extends this same Eval
+with risk, scope, criterion-to-evidence, verifier-identity, and local worktree regressions. The
+[script organization](../changes/2026-08-31-organize-scripts/change.md) condenses those failure
+classes into one focused suite without changing either Gate.
 
 ## Fixed input and environment
 
-Run `bun test script/check-sdlc.test.ts` from a CodeTwo checkout with Bun 1.3.10. Each branch-diff
-fixture is a temporary Git repository with a fixed baseline. The live check reads the current
-repository without starting CodeTwo or using its runtime data.
+Run `bun test script/verify/checks.test.ts` from a CodeTwo checkout with Bun 1.3.10. Branch-diff
+fixtures use temporary Git repositories with fixed baselines; documentation fixtures use isolated
+temporary directories. Live checks read the repository without starting CodeTwo or using its
+runtime data.
 
 ## Allowed actions
 
@@ -35,14 +40,16 @@ deploy, or modify the user's application data.
 
 ## Observable acceptance
 
-- A valid `executing` Artifact and the live repository pass.
-- Superseded lifecycle sources, duplicate ids, and missing required sections fail.
-- `verified` fails with unchecked acceptance, missing verdict, or missing residual risk.
+- Valid documentation, `executing` changes, and `verified` changes pass.
+- Documentation drift fails for an unclassified file, broken local link, orphan image, or legacy
+  change schema.
+- Duplicate change ids, non-passing acceptance evidence, and owner-approved high-risk changes fail.
 - release readiness fails without approval or target; `released` fails without identity or smoke.
 - a resolved Incident fails without recovery, follow-up change, or regression Eval links.
 - an active Eval fails without linked provenance, result, or revision.
-- an Artifact-only draft passes, but implementation beside that draft fails until it reaches
-  `executing`; a branch with no changed change Artifact fails.
+- the committed branch Gate rejects uncovered paths and a changed schema-1 Artifact.
+- the worktree Gate sees staged and untracked files and rejects paths outside the changed Artifact
+  scope.
 
 ## Scoring and failure classes
 
@@ -53,9 +60,10 @@ must not be reported as a lifecycle verdict.
 ## Last result
 
 Result: pass.
-Revision: working tree rebased onto `e3744874` on 2026-08-30.
-Evidence: `bun test script/check-sdlc.test.ts` passed all 10 tests with 24 assertions; the live
-checker passed; a temporary committed copy of the full diff passed `--base` branch
-validation; the named migration change was rejected by the release Gate because it was not
-`ready-to-release`. Two earlier test iterations exposed and then corrected target normalization and
-fixture/base-diff defects, as recorded in the linked change Artifact.
+Revision: uncommitted script-organization worktree over `cdbfefe9` on 2026-08-31. Evidence:
+`bun test script/verify/checks.test.ts` passed all 5 focused tests with 23 assertions. The suite
+covers the valid path plus documentation drift, acceptance and authority closure, release,
+Incident/Eval evidence, committed branch scope/schema, and staged/untracked worktree scope.
+`bun script/verify/docs.ts`, the plain lifecycle checker, and the `--worktree` Gate passed. The
+first consolidated worktree fixture did not modify its Change Artifact and was corrected before
+this passing result. Isolated committed-diff evidence is recorded in the governing script change.

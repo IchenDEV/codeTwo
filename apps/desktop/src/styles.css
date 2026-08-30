@@ -7,7 +7,7 @@
 :root {
   --hairline-width: 0.5px;
 
-  /* ---- legacy motion aliases (see docs/design.md) ----------------------------------------------
+  /* ---- legacy motion aliases (see docs/design/system.md) ----------------------------------------------
      One curve and four durations, so that a hover and a page mount are recognisably the same app.
      Hand-written CSS layers still consume these aliases. Product TS/TSX uses the named Tailwind
      utilities exposed by the design-system bridge below (`duration-feedback`, `ease-enter`, etc.).
@@ -261,7 +261,7 @@
 
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
-  /* ---- type roles (see docs/design.md) -------------------------------------------------------
+  /* ---- type roles (see docs/design/system.md) -------------------------------------------------------
      New work uses the semantic role names with their paired line heights. The short names keep
      existing call sites stable during Phase 2, but resolve to the same canonical token source. */
   --text-large-title: var(--ds-type-large-title-size);

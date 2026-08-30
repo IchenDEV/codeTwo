@@ -15,11 +15,15 @@ Artifacts, lifecycle states, Gates, verification evidence, release handoff, Inci
   `in-review`.
 - Reuse accepted ADRs, design documents, issues, and PRs as evidence; link them from the change
   Artifact instead of copying their state into another tracker.
-- Run `bun test script/check-sdlc.test.ts` when lifecycle enforcement changes, and always run
-  `bun script/check-sdlc.ts`
-  before handoff. A PR that changes repository files must change or add a canonical file under
-  `docs/sdlc/changes/`; implementation differences require that Artifact to be `executing` or later.
+- Run `bun test script/verify/checks.test.ts` when either repository Gate changes. Before handoff,
+  always run `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts`, and
+  `bun script/verify/sdlc.ts --worktree`. A PR that
+  changes repository files must change or add a schema-2 canonical
+  `docs/sdlc/changes/<date>-<slug>/change.md`; implementation differences require that Artifact to
+  be `executing` or later and every changed path to fall under its explicit scope.
 - Do not create `docs/superpowers`, a parallel specs/plans tree, or another lifecycle registry.
+- Every file under `docs/` must match exactly one rule in `docs/catalog.json`; dated research and
+  completed plans belong under `docs/archive/`, and every documentation image must be referenced.
 - Never mark a change verified, released, or closed without checked acceptance, an explicit
   verdict, actual evidence, residual risk, and the applicable human Gate.
 

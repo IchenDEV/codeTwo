@@ -13,7 +13,7 @@ import { useT } from "../i18n";
 import type { PipelineInstanceDetail, PipelineStageStatus, SceneArtifactRecord } from "../bridge";
 
 /**
- * The horizontal stage track (docs/scenes.md §UI contract): a pipeline-bound session renders its
+ * The horizontal stage track (docs/reference/scenes.md §UI contract): a pipeline-bound session renders its
  * instance as one chip per stage — done ✓ / current highlighted / pending muted, a ×n loop badge
  * when a stage has been entered more than once, and a lock glyph on confirm-gated stages. A chip
  * expands to a small popover listing the stage's captured artifacts and its sessions.

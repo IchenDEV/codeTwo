@@ -19,7 +19,7 @@
     "medium_distinct_tasks_minimum": 2
   },
   "verification_commands": [
-    "bun test script/check-sdlc.test.ts",
-    "bun script/check-sdlc.ts"
+    "bun test script/verify/checks.test.ts",
+    "bun script/verify/sdlc.ts"
   ]
 }

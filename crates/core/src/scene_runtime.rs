@@ -5,7 +5,7 @@
 //! one-in-flight macro turns, and per-project scheduling — so any frontend (desktop, TUI) reuses
 //! identical hook behavior by pumping its event stream through [`SceneRuntime::on_event`].
 //!
-//! Security posture (docs/scenes.md §Security): actions are an allowlist
+//! Security posture (docs/reference/scenes.md §Security): actions are an allowlist
 //! (`suggest_scene`/`suggest_next`/`notify` render, `run_macro` submits ONE attributed prompt
 //! within the session's current permission mode). There is deliberately no code path from a hook
 //! to [`Op::SetExecutionPolicy`] — a scene can never loosen permissions through its hooks. The
@@ -517,7 +517,7 @@ impl SceneRuntime {
 
     /// A stage-bound session produced a transition trigger: resolve the effective edge, apply the
     /// gate rule, and either advance in place (`auto`, tighten-only) or emit a `suggest_next`
-    /// suggestion carrying the pipeline coordinates (docs/design/scenes-impl-core.md §5.2).
+    /// suggestion carrying the pipeline coordinates (docs/archive/scenes-v1/core-implementation-plan.md §5.2).
     fn pipeline_on_trigger(&self, session: &str, trigger: TransitionTrigger, state_key: &str) {
         let Some((instance_id, stage_id)) = self.store.session_pipeline(session).ok().flatten()
         else {

@@ -634,7 +634,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     )?;
     ensure_column(&tx, "sessions", "pipeline_stage", "pipeline_stage TEXT")?;
     // Scene `schedule` hooks are inert until explicitly enabled per project (off by default;
-    // docs/scenes.md §hooks).
+    // docs/reference/scenes.md §hooks).
     ensure_column(
         &tx,
         "projects",
@@ -1884,7 +1884,7 @@ impl Store {
     }
 
     /// Enable/disable scene `schedule` hooks for one project. Off by default: a scene definition
-    /// alone must never start timed work (docs/scenes.md §Security).
+    /// alone must never start timed work (docs/reference/scenes.md §Security).
     pub fn set_project_scheduling(&self, path: &str, enabled: bool) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
         conn.execute(

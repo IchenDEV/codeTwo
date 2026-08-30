@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 export type Tone = "info" | "success" | "error";
 
-/** An offer to take it back. See the undo rule in docs/design.md. */
+/** An offer to take it back. See the undo rule in docs/design/system.md. */
 export interface ToastAction {
   label: string;
   run: () => void;

@@ -2,7 +2,7 @@
 //!
 //! A scene is a pure-data bundle configuring a session for one stage of work: execution posture,
 //! pinned skills, a task-brief skeleton, expected artifacts, exit criteria, and declarative hooks.
-//! A pipeline chains scenes into a lifecycle. See `docs/scenes.md` for the normative spec; the
+//! A pipeline chains scenes into a lifecycle. See `docs/reference/scenes.md` for the normative spec; the
 //! serde types below mirror the frozen JSON Schemas at `schemas/agent-scenes/1.0.0/` exactly.
 //!
 //! Two invariants live here and nowhere else:
@@ -1260,7 +1260,7 @@ pub struct EffectiveTransition {
     pub gate: Gate,
 }
 
-/// The effective outgoing edges of `stage_id` (docs/scenes.md §Pipelines): listed transitions
+/// The effective outgoing edges of `stage_id` (docs/reference/scenes.md §Pipelines): listed transitions
 /// with `from == stage_id` REPLACE the default edge entirely; absent any, the default is the next
 /// stage in array order with `when = exit_criteria_met` and the target stage's gate (or
 /// [`Gate::Suggest`]). The last stage with no listed transitions has no edges — the pipeline
@@ -1337,7 +1337,7 @@ fn fence_for(text: &str) -> String {
 }
 
 /// Export a scene as a SKILL.md document for hosts that only speak Agent Skills
-/// (docs/scenes.md §Interop). Deliberately lossy: only the prompt-shaped parts survive —
+/// (docs/reference/scenes.md §Interop). Deliberately lossy: only the prompt-shaped parts survive —
 /// guardrails, inline fragments, and the brief template as a suggested prompt skeleton. The
 /// exporter must say what was lost, so the document ends with a note naming the execution
 /// posture, artifacts, exit criteria, and hooks that did not survive.

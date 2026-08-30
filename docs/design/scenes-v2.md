@@ -473,6 +473,11 @@ The Task surface MUST show:
 The user MUST be able to pause, cancel, prohibit a direction, insert a Work Item, and inspect
 Sessions. AI MAY change Scenes and Work Items without a confirmation dialog.
 
+The following images are non-normative layout concepts, not acceptance evidence:
+
+- [`taskboard-concept.png`](taskboard-concept.png) — Task Board overview.
+- [`taskboard-editor-concept.png`](taskboard-editor-concept.png) — create/edit Task dialog.
+
 ### 12.3 Scene surface
 
 The old single Scene picker, posture controls, completion-next banner, and fixed Stage Track do not
