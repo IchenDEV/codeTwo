@@ -193,6 +193,9 @@ artifact of this scope.
 
 ## Feedback
 
-The follow-up user decision — which skin to keep — is tracked as this Artifact's `next_trigger`.
-Once the user picks, a follow-up change removes the losing skin and the preview toggle, and that
-decision will be recorded here. No other feedback exists yet.
+Resolved 2026-08-31: after reviewing both deployed skins, the user chose the Terminal design
+(方案一) and requested Apple-style scroll animations for it in the same request. The Modern skin,
+the style toggle, and the `c2-home-style` persistence introduced by this change were removed by
+the follow-up change
+[2026-08-31-website-terminal-motion](../2026-08-31-website-terminal-motion/change.md), which also
+records the removal evidence. No other feedback exists.

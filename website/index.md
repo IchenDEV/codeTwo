@@ -6,44 +6,10 @@ description: Compose structured prompts, weave in reusable skills, and run your 
 
 <script setup>
 import { onMounted } from "vue";
-
-const STYLE_STORAGE_KEY = "c2-home-style";
+import { initLandingMotion } from "./.vitepress/theme/motion";
 
 onMounted(() => {
-  const root = document.querySelector(".codetwo-home");
-  const buttons = Array.from(document.querySelectorAll(".style-toggle-btn"));
-  if (!root || buttons.length === 0) {
-    return;
-  }
-
-  const applyStyle = (style) => {
-    root.classList.toggle("theme-modern", style === "modern");
-    for (const button of buttons) {
-      button.classList.toggle("is-active", button.dataset.style === style);
-    }
-  };
-
-  let style = "terminal";
-  try {
-    if (localStorage.getItem(STYLE_STORAGE_KEY) === "modern") {
-      style = "modern";
-    }
-  } catch {
-    style = "terminal";
-  }
-  applyStyle(style);
-
-  for (const button of buttons) {
-    button.addEventListener("click", () => {
-      const next = button.dataset.style === "modern" ? "modern" : "terminal";
-      applyStyle(next);
-      try {
-        localStorage.setItem(STYLE_STORAGE_KEY, next);
-      } catch {
-        /* persistence is best-effort */
-      }
-    });
-  }
+  initLandingMotion();
 });
 </script>
 
@@ -87,17 +53,17 @@ onMounted(() => {
   <main id="main-content">
     <section class="hero" aria-labelledby="hero-title">
       <div class="shell hero-copy">
-        <div class="section-command" aria-hidden="true">$ code2 --compose</div>
-        <h1 id="hero-title">
+        <div class="section-command" data-motion="type" aria-hidden="true">$ code2 --compose</div>
+        <h1 id="hero-title" data-motion>
           The document-first<br />
           coding agent<span class="terminal-period">.</span>
         </h1>
-        <p>
+        <p data-motion style="--motion-delay: 120ms">
           Compose structured prompts, weave in reusable skills, and run Claude
           Code, Codex, Grok, Cursor, OpenCode 1 or 2, Pi, Kimi, or GLM through one
           local interface.
         </p>
-        <div class="actions">
+        <div class="actions" data-motion style="--motion-delay: 240ms">
           <a class="button button-primary" href="./guide/getting-started">
             <span aria-hidden="true">&gt;</span>
             Build from source
@@ -107,9 +73,14 @@ onMounted(() => {
             View source
           </a>
         </div>
-        <p class="hero-meta">Local-first · ACP orchestration · Apache-2.0</p>
+        <p class="hero-meta" data-motion style="--motion-delay: 340ms">Local-first · ACP orchestration · Apache-2.0</p>
       </div>
-      <figure class="shell screenshot-frame hero-window">
+      <figure
+        class="shell screenshot-frame hero-window"
+        data-motion
+        data-parallax
+        style="--motion-delay: 180ms"
+      >
         <img
           src="/screenshots/app-main.png"
           width="1440"
@@ -117,36 +88,36 @@ onMounted(() => {
           alt="C2 desktop app with a session rail, document composer, and environment dock"
         />
       </figure>
-      <ul class="shell hero-capabilities" aria-label="Key capabilities">
-        <li><span aria-hidden="true">&gt;_</span> Structured documents</li>
-        <li><span aria-hidden="true">&gt;_</span> Inline skills</li>
-        <li><span aria-hidden="true">&gt;_</span> 8 providers</li>
-        <li><span aria-hidden="true">&gt;_</span> One local core</li>
+      <ul class="shell hero-capabilities" aria-label="Key capabilities" data-motion-stagger="70">
+        <li data-motion><span aria-hidden="true">&gt;_</span> Structured documents</li>
+        <li data-motion><span aria-hidden="true">&gt;_</span> Inline skills</li>
+        <li data-motion><span aria-hidden="true">&gt;_</span> 8 providers</li>
+        <li data-motion><span aria-hidden="true">&gt;_</span> One local core</li>
       </ul>
     </section>
     <section id="product" class="workflow" aria-labelledby="workflow-title">
       <div class="shell">
-        <div class="section-command" aria-hidden="true">$ code2 workflow --inspect</div>
+        <div class="section-command" data-motion="type" aria-hidden="true">$ code2 workflow --inspect</div>
         <div class="workflow-head">
-          <h2 id="workflow-title">
+          <h2 id="workflow-title" data-motion>
             Write the work.<br />
             Choose the agent<span class="terminal-period">.</span>
           </h2>
-          <p>
+          <p data-motion style="--motion-delay: 140ms">
             C2 turns a prompt into a structured document you can edit,
             reuse, and inspect before it runs.
           </p>
         </div>
         <div class="workflow-stage">
-          <ol class="steps">
-            <li>
+          <ol class="steps" data-motion-stagger="130">
+            <li data-motion>
               <span class="terminal-mark" aria-hidden="true">&gt;</span>
               <div>
                 <h3>Compose as a document</h3>
                 <p>Shape the brief with headings, lists, and context.</p>
               </div>
             </li>
-            <li>
+            <li data-motion>
               <span class="terminal-mark" aria-hidden="true">&gt;</span>
               <div>
                 <h3>Add skills and files inline</h3>
@@ -156,7 +127,7 @@ onMounted(() => {
                 </p>
               </div>
             </li>
-            <li>
+            <li data-motion>
               <span class="terminal-mark" aria-hidden="true">&gt;</span>
               <div>
                 <h3>Run through ACP</h3>
@@ -167,7 +138,11 @@ onMounted(() => {
               </div>
             </li>
           </ol>
-          <figure class="screenshot-frame workflow-window">
+          <figure
+            class="screenshot-frame workflow-window"
+            data-motion
+            style="--motion-delay: 160ms"
+          >
             <img
               src="/screenshots/slash-menu.png"
               width="1440"
@@ -181,19 +156,19 @@ onMounted(() => {
     </section>
     <section id="providers" class="providers" aria-labelledby="providers-title">
       <div class="shell">
-        <div class="section-command" aria-hidden="true">$ code2 providers --list</div>
+        <div class="section-command" data-motion="type" aria-hidden="true">$ code2 providers --list</div>
         <div class="providers-head">
-          <h2 id="providers-title">
+          <h2 id="providers-title" data-motion>
             Bring the agent<br />
             you already use<span class="terminal-period">.</span>
           </h2>
-          <p>
+          <p data-motion style="--motion-delay: 140ms">
             C2 starts the CLI or ACP adapter on your machine. Your provider
             account, subscription, quota, and billing stay with the provider.
           </p>
         </div>
-        <div class="provider-matrix">
-          <article class="provider-entry">
+        <div class="provider-matrix" data-motion-stagger="45">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">01</span>
             <div>
               <h3>Claude Code</h3>
@@ -201,7 +176,7 @@ onMounted(() => {
               <code>claude-agent-acp</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">02</span>
             <div>
               <h3>OpenAI Codex</h3>
@@ -209,7 +184,7 @@ onMounted(() => {
               <code>codex-acp@1.7.0</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">03</span>
             <div>
               <h3>Grok</h3>
@@ -217,7 +192,7 @@ onMounted(() => {
               <code>grok agent stdio</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">04</span>
             <div>
               <h3>Cursor</h3>
@@ -225,7 +200,7 @@ onMounted(() => {
               <code>cursor-agent acp</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">05</span>
             <div>
               <h3>OpenCode 1</h3>
@@ -233,7 +208,7 @@ onMounted(() => {
               <code>opencode acp</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">06</span>
             <div>
               <h3>OpenCode 2</h3>
@@ -241,7 +216,7 @@ onMounted(() => {
               <code>opencode2 acp</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">07</span>
             <div>
               <h3>Pi</h3>
@@ -249,7 +224,7 @@ onMounted(() => {
               <code>pi-acp</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">08</span>
             <div>
               <h3>Kimi</h3>
@@ -257,7 +232,7 @@ onMounted(() => {
               <code>kimi acp</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">09</span>
             <div>
               <h3>ZCode (GLM)</h3>
@@ -265,7 +240,7 @@ onMounted(() => {
               <code>glm-acp-agent</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">10</span>
             <div>
               <h3>Amp</h3>
@@ -273,7 +248,7 @@ onMounted(() => {
               <code>amp-acp</code>
             </div>
           </article>
-          <article class="provider-entry">
+          <article class="provider-entry" data-motion>
             <span class="provider-index">11</span>
             <div>
               <h3>Droid</h3>
@@ -282,28 +257,31 @@ onMounted(() => {
             </div>
           </article>
         </div>
-        <div class="provider-facts">
+        <div class="provider-facts" data-motion>
           <p><span>LOCAL</span> The CLI or adapter runs as a child process on your machine.</p>
           <p><span>ACP</span> Native endpoints and adapters share one submission/event interface.</p>
           <p><span>STATUS</span> A green dot means the required launch command is on your PATH.</p>
         </div>
-        <a class="provider-doc-link" href="./guide/providers">
+        <a class="provider-doc-link" href="./guide/providers" data-motion style="--motion-delay: 120ms">
           Compare setup requirements <span aria-hidden="true">↗</span>
         </a>
       </div>
     </section>
     <section class="architecture" aria-labelledby="architecture-title">
       <div class="shell">
-        <div class="section-command" aria-hidden="true">$ code2 architecture --local</div>
-        <h2 id="architecture-title">
+        <div class="section-command" data-motion="type" aria-hidden="true">$ code2 architecture --local</div>
+        <h2 id="architecture-title" data-motion>
           One local core.<br />
           Three ways in<span class="terminal-period">.</span>
         </h2>
-        <div
-          class="architecture-flow"
-          role="img"
-          aria-label="Coding CLIs connect over ACP to the Rust core, which powers Desktop, TUI, and Remote surfaces"
-        >
+        <div class="architecture-stage" data-architecture-stage>
+          <div
+            class="architecture-flow"
+            data-architecture-flow
+            data-motion
+            role="img"
+            aria-label="Coding CLIs connect over ACP to the Rust core, which powers Desktop, TUI, and Remote surfaces"
+          >
           <div class="architecture-node"><span>Coding CLIs</span></div>
           <svg class="flow-arrow" aria-hidden="true" viewBox="0 0 100 20">
             <path d="M1 10h92M86 3l7 7-7 7" />
@@ -328,24 +306,25 @@ onMounted(() => {
               <div class="output-node"><span>Remote</span></div>
             </div>
           </div>
+          </div>
         </div>
       </div>
     </section>
     <section class="open-source" aria-labelledby="open-source-title">
       <div class="shell section-command-row">
-        <div class="section-command" aria-hidden="true">$ code2 source --open</div>
+        <div class="section-command" data-motion="type" aria-hidden="true">$ code2 source --open</div>
       </div>
       <div class="shell open-source-grid">
-        <h2 id="open-source-title">
+        <h2 id="open-source-title" data-motion>
           Open source,<br />
           from the core out<span class="terminal-period">.</span>
         </h2>
         <div class="open-source-copy">
-          <p>
+          <p data-motion style="--motion-delay: 140ms">
             C2 is licensed under Apache 2.0 and built in the open for people
             who want control over their coding-agent workflow.
           </p>
-          <div class="actions">
+          <div class="actions" data-motion style="--motion-delay: 260ms">
             <a
               class="button button-primary button-github"
               href="https://github.com/IchenDEV/codeTwo"
@@ -377,10 +356,4 @@ onMounted(() => {
       </footer>
     </section>
   </main>
-  <div class="style-toggle" role="group" aria-label="Preview homepage style">
-    <button type="button" class="style-toggle-btn is-active" data-style="terminal">
-      Terminal
-    </button>
-    <button type="button" class="style-toggle-btn" data-style="modern">Modern</button>
-  </div>
 </div>

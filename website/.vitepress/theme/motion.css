@@ -1,0 +1,159 @@
+/* Terminal landing scroll motion.
+   All hiding/scrub effects are scoped under .motion-ready (set by
+   motion.ts at hydration) so the page stays fully visible without
+   JavaScript. Terminal skin only — the Modern skin was removed. */
+
+/* ---------------------------------------------------------------- */
+/* Entrance reveals (translate property keeps transform free for     */
+/* parallax on the same element)                                     */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.motion-ready [data-motion] {
+  opacity: 0;
+  translate: 0 26px;
+  transition:
+    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    translate 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--motion-delay, 0ms);
+}
+
+.codetwo-home.motion-ready [data-motion].is-visible {
+  opacity: 1;
+  translate: 0 0;
+}
+
+/* ---------------------------------------------------------------- */
+/* Command typewriter                                                */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.motion-ready [data-motion="type"] {
+  min-height: 1.5em;
+}
+
+.codetwo-home.motion-ready [data-motion="type"].is-typing::after {
+  content: "▌";
+  margin-left: 3px;
+  color: var(--home-green);
+  animation: codetwo-cursor 1.05s steps(1) infinite;
+}
+
+@keyframes codetwo-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Smooth anchor scrolling on the landing pages                      */
+/* ---------------------------------------------------------------- */
+
+html:has(body .codetwo-home) {
+  scroll-behavior: smooth;
+}
+
+/* ---------------------------------------------------------------- */
+/* Architecture scroll scrub (wide viewports only)                   */
+/*                                                                   */
+/* While .scrub-active is set, motion.ts gives the stage ~240vh so   */
+/* the sticky flow plays through four assembly stages.               */
+/* ---------------------------------------------------------------- */
+
+@media (min-width: 1181px) {
+  .codetwo-home.motion-ready.scrub-active .architecture-stage {
+    height: 240vh;
+  }
+
+  .codetwo-home.motion-ready.scrub-active .architecture .architecture-flow {
+    position: sticky;
+    top: calc(50vh - 205px);
+    margin-top: 46px;
+  }
+}
+
+/* Hidden-before-assembly states: scoped to the scrub mode so narrow
+   viewports and no-JS visitors always see the finished diagram. */
+
+.codetwo-home.motion-ready.scrub-active
+  .architecture-flow
+  :is(.architecture-node-small, .architecture-node-core, .output-node) {
+  opacity: 0;
+  scale: 0.88;
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    scale 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.codetwo-home.motion-ready.scrub-active .architecture-flow .flow-arrow {
+  opacity: 0;
+  scale: 0 1;
+  transform-origin: left center;
+  transition:
+    opacity 0.5s ease,
+    scale 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.codetwo-home.motion-ready.scrub-active .architecture-flow .branch-lines {
+  opacity: 0;
+  scale: 0.55 1;
+  transform-origin: left center;
+  transition:
+    opacity 0.6s ease,
+    scale 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Stages (cumulative; applied by motion.ts from scroll progress) */
+
+.codetwo-home.motion-ready.scrub-active
+  .architecture-flow.stage-2
+  :is(.architecture-node-small, .flow-arrow:nth-of-type(1)) {
+  opacity: 1;
+  scale: 1 1;
+}
+
+.codetwo-home.motion-ready.scrub-active
+  .architecture-flow.stage-3
+  :is(.architecture-node-core, .flow-arrow:nth-of-type(2)) {
+  opacity: 1;
+  scale: 1 1;
+}
+
+.codetwo-home.motion-ready.scrub-active .architecture-flow.stage-4 .branch-lines {
+  opacity: 1;
+  scale: 1 1;
+}
+
+.codetwo-home.motion-ready.scrub-active
+  .architecture-flow.stage-4
+  .output-node {
+  opacity: 1;
+  scale: 1 1;
+}
+
+.codetwo-home.motion-ready.scrub-active
+  .architecture-flow.stage-4
+  .output-node:nth-child(2) {
+  transition-delay: 130ms;
+}
+
+.codetwo-home.motion-ready.scrub-active
+  .architecture-flow.stage-4
+  .output-node:nth-child(3) {
+  transition-delay: 260ms;
+}
+
+/* ---------------------------------------------------------------- */
+/* Reduced motion: never arm the page (JS checks first); smooth      */
+/* scrolling is also disabled here as a CSS-only guard.              */
+/* ---------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(body .codetwo-home) {
+    scroll-behavior: auto;
+  }
+
+  .codetwo-home.motion-ready [data-motion] {
+    opacity: 1;
+    translate: none;
+    transition: none;
+  }
+}
