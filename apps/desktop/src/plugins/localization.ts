@@ -36,6 +36,7 @@ const CONTRIBUTION_KEYS: Record<string, StringKey> = {
   monitors: "pluginManager.contribution.monitors",
   apps: "pluginManager.contribution.apps",
   ui: "pluginManager.contribution.uiActions",
+  connectors: "pluginManager.contribution.connectors",
   scenes: "pluginManager.contribution.scenes",
   pipelines: "pluginManager.contribution.pipelines",
 };

@@ -31,7 +31,11 @@ import type {
   AppUpdateStatus,
   WorkspaceOpenTarget,
 } from "./container";
-import type { PluginRuntimeCommandContribution, PluginUiContribution } from "./pluginModel";
+import type {
+  PluginConnectorContribution,
+  PluginRuntimeCommandContribution,
+  PluginUiContribution,
+} from "./pluginModel";
 import {
   browserAnnotateLocal,
   browserAnnotationCountLocal,
@@ -2916,14 +2920,16 @@ export interface PluginCounts {
   monitors: number;
   apps: number;
   /** Safe declarative actions rendered into C2-owned UI slots. */
-  ui?: number;
+  ui: number;
+  /** Host-rendered external-system connectors backed by an owned runtime command. */
+  connectors: number;
   /** Agent Scenes components (R14); serde-defaulted server-side, so always present here. */
   scenes: number;
   pipelines: number;
   /** Present for hosts that support a C2 JSON-RPC process runtime contribution. */
-  runtime?: number;
+  runtime: number;
   /** Statically declared commands implemented by the process runtime. */
-  runtime_commands?: number;
+  runtime_commands: number;
 }
 
 export type PluginInstallScope = "user" | "project" | "local" | "managed";
@@ -2955,6 +2961,8 @@ export {
 } from "./pluginModel";
 export type {
   PluginRuntimeCommandContribution,
+  PluginConnectorCapability,
+  PluginConnectorContribution,
   PluginUiContribution,
   PluginUiSlotId,
 } from "./pluginModel";
@@ -2982,9 +2990,10 @@ export interface PluginInfo {
   counts: PluginCounts;
   scaffolds: PluginScaffoldInfo[];
   extension_components: PluginExtensionComponent[];
-  runtime_commands?: PluginRuntimeCommandContribution[];
-  ui_contributions?: PluginUiContribution[];
-  lsp_servers?: PluginLanguageServer[];
+  runtime_commands: PluginRuntimeCommandContribution[];
+  ui_contributions: PluginUiContribution[];
+  connector_contributions: PluginConnectorContribution[];
+  lsp_servers: PluginLanguageServer[];
   diagnostics: PluginDiagnostic[];
 }
 
@@ -3106,7 +3115,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           author: "C2",
           source: "Built-in renderer preview",
           repository: "https://github.com/IchenDEV/codeTwo",
-          standard_version: "1.1.0",
+          standard_version: "1.2.0",
           enabled: true,
           trusted: true,
           scope: "user",
@@ -3122,6 +3131,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             monitors: 0,
             apps: 0,
             ui: 0,
+            connectors: 0,
             scenes: 0,
             pipelines: 0,
             runtime: 1,
@@ -3142,6 +3152,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             ["docker.remove_image", "Remove image"],
           ].map(([id, title]) => ({ id, title, description: "", argsSchema: null })),
           ui_contributions: [],
+          connector_contributions: [],
           lsp_servers: [],
           diagnostics: [],
           scaffolds: [],
@@ -3154,7 +3165,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           author: "C2 Community",
           source: "GitHub · example/developer-toolkit",
           repository: "https://github.com/example/developer-toolkit",
-          standard_version: "1.0.0",
+          standard_version: "1.2.0",
           enabled: true,
           trusted: false,
           scope: "user",
@@ -3168,8 +3179,12 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             lsp_servers: 1,
             monitors: 0,
             apps: 0,
+            ui: 0,
+            connectors: 0,
             scenes: 1,
             pipelines: 1,
+            runtime: 0,
+            runtime_commands: 0,
           },
           extension_components: [
             {
@@ -3186,6 +3201,10 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             },
           ],
           diagnostics: [],
+          runtime_commands: [],
+          ui_contributions: [],
+          connector_contributions: [],
+          lsp_servers: [],
           scaffolds: [
             {
               id: "vite-react-demo",
@@ -3203,7 +3222,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           author: "C2",
           source: "Built-in preview",
           repository: "",
-          standard_version: "1.0.0",
+          standard_version: "1.2.0",
           enabled: true,
           trusted: true,
           scope: "user",
@@ -3218,9 +3237,11 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             monitors: 0,
             apps: 0,
             ui: 5,
+            connectors: 0,
             scenes: 0,
             pipelines: 0,
             runtime: 1,
+            runtime_commands: 1,
           },
           extension_components: [
             { kind: "ui", name: "Review tools", path: "rail.features", status: "ready" },
@@ -3277,6 +3298,13 @@ export async function listPlugins(): Promise<PluginInfo[]> {
               order: 0,
             },
           ],
+          runtime_commands: [{
+            id: "demo.review",
+            title: "Review",
+            description: "Run the demo review action.",
+            argsSchema: null,
+          }],
+          connector_contributions: [],
           lsp_servers: [{
             id: "zig",
             languages: ["zig"],
@@ -3296,6 +3324,19 @@ export async function onPluginsChanged(cb: () => void): Promise<() => void> {
   return listenDesktop<null>("plugins-changed", cb);
 }
 
+export interface PluginConnectorEventEnvelope {
+  plugin_id: string;
+  event: unknown;
+}
+
+/** Receive one event from a connector Runtime after the host authenticates its owning bundle. */
+export async function onPluginConnectorEvent(
+  cb: (event: PluginConnectorEventEnvelope) => void,
+): Promise<() => void> {
+  if (!inDesktop) return () => {};
+  return listenDesktop<PluginConnectorEventEnvelope>("plugin-connector-event", cb);
+}
+
 /** Invoke a manifest-declared UI action after the host verifies contribution and command ownership. */
 export async function invokePluginUi(
   pluginId: string,
@@ -3308,6 +3349,23 @@ export async function invokePluginUi(
     plugin_id: pluginId,
     contribution_id: contributionId,
     context,
+  }, projectPath);
+}
+
+/** Invoke one manifest-declared connector operation after runtime ownership checks. */
+export async function invokePluginConnector(
+  pluginId: string,
+  contributionId: string,
+  operation: string,
+  input: unknown,
+  projectPath: string | null,
+): Promise<unknown> {
+  if (!inDesktop) throw new Error("Plugin connectors require the C2 desktop app.");
+  return call("plugins.invoke_connector", {
+    plugin_id: pluginId,
+    contribution_id: contributionId,
+    operation,
+    input,
   }, projectPath);
 }
 

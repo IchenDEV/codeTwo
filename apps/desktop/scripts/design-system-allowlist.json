@@ -28,6 +28,11 @@
       "reason": "BlockNote owns document content typography while C2 owns its surrounding chrome."
     },
     {
+      "path": "src/feishu/FeishuWorkspacePage.tsx",
+      "rules": ["static-border"],
+      "reason": "Feishu Base cells use structural table dividers, one of the design system's explicit content exceptions."
+    },
+    {
       "path": "src/appearance.ts",
       "rules": ["direct-ds-token"],
       "reason": "The appearance controller writes validated runtime theme values into the semantic token layer."

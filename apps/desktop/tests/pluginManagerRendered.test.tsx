@@ -66,7 +66,7 @@ const plugins = [
     bundle: {
       id: "review-tools",
       repository: "https://example.test/review-tools",
-      standardVersion: "1.0.0",
+      standardVersion: "1.2.0",
       trusted: false,
       enabled: true,
       requiresTrust: true,
@@ -246,6 +246,37 @@ async function selectItem(item) {
 }
 
 describe("PluginManagerPage", () => {
+  test("opens a requested plugin and renders only its host-owned settings extension", async () => {
+    activateDom();
+    const { view } = renderManager({
+      initialPluginId: "review-tools",
+      pluginDetailsExtension: {
+        pluginId: "review-tools",
+        content: (
+          <section data-host-plugin-settings>
+            Feishu connection settings
+          </section>
+        ),
+      },
+    });
+    await flush();
+
+    expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent)
+      .toContain("Review Tools");
+    expect(view.container.querySelector("[data-plugin-details]")?.textContent)
+      .toContain("Review Tools");
+    expect(view.container.querySelector("[data-host-plugin-settings]")?.textContent)
+      .toBe("Feishu connection settings");
+
+    click(Array.from(view.container.querySelectorAll('button')).find((candidate) =>
+      candidate.textContent?.includes("Memory"),
+    ));
+    await flush();
+    expect(view.container.querySelector("[data-host-plugin-settings]")).toBeNull();
+
+    view.unmount();
+  });
+
   test("keeps the sidebar expansion action available on the full-page plugin surface", async () => {
     activateDom();
     const expanded = [];
@@ -357,7 +388,7 @@ describe("PluginManagerPage", () => {
     const railAction = view.container.querySelector(
       '[data-plugin-ui-slot="rail.features"] button',
     );
-    expect(railAction?.className).toContain("h-(--ds-control-normal)");
+    expect(railAction?.className).toContain("h-control");
     expect(railAction?.className).toContain("text-ui");
     expect(railAction?.className).toContain("text-foreground/75");
 
@@ -758,13 +789,17 @@ describe("PluginManagerPage", () => {
         author: "C2",
         source: "GitHub · c2/review",
         repository: "https://example.test/review",
-        standard_version: "1.0.0",
+        standard_version: "1.2.0",
         enabled: true,
         trusted: true,
         scope: "user",
         counts: {},
         scaffolds: [],
         extension_components: [],
+        runtime_commands: [],
+        ui_contributions: [],
+        connector_contributions: [],
+        lsp_servers: [],
         diagnostics: [],
       }],
       skills: [],

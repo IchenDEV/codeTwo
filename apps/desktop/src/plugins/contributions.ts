@@ -1,5 +1,6 @@
 import {
   PLUGIN_UI_SLOT_IDS,
+  type PluginConnectorContribution,
   type PluginInfo,
   type PluginLanguageServer,
   type PluginUiContribution,
@@ -16,6 +17,10 @@ export interface ActivePluginUiContribution extends PluginUiContribution {
 export interface ActivePluginLanguageServer extends PluginLanguageServer {
   pluginId: string;
   pluginName: string;
+}
+
+interface ActivePluginConnectorContribution extends PluginConnectorContribution {
+  pluginId: string;
 }
 
 export type ActivePluginUiContributionsBySlot = Record<
@@ -43,7 +48,7 @@ export function activePluginUiContributions(
   const componentById = new Map(components.map((component) => [component.id, component]));
 
   for (const bundle of bundles.filter((candidate) => activeBundle(candidate, plugins))) {
-    for (const contribution of bundle.ui_contributions ?? []) {
+    for (const contribution of bundle.ui_contributions) {
       const managedComponent = componentById.get(pluginUiComponentId(bundle.id, contribution.id));
       if (managedComponent && !managedComponent.state.effectiveEnabled) continue;
       bySlot[contribution.slot].push({
@@ -68,10 +73,24 @@ export function activePluginLanguageServers(
 ): ActivePluginLanguageServer[] {
   return bundles
     .filter((bundle) => activeBundle(bundle, plugins))
-    .flatMap((bundle) => (bundle.lsp_servers ?? []).map((server) => ({
+    .flatMap((bundle) => bundle.lsp_servers.map((server) => ({
       ...server,
       pluginId: bundle.id,
       pluginName: bundle.name,
+    })))
+    .sort((left, right) =>
+      left.pluginId.localeCompare(right.pluginId) || left.id.localeCompare(right.id));
+}
+
+export function activePluginConnectorContributions(
+  bundles: PluginInfo[],
+  plugins: PluginManagerPlugin[],
+): ActivePluginConnectorContribution[] {
+  return bundles
+    .filter((bundle) => activeBundle(bundle, plugins))
+    .flatMap((bundle) => bundle.connector_contributions.map((contribution) => ({
+      ...contribution,
+      pluginId: bundle.id,
     })))
     .sort((left, right) =>
       left.pluginId.localeCompare(right.pluginId) || left.id.localeCompare(right.id));

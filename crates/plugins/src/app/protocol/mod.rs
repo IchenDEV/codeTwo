@@ -44,9 +44,11 @@ pub use wire::{
     InvokeParams, LogParams, PROTOCOL_VERSION,
 };
 
+use crate::app::events::ConnectorEvent;
 use crate::bundle::{PluginRuntimeCommand, PluginRuntimeSpec};
 use codetwo_kernel::{
-    async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
+    async_trait, CommandRealm, Context, Event, Injection, Plugin, PluginError, PluginResult,
+    WeakContext,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -690,6 +692,10 @@ struct KernelHost {
     plugin: String,
 }
 
+fn connector_owner_id(plugin: &str) -> String {
+    plugin.strip_prefix("bundle:").unwrap_or(plugin).to_string()
+}
+
 #[async_trait]
 impl HostHandler for KernelHost {
     async fn call(&self, name: &str, args: Value) -> Result<Value, String> {
@@ -703,7 +709,15 @@ impl HostHandler for KernelHost {
 
     async fn emit(&self, name: &str, payload: Value) {
         if let Some(ctx) = self.ctx.upgrade() {
-            ctx.emit_json(name, payload).await;
+            if name == ConnectorEvent::NAME {
+                ctx.emit(ConnectorEvent {
+                    plugin_id: connector_owner_id(&self.plugin),
+                    event: payload,
+                })
+                .await;
+            } else {
+                ctx.emit_json(name, payload).await;
+            }
         }
     }
 
@@ -720,6 +734,15 @@ impl HostHandler for KernelHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connector_events_expose_the_installed_bundle_id_not_the_internal_runtime_name() {
+        assert_eq!(
+            connector_owner_id("bundle:feishu-collaboration"),
+            "feishu-collaboration"
+        );
+        assert_eq!(connector_owner_id("mock"), "mock");
+    }
 
     #[test]
     fn process_transport_prefers_a_bundle_local_bare_command_then_falls_back_to_path() {

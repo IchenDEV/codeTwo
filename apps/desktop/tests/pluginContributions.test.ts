@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  activePluginConnectorContributions,
   activePluginLanguageServers,
   activePluginUiContributions,
 } from "../src/plugins/contributions";
@@ -21,7 +22,7 @@ const bundle = {
   author: "C2",
   source: "Test",
   repository: "local",
-  standard_version: "1.0.0",
+  standard_version: "1.2.0",
   enabled: true,
   trusted: true,
   scope: "user" as const,
@@ -31,16 +32,26 @@ const bundle = {
     mcp_servers: 0,
     scaffolds: 0,
     commands: 0,
+    runtime_commands: 2,
     hooks: 0,
     lsp_servers: 1,
     monitors: 0,
     apps: 0,
+    ui: uiSlots.length,
+    connectors: 1,
     scenes: 0,
     pipelines: 0,
+    runtime: 1,
   },
   scaffolds: [],
   extension_components: [],
   diagnostics: [],
+  runtime_commands: ["review.run", "review.connector"].map((id) => ({
+    id,
+    title: id,
+    description: "",
+    argsSchema: null,
+  })),
   ui_contributions: uiSlots.map((slot, order) => ({
     id: `review-${order}`,
     slot,
@@ -50,6 +61,12 @@ const bundle = {
     input: null,
     order,
   })),
+  connector_contributions: [{
+    id: "workspace",
+    provider: "test-chat",
+    command: "review.connector",
+    capabilities: ["conversations" as const],
+  }],
   lsp_servers: [{
     id: "zls",
     languages: ["zig"],
@@ -79,15 +96,18 @@ describe("plugin UI and LSP contribution policy", () => {
     }
     expect(activePluginLanguageServers([bundle], managed("active")))
       .toContainEqual(expect.objectContaining({ pluginId: "review", id: "zls" }));
+    expect(activePluginConnectorContributions([bundle], managed("active")))
+      .toContainEqual(expect.objectContaining({ pluginId: "review", id: "workspace" }));
 
     expect(Object.values(activePluginUiContributions([bundle], managed("loading"))).every(
       (contributions) => contributions.length === 0,
     )).toBe(true);
     expect(activePluginLanguageServers([{ ...bundle, trusted: false }], managed("active"))).toEqual([]);
     expect(activePluginLanguageServers([{ ...bundle, enabled: false }], managed("active"))).toEqual([]);
+    expect(activePluginConnectorContributions([bundle], managed("loading"))).toEqual([]);
   });
 
-  test("applies the same component policy to rendering that the host enforces on invocation", () => {
+  test("applies component policy to UI actions", () => {
     const components = [{
       id: "bundle:review:ui:review-1",
       pluginId: "bundle:review",
@@ -102,5 +122,6 @@ describe("plugin UI and LSP contribution policy", () => {
     const active = activePluginUiContributions([bundle], managed("active"), components);
     expect(active["session.header"]).toEqual([]);
     expect(active["rail.features"]).toHaveLength(1);
+
   });
 });

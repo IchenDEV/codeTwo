@@ -9,7 +9,7 @@ native IPC path.
 
 ## Requirements
 
-- C2 with Plugin Standard 1.1.0 support
+- C2 with Plugin Standard 1.2.0 support
 - Node.js 18 or newer
 - Docker CLI with access to a running Docker engine
 

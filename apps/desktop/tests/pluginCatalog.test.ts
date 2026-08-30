@@ -45,6 +45,50 @@ const emptyCatalog = {
   plugins: [],
 };
 
+const emptyCounts = {
+  skills: 0,
+  subagents: 0,
+  mcp_servers: 0,
+  scaffolds: 0,
+  commands: 0,
+  runtime_commands: 0,
+  hooks: 0,
+  lsp_servers: 0,
+  monitors: 0,
+  apps: 0,
+  ui: 0,
+  connectors: 0,
+  scenes: 0,
+  pipelines: 0,
+  runtime: 0,
+};
+
+function bundleRecord(overrides = {}) {
+  return {
+    id: "fixture",
+    name: "Fixture",
+    version: "1.0.0",
+    description: "Fixture bundle",
+    author: "C2",
+    source: "Local",
+    repository: "",
+    standard_version: "1.2.0",
+    enabled: true,
+    trusted: true,
+    scope: "user",
+    counts: emptyCounts,
+    scaffolds: [],
+    extension_components: [],
+    runtime_commands: [],
+    ui_contributions: [],
+    connector_contributions: [],
+    lsp_servers: [],
+    diagnostics: [],
+    ...overrides,
+    counts: { ...emptyCounts, ...overrides.counts },
+  };
+}
+
 describe("unified plugin catalog adapter", () => {
   test("keeps the browser preview aligned with Docker's static command manifest", async () => {
     const preview = (await listPlugins()).find((plugin) => plugin.id === "docker-tools-preview");
@@ -56,7 +100,7 @@ describe("unified plugin catalog adapter", () => {
       title,
     }));
 
-    expect(preview?.standard_version).toBe("1.1.0");
+    expect(preview?.standard_version).toBe("1.2.0");
     expect(preview?.counts).toMatchObject({ commands: 0, runtime_commands: declared.length });
     expect(preview?.runtime_commands?.map(({ id, title }) => ({ id, title }))).toEqual(declared);
   });
@@ -110,7 +154,7 @@ describe("unified plugin catalog adapter", () => {
         entry("skills"),
       ],
     };
-    const bundle = {
+    const bundle = bundleRecord({
       id: "review",
       name: "Review Tools",
       version: "1.0.0",
@@ -118,11 +162,10 @@ describe("unified plugin catalog adapter", () => {
       author: "C2",
       source: "GitHub · c2/review",
       repository: "https://example.test/review",
-      standard_version: "1.1.0",
       enabled: true,
       trusted: true,
       scope: "user",
-      counts: { runtime: 1, runtime_commands: 1, skills: 2 },
+      counts: { runtime: 1, runtime_commands: 1, skills: 2, connectors: 1 },
       scaffolds: [],
       extension_components: [{ kind: "lsp", name: "rust", path: "plugin.json#extensions.dev.codetwo.languageServers", status: "ready" }],
       runtime_commands: [{
@@ -131,8 +174,14 @@ describe("unified plugin catalog adapter", () => {
         description: "Review this workspace.",
         argsSchema: null,
       }],
+      connector_contributions: [{
+        id: "workspace",
+        provider: "test-chat",
+        command: "review.run",
+        capabilities: ["conversations" as const],
+      }],
       diagnostics: [],
-    };
+    });
     const model = buildPluginManagerCatalog({
       catalog,
       bundles: [bundle],
@@ -158,6 +207,7 @@ describe("unified plugin catalog adapter", () => {
         { id: "runtime", label: "Process runtime", count: 1 },
         { id: "skills", label: "Skills", count: 2 },
         { id: "runtime_commands", label: "Runtime commands", count: 1 },
+        { id: "connectors", label: "Connectors", count: 1 },
       ],
     });
     expect(model.plugins.find((plugin) => plugin.id === "bundle:review")?.commands)
@@ -169,6 +219,7 @@ describe("unified plugin catalog adapter", () => {
       slot: "settings.sections",
     });
     expect(model.components.find((component) => component.id === "bundle:review:extension:lsp:rust")?.slot).toBe("plugin.json#extensions.dev.codetwo.languageServers");
+    expect(model.components.some((component) => component.kind === "connector")).toBe(false);
     expect(model.components.find((component) => component.id === "skill:review-skill")).toMatchObject({
       pluginId: "bundle:review",
       policyPluginId: "skills",
@@ -190,7 +241,28 @@ describe("unified plugin catalog adapter", () => {
     const model = buildPluginManagerCatalog({
       catalog: projectCatalog,
       userCatalog,
-      bundles: [],
+      bundles: [
+        bundleRecord({
+          id: "review-tools-local",
+          name: "Review Tools",
+          version: "0.9.0",
+          description: "Review bundle",
+          author: null,
+          source: "Marketplace · Local tools",
+          repository: "/tmp/review-tools",
+          enabled: true,
+          trusted: true,
+          scope: "user",
+          counts: {},
+          components: [],
+          scaffolds: [],
+          extension_components: [],
+          runtime_commands: [],
+          ui_contributions: [],
+          lsp_servers: [],
+          diagnostics: [],
+        }),
+      ],
       skills: [],
       market: [],
       scope: { kind: "project", projectPath: "/tmp/demo" },
@@ -211,7 +283,7 @@ describe("unified plugin catalog adapter", () => {
   });
 
   test("does not misrepresent bundle install provenance as project-local lifecycle support", () => {
-    const bundle = {
+    const bundle = bundleRecord({
       id: "local-tools",
       name: "Local tools bundle",
       version: "1.0.0",
@@ -219,7 +291,6 @@ describe("unified plugin catalog adapter", () => {
       author: "C2",
       source: "Local",
       repository: "/tmp/plugin",
-      standard_version: "1.0.0",
       enabled: true,
       trusted: true,
       scope: "local",
@@ -227,7 +298,7 @@ describe("unified plugin catalog adapter", () => {
       scaffolds: [],
       extension_components: [{ kind: "hook", name: "session", path: "hooks.json", status: "unsupported" }],
       diagnostics: [],
-    };
+    });
     const model = buildPluginManagerCatalog({
       catalog: emptyCatalog,
       bundles: [bundle],
@@ -242,7 +313,7 @@ describe("unified plugin catalog adapter", () => {
   });
 
   test("uses managed project policy only for the bundle process runtime", () => {
-    const bundle = {
+    const bundle = bundleRecord({
       id: "review",
       name: "Review Tools",
       version: "1.0.0",
@@ -250,7 +321,6 @@ describe("unified plugin catalog adapter", () => {
       author: "C2",
       source: "GitHub · c2/review",
       repository: "https://example.test/review",
-      standard_version: "1.0.0",
       // Installation state remains global descriptor data. It must not override project policy.
       enabled: true,
       trusted: true,
@@ -268,7 +338,7 @@ describe("unified plugin catalog adapter", () => {
         order: 0,
       }],
       diagnostics: [],
-    };
+    });
     const metadata = {
       origin: "third_party",
       role: "extension",
@@ -407,6 +477,8 @@ describe("unified plugin catalog adapter", () => {
     expect(model.marketplaceItems[0]).toMatchObject({
       id: "marketplace:local-tools:review-tools",
       name: "Review Tools",
+      installed: false,
+      installable: true,
       marketplace: {
         manifestPath: "/tmp/marketplace.json",
         pluginName: "review-tools",

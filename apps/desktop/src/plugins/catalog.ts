@@ -35,6 +35,7 @@ const BUNDLE_CONTRIBUTIONS = [
   ["monitors", "Monitors"],
   ["apps", "Apps"],
   ["ui", "UI actions"],
+  ["connectors", "Connectors"],
   ["scenes", "Scenes"],
   ["pipelines", "Pipelines"],
 ] as const;
@@ -287,14 +288,14 @@ export function buildPluginManagerCatalog({
         : undefined,
       commands: policyEntry?.commands?.length
         ? policyEntry.commands
-        : (bundle.runtime_commands ?? []).map((command) => command.id),
+        : bundle.runtime_commands.map((command) => command.id),
       services: policyEntry?.services ?? [],
       componentIds: [
-        ...(bundle.ui_contributions ?? []).map((contribution) =>
+        ...bundle.ui_contributions.map((contribution) =>
           pluginUiComponentId(bundle.id, contribution.id)
         ),
         ...bundle.extension_components
-          .filter((component) => component.kind !== "ui")
+          .filter((component) => component.kind !== "ui" && component.kind !== "connector")
           .map((component) => `${id}:extension:${component.kind}:${component.name}`),
       ],
       state: policyEntry ? managerState(policyEntry, scope) : bundleState(bundle),
@@ -354,7 +355,7 @@ export function buildPluginManagerCatalog({
     const pluginId = bundleId(bundle.id);
     const policyEntry = entries.get(pluginId);
     const userEntry = userEntries.get(pluginId);
-    const uiComponents: PluginManagerComponent[] = (bundle.ui_contributions ?? []).map((contribution) => {
+    const uiComponents: PluginManagerComponent[] = bundle.ui_contributions.map((contribution) => {
       const id = pluginUiComponentId(bundle.id, contribution.id);
       return {
         id,
@@ -374,7 +375,7 @@ export function buildPluginManagerCatalog({
       };
     });
     const inventoryComponents: PluginManagerComponent[] = bundle.extension_components
-      .filter((component) => component.kind !== "ui")
+      .filter((component) => component.kind !== "ui" && component.kind !== "connector")
       .map((component) => {
         const id = `${pluginId}:extension:${component.kind}:${component.name}`;
         return {
@@ -451,25 +452,30 @@ export function buildPluginManagerCatalog({
   }));
 
   const localMarketplaceItems: PluginManagerMarketplaceItem[] =
-    localMarketplace?.plugins.map((entry) => ({
-      id: `marketplace:${localMarketplace.name}:${entry.name}`,
-      name: entry.display_name,
-      description: entry.description,
-      version: entry.version || null,
-      kind: entry.category || "bundle",
-      sourceLabel: `${localMarketplace.display_name} · ${entry.source.kind.replace("_", " ")}`,
-      installed: bundles.some(
+    localMarketplace?.plugins.map((entry) => {
+      const installedBundle = bundles.find(
         (bundle) =>
           bundle.name === entry.display_name || bundle.name === entry.name,
-      ),
-      installable: entry.installable,
-      supportedScopes: ["user"],
-      diagnostic: entry.diagnostic,
-      marketplace: {
-        manifestPath: localMarketplace.manifest_path,
-        pluginName: entry.name,
-      },
-    })) ?? [];
+      );
+      return {
+        id: `marketplace:${localMarketplace.name}:${entry.name}`,
+        name: entry.display_name,
+        description: entry.description,
+        version: entry.version || null,
+        kind: entry.category || "bundle",
+        sourceLabel: `${localMarketplace.display_name} · ${entry.source.kind.replace("_", " ")}`,
+        installed:
+          installedBundle != null &&
+          (!entry.version || installedBundle.version === entry.version),
+        installable: entry.installable,
+        supportedScopes: ["user"],
+        diagnostic: entry.diagnostic,
+        marketplace: {
+          manifestPath: localMarketplace.manifest_path,
+          pluginName: entry.name,
+        },
+      };
+    }) ?? [];
 
   const marketplaceSources: PluginManagerMarketplaceSource[] = localMarketplace
     ? [

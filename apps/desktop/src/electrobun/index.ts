@@ -377,8 +377,8 @@ mainWindow.webview.on("dom-ready", () => {
     mainWindow.webview.executeJavascript(
       'document.documentElement.classList.add("macos-window-glass")',
     );
-    // Center the 14px native controls in the shared 40px title row.
-    mainWindow.setWindowButtonPosition(22, 13);
+    // Center the 14px native controls in the shared 56px title row.
+    mainWindow.setWindowButtonPosition(22, 21);
   }
   rendererReady = true;
   rpc.send.hostStatus({ ready: true });

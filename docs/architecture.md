@@ -33,7 +33,7 @@ separately installed **extensions**. See [ADR 0002](adr/0002-core-extension-boun
 That is why the module list below reads as a menu rather than a build order: `store` and `engine`
 have no fixed sequence, the app runs without either, and reconfiguring one reloads exactly what was
 built on it. See [`docs/plugins.md`](plugins.md) for the model, how to write one, and what is still
-hand-wired, and the [C2 Plugin Standard 1.1.0](plugin-standard.md) for the normative package,
+hand-wired, and the [C2 Plugin Standard 1.2.0](plugin-standard.md) for the normative package,
 lifecycle, scope, security, and host-capability contract.
 
 An extension does not have to be Rust. A bundle can ship a **process** that C2 speaks JSON-RPC to

@@ -60,7 +60,7 @@ done
         "author": "CodeTwo",
         "source": "local-test",
         "repository": bundle_dir,
-        "standard_version": "1.1.0",
+        "standard_version": "1.2.0",
         "enabled": true,
         "trusted": true,
         "scope": "user",
@@ -68,10 +68,16 @@ done
             "skills": 0,
             "subagents": 0,
             "mcp_servers": 0,
+            "commands": 0,
+            "hooks": 0,
+            "lsp_servers": 0,
+            "monitors": 0,
+            "apps": 0,
             "scenes": 0,
             "pipelines": 0,
             "scaffolds": 0,
             "ui": 1,
+            "connectors": 1,
             "runtime_commands": 1,
             "runtime": 1
         },
@@ -91,6 +97,12 @@ done
             "command": command,
             "input": { "mode": "fixture" },
             "order": 0
+        }],
+        "connector_contributions": [{
+            "id": "workspace",
+            "provider": "test-chat",
+            "command": command,
+            "capabilities": ["conversations"]
         }],
         "lsp_servers": [],
         "diagnostics": [],
@@ -238,7 +250,7 @@ async fn an_installed_process_bundle_is_a_managed_project_plugin() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn manifest_ui_actions_invoke_only_the_owning_runtime_in_the_callers_realm() {
+async fn manifest_surfaces_invoke_only_the_owning_runtime_in_the_callers_realm() {
     let data = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();
     install_runtime_bundle(data.path(), "fixture", true);
@@ -246,6 +258,7 @@ async fn manifest_ui_actions_invoke_only_the_owning_runtime_in_the_callers_realm
 
     let listed = app.call("plugins.list", Value::Null).await.unwrap();
     assert_eq!(listed[0]["ui_contributions"][0]["id"], "where");
+    assert_eq!(listed[0]["connector_contributions"][0]["id"], "workspace");
 
     let global = app
         .call(
@@ -281,6 +294,37 @@ async fn manifest_ui_actions_invoke_only_the_owning_runtime_in_the_callers_realm
             .to_string_lossy()
             .as_ref()
     );
+
+    let connector = app
+        .call_in_project(
+            project.path(),
+            "plugins.invoke_connector",
+            json!({
+                "plugin_id": "fixture",
+                "contribution_id": "workspace",
+                "operation": "conversation.messages",
+                "input": { "chatId": "chat-1" }
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(connector["projectPath"], local["projectPath"]);
+
+    let capability_error = app
+        .call(
+            "plugins.invoke_connector",
+            json!({
+                "plugin_id": "fixture",
+                "contribution_id": "workspace",
+                "operation": "document.read",
+                "input": { "documentId": "doc-1" }
+            }),
+        )
+        .await
+        .unwrap_err();
+    assert!(capability_error
+        .to_string()
+        .contains("does not declare the capability"));
 
     change(
         &app,

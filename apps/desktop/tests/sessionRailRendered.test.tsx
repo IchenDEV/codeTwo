@@ -99,6 +99,22 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
+  test("renders external resource Sections in the same flat scroll flow", () => {
+    activateDom();
+    const view = renderRail({ resourceSections: <section>Feishu resources</section> });
+
+    const sessionScroll = view.container.querySelector("[data-rail-session-scroll]");
+    const resources = Array.from(sessionScroll?.querySelectorAll("section") ?? [])
+      .find((section) => section.textContent?.includes("Feishu resources"));
+    expect(resources).toBeTruthy();
+    expect(sessionScroll?.contains(resources ?? null)).toBe(true);
+    expect(view.container.querySelector("[data-rail-project-switcher]")).toBeNull();
+    expect(view.container.textContent).toContain("Punctuation");
+    expect(view.container.textContent).toContain("Settings");
+
+    view.unmount();
+  });
+
   test("sorts the cross-project feed by automatic Highlight then global recency", () => {
     activateDom();
     const pinned = {

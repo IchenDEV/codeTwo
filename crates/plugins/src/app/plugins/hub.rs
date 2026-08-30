@@ -67,9 +67,9 @@ struct PluginInfo {
     counts: PluginCounts,
     scaffolds: Vec<PluginScaffoldInfo>,
     extension_components: Vec<plugin::PluginExtensionComponent>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_commands: Option<Vec<plugin::PluginRuntimeCommand>>,
+    runtime_commands: Vec<plugin::PluginRuntimeCommand>,
     ui_contributions: Vec<plugin::PluginUiContribution>,
+    connector_contributions: Vec<plugin::PluginConnectorContribution>,
     lsp_servers: Vec<plugin::PluginLspServer>,
     diagnostics: Vec<plugin::PluginDiagnostic>,
 }
@@ -93,6 +93,7 @@ impl From<InstalledPlugin> for PluginInfo {
             extension_components: plugin.extension_components,
             runtime_commands: plugin.runtime_commands,
             ui_contributions: plugin.ui_contributions,
+            connector_contributions: plugin.connector_contributions,
             lsp_servers: plugin.lsp_servers,
             diagnostics: plugin.diagnostics,
         }
@@ -108,6 +109,28 @@ struct PluginImportResult {
 struct FlagArgs {
     id: String,
     value: bool,
+}
+
+fn connector_allows_operation(
+    contribution: &plugin::PluginConnectorContribution,
+    operation: &str,
+) -> bool {
+    let has = |capability: &str| {
+        contribution
+            .capabilities
+            .iter()
+            .any(|candidate| candidate == capability)
+    };
+    match operation {
+        "resources.list" => has("conversations") || has("documents") || has("tables"),
+        operation if operation.starts_with("connection.") => has("connection"),
+        operation if operation.starts_with("conversation.") => has("conversations"),
+        operation if operation.starts_with("document.") => has("documents"),
+        operation if operation.starts_with("table.") => has("tables"),
+        operation if operation.starts_with("message.") => has("messaging"),
+        operation if operation.starts_with("notification.") => has("turn_notifications"),
+        _ => false,
+    }
 }
 
 async fn reconcile_and_announce(
@@ -267,6 +290,104 @@ impl Plugin for HubPlugin {
                         jval!({
                             "context": activation_context,
                             "input": contribution.input,
+                        }),
+                    )
+                    .await
+                    .map_err(PluginError::new)
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct InvokeConnectorArgs {
+            plugin_id: String,
+            contribution_id: String,
+            operation: String,
+            #[serde(default)]
+            input: Value,
+        }
+        let connector_hub = hub.clone();
+        let connector_context = ctx.weak();
+        ctx.command_with_realm("plugins.invoke_connector", move |caller_realm, args| {
+            let hub = connector_hub.clone();
+            let context = connector_context.clone();
+            async move {
+                let args: InvokeConnectorArgs = take_args(args)?;
+                if !args.operation.contains('.')
+                    || args.operation.len() > 128
+                    || args.operation.split('.').any(|segment| {
+                        segment.is_empty()
+                            || !segment
+                                .chars()
+                                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+                    })
+                {
+                    return Err(PluginError::new("connector operation is invalid"));
+                }
+                let plugin = {
+                    let _inventory = hub.inventory.lock().await;
+                    hub.installed()
+                        .into_iter()
+                        .find(|plugin| plugin.id == args.plugin_id)
+                }
+                .ok_or_else(|| PluginError::new(format!("unknown plugin `{}`", args.plugin_id)))?;
+                if !plugin.enabled || !plugin.trusted {
+                    return Err(PluginError::new(format!(
+                        "plugin `{}` is not enabled and trusted",
+                        plugin.id
+                    )));
+                }
+                let runtime = plugin.runtime.as_ref().ok_or_else(|| {
+                    PluginError::new(format!("plugin `{}` has no process runtime", plugin.id))
+                })?;
+                let contribution = plugin
+                    .connector_contributions
+                    .iter()
+                    .find(|contribution| contribution.id == args.contribution_id)
+                    .ok_or_else(|| {
+                        PluginError::new(format!(
+                            "unknown connector contribution `{}` for plugin `{}`",
+                            args.contribution_id, plugin.id
+                        ))
+                    })?;
+                if !connector_allows_operation(contribution, &args.operation) {
+                    return Err(PluginError::new(format!(
+                        "Connector `{}` does not declare the capability for operation `{}`",
+                        contribution.id, args.operation
+                    )));
+                }
+                if !args.input.is_object() && !args.input.is_null() {
+                    return Err(PluginError::new("connector input must be an object"));
+                }
+                let target_realm = match caller_realm {
+                    CommandRealm::Project(project)
+                        if runtime.scope_support.contains(&PluginScopeSupport::Project) =>
+                    {
+                        CommandRealm::Project(project)
+                    }
+                    _ => CommandRealm::Global,
+                };
+                let context = context
+                    .upgrade()
+                    .ok_or_else(|| PluginError::new("plugin runtime is unavailable"))?;
+                let owner = format!("bundle:{}", plugin.id);
+                let registered = context.runtime().commands().into_iter().any(|command| {
+                    command.name == contribution.command
+                        && command.realm == target_realm
+                        && command.plugin == owner
+                });
+                if !registered {
+                    return Err(PluginError::new(format!(
+                        "Connector `{}` does not reference an active command owned by plugin `{}` in this scope",
+                        contribution.id, plugin.id
+                    )));
+                }
+                context
+                    .with_command_realm(target_realm)
+                    .call(
+                        &contribution.command,
+                        jval!({
+                            "operation": args.operation,
+                            "input": args.input,
                         }),
                     )
                     .await
@@ -642,7 +763,29 @@ impl Plugin for KernelPlugin {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_marketplace_identity;
+    use super::{connector_allows_operation, validate_marketplace_identity};
+    use crate::bundle::PluginConnectorContribution;
+
+    #[test]
+    fn connector_operations_stay_within_declared_capabilities() {
+        let contribution = PluginConnectorContribution {
+            id: "workspace".into(),
+            provider: "test-chat".into(),
+            command: "test.connector".into(),
+            capabilities: vec!["conversations".into()],
+        };
+
+        assert!(connector_allows_operation(&contribution, "resources.list"));
+        assert!(connector_allows_operation(
+            &contribution,
+            "conversation.messages"
+        ));
+        assert!(!connector_allows_operation(&contribution, "message.send"));
+        assert!(!connector_allows_operation(
+            &contribution,
+            "unknown.operation"
+        ));
+    }
 
     #[test]
     fn marketplace_entry_must_match_bundle_identity() {

@@ -176,6 +176,7 @@ export function SessionRail({
   quickQuotaProviderName,
   onOpenUsage,
   pluginActions,
+  resourceSections,
 }: {
   projects: Project[];
   /** Every live Task session; the rail shows one cross-Project feed, newest first. */
@@ -235,6 +236,8 @@ export function SessionRail({
   onOpenUsage: () => void;
   /** Host-rendered declarative plugin actions in the primary feature list. */
   pluginActions?: ReactNode;
+  /** External resources render as peer Sections in the same scroll flow as Tasks. */
+  resourceSections?: ReactNode;
 }) {
   const t = useT();
   const toast = useToast();
@@ -1181,6 +1184,7 @@ export function SessionRail({
           fill="var(--color-fill-hover)"
           className="px-2 pb-4"
         >
+          {resourceSections}
           {recent.length === 0 && archived.length === 0 &&
           taskSections.sections.length === 0 && creatingSectionFor === undefined ? (
             <p className="px-2 py-3 text-fine leading-relaxed text-muted-foreground">

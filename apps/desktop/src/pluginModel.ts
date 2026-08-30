@@ -13,6 +13,16 @@ export const PLUGIN_UI_SLOT_IDS = [
 
 export type PluginUiSlotId = (typeof PLUGIN_UI_SLOT_IDS)[number];
 
+export const PLUGIN_CONNECTOR_CAPABILITIES = [
+  "connection",
+  "conversations",
+  "documents",
+  "tables",
+  "messaging",
+  "turn_notifications",
+] as const;
+export type PluginConnectorCapability = (typeof PLUGIN_CONNECTOR_CAPABILITIES)[number];
+
 export interface PluginUiContribution {
   id: string;
   slot: PluginUiSlotId;
@@ -21,6 +31,14 @@ export interface PluginUiContribution {
   command: string;
   input: unknown;
   order: number;
+}
+
+/** A host-rendered external-system integration backed by one bundle-owned command. */
+export interface PluginConnectorContribution {
+  id: string;
+  provider: string;
+  command: string;
+  capabilities: PluginConnectorCapability[];
 }
 
 export interface PluginRuntimeContribution {
@@ -58,13 +76,13 @@ export interface C2PluginManifest {
   runtime: PluginRuntimeContribution | null;
   commands: PluginRuntimeCommandContribution[];
   ui: PluginUiContribution[];
+  connectors: PluginConnectorContribution[];
   languageServers: PluginLanguageServerContribution[];
 }
 
 export const AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-export const C2_PLUGIN_STANDARD_VERSION = "1.1.0";
-export const C2_PLUGIN_STANDARD_VERSIONS = ["1.0.0", C2_PLUGIN_STANDARD_VERSION] as const;
-export type C2PluginStandardVersion = (typeof C2_PLUGIN_STANDARD_VERSIONS)[number];
+export const C2_PLUGIN_STANDARD_VERSION = "1.2.0";
+export type C2PluginStandardVersion = typeof C2_PLUGIN_STANDARD_VERSION;
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -202,6 +220,28 @@ export function parsePluginUiContribution(value: unknown): PluginUiContribution 
   };
 }
 
+export function parsePluginConnectorContribution(
+  value: unknown,
+): PluginConnectorContribution | null {
+  if (!isObject(value)) return null;
+  const raw = asObject(value);
+  if (!hasOnlyKeys(raw, ["id", "provider", "command", "capabilities"])) return null;
+  if (!safeId(String(raw.id ?? ""))) return null;
+  if (typeof raw.provider !== "string" || !safeId(raw.provider)) return null;
+  if (!commandName(raw.command)) return null;
+  if (!Array.isArray(raw.capabilities) || raw.capabilities.length === 0) return null;
+  if (raw.capabilities.some((entry) =>
+    typeof entry !== "string" ||
+    !PLUGIN_CONNECTOR_CAPABILITIES.includes(entry as PluginConnectorCapability)
+  )) return null;
+  return {
+    id: String(raw.id),
+    provider: raw.provider,
+    command: raw.command,
+    capabilities: [...new Set(raw.capabilities)] as PluginConnectorCapability[],
+  };
+}
+
 export function parsePluginLanguageServerContribution(
   value: unknown,
 ): PluginLanguageServerContribution | null {
@@ -313,14 +353,12 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   }
   const c2 = asObject(c2Value);
   const standardVersion = typeof c2.standardVersion === "string" ? c2.standardVersion : "";
-  if (!C2_PLUGIN_STANDARD_VERSIONS.includes(standardVersion as C2PluginStandardVersion)) {
+  if (standardVersion !== C2_PLUGIN_STANDARD_VERSION) {
     throw new Error(`Unsupported C2 plugin standard: ${standardVersion || "missing"}`);
   }
-  const supportsStaticCommands = standardVersion === C2_PLUGIN_STANDARD_VERSION;
   const unknownFields = Object.keys(c2).filter(
     (key) => ![
-      "standardVersion", "runtime", "ui", "languageServers",
-      ...(supportsStaticCommands ? ["commands"] : []),
+      "standardVersion", "runtime", "commands", "ui", "connectors", "languageServers",
     ].includes(key),
   );
   if (unknownFields.length > 0) {
@@ -341,6 +379,15 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     "extensions.dev.codetwo.ui",
     true,
   );
+  const connectors = parsePluginContributionArray(
+    c2.connectors,
+    parsePluginConnectorContribution,
+    "extensions.dev.codetwo.connectors",
+    true,
+  );
+  if (connectors.length > 100) {
+    throw new Error("extensions.dev.codetwo.connectors has too many entries");
+  }
   const languageServers = parsePluginContributionArray(
     c2.languageServers,
     parsePluginLanguageServerContribution,
@@ -349,21 +396,33 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   );
   assertUniquePluginContributionIds(commands, "extensions.dev.codetwo.commands");
   assertUniquePluginContributionIds(ui, "extensions.dev.codetwo.ui");
+  assertUniquePluginContributionIds(connectors, "extensions.dev.codetwo.connectors");
   assertUniquePluginContributionIds(languageServers, "extensions.dev.codetwo.languageServers");
   if (ui.length > 0 && !runtime) {
     throw new Error("UI action contributions require extensions.dev.codetwo.runtime");
   }
-  if (supportsStaticCommands && runtime && commands.length === 0) {
-    throw new Error("C2 1.1 process runtimes require extensions.dev.codetwo.commands");
+  if (connectors.length > 0 && !runtime) {
+    throw new Error("Connector contributions require extensions.dev.codetwo.runtime");
+  }
+  if (runtime && commands.length === 0) {
+    throw new Error("C2 process runtimes require extensions.dev.codetwo.commands");
   }
   if (commands.length > 0 && !runtime) {
     throw new Error("Runtime command contributions require extensions.dev.codetwo.runtime");
   }
   const declaredCommands = new Set(commands.map((command) => command.id));
   const unknownUiCommand = ui.find((contribution) => !declaredCommands.has(contribution.command));
-  if (commands.length > 0 && unknownUiCommand) {
+  if (unknownUiCommand) {
     throw new Error(
       `UI action ${unknownUiCommand.id} references undeclared runtime command ${unknownUiCommand.command}`,
+    );
+  }
+  const unknownConnectorCommand = connectors.find(
+    (contribution) => !declaredCommands.has(contribution.command),
+  );
+  if (unknownConnectorCommand) {
+    throw new Error(
+      `Connector ${unknownConnectorCommand.id} references undeclared runtime command ${unknownConnectorCommand.command}`,
     );
   }
   const author = asObject(raw.author);
@@ -377,6 +436,7 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     runtime,
     commands,
     ui,
+    connectors,
     languageServers,
   };
 }

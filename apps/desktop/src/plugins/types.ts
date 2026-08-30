@@ -318,6 +318,11 @@ export interface PluginManagerPageProps {
   scope: PluginManagerScope;
   projects?: PluginManagerProject[];
   initialTab?: PluginManagerTab;
+  initialPluginId?: string | null;
+  pluginDetailsExtension?: {
+    pluginId: string;
+    content: ReactNode;
+  } | null;
   recovery?: PluginManagerRecovery;
   labels?: Partial<PluginManagerLabels>;
   onScopeChange: (scope: PluginManagerScope) => void;
