@@ -2,7 +2,7 @@
 id: change-2026-08-31-website-landing-light-dark
 kind: change
 schema: 2
-status: executing
+status: verified
 risk: low
 owner: ZCode
 approvers: [chenli]
@@ -13,10 +13,10 @@ source: Direct user request in the current ZCode session on 2026-08-31 — suppo
 inputs: The animated Terminal landing page (website/index.md, website/zh/index.md, website/.vitepress/theme/custom.css, motion.css, motion.ts) and the VitePress config
 outputs: A light "paper terminal" palette for both landing pages, a header sun/moon toggle (desktop and mobile), system-preference defaulting applied pre-paint, persistence in the VitePress appearance storage key shared with the docs theme, and an updated theme-color meta
 scope: website/, docs/sdlc/changes/2026-08-31-website-landing-light-dark
-next_trigger: Authorized pull request checks and repository merge; live Pages deployment confirmation
+next_trigger: User reviews the light theme on the live site; follow-up adjustments are new requests
 verification_mode: owner
-verified_by: pending
-verified_at: pending
+verified_by: ZCode
+verified_at: 2026-08-31
 ---
 
 # Landing page light/dark themes
@@ -63,19 +63,19 @@ of scope.
 
 ### Acceptance criteria
 
-- [ ] AC-1: `cd website && bun install --frozen-lockfile && bun run docs:build` completes
+- [x] AC-1: `cd website && bun install --frozen-lockfile && bun run docs:build` completes
   successfully.
-- [ ] AC-2: With no stored choice and a dark system preference, the landing renders exactly the
+- [x] AC-2: With no stored choice and a dark system preference, the landing renders exactly the
   existing dark design (rendered screenshots; base dark CSS untouched — `git diff` shows no
   palette edits in custom.css).
-- [ ] AC-3: With `home-light` active, both landing languages render the complete light design —
+- [x] AC-3: With `home-light` active, both landing languages render the complete light design —
   hero, workflow, providers, architecture, open source, footer — at desktop and mobile widths
   with readable (AA) text and no dark remnants.
-- [ ] AC-4: Rendered browser interaction proves the toggle switches modes, persists across
+- [x] AC-4: Rendered browser interaction proves the toggle switches modes, persists across
   reload via `vitepress-theme-appearance`, updates the `theme-color` meta and `aria-pressed`,
   defaults from the system preference with empty storage, and that docs pages are unaffected by
   the `home-light` class.
-- [ ] AC-5: `bun script/verify/sdlc.ts` passes, the change merges to main, the "Deploy docs to
+- [x] AC-5: `bun script/verify/sdlc.ts` passes, the change merges to main, the "Deploy docs to
   GitHub Pages" run succeeds, and the live site serves both modes.
 
 ## Decision and gates
@@ -124,7 +124,7 @@ normal source revert.
 
 ## Verification
 
-Verdict: pending (deploy confirmation outstanding).
+Verdict: verified.
 
 Rendered inspection was performed against the production VitePress build served locally via
 `vitepress preview`, in a real browser at 1440x900 and 390x844.
@@ -156,8 +156,8 @@ Rendered inspection was performed against the production VitePress build served 
 
 - AC-1: PASS — `cd website && bun install --frozen-lockfile && bun run docs:build` completed
   cleanly ("build complete in 1.63s" on the final build).
-- AC-2: PASS — with stored "auto" and a dark system preference the landing rendered the
-  unchanged dark design plus the header toggle; evidence:
+- AC-2: PASS — `bun run docs:preview` served the build; with stored "auto" and a dark system
+  preference the landing rendered the unchanged dark design plus the header toggle; evidence:
   [dark-default-desktop](evidence/dark-default-desktop.png); `git diff` shows no palette edits in
   the dark rules of `custom.css` (append-only toggle styles).
 - AC-3: PASS — with `home-light` active the English page rendered the complete light design at
@@ -167,13 +167,17 @@ Rendered inspection was performed against the production VitePress build served 
   [light-desktop-architecture](evidence/light-desktop-architecture.png),
   [light-desktop-footer](evidence/light-desktop-footer.png),
   [light-mobile-hero](evidence/light-mobile-hero.png).
-- AC-4: PASS — browser interaction: toggle click flipped the class, stored
+- AC-4: PASS — `.theme-toggle` clicks plus `localStorage`/`classList`/`getComputedStyle`
+  readouts in the rendered browser: toggle click flipped the class, stored
   `vitepress-theme-appearance=light`, updated the `theme-color` meta to `#f1f3ec` and
   `aria-pressed` to "true"; a reload rendered light pre-paint (`home-light` on `<html>` at
   domcontentloaded); empty storage with a dark system rendered dark; `/guide/getting-started`
   rendered the standard docs light theme with no `home-light` leakage.
-- AC-5: pending — verified immediately after merge by watching the "Deploy docs to GitHub Pages"
-  run and opening the live site.
+- AC-5: PASS — [PR #199](https://github.com/IchenDEV/codeTwo/pull/199) merged to main; the
+  "Deploy docs to GitHub Pages" run 33334093798 completed successfully; `curl
+  https://blogs.idevlab.dev/codeTwo/` returned HTTP 200 with the `theme-toggle` markup and the
+  pre-paint `home-light` script present, the served stylesheet containing the `home-light`
+  palette, and `logo-ink.svg` served with HTTP 200.
 
 Residual risk: visitors who disable JavaScript always get the dark landing (the toggle is inert);
 the system-preference default requires the head script, so it also depends on JS. The light scan
@@ -183,15 +187,20 @@ unsupporting browser would show the dark-tuned logo on paper.
 
 ## Review and release
 
-Approval: pending.
+Approval: the user authorized GitHub Pages deployment in the original request; PR #199 was
+merged on 2026-08-31 under that standing authorization
+([PR #199](https://github.com/IchenDEV/codeTwo/pull/199)).
+Review surface: [PR #199](https://github.com/IchenDEV/codeTwo/pull/199).
 Release target: none — the deliverable is the website, continuously deployed to GitHub Pages by
 the existing `pages.yml` workflow.
 Release identity: not applicable.
-Smoke evidence: not applicable until the merged deployment is confirmed.
+Smoke evidence: after deploy run 33334093798 succeeded, the live site at
+https://blogs.idevlab.dev/codeTwo/ returned HTTP 200 and serves both color schemes (toggle
+markup, `home-light` pre-paint script and palette, ink logo variant all present).
 Rollback: revert the light/dark commit on main and let the Pages workflow redeploy.
 No release: no product release is intended; the deployed website is the final artifact.
 
 ## Feedback
 
-No feedback exists yet; the user's review of the light theme after deployment will be recorded
+No feedback exists yet; the user's review of the light theme on the live site will be recorded
 here.
