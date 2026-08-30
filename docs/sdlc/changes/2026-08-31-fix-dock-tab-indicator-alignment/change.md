@@ -125,6 +125,7 @@ review remains available during PR review.
 ## Review and release
 
 Approval: implementation, visible design, and PR creation were authorized by the user.
+Review surface: [PR #198](https://github.com/IchenDEV/codeTwo/pull/198).
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: renderer evidence is recorded above.

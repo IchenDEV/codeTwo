@@ -155,6 +155,7 @@ width. Native Core behavior is outside this renderer-only visual change.
 ## Review and release
 
 Approval: implementation, final screenshot review, and PR creation were authorized by the user.
+Review surface: [PR #198](https://github.com/IchenDEV/codeTwo/pull/198).
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: renderer evidence is recorded above.
