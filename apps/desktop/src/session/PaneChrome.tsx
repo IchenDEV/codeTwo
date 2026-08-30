@@ -5,6 +5,16 @@ import {
 } from "react";
 import { PanelBottom, PanelRight, X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 import { MIN_RATIO, type DividerRect } from "./paneLayout";
 import { TurnCard } from "./TurnCard";
@@ -67,6 +77,83 @@ export function PaneToolbar({
           <X className="size-4" aria-hidden />
         </Button>
       ) : null}
+    </div>
+  );
+}
+
+interface PaneLayoutToolbarProps extends PaneToolbarProps {
+  panelActive: boolean;
+  onTogglePanel: () => void;
+  panelLabel: string;
+  groupLabel: string;
+  viewLabel: string;
+}
+
+/** Pane and panel controls grouped at the trailing edge of the focused session titlebar. */
+export function PaneLayoutToolbar({
+  panelActive,
+  onTogglePanel,
+  panelLabel,
+  groupLabel,
+  viewLabel,
+  onSplitRight,
+  onSplitDown,
+  onClose,
+  canClose,
+  labels,
+}: PaneLayoutToolbarProps) {
+  return (
+    <div
+      className="session-header-layout-actions flex shrink-0 items-center"
+      role="group"
+      aria-label={groupLabel}
+    >
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={(
+            <Button
+              type="button"
+              variant="ghost"
+              size="compact"
+              className={cn(
+                "session-header-layout-main text-foreground hover:text-foreground",
+                panelActive && "bg-fill-rest",
+              )}
+              title={viewLabel}
+              aria-label={viewLabel}
+            >
+              <PanelRight className="session-header-layout-icon size-4 text-muted-foreground" aria-hidden />
+              <span className="session-header-layout-label">{viewLabel}</span>
+            </Button>
+          )}
+        />
+        <DropdownMenuContent align="end">
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={onSplitRight}>
+              <PanelRight aria-hidden />
+              {labels.splitRight}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onSplitDown}>
+              <PanelBottom aria-hidden />
+              {labels.splitDown}
+            </DropdownMenuItem>
+            {canClose ? (
+              <DropdownMenuItem onClick={onClose}>
+                <X aria-hidden />
+                {labels.close}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={panelActive}
+              onCheckedChange={() => onTogglePanel()}
+            >
+              <PanelRight aria-hidden />
+              {panelLabel}
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

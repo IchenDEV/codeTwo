@@ -238,15 +238,16 @@ export function EnvironmentPopover({
       <PopoverTrigger
         render={<Button
           variant="ghost"
-          size="icon"
+          size="compact"
           className={cn(
-            "size-7 shrink-0 text-muted-foreground hover:text-muted-foreground",
+            "session-header-context-main shrink-0 text-foreground hover:text-foreground",
             open && "bg-fill-rest",
           )}
           aria-label={t("header.environment")}
           title={t("header.environment")}
         >
-          <SlidersHorizontal className="size-4" />
+          <SlidersHorizontal className="session-header-context-icon size-4 text-muted-foreground" aria-hidden />
+          <span className="session-header-context-label">{t("environment.title")}</span>
         </Button>}
       />
 

@@ -22,9 +22,7 @@ function renderActions(overrides = {}) {
   const callback = (name: string) => () => calls.push(name);
   const props = {
     canCommit: true,
-    panelActive: false,
     onAddAction: callback("add"),
-    onOpen: callback("open"),
     onOpenCursor: callback("cursor"),
     onOpenAntigravity: callback("antigravity"),
     onOpenFinder: callback("finder"),
@@ -34,7 +32,7 @@ function renderActions(overrides = {}) {
     onCommit: callback("commit"),
     onCheckpoint: callback("checkpoint"),
     onPush: callback("push"),
-    onTogglePanel: callback("panel"),
+    onMoveTask: callback("move"),
     ...overrides,
   };
   const view = mount(
@@ -81,62 +79,50 @@ describe("SessionHeaderActions", () => {
     view.unmount();
   });
 
-  test("uses one neutral ghost treatment for resting and active titlebar actions", () => {
+  test("renders independent filled icon-and-label primary actions", () => {
     activateDom();
-    const { view } = renderActions({ panelActive: true });
+    const { view } = renderActions();
     const group = view.container.querySelector(".session-header-actions");
-    expect(group?.classList.contains("gap-1")).toBe(true);
+    expect(group?.classList.contains("gap-2")).toBe(true);
+    expect(group?.classList.contains("rounded-control")).toBe(false);
+    expect(group?.classList.contains("p-0.5")).toBe(false);
 
-    for (const label of [
-      "Add action",
-      "Open",
-      "Open · More",
-      "Commit",
-      "Commit · More",
-      "Toggle side panel",
-    ]) {
+    const addAction = button(view.container, "Add action");
+    expect(addAction.dataset.variant).toBe("ghost");
+
+    for (const label of ["Add action", "Open", "Commit"]) {
       const action = button(view.container, label);
       expect(action.dataset.variant).toBe("ghost");
-      expect(action.classList.contains("text-muted-foreground")).toBe(true);
-      expect(action.classList.contains("hover:text-muted-foreground")).toBe(true);
-      expect(action.classList.contains("text-primary")).toBe(false);
+      expect(action.classList.contains("bg-fill-rest")).toBe(true);
+      expect(action.classList.contains("hover:bg-fill-hover")).toBe(true);
+      expect(action.classList.contains("text-foreground")).toBe(true);
+      expect(action.querySelector(".session-header-action-icon")).not.toBeNull();
+      expect(action.querySelector(".session-header-action-label")?.textContent).toBe(label);
+      expect(action.classList.contains("button-toolbar-outline")).toBe(false);
     }
 
-    const panel = button(view.container, "Toggle side panel");
-    expect(panel.classList.contains("bg-fill-rest")).toBe(true);
-
-    const splitGroups = Array.from(view.container.querySelectorAll(".session-header-split-group"));
-    expect(splitGroups).toHaveLength(2);
-    for (const splitGroup of splitGroups) {
-      expect(splitGroup.classList.contains("gap-0")).toBe(true);
-      const [main, trigger] = Array.from(splitGroup.querySelectorAll("button"));
-      expect(main.classList.contains("rounded-r-none")).toBe(true);
-      expect(trigger.classList.contains("rounded-l-none")).toBe(true);
-      expect(trigger.classList.contains("before:w-px")).toBe(true);
-    }
+    expect(view.container.querySelectorAll("button")).toHaveLength(3);
+    expect(view.container.querySelector('[data-slot="button-group"]')).toBeNull();
+    expect(view.container.querySelector(".session-header-split-trigger")).toBeNull();
+    expect(view.container.querySelector(".session-header-compact-action")).toBeNull();
 
     for (const action of Array.from(view.container.querySelectorAll("button"))) {
       expect(
-        action.classList.contains("h-control") || action.classList.contains("size-7"),
+        action.classList.contains("h-control") ||
+          action.classList.contains("size-control") ||
+          action.classList.contains("size-7"),
       ).toBe(true);
     }
 
     view.unmount();
   });
 
-  test("wires the primary actions and exposes the split menus", async () => {
+  test("uses each complete toolbar item to expose its action menu", async () => {
     activateDom();
     const { calls, view } = renderActions();
 
     await press(button(view.container, "Add action"));
     await press(button(view.container, "Open"));
-    await press(button(view.container, "Commit"));
-    await press(button(view.container, "Toggle side panel"));
-    expect(calls).toEqual(["add", "open", "commit", "panel"]);
-    expect(view.container.querySelector('[aria-label="Toggle terminal"]')).toBeNull();
-    expect(view.container.querySelector('[aria-label="Toggle side chat"]')).toBeNull();
-
-    await press(button(view.container, "Open · More"));
     expect(dom.document.body.textContent).toContain("Cursor");
     expect(dom.document.body.textContent).toContain("Antigravity");
     expect(dom.document.body.textContent).toContain("Finder");
@@ -146,17 +132,35 @@ describe("SessionHeaderActions", () => {
       .find((item) => item.textContent?.includes("Finder"));
     if (!finderItem) throw new Error("Finder menu item not found");
     await press(finderItem);
-    expect(calls).toEqual(["add", "open", "commit", "panel", "finder"]);
+    expect(calls).toEqual(["add", "finder"]);
+
+    await press(button(view.container, "Open"));
+    const moveItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes("Move task to device"));
+    if (!moveItem) throw new Error("Move task menu item not found");
+    await press(moveItem);
+    expect(calls).toEqual(["add", "finder", "move"]);
+
+    await press(button(view.container, "Commit"));
+    expect(dom.document.body.textContent).toContain("Source control");
+    expect(dom.document.body.textContent).toContain("Checkpoint now");
+    expect(dom.document.body.textContent).toContain("Push");
+    const sourceControlItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes("Source control"));
+    if (!sourceControlItem) throw new Error("Source control menu item not found");
+    await press(sourceControlItem);
+    expect(calls).toEqual(["add", "finder", "move", "commit"]);
 
     view.unmount();
   });
 
-  test("disables both commit segments outside a repository", () => {
+  test("disables the complete commit menu outside a repository", () => {
     activateDom();
     const { view } = renderActions({ canCommit: false });
 
     expect(button(view.container, "Commit").disabled).toBe(true);
-    expect(button(view.container, "Commit · More").disabled).toBe(true);
+    expect(button(view.container, "Commit").classList.contains("disabled:opacity-60")).toBe(true);
+    expect(view.container.querySelectorAll('[aria-label="Commit"]')).toHaveLength(1);
 
     view.unmount();
   });
@@ -169,7 +173,7 @@ describe("SessionHeaderActions", () => {
       finderHint: "Ctrl+O",
     });
 
-    await press(button(view.container, "Open · More"));
+    await press(button(view.container, "Open"));
     expect(dom.document.body.textContent).not.toContain("Cursor");
     expect(dom.document.body.textContent).not.toContain("Antigravity");
     expect(dom.document.body.textContent).toContain("File manager");

@@ -2551,6 +2551,10 @@ export const en = {
   "pane.splitRight": "Split right",
   "pane.splitDown": "Split down",
   "pane.close": "Close pane",
+  "pane.layoutActions": "Pane and panel layout",
+  "pane.layoutMenu": "Pane layout",
+  "pane.viewMenu": "View",
+  "pane.sidePanel": "Side panel",
   "pane.empty": "No messages yet",
 } as const;
 
@@ -4953,6 +4957,10 @@ export const zhCN: Record<StringKey, string> = {
   "pane.splitRight": "向右分割",
   "pane.splitDown": "向下分割",
   "pane.close": "关闭窗格",
+  "pane.layoutActions": "窗格与面板布局",
+  "pane.layoutMenu": "窗格布局",
+  "pane.viewMenu": "视图",
+  "pane.sidePanel": "侧边面板",
   "pane.empty": "还没有消息",
 };
 

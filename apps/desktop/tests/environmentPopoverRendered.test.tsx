@@ -58,8 +58,10 @@ describe("EnvironmentPopover layout", () => {
     const trigger = view.container.querySelector('[aria-label="Project environment"]');
     expect(trigger).toBeTruthy();
     expect(trigger?.getAttribute("data-variant")).toBe("ghost");
-    expect(trigger?.classList.contains("text-muted-foreground")).toBe(true);
-    expect(trigger?.classList.contains("hover:text-muted-foreground")).toBe(true);
+    expect(trigger?.classList.contains("text-foreground")).toBe(true);
+    expect(trigger?.querySelector(".session-header-context-label")?.textContent).toBe("Environment");
+    expect(trigger?.querySelector(".session-header-context-icon")).not.toBeNull();
+    expect(trigger?.classList.contains("hover:text-foreground")).toBe(true);
     await reactAct(async () => {
       trigger?.dispatchEvent(
         new dom.window.PointerEvent("pointerdown", {

@@ -321,7 +321,7 @@ import { TranscriptPane } from "./session/TranscriptPane";
 import { planChecklistMarkdown } from "./session/TaskPlanPanel";
 import type { TranscriptScrollController } from "./session/useTranscriptScroll";
 import { DesktopPetBridge } from "./pet/DesktopPet";
-import { PaneToolbar } from "./session/PaneChrome";
+import { PaneLayoutToolbar } from "./session/PaneChrome";
 import { PaneTiles } from "./session/PaneTiles";
 import {
   petAnimationForActivity,
@@ -7935,100 +7935,101 @@ export default function App() {
 
             <div className="electrobun-webkit-app-region-drag flex-1" />
 
-            <div className="session-header-toolbar flex min-w-0 shrink-0 items-center gap-1">
-            <PluginUiSlot
-              slot="session.header"
-              contributions={pluginUiActions["session.header"]}
-              onInvoke={invokePluginAction}
-            />
+            <div className="session-header-toolbar flex min-w-0 shrink-0 items-center gap-4 [&_svg]:text-muted-foreground">
+              {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
+                  is in flight — and the way back to the answer without leaving the mode for good. */}
+              {docMode && hasConversationContent && (
+                <button
+                  onClick={() => toggleDocMode(false)}
+                  className="mr-1 flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                  title={t("header.showTranscript", { count: turns.length })}
+                >
+                  {(running || sessionLoading) && (
+                    <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                  )}
+                  {sessionLoading
+                    ? t("session.loading")
+                    : awaitingInput
+                      ? t("session.awaitingInput")
+                      : running
+                        ? t("header.running")
+                        : t("header.turns", { count: turns.length })}
+                </button>
+              )}
 
-            {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
-                is in flight — and the way back to the answer without leaving the mode for good. */}
-            {docMode && hasConversationContent && (
-              <button
-                onClick={() => toggleDocMode(false)}
-                className="mr-1 flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-                title={t("header.showTranscript", { count: turns.length })}
-              >
-                {(running || sessionLoading) && (
-                  <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-                )}
-                {sessionLoading
-                  ? t("session.loading")
-                  : awaitingInput
-                    ? t("session.awaitingInput")
-                    : running
-                      ? t("header.running")
-                    : t("header.turns", { count: turns.length })}
-              </button>
-            )}
+              <div className="session-header-context-actions flex min-w-0 shrink-0 items-center gap-2">
+                <PluginUiSlot
+                  slot="session.header"
+                  contributions={pluginUiActions["session.header"]}
+                  onInvoke={invokePluginAction}
+                />
+                <EnvironmentPopover
+                  suppressed={
+                    showTaskBoard ||
+                    showPluginManager ||
+                    showAutomations ||
+                    showPullRequests ||
+                    showDocker ||
+                    showFeishu
+                  }
+                  project={activeProjectName}
+                  projectPath={activeProjectName ? activeProject : null}
+                  projects={projects}
+                  git={git}
+                  diffStat={diffStat}
+                  onRefresh={refreshGit}
+                  onSelectProject={selectProject}
+                  onAddProject={() => void addProjectFolder()}
+                  onOpenSourceControl={openSourceControl}
+                  onOpenSettings={() => {
+                    setSettingsInitialTab("general");
+                    setShowSettings(true);
+                  }}
+                  turns={turns}
+                  onOpenPlanAsDocument={openPlanAsDocument}
+                  onPinPlanArtifact={pinPlanArtifact}
+                  canPinPlan={scenesSurfaceEnabled && canPinPlan}
+                  preview={interactivePreview}
+                />
+              </div>
 
-            <EnvironmentPopover
-              suppressed={
-                showTaskBoard ||
-                showPluginManager ||
-                showAutomations ||
-                showPullRequests ||
-                showDocker ||
-                showFeishu
-              }
-              project={activeProjectName}
-              projectPath={activeProjectName ? activeProject : null}
-              projects={projects}
-              git={git}
-              diffStat={diffStat}
-              onRefresh={refreshGit}
-              onSelectProject={selectProject}
-              onAddProject={() => void addProjectFolder()}
-              onOpenSourceControl={openSourceControl}
-              onOpenSettings={() => {
-                setSettingsInitialTab("general");
-                setShowSettings(true);
-              }}
-              turns={turns}
-              onOpenPlanAsDocument={openPlanAsDocument}
-              onPinPlanArtifact={pinPlanArtifact}
-              canPinPlan={scenesSurfaceEnabled && canPinPlan}
-              preview={interactivePreview}
-            />
+              <SessionHeaderActions
+                canCommit={git?.is_repo === true}
+                actions={scripts}
+                editorLaunchersAvailable={editorLaunchersAvailable}
+                fileManagerLabel={fileManagerLabel}
+                onRunAction={runProjectAction}
+                onAddAction={() => setShowActionDialog(true)}
+                onOpenCursor={() => void openWorkingDirectory("cursor")}
+                onOpenAntigravity={() => void openWorkingDirectory("antigravity")}
+                onOpenFinder={() => void openWorkingDirectory("finder")}
+                finderHint={hint("open_finder")}
+                onCommit={openSourceControl}
+                onCheckpoint={() => void doCheckpoint()}
+                onPush={() => void doPush().catch(() => {})}
+                onMoveTask={() => activeSession && setShowTaskHandoff(true)}
+              />
 
-            {/* Tiling controls for this pane: split this column, or close it when tiled. */}
-            <PaneToolbar
-              onSplitRight={() => splitPaneById(paneId, "right")}
-              onSplitDown={() => splitPaneById(paneId, "bottom")}
-              onClose={() => closePaneById(paneId)}
-              canClose={multiPane}
-              labels={{
-                splitRight: t("pane.splitRight"),
-                splitDown: t("pane.splitDown"),
-                close: t("pane.close"),
-              }}
-            />
-
-            <SessionHeaderActions
-              canCommit={git?.is_repo === true}
-              panelActive={dockTab !== null}
-              actions={scripts}
-              editorLaunchersAvailable={editorLaunchersAvailable}
-              fileManagerLabel={fileManagerLabel}
-              onRunAction={runProjectAction}
-              onAddAction={() => setShowActionDialog(true)}
-              onOpen={() =>
-                void openWorkingDirectory(editorLaunchersAvailable ? "cursor" : "finder")
-              }
-              onOpenCursor={() => void openWorkingDirectory("cursor")}
-              onOpenAntigravity={() => void openWorkingDirectory("antigravity")}
-              onOpenFinder={() => void openWorkingDirectory("finder")}
-              finderHint={hint("open_finder")}
-              onCommit={openSourceControl}
-              onCheckpoint={() => void doCheckpoint()}
-              onPush={() => void doPush().catch(() => {})}
-              onTogglePanel={() => {
-                manualDockTab(dockTab !== null ? null : "home");
-                setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-              }}
-              onMoveTask={() => activeSession && setShowTaskHandoff(true)}
-            />
+              {/* Keep pane/window layout controls together at the trailing edge. */}
+              <PaneLayoutToolbar
+                onSplitRight={() => splitPaneById(paneId, "right")}
+                onSplitDown={() => splitPaneById(paneId, "bottom")}
+                onClose={() => closePaneById(paneId)}
+                canClose={multiPane}
+                labels={{
+                  splitRight: t("pane.splitRight"),
+                  splitDown: t("pane.splitDown"),
+                  close: t("pane.close"),
+                }}
+                groupLabel={t("pane.layoutActions")}
+                viewLabel={t("pane.viewMenu")}
+                panelLabel={t("pane.sidePanel")}
+                panelActive={dockTab !== null}
+                onTogglePanel={() => {
+                  manualDockTab(dockTab !== null ? null : "home");
+                  setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+                }}
+              />
             </div>
           </header>
 
