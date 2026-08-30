@@ -407,8 +407,14 @@ export function AutomationsPage({
       aria-label={t("automations.title")}
     >
       <div data-automation-list-pane className="automation-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
-        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-3 py-2.5">
-          {headerLeadingAction ? <div data-automation-leading-action>{headerLeadingAction}</div> : null}
+        <header
+          data-automation-list-header
+          className={cn(
+            "electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-2 pr-3",
+            headerLeadingAction ? "window-controls-safe-main" : "pl-3",
+          )}
+        >
+          {headerLeadingAction ? <div data-automation-leading-action className="shrink-0">{headerLeadingAction}</div> : null}
           <h1 className="shrink-0 text-dialog font-semibold">{t("automations.title")}</h1>
           <div data-automation-filters className="min-w-0 shrink">
             <ViewSwitcher
@@ -477,7 +483,18 @@ export function AutomationsPage({
       </div>
 
       <div data-automation-detail-pane className="automation-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-2.5">
+        <header
+          data-automation-detail-header
+          className={cn(
+            "electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-2 pr-4",
+            headerLeadingAction ? "window-controls-safe-compact-main" : "pl-4",
+          )}
+        >
+          {headerLeadingAction ? (
+            <div data-automation-detail-leading-action className="window-controls-compact-leading-action shrink-0">
+              {headerLeadingAction}
+            </div>
+          ) : null}
           {(selectedId || draft) && (
             <Button
               variant="ghost"
@@ -492,7 +509,7 @@ export function AutomationsPage({
           {draft ? (
             <span className="text-ui font-medium">{draft.id ? t("automations.editTitle") : t("automations.createTitle")}</span>
           ) : (
-            <LiquidSelectionGroup role="tablist" aria-label={t("automations.detailViews")} className="flex h-(--ds-control-normal) items-center gap-1">
+            <LiquidSelectionGroup role="tablist" aria-label={t("automations.detailViews")} className="flex h-control items-center gap-1">
               {(["overview", "runs"] as const).map((value) => (
                 <button
                   key={value}
@@ -502,7 +519,7 @@ export function AutomationsPage({
                   disabled={!selected}
                   onClick={() => setDetailTab(value)}
                   className={cn(
-                    "h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50",
+                    "h-control rounded-control px-module-inset text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:focus-ring-inset disabled:opacity-50",
                     detailTab === value && "font-medium text-foreground hover:bg-transparent",
                   )}
                 >

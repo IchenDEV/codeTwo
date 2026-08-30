@@ -228,6 +228,7 @@ export function PullRequestsPage({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<DetailState | null>(null);
   const [detailTab, setDetailTab] = useState<"summary" | "code">("summary");
+  const [compactListVisible, setCompactListVisible] = useState(true);
   const requestRef = useRef(0);
 
   const reload = useCallback(async () => {
@@ -296,13 +297,19 @@ export function PullRequestsPage({
 
   return (
     <section
-      data-compact-detail={selectedId !== null}
+      data-compact-detail={selectedId !== null && !compactListVisible}
       className="pull-requests-page flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
       aria-label={t("pullRequests.title")}
     >
       <div className="pull-requests-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
-        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-3 py-2.5">
-          {headerLeadingAction}
+        <header
+          data-pull-requests-list-header
+          className={cn(
+            "electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-2 pr-3",
+            headerLeadingAction ? "window-controls-safe-main" : "pl-3",
+          )}
+        >
+          {headerLeadingAction ? <div data-pull-requests-leading-action className="shrink-0">{headerLeadingAction}</div> : null}
           <h1 className="shrink-0 text-dialog font-semibold">{t("pullRequests.title")}</h1>
           <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.views")} className="flex h-control min-w-0 shrink items-center gap-1 overflow-x-auto">
             {(["all", "reviewing", "authored"] as const).map((id) => (
@@ -357,7 +364,7 @@ export function PullRequestsPage({
             ) : groups.map((group) => (
               <section key={group.id} className="pt-2">
                 <h2 className="px-3 pb-1 text-fine font-medium text-muted-foreground">{groupLabel(group.id)}</h2>
-                <div className="flex flex-col gap-0.5">{group.items.map((item) => <PullRequestRow key={item.id} item={item} selected={item.id === selectedId} onSelect={() => { setSelectedId(item.id); setDetailTab("summary"); }} />)}</div>
+                <div className="flex flex-col gap-0.5">{group.items.map((item) => <PullRequestRow key={item.id} item={item} selected={item.id === selectedId} onSelect={() => { setSelectedId(item.id); setDetailTab("summary"); setCompactListVisible(false); }} />)}</div>
               </section>
             ))}
           </div>
@@ -365,11 +372,22 @@ export function PullRequestsPage({
       </div>
 
       <div className="pull-request-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-module-inset">
-          {selectedId && <Button variant="ghost" size="icon-xs" className="pull-request-back" aria-label={t("pullRequests.backToList")} onClick={() => setSelectedId(null)}><ArrowLeft className="size-3.5" /></Button>}
-          <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.detailViews")} className="flex h-(--ds-control-normal) items-center gap-1">
+        <header
+          data-pull-request-detail-header
+          className={cn(
+            "electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-2 pr-4",
+            headerLeadingAction ? "window-controls-safe-compact-main" : "pl-4",
+          )}
+        >
+          {headerLeadingAction ? (
+            <div data-pull-request-detail-leading-action className="window-controls-compact-leading-action shrink-0">
+              {headerLeadingAction}
+            </div>
+          ) : null}
+          {selectedId && <Button variant="ghost" size="icon-xs" className="pull-request-back" aria-label={t("pullRequests.backToList")} onClick={() => setCompactListVisible(true)}><ArrowLeft className="size-3.5" /></Button>}
+          <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.detailViews")} className="flex h-control items-center gap-1">
             {(["summary", "code"] as const).map((id) => (
-              <button key={id} type="button" role="tab" aria-selected={detailTab === id} disabled={!selected} onClick={() => setDetailTab(id)} className={cn("h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50", detailTab === id && "font-medium text-foreground hover:bg-transparent")}>{t(`pullRequests.detail.${id}`)}</button>
+              <button key={id} type="button" role="tab" aria-selected={detailTab === id} disabled={!selected} onClick={() => setDetailTab(id)} className={cn("h-control rounded-control px-module-inset text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:focus-ring-inset disabled:opacity-50", detailTab === id && "font-medium text-foreground hover:bg-transparent")}>{t(`pullRequests.detail.${id}`)}</button>
             ))}
           </LiquidSelectionGroup>
           <div className="electrobun-webkit-app-region-drag flex-1" />
