@@ -4,6 +4,49 @@ title: C2 — The document-first coding agent
 description: Compose structured prompts, weave in reusable skills, and run your coding CLIs through one local interface.
 ---
 
+<script setup>
+import { onMounted } from "vue";
+
+const STYLE_STORAGE_KEY = "c2-home-style";
+
+onMounted(() => {
+  const root = document.querySelector(".codetwo-home");
+  const buttons = Array.from(document.querySelectorAll(".style-toggle-btn"));
+  if (!root || buttons.length === 0) {
+    return;
+  }
+
+  const applyStyle = (style) => {
+    root.classList.toggle("theme-modern", style === "modern");
+    for (const button of buttons) {
+      button.classList.toggle("is-active", button.dataset.style === style);
+    }
+  };
+
+  let style = "terminal";
+  try {
+    if (localStorage.getItem(STYLE_STORAGE_KEY) === "modern") {
+      style = "modern";
+    }
+  } catch {
+    style = "terminal";
+  }
+  applyStyle(style);
+
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      const next = button.dataset.style === "modern" ? "modern" : "terminal";
+      applyStyle(next);
+      try {
+        localStorage.setItem(STYLE_STORAGE_KEY, next);
+      } catch {
+        /* persistence is best-effort */
+      }
+    });
+  }
+});
+</script>
+
 <div class="codetwo-home">
   <a class="skip-link" href="#main-content">Skip to content</a>
   <div class="window-bar" aria-label="C2 window">
@@ -334,4 +377,10 @@ description: Compose structured prompts, weave in reusable skills, and run your 
       </footer>
     </section>
   </main>
+  <div class="style-toggle" role="group" aria-label="Preview homepage style">
+    <button type="button" class="style-toggle-btn is-active" data-style="terminal">
+      Terminal
+    </button>
+    <button type="button" class="style-toggle-btn" data-style="modern">Modern</button>
+  </div>
 </div>
