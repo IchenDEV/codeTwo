@@ -11,7 +11,7 @@ created: 2026-08-31
 updated: 2026-08-31
 source: user-supplied desktop-pet screenshot and direct implementation request on 2026-08-31
 inputs: current pet renderer, active-session activity projection, and native context-menu bridge
-outputs: simplified pet chrome, bounded conversation bubble, native close menu, and focused evidence
+outputs: PR #190 with simplified pet chrome, bounded conversation bubble, native close menu, and focused evidence
 scope: apps/desktop/src/App.tsx, apps/desktop/src/container.ts, apps/desktop/src/electrobun, apps/desktop/src/i18n/strings.ts, apps/desktop/src/pet, apps/desktop/tests
 next_trigger: pass pull-request checks, merge to main, then exercise the native pet menu after the existing Core owner exits
 verification_mode: owner
@@ -97,6 +97,7 @@ Secondary click now uses the existing OS-hosted context-menu request model from 
 The localized Close action calls the existing pet-hide request, which preserves the established
 appearance-preference synchronization. Streaming state updates are coalesced to one RPC update per
 160 milliseconds so token arrival does not resize or message the native window on every delta.
+The repository review handoff is [PR #190](https://github.com/IchenDEV/codeTwo/pull/190).
 
 ## Verification
 
@@ -135,7 +136,7 @@ this checkout.
 
 ## Review and release
 
-Approval: the user approved pull-request creation and merge through the direct `pr & merge`
+Approval: the user approved [PR #190](https://github.com/IchenDEV/codeTwo/pull/190) creation and merge through the direct `pr & merge`
 instruction on 2026-08-31, with the recorded native-window evidence gap retained as residual risk.
 Release target: none.
 Release identity: not applicable until released.
