@@ -173,6 +173,7 @@ describe("SessionRail row layout", () => {
 
   test("gives explicit Sections precedence over automatic Highlight without duplicating Tasks", async () => {
     activateDom();
+    disableCanvasDrawing();
     dom.window.localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify({
       version: 1,
       sections: [{ id: "work", name: "Work", collapsed: false }],

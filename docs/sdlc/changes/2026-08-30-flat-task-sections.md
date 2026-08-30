@@ -97,6 +97,11 @@ partition. Stored UI organization is versioned and ignored by older builds.
 
 ## Verification
 
+- PR #183's first cross-platform desktop run failed on Linux, macOS, and Windows in the explicit
+  Section-precedence test. The complete suite left an intentionally partial Canvas context in the
+  shared DOM, and the test's running Task then mounted ActivityOrb against that stub. The focused
+  suite had passed because it did not include the polluting Canvas tests. The existing test now
+  disables Canvas drawing within its own boundary before rendering the running Task.
 - `bun test apps/desktop/tests/sidebarSections.test.ts apps/desktop/tests/sessionRailRendered.test.tsx`
   passed: 20 tests, 195 expectations, 0 failures.
 - `bun run build:renderer` passed TypeScript, Vite production rendering, the source design-system
