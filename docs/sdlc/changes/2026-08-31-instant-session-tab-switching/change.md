@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-31-instant-session-tab-switching
 kind: change
+schema: 2
 status: verified
+risk: medium
 owner: codex
 approvers: chenli
+approved_at: 2026-08-31
 created: 2026-08-31
 updated: 2026-08-31
 source: user request in this task, "移除 tab 之间切换的多余的动画"
 inputs: the current session rail selection treatment and the user-supplied sidebar screenshot
 outputs: immediate session-tab selection without a sliding or morphing indicator
+scope: apps/desktop
 next_trigger: merge PR #185 after required checks pass
+verification_mode: owner
+verified_by: codex
+verified_at: 2026-08-31
 ---
 
 # Make session tab switching immediate
@@ -29,11 +36,11 @@ local state change rather than delaying tab selection. Other tab groups are outs
 
 ### Acceptance criteria
 
-- [x] Selecting a session updates the selected row and content immediately, with no animated
+- [x] AC-1: Selecting a session updates the selected row and content immediately, with no animated
       indicator travelling between session rows.
-- [x] The active session keeps the existing neutral selected surface in light and dark appearance.
-- [x] Pointer, keyboard, context-menu, archive, and section-collapse interactions remain unchanged.
-- [x] The focused rendered test, renderer build, lifecycle check, and real CodeTwo window check pass.
+- [x] AC-2: The active session keeps the existing neutral selected surface in light and dark appearance.
+- [x] AC-3: Pointer, keyboard, context-menu, archive, and section-collapse interactions remain unchanged.
+- [x] AC-4: The focused rendered test, renderer build, lifecycle check, and real CodeTwo window check pass.
 
 ## Decision and gates
 
@@ -77,6 +84,13 @@ Verdict: verified.
 - The first lifecycle check rejected the new Artifact because its required `Feedback` section was
   missing. The section was added, after which `bun script/check-sdlc.ts` passed.
 - `git diff --check` passed.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
 
 Residual risk: desktop observation is frame-level rather than a recorded high-frame-rate capture;
 the absence of the shared animated component and background transition is also protected by source

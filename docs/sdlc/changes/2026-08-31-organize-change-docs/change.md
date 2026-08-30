@@ -91,6 +91,11 @@ not bypass the stricter contract. The strict-SDLC and documentation-organization
 created directly in bundle form. The checker now derives ids from bundle names, rejects flat files,
 discovers `change.md`, and permits only unchanged legacy `R100` layout migrations without upgrade.
 
+The rebase onto `origin/main` brought ten additional flat change records created by intervening
+merged PRs. They were moved into the same bundle layout and upgraded to schema 2 while preserving
+their status, approval, acceptance, verification, and residual-risk record. Two newly merged Feishu
+research reports were placed directly in the research archive and added to its index.
+
 [`docs/README.md`](../../../README.md) now separates current contracts, active designs, dated
 research, assets, and development records. The root README routes through that map. The two
 superseded 2026-08-06 t3code reports were deleted; the retained
@@ -106,16 +111,19 @@ Verdict: verified.
 
 ### Acceptance evidence
 
-- AC-1: PASS — `find docs/sdlc/changes -mindepth 2 -maxdepth 2 -name change.md` found 16 bundles, the flat-file inventory found zero, and `git diff HEAD --summary` retained rename provenance for all 14 historical moves.
+- AC-1: PASS — `find docs/sdlc/changes -mindepth 2 -maxdepth 2 -name change.md` found 29 bundles, the flat-file inventory found zero, and Git retained rename provenance for the 24 records moved by this branch.
 - AC-2: PASS — `bun test script/verify/checks.test.ts` passed 16 tests with 37 assertions, including canonical bundle, forbidden flat path, schema upgrade, scope, and unchanged `R100` migration fixtures.
-- AC-3: PASS — [`docs/README.md`](../../../README.md) links each maintained category once and the repository Markdown-link audit resolved it with the other 50 Markdown files.
-- AC-4: PASS — the exact-file and stale-path inventory found neither removed report nor the obsolete Bun database and Core plugin links; the Bun local-link audit reported `[docs] 51 Markdown files, local links valid`.
-- AC-5: PASS — [`docs/README.md`](../../../README.md), [`scenes.md`](../../../reference/scenes.md), and `find docs -maxdepth 2 -type f` retain and classify the current contracts, pending Scenes 2.0 records, implementation designs, ADRs, guides, assets, and ten later research reports.
+- AC-3: PASS — [`docs/README.md`](../../../README.md) links each maintained category once and `bun script/verify/docs.ts` resolves the final repository link graph.
+- AC-4: PASS — the exact-file and stale-path inventory found neither removed report nor the obsolete Bun database and Core plugin links; `bun script/verify/docs.ts` reports the final catalog and local links valid.
+- AC-5: PASS — [`docs/README.md`](../../../README.md), [`scenes.md`](../../../reference/scenes.md), and `find docs -maxdepth 2 -type f` retain and classify current contracts, pending Scenes 2.0 records, ADRs, guides, assets, and archived research.
 - AC-6: PASS — `bun script/verify/sdlc.ts`, `bun script/verify/sdlc.ts --worktree`, `git diff --check`, and `git diff --cached --check` passed; an isolated committed copy of all tracked and untracked changes also passed `bun script/verify/sdlc.ts --base HEAD~1` and diff checking.
 
 The first focused test run after adding bundle cases failed three fixtures: two replacement strings
 still named old relative paths and the branch Gate did not exclude the source of an unchanged
 rename. The fixtures and Gate were corrected before the 16-test passing result.
+
+After the rebase migration, the consolidated Gate passed 5 focused tests with 23 assertions; the
+plain docs and lifecycle checks also passed with 29 schema-2 bundles and no flat change files.
 
 Residual risk: Git viewers may render the three schema-upgraded historical Artifacts as lower-score
 renames, although their ids, status, conclusions, and original evidence remain intact. The two

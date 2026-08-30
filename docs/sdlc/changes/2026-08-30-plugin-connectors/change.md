@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-30-plugin-connectors
 kind: change
+schema: 2
 status: executing
+risk: high
 owner: codex
 approvers: chenli
+approved_at: 2026-08-30
 created: 2026-08-30
 updated: 2026-08-31
 source: user request in this task, "需要提升扩展plugin 模型"
 inputs: the C2 process runtime model, host-rendered UI contributions, and the Feishu collaboration extension
 outputs: a manifest-declared connector contribution invoked through one owned runtime command
+scope: community/plugins/feishu, apps/desktop, crates/plugins, docs/reference/plugin-standard.md
 next_trigger: free or isolate port 1420 from the separate /Users/chenli/projects/codeTwo renderer and rerun real-window verification
+verification_mode: independent
+verified_by: pending
+verified_at: pending
 ---
 
 # Add connector contributions to the extension model
@@ -37,25 +44,25 @@ Only C2 Plugin Standard 1.2 bundles and installed records are accepted.
 
 ### Acceptance criteria
 
-- [x] A valid 1.2 bundle can declare a connector whose command is statically declared by the same
+- [x] AC-1: A valid 1.2 bundle can declare a connector whose command is statically declared by the same
       runtime; unknown capabilities, commands, fields, and duplicate ids fail closed.
-- [x] C2 accepts only Plugin Standard 1.2; 1.0 and 1.1 manifests and installed records fail closed.
-- [x] Installed bundle inventory, catalog counts, and desktop bridge expose connector
+- [x] AC-2: C2 accepts only Plugin Standard 1.2; 1.0 and 1.1 manifests and installed records fail closed.
+- [x] AC-3: Installed bundle inventory, catalog counts, and desktop bridge expose connector
       descriptors without starting an untrusted runtime.
-- [x] Connector invocation verifies enabled/trusted state, contribution ownership, command ownership,
+- [x] AC-4: Connector invocation verifies enabled/trusted state, contribution ownership, command ownership,
       and caller realm before dispatching `{ operation, input }`.
-- [x] The desktop discovers the Feishu collaboration surface from an active connector and contains no
+- [x] AC-5: The desktop discovers the Feishu collaboration surface from an active connector and contains no
       plugin-name check or direct `feishu.*` command call for that surface.
-- [x] The community Feishu bundle declares the connector and implements its single operation dispatcher
+- [x] AC-6: The community Feishu bundle declares the connector and implements its single operation dispatcher
       as its only public runtime command.
-- [x] Before Feishu authorization, the rail shows no contact, document, or Base groups; it presents
+- [x] AC-7: Before Feishu authorization, the rail shows no contact, document, or Base groups; it presents
       only a concise sign-in prompt whose action opens the Feishu bundle's plugin settings.
-- [x] Feishu app setup and account authorization live in the Feishu plugin details rather than the
+- [x] AC-8: Feishu app setup and account authorization live in the Feishu plugin details rather than the
       collaboration workspace; successful authorization restores the existing resource directory.
-- [ ] The authorization boundary is covered in English and Chinese and checked in the rendered desktop.
-- [x] Conversation messages render the sender display name and avatar resolved by the connector; internal
+- [ ] AC-9: The authorization boundary is covered in English and Chinese and checked in the rendered desktop.
+- [x] AC-10: Conversation messages render the sender display name and avatar resolved by the connector; internal
       Feishu identifiers appear only as a last-resort fallback when no user profile is available.
-- [ ] Focused Rust, renderer, community-plugin, build, SDLC, and real-window checks pass.
+- [ ] AC-11: Focused Rust, renderer, community-plugin, build, SDLC, and real-window checks pass.
 
 ## Decision and gates
 
@@ -164,6 +171,20 @@ Verdict: partial. Renderer tests, the current-only manifest and installed-record
 source bundle, and the community runtime pass. Real-window behavior remains unverified because the
 current renderer is blank while a same-bundle window from another worktree is also present, and the
 native integration-test binaries do not currently link in this environment.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
+- AC-5: PASS — `Verification record above` preserves the original passing evidence.
+- AC-6: PASS — `Verification record above` preserves the original passing evidence.
+- AC-7: PASS — `Verification record above` preserves the original passing evidence.
+- AC-8: PASS — `Verification record above` preserves the original passing evidence.
+- AC-9: BLOCKED — `Verification record above` preserves the original unresolved criterion.
+- AC-10: PASS — `Verification record above` preserves the original passing evidence.
+- AC-11: BLOCKED — `Verification record above` preserves the original unresolved criterion.
 
 Residual risk: the community source no longer contains legacy command aliases, but the already-running
 default desktop profile still owns its installed copy. Replacing that copy safely requires the next

@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-31-separate-quick-and-side-chat
 kind: change
+schema: 2
 status: verified
+risk: medium
 owner: Codex
 approvers: [chenli]
+approved_at: 2026-08-31
 created: 2026-08-31
 updated: 2026-08-31
 source: User request and four attached reference screenshots in the current Codex task
 inputs: Current desktop sidebar, floating transient-chat panel, right Dock, and Codex Quick Chat and Side Chat reference screenshots
 outputs: Distinct Quick Chat and Side Chat surfaces, one sidebar Quick Chat action, draggable Quick Chat panel, complete transient composer controls, restrained elevation, regression tests, and rendered desktop evidence
+scope: apps/desktop
 next_trigger: Authorized pull request checks and repository merge; no product release is authorized
+verification_mode: owner
+verified_by: Codex
+verified_at: 2026-08-31
 ---
 
 # Separate Quick Chat from Side Chat
@@ -55,25 +62,25 @@ Task history are out of scope.
 
 ### Acceptance criteria
 
-- [x] `apps/desktop/tests/sessionRailRendered.test.tsx` proves the New task row has one Quick Chat
+- [x] AC-1: `apps/desktop/tests/sessionRailRendered.test.tsx` proves the New task row has one Quick Chat
   secondary control and no temporary-session plus or Side Chat control.
-- [x] Dock rendered tests prove Side Chat is an ordinary right-panel surface, independently
+- [x] AC-2: Dock rendered tests prove Side Chat is an ordinary right-panel surface, independently
   selected through Dock navigation.
-- [x] Transient chat rendered tests prove Quick Chat and Side Chat expose distinct accessible
+- [x] AC-3: Transient chat rendered tests prove Quick Chat and Side Chat expose distinct accessible
   identities and independent placement semantics.
-- [x] A pointer-drag regression test proves Quick Chat changes position, releases capture on cancel,
+- [x] AC-4: A pointer-drag regression test proves Quick Chat changes position, releases capture on cancel,
   ignores interactive controls, and clamps the panel to the viewport.
-- [x] Focused tests, desktop renderer build/design checks, and `bun script/check-sdlc.ts` pass.
-- [x] A real rendered desktop window proves the sidebar, floating Quick Chat, dragged position, and
+- [x] AC-5: Focused tests, desktop renderer build/design checks, and `bun script/check-sdlc.ts` pass.
+- [x] AC-6: A real rendered desktop window proves the sidebar, floating Quick Chat, dragged position, and
   Dock Side Chat match the supplied behavioral references without clipping or relevant console
   errors.
-- [x] Rendered tests and live UI interaction prove both surfaces show the current model and can
+- [x] AC-7: Rendered tests and live UI interaction prove both surfaces show the current model and can
   choose another available model before sending the first prompt.
-- [x] Rendered interaction tests and live UI inspection prove add-content, permission-mode, voice,
+- [x] AC-8: Rendered interaction tests and live UI inspection prove add-content, permission-mode, voice,
   model, and send/stop controls are present without clipping in both transient composers.
-- [x] Rendered and design-system checks prove the Quick Chat shell no longer uses modal elevation
+- [x] AC-9: Rendered and design-system checks prove the Quick Chat shell no longer uses modal elevation
   and the inner composer uses the short control shadow rather than surface or raised elevation.
-- [x] A focused rendered regression and live Browser inspection prove Quick Chat and Side Chat
+- [x] AC-10: A focused rendered regression and live Browser inspection prove Quick Chat and Side Chat
   show one outer composer focus outline with no nested textarea outline.
 
 ## Decision and gates
@@ -206,6 +213,19 @@ disposition.
   provider-list selection path was exercised in the rendered component loop above.
 - The follow-up `bun run build:renderer` again passed the design source gate, TypeScript, the Vite
   production build with 6,401 modules, and the generated-dist semantic selector check.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
+- AC-5: PASS — `Verification record above` preserves the original passing evidence.
+- AC-6: PASS — `Verification record above` preserves the original passing evidence.
+- AC-7: PASS — `Verification record above` preserves the original passing evidence.
+- AC-8: PASS — `Verification record above` preserves the original passing evidence.
+- AC-9: PASS — `Verification record above` preserves the original passing evidence.
+- AC-10: PASS — `Verification record above` preserves the original passing evidence.
 
 Residual risk: the Browser fixture has no available Grok CLI and cannot execute the native private
 attachment import or return a real provider model catalog. Alternative-model selection and pending

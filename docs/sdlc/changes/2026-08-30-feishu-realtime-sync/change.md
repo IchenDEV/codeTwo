@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-30-feishu-realtime-sync
 kind: change
+schema: 2
 status: executing
+risk: high
 owner: codex
 approvers: chenli
+approved_at: 2026-08-30
 created: 2026-08-30
 updated: 2026-08-31
 source: user request in this task, "支持飞书新消息的同步……有红点……立即更新，而不是通过轮询"
 inputs: the Feishu collaboration connector, C2 process-runtime events, and the host-rendered Feishu sidebar
 outputs: event-driven Feishu message and document updates with local unread/change indicators
+scope: community/plugins/feishu, apps/desktop, crates/plugins
 next_trigger: generate one covered external Feishu event and verify immediate C2 refresh plus clear-on-open activity dots
+verification_mode: independent
+verified_by: pending
+verified_at: pending
 ---
 
 # Add realtime Feishu connector updates
@@ -43,21 +50,21 @@ OAuth completion polling remains a separate short-lived authorization mechanism.
 
 ### Acceptance criteria
 
-- [x] Application registration requests the implemented tenant message/reaction events and user
+- [x] AC-1: Application registration requests the implemented tenant message/reaction events and user
       document/Base events, and increments its scope revision so an existing one-click application is
       prompted to approve the new configuration.
-- [x] An authorized Runtime starts one official Feishu WebSocket client, deduplicates at-least-once
+- [x] AC-2: An authorized Runtime starts one official Feishu WebSocket client, deduplicates at-least-once
       delivery, emits normalized connector events, and stops it on disconnect or process exit.
-- [x] Documents and Bases visible to C2 are subscribed with user identity when the current user is an
+- [x] AC-3: Documents and Bases visible to C2 are subscribed with user identity when the current user is an
       owner or manager; unsupported resources remain usable and surface a bounded warning instead of
       failing the whole overview.
-- [x] C2 authenticates the source plugin of each connector event and the renderer accepts events only
+- [x] AC-4: C2 authenticates the source plugin of each connector event and the renderer accepts events only
       for the currently active Feishu connector.
-- [x] New covered messages and changed resources produce local dots; selecting the item clears the dot,
+- [x] AC-5: New covered messages and changed resources produce local dots; selecting the item clears the dot,
       while an already-visible item refreshes immediately without a recurring timer.
-- [x] Product copy and documentation state that ordinary user-to-user chats and non-manageable
+- [x] AC-6: Product copy and documentation state that ordinary user-to-user chats and non-manageable
       documents do not have full realtime coverage and that C2 dots are not Feishu global unread counts.
-- [x] Focused community-plugin, Rust, renderer, build, and SDLC checks pass within the documented
+- [x] AC-7: Focused community-plugin, Rust, renderer, build, and SDLC checks pass within the documented
       native-link limitation.
 
 ## Decision and gates
@@ -130,6 +137,16 @@ C2 connection panel reports the authorized account as Connected. The adapter's d
 holds a live established TLS connection after overview loading and emits no realtime-start error,
 which is consistent with the official WebSocket client remaining active. This proves transport
 startup, not delivery of a particular message/document event.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
+- AC-5: PASS — `Verification record above` preserves the original passing evidence.
+- AC-6: PASS — `Verification record above` preserves the original passing evidence.
+- AC-7: PASS — `Verification record above` preserves the original passing evidence.
 
 Residual risk: Feishu does not provide user-identity realtime events for arbitrary colleague chats;
 read-only/non-manageable documents cannot be subscribed. Multiple clients with one App ID share a

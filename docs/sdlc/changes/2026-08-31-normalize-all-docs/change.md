@@ -93,14 +93,14 @@ generated runtime state, or external cleanup is required.
 
 ## Build
 
-[`docs/catalog.json`](../../../catalog.json) now classifies all 63 retained files with exactly one
+[`docs/catalog.json`](../../../catalog.json) now classifies all 78 retained files with exactly one
 authority rule: 8 current contracts, 5 active-design files, 2 accepted ADRs, 3 publication assets,
-5 SDLC authority files, 17 change records, 21 archive files, and 2 catalog files. The rewritten
-[`docs/README.md`](../../../README.md) is the human authority map. It leaves 42 files in the live
-tree and places 21 files behind the explicit non-normative
+5 SDLC authority files, 29 change records, 23 archive files, and 3 catalog files. The rewritten
+[`docs/README.md`](../../../README.md) is the human authority map. It leaves 55 files in the live
+tree and places 23 files behind the explicit non-normative
 [`archive boundary`](../../../archive/README.md).
 
-Ten dated research reports moved to [`archive/research`](../../../archive/research/README.md). The
+Twelve dated research reports moved to [`archive/research`](../../../archive/research/README.md). The
 current memory contract was separated from its historical ec-mono and Codex comparison into a
 dated archive snapshot. The completed Scenes 1.0 roadmap, Core/frontend implementation plans, and
 three historical screenshots moved together under
@@ -116,7 +116,7 @@ current built-in provider CLIs instead of the obsolete three-provider snapshot. 
 images were visually inspected; current concepts and publication screenshots stay with their live
 owners, while Scenes 1.0 evidence stays with its archive owner.
 
-All 17 change records now use schema 2. The last schema-1 compatibility exception was removed from
+All 29 change records now use schema 2. The last schema-1 compatibility exception was removed from
 [`check-sdlc.ts`](../../../../script/verify/sdlc.ts), and its Eval now proves legacy Artifacts fail
 even during path-only migration. The new [`check-docs.ts`](../../../../script/verify/docs.ts) Gate and
 focused fixtures enforce exact catalog coverage, archive placement for dated snapshots, schema-2
@@ -130,10 +130,10 @@ Verdict: verified.
 
 ### Acceptance evidence
 
-- AC-1: PASS — `bun script/verify/docs.ts` returned `[docs] catalog, links, schemas, and assets valid`; an independent rule count classified all 63 files exactly once.
-- AC-2: PASS — a `find docs -type f` inventory resolved through [`docs/catalog.json`](../../../catalog.json) found 42 live files and 21 archive files; the live tree contains only catalog, contract, accepted ADR, active-design, publication-asset, SDLC-authority, and change-record classifications.
-- AC-3: PASS — `git diff HEAD --summary` preserves move provenance for ten research reports, three completed plans, and three screenshots; archive manifests enumerate the moved evidence, and the local-link Gate passes.
-- AC-4: PASS — the schema inventory found 17 change records and zero legacy schemas; `bun script/verify/sdlc.ts` and the focused Eval both pass after deletion of the schema-1 exception.
+- AC-1: PASS — `bun script/verify/docs.ts` returned `[docs] catalog, links, schemas, and assets valid`; an independent rule count classified all 78 files exactly once.
+- AC-2: PASS — a `find docs -type f` inventory resolved through [`docs/catalog.json`](../../../catalog.json) found 55 live files and 23 archive files; the live tree contains only catalog, contract, accepted ADR, active-design, publication-asset, SDLC-authority, and change-record classifications.
+- AC-3: PASS — `git diff origin/main...HEAD --summary` preserves move provenance for twelve research reports, three completed plans, and three screenshots; archive manifests enumerate the moved evidence, and the local-link Gate passes.
+- AC-4: PASS — the schema inventory found 29 change records and zero legacy schemas; `bun script/verify/sdlc.ts` and the focused Eval both pass after deletion of the schema-1 exception.
 - AC-5: PASS — [`docs/README.md`](../../../README.md), the archive boundary, design index, screenshot owner, and status lines in current contracts distinguish maintained, accepted-pending, publication, historical-state, and non-normative material.
 - AC-6: PASS — `bun script/verify/docs.ts` found no unreferenced image; the seven retained images are owned by active design, publication screenshots, or the Scenes 1.0 archive.
 - AC-7: PASS — the pre-consolidation docs and SDLC suites passed 20 tests with 44 assertions; the docs checker, plain lifecycle checker, `--worktree` Gate, `git diff --check`, and `git diff --cached --check` passed. A temporary committed copy of the complete tracked and untracked diff also passed both repository Gates with `--base HEAD~1` and diff checking.

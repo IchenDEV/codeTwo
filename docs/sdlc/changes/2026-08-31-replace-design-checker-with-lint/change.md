@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-31-replace-design-checker-with-lint
 kind: change
+schema: 2
 status: verified
+risk: medium
 owner: codex
 approvers: [user]
+approved_at: 2026-08-31
 created: 2026-08-31
 updated: 2026-08-31
 source: direct user request to delete the custom design checker and use lint wherever possible
 inputs: current desktop design checker, baseline and allowlist, desktop package scripts, CI workflow, design documentation
 outputs: standard lint configuration, deleted custom checker artifacts, updated desktop build and CI gates, focused verification
+scope: apps/desktop, .github/workflows/desktop-design-system.yml, docs/design/system.md
 next_trigger: authorized pull request checks and repository merge; no product release is authorized
+verification_mode: owner
+verified_by: codex
+verified_at: 2026-08-31
 ---
 
 # Replace the custom design checker with standard lint tooling
@@ -43,14 +50,14 @@ authority. Historical change records keep their original command evidence unchan
 
 ### Acceptance criteria
 
-- [x] The custom design checker, allowlist, and occurrence baseline are deleted with no active
+- [x] AC-1: The custom design checker, allowlist, and occurrence baseline are deleted with no active
       package, test, workflow, README, or current design-document reference remaining.
-- [x] `bun run lint` uses installed ESLint and Stylelint packages and rejects legacy radius classes,
+- [x] AC-2: `bun run lint` uses installed ESLint and Stylelint packages and rejects legacy radius classes,
       arbitrary radius utilities, direct inline `borderRadius`, raw product `<textarea>`, and
       non-semantic CSS radius declarations where standard lint rules can express them.
-- [x] The current desktop source passes lint without introducing a replacement custom scanner,
+- [x] AC-3: The current desktop source passes lint without introducing a replacement custom scanner,
       generated suppression baseline, or broad new ignore list.
-- [x] Migration-focused desktop tests, renderer build, diff hygiene, and lifecycle validation pass;
+- [x] AC-4: Migration-focused desktop tests, renderer build, diff hygiene, and lifecycle validation pass;
       the full desktop suite is run and any unrelated failure is recorded explicitly.
 
 ## Decision and gates
@@ -105,6 +112,13 @@ Verdict: verified.
 - `git diff --check` — passed.
 - Post-rebase `bun test` — 743 passed, 0 failed, and 3,482 expectations across 124 files. The
   component-policy contract now covers the main Composer, Quick Chat, and Side Chat voice gates.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
 
 Residual risk: ordinary lint cannot prove that every `50%` radius is applied to square geometry,
 evaluate color contrast, or inspect arbitrary CSS embedded inside JavaScript strings without

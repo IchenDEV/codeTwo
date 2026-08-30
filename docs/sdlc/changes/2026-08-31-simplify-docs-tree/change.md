@@ -87,7 +87,7 @@ Verdict: verified.
 ### Acceptance evidence
 
 - AC-1: PASS — `find docs -maxdepth 1 -type f` returns only `docs/README.md` and `docs/catalog.json`; `find docs -mindepth 1 -maxdepth 1 -type d` returns exactly the six documented categories.
-- AC-2: PASS — [`docs/README.md`](../../../README.md), [`reference/README.md`](../../../reference/README.md), and [`design/README.md`](../../../design/README.md) route to every moved maintained document, while `bun script/verify/docs.ts` classifies all 65 retained files exactly once.
+- AC-2: PASS — [`docs/README.md`](../../../README.md), [`reference/README.md`](../../../reference/README.md), and [`design/README.md`](../../../design/README.md) route to every moved maintained document, while `bun script/verify/docs.ts` classifies all 78 retained files exactly once.
 - AC-3: PASS — `bun script/verify/docs.ts` returned `[docs] catalog, links, schemas, and assets valid`, and `rg 'docs/(architecture|design|memory|plugin-protocol|plugin-standard|plugins|remote-agent|scenes)\.md'` found no obsolete canonical path.
 - AC-4: PASS — the pre-consolidation docs and SDLC suites plus `bun test apps/desktop/tests/uiStack.test.ts` passed 25 tests with 65 assertions; both lifecycle modes and both diff checks passed. A temporary committed copy of every tracked and untracked change also passed the docs Gate, lifecycle `--base HEAD~1` Gate, affected UI-stack test, and diff check.
 

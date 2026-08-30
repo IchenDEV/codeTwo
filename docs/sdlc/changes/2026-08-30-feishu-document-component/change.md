@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-30-feishu-document-component
 kind: change
+schema: 2
 status: executing
+risk: high
 owner: codex
 approvers: chenli
+approved_at: 2026-08-30
 created: 2026-08-30
 updated: 2026-08-31
 source: user request in this task, "云文档的渲染考虑使用飞书云文档组件或者说是 iframe 来接"
 inputs: the official Feishu Docs Component, the community Feishu Runtime, and the C2 document detail surface
 outputs: an official-component-first Feishu document viewer with a readable Markdown fallback
+scope: community/plugins/feishu, apps/desktop
 next_trigger: resolve the official SDK's missing mount callback in Electrobun WebKit, then rerun the live component matrix
+verification_mode: independent
+verified_by: pending
+verified_at: pending
 ---
 
 # Embed Feishu documents with the official component
@@ -40,17 +47,17 @@ existing OpenAPI-to-Markdown rendering visible and offers the canonical Feishu l
 
 ### Acceptance criteria
 
-- [x] Official current Feishu documentation, SDK identity, authorization flow, iframe boundary, and
+- [x] AC-1: Official current Feishu documentation, SDK identity, authorization flow, iframe boundary, and
       user-versus-app capabilities are recorded in a source-linked research note.
-- [x] A selected cloud document attempts the official component first and never embeds the ordinary
+- [x] AC-2: A selected cloud document attempts the official component first and never embeds the ordinary
       Feishu document page as a raw iframe.
-- [x] Component authorization uses the user identity and one-use signature while secrets, access
+- [x] AC-3: Component authorization uses the user identity and one-use signature while secrets, access
       tokens, and JSAPI tickets remain inside the community Runtime.
-- [x] The SDK lifecycle handles mount, one authorization retry, document/theme changes, destruction,
+- [x] AC-4: The SDK lifecycle handles mount, one authorization retry, document/theme changes, destruction,
       and bounded sizing without leaving duplicate iframes.
-- [x] Markdown remains a readable fallback, including a localized explanation and an open-in-Feishu
+- [x] AC-5: Markdown remains a readable fallback, including a localized explanation and an open-in-Feishu
       action when the richer renderer is unavailable.
-- [x] Focused Runtime and rendered tests, renderer build, diff checks, and the SDLC contract pass;
+- [x] AC-6: Focused Runtime and rendered tests, renderer build, diff checks, and the SDLC contract pass;
       any unexercised real Feishu/WebView boundary is stated as residual risk.
 
 ## Decision and gates
@@ -118,6 +125,15 @@ pass. The official live component still times out in Electrobun WebKit and remai
   20-second product timeout, so C2 correctly replaced the live surface with the latest readable
   OpenAPI/Markdown preview and kept Retry and Open in Feishu available. A speculative WebKit
   `MessageEvent.source` relaxation did not change this result and was reverted.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
+- AC-5: PASS — `Verification record above` preserves the original passing evidence.
+- AC-6: PASS — `Verification record above` preserves the original passing evidence.
 
 Residual risk: the official SDK's live mount is not yet proven inside Electrobun WebKit. The
 component-first boundary and no-blank-screen fallback are verified, but the SDK's missing callback

@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-31-panel-window-controls-safe-area
 kind: change
+schema: 2
 status: verified
+risk: medium
 owner: codex
 approvers: [user]
+approved_at: 2026-08-31
 created: 2026-08-31
 updated: 2026-08-31
 source: user-supplied Pull requests and Automations overlap screenshots on 2026-08-31
 inputs: direct implementation request, screenshots, existing macOS window-controls safe-area contract
 outputs: scoped split-panel header adaptation, focused regression coverage, and rendered evidence
+scope: apps/desktop
 next_trigger: merge authorized Draft PR 186 after refreshed required checks pass
+verification_mode: owner
+verified_by: codex
+verified_at: 2026-08-31
 ---
 
 # Keep panel headers clear of macOS window controls
@@ -41,13 +48,13 @@ container-query and safe-area classes instead of adding device-specific JavaScri
 
 ### Acceptance criteria
 
-- [x] With the rail collapsed in the normal two-pane layout, Pull requests and Automations list
+- [x] AC-1: With the rail collapsed in the normal two-pane layout, Pull requests and Automations list
       header controls, titles, and filters clear macOS window controls/system capture chrome.
-- [x] At the existing compact breakpoint, the visible detail header clears the same system area
+- [x] AC-2: At the existing compact breakpoint, the visible detail header clears the same system area
       and exposes operable sidebar-expand and back-to-list actions without horizontal overflow.
-- [x] With the rail open, both list and detail header alignment remains unchanged; filter, tab,
+- [x] AC-3: With the rail open, both list and detail header alignment remains unchanged; filter, tab,
       refresh/create, selection, and back behavior retain their accessible names and behavior.
-- [x] Focused rendered tests, design-system validation, renderer build, SDLC check, and real
+- [x] AC-4: Focused rendered tests, design-system validation, renderer build, SDLC check, and real
       light/dark standard plus narrow rendered inspection pass without relevant console errors.
 
 ## Decision and gates
@@ -104,6 +111,13 @@ Verdict: verified.
   indicator/window-control group occupies the leading region covered by the repository's 96px
   safe-area contract. That app belongs to another worktree and is not evidence that this branch is
   running natively.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
 
 Residual risk: the compact detail surface cannot be populated in a renderer-only Browser because
 the non-desktop bridge intentionally returns no Pull requests or Automations. The focused rendered

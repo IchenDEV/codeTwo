@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-31-device-connections-navigation
 kind: change
+schema: 2
 status: verified
+risk: medium
 owner: codex
 approvers: user via the 2026-08-31 device-connections feedback and merge instruction
+approved_at: 2026-08-31
 created: 2026-08-31
 updated: 2026-08-31
 source: user-supplied C2 Dev appshots plus 2026-08-31 placement, phone-icon, and compact-toolbar follow-ups
 inputs: accepted requirement for discoverable connections in a space-efficient lower-left utility area
 outputs: a verified one-row lower-left utility toolbar with accessible Settings, Usage, and Device connections buttons
+scope: apps/desktop
 next_trigger: merge PR #187 after refreshed required checks pass
+verification_mode: owner
+verified_by: codex
+verified_at: 2026-08-31
 ---
 
 # Make device connections discoverable from the main sidebar
@@ -42,22 +49,22 @@ lifecycle contract and does not present a dead connection affordance.
 
 ### Acceptance criteria
 
-- [x] The fixed lower-left utility group uses one horizontal icon-toolbar row instead of stacked
+- [x] AC-1: The fixed lower-left utility group uses one horizontal icon-toolbar row instead of stacked
       labeled rows, reducing its vertical footprint.
-- [x] Settings and Usage remain available in the leading cluster; Device connections is anchored
+- [x] AC-2: Settings and Usage remain available in the leading cluster; Device connections is anchored
       at the trailing edge when `remote.modal` is enabled.
-- [x] Every utility icon has a localized accessible name, tooltip, keyboard focus treatment, and a
+- [x] AC-3: Every utility icon has a localized accessible name, tooltip, keyboard focus treatment, and a
       minimum standard control hit area.
-- [x] Device connections uses a circular selected state while its modal is open without inventing
+- [x] AC-4: Device connections uses a circular selected state while its modal is open without inventing
       notification or connection-status dots.
-- [x] With `remote.modal` enabled, the main sidebar includes Device connections in the fixed
+- [x] AC-5: With `remote.modal` enabled, the main sidebar includes Device connections in the fixed
       lower-left utility group, not the upper feature group.
-- [x] Activating the row invokes the existing device-connections modal opener by pointer or
+- [x] AC-6: Activating the row invokes the existing device-connections modal opener by pointer or
       keyboard-compatible button semantics.
-- [x] With `remote.modal` disabled, the row is not rendered and no dead affordance remains.
-- [x] The existing command-palette entry uses the same user-facing `Device connections` name.
-- [x] The lower-left entry uses a single-phone icon rather than the computer-and-phone sync icon.
-- [x] Focused rendered tests, renderer/design validation, SDLC validation, and isolated real UI
+- [x] AC-7: With `remote.modal` disabled, the row is not rendered and no dead affordance remains.
+- [x] AC-8: The existing command-palette entry uses the same user-facing `Device connections` name.
+- [x] AC-9: The lower-left entry uses a single-phone icon rather than the computer-and-phone sync icon.
+- [x] AC-10: Focused rendered tests, renderer/design validation, SDLC validation, and isolated real UI
       inspection pass.
 
 ## Decision and gates
@@ -178,6 +185,19 @@ and refreshed required checks are the next Gate.
   dependency directory lacked #188's newly locked ESLint packages. A frozen Bun 1.4.0 install did
   not change tracked files; the same build then passed ESLint, Stylelint, TypeScript, and the
   6,401-module Vite production build.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
+- AC-5: PASS — `Verification record above` preserves the original passing evidence.
+- AC-6: PASS — `Verification record above` preserves the original passing evidence.
+- AC-7: PASS — `Verification record above` preserves the original passing evidence.
+- AC-8: PASS — `Verification record above` preserves the original passing evidence.
+- AC-9: PASS — `Verification record above` preserves the original passing evidence.
+- AC-10: PASS — `Verification record above` preserves the original passing evidence.
 
 Residual risk: icon-only controls rely on hover/focus labels for first-time discoverability, which
 is the accepted density tradeoff in the supplied reference. Physical two-device pairing and the

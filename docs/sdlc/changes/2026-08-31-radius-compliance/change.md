@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-31-radius-compliance
 kind: change
+schema: 2
 status: verified
+risk: medium
 owner: codex
 approvers: [user]
+approved_at: 2026-08-31
 created: 2026-08-31
 updated: 2026-08-31
 source: direct user request to correct every radius that does not follow the project standard
 inputs: repository radius audit, current design tokens, design-system checks, rendered UI
 outputs: desktop radius migration, strengthened design-system enforcement, tests, and rendered evidence
+scope: apps/desktop, .github/workflows/desktop-design-system.yml, docs/design/system.md
 next_trigger: authorized pull request checks and repository merge; no product release is authorized
+verification_mode: owner
+verified_by: codex
+verified_at: 2026-08-31
 ---
 
 # Enforce the product radius scale everywhere
@@ -45,15 +52,15 @@ Existing unrelated worktree changes remain intact.
 
 ### Acceptance criteria
 
-- [x] Repository source contains no legacy size-named or bare Tailwind radius utilities, direct
+- [x] AC-1: Repository source contains no legacy size-named or bare Tailwind radius utilities, direct
       product radius escape hatches, undersized numeric fallbacks, or non-circular `rounded-full`
       uses in the maintained desktop UI.
-- [x] App, Remote, Canvas, annotation, visualization, Side Chat/Quick Chat, and shared UI source
+- [x] AC-2: App, Remote, Canvas, annotation, visualization, Side Chat/Quick Chat, and shared UI source
       contracts resolve to 0/12/16/24 according to their semantic role; the live app and shared
       primitive preview preserve that hierarchy in light and dark themes.
-- [x] ESLint, Stylelint, and focused tests reject reintroduced legacy and maintained-CSS hardcoded
+- [x] AC-3: ESLint, Stylelint, and focused tests reject reintroduced legacy and maintained-CSS hardcoded
       radius values, with current radius-specific design debt reduced to zero.
-- [x] Focused tests, renderer build, SDLC validation, diff hygiene, and real light/dark plus narrow
+- [x] AC-4: Focused tests, renderer build, SDLC validation, diff hygiene, and real light/dark plus narrow
       rendered inspection pass without radius regressions or relevant console errors.
 
 ## Decision and gates
@@ -119,6 +126,13 @@ Verdict: verified.
   no relevant console messages. The existing renderer-only Vite process was reused without
   starting or disturbing a native Core.
 - Final `git diff --check` passed and `bun script/check-sdlc.ts` reported `[sdlc] contract valid`.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
 
 Residual risk: the standalone annotation overlay, generated visualization document, and Remote
 Canvas were source-scanned, test-covered, and included in the successful renderer build, but were

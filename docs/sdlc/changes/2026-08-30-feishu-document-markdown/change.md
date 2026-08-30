@@ -1,15 +1,22 @@
 ---
 id: change-2026-08-30-feishu-document-markdown
 kind: change
+schema: 2
 status: executing
+risk: medium
 owner: codex
 approvers: chenli
+approved_at: 2026-08-30
 created: 2026-08-30
 updated: 2026-08-31
 source: user request in this task, "文档 md 渲染"
 inputs: existing Feishu document detail and shared Markdown renderer
 outputs: Feishu document, conversation, emoji, and reaction rendering with focused tests and rendered evidence
+scope: community/plugins/feishu, apps/desktop
 next_trigger: focused Feishu content rendering verification completes
+verification_mode: owner
+verified_by: pending
+verified_at: pending
 ---
 
 # Render Feishu documents and conversations
@@ -37,18 +44,18 @@ message without making the pill interactive.
 
 ### Acceptance criteria
 
-- [x] A fetched document containing Markdown headings, emphasis, lists, links, and code renders
+- [x] AC-1: A fetched document containing Markdown headings, emphasis, lists, links, and code renders
       semantic HTML instead of visible Markdown delimiters.
-- [x] Conversation text, rich-text posts, and converted message cards use Markdown semantics; empty
+- [x] AC-2: Conversation text, rich-text posts, and converted message cards use Markdown semantics; empty
       media or unsupported payloads show localized readable fallbacks rather than `[type]`.
-- [x] Inline Feishu emotion nodes render as visible emoji, and message reactions render as compact
+- [x] AC-3: Inline Feishu emotion nodes render as visible emoji, and message reactions render as compact
       emoji-and-count aggregates with accessible names.
-- [x] Reaction enrichment uses one batch request for the visible message page, requires only the
+- [x] AC-4: Reaction enrichment uses one batch request for the visible message page, requires only the
       read scope, and fails without hiding the underlying messages.
-- [x] The loading state and localized empty-document state remain unchanged.
-- [x] Focused rendered tests, the renderer and full desktop builds, the SDLC check, and diff checks
+- [x] AC-5: The loading state and localized empty-document state remain unchanged.
+- [x] AC-6: Focused rendered tests, the renderer and full desktop builds, the SDLC check, and diff checks
       pass.
-- [ ] A real C2-dev conversation view passes without a visible error overlay after macOS is
+- [ ] AC-7: A real C2-dev conversation view passes without a visible error overlay after macOS is
       unlocked and the existing single Core can be restarted safely.
 
 ## Decision and gates
@@ -104,6 +111,16 @@ Verdict: implementation checks passed; real-window verification pending an unloc
   so Bun found no matching test. Re-running the same test with the correct relative path passed.
 - Real-window evidence is pending because macOS is locked; the existing single C2-dev instance has
   not been killed, duplicated, or reopened against shared state.
+
+### Acceptance evidence
+
+- AC-1: PASS — `Verification record above` preserves the original passing evidence.
+- AC-2: PASS — `Verification record above` preserves the original passing evidence.
+- AC-3: PASS — `Verification record above` preserves the original passing evidence.
+- AC-4: PASS — `Verification record above` preserves the original passing evidence.
+- AC-5: PASS — `Verification record above` preserves the original passing evidence.
+- AC-6: PASS — `Verification record above` preserves the original passing evidence.
+- AC-7: BLOCKED — `Verification record above` preserves the original unresolved criterion.
 
 Residual risk: Feishu publishes many custom emoji identifiers. Common reactions map to matching
 Unicode emoji; unknown identifiers fall back to a spaced readable name rather than the proprietary
