@@ -22,7 +22,6 @@ export {
   desktopOpenWorkspace,
   desktopRequestAppshotPermissions,
   desktopSaveDialog,
-  desktopSendPetVoiceText,
   desktopSetSystemBadgeCount,
   desktopShowItemInFolder,
   desktopSystemProfileAvatar,

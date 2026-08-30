@@ -4,7 +4,7 @@ import { CodeTwoPet } from "./CodeTwoPet";
 export function PetPreview() {
   return (
     <main className="flex size-full items-center justify-center bg-background">
-      <CodeTwoPet animation="review" voiceEnabled onVoiceText={() => undefined} />
+      <CodeTwoPet animation="review" />
     </main>
   );
 }

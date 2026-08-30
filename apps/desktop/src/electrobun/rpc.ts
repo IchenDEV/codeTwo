@@ -67,7 +67,6 @@ export type DesktopPetAnimation = "idle" | "running" | "waiting" | "failed" | "r
 export interface DesktopPetState {
   visible: boolean;
   animation: DesktopPetAnimation;
-  voiceEnabled: boolean;
   appearance: {
     petActivityEnabled: boolean;
     petSize: "small" | "medium" | "large";
@@ -127,7 +126,6 @@ export type CodeTwoRPC = {
       desktopPetState: { params: undefined; response: DesktopPetState };
       desktopPetUpdate: { params: DesktopPetState; response: void };
       desktopPetHide: { params: undefined; response: void };
-      desktopPetVoiceText: { params: { text: string }; response: void };
       openDevtools: { params: undefined; response: void };
       updateStatus: { params: undefined; response: AppUpdateStatus };
       updateCheck: { params: undefined; response: AppUpdateStatus };
