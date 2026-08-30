@@ -1,11 +1,8 @@
 import { PetX } from "@petx/react";
-import { Button } from "@/components/ui/button";
-import { ChevronDown } from "@/components/ui/icons";
 import { useT } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 
 import {
-  setAppearanceSettings,
   useAppearanceSettings,
   type AppearanceSettings,
   type PetSize,
@@ -61,12 +58,12 @@ export function CodeTwoPetSprite({
 
 export function CodeTwoPet({
   animation,
+  bubble = null,
   appearance: providedAppearance,
-  onHide,
 }: {
   animation: CodeTwoPetAnimation;
+  bubble?: string | null;
   appearance?: CodeTwoPetAppearance;
-  onHide?: () => void;
 }) {
   const t = useT();
   const storedAppearance = useAppearanceSettings();
@@ -95,6 +92,11 @@ export function CodeTwoPet({
 
   return (
     <section className="codetwo-pet-stage" aria-label={t("pet.label")}>
+      {bubble ? (
+        <p className="codetwo-pet-bubble" dir="auto">
+          <span>{bubble}</span>
+        </p>
+      ) : null}
       <button
         type="button"
         className="codetwo-pet-mascot"
@@ -110,19 +112,6 @@ export function CodeTwoPet({
           title={appearance.petName || t("pet.label")}
         />
       </button>
-
-      <div className="codetwo-pet-controls">
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon"
-          aria-label={t("pet.hide")}
-          title={t("pet.hide")}
-          onClick={onHide ?? (() => setAppearanceSettings({ petEnabled: false }))}
-        >
-          <ChevronDown aria-hidden />
-        </Button>
-      </div>
     </section>
   );
 }

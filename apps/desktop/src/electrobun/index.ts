@@ -127,9 +127,11 @@ const dataDir =
 const desktopPetPositionPath = join(dataDir, "desktop-pet-window.json");
 const desktopPetWidth = 184;
 const desktopPetHeights = { small: 156, medium: 180, large: 204 } as const;
+const desktopPetBubbleHeight = 64;
 let desktopPetState: DesktopPetState = {
   visible: false,
   animation: "idle",
+  bubble: null,
   appearance: {
     petActivityEnabled: true,
     petSize: "medium",
@@ -140,10 +142,16 @@ let desktopPetState: DesktopPetState = {
 };
 let desktopPetWindow: BrowserWindow | null = null;
 let desktopPetRendererReady = false;
+let desktopPetProgrammaticPosition: { x: number; y: number } | null = null;
+
+function desktopPetHeight() {
+  return desktopPetHeights[desktopPetState.appearance.petSize]
+    + (desktopPetState.bubble ? desktopPetBubbleHeight : 0);
+}
 
 function desktopPetFrame() {
   const display = Screen.getPrimaryDisplay().workArea;
-  const height = desktopPetHeights[desktopPetState.appearance.petSize];
+  const height = desktopPetHeight();
   const fallback = {
     x: display.x + display.width - desktopPetWidth - 24,
     y: display.y + display.height - height - 24,
@@ -177,10 +185,13 @@ function desktopPetFrame() {
 
 function applyDesktopPetState() {
   if (!desktopPetWindow) return;
-  desktopPetWindow.setSize(
-    desktopPetWidth,
-    desktopPetHeights[desktopPetState.appearance.petSize],
-  );
+  const frame = desktopPetWindow.getFrame();
+  const height = desktopPetHeight();
+  if (frame.width !== desktopPetWidth || frame.height !== height) {
+    const y = frame.y + frame.height - height;
+    desktopPetProgrammaticPosition = { x: frame.x, y };
+    desktopPetWindow.setFrame(frame.x, y, desktopPetWidth, height);
+  }
   if (desktopPetRendererReady && desktopPetState.visible) desktopPetWindow.showInactive();
   else desktopPetWindow.hide();
   desktopPetRpc.send.event({ name: "desktop-pet-state", payload: desktopPetState });
@@ -189,7 +200,10 @@ function applyDesktopPetState() {
 function persistDesktopPetPosition(x: number, y: number) {
   try {
     mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-    writeFileSync(desktopPetPositionPath, `${JSON.stringify({ x, y })}\n`, { mode: 0o600 });
+    const normalizedY = y + (desktopPetState.bubble ? desktopPetBubbleHeight : 0);
+    writeFileSync(desktopPetPositionPath, `${JSON.stringify({ x, y: normalizedY })}\n`, {
+      mode: 0o600,
+    });
   } catch {
     // A read-only app-data directory should not make the companion unusable for this run.
   }
@@ -285,6 +299,9 @@ desktopPetRpc = BrowserView.defineRPC<CodeTwoRPC>({
   maxRequestTime: Infinity,
   handlers: {
     requests: {
+      contextMenuShow: ({ requestId, items }) => {
+        ContextMenu.showContextMenu(nativeContextMenuConfig(items, requestId));
+      },
       desktopPetState: () => desktopPetState,
       desktopPetHide: () => {
         desktopPetState = { ...desktopPetState, visible: false };
@@ -300,6 +317,7 @@ ContextMenu.on("context-menu-clicked", (event) => {
   const action = nativeContextMenuAction(event);
   if (!action) return;
   rpc.send.event({ name: "native-context-menu-action", payload: action });
+  desktopPetRpc.send.event({ name: "native-context-menu-action", payload: action });
 });
 
 const display = Screen.getPrimaryDisplay().workArea;
@@ -351,6 +369,15 @@ desktopPetWindow.webview.on("dom-ready", () => {
 desktopPetWindow.on("move", (event) => {
   const position = (event as { data?: { x?: unknown; y?: unknown } }).data;
   if (typeof position?.x === "number" && typeof position.y === "number") {
+    if (
+      desktopPetProgrammaticPosition
+      && position.x === desktopPetProgrammaticPosition.x
+      && position.y === desktopPetProgrammaticPosition.y
+    ) {
+      desktopPetProgrammaticPosition = null;
+      return;
+    }
+    desktopPetProgrammaticPosition = null;
     persistDesktopPetPosition(position.x, position.y);
   }
 });

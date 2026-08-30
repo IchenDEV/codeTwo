@@ -67,6 +67,7 @@ export type DesktopPetAnimation = "idle" | "running" | "waiting" | "failed" | "r
 export interface DesktopPetState {
   visible: boolean;
   animation: DesktopPetAnimation;
+  bubble: string | null;
   appearance: {
     petActivityEnabled: boolean;
     petSize: "small" | "medium" | "large";

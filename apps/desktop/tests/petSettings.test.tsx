@@ -6,6 +6,7 @@ activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { getAppearanceSettings, resetAppearanceSettings, setAppearanceSettings } = await import("../src/appearance");
 const { CodeTwoPet } = await import("../src/pet/CodeTwoPet");
+const { desktopPetContextMenu, DESKTOP_PET_CLOSE_ACTION } = await import("../src/pet/DesktopPet");
 const { PetSettings } = await import("../src/settings/PetSettings");
 
 const remotePets = [
@@ -166,5 +167,28 @@ describe("Pet settings", () => {
       .toBe("waving");
 
     view.unmount();
+  });
+
+  test("shows only an optional conversation bubble beside the unframed mascot", async () => {
+    activateDom();
+    const view = mount(
+      <I18nProvider>
+        <CodeTwoPet animation="running" bubble="I am checking the active conversation." />
+      </I18nProvider>,
+    );
+    await flush();
+
+    expect(view.container.querySelector(".codetwo-pet-bubble")?.textContent)
+      .toBe("I am checking the active conversation.");
+    expect(view.container.querySelector(".codetwo-pet-controls")).toBeNull();
+    expect(view.container.querySelector('[aria-label="Hide desktop pet"]')).toBeNull();
+
+    view.unmount();
+  });
+
+  test("offers closing through the native pet context-menu model", () => {
+    expect(desktopPetContextMenu("Close")).toEqual([
+      { type: "item", label: "Close", action: DESKTOP_PET_CLOSE_ACTION },
+    ]);
   });
 });
