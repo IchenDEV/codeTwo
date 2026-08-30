@@ -4,6 +4,49 @@ title: C2 — 以文档为中心的编程智能体
 description: 在一个本地界面中编写结构化提示词、组合可复用技能，并运行不同的编程 CLI。
 ---
 
+<script setup>
+import { onMounted } from "vue";
+
+const STYLE_STORAGE_KEY = "c2-home-style";
+
+onMounted(() => {
+  const root = document.querySelector(".codetwo-home");
+  const buttons = Array.from(document.querySelectorAll(".style-toggle-btn"));
+  if (!root || buttons.length === 0) {
+    return;
+  }
+
+  const applyStyle = (style) => {
+    root.classList.toggle("theme-modern", style === "modern");
+    for (const button of buttons) {
+      button.classList.toggle("is-active", button.dataset.style === style);
+    }
+  };
+
+  let style = "terminal";
+  try {
+    if (localStorage.getItem(STYLE_STORAGE_KEY) === "modern") {
+      style = "modern";
+    }
+  } catch {
+    style = "terminal";
+  }
+  applyStyle(style);
+
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      const next = button.dataset.style === "modern" ? "modern" : "terminal";
+      applyStyle(next);
+      try {
+        localStorage.setItem(STYLE_STORAGE_KEY, next);
+      } catch {
+        /* persistence is best-effort */
+      }
+    });
+  }
+});
+</script>
+
 <div class="codetwo-home" lang="zh-CN">
   <a class="skip-link" href="#main-content">跳到正文</a>
   <div class="window-bar" aria-label="C2 窗口">
@@ -323,4 +366,10 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
       </footer>
     </section>
   </main>
+  <div class="style-toggle" role="group" aria-label="预览首页风格">
+    <button type="button" class="style-toggle-btn is-active" data-style="terminal">
+      终端风
+    </button>
+    <button type="button" class="style-toggle-btn" data-style="modern">现代风</button>
+  </div>
 </div>

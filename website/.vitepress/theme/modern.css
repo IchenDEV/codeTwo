@@ -1,0 +1,449 @@
+/* Modern dark developer-tool skin for the landing page.
+   Loaded after custom.css; every rule is additive and scoped to
+   .codetwo-home.theme-modern (plus the shared .style-toggle widget)
+   so the default Terminal skin keeps its current rendering. */
+
+/* ---------------------------------------------------------------- */
+/* Floating style toggle (shared by both skins)                      */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home .style-toggle {
+  position: fixed;
+  z-index: 80;
+  right: 18px;
+  bottom: 18px;
+  display: inline-flex;
+  padding: 4px;
+  gap: 2px;
+  border: 1px solid rgb(148 163 184 / 32%);
+  border-radius: 999px;
+  background: rgb(10 13 20 / 88%);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 40%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.codetwo-home .style-toggle-btn {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  color: #a7b0c0;
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.codetwo-home .style-toggle-btn:hover {
+  color: #f1f4f9;
+}
+
+.codetwo-home .style-toggle-btn.is-active {
+  color: #062413;
+  background: linear-gradient(100deg, #4ade80, #38bdf8);
+}
+
+.codetwo-home .style-toggle-btn:focus-visible {
+  outline: 2px solid #4ade80;
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Modern skin tokens and page frame                                 */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern {
+  --home-bg: #07090e;
+  --home-surface: #0a0e15;
+  --home-surface-raised: #10151f;
+  --home-ink: #f3f5f9;
+  --home-muted: #9aa4b5;
+  --home-green: #4ade80;
+  --home-green-dim: rgb(74 222 128 / 45%);
+  --home-line: rgb(148 163 184 / 15%);
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(1100px 560px at 72% -8%, rgb(56 189 248 / 10%), transparent 62%),
+    radial-gradient(900px 480px at 12% 2%, rgb(74 222 128 / 8%), transparent 58%),
+    var(--home-bg);
+  box-shadow: none;
+}
+
+body:has(.codetwo-home.theme-modern) {
+  background: #05070b;
+}
+
+body:has(.codetwo-home.theme-modern) #app {
+  padding: 0;
+}
+
+/* ---------------------------------------------------------------- */
+/* Window chrome and header                                          */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .window-bar {
+  display: none;
+}
+
+.codetwo-home.theme-modern .site-header {
+  background: rgb(7 9 14 / 80%);
+  border-bottom: 1px solid rgb(148 163 184 / 12%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.codetwo-home.theme-modern .desktop-nav {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.codetwo-home.theme-modern .desktop-nav .nav-cta {
+  min-height: 40px;
+  padding: 0 17px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 999px;
+  color: var(--home-ink);
+  background: rgb(255 255 255 / 4%);
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.codetwo-home.theme-modern .desktop-nav .nav-cta:hover {
+  border-color: rgb(255 255 255 / 34%);
+  color: var(--home-ink);
+  background: rgb(255 255 255 / 9%);
+}
+
+.codetwo-home.theme-modern .mobile-nav summary {
+  border-radius: 10px;
+}
+
+.codetwo-home.theme-modern .mobile-nav nav {
+  border: 1px solid var(--home-line);
+  border-radius: 14px;
+  background: #0b0f16;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Section command chips                                             */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .section-command {
+  display: inline-flex;
+  margin-bottom: 26px;
+  padding: 6px 14px;
+  border: 1px solid rgb(74 222 128 / 28%);
+  border-radius: 999px;
+  color: #86efac;
+  background: rgb(74 222 128 / 7%);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------------- */
+/* Typography                                                        */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .hero h1,
+.codetwo-home.theme-modern .workflow h2,
+.codetwo-home.theme-modern .providers h2,
+.codetwo-home.theme-modern .architecture h2,
+.codetwo-home.theme-modern .open-source h2 {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+}
+
+.codetwo-home.theme-modern .hero h1 {
+  color: #f3f5f9;
+  background: linear-gradient(120deg, #f3f5f9 52%, #86efac 96%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.codetwo-home.theme-modern .terminal-period {
+  color: #f3f5f9;
+  background: linear-gradient(100deg, #4ade80 8%, #38bdf8 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.codetwo-home.theme-modern .hero-copy > .hero-meta {
+  color: #6f7a8c;
+}
+
+/* ---------------------------------------------------------------- */
+/* Buttons and text links                                            */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .button {
+  min-height: 50px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 12px;
+  color: #06220f;
+  background: linear-gradient(100deg, #4ade80, #38bdf8);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15.5px;
+  font-weight: 650;
+  box-shadow:
+    0 10px 32px rgb(56 189 248 / 18%),
+    0 2px 10px rgb(0 0 0 / 35%);
+}
+
+.codetwo-home.theme-modern .button:hover {
+  border: 0;
+  color: #06220f;
+  background: linear-gradient(100deg, #4ade80, #38bdf8);
+  filter: brightness(1.08);
+}
+
+.codetwo-home.theme-modern .button > span {
+  color: rgb(6 34 15 / 70%);
+  font-size: 17px;
+}
+
+.codetwo-home.theme-modern .button-secondary {
+  border: 1px solid rgb(255 255 255 / 16%);
+  color: var(--home-ink);
+  background: rgb(255 255 255 / 3%);
+  box-shadow: none;
+}
+
+.codetwo-home.theme-modern .button-secondary:hover {
+  border-color: rgb(255 255 255 / 34%);
+  color: var(--home-ink);
+  background: rgb(255 255 255 / 8%);
+  filter: none;
+}
+
+.codetwo-home.theme-modern .button-secondary > span {
+  color: var(--home-green);
+}
+
+.codetwo-home.theme-modern .quiet-link,
+.codetwo-home.theme-modern .provider-doc-link,
+.codetwo-home.theme-modern .site-footer nav {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.codetwo-home.theme-modern .quiet-link {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.codetwo-home.theme-modern .provider-doc-link {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.codetwo-home.theme-modern .site-footer nav {
+  color: #9aa4b5;
+  font-size: 14px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Hero: grid backdrop instead of scanlines, capability chips        */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .hero::before {
+  inset: 0;
+  opacity: 1;
+  animation: none;
+  background-image:
+    linear-gradient(rgb(148 163 184 / 7%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 7%) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(900px 500px at 50% 6%, #000 0%, transparent 74%);
+  -webkit-mask-image: radial-gradient(900px 500px at 50% 6%, #000 0%, transparent 74%);
+}
+
+.codetwo-home.theme-modern .hero-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  padding: 0;
+  gap: 10px;
+  background: none;
+}
+
+.codetwo-home.theme-modern .hero-capabilities li {
+  width: auto;
+  padding: 9px 16px;
+  border: 1px solid var(--home-line);
+  border-radius: 999px;
+  color: #c3cbd8;
+  background: rgb(255 255 255 / 3%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------- */
+/* Screenshot frames                                                 */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .screenshot-frame {
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 16px;
+  background: #0b0f17;
+  box-shadow:
+    0 30px 90px rgb(0 0 0 / 55%),
+    0 0 70px rgb(56 189 248 / 9%);
+}
+
+/* ---------------------------------------------------------------- */
+/* Workflow steps                                                    */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .workflow,
+.codetwo-home.theme-modern .architecture,
+.codetwo-home.theme-modern .open-source {
+  border-top: 0;
+}
+
+.codetwo-home.theme-modern .steps li {
+  border-top: 1px solid var(--home-line);
+}
+
+.codetwo-home.theme-modern .steps li:last-child {
+  border-bottom: 1px solid var(--home-line);
+}
+
+.codetwo-home.theme-modern .steps li::after {
+  border-top: 1px solid rgb(74 222 128 / 40%);
+}
+
+.codetwo-home.theme-modern .terminal-mark {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 7px;
+  color: #06220f;
+  background: linear-gradient(135deg, #4ade80, #38bdf8);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.codetwo-home.theme-modern .steps h3 {
+  color: var(--home-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ---------------------------------------------------------------- */
+/* Provider matrix: glass cards                                      */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .provider-matrix {
+  margin-top: 64px;
+  gap: 14px;
+  border: 0;
+  background: none;
+}
+
+.codetwo-home.theme-modern .provider-entry:nth-child(n) {
+  min-height: 0;
+  padding: 22px;
+  border: 1px solid var(--home-line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 3.5%), rgb(255 255 255 / 1%));
+  transition: border-color 140ms ease;
+}
+
+.codetwo-home.theme-modern .provider-entry:hover {
+  border-color: rgb(74 222 128 / 40%);
+}
+
+.codetwo-home.theme-modern .provider-index {
+  color: #64748b;
+}
+
+.codetwo-home.theme-modern .provider-facts {
+  margin-top: 18px;
+  border: 1px solid var(--home-line);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.codetwo-home.theme-modern .provider-facts p + p {
+  border-left: 1px solid var(--home-line);
+}
+
+/* ---------------------------------------------------------------- */
+/* Architecture: rounded nodes, solid hairline arrows                */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .architecture-node,
+.codetwo-home.theme-modern .output-node {
+  clip-path: none;
+  border: 1px solid rgb(148 163 184 / 22%);
+  border-radius: 20px;
+  background: rgb(148 163 184 / 5%);
+}
+
+.codetwo-home.theme-modern .architecture-node::before,
+.codetwo-home.theme-modern .output-node::before {
+  content: none;
+}
+
+.codetwo-home.theme-modern .architecture-node > span,
+.codetwo-home.theme-modern .output-node > span {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  color: var(--home-ink);
+  font-weight: 650;
+}
+
+.codetwo-home.theme-modern .architecture-node-core {
+  border-color: rgb(74 222 128 / 45%);
+  background: linear-gradient(135deg, rgb(74 222 128 / 13%), rgb(56 189 248 / 13%));
+}
+
+.codetwo-home.theme-modern .architecture-node-core > span {
+  color: #a7f3c9;
+  background: linear-gradient(100deg, #4ade80, #38bdf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.codetwo-home.theme-modern .flow-arrow,
+.codetwo-home.theme-modern .branch-lines {
+  stroke: rgb(148 163 184 / 40%);
+  stroke-dasharray: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Footer                                                            */
+/* ---------------------------------------------------------------- */
+
+.codetwo-home.theme-modern .site-footer {
+  border-top: 1px solid var(--home-line);
+}
+
+/* ---------------------------------------------------------------- */
+/* Modern skin responsive fixes                                      */
+/* ---------------------------------------------------------------- */
+
+@media (max-width: 560px) {
+  .codetwo-home.theme-modern .provider-facts p + p {
+    border-top: 1px solid var(--home-line);
+    border-left: 0;
+  }
+
+  .codetwo-home.theme-modern .screenshot-frame {
+    border-radius: 12px;
+  }
+}
