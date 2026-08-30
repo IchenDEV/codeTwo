@@ -1,0 +1,25 @@
+{
+  "created_at": "2026-08-30T08:14:22Z",
+  "global_metric": {
+    "name": "",
+    "observation_window": "",
+    "rollback_threshold": ""
+  },
+  "limits": {
+    "max_behaviors_per_proposal": 1,
+    "max_changed_lines": 40,
+    "max_skill_files_changed": 1
+  },
+  "mode": "proposal-only",
+  "schema_version": 1,
+  "skill_path": "/Users/chenli/.codex/plugins/cache/personal/ai-native-sdlc/1.1.0/skills/ai-native-sdlc/SKILL.md",
+  "thresholds": {
+    "high_minimum": 1,
+    "low_can_trigger": false,
+    "medium_distinct_tasks_minimum": 2
+  },
+  "verification_commands": [
+    "bun test script/check-sdlc.test.ts",
+    "bun script/check-sdlc.ts"
+  ]
+}
