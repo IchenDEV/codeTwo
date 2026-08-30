@@ -3,8 +3,12 @@ id: change-2026-08-29-session-header-toolbar-unification
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-29
 updated: 2026-08-29
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: human review accepts the rendered interaction and release risk
 ---
 
@@ -80,7 +84,12 @@ retain a zero-width inner gap and semantic 8px horizontal padding.
 - In light appearance, every enabled resting action again resolved to one foreground value and a
   transparent background, with the same 28px height and 4px/0px gap contract. The appearance setting
   was restored to System after verification.
-- `python3 script/check_sdlc.py` and `git diff --check`: passed.
+- `bun script/check-sdlc.ts` and `git diff --check`: passed.
+
+Verdict: verified.
+
+Residual risk: a full renderer build was intentionally skipped for this markup-only change; the
+focused tests, design check, live renderer, and diff evidence are the acceptance boundary.
 
 ## Review and release
 

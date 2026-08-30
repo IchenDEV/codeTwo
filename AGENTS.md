@@ -7,16 +7,21 @@ checkout.
 ## Development lifecycle
 
 [`docs/sdlc/workflow.md`](docs/sdlc/workflow.md) is the single source of truth for material change
-artifacts, lifecycle states, gates, verification evidence, release handoff, incidents, and evals.
+Artifacts, lifecycle states, Gates, verification evidence, release handoff, Incidents, and Evals.
 
-- A direct user implementation request may supply the accepted Intent. Record its source and the
-  observable acceptance criteria in one change artifact before treating implementation as ready.
+- A direct user implementation request may approve Intent. Record its source, constraints, named
+  approver, and observable acceptance in one change Artifact, then move it to `executing` before
+  repository implementation begins. An Artifact-only Intent proposal may remain `draft` or
+  `in-review`.
 - Reuse accepted ADRs, design documents, issues, and PRs as evidence; link them from the change
-  artifact instead of copying their state into another tracker.
-- Run `python3 script/check_sdlc.py` before handoff. A PR that changes repository files must change
-  or add a canonical file under `docs/sdlc/changes/`.
+  Artifact instead of copying their state into another tracker.
+- Run `bun test script/check-sdlc.test.ts` when lifecycle enforcement changes, and always run
+  `bun script/check-sdlc.ts`
+  before handoff. A PR that changes repository files must change or add a canonical file under
+  `docs/sdlc/changes/`; implementation differences require that Artifact to be `executing` or later.
 - Do not create `docs/superpowers`, a parallel specs/plans tree, or another lifecycle registry.
-- Never mark a change verified, released, or closed without the corresponding observed evidence.
+- Never mark a change verified, released, or closed without checked acceptance, an explicit
+  verdict, actual evidence, residual risk, and the applicable human Gate.
 
 C2's product-level Scenes, Pipelines, task boards, and packs are application features and fixtures;
 they are not repositories for this project's development-lifecycle state.

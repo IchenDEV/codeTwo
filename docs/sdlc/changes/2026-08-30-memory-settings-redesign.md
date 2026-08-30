@@ -3,8 +3,12 @@ id: change-2026-08-30-memory-settings-redesign
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-30
 updated: 2026-08-30
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: PR #182 merge verification
 ---
 
@@ -87,7 +91,12 @@ actions, editing, and the existing narrow detail dialog are unchanged.
   and responsive behavior. Above-the-fold copy is unchanged. The implementation intentionally
   retains the repository's 768px settings column and persisted sidebar width instead of the
   concept image's over-wide shell rendering; no other material visual mismatch remains.
-- `python3 script/check_sdlc.py` — passed; task-scoped `git diff --check` — passed.
+- `bun script/check-sdlc.ts` — passed; task-scoped `git diff --check` — passed.
+
+Verdict: verified.
+
+Residual risk: verification covers the recorded desktop viewport matrix and repository design
+contract; no versioned release or external production observation was requested.
 
 ## Review and release
 

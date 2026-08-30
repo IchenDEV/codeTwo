@@ -3,8 +3,12 @@ id: change-2026-08-30-desktop-pet-pointer-interaction
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-30
 updated: 2026-08-30
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: pull request checks and repository merge
 ---
 
@@ -65,8 +69,13 @@ reintroduced.
 - The isolated Core later exited with `Resource temporarily unavailable (os error 35)`, so this
   evidence does not claim that the whole development runtime stayed healthy. The Electrobun pet
   window and its renderer remained available long enough to reproduce and verify the input fix.
-- `python3 script/check_sdlc.py` reported `[sdlc] contract valid`; task-scoped
+- `bun script/check-sdlc.ts` reported `[sdlc] contract valid`; task-scoped
   `git diff --check` passed.
+
+Verdict: verified.
+
+Residual risk: the isolated Core later exited with the recorded `os error 35`; evidence verifies
+the pet window interaction, not long-running Core health or a versioned product release.
 
 ## Review and release
 

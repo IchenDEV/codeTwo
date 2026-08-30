@@ -3,8 +3,12 @@ id: change-2026-08-30-desktop-pet-remove-voice-control
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-30
 updated: 2026-08-30
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: pull request checks and repository merge
 ---
 
@@ -63,8 +67,13 @@ existing `voice.composer` policy gate and `VoiceButton`.
   `views://main/desktop-pet.html` exposed only `Say hello to the pet` and `Hide desktop pet`; no
   microphone or voice control appeared in the accessibility tree or rendered screenshot.
 - Clicking the mascot in that real window still rendered its waving frame.
-- `python3 script/check_sdlc.py` reported `[sdlc] contract valid`; task-scoped
+- `bun script/check-sdlc.ts` reported `[sdlc] contract valid`; task-scoped
   `git diff --check` passed.
+
+Verdict: verified.
+
+Residual risk: validation used an isolated development build; no versioned product release or
+public distribution was requested or observed.
 
 ## Review and release
 

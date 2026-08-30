@@ -3,8 +3,12 @@ id: change-2026-08-26-plugin-hot-reload
 kind: change
 status: closed
 owner: repository maintainers
+approvers: "#decision-and-gates"
 created: 2026-08-26
 updated: 2026-08-29
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: new plugin-development feedback or regression
 ---
 
@@ -51,13 +55,24 @@ plugin-development path. Current behavior is documented in [`docs/plugins.md`](.
 
 The implementation contains targeted reload and developer-mode integration coverage in
 `crates/plugins/tests/project_bundle_runtime.rs`, plus bridge and rendered settings tests under
-`apps/desktop/tests`. The 2026-08-29 SDLC migration reruns the focused current-checkout coverage;
-its observed result is recorded in the bootstrap change artifact.
+`apps/desktop/tests`. On 2026-08-29, focused desktop coverage passed 4 tests with 46 assertions.
+The Rust reload/developer tests were attempted but did not start because the unchanged
+`libghostty-vt-sys` build failed first with Zig's `use of undeclared identifier 'INFINITY'` error.
+[PR #178's SDLC run](https://github.com/IchenDEV/codeTwo/actions/runs/33198244379) separately passed
+the repository contract and base-diff Gate.
+
+Verdict: verified.
+
+Residual risk: focused Rust behavior remains unverified because of the recorded Ghostty/Zig build
+blocker; repository integration evidence does not prove public product release.
 
 ## Review and release
 
 PR #110 merged the implementation to `main` in commit `310b309`. This is repository integration
 evidence, not a claim that the feature shipped in a notarized public C2 release.
+
+No release: the historical change is closed as merged repository work without a versioned or
+notarized product release claim.
 
 ## Feedback
 

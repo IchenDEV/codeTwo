@@ -3,20 +3,24 @@ id: incident-YYYY-MM-DD-short-slug
 kind: incident
 status: investigating
 owner: unassigned
+approvers: []
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-next_trigger: evidence establishes mitigation or a blocked reason
+source: <deterministic alert, user report, or operational observation>
+inputs: pending
+outputs: pending
+next_trigger: evidence establishes mitigation, recovery, or a blocked reason
 ---
 
 # Incident title
 
 ## Detection and impact
 
-Record the deterministic trigger, severity, time, affected users/systems/data, and duration.
+Record deterministic trigger, severity, time, source, affected users/systems/data, and duration.
 
 ## Timeline
 
-List only verifiable events with source links. Label inference explicitly.
+List only verifiable events, decisions, and actions with sources. Label inference explicitly.
 
 ## Diagnosis
 
@@ -24,13 +28,23 @@ Separate established cause, contributing conditions, hypotheses, and missing evi
 
 ## Mitigation and recovery
 
-Record actions, authorization, actual results, recovery verification, and rollback.
+Record actor, authorization, action, actual result, recovery check, and rollback.
+
+Recovery verdict: pending.
 
 ## Follow-ups
 
-Link owned actions and at least one new change Intent when remediation is needed.
+Link at least one owned change Intent when remediation is needed.
+
+Blocked: pending.
+
+Replace the placeholder with a concrete obstacle only when a follow-up change cannot be created.
 
 ## Regression eval
 
-Link the Eval that would detect the same failure. If it cannot be built, record the concrete
-blocker instead of omitting it.
+Link the Eval that would detect the same failure.
+
+Blocked: pending.
+
+Replace the placeholder with a concrete fixture, isolation, or scoring obstacle only when the Eval
+cannot be created.

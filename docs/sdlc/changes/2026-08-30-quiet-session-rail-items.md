@@ -1,11 +1,15 @@
 ---
 id: change-2026-08-30-quiet-session-rail-items
 kind: change
-status: verified
+status: closed
 owner: codex
+approvers: user via the 2026-08-30 sidebar requests and explicit PR merge authorization
 created: 2026-08-30
 updated: 2026-08-30
-next_trigger: pull request checks and repository merge
+source: user-supplied sidebar reference and PR #183
+inputs: accepted conditional row-hierarchy and visual-noise constraints
+outputs: merge commit e3744874 and focused renderer verification evidence
+next_trigger: new session-rail feedback or a regression report
 ---
 
 # Quiet the session rail items
@@ -68,6 +72,8 @@ present in the existing native and rendered context menus.
 
 ## Verification
 
+Verdict: verified.
+
 - Failed iteration: `bun run build:renderer` stopped in the source design check because the first
   row draft used raw `h-5`; the design checker required a semantic control-height utility. The row
   was corrected to the existing `h-control-mini` token before the build was rerun.
@@ -89,14 +95,19 @@ present in the existing native and rendered context menus.
 - Only the Vite renderer was started for inspection after the process/port preflight; no second Core
   was launched alongside the live CodeTwo instance. The development-only preview fixture was
   removed after inspection and is not part of the final source tree.
-- `python3 script/check_sdlc.py` and `git diff --check` passed on the final change.
+- `bun script/check-sdlc.ts` revalidated the migrated Artifact, and `git diff --check` passed.
+
+Residual risk: the captured inspection covers the supported sidebar widths and themes, but not
+future row content shapes introduced after PR #183.
 
 ## Review and release
 
-The user explicitly authorized creating and merging the repository pull request on 2026-08-30.
-[PR #183](https://github.com/IchenDEV/codeTwo/pull/183) carries the implementation; repository
-integration remains pending until its checks pass and the merge is observed. No versioned product
-release was requested.
+Approval: the user explicitly authorized creating and merging the repository pull request on
+2026-08-30.
+Release target: none; this was a repository integration, not a versioned product release.
+Rollback: revert merge commit `e3744874` and its PR #183 implementation commits.
+No release: [PR #183](https://github.com/IchenDEV/codeTwo/pull/183) was observed on `origin/main` as
+merge commit `e3744874`; no versioned package or deployment was requested.
 
 ## Feedback
 

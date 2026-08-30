@@ -3,8 +3,12 @@ id: change-2026-08-29-semantic-radius-floor
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-29
 updated: 2026-08-29
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: human review accepts the rendered geometry and release risk
 ---
 
@@ -64,7 +68,12 @@ The design preview and design law show the new values.
   corner below 12px and the typed editor stayed within the Composer card.
 - `bun run build:renderer`: passed TypeScript, Vite production build, source design check, and
   built-CSS design check; 0 new design violations and 35 semantic selectors generated.
-- `python3 script/check_sdlc.py` and `git diff --check`: passed.
+- `bun script/check-sdlc.ts` and `git diff --check`: passed.
+
+Verdict: verified.
+
+Residual risk: visual evidence sampled the recorded viewport and appearance matrix rather than
+every platform font/rasterization combination.
 
 ## Review and release
 

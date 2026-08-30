@@ -1,11 +1,15 @@
 ---
 id: change-2026-08-30-flat-task-sections
 kind: change
-status: verified
+status: closed
 owner: codex
+approvers: user via the 2026-08-30 sidebar requests and explicit PR merge authorization
 created: 2026-08-30
 updated: 2026-08-30
-next_trigger: pull request checks and repository merge
+source: user-supplied sidebar references and PR #183
+inputs: accepted sidebar hierarchy and interaction requirements
+outputs: merge commit e3744874 and focused UI verification evidence
+next_trigger: new sidebar feedback or a regression report
 ---
 
 # Flatten recent Tasks and add sidebar Sections
@@ -97,6 +101,8 @@ partition. Stored UI organization is versioned and ignored by older builds.
 
 ## Verification
 
+Verdict: verified.
+
 - PR #183's first cross-platform desktop run failed on Linux, macOS, and Windows in the explicit
   Section-precedence test. The complete suite left an intentionally partial Canvas context in the
   shared DOM, and the test's running Task then mounted ActivityOrb against that stub. The focused
@@ -106,7 +112,7 @@ partition. Stored UI organization is versioned and ignored by older builds.
   passed: 20 tests, 195 expectations, 0 failures.
 - `bun run build:renderer` passed TypeScript, Vite production rendering, the source design-system
   gate with 0 new violations, and the built-selector design-system gate.
-- `python3 script/check_sdlc.py` passed with `[sdlc] contract valid`.
+- `bun script/check-sdlc.ts` revalidated the migrated Artifact with `[sdlc] contract valid`.
 - Renderer-only QA used isolated port 1421 and did not launch a second Core. Browser inspection
   confirmed the Recent label, Project switcher, and inline add control were absent, with Highlight
   becoming the first visible Task control and no blank placeholder above it.
@@ -121,12 +127,17 @@ partition. Stored UI organization is versioned and ignored by older builds.
   title, and flat Task title at the same 16 CSS-pixel left edge at both 320- and 220-pixel rail
   widths. The narrow rail had no horizontal overflow, and folding Work removed only its rows.
 
+Residual risk: Section state remains renderer-local and the recorded UI checks do not establish
+cross-device synchronization, which was explicitly outside this change.
+
 ## Review and release
 
-The user explicitly authorized creating and merging the repository pull request on 2026-08-30.
-[PR #183](https://github.com/IchenDEV/codeTwo/pull/183) carries the implementation; repository
-integration remains pending until its checks pass and the merge is observed. No versioned product
-release was requested.
+Approval: the user explicitly authorized creating and merging the repository pull request on
+2026-08-30.
+Release target: none; this was a repository integration, not a versioned product release.
+Rollback: revert merge commit `e3744874` and its PR #183 implementation commits.
+No release: [PR #183](https://github.com/IchenDEV/codeTwo/pull/183) was observed on `origin/main` as
+merge commit `e3744874`; no versioned package or deployment was requested.
 
 ## Feedback
 

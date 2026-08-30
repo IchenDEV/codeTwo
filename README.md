@@ -201,9 +201,10 @@ Please keep changes scoped, add tests for behavior changes, and run the relevant
 pull request that changes user-visible desktop UI should include light, dark, and narrow viewport
 evidence where applicable.
 
-Material changes follow the repository's [artifact-driven development lifecycle](docs/sdlc/workflow.md).
-Link the canonical change artifact in the pull request; do not create a parallel specs or plans
-directory.
+Material changes follow the repository's [AI-native development lifecycle](docs/sdlc/workflow.md).
+Link the canonical change Artifact in the pull request. Implementation starts only after its
+Intent/Spec is accepted and the Artifact reaches `executing`; do not create a parallel lifecycle,
+specs, or plans registry.
 
 ## Security and privacy
 

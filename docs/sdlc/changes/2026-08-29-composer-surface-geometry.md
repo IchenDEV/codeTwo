@@ -3,8 +3,12 @@ id: change-2026-08-29-composer-surface-geometry
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-29
 updated: 2026-08-29
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: human review accepts the rendered interaction and release risk
 ---
 
@@ -68,8 +72,13 @@ contract rejects reintroducing that second surface.
 - Safari WebKit accessibility readback confirmed the same prompt accepted `q` and preserved it
   across expand and collapse. Safari's web-content screenshot capture returned a blank protected
   surface, so exact visual geometry comes from the four Browser screenshots and computed styles.
-- `python3 script/check_sdlc.py` and `git diff --check`: passed. The existing C2 Core process and its
+- `bun script/check-sdlc.ts` and `git diff --check`: passed. The existing C2 Core process and its
   data directory were not restarted or shared during validation.
+
+Verdict: verified.
+
+Residual risk: Safari protected-surface screenshot capture was unavailable, so visual geometry
+relies on the recorded Browser screenshots, accessibility readback, and computed styles.
 
 ## Review and release
 

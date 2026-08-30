@@ -3,8 +3,12 @@ id: change-2026-08-29-appearance-settings-layout
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-29
 updated: 2026-08-29
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: human product review
 ---
 
@@ -68,7 +72,12 @@ selection and editing controls were preserved.
   3/2/1 compact grids, 1/1/1 auxiliary grids, zero horizontal overflow, and no console errors.
 - Scheme changes (`Light` then `System`) and theme changes (`Ocean` then `C2`) updated checked and
   pressed state and were restored after verification.
-- `python3 script/check_sdlc.py` — passed; task-scoped `git diff --check` — passed.
+- `bun script/check-sdlc.ts` — passed; task-scoped `git diff --check` — passed.
+
+Verdict: verified.
+
+Residual risk: existing Base UI `act(...)` warnings and the bundle-size advisory remain; no product
+release was reviewed or authorized.
 
 ## Review and release
 

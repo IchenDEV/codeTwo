@@ -3,8 +3,12 @@ id: change-2026-08-29-pets-settings-surface-and-scroll
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-29
 updated: 2026-08-29
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: human product review
 ---
 
@@ -63,7 +67,12 @@ so responsive overrides cannot reset the scroll clearance to zero.
   clearance at the scroll limit.
 - Selected Bill Gates and then restored Naiwa; the selected row updated correctly both times.
 - Browser console reported no warnings or errors after the final reload.
-- `python3 script/check_sdlc.py` — passed; task-scoped `git diff --check` — passed.
+- `bun script/check-sdlc.ts` — passed; task-scoped `git diff --check` — passed.
+
+Verdict: verified.
+
+Residual risk: the existing non-failing React `act(...)` warnings remain; no product release was
+reviewed or authorized.
 
 ## Review and release
 

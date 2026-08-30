@@ -3,8 +3,12 @@ id: change-2026-08-29-empty-session-titlebar-divider
 kind: change
 status: verified
 owner: codex
+approvers: "#decision-and-gates"
 created: 2026-08-29
 updated: 2026-08-29
+source: "#intent"
+inputs: "#spec"
+outputs: "#build"
 next_trigger: human review accepts the rendered interaction and release risk
 ---
 
@@ -65,7 +69,12 @@ still use the global titlebar rule.
   hairline. In the same renderer, rail and dock titlebars retained their computed half-pixel inset
   shadows while the session header had none.
 - The side panel and appearance settings were restored, and browser warning/error output was empty.
-- `python3 script/check_sdlc.py` and the task-scoped `git diff --check`: passed.
+- `bun script/check-sdlc.ts` and the task-scoped `git diff --check`: passed.
+
+Verdict: verified.
+
+Residual risk: live evidence covered the empty state; the non-empty conversation state is retained
+by focused contract coverage and the unchanged semantic selector.
 
 ## Review and release
 

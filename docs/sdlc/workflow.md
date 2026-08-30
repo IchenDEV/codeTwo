@@ -1,123 +1,156 @@
-# CodeTwo development lifecycle
+# CodeTwo AI-native development lifecycle
 
-This directory is the single machine- and human-readable state source for material repository
-changes. Existing issues, ADRs, design documents, commits, pull requests, checks, releases, and
-monitoring evidence remain authoritative for their own facts; the change artifact links them into
-one lifecycle instead of copying them.
+This file is the single lifecycle authority for material repository changes. It connects existing
+facts without copying them: a user request or issue owns the request, ADRs and design documents own
+accepted design decisions, tests and CI own check results, pull requests own review, releases own
+published identity, and monitoring owns operational detection. The canonical change Artifact links
+those facts and owns lifecycle status and the next trigger.
 
-## Canonical locations
+## Canonical Artifact locations
 
 ```text
 docs/sdlc/
-  workflow.md                  lifecycle and gate contract
-  templates/change.md         compact Intent-to-Release artifact
-  templates/incident.md       production or operational incident
-  templates/eval.md           repeatable regression case
-  changes/<date>-<slug>.md    authoritative state for a material change
-  incidents/<date>-<slug>.md  created only for a real incident
-  evals/<slug>.md             real-task or incident regression cases
+  workflow.md                  lifecycle, states, Gates, and actual commands
+  templates/change.md         compact Intent-to-feedback Artifact
+  templates/incident.md       real operational event and recovery
+  templates/eval.md           repeatable real-task or Incident regression
+  changes/<date>-<slug>.md    one state record per material change
+  incidents/<date>-<slug>.md  created only after a real Incident
+  evals/<slug>.md             fixed regression cases with actual results
 ```
 
-Do not create a second specs/plans tree. `docs/superpowers` was retired when this contract was
-introduced. Files under `docs/design`, `docs/adr`, GitHub issues, and PRs may provide Intent or Spec
-evidence, but lifecycle status lives only in the canonical change artifact.
+Use one compact change file by default. For a high-risk or cross-system change, keep the lifecycle
+state in that file and link accepted ADRs, design documents, migration plans, test reports, and
+release evidence from their existing authoritative locations. Do not create global parallel
+`specs`, `plans`, `docs/superpowers`, or another lifecycle registry.
 
-C2's product-level Scenes, Pipelines, task boards, and packs are application behavior and test
-fixtures. They do not advance or replace this repository workflow.
+Historical change Artifacts remain auditable evidence. Superseding the workflow never permits
+deleting unrelated product history merely to make a new template look uniform.
 
-## When a change artifact is required
-
-A change artifact is required for every pull request that changes repository files. Keep a
-low-risk or editorial change in one compact file; link a separate accepted design or ADR rather
-than restating it.
-
-A direct user instruction to implement counts as Intent approval when its source and constraints
-are recorded. It does not grant permission to create a PR, merge, deploy, mutate production, or
-perform other external actions.
-
-## Lifecycle and legal transitions
+## End-to-end chain
 
 ```text
-draft -> in-review -> accepted -> executing -> verified -> ready-to-release
-      -> released -> closed
+Request / Idea / Incident
+  -> Intent -> Spec -> Plan -> Build -> Verification
+  -> Review / Release -> Production / Operation
+  -> Incident / Feedback -> new Intent + regression Eval
 ```
 
-`blocked` and `superseded` may be entered from any non-final state. `failed` records a completed
-verification attempt that did not meet acceptance; correction returns the same artifact to
-`executing`, preserving the failed evidence in its Verification section.
+Every transition has an owner, input, output, observable acceptance, evidence, and `next_trigger`.
+Failure, blocking, rejection, supersession, rollback, and no-release closure are explicit states.
+An Artifact does not advance because an Agent says work is done.
 
-| State | Required evidence | Next trigger |
+## Change states and Gates
+
+| State | Required fact | Gate or next trigger |
 |---|---|---|
-| `draft` | problem, outcome, affected boundary | owner asks for review |
-| `in-review` | testable acceptance and open decisions | owner accepts or blocks Intent/Spec |
-| `accepted` | approval source and resolved blocking decisions | implementation starts |
-| `executing` | linked Plan and owned implementation scope | observable verification runs |
-| `failed` | actual failed command or symptom | correction is authorized |
-| `verified` | actual result for every applicable criterion | human review accepts risk |
-| `ready-to-release` | PR/review status, rollback and target environment | authorized release action |
-| `released` | immutable version/build/environment and smoke evidence | observation window closes |
-| `closed` | released outcome or explicit no-release disposition | new feedback or incident |
+| `draft` | problem, desired outcome, source, owner candidate | owner requests review |
+| `in-review` | testable acceptance and open decisions | named approver accepts, blocks, or rejects |
+| `accepted` | Intent/Spec approval and resolved blocking decisions | implementation owner starts work |
+| `executing` | Plan mapped to criteria, affected scope, tests, risks, rollback | observable verification runs |
+| `failed` | actual failed symptom or command retained in Verification | correction is authorized |
+| `blocked` | concrete missing decision, authority, dependency, or evidence | blocker changes |
+| `verified` | every criterion checked, actual evidence, verdict, residual risk | human review accepts risk |
+| `ready-to-release` | verification, release approval, target, and rollback | authorized release action |
+| `released` | immutable identity, environment, and smoke evidence | observation window closes |
+| `closed` | released outcome or explicit no-release disposition | new feedback or Incident |
+| `superseded` | replacement Artifact and rationale | replacement governs |
 
-## Artifact chain
+A direct user implementation request may approve Intent when its source and constraints are
+recorded. It does not authorize PR creation, merge, release, deployment, production mutation,
+messages, or long-running automation. Security, data migration, major design, merge, and production
+release remain human Gates unless separately authorized.
 
-### Intent and Spec
+A PR containing changes outside its canonical change Artifact must include a changed Artifact in
+`executing` or a later execution state. An Artifact-only proposal may remain `draft` or
+`in-review`; this lets Intent be reviewed without falsely treating implementation as authorized.
 
-Record the problem and source evidence before the proposed implementation. Acceptance criteria must
-describe observable outcomes, including compatibility, failure, security, data, UX, and operations
-only where applicable. An accepted ADR or design document can be linked as the Spec.
+## Intent, Spec, Plan, and Build
 
-### Plan and Build
+Intent proves the problem is worth solving and records affected users/systems, constraints, and
+non-goals. Spec defines observable behavior, failure paths, interfaces, compatibility, rollout,
+rollback, and checkable acceptance criteria without duplicating an accepted ADR or design.
 
-Map implementation steps to acceptance criteria, affected modules, tests, risks, and rollback. The
-Plan is not a work diary. Use separate worktrees for concurrent revisions and follow `AGENTS.md`
-for desktop process and data ownership.
+Plan maps the smallest implementation steps to acceptance criteria, affected modules, validation,
+risks, rollback, and required Gates. Build links implementation commits or PRs and records only
+material deviations; it is not a work diary. Concurrent code revisions use separate worktrees and
+must follow the desktop ownership rules in [`AGENTS.md`](../../AGENTS.md).
 
-### Verification
+## Verification loop
 
-Run the narrow relevant checks first, then the broader checks proportional to risk. Record actual
-commands and results. Desktop UI changes require real rendered-window evidence in the applicable
-light, dark, and narrow states; successful compilation is not visual acceptance.
+Verification records actual commands, environment, results, runtime or visual evidence, failed
+iterations, and residual risk. A failed attempt remains visible; correction returns the same change
+to `executing`, then produces new evidence.
 
-### Review and Release
+- Desktop UI changes require real rendered-window evidence for applicable light, dark, and narrow
+  states. Compilation is not visual acceptance.
+- Service, data, protocol, and release changes require the corresponding contract, integration,
+  migration, request/response, log, package, or smoke evidence.
+- `verified` and later states require every acceptance checkbox checked, `Verdict: verified`, and a
+  concrete `Residual risk:` statement.
+- Skipped checks state why they are not applicable or what blocks them.
 
-The pull-request template is the review handoff. CI provides deterministic checks; a human accepts
-product and release risk. Current repository automation is:
+## Review and release
 
-| Concern | Deterministic mechanism |
+The pull-request template is the human review handoff. CI provides deterministic evidence; it does
+not accept product or release risk. The live repository mechanisms are:
+
+| Concern | Repository mechanism |
 |---|---|
-| Artifact contract and single-source rule | `.github/workflows/sdlc.yml` |
-| Desktop policy, tests, renderer | `.github/workflows/desktop-design-system.yml` |
-| Windows package and focused compatibility | `.github/workflows/windows-desktop.yml` |
-| Documentation build and Pages deploy | `.github/workflows/pages.yml` |
-| Nightly macOS package | `.github/workflows/nightly-macos.yml` |
-| Versioned macOS release | `.github/workflows/release-macos.yml` |
+| Artifact shape, readiness, and feedback Gates | [`.github/workflows/sdlc.yml`](../../.github/workflows/sdlc.yml) |
+| Desktop design, tests, and renderer build | [`.github/workflows/desktop-design-system.yml`](../../.github/workflows/desktop-design-system.yml) |
+| Windows packaging and focused compatibility | [`.github/workflows/windows-desktop.yml`](../../.github/workflows/windows-desktop.yml) |
+| Documentation build and Pages deployment | [`.github/workflows/pages.yml`](../../.github/workflows/pages.yml) |
+| Nightly macOS package | [`.github/workflows/nightly-macos.yml`](../../.github/workflows/nightly-macos.yml) |
+| Versioned macOS release | [`.github/workflows/release-macos.yml`](../../.github/workflows/release-macos.yml) |
 
-The versioned release workflow must be dispatched from `main` with a canonical change id in
-`ready-to-release` state. The checker blocks every other state. The workflow validates immutable
-SemVer tags, writes the change id into the staged release files, and publishes an ad-hoc-signed
-Apple Silicon DMG. It is not Developer ID signing, notarization, or proof of a public production
-distribution. After observed smoke verification, update the change Artifact to `released` or
-`closed` through a normal reviewed repository change.
+The versioned macOS workflow accepts only a named `ready-to-release` change. The checker also
+requires release approval, target, rollback, complete verification, and residual risk before
+packaging starts. The workflow then records the change id beside the DMG. `released` is written only
+after an immutable tag/build/environment and observed smoke result exist.
 
-### Maintain and Evals
+The macOS package is ad-hoc signed and not Apple-notarized. A GitHub Release is not proof of public
+production adoption. GitHub branch-protection configuration is external to this repository; the
+workflow exists, but maintainers must separately require the `SDLC contract` check for a guaranteed
+merge-blocking Gate.
 
-Create an Incident artifact only from a real operational event. Separate facts from hypotheses,
-record approvals and recovery evidence, then link a new change Intent and a regression Eval. Evals
-must come from real tasks or incidents and define fixed input, allowed actions, observable
-acceptance, and a repeatable result.
+## Operation, Incidents, and feedback
 
-This repository currently has no repository-owned production monitoring integration that can
-automatically open Incident artifacts. Detection-to-Agent triggering is therefore `blocked` until
-a real monitoring source and authorization path exist; do not simulate it in documentation.
+Detection thresholds belong to deterministic monitoring. An Agent may diagnose after a trigger and
+act only along an already authorized path. A confirmed Incident records detection, impact,
+timeline, facts versus hypotheses, authorization, mitigation, recovery evidence, a follow-up change,
+and a regression Eval. `resolved` or `closed` is rejected unless those links exist or a concrete
+`Blocked:` reason explains why one cannot be created.
 
-## Local checks
+CodeTwo currently has no repository-owned production monitoring integration that automatically
+opens Incident Artifacts. Detection-to-Agent triggering is `blocked` until a real source, threshold,
+destination, and authorization path exist. Do not simulate an Incident or claim monitoring exists.
+
+## Continuous Evals
+
+Evals come from real tasks, defects, or Incidents. They fix input and environment, allowed actions,
+observable acceptance, evidence, scoring, and failure classes. `active`, `failed`, or `retired`
+Evals require linked provenance plus `Result:` and `Revision:` in the last result.
+
+Run relevant Evals whenever project instructions, Skills, Hooks, prompts, models, Harness settings,
+or lifecycle enforcement changes. Do not manufacture cases for a target count, and do not delete an
+Incident Eval merely because its fixture is difficult; repair its isolation or scoring instead.
+
+## Deterministic checks
+
+Run from the repository root:
 
 ```sh
-python3 -m unittest script/test_check_sdlc.py
-python3 script/check_sdlc.py
+bun test script/check-sdlc.test.ts
+bun script/check-sdlc.ts
 ```
 
-On pull requests, CI also compares the branch with its base and rejects material repository changes
-that do not add or update a canonical change artifact. GitHub branch-protection settings are
-external to this repository; maintainers must require the `SDLC contract` check before it becomes
-a merge-blocking Gate.
+CI additionally runs `bun script/check-sdlc.ts --base "$BASE_SHA"`. A versioned release runs
+`bun script/check-sdlc.ts --release-change "$CHANGE_ID"`. The checker uses only Bun and Node
+built-ins and validates required fields and sections, unique ids, legal states, local links,
+acceptance closure, verification evidence, release readiness, Incident/Eval feedback links,
+forbidden parallel sources, and the branch-diff Gate.
+
+These checks validate the repository-controlled lifecycle. They do not claim external branch
+protection, deployment success, production monitoring, or release smoke evidence that was not
+actually observed.
