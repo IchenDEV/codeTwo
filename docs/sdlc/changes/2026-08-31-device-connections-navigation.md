@@ -162,7 +162,7 @@ and refreshed required checks are the next Gate.
   `apps/desktop` passed the design check with 0 new violations, TypeScript, the 6,397-module Vite
   production build, and the built-selector check.
 
-- After merge approval, `main` advanced twice. Refreshed CI run `33326789622` tested the newer
+- After merge approval, `main` advanced repeatedly. Refreshed CI run `33326789622` tested the newer
   synthetic merge ref and failed Linux, macOS, and Windows at the Feishu resource-section test:
   that newly inherited assertion still required visible `Settings` text after this change had
   intentionally converted utility rows into icon-only buttons. Rebasing onto `b82b2060` reproduced
@@ -172,6 +172,12 @@ and refreshed required checks are the next Gate.
 - On that refreshed base, `bunx bun@1.4.0 test` passed all 757 desktop tests across 124 files with
   3,683 expectations. `bunx bun@1.4.0 run build:renderer` also passed the source design check with
   0 new violations, TypeScript, a 6,401-module Vite production build, and the built-selector check.
+- Before merge, `main` advanced again through PR #188. Rebasing onto `37c89330` was conflict-free,
+  and the Bun 1.4.0 full suite passed all 745 current desktop tests across 124 files with 3,501
+  expectations. The first renderer build stopped before source validation because the existing
+  dependency directory lacked #188's newly locked ESLint packages. A frozen Bun 1.4.0 install did
+  not change tracked files; the same build then passed ESLint, Stylelint, TypeScript, and the
+  6,401-module Vite production build.
 
 Residual risk: icon-only controls rely on hover/focus labels for first-time discoverability, which
 is the accepted density tradeoff in the supplied reference. Physical two-device pairing and the
