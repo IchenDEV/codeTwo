@@ -3,13 +3,13 @@ id: change-2026-08-31-device-connections-navigation
 kind: change
 status: verified
 owner: codex
-approvers: user via the 2026-08-31 device-connections menu feedback
+approvers: user via the 2026-08-31 device-connections feedback and merge instruction
 created: 2026-08-31
 updated: 2026-08-31
 source: user-supplied C2 Dev appshots plus 2026-08-31 placement, phone-icon, and compact-toolbar follow-ups
 inputs: accepted requirement for discoverable connections in a space-efficient lower-left utility area
 outputs: a verified one-row lower-left utility toolbar with accessible Settings, Usage, and Device connections buttons
-next_trigger: human review in the authorized Draft pull request
+next_trigger: merge PR #187 after refreshed required checks pass
 ---
 
 # Make device connections discoverable from the main sidebar
@@ -64,8 +64,9 @@ lifecycle contract and does not present a dead connection affordance.
 
 The user supplied the failed visible state and explicitly asked where the connection menu is,
 accepting a discoverable main-menu repair. Reusing the existing modal avoids a second pairing
-surface or protocol path. The user's 2026-08-31 `pr` instruction authorizes a Draft pull request as
-the human-review handoff. It does not authorize merge, release, deployment, or production mutation.
+surface or protocol path. The user's 2026-08-31 `pr` instruction authorized Draft PR #187 as the
+human-review handoff, and the later `merge` instruction accepts the verified residual risk and
+authorizes that PR's merge. It does not authorize release, deployment, or production mutation.
 
 ## Plan
 
@@ -86,6 +87,7 @@ stored data, credentials, protocol state, or migrations are changed.
 
 ## Build
 
+- Review handoff: [Draft PR #187](https://github.com/IchenDEV/codeTwo/pull/187).
 - Added one standard NavigationRow to SessionRail's fixed lower-left utility group between Usage
   and Settings, using a single-phone icon and English/Simplified Chinese copy.
 - Routed the live `remote.modal` component policy, open state, and existing RemoteModal opener from
@@ -166,12 +168,13 @@ existing network path are unchanged.
 
 ## Review and release
 
-Approval: pending human review in the authorized Draft pull request.
+Approval: user approved PR #187 for merge via the 2026-08-31 `merge` instruction.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
 Rollback: remove the sidebar navigation wiring and localization changes; no data rollback is needed.
-No release: pending review disposition.
+No release: explicit no-release disposition; the merge instruction does not authorize release or
+deployment.
 
 ## Feedback
 
