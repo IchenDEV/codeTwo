@@ -4,6 +4,8 @@ import {
   sidebarBeforeIdAtFinalIndex,
   sidebarFinalizedDestination,
   sidebarProjectSectionFromGroup,
+  sidebarRememberedDragTarget,
+  sidebarTaskContainerCollisionPriority,
   sidebarTaskLocationFromGroup,
 } from "../src/sidebar/sidebarDnd";
 
@@ -53,5 +55,24 @@ describe("sidebar dnd destination mapping", () => {
       projectPath: "/tmp/repo",
       index: 3,
     });
+  });
+
+  test("keeps nonempty Task containers below nested Task rows", () => {
+    expect(sidebarTaskContainerCollisionPriority(true)).toBeLessThan(2);
+    expect(sidebarTaskContainerCollisionPriority(false)).toBeGreaterThan(2);
+  });
+
+  test("forgets the last destination after leaving or entering an incompatible target", () => {
+    const source = { kind: "task", id: "task-1" } as const;
+    const previous = {
+      item: { kind: "task", id: "task-2" } as const,
+      location: { kind: "tasks", sectionId: null, projectPath: "/tmp/repo" } as const,
+    };
+
+    expect(sidebarRememberedDragTarget(source, null, previous)).toBeNull();
+    expect(sidebarRememberedDragTarget(source, {
+      item: { kind: "project", id: "/tmp/other" },
+      location: { kind: "projects", sectionId: null },
+    }, previous)).toBeNull();
   });
 });

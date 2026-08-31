@@ -45,7 +45,8 @@ operations. The implementation must not depend on native HTML5 `draggable`, `dra
 - [x] AC-2: A physical pointer drag moves a Project into a user Section and back to the root list,
       including a Section without existing Projects.
 - [x] AC-3: Section and Task drag targets continue to map to the existing move operations, with
-      keyboard drag support supplied by the library.
+      keyboard drag support supplied by the library. Nested Task rows outrank their nonempty
+      container, and dropping outside a compatible target cancels instead of reusing stale hover.
 - [x] AC-4: Focused rendered tests, type checks, renderer build, lifecycle checks, and an isolated
       real rendered-window inspection pass.
 
@@ -80,9 +81,16 @@ a stale hover row. Group components are URI-encoded, so paths and Section IDs co
 remain unambiguous. Empty Section and empty root drop zones have distinct IDs and explicit
 collision priority, so another item kind cannot overwrite the registered target.
 
+Nonempty Project and Section Task containers stay below their nested Task rows in collision
+priority while empty containers retain the stronger target needed for first-item placement.
+Drag-over normalization also clears the remembered destination on a missing or incompatible
+target, so a release outside the sidebar cannot mutate the last valid destination.
+
 ## Verification
 
 Verdict: verified
+
+Review-feedback corrections are included in this verdict.
 
 ### Acceptance evidence
 
@@ -97,11 +105,12 @@ Verdict: verified
   also moved `codeTwo` into the empty `Work` Section.
 - AC-3: PASS — `bun test tests/sessionRailRendered.test.tsx` verifies that Section, Project, and
   Task rows expose dedicated dnd-kit keyboard handles and no native `[draggable=true]` elements.
-  `bun test tests/sidebarDnd.test.ts tests/sidebarProjects.test.ts tests/sidebarSections.test.ts`
-  verifies finalized index mapping plus Section, Project, and Task destination decoding, including
-  encoded paths. Existing typed domain move suites pass.
-- AC-4: PASS — `bun test` plus TypeScript, focused suites, and the renderer production
-  build passed in the final verification pass. The isolated rendered pass covered same-list
+  `bun test tests/sidebarDnd.test.ts` additionally verifies that nonempty Task containers stay
+  below Task-row priority and that null or incompatible drag targets clear the last destination.
+  The broader destination suites verify finalized index mapping plus Section, Project, and Task
+  decoding, including encoded paths. Existing typed domain move suites pass.
+- AC-4: PASS — the final `bun test` passed 809 tests and 3,841 expectations; `bunx tsc --noEmit`
+  and `bun run build` also passed. The isolated rendered pass covered same-list
   pointer sorting, empty-Section keyboard placement, the [narrow shell](evidence/pr-review-narrow-dark.png),
   and the final visual state without starting a second Core process.
 
@@ -109,7 +118,8 @@ The initial native-HTML5 baseline emitted `pointerdown` but not `dragstart`. Dur
 the first library pass exposed two integration defects: optimistic same-list sorting reported the
 source row as the final target, and Project/Task empty drop zones shared an ID. The final adapter
 uses sortable destination metadata and kind-qualified drop-zone IDs; both failure paths were
-retested after correction.
+retested after correction. The later review regressions were first reproduced by focused failing
+tests, then passed after container-priority and stale-target normalization were corrected.
 
 Residual risk: the user's live Core-backed profile was deliberately not opened because another
 process owns it. Pointer and keyboard gestures were exercised in the isolated Chromium renderer;
@@ -130,5 +140,6 @@ Preparing this section does not authorize merge, deployment, release, or product
 
 ## Feedback
 
-The screenshot and request are the direct defect feedback for this change. No post-change feedback
-exists yet.
+The screenshot and request are the direct defect feedback for this change. PR review later found
+that nonempty Project/Section container zones could outrank nested Task rows and that leaving all
+valid targets retained the last hover destination. The user explicitly requested both corrections.

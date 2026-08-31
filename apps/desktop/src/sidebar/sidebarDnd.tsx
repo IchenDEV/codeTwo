@@ -138,6 +138,34 @@ export function sidebarDndData(value: unknown): SidebarDndData | null {
   return candidate as SidebarDndData;
 }
 
+export function sidebarTaskContainerCollisionPriority(hasNestedTaskRows: boolean): number {
+  return hasNestedTaskRows ? 1 : 3;
+}
+
+function sidebarDragTargetIsCompatible(
+  source: SidebarDragItem,
+  target: SidebarDndData,
+): boolean {
+  if (source.kind === "section") {
+    return target.location.kind === "sections" || target.item?.kind === "section";
+  }
+  if (source.kind === "project") {
+    return target.location.kind === "projects" || target.location.kind === "section";
+  }
+  return target.location.kind === "tasks" || target.location.kind === "section";
+}
+
+export function sidebarRememberedDragTarget(
+  source: SidebarDragItem | null,
+  value: unknown,
+  previous: SidebarDndData | null,
+): SidebarDndData | null {
+  const target = sidebarDndData(value);
+  if (!source || !target || !sidebarDragTargetIsCompatible(source, target)) return null;
+  if (target.item?.kind === source.kind && target.item.id === source.id) return previous;
+  return target;
+}
+
 export function sidebarSortableSnapshot(value: unknown): SidebarSortableSnapshot | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<SidebarSortableSnapshot>;

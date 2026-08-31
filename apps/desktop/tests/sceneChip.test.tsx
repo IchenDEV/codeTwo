@@ -295,6 +295,61 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
+  test("selects an installed Provider without requiring a preset model", async () => {
+    activateDom();
+    const providerChanges = [];
+    const providerModelChanges = [];
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config({
+            provider: "codex",
+            providers: [
+              {
+                id: "codex",
+                display_name: "OpenAI Codex",
+                available: true,
+                enabled: true,
+                models: [{ id: "gpt-5.6-sol", name: "GPT-5.6-Sol" }],
+              },
+              {
+                id: "pi",
+                display_name: "Pi",
+                available: true,
+                enabled: true,
+                models: [],
+              },
+            ],
+            onProvider: (provider) => providerChanges.push(provider),
+            onProviderModel: (provider, model) => providerModelChanges.push([provider, model]),
+          })}
+          models={[{ id: "gpt-5.6-sol", name: "GPT-5.6-Sol" }]}
+          currentModel="gpt-5.6-sol"
+          defaultModel="gpt-5.6-sol"
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    if (!trigger) throw new Error("combined Provider/model trigger did not render");
+    click(trigger);
+    await flush();
+
+    const picker = dom.document.body.querySelector("[data-provider-model-picker]");
+    const pi = picker?.querySelector<HTMLButtonElement>('button[aria-label="Pi"]');
+    if (!pi) throw new Error("Pi Provider rail item did not render");
+    click(pi);
+    await flush();
+
+    expect(providerChanges).toEqual([]);
+    expect(providerModelChanges).toEqual([["pi", null]]);
+    expect(dom.document.body.querySelector("[data-provider-model-picker]")).toBeNull();
+    rendered.unmount();
+  });
+
   test("does not duplicate the worktree control when the checkout bar owns it", async () => {
     activateDom();
     const rendered = mount(

@@ -1072,8 +1072,18 @@ export function ModelPicker({
                             disabled={unavailable}
                             className="relative shrink-0"
                             onClick={() => {
-                              setBrowseProvider(candidate.id);
                               setModelSearch("");
+                              if (
+                                candidate.id !== provider
+                                && candidate.models.length === 0
+                                && providerConfig.providersStatus === "ready"
+                                && candidate.available
+                              ) {
+                                providerConfig.onProviderModel(candidate.id, null);
+                                setModelOpen(false);
+                                return;
+                              }
+                              setBrowseProvider(candidate.id);
                             }}
                           >
                             <ProviderIcon

@@ -35,8 +35,8 @@ export interface SessionConfig {
   providersStatus: "loading" | "ready" | "error";
   provider: string;
   onProvider: (v: string) => void;
-  /** A foreign Provider model starts a fresh provider session; never set it on the old session. */
-  onProviderModel: (provider: string, model: string) => void;
+  /** A foreign Provider choice starts a fresh session; null leaves its model unspecified. */
+  onProviderModel: (provider: string, model: string | null) => void;
   onReloadProviders: () => void;
   /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */
   mode: PermissionMode;

@@ -36,6 +36,8 @@ adapter-owned model options, disabled states, and existing callbacks. Provider l
 unavailable states remain legible. Choosing a Provider in the rail browses its models locally and
 keeps the surface open. Selecting a model owned by another Provider applies Provider and model
 atomically to a fresh session; it must never call `setModel` on the old Provider session.
+An installed Provider with an empty pre-session model catalogue is selected atomically with its
+model left unspecified; the picker must not invent or persist a preset model.
 
 Do not copy T3-only shortcut labels, legacy sections, or new favorite semantics. Keep reasoning
 effort independent because it is a separate provider-owned configuration axis. ModelPicker uses in
@@ -48,7 +50,8 @@ Side Chat and Project Settings remain model-only and retain their current compac
 - [x] AC-2: The unified popup has a Provider icon rail, model search, and a scrollable model list
       whose selected/favorite/default states reuse existing behavior.
 - [x] AC-3: Switching the rail reveals that Provider's models without mutating the current session;
-      selecting a foreign model starts a fresh session and applies Provider/model atomically.
+      selecting a foreign model starts a fresh session and applies Provider/model atomically. An
+      installed Provider with no catalogue is selectable with `model = null`.
 - [x] AC-4: Reasoning effort, disabled/running behavior, provider loading/error states, Side Chat,
       and Project Settings model-only use remain intact.
 - [x] AC-5: Focused/full tests, renderer build, rendered Browser interaction and reference-image
@@ -77,7 +80,9 @@ model projection and existing row states on the right, and leaves model-only cal
 original surface. The former duplicate `ProviderPicker` was removed. Provider browsing stays local
 to the open picker; choosing a foreign model invokes one `onProviderModel(provider, model)` intent,
 and `App` creates a fresh session before pinning that Provider and applying its model. The separate
-effort selector remains unchanged.
+effort selector remains unchanged. For an available Provider whose catalogue is empty, the same
+fresh-session intent carries `model = null`, closes the picker, and leaves model resolution to that
+Provider instead of manufacturing a default.
 
 The popup uses shared menu width, separator, selectable-row, and quiet-fill primitives instead of
 one-off picker border, ring, sizing, and selected-state contracts.
@@ -85,6 +90,8 @@ one-off picker border, ring, sizing, and selected-state contracts.
 ## Verification
 
 Verdict: verified
+
+Review-feedback corrections are included in this verdict.
 
 The requested T3-style simplification is implemented and the changed behavior is covered by a
 regression test plus an isolated rendered interaction check.
@@ -106,12 +113,14 @@ regression test plus an isolated rendered interaction check.
   before applying the pair, aborts without state mutation when draft creation fails, and skips
   creation for an existing blank draft. The rendered flow switched to Grok without closing,
   selected `Grok 4.6`, printed the exact `grok:grok-4.6:fresh-session` state, and updated the trigger
-  without console errors.
+  without console errors. The added empty-catalogue regression emits exactly `pi / null`; an
+  isolated Browser interaction then showed `Provider: pi`, `Model: 未指定`, and a closed picker.
 - AC-4: PASS — `bun test tests/reasoningScaleRendered.test.tsx tests/sceneChip.test.tsx` passed 26
   tests and 92 expectations; `bunx tsc --noEmit` and focused ESLint also passed. Model-only picker
   tests remain in that passing suite.
-- AC-5: PASS — `bun test` and `bun run build:renderer` passed. Repository lifecycle commands are
-  recorded by the final verification pass below.
+- AC-5: PASS — the final `bun test` passed 809 tests and 3,841 expectations; `bun run build`
+  completed the production renderer and native package. Repository lifecycle commands are recorded
+  by the final verification pass below.
 
 Residual risk: the visual exercise used an isolated renderer fixture rather than starting another
 Core process, as required by the repository's single-owner rule. The App integration is covered by
@@ -131,5 +140,6 @@ No release: PR creation is authorized; merge, deployment, and release remain una
 
 ## Feedback
 
-The T3 and CodeTwo screenshots are the accepted reference and current-state evidence; no post-change
-feedback exists yet.
+The T3 and CodeTwo screenshots are the accepted reference and current-state evidence. PR review
+found that a Provider with no pre-session model catalogue had no selection path. The user clarified
+that such Providers should be selectable directly and do not require any preset model.

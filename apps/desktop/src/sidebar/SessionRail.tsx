@@ -137,7 +137,9 @@ import {
   sidebarBeforeIdAtFinalIndex,
   sidebarDndData,
   sidebarFinalizedDestination,
+  sidebarRememberedDragTarget,
   sidebarSortableSnapshot,
+  sidebarTaskContainerCollisionPriority,
   type SidebarDndData,
   type SidebarDragItem,
 } from "./sidebarDnd";
@@ -753,10 +755,11 @@ export function SessionRail({
 
   const handleSidebarDragOver = useCallback((event: DragOverEvent) => {
     const source = sidebarDndData(event.operation.source?.data)?.item;
-    const target = sidebarDndData(event.operation.target?.data);
-    if (!source || !target) return;
-    if (target.item?.kind === source.kind && target.item.id === source.id) return;
-    dragTargetRef.current = target;
+    dragTargetRef.current = sidebarRememberedDragTarget(
+      source ?? null,
+      event.operation.target?.data,
+      dragTargetRef.current,
+    );
   }, []);
 
   const handleSidebarDragEnd = useCallback((event: DragEndEvent) => {
@@ -766,13 +769,18 @@ export function SessionRail({
     if (event.canceled) return;
 
     const source = sidebarDndData(event.operation.source?.data)?.item;
-    const sortable = sidebarSortableSnapshot(event.operation.source);
-    const eventTarget = sidebarDndData(event.operation.target?.data);
-    const target = source && eventTarget?.item?.kind === source.kind
-      && eventTarget.item.id === source.id
-      ? lastTarget
-      : eventTarget ?? lastTarget;
     if (!source) return;
+    const sortable = sidebarSortableSnapshot(event.operation.source);
+    const rawEventTarget = sidebarDndData(event.operation.target?.data);
+    const eventTarget = sidebarRememberedDragTarget(
+      source,
+      event.operation.target?.data,
+      lastTarget,
+    );
+    const target = rawEventTarget?.item?.kind === source.kind
+      && rawEventTarget.item.id === source.id
+      ? lastTarget
+      : eventTarget;
     const finalized = sidebarFinalizedDestination(source, sortable);
 
     if (source.kind === "section") {
@@ -1506,7 +1514,7 @@ export function SessionRail({
         key={project.path}
         location={{ kind: "tasks", sectionId: null, projectPath: project.path }}
         accept="task"
-        collisionPriority={3}
+        collisionPriority={sidebarTaskContainerCollisionPriority(rows.length > 0)}
       >
         {({ ref: taskDropRef, isDropTarget: isTaskDropTarget }) => (
       <SidebarSortable
@@ -1657,7 +1665,11 @@ export function SessionRail({
       <SidebarDropZone
         location={{ kind: "section", sectionId: section.id }}
         accept="task"
-        collisionPriority={3}
+        collisionPriority={sidebarTaskContainerCollisionPriority(
+          rows.length > 0 || sectionProjectRows.some(
+            (project) => (projectRows.get(project.path) ?? []).length > 0,
+          ),
+        )}
       >
         {({ ref: taskDropRef, isDropTarget: isTaskDropTarget }) => (
       <SidebarSortable
