@@ -288,7 +288,7 @@ export function DockerPage({
 
   if (!enabled) {
     return (
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background" aria-label={t("docker.title")}>
+      <section className="animate-data-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background" aria-label={t("docker.title")}>
         <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-2.5">
           {headerLeadingAction}
           <h1 className="text-dialog font-semibold">{t("docker.title")}</h1>
@@ -304,7 +304,7 @@ export function DockerPage({
   }
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground" aria-label={t("docker.title")}>
+    <section className="animate-data-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground" aria-label={t("docker.title")}>
       <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-3 px-4 py-2.5">
         {headerLeadingAction}
         <h1 className="text-dialog font-semibold">{t("docker.title")}</h1>

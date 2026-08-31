@@ -1,4 +1,5 @@
 import {
+  useDeferredValue,
   useEffect,
   useMemo,
   useReducer,
@@ -586,6 +587,7 @@ export function TaskBoardPage({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [expandedLanes, setExpandedLanes] = useState<Partial<Record<TaskBoardLane, boolean>>>({})
   const didMount = useRef(false)
+  const deferredQuery = useDeferredValue(query)
 
   useEffect(() => {
     if (state.warning) toast(warningText(state.warning, t), "error")
@@ -601,8 +603,8 @@ export function TaskBoardPage({
   }, [state.tasks, t, toast])
 
   const filters: BoardFilters = useMemo(
-    () => ({ query, priorities, labels }),
-    [labels, priorities, query]
+    () => ({ query: deferredQuery, priorities, labels }),
+    [deferredQuery, labels, priorities]
   )
   const visibleTasks = useMemo(
     () => sortBoardTasks(filterBoardTasks(state.tasks, filters)),
@@ -683,7 +685,7 @@ export function TaskBoardPage({
   }
 
   return (
-    <main className="animate-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
+    <main className="animate-data-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
       <header className="shrink-0 bg-background px-6 py-4 sm:px-8">
         <div
           data-page-header-content

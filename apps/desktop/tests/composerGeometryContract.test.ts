@@ -40,7 +40,7 @@ describe("composer geometry contract", () => {
     );
     expect(composer).toContain('data-composer-mode={docMode ? "document" : "compact"}');
     expect(composer).toContain('"composer-mode-transition flex flex-col"');
-    expect(composer).toContain('effect={reducedMotion ? undefined : "move"}');
+    expect(composer).not.toContain("reducedMotion");
     expect(composer).toContain(
       '"raised-material pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"',
     );
@@ -59,9 +59,7 @@ describe("composer geometry contract", () => {
     expect(controlChip).toContain('size="compact"');
     expect(controlChip).toContain('data-slot="control-chip"');
     expect(voiceButton).toContain('className="size-8 shrink-0 rounded-full"');
-    expect(composer).toMatch(
-      /fill="var\(--secondary\)"[\s\S]*variant="secondary"[\s\S]*onClick=\{onStop\}/,
-    );
+    expect(composer).toMatch(/variant="secondary"[\s\S]*onClick=\{onStop\}/);
     expect(composer).not.toContain('"px-3 pb-2.5 pt-1.5"');
     expect(composer).not.toContain(
       'className="size-8 shrink-0 rounded-(--ds-radius-control) transition-transform active:scale-90"',

@@ -413,10 +413,6 @@
    viewer, the terminal surface, and the pane splitter.
    ------------------------------------------------------------------------ */
 @layer components {
-  .tabs-liquid-indicator {
-    border-radius: var(--tabs-indicator-radius);
-  }
-
   /* ---- window shell ------------------------------------------------------------------------
      Other platforms and browser previews keep the solid shell. The macOS Electrobun window lets
      the desktop show through only where an individual pane supplies a translucent surface. */
@@ -738,6 +734,24 @@
   }
   .animate-page-in {
     animation: page-in var(--motion-slow) var(--ease-standard) both;
+  }
+
+  /* Data-heavy routes already paint their final geometry. Fading that composited surface gives
+     the page swap feedback without re-rasterising a translated board, table, or detail pane. */
+  @keyframes data-page-in {
+    from {
+      opacity: 0;
+    }
+  }
+  .animate-data-page-in {
+    animation: data-page-in var(--motion-slow) var(--ease-standard) both;
+  }
+
+  /* Keep every session in DOM and focus order while allowing WebKit to skip off-screen paint in
+     long rails. `auto` lets the browser remember the real height after a row is first revealed. */
+  .session-rail-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 64px;
   }
 
   /* Archiving is reversible but spatial: the row leaves its current collection before the bridge

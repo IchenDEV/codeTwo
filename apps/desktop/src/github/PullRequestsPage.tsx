@@ -18,7 +18,7 @@ import {
   UserRound,
   X,
 } from "@/components/ui/icons";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   getGitHubPullRequest,
@@ -78,6 +78,8 @@ function avatar(login: string): ReactNode {
         alt=""
         aria-hidden="true"
         className="absolute inset-0 size-full object-cover"
+        decoding="async"
+        loading="lazy"
         src={`https://github.com/${encodeURIComponent(login)}.png?size=48`}
         onError={(event) => { event.currentTarget.hidden = true; }}
       />
@@ -214,6 +216,7 @@ export function PullRequestsPage({
   const [view, setView] = useState<PullRequestView>("all");
   const [readiness, setReadiness] = useState<PullRequestReadiness>("all");
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<DetailState | null>(null);
   const [detailTab, setDetailTab] = useState<"summary" | "code">("summary");
@@ -264,8 +267,8 @@ export function PullRequestsPage({
   }, [loadPullRequest, selected]);
 
   const visible = useMemo(
-    () => filterPullRequests(items, view, readiness, query),
-    [items, query, readiness, view],
+    () => filterPullRequests(items, view, readiness, deferredQuery),
+    [deferredQuery, items, readiness, view],
   );
   useEffect(() => {
     if (selectedId && visible.some((item) => item.id === selectedId)) return;
@@ -287,7 +290,7 @@ export function PullRequestsPage({
   return (
     <section
       data-compact-detail={selectedId !== null && !compactListVisible}
-      className="pull-requests-page flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
+      className="pull-requests-page animate-data-page-in flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
       aria-label={t("pullRequests.title")}
     >
       <div className="pull-requests-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">

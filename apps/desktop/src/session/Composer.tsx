@@ -1,5 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type MutableRefObject, type ReactElement, type ReactNode } from "react";
-import { Liquid } from "liquid-gooey";
+import { useEffect, useId, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import {
   ArrowUp,
   BrainCircuit,
@@ -139,58 +138,6 @@ interface ComposerProps {
   sessionId?: string | null;
   /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
   insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
-}
-
-const LIQUID_AVAILABLE = typeof ResizeObserver !== "undefined";
-
-function useReducedMotionPreference() {
-  const [reduced, setReduced] = useState(() =>
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(query.matches);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-
-  return reduced;
-}
-
-function LiquidActionSurface({
-  children,
-  disabled = false,
-  fill,
-  reducedMotion,
-}: {
-  children: ReactElement;
-  disabled?: boolean;
-  fill: string;
-  reducedMotion: boolean;
-}) {
-  if (!LIQUID_AVAILABLE) return children;
-
-  return (
-    <Liquid
-      data-gooey-action
-      blur={4}
-      contrast={20}
-      fill={fill}
-      filterPadding={12}
-      className={cn("shrink-0 transition-opacity", disabled && "opacity-50")}
-    >
-      <Liquid.Item
-        effect={reducedMotion ? undefined : "move"}
-        move={{ springiness: 0.72, wobble: 0.28, stretch: 0.42, trail: 0.3 }}
-      >
-        {children}
-      </Liquid.Item>
-    </Liquid>
-  );
 }
 
 function displayGitRef(reference: string | null | undefined): string | null {
@@ -1246,7 +1193,6 @@ export function Composer({
   insertBriefRef,
 }: ComposerProps) {
   const t = useT();
-  const reducedMotion = useReducedMotionPreference();
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   // ---- R5 scene brief: offer banner, + menu entry, required-slot hint --------------------------
@@ -1483,22 +1429,17 @@ export function Composer({
             </DropdownMenu>
           </div>
           <Tooltip>
-            <LiquidActionSurface fill="var(--secondary)" reducedMotion={reducedMotion}>
-              <TooltipTrigger
-                render={<Button
-                  variant="secondary"
-                  size="icon"
-                  className={cn(
-                    "size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100",
-                    LIQUID_AVAILABLE && "bg-transparent hover:bg-transparent",
-                  )}
-                  onClick={onStop}
-                  aria-label={t("composer.stop")}
-                >
-                  <Square className="size-3.5 fill-current" />
-                </Button>}
-              />
-            </LiquidActionSurface>
+            <TooltipTrigger
+              render={<Button
+                variant="secondary"
+                size="icon"
+                className="size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"
+                onClick={onStop}
+                aria-label={t("composer.stop")}
+              >
+                <Square className="size-3.5 fill-current" />
+              </Button>}
+            />
             <TooltipContent>{t("composer.stop")}</TooltipContent>
           </Tooltip>
         </>
@@ -1506,20 +1447,12 @@ export function Composer({
         <Tooltip>
           {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
               focuses the document and says what's missing. */}
-          <LiquidActionSurface
-            fill={composerEmpty ? "var(--secondary)" : "var(--primary)"}
-            disabled={loading}
-            reducedMotion={reducedMotion}
-          >
-            <TooltipTrigger
-              render={
+          <TooltipTrigger
+            render={
               <Button
                 size="icon"
                 variant={composerEmpty ? "secondary" : "default"}
-                className={cn(
-                  "size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100",
-                  LIQUID_AVAILABLE && "bg-transparent hover:bg-transparent disabled:opacity-100",
-                )}
+                className="size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"
                 onClick={onRun}
                 disabled={loading}
                 aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
@@ -1530,9 +1463,8 @@ export function Composer({
                   <ArrowUp className="size-4" />
                 )}
               </Button>
-              }
-            />
-          </LiquidActionSurface>
+            }
+          />
           <TooltipContent>
             {loading ? t("composer.loadingSession") : composerEmpty ? t("composer.runEmpty") : t("composer.run")}
             {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
