@@ -140,6 +140,7 @@ Vite large-chunk warning and React test `act(...)` notices remain pre-existing, 
 
 ## Review and release
 
+Review handoff: [Draft PR #207](https://github.com/IchenDEV/codeTwo/pull/207).
 Approval: pending human review of the verified Appearance page.
 Release target: none.
 Release identity: not applicable until released.
