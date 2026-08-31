@@ -1588,6 +1588,9 @@ export const en = {
   "memory.saveAction": "Save",
   "memory.cancel": "Cancel",
   "memory.corrected": "Correction saved. The original memory was deactivated.",
+  "memory.preset.codex_default": "Codex default",
+  "memory.preset.codex_defaultHint":
+    "Keep C2 memory out of the visible Codex conversation; still learn according to global settings.",
   "memory.preset.standard": "Memory on",
   "memory.preset.standardHint":
     "Recall relevant memory and learn from completed turns.",
@@ -4094,6 +4097,9 @@ export const zhCN: Record<StringKey, string> = {
   "memory.saveAction": "保存",
   "memory.cancel": "取消",
   "memory.corrected": "纠正已保存，原记忆已停用。",
+  "memory.preset.codex_default": "Codex 默认",
+  "memory.preset.codex_defaultHint":
+    "不向可见的 Codex 对话注入 C2 记忆；仍按全局设置学习。",
   "memory.preset.standard": "启用记忆",
   "memory.preset.standardHint": "回忆相关记忆，并从完成的轮次中学习。",
   "memory.preset.read_only": "只回忆",

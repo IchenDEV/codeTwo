@@ -64,3 +64,37 @@ export interface SessionConfig {
   /** New session, full-apply, in the active scene — closes the soft-apply gap. */
   onRestartInScene: () => void;
 }
+
+export type MemoryPresetId =
+  | "codex_default"
+  | "standard"
+  | "read_only"
+  | "private"
+  | "learn_only";
+
+export interface MemoryPreset {
+  id: MemoryPresetId;
+  read: MemoryAccess;
+  write: MemoryAccess;
+  isDefault?: boolean;
+}
+
+const MEMORY_PRESETS: readonly MemoryPreset[] = [
+  { id: "standard", read: "inherit", write: "inherit", isDefault: true },
+  { id: "read_only", read: "allow", write: "deny" },
+  { id: "private", read: "deny", write: "deny" },
+  { id: "learn_only", read: "deny", write: "allow" },
+];
+
+const CODEX_MEMORY_PRESETS: readonly MemoryPreset[] = [
+  { id: "codex_default", read: "inherit", write: "inherit", isDefault: true },
+  { id: "standard", read: "allow", write: "allow" },
+  { id: "read_only", read: "allow", write: "deny" },
+  { id: "private", read: "deny", write: "deny" },
+  { id: "learn_only", read: "deny", write: "allow" },
+];
+
+/** Codex keeps inherited C2 recall out of its visible ACP user turn. */
+export function memoryPresetsForProvider(provider: string): readonly MemoryPreset[] {
+  return provider === "codex" ? CODEX_MEMORY_PRESETS : MEMORY_PRESETS;
+}

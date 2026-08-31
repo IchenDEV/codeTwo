@@ -6,7 +6,7 @@ import { activateDom, button, click, dom, flush, mount, restoreDom, waitFor } fr
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
-const { QuickChatPanel, SideChatPanel } = await import("../src/session/SideChatPanel");
+const { QuickChatPanel, SideChatPanel, transientMemoryPolicy } = await import("../src/session/SideChatPanel");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 
@@ -77,6 +77,11 @@ function quickPanel(
 }
 
 describe("SideChatPanel", () => {
+  test("keeps Codex recall as an explicit transient-chat opt-in", () => {
+    expect(transientMemoryPolicy("codex")).toEqual(["allow", "deny"]);
+    expect(transientMemoryPolicy("claude-code")).toEqual(["inherit", "deny"]);
+  });
+
   test("routes Quick Chat to the floating panel and Side Chat to the right Dock", () => {
     expect(appSource).toContain("<QuickChatPanel");
     expect(appSource).toContain("open={quickChatOpen}");

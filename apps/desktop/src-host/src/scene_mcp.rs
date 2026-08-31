@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 
 use crate::EventSink;
 
-const SCENE_INSTRUCTIONS: &str = "Use scene_list only when C2 Auto Scene is enabled in the prompt. Search with a short task query, select only an exact returned reference, and follow scene_select's returned current-turn instructions.";
+const SCENE_INSTRUCTIONS: &str = "Call scene_list at the start of each turn and use its returned `enabled` status. When disabled, continue without scene action. When enabled, search with a short task query, select only an exact returned reference, and follow scene_select's returned current-turn instructions.";
 
 #[cfg(unix)]
 struct Sidecar {
@@ -362,7 +362,12 @@ fn secure_eq(left: &str, right: &str) -> bool {
         == 0
 }
 
-fn scene_results(scenes: &codetwo_core::SceneLibrary, query: Option<&str>, limit: usize) -> Value {
+fn scene_results(
+    scenes: &codetwo_core::SceneLibrary,
+    query: Option<&str>,
+    limit: usize,
+    current: Option<Value>,
+) -> Value {
     let query = query.unwrap_or("").trim().to_lowercase();
     let terms = query.split_whitespace().collect::<Vec<_>>();
     let mut matches = scenes
@@ -413,10 +418,23 @@ fn scene_results(scenes: &codetwo_core::SceneLibrary, query: Option<&str>, limit
         .collect::<Vec<_>>();
     let returned = scenes.len();
     json!({
+        "enabled": true,
+        "current": current,
         "query": query,
         "scenes": scenes,
         "matched": matched,
         "truncated": matched > returned,
+    })
+}
+
+fn disabled_scene_results(query: Option<&str>) -> Value {
+    json!({
+        "enabled": false,
+        "current": Value::Null,
+        "query": query.unwrap_or("").trim().to_lowercase(),
+        "scenes": [],
+        "matched": 0,
+        "truncated": false,
     })
 }
 
@@ -437,10 +455,21 @@ async fn dispatch_broker(
     let Some(store) = core.service::<StoreService>() else {
         return BrokerResponse::error("store plugin is unavailable");
     };
-    match store.session_auto_scene(&request.session) {
-        Ok(true) => {}
-        Ok(false) => return BrokerResponse::error("Auto Scene is not enabled for this session"),
+    let auto_scene_enabled = match store.session_auto_scene(&request.session) {
+        Ok(enabled) => enabled,
         Err(error) => return BrokerResponse::error(error.to_string()),
+    };
+    if !auto_scene_enabled {
+        return if request.method == "scene_list" {
+            let query = request.params.get("query").and_then(Value::as_str);
+            if query.is_some_and(|query| query.chars().count() > 240) {
+                BrokerResponse::error("query must be at most 240 characters")
+            } else {
+                BrokerResponse::result(disabled_scene_results(query))
+            }
+        } else {
+            BrokerResponse::error("Auto Scene is not enabled for this session")
+        };
     }
 
     let result: Result<Value, String> = async {
@@ -460,7 +489,18 @@ async fn dispatch_broker(
                     .service::<SceneService>()
                     .ok_or_else(|| "scenes plugin is unavailable".to_string())?
                     .library();
-                Ok(scene_results(&scenes, query, limit))
+                let current = store
+                    .session_scene(&request.session)
+                    .map_err(|error| error.to_string())?
+                    .and_then(|(reference, _)| {
+                        scenes.resolve(&reference).map(|entry| {
+                            json!({
+                                "reference": codetwo_core::SceneLibrary::reference_for(entry),
+                                "title": entry.scene.title,
+                            })
+                        })
+                    });
+                Ok(scene_results(&scenes, query, limit, current))
             }
             "scene_select" => {
                 let reference = required_string(&request.params, "reference")?;
@@ -640,7 +680,10 @@ pub async fn serve_broker(
 
 #[cfg(test)]
 mod tests {
-    use super::{approval_accepted, scene_results, secure_eq, tools};
+    use super::{
+        approval_accepted, disabled_scene_results, scene_results, secure_eq, tools,
+        SCENE_INSTRUCTIONS,
+    };
     use serde_json::json;
 
     #[test]
@@ -656,9 +699,16 @@ mod tests {
     }
 
     #[test]
+    fn scene_instructions_use_the_status_probe_instead_of_a_prompt_marker() {
+        assert!(SCENE_INSTRUCTIONS.contains("returned `enabled` status"));
+        assert!(!SCENE_INSTRUCTIONS.contains("enabled in the prompt"));
+    }
+
+    #[test]
     fn scene_search_returns_bounded_routing_metadata() {
         let scenes = codetwo_core::SceneLibrary::builtin();
-        let result = scene_results(&scenes, Some("fix"), 1);
+        let result = scene_results(&scenes, Some("fix"), 1, None);
+        assert_eq!(result.pointer("/enabled").unwrap(), true);
         assert_eq!(
             result.pointer("/scenes/0/reference").unwrap(),
             "builtin:fix"
@@ -666,6 +716,14 @@ mod tests {
         assert!(result.pointer("/scenes/0/title").is_some());
         assert!(result.pointer("/scenes/0/description").is_some());
         assert!(result.pointer("/scenes/0/instructions").is_none());
+    }
+
+    #[test]
+    fn disabled_scene_status_is_bounded_and_non_failing() {
+        let result = disabled_scene_results(Some("fix"));
+        assert_eq!(result.pointer("/enabled").unwrap(), false);
+        assert_eq!(result.pointer("/scenes").unwrap(), &json!([]));
+        assert!(result.pointer("/current").unwrap().is_null());
     }
 
     #[test]

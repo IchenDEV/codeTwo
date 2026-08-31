@@ -41,9 +41,9 @@ use crate::permission::{
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::session::{
     initial_session_title, tool_status_is_in_flight, tool_status_is_terminal,
-    transcript_context_with_omission, Part, PlanEntry, Role, Session, SessionActivity, SessionId,
-    SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
-    DEFAULT_TRANSCRIPT_TURNS,
+    transcript_context_with_omission, MemoryAccess, Part, PlanEntry, Role, Session,
+    SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
+    TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
     canonical_doc_text, compile_with_appshots, compile_with_canvas,
@@ -1111,6 +1111,7 @@ fn attach_host_mcp_servers(
 
 const CODETWO_BROWSER_ROUTING_INSTRUCTIONS: &str = "[C2 desktop browser routing]\nFor any browser or website task, use the codetwo_browser MCP tools by default. Do not use node_repl, the host in-app browser, or Chrome unless the user explicitly asks for Chrome, an existing browser tab, or an existing login state. This routing rule applies even when another available skill describes a different in-app browser. Website access and sensitive actions still require the approvals requested by codetwo_browser.";
 const CODEX_SITES_INSTRUCTIONS: &str = "[C2 Sites routing and safety]\nWhen the user asks to build, save, publish, deploy, manage, or inspect a hosted site, or when .openai/hosting.json exists, use the official OpenAI Sites plugin and its Sites skills. Reuse the exact project_id from .openai/hosting.json; never invent or transform Sites identifiers, and never expose or persist connector credentials. Treat saving a version and deploying it as separate stages, and remember that every Sites deployment URL is production. Immediately before any deployment, access-policy change, environment/secret change, custom-domain change, bypass-token generation, or deletion, require an explicit ACP or MCP approval even in Full Access; if the connector does not request one, stop and ask the user. A request for a local build or saved version alone never authorizes production deployment.";
+const CODEX_AUTO_SCENE_INSTRUCTIONS: &str = "[C2 Auto Scene]\nAt the start of each turn, call `scene_list` with a short task query. If it reports that Auto Scene is disabled, continue without scene action. When enabled, select only an exact returned reference with `scene_select`, follow its current-turn instructions, and never claim a scene changed until the tool confirms it. Permission increases still require the tool's approval flow.";
 
 fn with_codetwo_browser_routing(prompt: String, enabled: bool) -> String {
     if enabled {
@@ -1156,8 +1157,9 @@ fn codex_launch_with_static_provider_context(
     tool_instructions: &[String],
     route_desktop_browser: bool,
     browser_access_enabled: bool,
+    route_auto_scene: bool,
 ) -> Result<LaunchSpec, serde_json::Error> {
-    let static_context = with_initial_provider_context(
+    let mut static_context = with_initial_provider_context(
         String::new(),
         tool_instructions,
         route_desktop_browser,
@@ -1166,6 +1168,9 @@ fn codex_launch_with_static_provider_context(
     )
     .trim()
     .to_string();
+    if route_auto_scene {
+        static_context = format!("{static_context}\n\n{CODEX_AUTO_SCENE_INSTRUCTIONS}");
+    }
     let existing_config = launch
         .env
         .iter()
@@ -1244,6 +1249,33 @@ fn codex_launch_with_static_provider_context(
             .push(("DISABLE_MCP_CONFIG_FILTERING".into(), "true".into()));
     }
     Ok(launch)
+}
+
+fn without_codex_native_project_rules(prompt: String, cwd: &str) -> String {
+    let rules = crate::rules::load(std::path::Path::new(cwd));
+    let compiled_rules = crate::rules::to_context(&rules);
+    if compiled_rules.is_empty() {
+        return prompt;
+    }
+    let remainder = if prompt == compiled_rules {
+        String::new()
+    } else if let Some(remainder) = prompt.strip_prefix(&format!("{compiled_rules}\n\n")) {
+        remainder.to_string()
+    } else {
+        return prompt;
+    };
+    let portable_rules = rules
+        .into_iter()
+        // Codex loads AGENTS.md from its session cwd. C2's other supported formats still need
+        // provider-neutral transport or they disappear from Codex sessions entirely.
+        .filter(|rule| rule.path != "AGENTS.md")
+        .collect::<Vec<_>>();
+    let portable_context = crate::rules::to_context(&portable_rules);
+    match (portable_context.is_empty(), remainder.is_empty()) {
+        (true, _) => remainder,
+        (_, true) => portable_context,
+        _ => format!("{portable_context}\n\n{remainder}"),
+    }
 }
 
 fn auto_scene_routing_instructions(
@@ -4433,6 +4465,7 @@ impl Engine {
                         .as_ref()
                         .is_some_and(|config| config.browser_enabled),
                 provider_toolset.browser_access_enabled,
+                self.state.desktop_mcp.is_some(),
             )
             .map_err(|error| format!("couldn't configure {}: {error}", prov.display_name))?
         } else {
@@ -4889,6 +4922,7 @@ impl Engine {
                                 .as_ref()
                                 .is_some_and(|config| config.browser_enabled),
                         provider_toolset.browser_access_enabled,
+                        self.state.desktop_mcp.is_some(),
                     )
                     .map_err(AcpError::Decode)?
                 } else {
@@ -5473,6 +5507,11 @@ impl Engine {
                         })
                 };
                 let is_codex = current_provider == ProviderId::Codex;
+                if is_codex {
+                    // Codex loads AGENTS.md from its session cwd. Avoid repeating that native
+                    // file as visible user text while preserving C2's provider-neutral rules.
+                    compiled.prompt = without_codex_native_project_rules(compiled.prompt, &cwd);
+                }
                 attach_host_mcp_servers(
                     &mut compiled.mcp_servers,
                     provider_toolset.mcp_servers.iter().cloned(),
@@ -5514,8 +5553,13 @@ impl Engine {
                     .get(&session)
                     .map(|runtime| runtime.injected_memory_keys.clone())
                     .unwrap_or_default();
-                let memory_turn = native_command
-                    .is_none()
+                let codex_memory_explicitly_allowed = !is_codex
+                    || self.state.store.as_ref().is_some_and(|store| {
+                        store
+                            .session_memory_policy(&session)
+                            .is_ok_and(|(read, _)| read == MemoryAccess::Allow)
+                    });
+                let memory_turn = (native_command.is_none() && codex_memory_explicitly_allowed)
                     .then(|| {
                         self.state.memory.as_ref().and_then(|memory| {
                             match memory.recall(&cwd, &session, &memory_source) {
@@ -5557,8 +5601,10 @@ impl Engine {
                         })
                     })
                     .flatten();
-                let provider_prompt =
-                    with_auto_scene_routing(provider_prompt, auto_scene_instructions);
+                let provider_prompt = with_auto_scene_routing(
+                    provider_prompt,
+                    (!is_codex).then_some(auto_scene_instructions).flatten(),
+                );
                 let (caps, attached_mcp, inject_provider_context) = {
                     let map = self.state.sessions.lock().unwrap();
                     map.get(&session)
@@ -8452,10 +8498,12 @@ mod mcp_tests {
             r#"{"model":"kept","developer_instructions":"Existing rule."}"#.into(),
         ));
         let instructions = vec!["HOST_TOOL_MARKER".to_string()];
-        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true, true)
-            .expect("valid Codex config");
-        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true, true)
-            .expect("reapplying context remains valid");
+        let launch =
+            codex_launch_with_static_provider_context(&launch, &instructions, true, true, true)
+                .expect("valid Codex config");
+        let launch =
+            codex_launch_with_static_provider_context(&launch, &instructions, true, true, true)
+                .expect("reapplying context remains valid");
         let encoded = launch
             .env
             .iter()
@@ -8470,6 +8518,7 @@ mod mcp_tests {
         assert!(developer.contains("HOST_TOOL_MARKER"));
         assert!(developer.contains("[C2 desktop browser routing]"));
         assert!(developer.contains("[C2 Sites routing and safety]"));
+        assert!(developer.contains("[C2 Auto Scene]"));
         assert_eq!(
             developer.matches("[C2 Sites routing and safety]").count(),
             1
@@ -8485,7 +8534,7 @@ mod mcp_tests {
                 .into(),
         ));
 
-        let launch = codex_launch_with_static_provider_context(&launch, &[], false, false)
+        let launch = codex_launch_with_static_provider_context(&launch, &[], false, false, false)
             .expect("valid Codex config");
         let encoded = launch
             .env

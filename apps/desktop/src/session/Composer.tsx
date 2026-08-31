@@ -25,7 +25,7 @@ import {
   X,
 } from "@/components/ui/icons";
 
-import type { SessionConfig } from "./config";
+import { memoryPresetsForProvider, type SessionConfig } from "./config";
 import type { SceneInfo } from "./scene";
 import { briefOfferVisible } from "../editor/slotCard";
 import { SceneChip } from "./SceneChip";
@@ -480,20 +480,14 @@ export function ModePicker({ config }: { config: SessionConfig }) {
   );
 }
 
-const MEMORY_PRESETS = [
-  { id: "standard", read: "inherit", write: "inherit" },
-  { id: "read_only", read: "allow", write: "deny" },
-  { id: "private", read: "deny", write: "deny" },
-  { id: "learn_only", read: "deny", write: "allow" },
-] as const;
-
 export function MemoryPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const presets = memoryPresetsForProvider(config.provider);
   const active =
-    MEMORY_PRESETS.find(
+    presets.find(
       (preset) => preset.read === config.memoryRead && preset.write === config.memoryWrite,
-    ) ?? MEMORY_PRESETS[0];
+    ) ?? presets[0];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -509,13 +503,13 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
       />
       <PopoverContent align="start" side="top" className="w-72 p-1.5">
         <MenuSection>{t("config.memory")}</MenuSection>
-        {MEMORY_PRESETS.map((preset) => (
+        {presets.map((preset) => (
           <SelectableRow
             key={preset.id}
             selected={preset.id === active.id}
             label={t(`memory.preset.${preset.id}` as "memory.preset.standard")}
             description={t(`memory.preset.${preset.id}Hint` as "memory.preset.standardHint")}
-            meta={preset.id === "standard" ? <DefaultBadge /> : undefined}
+            meta={preset.isDefault ? <DefaultBadge /> : undefined}
             onSelect={() => {
               config.onMemoryPolicy(preset.read, preset.write);
               setOpen(false);
