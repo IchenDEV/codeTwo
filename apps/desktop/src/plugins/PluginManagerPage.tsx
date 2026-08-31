@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
 
 import {
   ArrowLeft,
@@ -1418,6 +1418,7 @@ export function PluginManagerPage({
   );
   const [tab, setTab] = useState(initialTab);
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [selectedPluginId, setSelectedPluginId] = useState<
     string | null | undefined
   >(initialPluginId ?? plugins[0]?.id);
@@ -1439,7 +1440,7 @@ export function PluginManagerPage({
   const [githubError, setGithubError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
   const visiblePlugins = useMemo(
     () =>
       plugins.filter((plugin) =>
@@ -1690,7 +1691,7 @@ export function PluginManagerPage({
                 : selectedResource),
         )
       }
-      className="plugin-manager-page @container/plugin-manager flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
+      className="plugin-manager-page animate-data-page-in @container/plugin-manager flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
       aria-label={labels.title}
     >
       <div className="plugin-manager-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">

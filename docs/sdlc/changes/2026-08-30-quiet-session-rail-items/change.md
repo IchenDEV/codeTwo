@@ -61,7 +61,7 @@ No PR, merge, publication, or release permission is implied.
 ## Plan
 
 Refine the existing row in place, reuse the existing Button, context-menu, semantic status, and
-LiquidSelectionGroup primitives, and keep the rail's current width contract. Keep useful preview
+selection-group primitives, and keep the rail's current width contract. Keep useful preview
 copy as the conditional middle line, replace the visible provider/completed footer with workspace
 identity, disclose actions on hover or focus, and retain urgent activity at the trailing edge.
 Update only the focused rendered tests that protect this behavior, then validate source, renderer,

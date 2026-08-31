@@ -1034,7 +1034,7 @@ export function SessionRail({
                   ?.focus({ preventScroll: true })
               }
               className={cn(
-                "group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-[box-shadow,opacity] hover:bg-fill-quiet focus-within:bg-fill-quiet data-[popup-open]:bg-fill-hover data-[sidebar-dragging=true]:opacity-45",
+                "session-rail-row group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-[box-shadow,opacity] hover:bg-fill-quiet focus-within:bg-fill-quiet data-[popup-open]:bg-fill-hover data-[sidebar-dragging=true]:opacity-45",
                 s.id === activeSession && "bg-fill-hover",
               )}
             >

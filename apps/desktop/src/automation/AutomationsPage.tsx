@@ -392,7 +392,7 @@ export function AutomationsPage({
     <section
       data-automation-page
       data-compact-detail={(selectedId !== null || draft !== null) && !compactListVisible}
-      className="automations-page animate-page-in flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
+      className="automations-page animate-data-page-in flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
       aria-label={t("automations.title")}
     >
       <div data-automation-list-pane className="automation-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">

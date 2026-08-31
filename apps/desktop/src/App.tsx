@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -207,7 +209,6 @@ import {
 import { loadProviderRegistry } from "./providers/registry";
 import { makeTranscriptHandler } from "./voice/VoiceButton";
 import {
-  PluginManagerPage,
   PluginUiSlot,
   activePluginConnectorContributions,
   activePluginLanguageServers,
@@ -250,7 +251,6 @@ import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
 import { synchronizeLspRuntimePolicy } from "./lsp/runtimePolicy";
 import { configurePluginLanguageServers } from "./lsp/client";
 import { quickQuotaProviderFor, quickQuotaSummary } from "./usage/quickQuota";
-import { AutomationsPage } from "./automation/AutomationsPage";
 import type { SessionConfig } from "./session/config";
 import {
   SESSION_MODES,
@@ -404,13 +404,9 @@ import { TrajectoryView } from "./session/TrajectoryView";
 import { SessionRail } from "./sidebar/SessionRail";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
-import {
-  PullRequestsPage,
-  type PullRequestTaskLinkTarget,
-} from "./github/PullRequestsPage";
+import type { PullRequestTaskLinkTarget } from "./github/PullRequestsPage";
 import { githubPullRequestReference } from "./github/pullRequests";
-import { DockerPage, type DockerCommandCaller } from "./docker/DockerPage";
-import { TaskBoardPage } from "./taskboard/TaskBoardPage";
+import type { DockerCommandCaller } from "./docker/DockerPage";
 import {
   associateTaskSession,
   associateTaskPullRequest,
@@ -452,6 +448,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -461,6 +458,45 @@ import {
 } from "@/components/ui/tooltip";
 import { usePersistedNumber } from "@/lib/persist";
 import { cn } from "@/lib/utils";
+
+const TaskBoardPage = lazy(() =>
+  import("./taskboard/TaskBoardPage").then((module) => ({
+    default: module.TaskBoardPage,
+  })),
+);
+const PullRequestsPage = lazy(() =>
+  import("./github/PullRequestsPage").then((module) => ({
+    default: module.PullRequestsPage,
+  })),
+);
+const AutomationsPage = lazy(() =>
+  import("./automation/AutomationsPage").then((module) => ({
+    default: module.AutomationsPage,
+  })),
+);
+const PluginManagerPage = lazy(() =>
+  import("./plugins/PluginManagerPage").then((module) => ({
+    default: module.PluginManagerPage,
+  })),
+);
+const DockerPage = lazy(() =>
+  import("./docker/DockerPage").then((module) => ({
+    default: module.DockerPage,
+  })),
+);
+
+function PageLoadingFallback() {
+  const t = useT();
+  return (
+    <div
+      role="status"
+      className="flex min-h-0 min-w-0 flex-1 items-center justify-center gap-2 bg-background text-body text-muted-foreground"
+    >
+      <Spinner />
+      {t("session.loading")}
+    </div>
+  );
+}
 
 function summarizeDoc(doc: DocBlock[]): string {
   return doc.map(describeBlock).join("\n\n");
@@ -7516,6 +7552,7 @@ export default function App() {
           resourceSections={collaborationConnector ? <div ref={setFeishuRailHost} /> : null}
         />
 
+        <Suspense fallback={<PageLoadingFallback />}>
           {showDocker && dockerPlugin ? (
             <DockerPage
               enabled={dockerPluginReady}
@@ -7718,6 +7755,7 @@ export default function App() {
             }
           />
         )}
+        </Suspense>
 
         <div
           ref={sessionWorkspaceRef}

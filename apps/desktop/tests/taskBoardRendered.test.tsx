@@ -209,6 +209,34 @@ describe("TaskBoardPage rendered", () => {
     expect(view.container.textContent).not.toContain("TASK-")
   })
 
+  test("keeps a large persisted board progressive on first render", async () => {
+    installStorage()
+    const statuses = ["todo", "in_progress", "in_review", "done"]
+    const tasks = Array.from({ length: 160 }, (_, index) =>
+      createBoardTask(
+        {
+          title: `Large board task ${index}`,
+          status: statuses[index % statuses.length],
+        },
+        { id: `TASK-LARGE-${index}`, now: 1_700_000_000_000 + index },
+      ),
+    )
+    dom.window.localStorage.setItem(
+      TASKBOARD_STORAGE_KEY,
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks }),
+    )
+
+    const view = await renderBoard()
+    const columns = Array.from(view.container.querySelectorAll("[data-task-column]"))
+    const renderedCounts = columns.map(
+      (column) => column.querySelectorAll("[data-task-card]").length,
+    )
+
+    expect(renderedCounts.every((count) => count <= 3)).toBe(true)
+    expect(renderedCounts.reduce((total, count) => total + count, 0)).toBeLessThanOrEqual(12)
+    expect(view.container.textContent).toContain("还有")
+  })
+
   test("uses the selected language for board chrome and starter content", async () => {
     const view = await renderBoard({}, "en")
 
