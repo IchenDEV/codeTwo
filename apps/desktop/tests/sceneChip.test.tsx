@@ -221,7 +221,7 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("combines Provider and model selection into one T3-style picker", async () => {
+  test("combines Provider and model selection into one CodeTwo picker", async () => {
     activateDom();
     const providers = [
       {
@@ -275,10 +275,14 @@ describe("SceneChip", () => {
 
     const picker = dom.document.body.querySelector("[data-provider-model-picker]");
     expect(picker).toBeTruthy();
-    expect(picker?.querySelector("[data-provider-rail]")).toBeTruthy();
+    expect(picker?.querySelector("[data-provider-rail]")).toBeNull();
+    const providerSwitcher = picker?.querySelector("[data-provider-switcher]");
+    expect(providerSwitcher).toBeTruthy();
+    expect(providerSwitcher?.textContent).toContain("OpenAI Codex");
+    expect(providerSwitcher?.textContent).toContain("Grok");
     expect(picker?.querySelector('input[aria-label="Search models"]')).toBeTruthy();
     const grok = picker?.querySelector<HTMLButtonElement>('button[aria-label="Grok"]');
-    if (!grok) throw new Error("Grok Provider rail item did not render");
+    if (!grok) throw new Error("Grok Provider switcher item did not render");
     click(grok);
     await flush();
 
@@ -340,7 +344,7 @@ describe("SceneChip", () => {
 
     const picker = dom.document.body.querySelector("[data-provider-model-picker]");
     const pi = picker?.querySelector<HTMLButtonElement>('button[aria-label="Pi"]');
-    if (!pi) throw new Error("Pi Provider rail item did not render");
+    if (!pi) throw new Error("Pi Provider switcher item did not render");
     click(pi);
     await flush();
 

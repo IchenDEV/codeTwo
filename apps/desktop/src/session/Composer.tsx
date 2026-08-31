@@ -824,7 +824,7 @@ export function ModelPicker({
   const [effortOpen, setEffortOpen] = useState(false);
   const [browseProvider, setBrowseProvider] = useState(provider);
   const modelTriggerRef = useRef<HTMLButtonElement>(null);
-  const providerRailEnabled = providerConfig !== undefined;
+  const providerSwitcherEnabled = providerConfig !== undefined;
   const providerRegistry = providerConfig
     ? providerConfig.providers.length > 0 ? providerConfig.providers : fallbackProviders()
     : [];
@@ -833,7 +833,7 @@ export function ModelPicker({
         (candidate) => candidate.enabled !== false || candidate.id === providerConfig.provider,
       )
     : [];
-  const pickerProvider = providerRailEnabled ? browseProvider : provider;
+  const pickerProvider = providerSwitcherEnabled ? browseProvider : provider;
   const pickerProviderInfo = providerChoices.find((candidate) => candidate.id === pickerProvider);
   const browsingCurrentProvider = pickerProvider === provider;
   const pickerModels = browsingCurrentProvider ? models : pickerProviderInfo?.models ?? [];
@@ -861,7 +861,7 @@ export function ModelPicker({
     if (!modelOpen) setBrowseProvider(provider);
   }, [modelOpen, provider]);
   useEffect(() => {
-    if (!providerRailEnabled) return;
+    if (!providerSwitcherEnabled) return;
     const openProviderModelPicker = () => {
       setBrowseProvider(provider);
       setModelOpen(true);
@@ -869,8 +869,8 @@ export function ModelPicker({
     };
     window.addEventListener("codetwo-open-provider-picker", openProviderModelPicker);
     return () => window.removeEventListener("codetwo-open-provider-picker", openProviderModelPicker);
-  }, [provider, providerRailEnabled]);
-  if (!providerRailEnabled && !hasSession && models.length === 0 && !showWhenUnavailable) return null;
+  }, [provider, providerSwitcherEnabled]);
+  if (!providerSwitcherEnabled && !hasSession && models.length === 0 && !showWhenUnavailable) return null;
 
   const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
 
@@ -1041,72 +1041,67 @@ export function ModelPicker({
           side="top"
           className={cn(
             "flex max-h-(--available-height) overflow-hidden",
-            providerRailEnabled
-              ? "w-menu-wide max-w-(--available-width) flex-row p-0"
+            providerSwitcherEnabled
+              ? "w-menu-wide max-w-(--available-width) flex-col p-0"
               : "w-64 flex-col p-1.5",
           )}
         >
           {providerConfig ? (
-            <div data-provider-model-picker className="flex min-h-72 min-w-0 flex-1">
+            <div data-provider-model-picker className="flex min-h-72 min-w-0 flex-1 flex-col">
               <div
-                data-provider-rail
+                data-provider-switcher
                 role="listbox"
                 aria-label={t("config.provider")}
-                className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto px-2 py-2"
+                className="flex shrink-0 gap-1 overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
                 {providerChoices.map((candidate) => {
                   const selected = candidate.id === pickerProvider;
                   const unavailable = providerConfig.providersStatus === "ready" && !candidate.available;
                   return (
-                    <Tooltip key={candidate.id}>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            type="button"
-                            variant="selectable"
-                            size="icon"
-                            role="option"
-                            aria-label={candidate.display_name}
-                            aria-selected={selected}
-                            data-selected={selected ? "true" : "false"}
-                            disabled={unavailable}
-                            className="relative shrink-0"
-                            onClick={() => {
-                              setModelSearch("");
-                              if (
-                                candidate.id !== provider
-                                && candidate.models.length === 0
-                                && providerConfig.providersStatus === "ready"
-                                && candidate.available
-                              ) {
-                                providerConfig.onProviderModel(candidate.id, null);
-                                setModelOpen(false);
-                                return;
-                              }
-                              setBrowseProvider(candidate.id);
-                            }}
-                          >
-                            <ProviderIcon
-                              provider={candidate.id}
-                              className={cn("size-4", unavailable && "opacity-40")}
-                            />
-                            <span
-                              aria-hidden="true"
-                              className={cn(
-                                "absolute bottom-1 right-1 size-1.5 rounded-full",
-                                unavailable ? "bg-border" : "bg-success",
-                              )}
-                            />
-                          </Button>
+                    <Button
+                      key={candidate.id}
+                      type="button"
+                      variant="selectable"
+                      size="compact"
+                      role="option"
+                      aria-label={candidate.display_name}
+                      aria-selected={selected}
+                      data-selected={selected ? "true" : "false"}
+                      disabled={unavailable}
+                      className="max-w-40 shrink-0 justify-start px-2 font-normal"
+                      onClick={() => {
+                        setModelSearch("");
+                        if (
+                          candidate.id !== provider
+                          && candidate.models.length === 0
+                          && providerConfig.providersStatus === "ready"
+                          && candidate.available
+                        ) {
+                          providerConfig.onProviderModel(candidate.id, null);
+                          setModelOpen(false);
+                          return;
                         }
+                        setBrowseProvider(candidate.id);
+                      }}
+                    >
+                      <ProviderIcon
+                        provider={candidate.id}
+                        className={cn("size-3.5", unavailable && "opacity-40")}
                       />
-                      <TooltipContent side="right">{candidate.display_name}</TooltipContent>
-                    </Tooltip>
+                      <span className="truncate">{candidate.display_name}</span>
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "ml-auto size-1.5 shrink-0 rounded-full",
+                          unavailable ? "bg-border" : "bg-success",
+                        )}
+                      />
+                    </Button>
                   );
                 })}
               </div>
-              <Separator orientation="vertical" />
-              <div className="flex min-w-0 flex-1 flex-col p-2">
+              <Separator />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2">
                 {providerConfig.providersStatus === "loading" ? (
                   <p role="status" className="px-2 pb-2 text-callout text-muted-foreground">
                     {t("config.providersLoading")}
