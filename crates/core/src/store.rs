@@ -2114,6 +2114,56 @@ impl Store {
         Self::upsert_session_on(&conn, s)
     }
 
+    /// Compare-and-set the provider-owned portion of one idle Session without rewriting the
+    /// provider-neutral title, policy, workspace, transcript, or recency fields. The continuation
+    /// context is consumed exactly once by the replacement runtime's first successful prompt.
+    pub fn switch_session_provider(
+        &self,
+        session_id: &str,
+        expected_provider: &crate::provider::ProviderId,
+        provider: &crate::provider::ProviderId,
+        model: Option<&str>,
+        continuation_context: &serde_json::Value,
+    ) -> Result<bool, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        require_session_active_on(&tx, session_id)?;
+
+        let leased: bool = tx.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM task_session_leases_v2
+               WHERE session_id=?1 AND released_at_ms IS NULL
+             )",
+            [session_id],
+            |row| row.get(0),
+        )?;
+        if leased {
+            return Err(StoreError::SessionLeaseConflict {
+                session_id: session_id.to_string(),
+                reason: "managed Task sessions keep the provider compatibility identity they were leased with"
+                    .into(),
+            });
+        }
+
+        let expected_provider = serde_json::to_string(expected_provider)?;
+        let provider = serde_json::to_string(provider)?;
+        let continuation_context = serde_json::to_string(continuation_context)?;
+        let changed = tx.execute(
+            "UPDATE sessions
+             SET provider=?2,model=?3,acp_session_id=NULL,handoff_context_json=?4
+             WHERE id=?1 AND provider=?5",
+            rusqlite::params![
+                session_id,
+                provider,
+                model,
+                continuation_context,
+                expected_provider,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(changed == 1)
+    }
+
     /// Atomically add one provider-owned historical session. The deterministic imported session
     /// id is the dedupe receipt: selecting the same source file again never duplicates messages.
     pub fn import_session(

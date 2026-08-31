@@ -800,7 +800,8 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
           ref={triggerRef}
           title={config.providersStatus === "error" ? t("config.providersLoadFailed") : t("config.provider")}
           aria-label={`${t("config.provider")}: ${activeLabel}`}
-          aria-busy={config.providersStatus === "loading"}
+          aria-busy={config.providersStatus === "loading" || config.providerChangeDisabled}
+          disabled={config.providerChangeDisabled}
         >
           {registryReady && active && !active.available && (
             <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
@@ -861,7 +862,7 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
                 />
               </>
             }
-            disabled={registryReady && !p.available}
+            disabled={config.providerChangeDisabled || (registryReady && !p.available)}
             onSelect={() => {
               config.onProvider(p.id);
               setOpen(false);

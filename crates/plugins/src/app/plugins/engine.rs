@@ -646,6 +646,11 @@ fn register_commands(
             {
                 return Err(PluginError::new("prompt is empty"));
             }
+            if engine.session_is_switching_provider(&args.session) {
+                return Err(PluginError::new(
+                    "the provider is still switching for this session",
+                ));
+            }
             if !engine.session_is_busy(&args.session) {
                 engine
                     .submit(Op::Prompt {
@@ -866,6 +871,26 @@ fn register_commands(
                 .await
                 .map_err(PluginError::new)?;
             Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct ProviderSwitchArgs {
+        session: String,
+        provider: String,
+        #[serde(default)]
+        model: Option<String>,
+    }
+    let provider_switch = engine.clone();
+    ctx.command("engine.switch_provider", move |args| {
+        let engine = provider_switch.clone();
+        async move {
+            let args: ProviderSwitchArgs = take_args(args)?;
+            let session = engine
+                .switch_provider(&args.session, parse_provider(&args.provider), args.model)
+                .await
+                .map_err(PluginError::new)?;
+            json(session)
         }
     })?;
 

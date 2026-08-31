@@ -77,6 +77,27 @@ function renderChip(cfg) {
 }
 
 describe("ProviderPicker", () => {
+  test("locks provider replacement while the session runtime is busy", () => {
+    activateDom();
+    let selected = false;
+    const rendered = mount(
+      <I18nProvider>
+        <ProviderPicker
+          config={config({
+            provider: "codex",
+            providerChangeDisabled: true,
+            onProvider: () => { selected = true; },
+          })}
+        />
+      </I18nProvider>,
+    );
+    const trigger = rendered.container.querySelector("button");
+    expect(trigger?.hasAttribute("disabled")).toBe(true);
+    trigger?.click();
+    expect(selected).toBe(false);
+    rendered.unmount();
+  });
+
   test("keeps known providers selectable and offers retry when desktop detection fails", async () => {
     activateDom();
     let retries = 0;

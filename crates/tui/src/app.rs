@@ -301,6 +301,27 @@ impl App {
                     self.status = format!("session: {title}");
                 }
             }
+            Event::ProviderChanged {
+                session,
+                provider,
+                model,
+            } => {
+                if let Some(shell) = self.sessions.iter_mut().find(|shell| shell.id == session) {
+                    shell.provider = provider.clone();
+                    shell.model = model;
+                    shell.acp_session_id = None;
+                }
+                if self.active.as_deref() == Some(session.as_str()) {
+                    if let Some(index) = self
+                        .providers
+                        .iter()
+                        .position(|candidate| candidate.id == provider)
+                    {
+                        self.provider_idx = index;
+                    }
+                    self.status = format!("provider: {}", provider.as_str());
+                }
+            }
             Event::SessionActivityChanged { session, activity } => {
                 self.apply_activity(session, activity);
             }
@@ -1507,6 +1528,27 @@ mod tests {
             a.sessions[0].sandbox_policy,
             SandboxPolicy::DangerFullAccess
         );
+    }
+
+    #[test]
+    fn provider_change_reconciles_the_active_tui_shell() {
+        let mut a = app();
+        let mut session = activity_session("provider-session", SessionActivity::default());
+        session.acp_session_id = Some("old-provider-cursor".into());
+        a.active = Some(session.id.clone());
+        a.set_sessions(vec![session]);
+
+        a.on_engine_event(Event::ProviderChanged {
+            session: "provider-session".into(),
+            provider: ProviderId::Pi,
+            model: None,
+        });
+
+        assert_eq!(a.sessions[0].provider, ProviderId::Pi);
+        assert_eq!(a.sessions[0].model, None);
+        assert_eq!(a.sessions[0].acp_session_id, None);
+        assert_eq!(a.providers[a.provider_idx].id, ProviderId::Pi);
+        assert_eq!(a.status, "provider: pi");
     }
 
     #[test]

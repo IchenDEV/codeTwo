@@ -131,6 +131,14 @@ pub enum Event {
     },
     /// Durable automatic-title update; frontends can refresh a shell without reloading sessions.
     SessionTitleChanged { session: SessionId, title: String },
+    /// Authoritative durable provider replacement for an existing conversation. Provider-owned
+    /// model/config/capability projections are reset and republished separately after this event.
+    ProviderChanged {
+        session: SessionId,
+        provider: ProviderId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+    },
     /// Authoritative, revisioned session lifecycle projection.
     SessionActivityChanged {
         session: SessionId,

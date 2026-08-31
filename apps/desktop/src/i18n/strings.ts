@@ -1889,6 +1889,8 @@ export const en = {
   "toast.projectDefaultFailed":
     "Could not save the project workspace default: {error}",
   "toast.modelFailed": "Could not switch model: {error}",
+  "toast.providerSwitchBusy": "Stop the current turn before switching providers.",
+  "toast.providerSwitchFailed": "Could not switch provider: {error}",
   "toast.modelBusy": "Stop the current turn before switching models.",
   "toast.dismiss": "Dismiss",
 
@@ -4371,6 +4373,8 @@ export const zhCN: Record<StringKey, string> = {
   "toast.projectFailed": "无法添加该文件夹：{error}",
   "toast.projectDefaultFailed": "无法保存项目工作区默认值：{error}",
   "toast.modelFailed": "无法切换模型：{error}",
+  "toast.providerSwitchBusy": "请先停止当前回合，再切换供应商。",
+  "toast.providerSwitchFailed": "无法切换供应商：{error}",
   "toast.modelBusy": "请先停止当前运行，再切换模型。",
   "toast.dismiss": "关闭",
 

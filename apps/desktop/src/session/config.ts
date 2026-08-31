@@ -22,6 +22,8 @@ export interface SessionConfig {
   providersStatus: "loading" | "ready" | "error";
   provider: string;
   onProvider: (v: string) => void;
+  /** A running turn or in-flight runtime replacement owns the provider boundary. */
+  providerChangeDisabled?: boolean;
   onReloadProviders: () => void;
   /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */
   mode: PermissionMode;
