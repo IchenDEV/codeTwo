@@ -18,6 +18,7 @@ use codetwo_core::provider::{
 };
 use codetwo_core::provider_lifecycle::{
     ProviderLaunchMode, ProviderLifecycleManager, ProviderLifecycleStatus,
+    ProviderRuntimeConfiguration,
 };
 use codetwo_core::scene::SceneLibrary;
 use codetwo_core::scene_artifact::SceneArtifactStore;
@@ -190,6 +191,7 @@ pub struct ProviderSummary {
     pub models: Vec<codetwo_core::event::ModelChoice>,
     pub capabilities: Vec<ProviderCapability>,
     pub management: ProviderLifecycleStatus,
+    pub configuration: ProviderRuntimeConfiguration,
 }
 
 /// Provider installation facts safe for the default support bundle. Launch commands, paths,
@@ -303,6 +305,9 @@ impl ProviderService {
             tasks.spawn(async move {
                 let enabled = lifecycle.enabled(provider.id.as_str()).unwrap_or(false);
                 let management = lifecycle.status(&provider, check_updates).await;
+                let configuration = lifecycle
+                    .runtime_configuration(&provider)
+                    .expect("registered provider has a lifecycle recipe");
                 let summary = ProviderSummary {
                     id: provider.id.as_str().to_string(),
                     display_name: provider.display_name.clone(),
@@ -312,6 +317,7 @@ impl ProviderService {
                     models: available_models(&provider).await,
                     capabilities,
                     management,
+                    configuration,
                 };
                 (index, summary)
             });

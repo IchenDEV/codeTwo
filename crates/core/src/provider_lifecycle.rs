@@ -6,7 +6,7 @@
 use crate::provider::{which, Provider};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -37,6 +37,36 @@ pub enum ProviderLaunchMode {
     Installed,
     OnDemand,
     Unavailable,
+}
+
+/// User-authored launch metadata. Values of forwarded environment variables deliberately never
+/// enter this document: only their names are durable, and the current host value is copied when a
+/// Provider process is prepared.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProviderRuntimeOverride {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub forwarded_environment: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProviderRuntimeConfiguration {
+    pub display_name: Option<String>,
+    pub command: Option<String>,
+    pub args: Option<Vec<String>>,
+    pub home_path: Option<String>,
+    pub home_environment: Option<String>,
+    pub forwarded_environment: Vec<String>,
+    pub missing_environment: Vec<String>,
+    pub effective_command: String,
+    pub effective_args: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -220,6 +250,8 @@ struct ProviderLifecycleState {
     schema_version: u8,
     #[serde(default)]
     enabled: HashMap<String, bool>,
+    #[serde(default)]
+    runtime: HashMap<String, ProviderRuntimeOverride>,
 }
 
 impl Default for ProviderLifecycleState {
@@ -227,6 +259,7 @@ impl Default for ProviderLifecycleState {
         Self {
             schema_version: 1,
             enabled: HashMap::new(),
+            runtime: HashMap::new(),
         }
     }
 }
@@ -270,6 +303,57 @@ impl ProviderLifecycleManager {
         save_state(&self.data_dir, &self.state_path, &next)?;
         *state = next;
         Ok(())
+    }
+
+    pub fn set_runtime_configuration(
+        &self,
+        provider_id: &str,
+        configuration: ProviderRuntimeOverride,
+    ) -> Result<(), String> {
+        recipe(provider_id)?;
+        let configuration = validate_runtime_configuration(provider_id, configuration)?;
+        let mut state = self.state.lock().unwrap();
+        let mut next = state.clone();
+        if configuration == ProviderRuntimeOverride::default() {
+            next.runtime.remove(provider_id);
+        } else {
+            next.runtime.insert(provider_id.to_string(), configuration);
+        }
+        save_state(&self.data_dir, &self.state_path, &next)?;
+        *state = next;
+        Ok(())
+    }
+
+    pub fn runtime_configuration(
+        &self,
+        provider: &Provider,
+    ) -> Result<ProviderRuntimeConfiguration, String> {
+        recipe(provider.id.as_str())?;
+        let configured = self
+            .state
+            .lock()
+            .unwrap()
+            .runtime
+            .get(provider.id.as_str())
+            .cloned()
+            .unwrap_or_default();
+        let missing_environment = configured
+            .forwarded_environment
+            .iter()
+            .filter(|name| std::env::var_os(name).is_none())
+            .cloned()
+            .collect();
+        Ok(ProviderRuntimeConfiguration {
+            display_name: configured.display_name,
+            command: configured.command,
+            args: configured.args,
+            home_path: configured.home_path,
+            home_environment: provider_home_environment(provider.id.as_str()).map(str::to_string),
+            forwarded_environment: configured.forwarded_environment,
+            missing_environment,
+            effective_command: provider.launch.command.clone(),
+            effective_args: provider.launch.args.clone(),
+        })
     }
 
     pub async fn status(&self, provider: &Provider, check_latest: bool) -> ProviderLifecycleStatus {
@@ -356,6 +440,36 @@ impl ProviderLifecycleManager {
                 provider.launch.command = executable.to_string_lossy().into_owned();
                 provider.launch.args = args.iter().map(|value| (*value).to_string()).collect();
                 provider.needs_node = false;
+            }
+        }
+        let configured = self.state.lock().unwrap().runtime.clone();
+        for provider in &mut providers {
+            let Some(configuration) = configured.get(provider.id.as_str()) else {
+                continue;
+            };
+            if let Some(display_name) = &configuration.display_name {
+                provider.display_name = display_name.clone();
+            }
+            if let Some(command) = &configuration.command {
+                provider.launch.command = expand_home(command);
+            }
+            if let Some(args) = &configuration.args {
+                provider.launch.args = args.clone();
+            }
+            for name in &configuration.forwarded_environment {
+                if let Some(value) = std::env::var_os(name) {
+                    set_launch_environment(
+                        &mut provider.launch.env,
+                        name,
+                        value.to_string_lossy().into_owned(),
+                    );
+                }
+            }
+            if let (Some(variable), Some(path)) = (
+                provider_home_environment(provider.id.as_str()),
+                configuration.home_path.as_deref(),
+            ) {
+                set_launch_environment(&mut provider.launch.env, variable, expand_home(path));
             }
         }
         providers
@@ -583,6 +697,124 @@ pub fn parse_provider_version(output: &str) -> Option<String> {
     })
 }
 
+fn provider_home_environment(provider_id: &str) -> Option<&'static str> {
+    match provider_id {
+        "codex" => Some("CODEX_HOME"),
+        "claude_code" => Some("CLAUDE_CONFIG_DIR"),
+        _ => None,
+    }
+}
+
+fn normalize_optional(
+    value: Option<String>,
+    field: &str,
+    maximum: usize,
+) -> Result<Option<String>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.len() > maximum || value.contains('\0') {
+        return Err(format!("{field} is invalid or exceeds {maximum} bytes"));
+    }
+    Ok(Some(value.to_string()))
+}
+
+fn valid_environment_name(name: &str) -> bool {
+    let mut characters = name.chars();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    (first == '_' || first.is_ascii_alphabetic())
+        && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
+        && name.len() <= 128
+}
+
+fn validate_runtime_configuration(
+    provider_id: &str,
+    configuration: ProviderRuntimeOverride,
+) -> Result<ProviderRuntimeOverride, String> {
+    let display_name = normalize_optional(configuration.display_name, "display name", 80)?;
+    let command = normalize_optional(configuration.command, "runtime command", 1_024)?;
+    let home_path = normalize_optional(configuration.home_path, "config directory", 1_024)?;
+    if home_path.is_some() && provider_home_environment(provider_id).is_none() {
+        return Err(format!(
+            "{provider_id} does not support a managed config directory"
+        ));
+    }
+    let args = configuration
+        .args
+        .map(|args| {
+            if args.len() > 64 {
+                return Err("runtime arguments exceed 64 entries".to_string());
+            }
+            args.into_iter()
+                .map(|argument| {
+                    if argument.len() > 1_024 || argument.contains('\0') {
+                        Err("a runtime argument is invalid or exceeds 1024 bytes".to_string())
+                    } else {
+                        Ok(argument)
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?;
+    let mut seen = HashSet::new();
+    let mut forwarded_environment = Vec::new();
+    for name in configuration.forwarded_environment {
+        let name = name.trim();
+        if !valid_environment_name(name) {
+            return Err(format!("invalid environment variable name {name:?}"));
+        }
+        if seen.insert(name.to_string()) {
+            forwarded_environment.push(name.to_string());
+        }
+        if forwarded_environment.len() > 64 {
+            return Err("forwarded environment exceeds 64 names".to_string());
+        }
+    }
+    Ok(ProviderRuntimeOverride {
+        display_name,
+        command,
+        args,
+        home_path,
+        forwarded_environment,
+    })
+}
+
+fn expand_home(value: &str) -> String {
+    if value == "~" {
+        return std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(|home| PathBuf::from(home).to_string_lossy().into_owned())
+            .unwrap_or_else(|| value.to_string());
+    }
+    let Some(rest) = value
+        .strip_prefix("~/")
+        .or_else(|| value.strip_prefix("~\\"))
+    else {
+        return value.to_string();
+    };
+    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        return value.to_string();
+    };
+    PathBuf::from(home)
+        .join(rest)
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn set_launch_environment(environment: &mut Vec<(String, String)>, name: &str, value: String) {
+    if let Some(existing) = environment.iter_mut().find(|(key, _)| key == name) {
+        existing.1 = value;
+    } else {
+        environment.push((name.to_string(), value));
+    }
+}
+
 fn load_state(path: &Path) -> ProviderLifecycleState {
     let Ok(bytes) = fs::read(path) else {
         return ProviderLifecycleState::default();
@@ -595,6 +827,9 @@ fn load_state(path: &Path) -> ProviderLifecycleState {
     }
     state
         .enabled
+        .retain(|id, _| RECIPES.iter().any(|recipe| recipe.id == id));
+    state
+        .runtime
         .retain(|id, _| RECIPES.iter().any(|recipe| recipe.id == id));
     state
 }
@@ -684,6 +919,87 @@ mod tests {
             .enabled("codex")
             .unwrap());
         assert!(manager.set_enabled("not-a-provider", true).is_err());
+    }
+
+    #[test]
+    fn runtime_overrides_are_durable_validated_and_applied_without_environment_values() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = ProviderLifecycleManager::open(directory.path());
+        manager
+            .set_runtime_configuration(
+                "codex",
+                ProviderRuntimeOverride {
+                    display_name: Some("  Codex Work  ".into()),
+                    command: Some("~/bin/codex-acp".into()),
+                    args: Some(vec!["--profile".into(), "work".into()]),
+                    home_path: Some("~/.codex-work".into()),
+                    forwarded_environment: vec![
+                        "CODETWO_TEST_MISSING_ENV".into(),
+                        "CODETWO_TEST_MISSING_ENV".into(),
+                    ],
+                },
+            )
+            .unwrap();
+
+        let reopened = ProviderLifecycleManager::open(directory.path());
+        let providers = reopened.prepare_registry(crate::provider::default_registry());
+        let codex = providers
+            .iter()
+            .find(|provider| provider.id.as_str() == "codex")
+            .unwrap();
+        let configuration = reopened.runtime_configuration(codex).unwrap();
+
+        assert_eq!(codex.display_name, "Codex Work");
+        assert!(codex.launch.command.ends_with("/bin/codex-acp"));
+        assert_eq!(codex.launch.args, ["--profile", "work"]);
+        assert_eq!(
+            configuration.home_environment.as_deref(),
+            Some("CODEX_HOME")
+        );
+        assert_eq!(
+            configuration.forwarded_environment,
+            ["CODETWO_TEST_MISSING_ENV"]
+        );
+        assert_eq!(
+            configuration.missing_environment,
+            ["CODETWO_TEST_MISSING_ENV"]
+        );
+        assert!(codex
+            .launch
+            .env
+            .iter()
+            .any(|(name, value)| name == "CODEX_HOME" && value.ends_with("/.codex-work")));
+        let persisted =
+            fs::read_to_string(directory.path().join("provider-settings.json")).unwrap();
+        assert!(persisted.contains("CODETWO_TEST_MISSING_ENV"));
+        assert!(!persisted.contains("environment_value"));
+    }
+
+    #[test]
+    fn runtime_overrides_reject_unknown_providers_unsafe_names_and_unsupported_homes() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = ProviderLifecycleManager::open(directory.path());
+        assert!(manager
+            .set_runtime_configuration("unknown", ProviderRuntimeOverride::default())
+            .is_err());
+        assert!(manager
+            .set_runtime_configuration(
+                "codex",
+                ProviderRuntimeOverride {
+                    forwarded_environment: vec!["BAD-NAME".into()],
+                    ..ProviderRuntimeOverride::default()
+                },
+            )
+            .is_err());
+        assert!(manager
+            .set_runtime_configuration(
+                "grok",
+                ProviderRuntimeOverride {
+                    home_path: Some("~/.grok".into()),
+                    ..ProviderRuntimeOverride::default()
+                },
+            )
+            .is_err());
     }
 
     #[cfg(windows)]

@@ -1,0 +1,60 @@
+diff --git a/pkg/apple-sdk/build.zig b/pkg/apple-sdk/build.zig
+index f897919f4..25d3cc817 100644
+--- a/pkg/apple-sdk/build.zig
++++ b/pkg/apple-sdk/build.zig
+@@ -53,12 +53,26 @@ pub fn addPaths(
+             // Detect our SDK using the "findNative" Zig stdlib function.
+             // This is really important because it forces using `xcrun` to
+             // find the SDK path.
+-            const libc = std.zig.LibCInstallation.findNative(.{
++            var libc = std.zig.LibCInstallation.findNative(.{
+                 .allocator = b.allocator,
+                 .target = &step.rootModuleTarget(),
+                 .verbose = false,
+             }) catch break :darwin;
+-
++
++            // Xcode 27's math.h requests infinity and NaN definitions from
++            // Clang's float.h using the __need_infinity_nan protocol. Zig
++            // 0.15's bundled Clang resource headers predate that protocol, so
++            // compiling Zig's bundled libc++ against the new SDK fails.
++            //
++            // Put our compatibility include directory between Zig's resource
++            // headers and the selected SDK headers. Its math.h forwards to the
++            // SDK with #include_next, then supplies the definitions missing
++            // from Zig's float.h. This is a backport of Ghostty 1c861e3c4 and
++            // can be removed when the pinned Ghostty/Zig pair contains it.
++            libc.include_dir = b.dependency("apple_sdk", .{})
++                .path("include")
++                .getPath(b);
++
+             // Render the file compatible with the `--libc` Zig flag.
+             var stream: std.io.Writer.Allocating = .init(b.allocator);
+             defer stream.deinit();
+diff --git a/pkg/apple-sdk/include/math.h b/pkg/apple-sdk/include/math.h
+new file mode 100644
+index 000000000..507c3c707
+--- /dev/null
++++ b/pkg/apple-sdk/include/math.h
+@@ -0,0 +1,21 @@
++#ifndef GHOSTTY_APPLE_SDK_MATH_H
++#define GHOSTTY_APPLE_SDK_MATH_H
++
++// Resume the header search after this compatibility directory so we include
++// the selected Xcode SDK's math.h. A regular #include <math.h> would find this
++// wrapper again and loop forever. This is a Clang extension but Zig uses
++// Clang so we good.
++#include_next <math.h>
++
++// Xcode 27's math.h expects Clang's float.h to define these when requested
++// with __need_infinity_nan. Zig 0.15's bundled float.h predates that protocol;
++// remove these fallbacks once Zig's bundled Clang headers implement it.
++#ifndef INFINITY
++#define INFINITY (__builtin_inff())
++#endif
++
++#ifndef NAN
++#define NAN (__builtin_nanf(""))
++#endif
++
++#endif

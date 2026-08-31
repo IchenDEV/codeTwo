@@ -203,6 +203,22 @@ export interface ProviderInfo {
   models: ModelChoice[];
   capabilities: ProviderCapability[];
   management: ProviderManagementInfo;
+  configuration: ProviderRuntimeConfiguration;
+}
+
+export interface ProviderRuntimeOverride {
+  display_name: string | null;
+  command: string | null;
+  args: string[] | null;
+  home_path: string | null;
+  forwarded_environment: string[];
+}
+
+export interface ProviderRuntimeConfiguration extends ProviderRuntimeOverride {
+  home_environment: string | null;
+  missing_environment: string[];
+  effective_command: string;
+  effective_args: string[];
 }
 
 export interface ProviderManagementInfo {
@@ -297,17 +313,37 @@ function normalizeBrowserUseSettings(settings: BrowserUseSettingsWire): BrowserU
   };
 }
 
-type ProviderInfoWire = Omit<ProviderInfo, "capabilities" | "enabled" | "management"> & {
+type ProviderInfoWire = Omit<ProviderInfo, "capabilities" | "enabled" | "management" | "configuration"> & {
   capabilities?: ProviderCapability[] | null;
   enabled?: boolean | null;
   management?: ProviderManagementInfo | null;
+  configuration?: ProviderRuntimeConfiguration | null;
 };
+
+function defaultProviderConfiguration(provider: Pick<ProviderInfo, "id">): ProviderRuntimeConfiguration {
+  return {
+    display_name: null,
+    command: null,
+    args: null,
+    home_path: null,
+    home_environment: provider.id === "codex"
+      ? "CODEX_HOME"
+      : provider.id === "claude_code"
+        ? "CLAUDE_CONFIG_DIR"
+        : null,
+    forwarded_environment: [],
+    missing_environment: [],
+    effective_command: "",
+    effective_args: [],
+  };
+}
 
 export function normalizeProviderInfo(provider: ProviderInfoWire): ProviderInfo {
   return {
     ...provider,
     enabled: provider.enabled ?? true,
     capabilities: provider.capabilities ?? [],
+    configuration: provider.configuration ?? defaultProviderConfiguration(provider),
     management: provider.management ?? {
       installed: provider.available,
       version: null,
@@ -1513,6 +1549,7 @@ const fallbackProvider = (
     upgrade_supported: false,
     launch_mode: "unavailable",
   },
+  configuration: defaultProviderConfiguration({ id }),
 });
 
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
@@ -1536,6 +1573,13 @@ export function fallbackProviders(): ProviderInfo[] {
     models: [...provider.models],
     capabilities: [...provider.capabilities],
     management: { ...provider.management },
+    configuration: {
+      ...provider.configuration,
+      args: provider.configuration.args ? [...provider.configuration.args] : null,
+      effective_args: [...provider.configuration.effective_args],
+      forwarded_environment: [...provider.configuration.forwarded_environment],
+      missing_environment: [...provider.configuration.missing_environment],
+    },
   }));
 }
 
@@ -1570,6 +1614,15 @@ export async function listProviders(checkUpdates = false): Promise<ProviderInfo[
 export async function setProviderEnabled(provider: string, enabled: boolean): Promise<ProviderInfo[]> {
   if (!inDesktop) throw new Error("Provider management is available in the C2 desktop app");
   const providers = await call<ProviderInfoWire[]>("providers.set_enabled", { provider, enabled });
+  return providers.map(normalizeProviderInfo);
+}
+
+export async function configureProvider(
+  provider: string,
+  configuration: ProviderRuntimeOverride,
+): Promise<ProviderInfo[]> {
+  if (!inDesktop) throw new Error("Provider configuration is available in the C2 desktop app");
+  const providers = await call<ProviderInfoWire[]>("providers.configure", { provider, configuration });
   return providers.map(normalizeProviderInfo);
 }
 

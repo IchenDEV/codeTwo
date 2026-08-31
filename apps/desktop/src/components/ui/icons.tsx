@@ -148,6 +148,7 @@ import SquareData from "@hugeicons/core-free-icons/SquareIcon";
 import SquareDashedMousePointerIconData from "@hugeicons/core-free-icons/SquareDashedMousePointerIcon";
 import SquareKanbanData from "@hugeicons/core-free-icons/KanbanIcon";
 import SquarePenData from "@hugeicons/core-free-icons/Pen01Icon";
+import StarIconData from "@hugeicons/core-free-icons/StarIcon";
 import StoreData from "@hugeicons/core-free-icons/Store01Icon";
 import SunData from "@hugeicons/core-free-icons/Sun01Icon";
 import TargetData from "@hugeicons/core-free-icons/Target01Icon";
@@ -327,6 +328,7 @@ export const SquareDashedMousePointer = createIcon(SquareDashedMousePointerIconD
 export const SquareKanban = createIcon(SquareKanbanData, "SquareKanban");
 export const SquarePen = createIcon(SquarePenData, "SquarePen");
 export const SquarePlus = createIcon(AddSquareIconData, "SquarePlus");
+export const Star = createIcon(StarIconData, "Star");
 export const Store = createIcon(StoreData, "Store");
 export const Sun = createIcon(SunData, "Sun");
 export const Target = createIcon(TargetData, "Target");

@@ -39,6 +39,7 @@ import {
   type Project,
   type ProjectWorktreeMode,
   type ProviderInfo,
+  type ProviderRuntimeOverride,
   type SessionImportResult,
   type WorktreeSettings,
   type PluginDeveloperStatus,
@@ -201,6 +202,7 @@ export function SettingsPage({
   providerInstaller,
   providerUpgrader,
   providerEnabledSaver,
+  providerConfigurationSaver,
   deviceSyncStatusLoader,
   deviceSyncEnabledSaver,
   deviceSyncStarter,
@@ -269,6 +271,10 @@ export function SettingsPage({
   providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
   providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
   providerEnabledSaver?: (provider: string, enabled: boolean) => Promise<ProviderInfo[]>;
+  providerConfigurationSaver?: (
+    provider: string,
+    configuration: ProviderRuntimeOverride,
+  ) => Promise<ProviderInfo[]>;
   deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
   deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
   deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
@@ -533,6 +539,7 @@ export function SettingsPage({
                 installer={providerInstaller}
                 upgrader={providerUpgrader}
                 enabledSaver={providerEnabledSaver}
+                configurationSaver={providerConfigurationSaver}
               />
             )}
             {tab === "developer" && (
