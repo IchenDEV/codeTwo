@@ -1057,6 +1057,7 @@ export function ModelPicker({
                 {providerChoices.map((candidate) => {
                   const selected = candidate.id === pickerProvider;
                   const unavailable = providerConfig.providersStatus === "ready" && !candidate.available;
+                  const displayName = candidate.id === "codex" ? "Codex" : candidate.display_name;
                   return (
                     <Button
                       key={candidate.id}
@@ -1064,7 +1065,7 @@ export function ModelPicker({
                       variant="selectable"
                       size="compact"
                       role="option"
-                      aria-label={candidate.display_name}
+                      aria-label={displayName}
                       aria-selected={selected}
                       data-selected={selected ? "true" : "false"}
                       disabled={unavailable}
@@ -1088,7 +1089,7 @@ export function ModelPicker({
                         provider={candidate.id}
                         className={cn("size-3.5", unavailable && "opacity-40")}
                       />
-                      <span className="truncate">{candidate.display_name}</span>
+                      <span className="truncate">{displayName}</span>
                       <span
                         aria-hidden="true"
                         className={cn(

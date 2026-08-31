@@ -88,6 +88,9 @@ effort selector remains unchanged. For an available Provider whose catalogue is 
 fresh-session intent carries `model = null`, closes the picker, and leaves model resolution to that
 Provider instead of manufacturing a default.
 
+The compact switcher renders the canonical `codex` Provider as `Codex`; registry names,
+configuration surfaces, Provider IDs, protocols, and persisted session state remain unchanged.
+
 The popup uses shared menu width, separator, selectable-row, and quiet-fill primitives instead of
 one-off picker border, ring, sizing, and selected-state contracts.
 
@@ -114,7 +117,10 @@ checks.
   in dark, light, and an 800 px iframe viewport: the popup remained fully visible, long Provider
   sets scrolled horizontally, and no
   scrollbar or clipped primary content remained. Direct `view_image` comparison confirmed that
-  the T3 vertical rail, shortcut badges, and legacy section were not copied.
+  the T3 vertical rail, shortcut badges, and legacy section were not copied. A final rendered
+  Browser check confirmed the compact switcher exposes `Codex` visually and through its accessible
+  label, with zero remaining `OpenAI Codex` labels; the screenshot is
+  `/tmp/codetwo-provider-picker-codex-label.png`.
 - AC-3: PASS — `bun test tests/sceneChip.test.tsx` confirms Provider browsing invokes neither
   legacy session callback, while final selection emits exactly `grok / grok-4.6` through the atomic
   callback. `bun test tests/providerModelTransition.test.ts` confirms App creates a fresh draft
@@ -126,7 +132,7 @@ checks.
 - AC-4: PASS — `bun test tests/reasoningScaleRendered.test.tsx tests/sceneChip.test.tsx` passed 26
   tests and 92 expectations; `bunx tsc --noEmit` and focused ESLint also passed. Model-only picker
   tests remain in that passing suite.
-- AC-5: PASS — the final `bun test` passed 809 tests and 3,867 expectations; `bun run build`
+- AC-5: PASS — the final `bun test` passed 809 tests and 3,853 expectations; `bun run build`
   completed the production renderer and native package. Repository lifecycle commands are recorded
   by the final verification pass below.
 
@@ -142,7 +148,8 @@ checks.
   use existing CodeTwo tokens and primitives in both dark and light themes.
 - Responsive behavior: the Provider switcher scrolls horizontally without a visible scrollbar,
   and the full model workflow remained visible in the 800 px rendered state.
-- Visible-copy diff: no new heading, category label, badge, or explanatory copy was introduced.
+- Visible-copy diff: the compact Provider label was shortened from `OpenAI Codex` to the requested
+  `Codex`; no new heading, category label, badge, or explanatory copy was introduced.
 
 Residual risk: the visual exercise used an isolated renderer fixture rather than starting another
 Core process, as required by the repository's single-owner rule. The App integration is covered by
@@ -167,3 +174,4 @@ found that a Provider with no pre-session model catalogue had no selection path.
 that such Providers should be selectable directly and do not require any preset model.
 After the reviewed fixes, the user requested a more polished UI that keeps the simplified unified
 flow without copying T3's permanent left icon rail.
+The user then requested the compact switcher label `OpenAI Codex` be shortened to `Codex`.

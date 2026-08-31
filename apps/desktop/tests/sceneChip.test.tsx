@@ -278,7 +278,8 @@ describe("SceneChip", () => {
     expect(picker?.querySelector("[data-provider-rail]")).toBeNull();
     const providerSwitcher = picker?.querySelector("[data-provider-switcher]");
     expect(providerSwitcher).toBeTruthy();
-    expect(providerSwitcher?.textContent).toContain("OpenAI Codex");
+    expect(providerSwitcher?.textContent).toContain("Codex");
+    expect(providerSwitcher?.textContent).not.toContain("OpenAI Codex");
     expect(providerSwitcher?.textContent).toContain("Grok");
     expect(picker?.querySelector('input[aria-label="Search models"]')).toBeTruthy();
     const grok = picker?.querySelector<HTMLButtonElement>('button[aria-label="Grok"]');
