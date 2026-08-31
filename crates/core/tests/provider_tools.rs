@@ -462,7 +462,7 @@ async fn codex_host_context_does_not_appear_as_user_prompt_text() {
 
     assert_eq!(
         run_turn(&engine, &mut events, session.clone()).await,
-        ["config_host=true;config_sites=true;config_rules=false;config_scene=true;prompt_host=false;prompt_sites=false;prompt_rules=true;prompt_native_rule=false;prompt_portable_rule=true;prompt_scene=false;prompt_memory=false"]
+        ["config_host=true;config_sites=true;config_rules=false;config_scene=false;prompt_host=false;prompt_sites=false;prompt_rules=true;prompt_native_rule=false;prompt_portable_rule=true;prompt_scene=false;prompt_memory=false"]
     );
     assert!(store.list_memory_receipts(&session).unwrap().is_empty());
     store
@@ -470,7 +470,7 @@ async fn codex_host_context_does_not_appear_as_user_prompt_text() {
         .unwrap();
     assert_eq!(
         run_turn(&engine, &mut events, session.clone()).await,
-        ["config_host=true;config_sites=true;config_rules=false;config_scene=true;prompt_host=false;prompt_sites=false;prompt_rules=true;prompt_native_rule=false;prompt_portable_rule=true;prompt_scene=false;prompt_memory=true"]
+        ["config_host=true;config_sites=true;config_rules=false;config_scene=false;prompt_host=false;prompt_sites=false;prompt_rules=true;prompt_native_rule=false;prompt_portable_rule=true;prompt_scene=false;prompt_memory=true"]
     );
     assert_eq!(store.list_memory_receipts(&session).unwrap().len(), 1);
 

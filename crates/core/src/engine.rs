@@ -1111,7 +1111,6 @@ fn attach_host_mcp_servers(
 
 const CODETWO_BROWSER_ROUTING_INSTRUCTIONS: &str = "[C2 desktop browser routing]\nFor any browser or website task, use the codetwo_browser MCP tools by default. Do not use node_repl, the host in-app browser, or Chrome unless the user explicitly asks for Chrome, an existing browser tab, or an existing login state. This routing rule applies even when another available skill describes a different in-app browser. Website access and sensitive actions still require the approvals requested by codetwo_browser.";
 const CODEX_SITES_INSTRUCTIONS: &str = "[C2 Sites routing and safety]\nWhen the user asks to build, save, publish, deploy, manage, or inspect a hosted site, or when .openai/hosting.json exists, use the official OpenAI Sites plugin and its Sites skills. Reuse the exact project_id from .openai/hosting.json; never invent or transform Sites identifiers, and never expose or persist connector credentials. Treat saving a version and deploying it as separate stages, and remember that every Sites deployment URL is production. Immediately before any deployment, access-policy change, environment/secret change, custom-domain change, bypass-token generation, or deletion, require an explicit ACP or MCP approval even in Full Access; if the connector does not request one, stop and ask the user. A request for a local build or saved version alone never authorizes production deployment.";
-const CODEX_AUTO_SCENE_INSTRUCTIONS: &str = "[C2 Auto Scene]\nAt the start of each turn, call `scene_list` with a short task query. If it reports that Auto Scene is disabled, continue without scene action. When enabled, select only an exact returned reference with `scene_select`, follow its current-turn instructions, and never claim a scene changed until the tool confirms it. Permission increases still require the tool's approval flow.";
 
 fn with_codetwo_browser_routing(prompt: String, enabled: bool) -> String {
     if enabled {
@@ -1157,9 +1156,8 @@ fn codex_launch_with_static_provider_context(
     tool_instructions: &[String],
     route_desktop_browser: bool,
     browser_access_enabled: bool,
-    route_auto_scene: bool,
 ) -> Result<LaunchSpec, serde_json::Error> {
-    let mut static_context = with_initial_provider_context(
+    let static_context = with_initial_provider_context(
         String::new(),
         tool_instructions,
         route_desktop_browser,
@@ -1168,9 +1166,6 @@ fn codex_launch_with_static_provider_context(
     )
     .trim()
     .to_string();
-    if route_auto_scene {
-        static_context = format!("{static_context}\n\n{CODEX_AUTO_SCENE_INSTRUCTIONS}");
-    }
     let existing_config = launch
         .env
         .iter()
@@ -4465,7 +4460,6 @@ impl Engine {
                         .as_ref()
                         .is_some_and(|config| config.browser_enabled),
                 provider_toolset.browser_access_enabled,
-                self.state.desktop_mcp.is_some(),
             )
             .map_err(|error| format!("couldn't configure {}: {error}", prov.display_name))?
         } else {
@@ -4922,7 +4916,6 @@ impl Engine {
                                 .as_ref()
                                 .is_some_and(|config| config.browser_enabled),
                         provider_toolset.browser_access_enabled,
-                        self.state.desktop_mcp.is_some(),
                     )
                     .map_err(AcpError::Decode)?
                 } else {
@@ -8498,12 +8491,10 @@ mod mcp_tests {
             r#"{"model":"kept","developer_instructions":"Existing rule."}"#.into(),
         ));
         let instructions = vec!["HOST_TOOL_MARKER".to_string()];
-        let launch =
-            codex_launch_with_static_provider_context(&launch, &instructions, true, true, true)
-                .expect("valid Codex config");
-        let launch =
-            codex_launch_with_static_provider_context(&launch, &instructions, true, true, true)
-                .expect("reapplying context remains valid");
+        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true, true)
+            .expect("valid Codex config");
+        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true, true)
+            .expect("reapplying context remains valid");
         let encoded = launch
             .env
             .iter()
@@ -8518,7 +8509,7 @@ mod mcp_tests {
         assert!(developer.contains("HOST_TOOL_MARKER"));
         assert!(developer.contains("[C2 desktop browser routing]"));
         assert!(developer.contains("[C2 Sites routing and safety]"));
-        assert!(developer.contains("[C2 Auto Scene]"));
+        assert!(!developer.contains("[C2 Auto Scene]"));
         assert_eq!(
             developer.matches("[C2 Sites routing and safety]").count(),
             1
@@ -8534,7 +8525,7 @@ mod mcp_tests {
                 .into(),
         ));
 
-        let launch = codex_launch_with_static_provider_context(&launch, &[], false, false, false)
+        let launch = codex_launch_with_static_provider_context(&launch, &[], false, false)
             .expect("valid Codex config");
         let encoded = launch
             .env
