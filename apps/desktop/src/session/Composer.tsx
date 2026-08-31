@@ -38,7 +38,6 @@ import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import {
   fallbackProviders,
-  providerDisplayName,
   type ConfigOptionInfo,
   type AppshotCapture,
   type GoalCapabilityInfo,
@@ -64,6 +63,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
@@ -768,107 +768,6 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
   );
 }
 
-export function ProviderPicker({ config }: { config: SessionConfig }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const registry = config.providers.length > 0 ? config.providers : fallbackProviders();
-  // Disabled providers stop being new-session choices. Keep the active one visible so a resumed
-  // session still identifies the runtime it already owns.
-  const providers = registry.filter((candidate) => candidate.enabled !== false || candidate.id === config.provider);
-  const active = providers.find((p) => p.id === config.provider);
-  const activeLabel = active?.display_name ?? providerDisplayName(config.provider);
-  const registryReady = config.providersStatus === "ready";
-
-  useEffect(() => {
-    const openProviderPicker = () => {
-      setOpen(true);
-      window.setTimeout(() => triggerRef.current?.focus(), 0);
-    };
-    window.addEventListener("codetwo-open-provider-picker", openProviderPicker);
-    return () => window.removeEventListener("codetwo-open-provider-picker", openProviderPicker);
-  }, []);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={<Chip
-          ref={triggerRef}
-          title={config.providersStatus === "error" ? t("config.providersLoadFailed") : t("config.provider")}
-          aria-label={`${t("config.provider")}: ${activeLabel}`}
-          aria-busy={config.providersStatus === "loading"}
-        >
-          {registryReady && active && !active.available && (
-            <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
-          )}
-          <span className="max-w-40 truncate text-foreground/80">
-            {activeLabel}
-          </span>
-          <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>}
-      />
-      <PopoverContent align="start" side="top" className="w-64 p-1.5">
-        <MenuSection>{t("config.provider")}</MenuSection>
-        {config.providersStatus === "loading" && (
-          <p role="status" className="px-2.5 pb-2 text-callout text-muted-foreground">
-            {t("config.providersLoading")}
-          </p>
-        )}
-        {config.providersStatus === "error" && (
-          <div className="mb-1 flex items-center gap-2 rounded-control bg-muted/60 px-module-inset py-2 text-callout">
-            <span role="alert" className="min-w-0 flex-1 text-muted-foreground">
-              {t("config.providersLoadFailed")}
-            </span>
-            <Button
-              type="button"
-              variant="link"
-              size="compact"
-              className="shrink-0 px-0 font-medium text-foreground"
-              onClick={config.onReloadProviders}
-            >
-              {t("config.retryProviders")}
-            </Button>
-          </div>
-        )}
-        {providers.map((p) => (
-          <SelectableRow
-            key={p.id}
-            selected={p.id === config.provider}
-            label={p.display_name}
-            // The dot says installed; the line under it says what's missing, so the list itself
-            // answers "why can't I use that one?" without a paragraph of warning text.
-            description={registryReady && !p.available
-              ? p.enabled === false
-                ? t("settings.providerDisabled")
-                : p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")
-              : null}
-            leading={
-              <>
-                <span
-                  className={cn(
-                    "size-1.5 shrink-0 rounded-full",
-                    registryReady && p.available ? "bg-success" : "bg-border",
-                  )}
-                />
-                {/* The brand mark; dimmed when the CLI isn't installed, like the row's text. */}
-                <ProviderIcon
-                  provider={p.id}
-                  className={cn("size-3.5 shrink-0", registryReady && !p.available && "opacity-40")}
-                />
-              </>
-            }
-            disabled={registryReady && !p.available}
-            onSelect={() => {
-              config.onProvider(p.id);
-              setOpen(false);
-            }}
-          />
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 /**
  * The model this turn will run on: a model chip, and an effort chip when the model comes in
  * reasoning variants.
@@ -941,6 +840,13 @@ export function ModelPicker({
   const pickerConfigOptions = browsingCurrentProvider ? configOptions : [];
   const pickerCurrent = browsingCurrentProvider ? current : null;
   const pickerDefaultModel = browsingCurrentProvider ? defaultModel : null;
+  const selectPickerModel = (id: string) => {
+    if (providerConfig && pickerProvider !== provider) {
+      providerConfig.onProviderModel(pickerProvider, id);
+      return;
+    }
+    onModel(id);
+  };
   const families = useMemo(() => groupModels(models), [models]);
   const pickerFamilies = useMemo(() => groupModels(pickerModels), [pickerModels]);
   const { favorites, toggle: toggleFavorite } = useProviderModelFavorites(pickerProvider);
@@ -1012,7 +918,7 @@ export function ModelPicker({
       detail: f.variants[0]?.choice.description,
       isDefault: f.variants.some((v) => v.choice.id === pickerDefaultModel),
       selected: f === pickerActiveFamily,
-      select: () => onModel(
+      select: () => selectPickerModel(
         pickVariant(f, pickerActiveVariant?.effort ?? null, pickerDefaultModel).id,
       ),
     }));
@@ -1136,7 +1042,7 @@ export function ModelPicker({
           className={cn(
             "flex max-h-(--available-height) overflow-hidden",
             providerRailEnabled
-              ? "w-[30rem] max-w-(--available-width) flex-row p-0"
+              ? "w-menu-wide max-w-(--available-width) flex-row p-0"
               : "w-64 flex-col p-1.5",
           )}
         >
@@ -1146,7 +1052,7 @@ export function ModelPicker({
                 data-provider-rail
                 role="listbox"
                 aria-label={t("config.provider")}
-                className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-border/70 px-2 py-2"
+                className="flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto px-2 py-2"
               >
                 {providerChoices.map((candidate) => {
                   const selected = candidate.id === pickerProvider;
@@ -1157,20 +1063,17 @@ export function ModelPicker({
                         render={
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="selectable"
                             size="icon"
                             role="option"
                             aria-label={candidate.display_name}
                             aria-selected={selected}
+                            data-selected={selected ? "true" : "false"}
                             disabled={unavailable}
-                            className={cn(
-                              "relative size-9 shrink-0 rounded-control text-muted-foreground",
-                              selected && "bg-fill-rest text-foreground",
-                            )}
+                            className="relative shrink-0"
                             onClick={() => {
                               setBrowseProvider(candidate.id);
                               setModelSearch("");
-                              providerConfig.onProvider(candidate.id);
                             }}
                           >
                             <ProviderIcon
@@ -1180,7 +1083,7 @@ export function ModelPicker({
                             <span
                               aria-hidden="true"
                               className={cn(
-                                "absolute bottom-1 right-1 size-1.5 rounded-full ring-2 ring-popover",
+                                "absolute bottom-1 right-1 size-1.5 rounded-full",
                                 unavailable ? "bg-border" : "bg-success",
                               )}
                             />
@@ -1192,6 +1095,7 @@ export function ModelPicker({
                   );
                 })}
               </div>
+              <Separator orientation="vertical" />
               <div className="flex min-w-0 flex-1 flex-col p-2">
                 {providerConfig.providersStatus === "loading" ? (
                   <p role="status" className="px-2 pb-2 text-callout text-muted-foreground">
@@ -1199,7 +1103,7 @@ export function ModelPicker({
                   </p>
                 ) : null}
                 {providerConfig.providersStatus === "error" ? (
-                  <div className="mb-1 flex items-center gap-2 rounded-control bg-muted/60 px-module-inset py-2 text-callout">
+                  <div className="mb-1 flex items-center gap-2 rounded-control bg-fill-quiet px-module-inset py-2 text-callout">
                     <span role="alert" className="min-w-0 flex-1 text-muted-foreground">
                       {t("config.providersLoadFailed")}
                     </span>

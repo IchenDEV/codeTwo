@@ -1940,32 +1940,62 @@ impl Store {
     pub fn last_texts(&self) -> Result<Vec<(String, String)>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT p.session_id, p.part_json FROM parts p
-             JOIN sessions s ON s.id=p.session_id AND s.transient=0 AND s.handoff_state<>'accepted'
-             WHERE p.seq = (
-               SELECT MAX(q.seq) FROM parts q
-               WHERE q.session_id = p.session_id
-                 AND q.role='\"agent\"'
-                 AND json_extract(q.part_json,'$.kind')='text'
-             )",
+            "WITH latest_agent_text AS (
+               SELECT p.session_id, MAX(p.seq) AS final_seq
+               FROM parts p
+               JOIN sessions s
+                 ON s.id=p.session_id AND s.transient=0 AND s.handoff_state<>'accepted'
+               WHERE p.role='\"agent\"'
+                 AND json_extract(p.part_json,'$.kind')='text'
+               GROUP BY p.session_id
+             )
+             SELECT p.session_id, p.part_json
+             FROM latest_agent_text latest
+             JOIN parts p ON p.session_id=latest.session_id
+             WHERE p.role='\"agent\"'
+               AND json_extract(p.part_json,'$.kind')='text'
+               AND p.seq <= latest.final_seq
+               AND p.seq > COALESCE((
+                 SELECT MAX(user_part.seq)
+                 FROM parts user_part
+                 WHERE user_part.session_id=latest.session_id
+                   AND user_part.role='\"user\"'
+                   AND user_part.seq < latest.final_seq
+               ), -1)
+             ORDER BY p.session_id, p.seq",
         )?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
 
         let mut out = Vec::new();
+        let mut current_id = None::<String>;
+        let mut current_text = String::new();
+        let push_current =
+            |out: &mut Vec<(String, String)>, id: &mut Option<String>, text: &mut String| {
+                let Some(id) = id.take() else { return };
+                let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                text.clear();
+                if !flat.is_empty() {
+                    out.push((id, flat.chars().take(160).collect()));
+                }
+            };
         for row in rows.flatten() {
             let (id, json) = row;
+            if current_id.as_deref().is_some_and(|current| current != id) {
+                push_current(&mut out, &mut current_id, &mut current_text);
+            }
+            if current_id.is_none() {
+                current_id = Some(id);
+            }
             if let Ok(part) = serde_json::from_str::<Part>(&json) {
                 let text = match part {
                     Part::Text { text } => text,
                     Part::Prompt { display, .. } => display,
                     _ => continue,
                 };
-                let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
-                if !flat.is_empty() {
-                    out.push((id, flat.chars().take(160).collect()));
-                }
+                current_text.push_str(&text);
             }
         }
+        push_current(&mut out, &mut current_id, &mut current_text);
         Ok(out)
     }
 
@@ -4241,7 +4271,16 @@ mod tests {
                 &a.id,
                 Role::Agent,
                 &Part::Text {
-                    text: "  second\n  answer  ".into(),
+                    text: "  second\n".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &a.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "  answer  ".into(),
                 },
             )
             .unwrap();
@@ -4275,8 +4314,8 @@ mod tests {
         let previews = store.last_texts().unwrap();
         assert_eq!(previews.len(), 1);
         assert_eq!(previews[0].0, a.id);
-        // Whitespace is flattened so a multi-line answer stays one line in the rail, and the
-        // later user prompt does not replace the newest AI reply.
+        // Consecutive streaming chunks form one Agent answer before whitespace is flattened; the
+        // later user prompt still must not replace that newest AI reply.
         assert_eq!(previews[0].1, "second answer");
     }
 

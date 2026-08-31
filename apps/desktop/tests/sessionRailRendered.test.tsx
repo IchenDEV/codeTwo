@@ -285,25 +285,25 @@ describe("SessionRail row layout", () => {
       previews: {},
     });
 
-    const secondButton = view.container.querySelector<HTMLElement>(
-      '[data-session-id="second"] [data-session-select]',
+    const secondHandle = view.container.querySelector<HTMLElement>(
+      '[data-session-id="second"] [data-session-drag-handle]',
     );
-    if (!secondButton) throw new Error("missing Task drag fixture");
+    if (!secondHandle) throw new Error("missing Task drag fixture");
 
-    const repoButton = view.container.querySelector<HTMLElement>(
-      '[data-project-toggle="/tmp/repo"]',
+    const repoHandle = view.container.querySelector<HTMLElement>(
+      '[data-project-drag-handle="/tmp/repo"]',
     );
-    if (!repoButton) throw new Error("missing Project drag fixture");
+    if (!repoHandle) throw new Error("missing Project drag fixture");
 
     await waitFor(() => {
-      expect(repoButton.getAttribute("aria-roledescription")).toBe("draggable");
-      expect(secondButton.getAttribute("aria-roledescription")).toBe("draggable");
+      expect(repoHandle.getAttribute("aria-roledescription")).toBe("draggable");
+      expect(secondHandle.getAttribute("aria-roledescription")).toBe("draggable");
     });
-    expect(repoButton.getAttribute("draggable")).toBeNull();
-    expect(secondButton.getAttribute("draggable")).toBeNull();
+    expect(repoHandle.getAttribute("draggable")).toBeNull();
+    expect(secondHandle.getAttribute("draggable")).toBeNull();
     expect(view.container.querySelector("[draggable=true]")).toBeNull();
     const description = dom.document.getElementById(
-      repoButton.getAttribute("aria-describedby") ?? "",
+      repoHandle.getAttribute("aria-describedby") ?? "",
     );
     expect(description?.textContent).toContain("use the arrow keys");
     expect(view.container.querySelector(

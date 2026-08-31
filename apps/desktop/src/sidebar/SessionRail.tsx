@@ -13,11 +13,11 @@ import {
   type ReactNode,
 } from "react";
 import {
-  DragDropProvider,
+  DragDropRoot,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
-} from "@dnd-kit/react";
+} from "@/components/ui/drag-drop";
 import {
   Archive,
   ArchiveRestore,
@@ -134,8 +134,9 @@ import {
 import {
   SidebarDropZone,
   SidebarSortable,
+  sidebarBeforeIdAtFinalIndex,
   sidebarDndData,
-  sidebarProjectSectionFromGroup,
+  sidebarFinalizedDestination,
   sidebarSortableSnapshot,
   type SidebarDndData,
   type SidebarDragItem,
@@ -771,9 +772,17 @@ export function SessionRail({
       && eventTarget.item.id === source.id
       ? lastTarget
       : eventTarget ?? lastTarget;
-    if (!source || !target) return;
+    if (!source) return;
+    const finalized = sidebarFinalizedDestination(source, sortable);
 
     if (source.kind === "section") {
+      if (finalized?.kind === "sections") {
+        const sectionIds = taskSections.sections.map((section) => section.id);
+        const beforeId = sidebarBeforeIdAtFinalIndex(sectionIds, source.id, finalized.index);
+        setTaskSections((current) => moveSidebarTaskSection(current, source.id, beforeId));
+        return;
+      }
+      if (!target) return;
       if (target.item?.kind === "section") {
         setTaskSections((current) =>
           moveSidebarTaskSection(current, source.id, target.item!.id),
@@ -785,26 +794,19 @@ export function SessionRail({
     }
 
     if (source.kind === "project") {
-      const sortableSectionId = sortable
-        ? sidebarProjectSectionFromGroup(sortable.group)
-        : undefined;
-      if (
-        sortableSectionId !== undefined
-        && sortable
-        && (
-          sortable.group !== sortable.initialGroup
-          || sortable.index !== sortable.initialIndex
-        )
-      ) {
-        const destination = projectPathsForSection(sortableSectionId)
-          .filter((path) => path !== source.id);
+      if (finalized?.kind === "projects") {
         dropProject(
           source.id,
-          sortableSectionId,
-          destination[Math.min(sortable.index, destination.length)] ?? null,
+          finalized.sectionId,
+          sidebarBeforeIdAtFinalIndex(
+            projectPathsForSection(finalized.sectionId),
+            source.id,
+            finalized.index,
+          ),
         );
         return;
       }
+      if (!target) return;
       if (target.item?.kind === "section") {
         dropProject(source.id, target.item.id, null);
       } else if (target.item?.kind === "project" && target.location.kind === "projects") {
@@ -816,6 +818,24 @@ export function SessionRail({
       }
       return;
     }
+
+    if (finalized?.kind === "tasks") {
+      const destinationTaskIds = finalized.projectPath
+        ? taskIdsForProject(finalized.projectPath)
+        : taskIdsForSection(finalized.sectionId);
+      dropTask(
+        source.id,
+        finalized.sectionId,
+        sidebarBeforeIdAtFinalIndex(destinationTaskIds, source.id, finalized.index),
+        destinationTaskIds,
+        finalized.projectPath
+          ? projectTaskOrderKey(finalized.projectPath)
+          : finalized.sectionId ?? UNSECTIONED_TASK_ORDER_KEY,
+        finalized.projectPath,
+      );
+      return;
+    }
+    if (!target) return;
 
     let sectionId: string | null;
     let projectPath: string | null;
@@ -850,7 +870,14 @@ export function SessionRail({
         : sectionId ?? UNSECTIONED_TASK_ORDER_KEY,
       projectPath,
     );
-  }, [dropProject, dropTask, projectPathsForSection, taskIdsForProject, taskIdsForSection]);
+  }, [
+    dropProject,
+    dropTask,
+    projectPathsForSection,
+    taskIdsForProject,
+    taskIdsForSection,
+    taskSections.sections,
+  ]);
 
   /** One quiet source-list row: task title, workspace identity, and only actionable status. */
   const sessionRow = (s: SessionInfo, isArchived: boolean, showProjectIdentity = true) => {
@@ -1103,12 +1130,15 @@ export function SessionRail({
         collisionPriority={2}
         disabled={isArchived || renaming?.id === s.id}
       >
-        {({ sourceRef, targetRef, isDragging, isDropTarget }) => (
+        {({ ref: sortableRef, handleRef, sourceRef, targetRef, isDragging, isDropTarget }) => (
       <SessionContextMenu items={nativeMenuItems} onAction={runContextMenuAction}>
         <ContextMenuTrigger
           render={
             <div
-              ref={targetRef}
+              ref={(element) => {
+                sortableRef(element);
+                targetRef?.(element);
+              }}
               data-session-id={s.id}
               data-sidebar-dragging={isDragging ? "true" : undefined}
               data-sidebar-drop-target={isDropTarget ? "true" : undefined}
@@ -1208,14 +1238,16 @@ export function SessionRail({
                     className="hidden shrink-0 gap-0.5 group-hover:flex group-focus-within:flex group-data-[popup-open]:flex"
                   >
                     {!isArchived && (
-                      <span
+                      <TooltipButton
+                        ref={handleRef}
+                        label={t("rail.dragTask")}
+                        variant="ghost"
+                        size="icon-xs"
                         data-session-drag-handle
-                        title={t("rail.dragTask")}
-                        className="pointer-events-auto flex size-5 cursor-grab items-center justify-center text-muted-foreground active:cursor-grabbing"
-                        aria-hidden="true"
+                        className="pointer-events-auto relative z-10 cursor-grab text-muted-foreground active:cursor-grabbing"
                       >
-                        <GripVertical className="pointer-events-none size-3" />
-                      </span>
+                        <GripVertical className="pointer-events-none" />
+                      </TooltipButton>
                     )}
                     {!isArchived && (
                       <TooltipButton
@@ -1484,9 +1516,12 @@ export function SessionRail({
         accept="project"
         collisionPriority={1}
       >
-        {({ sourceRef, targetRef, isDragging, isDropTarget }) => (
+        {({ ref: sortableRef, handleRef, sourceRef, targetRef, isDragging, isDropTarget }) => (
       <div
-        ref={taskDropRef}
+        ref={(element) => {
+          sortableRef(element);
+          taskDropRef(element);
+        }}
         data-project-group={project.path}
         data-sidebar-dragging={isDragging ? "true" : undefined}
         data-sidebar-drop-target={isTaskDropTarget ? "true" : undefined}
@@ -1505,14 +1540,16 @@ export function SessionRail({
           data-sidebar-drop-target={isDropTarget ? "true" : undefined}
           className="group/project relative flex min-h-control items-center rounded-control pr-1 transition-[background-color,opacity] hover:bg-fill-quiet data-[sidebar-dragging=true]:opacity-45"
         >
-          <span
+          <TooltipButton
+            ref={handleRef}
+            label={t("rail.dragProject")}
+            variant="ghost"
+            size="icon-xs"
             data-project-drag-handle={project.path}
-            title={t("rail.dragProject")}
-            className="absolute left-0 flex size-4 cursor-grab items-center justify-center text-foreground/35 opacity-0 group-hover/project:opacity-100 active:cursor-grabbing"
-            aria-hidden="true"
+            className="absolute left-0 z-10 cursor-grab text-foreground/35 opacity-0 group-hover/project:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
           >
-            <GripVertical className="pointer-events-none size-3" />
-          </span>
+            <GripVertical className="pointer-events-none" />
+          </TooltipButton>
           <CollapsibleTrigger
             render={
               <Button
@@ -1630,9 +1667,12 @@ export function SessionRail({
         accept="section"
         disabled={renamingSection?.id === section.id}
       >
-        {({ sourceRef, targetRef, isDragging, isDropTarget }) => (
+        {({ ref: sortableRef, handleRef, sourceRef, targetRef, isDragging, isDropTarget }) => (
       <div
-        ref={taskDropRef}
+        ref={(element) => {
+          sortableRef(element);
+          taskDropRef(element);
+        }}
         data-task-section-group={section.id}
         data-sidebar-dragging={isDragging ? "true" : undefined}
         data-sidebar-drop-target={isTaskDropTarget ? "true" : undefined}
@@ -1677,14 +1717,16 @@ export function SessionRail({
             />
           ) : (
             <>
-              <span
+              <TooltipButton
+                ref={handleRef}
+                label={t("rail.dragSection")}
+                variant="ghost"
+                size="icon-xs"
                 data-section-drag-handle={section.id}
-                title={t("rail.dragSection")}
-                className="absolute left-0 flex size-4 cursor-grab items-center justify-center text-foreground/35 opacity-0 group-hover/section:opacity-100 active:cursor-grabbing"
-                aria-hidden="true"
+                className="absolute left-0 z-10 cursor-grab text-foreground/35 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
               >
-                <GripVertical className="pointer-events-none size-3" />
-              </span>
+                <GripVertical className="pointer-events-none" />
+              </TooltipButton>
               <CollapsibleTrigger
                 render={
                   <Button
@@ -1801,7 +1843,7 @@ export function SessionRail({
       )}
       style={{ width: collapsed ? 0 : applied }}
     >
-      <DragDropProvider
+      <DragDropRoot
         onDragStart={handleSidebarDragStart}
         onDragOver={handleSidebarDragOver}
         onDragEnd={handleSidebarDragEnd}
@@ -2117,7 +2159,7 @@ export function SessionRail({
         ) : null}
       </div>
       </div>
-      </DragDropProvider>
+      </DragDropRoot>
     </aside>
   );
 }

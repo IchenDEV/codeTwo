@@ -8,15 +8,15 @@ owner: codex
 approvers: [user]
 approved_at: 2026-08-31
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 source: direct user request with screenshot showing failed Project sorting and folder placement
 inputs: current desktop SessionRail drag behavior and physical pointer-drag reproduction
 outputs: library-backed sidebar sorting and Project-to-Section placement
-scope: apps/desktop/package.json, apps/desktop/bun.lock, apps/desktop/src/sidebar/SessionRail.tsx, apps/desktop/src/sidebar/sidebarDnd.tsx, apps/desktop/tests/sessionRailRendered.test.tsx, docs/sdlc/changes/2026-08-31-replace-sidebar-drag-with-dnd-kit
-next_trigger: PR review; merge and release remain pending
+scope: apps/desktop/package.json, apps/desktop/bun.lock, apps/desktop/src/components/ui/drag-drop.tsx, apps/desktop/src/sidebar/SessionRail.tsx, apps/desktop/src/sidebar/sidebarDnd.tsx, apps/desktop/tests/sessionRailRendered.test.tsx, apps/desktop/tests/sidebarDnd.test.ts, docs/sdlc/changes/2026-08-31-replace-sidebar-drag-with-dnd-kit
+next_trigger: human review and merge decision on PR #208
 verification_mode: owner
 verified_by: codex
-verified_at: 2026-08-31
+verified_at: 2026-09-01
 ---
 
 # Replace sidebar drag handling with dnd-kit
@@ -56,8 +56,8 @@ remains required before merge. No release or production action is authorized.
 
 ## Plan
 
-1. Add the maintained `@dnd-kit/react` package and a small typed adapter for sidebar items and
-   drop locations.
+1. Add the maintained `@dnd-kit/react` package behind a shared UI primitive and a small typed
+   adapter for sidebar items and drop locations.
 2. Replace native drag handlers with `DragDropProvider`, sortable rows, and explicit empty-list
    drop zones while retaining the existing state mutation callbacks.
 3. Update focused rendered coverage and run type, unit, build, lifecycle, and physical pointer-drag
@@ -67,37 +67,43 @@ Rollback removes the dependency and adapter and restores the previous sidebar dr
 
 ## Build
 
-Added the pinned `@dnd-kit/react` dependency and a typed sidebar adapter for sortable rows and
-explicit drop zones. `SessionRail` now wraps Section, Project, and Task rows in the library's
-provider and preserves the existing domain operations for persisted moves. Native HTML5
-`draggable`, `dragstart`, `dataTransfer`, and `drop` handling was removed.
+Added the pinned `@dnd-kit/react` dependency behind the shared `components/ui/drag-drop` primitive
+and a typed sidebar adapter for sortable rows and explicit drop zones. `SessionRail` now registers
+the complete Section, Project, and Task row as each sortable element, exposes a dedicated keyboard
+drag handle, and preserves the existing domain operations for persisted moves. Feature code no
+longer imports the third-party package directly. Native HTML5 `draggable`, `dragstart`,
+`dataTransfer`, and `drop` handling was removed.
 
-Project moves decode the library's final sortable group and index so a same-list sort, a
+Project moves decode the library's finalized sortable group and index so a same-list sort, a
 cross-Section move, and a move back to root all resolve against the actual destination rather than
-the optimistic source row. Empty Section and empty root drop zones have distinct IDs and explicit
+a stale hover row. Group components are URI-encoded, so paths and Section IDs containing colons
+remain unambiguous. Empty Section and empty root drop zones have distinct IDs and explicit
 collision priority, so another item kind cannot overwrite the registered target.
 
 ## Verification
 
-Verdict: verified.
+Verdict: verified
 
 ### Acceptance evidence
 
-- AC-1: PASS — `Browser physical pointer drag` in the isolated rendered desktop shell changed the root
-  Project order from `open-mole, codeTwo, MacOS` to `open-mole, MacOS, codeTwo`; a hard reload kept
-  the persisted renderer state.
+- AC-1: PASS — `Browser physical pointer drag` used a paced Chromium pointer path in the isolated rendered desktop shell
+  changed the root Project order from `codeTwo, open-mole, MacOS` to
+  `open-mole, MacOS, codeTwo`; dnd-kit finalized the source at index 2 instead of retaining its
+  stale hover index. See the [dark baseline](evidence/pr-review-dark.png) and
+  [post-drag state](evidence/drag-result-dark.png).
 - AC-2: PASS — physical pointer dragging moved `codeTwo` into the empty `Work` Section, and a
-  separate pointer drag moved `open-mole` from `Work` back to the root Project list.
-- AC-3: PASS — `bun test tests/sessionRailRendered.test.tsx tests/sidebarProjects.test.ts
-  tests/sidebarSections.test.ts` verifies the rendered DOM exposes dnd-kit's draggable semantics
-  and keyboard instructions
-  while containing no native sidebar `[draggable=true]` elements. Section, Project, and Task rows
-  retain their existing typed move callbacks; the Project and Section domain suites pass.
-- AC-4: PASS — focused sidebar suites passed 31 tests and 262 expectations; `bunx tsc --noEmit`
-  passed; the full desktop suite passed 795 tests and 3,787 expectations; and
-  `bun run build:renderer` completed lint, TypeScript, and the Vite production build. The isolated
-  rendered pass covered same-list sorting, placement into an empty Section, return to root, and
-  the final visual state without starting a second Core process.
+  separate drag moved `open-mole` from `Work` back to the root Project list. After the final
+  sortable-row registration correction, an actual keyboard gesture (`Enter`, `ArrowUp`, `Enter`)
+  also moved `codeTwo` into the empty `Work` Section.
+- AC-3: PASS — `bun test tests/sessionRailRendered.test.tsx` verifies that Section, Project, and
+  Task rows expose dedicated dnd-kit keyboard handles and no native `[draggable=true]` elements.
+  `bun test tests/sidebarDnd.test.ts tests/sidebarProjects.test.ts tests/sidebarSections.test.ts`
+  verifies finalized index mapping plus Section, Project, and Task destination decoding, including
+  encoded paths. Existing typed domain move suites pass.
+- AC-4: PASS — `bun test` plus TypeScript, focused suites, and the renderer production
+  build passed in the final verification pass. The isolated rendered pass covered same-list
+  pointer sorting, empty-Section keyboard placement, the [narrow shell](evidence/pr-review-narrow-dark.png),
+  and the final visual state without starting a second Core process.
 
 The initial native-HTML5 baseline emitted `pointerdown` but not `dragstart`. During replacement,
 the first library pass exposed two integration defects: optimistic same-list sorting reported the
@@ -105,10 +111,10 @@ source row as the final target, and Project/Task empty drop zones shared an ID. 
 uses sortable destination metadata and kind-qualified drop-zone IDs; both failure paths were
 retested after correction.
 
-Residual risk: the isolated renderer verified library-provided keyboard semantics and instructions,
-but the complete keyboard reorder gesture was not manually exercised. The user's live Core-backed
-profile was deliberately not opened because another process owns it; the unchanged persistence
-operations are covered by domain tests, and renderer persistence was checked across reload.
+Residual risk: the user's live Core-backed profile was deliberately not opened because another
+process owns it. Pointer and keyboard gestures were exercised in the isolated Chromium renderer;
+the unchanged Core persistence operations are covered by domain tests rather than a second live
+Core instance.
 
 ## Review and release
 

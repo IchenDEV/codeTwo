@@ -8,15 +8,15 @@ owner: codex
 approvers: [user]
 approved_at: 2026-08-31
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 source: direct user request with screenshot highlighting the non-working composer resize grip
 inputs: current Composer grip, resize state, styles, and translated label
 outputs: composer without the unusable top resize affordance or its dormant feature wiring
 scope: apps/desktop/src/App.tsx, apps/desktop/src/session/Composer.tsx, apps/desktop/src/styles.css, apps/desktop/src/i18n/strings.ts, apps/desktop/tests/composerGeometryContract.test.ts, docs/sdlc/changes/2026-08-31-remove-composer-resize-grip
-next_trigger: PR review; merge and release remain pending
+next_trigger: human review and merge decision on PR #208
 verification_mode: owner
 verified_by: codex
-verified_at: 2026-08-31
+verified_at: 2026-09-01
 ---
 
 # Remove the composer resize grip
@@ -73,17 +73,20 @@ unchanged.
 
 ## Verification
 
-Verdict: verified.
+Verdict: verified
 
 ### Acceptance evidence
 
 - AC-1: PASS — `Browser rendered compact Composer check` found zero `.composer-grip` elements.
   The first document child begins at the exact card top, proving the deleted 11 px grip did not
-  leave a spacer, and computed card radius remains `24px` at 1280x720.
+  leave a spacer, and computed card radius remains `24px` at 1280x720. The shared
+  [narrow rendered shell](../2026-08-31-replace-sidebar-drag-with-dnd-kit/evidence/pr-review-narrow-dark.png)
+  supplies the constrained-viewport evidence; the zero-element and geometry measurements are the
+  acceptance evidence for the removed affordance itself.
 - AC-2: PASS — `rg -n 'composer-grip|composer\.grip|codetwo\.composerHeight|composerHByPane'
   apps/desktop/src` returned no matches. `bun test tests/composerGeometryContract.test.ts` passed
   four tests and 34 expectations, including the fixed 190 px bound and explicit full-page button.
-- AC-3: PASS — `bun test` passed 796 tests and 3,794 expectations; `bunx tsc --noEmit` passed;
+- AC-3: PASS — final `bun test` passed 806 tests and 3,841 expectations; `bunx tsc --noEmit` passed;
   `bun run build:renderer` completed lint, TypeScript, and the Vite production build. Browser page
   identity, meaningful content, compact/full-page interaction, framework-overlay inspection,
   screenshot inspection, and console checks passed with no relevant warnings or errors.

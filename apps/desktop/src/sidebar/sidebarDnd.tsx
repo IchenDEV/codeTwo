@@ -1,6 +1,8 @@
-import { useDroppable } from "@dnd-kit/react";
-import { useSortable } from "@dnd-kit/react/sortable";
 import type { ReactNode } from "react";
+import {
+  useDragDropSortable,
+  useDragDropZone,
+} from "@/components/ui/drag-drop";
 
 export type SidebarDragItem =
   | { kind: "task"; id: string }
@@ -25,8 +27,19 @@ export interface SidebarSortableSnapshot {
   initialIndex: number;
 }
 
+export type SidebarFinalizedDestination =
+  | { kind: "sections"; index: number }
+  | { kind: "projects"; sectionId: string | null; index: number }
+  | {
+      kind: "tasks";
+      sectionId: string | null;
+      projectPath: string | null;
+      index: number;
+    };
+
 interface DndRenderState {
   ref: (element: Element | null) => void;
+  handleRef?: (element: Element | null) => void;
   sourceRef?: (element: Element | null) => void;
   targetRef?: (element: Element | null) => void;
   isDragging: boolean;
@@ -46,10 +59,10 @@ function dndId(prefix: string, item: SidebarDragItem | undefined, location: Side
 function dndGroup(item: SidebarDragItem, location: SidebarDropLocation) {
   if (item.kind === "section") return "sidebar-sections";
   if (item.kind === "project" && location.kind === "projects") {
-    return `sidebar-projects:${location.sectionId ?? "root"}`;
+    return `sidebar-projects:${encodeURIComponent(location.sectionId ?? "")}`;
   }
   if (item.kind === "task" && location.kind === "tasks") {
-    return `sidebar-tasks:${location.sectionId ?? "root"}:${location.projectPath ?? "none"}`;
+    return `sidebar-tasks:${encodeURIComponent(location.sectionId ?? "")}:${encodeURIComponent(location.projectPath ?? "")}`;
   }
   return `sidebar-${item.kind}`;
 }
@@ -71,7 +84,7 @@ export function SidebarSortable({
   disabled?: boolean;
   children: (state: DndRenderState) => ReactNode;
 }) {
-  const sortable = useSortable<SidebarDndData>({
+  const sortable = useDragDropSortable<SidebarDndData>({
     id: dndId("item", item, location),
     index,
     group: dndGroup(item, location),
@@ -84,6 +97,7 @@ export function SidebarSortable({
 
   return children({
     ref: sortable.ref,
+    handleRef: sortable.handleRef,
     sourceRef: sortable.sourceRef,
     targetRef: sortable.targetRef,
     isDragging: sortable.isDragging,
@@ -103,7 +117,7 @@ export function SidebarDropZone({
   children: (state: DndRenderState) => ReactNode;
 }) {
   const acceptKey = Array.isArray(accept) ? [...accept].sort().join("-") : accept;
-  const droppable = useDroppable<SidebarDndData>({
+  const droppable = useDragDropZone<SidebarDndData>({
     id: dndId(`zone:${acceptKey}`, undefined, location),
     accept,
     collisionPriority,
@@ -133,12 +147,71 @@ export function sidebarSortableSnapshot(value: unknown): SidebarSortableSnapshot
     || typeof candidate.index !== "number"
     || typeof candidate.initialIndex !== "number"
   ) return null;
-  return candidate as SidebarSortableSnapshot;
+  return {
+    group: candidate.group,
+    initialGroup: candidate.initialGroup,
+    index: candidate.index,
+    initialIndex: candidate.initialIndex,
+  };
 }
 
 export function sidebarProjectSectionFromGroup(group: string): string | null | undefined {
   const prefix = "sidebar-projects:";
   if (!group.startsWith(prefix)) return undefined;
-  const sectionId = group.slice(prefix.length);
-  return sectionId === "root" ? null : sectionId;
+  const sectionId = decodeURIComponent(group.slice(prefix.length));
+  return sectionId === "" ? null : sectionId;
+}
+
+export function sidebarTaskLocationFromGroup(
+  group: string,
+): Extract<SidebarDropLocation, { kind: "tasks" }> | undefined {
+  const prefix = "sidebar-tasks:";
+  if (!group.startsWith(prefix)) return undefined;
+  const separator = group.indexOf(":", prefix.length);
+  if (separator < 0) return undefined;
+  const sectionId = decodeURIComponent(group.slice(prefix.length, separator));
+  const projectPath = decodeURIComponent(group.slice(separator + 1));
+  return {
+    kind: "tasks",
+    sectionId: sectionId === "" ? null : sectionId,
+    projectPath: projectPath === "" ? null : projectPath,
+  };
+}
+
+export function sidebarBeforeIdAtFinalIndex(
+  destinationIds: readonly string[],
+  sourceId: string,
+  finalIndex: number,
+): string | null {
+  const remaining = destinationIds.filter((id) => id !== sourceId);
+  const boundedIndex = Math.min(Math.max(0, finalIndex), remaining.length);
+  return remaining[boundedIndex] ?? null;
+}
+
+/** Translate dnd-kit's authoritative final sortable state into a sidebar destination. */
+export function sidebarFinalizedDestination(
+  item: SidebarDragItem,
+  snapshot: SidebarSortableSnapshot | null,
+): SidebarFinalizedDestination | undefined {
+  if (
+    !snapshot
+    || (
+      snapshot.group === snapshot.initialGroup
+      && snapshot.index === snapshot.initialIndex
+    )
+  ) return undefined;
+
+  if (item.kind === "section") {
+    return snapshot.group === "sidebar-sections"
+      ? { kind: "sections", index: snapshot.index }
+      : undefined;
+  }
+  if (item.kind === "project") {
+    const sectionId = sidebarProjectSectionFromGroup(snapshot.group);
+    return sectionId === undefined
+      ? undefined
+      : { kind: "projects", sectionId, index: snapshot.index };
+  }
+  const location = sidebarTaskLocationFromGroup(snapshot.group);
+  return location ? { ...location, index: snapshot.index } : undefined;
 }

@@ -251,7 +251,10 @@ import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
 import { synchronizeLspRuntimePolicy } from "./lsp/runtimePolicy";
 import { configurePluginLanguageServers } from "./lsp/client";
 import { quickQuotaProviderFor, quickQuotaSummary } from "./usage/quickQuota";
-import type { SessionConfig } from "./session/config";
+import {
+  transitionProviderModelSelection,
+  type SessionConfig,
+} from "./session/config";
 import {
   SESSION_MODES,
   executionPolicyChangeDisabled,
@@ -7282,6 +7285,22 @@ export default function App() {
         setCurrentModel(null);
         setDefaultModel(null);
       }
+    },
+    onProviderModel: (nextProvider, nextModel) => {
+      transitionProviderModelSelection({
+        hasActiveSession: activeSessionRef.current !== null,
+        createSession,
+        apply: () => {
+          providerPinned.current = true;
+          setProvider(nextProvider);
+          setModels(
+            providers.find((candidate) => candidate.id === nextProvider)?.models ?? [],
+          );
+          setCurrentModel(nextModel);
+          setDefaultModel(null);
+          setConfigOptions([]);
+        },
+      });
     },
     onReloadProviders: () => {
       void refreshProviders().catch(() => {});

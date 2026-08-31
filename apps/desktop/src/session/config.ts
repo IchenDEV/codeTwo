@@ -10,18 +10,33 @@ import type {
 import type { SessionMode } from "./mode";
 import type { SceneInfo } from "./scene";
 
+export function transitionProviderModelSelection({
+  hasActiveSession,
+  createSession,
+  apply,
+}: {
+  hasActiveSession: boolean;
+  createSession: () => string | null;
+  apply: () => void;
+}): boolean {
+  if (hasActiveSession && createSession() === null) return false;
+  apply();
+  return true;
+}
+
 /**
  * Everything configured once per session rather than once per turn.
  *
- * This is one bag of state, but deliberately *not* one panel: each field is reached from its own
- * chip in the control row, so choosing a provider shows providers and nothing else. See the pickers
- * in `Composer.tsx`.
+ * This is one bag of state, but deliberately *not* one panel: related Provider/model choices share
+ * one picker while policy, worktree, scene, and memory settings keep their own controls.
  */
 export interface SessionConfig {
   providers: ProviderInfo[];
   providersStatus: "loading" | "ready" | "error";
   provider: string;
   onProvider: (v: string) => void;
+  /** A foreign Provider model starts a fresh provider session; never set it on the old session. */
+  onProviderModel: (provider: string, model: string) => void;
   onReloadProviders: () => void;
   /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */
   mode: PermissionMode;

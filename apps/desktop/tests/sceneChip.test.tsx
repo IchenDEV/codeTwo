@@ -5,7 +5,7 @@ import { activateDom, button, click, dom, flush, mount, restoreDom } from "./dom
 
 activateDom();
 const { SceneChip, ScenePicker, SourceBadge } = await import("../src/session/SceneChip");
-const { ProviderPicker, SessionControls } = await import("../src/session/Composer");
+const { SessionControls } = await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -36,6 +36,7 @@ function config(overrides = {}) {
     providersStatus: "ready",
     provider: "claude_code",
     onProvider: () => {},
+    onProviderModel: () => {},
     onReloadProviders: () => {},
     mode: "ask",
     sandbox: "workspace_write",
@@ -76,23 +77,29 @@ function renderChip(cfg) {
   );
 }
 
-describe("ProviderPicker", () => {
+describe("Provider/model picker", () => {
   test("keeps known providers selectable and offers retry when desktop detection fails", async () => {
     activateDom();
     let retries = 0;
     const rendered = mount(
       <I18nProvider>
-        <ProviderPicker
+        <SessionControls
           config={config({
             providers: [],
             providersStatus: "error",
             provider: "grok",
             onReloadProviders: () => { retries += 1; },
           })}
+          models={[]}
+          currentModel={null}
+          defaultModel={null}
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
         />
       </I18nProvider>,
     );
-    const trigger = rendered.container.querySelector("button");
+    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
 
     await reactAct(async () => {
       trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
@@ -107,9 +114,9 @@ describe("ProviderPicker", () => {
 
     try {
       const popup = dom.document.body.querySelector('[data-slot="popover-content"]');
-      expect(trigger?.textContent?.trim()).toBe("Grok");
-      expect(popup?.textContent).toContain("Grok");
-      expect(popup?.textContent).toContain("Codex");
+      expect(trigger?.textContent).toContain("Default model");
+      button(popup, "Grok");
+      button(popup, "Codex");
       button(popup, "Retry").click();
       expect(retries).toBe(1);
     } finally {
@@ -237,14 +244,16 @@ describe("SceneChip", () => {
     ];
     const providerChanges = [];
     const modelChanges = [];
+    const providerModelChanges = [];
     const rendered = mount(
       <I18nProvider>
         <SessionControls
           config={config({
-            hasSession: false,
+            hasSession: true,
             provider: "codex",
             providers,
             onProvider: (provider) => providerChanges.push(provider),
+            onProviderModel: (provider, model) => providerModelChanges.push([provider, model]),
           })}
           models={providers[0].models}
           currentModel="gpt-5.6-sol"
@@ -273,14 +282,15 @@ describe("SceneChip", () => {
     click(grok);
     await flush();
 
-    expect(providerChanges).toEqual(["grok"]);
+    expect(providerChanges).toEqual([]);
     const grokModel = Array.from(
       picker?.querySelectorAll<HTMLButtonElement>('[data-model-picker-row] [data-slot="selectable-row"]') ?? [],
     ).find((row) => row.textContent?.includes("Grok 4.6"));
     if (!grokModel) throw new Error("Grok model did not render after switching Provider");
     click(grokModel);
     await flush();
-    expect(modelChanges).toEqual(["grok-4.6"]);
+    expect(modelChanges).toEqual([]);
+    expect(providerModelChanges).toEqual([["grok", "grok-4.6"]]);
 
     rendered.unmount();
   });

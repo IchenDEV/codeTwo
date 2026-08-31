@@ -8,15 +8,15 @@ owner: codex
 approvers: [user]
 approved_at: 2026-08-31
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 source: direct user request with screenshot marking the Project-row disclosure icon
 inputs: current desktop SessionRail Project header and screenshot feedback
 outputs: Project rows without a trailing disclosure icon while retaining whole-row folding
 scope: apps/desktop/src/sidebar/SessionRail.tsx, apps/desktop/tests/sessionRailRendered.test.tsx, docs/sdlc/changes/2026-08-31-remove-project-disclosure-icon
-next_trigger: PR review; merge and release remain pending
+next_trigger: human review and merge decision on PR #208
 verification_mode: owner
 verified_by: codex
-verified_at: 2026-08-31
+verified_at: 2026-09-01
 ---
 
 # Remove the Project disclosure icon
@@ -64,16 +64,17 @@ content. No material deviation from the Plan was required.
 
 ## Verification
 
-Verdict: verified.
+Verdict: verified
 
 ### Acceptance evidence
 
 - AC-1: PASS — `bun test tests/sessionRailRendered.test.tsx` passed 24 tests and the 954 by 858
   in-app Browser inspection showed `codeTwo`, `open-mole`, and `MacOS` with one folder SVG each and
-  no trailing disclosure arrow.
+  no trailing disclosure arrow. The final [dark rendered sidebar](../2026-08-31-replace-sidebar-drag-with-dnd-kit/evidence/pr-review-dark.png)
+  records the same Project-header result.
 - AC-2: PASS — the focused test and Browser interaction changed the `codeTwo` header from
   `aria-expanded=true` to `false`, removed its Project content, then restored the expanded content.
-- AC-3: PASS — full `bun test` passed 795 tests across 137 files with 3,799 expectations;
+- AC-3: PASS — final full `bun test` passed 806 tests across 139 files with 3,841 expectations;
   `bun run build:renderer`, `bun test script/verify/checks.test.ts`,
   `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts`, and
   `bun script/verify/sdlc.ts --worktree` passed; the dark rendered view had no relevant console

@@ -8,15 +8,15 @@ owner: codex
 approvers: [user]
 approved_at: 2026-08-31
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 source: direct user request with screenshot highlighting the sidebar search shortcut alignment
 inputs: SessionRail search launcher width and inset behavior
 outputs: evenly inset search launcher with an aligned shortcut badge
 scope: apps/desktop/src/sidebar/SessionRail.tsx, apps/desktop/tests/sessionRailRendered.test.tsx, docs/sdlc/changes/2026-08-31-align-sidebar-search-shortcut
-next_trigger: PR review; merge and release remain pending
+next_trigger: human review and merge decision on PR #208
 verification_mode: owner
 verified_by: codex
-verified_at: 2026-08-31
+verified_at: 2026-09-01
 ---
 
 # Align the sidebar search shortcut
@@ -63,7 +63,7 @@ a full-width row. No shortcut, typography, height, interaction, or shared Button
 
 ## Verification
 
-Verdict: verified.
+Verdict: verified
 
 ### Acceptance evidence
 
@@ -72,7 +72,8 @@ Verdict: verified.
   Browser geometry at 1280 x 720 measured equal `8 px` left and right rail insets.
 - AC-2: PASS — Browser `playwright.evaluate(getBoundingClientRect)` measured the shortcut's
   vertical center delta from the launcher at `0 px` and confirmed all four shortcut bounds
-  remained inside the launcher.
+  remained inside the launcher. The final [dark sidebar screenshot](../2026-08-31-replace-sidebar-drag-with-dnd-kit/evidence/pr-review-dark.png)
+  records the contained `⌘K` badge and equal launcher insets.
 - AC-3: PASS — `bun test tests/sessionRailRendered.test.tsx` passed 26 tests and 252 expectations;
   clicking the rendered launcher opened the Command palette and Browser console errors/warnings
   remained empty.
