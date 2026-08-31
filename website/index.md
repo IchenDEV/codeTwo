@@ -203,7 +203,7 @@ onMounted(() => {
           <article class="provider-entry" data-motion>
             <span class="provider-index">02</span>
             <div>
-              <h3>OpenAI Codex</h3>
+              <h3>Codex</h3>
               <p>App Server adapter · Node required</p>
               <code>codex-acp@1.7.0</code>
             </div>

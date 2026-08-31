@@ -113,8 +113,13 @@ describe("design-system business components", () => {
     expect(selected.getAttribute("type")).toBe("button");
     expect(selected.getAttribute("aria-pressed")).toBe("true");
     expect(selected.getAttribute("data-selected")).toBe("true");
-    expect(selected.querySelector('[data-slot="selectable-row-indicator"] svg')).not.toBeNull();
-    expect(selected.querySelector('[data-slot="selectable-row-leading"]')?.textContent).toBe("Git");
+    const indicator = selected.querySelector('[data-slot="selectable-row-indicator"]');
+    const leading = selected.querySelector('[data-slot="selectable-row-leading"]');
+    expect(indicator?.querySelector("svg")).not.toBeNull();
+    expect(indicator?.className).toContain("h-[1lh]");
+    expect(leading?.textContent).toBe("Git");
+    expect(leading?.className).toContain("h-[1lh]");
+    expect(leading?.className).toContain("gap-inline");
     expect(selected.querySelector('[data-slot="selectable-row-description"]')?.textContent).toBe("main @ 3befbb7d");
     expect(selected.querySelector('[data-slot="selectable-row-meta"]')?.textContent).toBe("Current");
     expect(describedBy).toHaveLength(3);

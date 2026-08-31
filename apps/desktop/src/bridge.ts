@@ -1517,7 +1517,7 @@ const fallbackProvider = (
 
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
   fallbackProvider("claude_code", "Claude Code", true),
-  fallbackProvider("codex", "OpenAI Codex", true),
+  fallbackProvider("codex", "Codex", true),
   fallbackProvider("grok", "Grok", false),
   fallbackProvider("cursor", "Cursor", false),
   fallbackProvider("opencode", "OpenCode", false),

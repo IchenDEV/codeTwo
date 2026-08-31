@@ -18,8 +18,6 @@ import {
   MoreHorizontal,
   Search,
   Terminal,
-  ThumbsDown,
-  ThumbsUp,
   Wrench,
 } from "@/components/ui/icons";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -77,36 +75,13 @@ function duration(t: Turn): string | null {
 }
 
 type CopyTarget = "prompt" | "response";
-type TurnFeedback = "helpful" | "unhelpful";
-
-function storedTurnFeedback(key: string | undefined): TurnFeedback | null {
-  if (!key || typeof localStorage === "undefined") return null;
-  try {
-    const value = localStorage.getItem(key);
-    return value === "helpful" || value === "unhelpful" ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistTurnFeedback(key: string | undefined, value: TurnFeedback | null): void {
-  if (!key || typeof localStorage === "undefined") return;
-  try {
-    if (value) localStorage.setItem(key, value);
-    else localStorage.removeItem(key);
-  } catch {
-    // Private mode or a full storage quota: the pressed state still works for this app run.
-  }
-}
 
 function TurnActionButton({
   label,
-  pressed,
   onClick,
   children,
 }: {
   label: string;
-  pressed?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -115,8 +90,7 @@ function TurnActionButton({
       label={label}
       variant="ghost"
       size="icon-xs"
-      aria-pressed={pressed}
-      className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+      className="text-muted-foreground"
       onClick={onClick}
     >
       {children}
@@ -706,7 +680,6 @@ export const TurnCard = memo(function TurnCard({
   onSaveTemplate,
   linkActions,
   onFork,
-  feedbackKey,
 }: {
   turn: Turn;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
@@ -716,17 +689,12 @@ export const TurnCard = memo(function TurnCard({
   linkActions?: BuiltinLinkActions;
   /** Starts a new task whose referenced context ends at this completed turn. */
   onFork?: (turn: Turn) => void;
-  /** Stable local-only key for the helpful / unhelpful response state. */
-  feedbackKey?: string;
 }) {
   const t = useT();
   const toast = useToast();
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [copied, setCopied] = useState<CopyTarget | null>(null);
-  const [feedback, setFeedback] = useState<TurnFeedback | null>(() =>
-    storedTurnFeedback(feedbackKey),
-  );
   const running = isRunning(turn);
   const queued = turn.delivery === "queued";
   const dur = duration(turn);
@@ -747,9 +715,6 @@ export const TurnCard = memo(function TurnCard({
     [locale],
   );
   useEffect(() => {
-    setFeedback(storedTurnFeedback(feedbackKey));
-  }, [feedbackKey]);
-  useEffect(() => {
     if (!copied) return;
     const timeout = window.setTimeout(() => setCopied(null), 1_500);
     return () => window.clearTimeout(timeout);
@@ -763,11 +728,6 @@ export const TurnCard = memo(function TurnCard({
     void write
       .then(() => setCopied(target))
       .catch(() => toast(t("turn.copyFailed"), "error"));
-  };
-  const chooseFeedback = (next: TurnFeedback) => {
-    const value = feedback === next ? null : next;
-    setFeedback(value);
-    persistTurnFeedback(feedbackKey, value);
   };
   const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
@@ -1077,24 +1037,6 @@ export const TurnCard = memo(function TurnCard({
           >
             {copied === "response" ? <Check aria-hidden /> : <Copy aria-hidden />}
           </TurnActionButton>
-          {feedbackKey && (
-            <>
-              <TurnActionButton
-                label={t("turn.helpful")}
-                pressed={feedback === "helpful"}
-                onClick={() => chooseFeedback("helpful")}
-              >
-                <ThumbsUp aria-hidden />
-              </TurnActionButton>
-              <TurnActionButton
-                label={t("turn.unhelpful")}
-                pressed={feedback === "unhelpful"}
-                onClick={() => chooseFeedback("unhelpful")}
-              >
-                <ThumbsDown aria-hidden />
-              </TurnActionButton>
-            </>
-          )}
           {onFork && turn.accepted && turn.transcriptStartSeq !== undefined && (
             <TurnActionButton label={t("turn.fork")} onClick={() => onFork(turn)}>
               <GitFork aria-hidden />

@@ -85,12 +85,12 @@ describe("UsagePanel", () => {
     expect(quotaProviderFor("grok", null)).toBe("grok");
     expect(quotaProviderFor("grok", "codex")).toBe("codex");
     expect(quotaProviderOptions("grok", "Grok", {
-      codex: "OpenAI Codex",
+      codex: "Codex",
       grok: "Grok",
       claude_code: "Claude Code",
     })).toEqual([
       { id: "grok", name: "Grok" },
-      { id: "codex", name: "OpenAI Codex" },
+      { id: "codex", name: "Codex" },
       { id: "claude_code", name: "Claude Code" },
     ]);
   });
@@ -123,9 +123,9 @@ describe("UsagePanel", () => {
       <I18nProvider>
         <UsagePanel
           provider="codex"
-          providerName="OpenAI Codex"
+          providerName="Codex"
           providerNames={{
-            codex: "OpenAI Codex",
+            codex: "Codex",
             grok: "Grok",
             claude_code: "Claude Code",
           }}
@@ -135,12 +135,12 @@ describe("UsagePanel", () => {
 
     const trigger = view.container.querySelector("[data-quota-provider-select]");
     expect(trigger?.getAttribute("aria-label")).toBe("Choose a quota provider");
-    expect(trigger?.textContent).toContain("OpenAI Codex");
+    expect(trigger?.textContent).toContain("Codex");
 
     await openSelect(trigger);
     const items = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'));
     expect(items.map((item) => item.textContent?.trim())).toEqual([
-      "OpenAI Codex",
+      "Codex",
       "Grok",
       "Claude Code",
     ]);

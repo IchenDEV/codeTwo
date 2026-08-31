@@ -44,7 +44,7 @@ describe("Provider settings capabilities", () => {
             },
             {
               id: "codex",
-              display_name: "OpenAI Codex",
+              display_name: "Codex",
               available: true,
               needs_node: true,
               models: [],
@@ -104,7 +104,7 @@ describe("Provider settings capabilities", () => {
           providers={[
             {
               id: "codex",
-              display_name: "OpenAI Codex",
+              display_name: "Codex",
               available: true,
               enabled: true,
               needs_node: true,

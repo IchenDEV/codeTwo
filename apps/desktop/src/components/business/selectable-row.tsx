@@ -54,13 +54,17 @@ function SelectableRow({
     >
       <span
         data-slot="selectable-row-indicator"
-        className="flex size-4 shrink-0 items-center justify-center"
+        className="flex h-[1lh] w-4 shrink-0 items-center justify-center"
         aria-hidden="true"
       >
         {selected ? <Check className="size-3.5" /> : null}
       </span>
       {leading ? (
-        <span id={leadingId} data-slot="selectable-row-leading" className="flex shrink-0 items-center">
+        <span
+          id={leadingId}
+          data-slot="selectable-row-leading"
+          className="flex h-[1lh] shrink-0 items-center gap-inline"
+        >
           {leading}
         </span>
       ) : null}

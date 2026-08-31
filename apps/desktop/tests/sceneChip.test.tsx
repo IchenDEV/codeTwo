@@ -109,7 +109,7 @@ describe("ProviderPicker", () => {
       const popup = dom.document.body.querySelector('[data-slot="popover-content"]');
       expect(trigger?.textContent?.trim()).toBe("Grok");
       expect(popup?.textContent).toContain("Grok");
-      expect(popup?.textContent).toContain("OpenAI Codex");
+      expect(popup?.textContent).toContain("Codex");
       button(popup, "Retry").click();
       expect(retries).toBe(1);
     } finally {
