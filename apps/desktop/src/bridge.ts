@@ -3377,6 +3377,18 @@ export async function onPluginsChanged(cb: () => void): Promise<() => void> {
   return listenDesktop<null>("plugins-changed", cb);
 }
 
+export interface DesktopRevealSessionEvent {
+  session: string;
+}
+
+/** Receive a session-navigation request from an authenticated desktop host capability. */
+export async function onDesktopRevealSession(
+  cb: (event: DesktopRevealSessionEvent) => void,
+): Promise<() => void> {
+  if (!inDesktop) return () => {};
+  return listenDesktop<DesktopRevealSessionEvent>("desktop-reveal-session", cb);
+}
+
 export interface PluginConnectorEventEnvelope {
   plugin_id: string;
   event: unknown;

@@ -1287,6 +1287,7 @@ fn discover_ui_contributions(
         "transcript.before",
         "composer.above",
         "composer.toolbar",
+        "host.actions",
     ];
     let mut ids = HashSet::new();
     let mut contributions = Vec::new();

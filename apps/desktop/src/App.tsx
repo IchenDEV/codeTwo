@@ -102,6 +102,7 @@ import {
   onAppshotCaptured,
   onAppshotFailed,
   onDeviceSyncChanged,
+  onDesktopRevealSession,
   onPluginConnectorEvent,
   onPluginsChanged,
   onEngineEvent,
@@ -4836,6 +4837,16 @@ export default function App() {
       configOptionsBySession,
     ],
   );
+
+  useEffect(() => {
+    let dispose: (() => void) | null = null;
+    void onDesktopRevealSession(({ session }) => {
+      void selectSession(session);
+    }).then((unlisten) => {
+      dispose = unlisten;
+    });
+    return () => dispose?.();
+  }, [selectSession]);
 
   const activatePaneById = useCallback(
     (paneId: string) => {

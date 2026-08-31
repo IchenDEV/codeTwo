@@ -156,11 +156,20 @@ most 300 characters), JSON `input`, and integer `order` from -100 through 100 ar
 | `transcript.before` | Inside the transcript scroll area, before the conversation. |
 | `composer.above` | Full-width action card above the composer. |
 | `composer.toolbar` | Compact action in the composer control row. |
+| `host.actions` | Target-neutral compact actions rendered by a host adapter. |
 
 The host chooses the markup, component, spacing, focus behavior, and accessibility semantics. On
 activation it invokes the declared command with `{ context, input }`, after verifying that the
 contribution belongs to the bundle, the selected realm is active, and that same runtime registered
 the command. A descriptor cannot invoke another plugin's command.
+
+`host.actions` is the only dynamic UI slot. Its command receives `context.operation` equal to
+`render` or `invoke`. `render` returns at most eight actions with a unique safe `id`, non-empty
+`label`, optional `detail`, semantic `state` (`default`, `running`, `attention`, or `failure`),
+optional boolean `enabled`, object-valued `input` of at most 4 KiB, and optional
+`accessibilityLabel`. The host rejects unknown fields, markup, callbacks, platform objects, and
+out-of-bounds documents. On activation it calls the same contribution with `invoke` and the cached
+item input. Bundles do not select a device, operating system, or physical placement.
 
 The `connectors` array declares integrations that need a richer host-rendered surface than one UI
 action. Every connector has a stable bundle-local `id`, a provider identifier, a non-empty capability
@@ -336,6 +345,7 @@ Plugin boundaries for current features are fixed as follows:
 | Device synchronization | host `device-sync` adapter + Core document | Transport credentials stay host-owned; snapshot validation, merge, and deletion semantics stay in Core |
 | Canvas | `canvas` + `document` | Component enablement does not bypass the production safety feature gate |
 | Browser | host `browser` adapter | Manual sandboxed tabs and authenticated agent automation are different capabilities |
+| Compact host actions | plugin UI + host adapter | Plugins own bounded semantic actions; adapters own presentation and capability availability |
 
 ## 7. Host capability profiles
 
@@ -345,16 +355,21 @@ host-native plugins through configuration while retaining the same graph and com
 The Electrobun desktop packages the reference runtime as `codetwo-desktop-host`. That executable
 boots the same `CoreApp` and managed plugin graph used by the TUI and server, then adds desktop-owned
 automation, device-sync, language-server, event, and remote adapters. Electrobun owns windows,
-dialogs, updates, manual webviews, and one versioned command/event relay; it does not implement
-plugin lifecycle.
+dialogs, updates, manual webviews, native action adapters, and one versioned command/event
+relay; it does not implement plugin lifecycle.
 
 Installed records are reconciled by the Rust manager at startup. Portable bundles can be imported,
 trust and enablement remain separate, commands register and disappear live, safe UI actions render
-in the five supported slots, and plugin language servers use the existing LSP client and lifecycle.
+in the supported slots, and plugin language servers use the existing LSP client and lifecycle.
 User/project runtime policy uses the same revision-bound `plan_change -> apply_change` contract.
 Project-capable bundles receive a separate process, command realm, and BLAKE3-keyed data directory
 per project. UI invocation verifies the contribution, runtime realm, and owning bundle before the
 process command is called.
+
+Compact native actions reuse `plugins.list`, `plugins.catalog`, and `plugins.invoke_ui`. The desktop
+host exposes only a generic capability marker and narrow navigation command. Electrobun validates
+`host.actions` documents and injects a two-method adapter; the current macOS adapter maps them to
+public `NSTouchBar` controls while C2 is foreground.
 
 The desktop currently fails closed for the authenticated agent-browser MCP adapter. Its manual
 BrowserView tabs are a separate UI capability; the stable embedded webview surface does not expose

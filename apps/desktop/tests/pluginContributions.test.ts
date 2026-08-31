@@ -12,6 +12,7 @@ const uiSlots = [
   "transcript.before",
   "composer.above",
   "composer.toolbar",
+  "host.actions",
 ] as const;
 
 const bundle = {

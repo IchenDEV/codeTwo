@@ -9,6 +9,7 @@ export const PLUGIN_UI_SLOT_IDS = [
   "transcript.before",
   "composer.above",
   "composer.toolbar",
+  "host.actions",
 ] as const;
 
 export type PluginUiSlotId = (typeof PLUGIN_UI_SLOT_IDS)[number];
