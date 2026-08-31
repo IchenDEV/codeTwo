@@ -828,6 +828,12 @@ export type CoreEvent =
   | { event: "memory_context"; session: string; receipt: MemoryReceipt }
   | { event: "session_title_changed"; session: string; title: string }
   | {
+      event: "provider_changed";
+      session: string;
+      provider: string | { custom: string };
+      model?: string | null;
+    }
+  | {
       event: "worktree_discarded";
       session: string;
       worktree_path: string;
@@ -2621,6 +2627,18 @@ export async function defaultCwd(): Promise<string> {
 
 export async function setModel(session: string, model: string): Promise<void> {
   if (inDesktop) await call("engine.set_model", { session, model });
+}
+
+/** Atomically replace an idle Session's provider while retaining its transcript and workspace. */
+export async function switchProvider(
+  session: string,
+  provider: string,
+  model: string | null = null,
+): Promise<SessionInfo> {
+  if (inDesktop) {
+    return call<SessionInfo>("engine.switch_provider", { session, provider, model });
+  }
+  throw new Error("Provider switching requires the desktop app.");
 }
 
 /** Set an agent-reported config option (model, reasoning effort, …) by its id. */

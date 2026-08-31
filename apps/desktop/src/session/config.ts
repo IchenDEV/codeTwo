@@ -10,20 +10,6 @@ import type {
 import type { SessionMode } from "./mode";
 import type { SceneInfo } from "./scene";
 
-export function transitionProviderModelSelection({
-  hasActiveSession,
-  createSession,
-  apply,
-}: {
-  hasActiveSession: boolean;
-  createSession: () => string | null;
-  apply: () => void;
-}): boolean {
-  if (hasActiveSession && createSession() === null) return false;
-  apply();
-  return true;
-}
-
 /**
  * Everything configured once per session rather than once per turn.
  *
@@ -35,7 +21,9 @@ export interface SessionConfig {
   providersStatus: "loading" | "ready" | "error";
   provider: string;
   onProvider: (v: string) => void;
-  /** A foreign Provider choice starts a fresh session; null leaves its model unspecified. */
+  /** A running turn or in-flight runtime replacement owns the provider boundary. */
+  providerChangeDisabled?: boolean;
+  /** A foreign Provider choice replaces the active runtime; null leaves its model unspecified. */
   onProviderModel: (provider: string, model: string | null) => void;
   onReloadProviders: () => void;
   /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */

@@ -129,6 +129,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Event::SessionTitleChanged { title, .. } => {
                     println!("session title: {title}")
                 }
+                Event::ProviderChanged {
+                    provider, model, ..
+                } => {
+                    println!("provider changed: {} ({model:?})", provider.as_str())
+                }
                 Event::SessionActivityChanged { activity, .. } => {
                     println!("activity r{}: {:?}", activity.revision, activity.state)
                 }

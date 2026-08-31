@@ -128,6 +128,7 @@ import {
   setCallProjectPath,
   setKeymap,
   setModel,
+  switchProvider,
   setPluginEnabled,
   setPluginTrusted,
   setProjectAgentDefaults,
@@ -251,10 +252,7 @@ import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
 import { synchronizeLspRuntimePolicy } from "./lsp/runtimePolicy";
 import { configurePluginLanguageServers } from "./lsp/client";
 import { quickQuotaProviderFor, quickQuotaSummary } from "./usage/quickQuota";
-import {
-  transitionProviderModelSelection,
-  type SessionConfig,
-} from "./session/config";
+import type { SessionConfig } from "./session/config";
 import {
   SESSION_MODES,
   executionPolicyChangeDisabled,
@@ -335,7 +333,6 @@ import {
   canvasAcceptedRequestKey,
   canvasIdsToPurgeAfterTurnStart,
   canvasRetryDocument,
-  canvasRetryTargetSession,
   canvasUnmountPlan,
   canvasRetryRefsForTerminal,
   isCanvasProviderImageError,
@@ -839,6 +836,9 @@ export default function App() {
   // preview is a glance, and requerying the transcript table on every token would be absurd.
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [provider, setProvider] = useState("grok");
+  const [providerSwitchingSessions, setProviderSwitchingSessions] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [cwd, setCwd] = useState(".");
   const [mode, setMode] = useState<PermissionMode>("ask");
   const [sandbox, setSandboxState] = useState<Sandbox>("workspace_write");
@@ -1728,10 +1728,9 @@ export default function App() {
   const acceptedCanvasRequestsRef = useRef<Map<string, PendingPromptRequest>>(
     new Map(),
   );
-  // A provider picker selection after an asynchronous Canvas image rejection stages the retry in
-  // a fresh session; an existing ACP session keeps its original provider for its lifetime.
+  // An asynchronous Canvas image rejection keeps the immutable retry document until either the
+  // original provider accepts a structure-only retry or an idle runtime switch succeeds.
   const canvasProviderRetrySessionRef = useRef<string | null>(null);
-  const forceNewSessionForCanvasRetryRef = useRef(false);
   // Only session/new calls initiated by this window may take over its active conversation. A
   // remote client can create sessions on the same engine without stealing desktop focus.
   const awaitingSessionRef = useRef<string | null>(null);
@@ -1977,7 +1976,7 @@ export default function App() {
       });
       canvasProviderRetrySessionRef.current = session;
       toast(
-        "Canvas images are unsupported by this provider. Choose Send structure only in each restored Canvas, or switch provider to stage a new-session retry.",
+        "Canvas images are unsupported by this provider. Choose Send structure only in each restored Canvas, or switch provider and retry in this conversation.",
         "error",
       );
     },
@@ -3009,7 +3008,6 @@ export default function App() {
             }
           });
           {
-            forceNewSessionForCanvasRetryRef.current = false;
             setPendingSessionRunning(false);
             setPendingCreationPane(null);
             updateRunningSession(ev.session, true);
@@ -3085,6 +3083,75 @@ export default function App() {
             );
           setSessions(rename);
           setArchivedSessions(rename);
+          return;
+        }
+        if (ev.event === "provider_changed") {
+          const nextProvider = providerLabel(ev.provider);
+          const nextModel = ev.model ?? null;
+          const applyProvider = (items: SessionInfo[]) =>
+            items.map((session) =>
+              session.id === ev.session
+                ? {
+                    ...session,
+                    provider: ev.provider,
+                    model: nextModel,
+                    acp_session_id: null,
+                  }
+                : session,
+            );
+          setSessions(applyProvider);
+          setArchivedSessions(applyProvider);
+          setProviderSwitchingSessions((current) => {
+            if (!current.has(ev.session)) return current;
+            const next = new Set(current);
+            next.delete(ev.session);
+            return next;
+          });
+          knownModelsRef.current.delete(ev.session);
+          pendingModelChangesRef.current.delete(ev.session);
+          setModelsBySession((current) => {
+            const { [ev.session]: _old, ...rest } = current;
+            return rest;
+          });
+          setCurrentModelBySession((current) => ({
+            ...current,
+            [ev.session]: nextModel,
+          }));
+          setDefaultModelBySession((current) => {
+            const { [ev.session]: _old, ...rest } = current;
+            return rest;
+          });
+          setConfigOptionsBySession((current) => ({
+            ...current,
+            [ev.session]: [],
+          }));
+          setContextWindows((current) => clearContextWindow(current, ev.session));
+          setInteractionCapabilities((current) => {
+            const { [ev.session]: _old, ...rest } = current;
+            return rest;
+          });
+          setGoals((current) => ({ ...current, [ev.session]: null }));
+          sceneEffortAppliedRef.current.delete(ev.session);
+          scenePlanAppliedRef.current.delete(ev.session);
+          if (ev.session === activeSessionRef.current) {
+            setProvider(nextProvider);
+            setModels([]);
+            setCurrentModel(nextModel);
+            setDefaultModel(null);
+            setConfigOptions([]);
+            setPlanMode(false);
+            const scene = scenesRef.current.find(
+              (candidate) => candidate.reference === activeSceneNameRef.current,
+            );
+            setScenePendingFields([
+              ...(scene?.execution?.reasoning_effort ? ["reasoning_effort"] : []),
+              ...(scene?.execution?.plan_first !== undefined ? ["plan_first"] : []),
+            ]);
+          }
+          if (canvasProviderRetrySessionRef.current === ev.session) {
+            canvasProviderRetrySessionRef.current = null;
+          }
+          refreshSessions();
           return;
         }
         if (ev.event === "worktree_discarded") {
@@ -3672,12 +3739,7 @@ export default function App() {
       toast(t("toast.alreadyRunning"));
       return;
     }
-    const targetSession = newSessionTarget
-      ? null
-      : canvasRetryTargetSession(
-          paneSession,
-          forceNewSessionForCanvasRetryRef.current,
-        );
+    const targetSession = newSessionTarget ? null : paneSession;
     const creationWorktreeBase = newSessionTarget?.worktreeBase ?? worktreeBase;
     const stagedTask = activeBoardTaskRef.current;
     const temporary = temporarySessionRef.current;
@@ -4632,6 +4694,7 @@ export default function App() {
         archivedSessions.find((s) => s.id === id);
       if (stored) {
         setCwd(stored.cwd);
+        setProvider(providerLabel(stored.provider));
         const policy = sessionExecutionPolicy(stored);
         if (policy) {
           setMode(policy.mode);
@@ -7259,49 +7322,53 @@ export default function App() {
     [refreshSessions, t, toast],
   );
 
+  const changeConversationProvider = useCallback((
+    sessionId: string | null,
+    next: string,
+    nextModel: string | null = null,
+  ) => {
+    providerPinned.current = true;
+    if (sessionId === null) {
+      setProvider(next);
+      setModels(providers.find((candidate) => candidate.id === next)?.models ?? []);
+      setCurrentModel(nextModel);
+      setDefaultModel(null);
+      setConfigOptions([]);
+      return;
+    }
+    const stored = [...sessions, ...archivedSessions].find(
+      (candidate) => candidate.id === sessionId,
+    );
+    if (stored && providerLabel(stored.provider) === next) return;
+    if (runningSessionsRef.current.has(sessionId)) {
+      toast(t("toast.providerSwitchBusy"), "error");
+      return;
+    }
+    setProviderSwitchingSessions((current) => new Set(current).add(sessionId));
+    void switchProvider(sessionId, next, nextModel)
+      .catch((error) => {
+        toast(t("toast.providerSwitchFailed", { error: String(error) }), "error");
+      })
+      .finally(() => {
+        setProviderSwitchingSessions((current) => {
+          if (!current.has(sessionId)) return current;
+          const remaining = new Set(current);
+          remaining.delete(sessionId);
+          return remaining;
+        });
+      });
+  }, [archivedSessions, providers, sessions, t, toast]);
+
   const sessionConfig: SessionConfig = {
     providers,
     providersStatus,
     provider,
-    onProvider: (p) => {
-      providerPinned.current = true;
-      setProvider(p);
-      if (activeSessionRef.current === null) {
-        setCurrentModel(null);
-        setDefaultModel(null);
-        setConfigOptions([]);
-      }
-      if (canvasProviderRetrySessionRef.current !== null) {
-        // ACP sessions keep their provider. Switching after an asynchronous Canvas image failure
-        // therefore stages a fresh session instead of silently resubmitting to the failed one.
-        canvasProviderRetrySessionRef.current = null;
-        forceNewSessionForCanvasRetryRef.current = true;
-        activeSessionRef.current = null;
-        activeSessionProvenanceRef.current = null;
-        setActiveSessionReceipt(null);
-        setActiveSession(null);
-        setFocusedTurns([]);
-        setModels([]);
-        setCurrentModel(null);
-        setDefaultModel(null);
-      }
-    },
-    onProviderModel: (nextProvider, nextModel) => {
-      transitionProviderModelSelection({
-        hasActiveSession: activeSessionRef.current !== null,
-        createSession,
-        apply: () => {
-          providerPinned.current = true;
-          setProvider(nextProvider);
-          setModels(
-            providers.find((candidate) => candidate.id === nextProvider)?.models ?? [],
-          );
-          setCurrentModel(nextModel);
-          setDefaultModel(null);
-          setConfigOptions([]);
-        },
-      });
-    },
+    onProvider: (next) => changeConversationProvider(activeSessionRef.current, next, null),
+    onProviderModel: (nextProvider, nextModel) =>
+      changeConversationProvider(activeSessionRef.current, nextProvider, nextModel),
+    providerChangeDisabled:
+      activeSession !== null &&
+      (runningSessions.has(activeSession) || providerSwitchingSessions.has(activeSession)),
     onReloadProviders: () => {
       void refreshProviders().catch(() => {});
     },
@@ -7958,6 +8025,20 @@ export default function App() {
                   activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
                 const activeAppshots =
                   pendingAppshots[activeAppshotKey] ?? EMPTY_APPSHOTS;
+                const paneProvider = activeSession && paneStored
+                  ? providerLabel(paneStored.provider)
+                  : provider;
+                const paneSessionConfig: SessionConfig = {
+                  ...sessionConfig,
+                  provider: paneProvider,
+                  hasSession: activeSession !== null,
+                  providerChangeDisabled:
+                    activeSession !== null &&
+                    (running || providerSwitchingSessions.has(activeSession)),
+                  onProvider: (next) => changeConversationProvider(activeSession, next, null),
+                  onProviderModel: (nextProvider, nextModel) =>
+                    changeConversationProvider(activeSession, nextProvider, nextModel),
+                };
                 return (
             <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
@@ -8312,7 +8393,7 @@ export default function App() {
               )}
               <div className={cn("contents", activeArchived && "hidden")}>
                 <Composer
-                  config={sessionConfig}
+                  config={paneSessionConfig}
                   hero={turns.length === 0 && !sessionLoading}
                   checkout={{
                     project: activeProjectName ?? cwd,

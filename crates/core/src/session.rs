@@ -1,6 +1,8 @@
 //! Session / message / part model.
 //!
-//! A session is one conversation with one provider, shown as a row in the left session list.
+//! A session is one provider-neutral conversation shown as a row in the left session list. One
+//! provider owns its live ACP runtime at a time, but an idle session may replace that runtime while
+//! retaining the same durable transcript and workspace.
 //! Persistence (SQLite) lands in M1; these are the in-memory shapes the store will mirror.
 
 use crate::permission::{PermissionMode, SandboxPolicy};

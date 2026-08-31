@@ -37,6 +37,7 @@ function config(overrides = {}) {
     provider: "claude_code",
     onProvider: () => {},
     onProviderModel: () => {},
+    providerChangeDisabled: false,
     onReloadProviders: () => {},
     mode: "ask",
     sandbox: "workspace_write",
@@ -78,6 +79,41 @@ function renderChip(cfg) {
 }
 
 describe("Provider/model picker", () => {
+  test("locks provider replacement while the session runtime is busy", () => {
+    activateDom();
+    const providerModelChanges = [];
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config({
+            hasSession: true,
+            provider: "codex",
+            providerChangeDisabled: true,
+            providers: [{
+              id: "codex",
+              display_name: "Codex",
+              available: true,
+              enabled: true,
+              models: [{ id: "gpt-5.6-sol", name: "GPT-5.6-Sol" }],
+            }],
+            onProviderModel: (provider, model) => providerModelChanges.push([provider, model]),
+          })}
+          models={[{ id: "gpt-5.6-sol", name: "GPT-5.6-Sol" }]}
+          currentModel="gpt-5.6-sol"
+          defaultModel="gpt-5.6-sol"
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>,
+    );
+    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    expect(trigger?.disabled).toBe(true);
+    trigger?.click();
+    expect(providerModelChanges).toEqual([]);
+    rendered.unmount();
+  });
+
   test("keeps known providers selectable and offers retry when desktop detection fails", async () => {
     activateDom();
     let retries = 0;

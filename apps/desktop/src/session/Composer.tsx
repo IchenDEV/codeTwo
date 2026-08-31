@@ -1215,7 +1215,7 @@ export function SessionControls({
           onConfigOption={onConfigOption}
           hasSession={config.hasSession}
           providerConfig={config}
-          disabled={modelChangeDisabled}
+          disabled={modelChangeDisabled || config.providerChangeDisabled}
         />
         <Tooltip>
           <TooltipTrigger
