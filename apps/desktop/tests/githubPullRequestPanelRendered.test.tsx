@@ -103,6 +103,14 @@ describe("GitHubPullRequestPanel", () => {
 
     click(button(view.container, "Changes 1"));
     await waitFor(() => expect(text(view.container, "diff --git a/src/a.ts b/src/a.ts")).not.toBeNull());
+    const addedLine = view.container.querySelector(".diff-line.add");
+    const removedLine = view.container.querySelector(".diff-line.del");
+    expect(addedLine?.getAttribute("aria-label")).toBe("Added line: new");
+    expect(addedLine?.querySelector(".diff-line-marker")?.textContent).toBe("+");
+    expect(addedLine?.lastElementChild?.textContent).toBe("new");
+    expect(removedLine?.getAttribute("aria-label")).toBe("Removed line: old");
+    expect(removedLine?.querySelector(".diff-line-marker")?.textContent).toBe("-");
+    expect(removedLine?.lastElementChild?.textContent).toBe("old");
 
     expect(button(view.container, "Comment").disabled).toBe(true);
     expect(button(view.container, "Request changes").disabled).toBe(true);

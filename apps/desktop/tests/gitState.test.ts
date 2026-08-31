@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { GitFile, SourceControlInfo } from "../src/bridge";
 import {
   changeRequestPresentation,
+  diffLinePresentation,
   diffPreviewLines,
   gitFileDisplayState,
   gitFilePathspecs,
@@ -79,6 +80,13 @@ describe("source-control projection", () => {
   test("bounds diff DOM rows independently of the core byte limit", () => {
     const preview = diffPreviewLines("one\ntwo\nthree", 2);
     expect(preview).toEqual({ lines: ["one", "two"], truncated: true });
+  });
+
+  test("separates diff semantics from their color or symbol presentation", () => {
+    expect(diffLinePresentation("+added")).toEqual({ kind: "add", marker: "+", content: "added" });
+    expect(diffLinePresentation("-removed")).toEqual({ kind: "del", marker: "-", content: "removed" });
+    expect(diffLinePresentation("+++ b/file")).toEqual({ kind: "context", marker: "", content: "+++ b/file" });
+    expect(diffLinePresentation("@@ -1 +1 @@")).toEqual({ kind: "hunk", marker: "", content: "@@ -1 +1 @@" });
   });
 
   test("enables an advertised adapter only when its required CLI is available", () => {

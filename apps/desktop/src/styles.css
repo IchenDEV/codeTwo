@@ -380,9 +380,15 @@
     width: 100%;
     color: var(--foreground);
     font-family: var(--appearance-font-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    font-weight: var(--appearance-font-ui-weight, 400);
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+  }
+  code,
+  pre,
+  .font-mono {
+    font-weight: var(--appearance-font-code-weight, 400);
   }
   /* Let `.app-shell` own the window surface and corner radius. */
   html,
@@ -406,6 +412,44 @@
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+}
+
+html[data-appearance-pointer-cursors="true"]
+  :where(
+    a[href],
+    button,
+    summary,
+    select,
+    [role="button"],
+    [role="menuitem"],
+    [role="option"],
+    [role="tab"],
+    input[type="checkbox"],
+    input[type="radio"],
+    input[type="range"],
+    input[type="color"],
+    label:has(input[type="checkbox"], input[type="radio"])
+  ):not(:disabled, [aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+html[data-appearance-pointer-cursors="false"]
+  :where(
+    a[href],
+    button,
+    summary,
+    select,
+    [role="button"],
+    [role="menuitem"],
+    [role="option"],
+    [role="tab"],
+    input[type="checkbox"],
+    input[type="radio"],
+    input[type="range"],
+    input[type="color"],
+    label:has(input[type="checkbox"], input[type="radio"])
+  ):not(:disabled, [aria-disabled="true"]) {
+  cursor: default !important;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1117,13 +1161,19 @@
   .diff {
     margin: 0;
     font-family: var(--font-mono);
+    font-weight: var(--appearance-font-code-weight, 400);
     font-size: var(--ds-type-callout-size);
     line-height: 1.5;
   }
   .diff-line {
+    display: flex;
     padding: 0 10px;
     white-space: pre-wrap;
     word-break: break-all;
+  }
+  .diff-line-marker {
+    display: none;
+    flex: 0 0 1ch;
   }
   .diff-line.add {
     background: color-mix(in oklch, var(--success) 16%, transparent);
@@ -1139,6 +1189,15 @@
   }
   .diff-line.meta {
     color: var(--muted-foreground);
+  }
+
+  html[data-diff-markers="symbols"] .diff-line-marker {
+    display: inline-block;
+  }
+  html[data-diff-markers="symbols"] .diff-line.add,
+  html[data-diff-markers="symbols"] .diff-line.del {
+    color: inherit;
+    background: transparent;
   }
 
   /* xterm's defaults are a 2015 terminal: text hard against the edge, lines at 1.0, a scrollbar
@@ -1184,10 +1243,18 @@
 /* Motion is decoration here — every animation above is an entrance or a hover, so honouring the
    system preference costs nothing and skipping it would be the kind of thing that makes an app
    feel careless rather than native. */
+html[data-reduce-motion="on"] *,
+html[data-reduce-motion="on"] *::before,
+html[data-reduce-motion="on"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html:not([data-reduce-motion="off"]) *,
+  html:not([data-reduce-motion="off"]) *::before,
+  html:not([data-reduce-motion="off"]) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

@@ -3,6 +3,7 @@ import { Copy, Download, Plus, Trash2, Upload } from "@/components/ui/icons";
 
 import {
   CODE_FONTS,
+  FONT_WEIGHTS,
   UI_FONTS,
   duplicateTheme,
   importAppearanceTheme,
@@ -18,6 +19,10 @@ import {
   type AppearanceTheme,
   type CodeFontId,
   type ColorScheme,
+  type DiffMarkerPreference,
+  type FontWeightId,
+  type ReduceMotionPreference,
+  type SchemeAppearanceProfile,
   type ThemePalette,
   type ThemePreference,
   type UiFontId,
@@ -25,6 +30,8 @@ import {
 import { pickAppearanceThemeDocument, saveAppearanceThemeDocument } from "../bridge";
 import { useT } from "../i18n";
 import { SettingRow } from "@/components/business/setting-row";
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { ViewSwitcher } from "@/components/business/view-switcher";
 import { Button } from "@/components/ui/button";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -37,6 +44,8 @@ const SCHEMES: { value: ThemePreference; label: "settings.themeSystem" | "settin
   { value: "light", label: "settings.themeLight" },
   { value: "dark", label: "settings.themeDark" },
 ];
+
+const PROFILE_SCHEMES = ["light", "dark"] as const;
 
 function paletteVariables(palette: ThemePalette): CSSProperties {
   return {
@@ -266,6 +275,144 @@ function RangeSetting({
   );
 }
 
+const FONT_WEIGHT_LABELS = {
+  regular: "settings.fontWeightRegular",
+  medium: "settings.fontWeightMedium",
+  semibold: "settings.fontWeightSemibold",
+} as const;
+
+function ProfileHeading({
+  scheme,
+  palette,
+}: {
+  scheme: ColorScheme;
+  palette: ThemePalette;
+}) {
+  const t = useT();
+  return (
+    <div className="appearance-profile-heading">
+      <ThemeSwatch palette={palette} scheme={scheme} />
+      <h3>{scheme === "light" ? t("settings.lightTheme") : t("settings.darkTheme")}</h3>
+    </div>
+  );
+}
+
+function TypographyProfileEditor({
+  scheme,
+  palette,
+  profile,
+  onChange,
+}: {
+  scheme: ColorScheme;
+  palette: ThemePalette;
+  profile: SchemeAppearanceProfile;
+  onChange: (patch: Partial<SchemeAppearanceProfile>) => void;
+}) {
+  const t = useT();
+  const label = scheme === "light" ? t("settings.lightTheme") : t("settings.darkTheme");
+  return (
+    <section className="appearance-profile-editor" aria-label={`${label} ${t("settings.typography")}`}>
+      <ProfileHeading scheme={scheme} palette={palette} />
+      <SettingRow label={t("settings.interfaceFont")} description={t("settings.interfaceFontHint")}>
+        <span className="appearance-font-controls">
+          <Select value={profile.uiFont} onValueChange={(font) => onChange({ uiFont: font as UiFontId })}>
+            <SelectTrigger size="sm" className="w-40 max-w-full" aria-label={`${label} ${t("settings.interfaceFont")}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              <SelectGroup>
+                {UI_FONTS.map((font) => <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>)}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Select
+            value={profile.uiFontWeight}
+            onValueChange={(weight) => onChange({ uiFontWeight: weight as FontWeightId })}
+          >
+            <SelectTrigger size="sm" className="w-28 max-w-full" aria-label={`${label} ${t("settings.interfaceFontWeight")}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              <SelectGroup>
+                {FONT_WEIGHTS.map((weight) => (
+                  <SelectItem key={weight.id} value={weight.id}>{t(FONT_WEIGHT_LABELS[weight.id])}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </span>
+      </SettingRow>
+      <SettingRow label={t("settings.codeFont")} description={t("settings.codeFontHint")}>
+        <span className="appearance-font-controls">
+          <Select value={profile.codeFont} onValueChange={(font) => onChange({ codeFont: font as CodeFontId })}>
+            <SelectTrigger size="sm" className="w-40 max-w-full" aria-label={`${label} ${t("settings.codeFont")}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              <SelectGroup>
+                {CODE_FONTS.map((font) => <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>)}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Select
+            value={profile.codeFontWeight}
+            onValueChange={(weight) => onChange({ codeFontWeight: weight as FontWeightId })}
+          >
+            <SelectTrigger size="sm" className="w-28 max-w-full" aria-label={`${label} ${t("settings.codeFontWeight")}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              <SelectGroup>
+                {FONT_WEIGHTS.map((weight) => (
+                  <SelectItem key={weight.id} value={weight.id}>{t(FONT_WEIGHT_LABELS[weight.id])}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </span>
+      </SettingRow>
+    </section>
+  );
+}
+
+function SurfaceProfileEditor({
+  scheme,
+  palette,
+  profile,
+  onChange,
+}: {
+  scheme: ColorScheme;
+  palette: ThemePalette;
+  profile: SchemeAppearanceProfile;
+  onChange: (patch: Partial<SchemeAppearanceProfile>) => void;
+}) {
+  const t = useT();
+  const label = scheme === "light" ? t("settings.lightTheme") : t("settings.darkTheme");
+  return (
+    <section className="appearance-profile-editor" aria-label={`${label} ${t("settings.surfaces")}`}>
+      <ProfileHeading scheme={scheme} palette={palette} />
+      <RangeSetting
+        label={t("settings.sidebarOpacity")}
+        hint={t("settings.sidebarOpacityHint")}
+        value={profile.sidebarOpacity}
+        min={40}
+        max={100}
+        suffix="%"
+        onChange={(sidebarOpacity) => onChange({ sidebarOpacity })}
+      />
+      <RangeSetting
+        label={t("settings.contrast")}
+        hint={t("settings.contrastHint")}
+        value={profile.contrast}
+        min={0}
+        max={100}
+        suffix=""
+        onChange={(contrast) => onChange({ contrast })}
+      />
+    </section>
+  );
+}
+
 export function AppearanceSettings({
   value,
   onChange,
@@ -279,6 +426,13 @@ export function AppearanceSettings({
   const activeTheme = catalog.find((theme) => theme.id === settings.activeThemeId) ?? catalog[0];
   const fileInput = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
+
+  const updateProfile = (scheme: ColorScheme, patch: Partial<SchemeAppearanceProfile>) => {
+    setAppearanceSettings((current) => ({
+      ...current,
+      [scheme]: { ...current[scheme], ...patch },
+    }));
+  };
 
   const duplicate = (theme: AppearanceTheme, explicitName?: string) => {
     try {
@@ -470,26 +624,18 @@ export function AppearanceSettings({
 
       <section className="appearance-section" aria-labelledby="appearance-typography">
         <h2 id="appearance-typography" className="appearance-settings-heading">{t("settings.typography")}</h2>
+        <div className="appearance-profile-grid">
+          {PROFILE_SCHEMES.map((scheme) => (
+            <TypographyProfileEditor
+              key={scheme}
+              scheme={scheme}
+              palette={activeTheme[scheme]}
+              profile={settings[scheme]}
+              onChange={(patch) => updateProfile(scheme, patch)}
+            />
+          ))}
+        </div>
         <div className="appearance-setting-group">
-          <SettingRow
-            label={t("settings.interfaceFont")}
-            description={t("settings.interfaceFontHint")}
-          >
-            <Select value={settings.uiFont} onValueChange={(font) => setAppearanceSettings({ uiFont: font as UiFontId })}>
-              <SelectTrigger
-                size="sm"
-                className="w-44 max-w-full"
-                aria-label={t("settings.interfaceFont")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" align="end">
-                <SelectGroup>
-                  {UI_FONTS.map((font) => <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>)}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </SettingRow>
           <RangeSetting
             label={t("settings.interfaceFontSize")}
             hint={t("settings.interfaceFontSizeHint")}
@@ -499,25 +645,6 @@ export function AppearanceSettings({
             suffix=" px"
             onChange={(uiFontSize) => setAppearanceSettings({ uiFontSize })}
           />
-          <SettingRow
-            label={t("settings.codeFont")}
-            description={t("settings.codeFontHint")}
-          >
-            <Select value={settings.codeFont} onValueChange={(font) => setAppearanceSettings({ codeFont: font as CodeFontId })}>
-              <SelectTrigger
-                size="sm"
-                className="w-44 max-w-full"
-                aria-label={t("settings.codeFont")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" align="end">
-                <SelectGroup>
-                  {CODE_FONTS.map((font) => <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>)}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </SettingRow>
           <RangeSetting
             label={t("settings.codeFontSize")}
             hint={t("settings.codeFontSizeHint")}
@@ -532,25 +659,51 @@ export function AppearanceSettings({
 
       <section className="appearance-section" aria-labelledby="appearance-surfaces">
         <h2 id="appearance-surfaces" className="appearance-settings-heading">{t("settings.surfaces")}</h2>
+        <div className="appearance-profile-grid">
+          {PROFILE_SCHEMES.map((scheme) => (
+            <SurfaceProfileEditor
+              key={scheme}
+              scheme={scheme}
+              palette={activeTheme[scheme]}
+              profile={settings[scheme]}
+              onChange={(patch) => updateProfile(scheme, patch)}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="appearance-section" aria-labelledby="appearance-preferences">
+        <h2 id="appearance-preferences" className="appearance-settings-heading">{t("settings.appearancePreferences")}</h2>
         <div className="appearance-setting-group">
-          <RangeSetting
-            label={t("settings.sidebarOpacity")}
-            hint={t("settings.sidebarOpacityHint")}
-            value={settings.sidebarOpacity}
-            min={40}
-            max={100}
-            suffix="%"
-            onChange={(sidebarOpacity) => setAppearanceSettings({ sidebarOpacity })}
+          <SettingToggle
+            label={t("settings.pointerCursors")}
+            description={t("settings.pointerCursorsHint")}
+            checked={settings.pointerCursors}
+            onCheckedChange={(pointerCursors) => setAppearanceSettings({ pointerCursors })}
           />
-          <RangeSetting
-            label={t("settings.contrast")}
-            hint={t("settings.contrastHint")}
-            value={settings.contrast}
-            min={0}
-            max={100}
-            suffix=""
-            onChange={(contrast) => setAppearanceSettings({ contrast })}
-          />
+          <SettingRow label={t("settings.reduceMotion")} description={t("settings.reduceMotionHint")}>
+            <ViewSwitcher<ReduceMotionPreference>
+              label={t("settings.reduceMotion")}
+              value={settings.reduceMotion}
+              options={[
+                { value: "system", label: t("settings.preferenceSystem") },
+                { value: "on", label: t("settings.preferenceOn") },
+                { value: "off", label: t("settings.preferenceOff") },
+              ]}
+              onValueChange={(reduceMotion) => setAppearanceSettings({ reduceMotion })}
+            />
+          </SettingRow>
+          <SettingRow label={t("settings.diffMarkers")} description={t("settings.diffMarkersHint")}>
+            <ViewSwitcher<DiffMarkerPreference>
+              label={t("settings.diffMarkers")}
+              value={settings.diffMarkers}
+              options={[
+                { value: "color", label: t("settings.diffMarkersColor") },
+                { value: "symbols", label: t("settings.diffMarkersSymbols") },
+              ]}
+              onValueChange={(diffMarkers) => setAppearanceSettings({ diffMarkers })}
+            />
+          </SettingRow>
         </div>
       </section>
 

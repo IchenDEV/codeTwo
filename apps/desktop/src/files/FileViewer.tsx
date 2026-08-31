@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AtSign, ChevronRight, MessageSquarePlus, Save } from "@/components/ui/icons";
 
-import { CODE_FONTS, useAppearanceSettings } from "../appearance";
+import { CODE_FONTS, FONT_WEIGHTS, useAppearanceSettings } from "../appearance";
 import { readText, writeText } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
@@ -78,7 +78,10 @@ export function FileViewer({
   const toast = useToast();
   const scheme = useColorScheme();
   const appearance = useAppearanceSettings();
-  const codeFont = CODE_FONTS.find((font) => font.id === appearance.codeFont)?.stack ?? CODE_FONTS[0].stack;
+  const codeProfile = appearance[scheme];
+  const codeFont = CODE_FONTS.find((font) => font.id === codeProfile.codeFont)?.stack ?? CODE_FONTS[0].stack;
+  const codeFontWeight = FONT_WEIGHTS.find((weight) => weight.id === codeProfile.codeFontWeight)?.value
+    ?? FONT_WEIGHTS[0].value;
   // Pictures take the preview path instead of the editor — there's no text to put in a buffer.
   const isImage = imageTypeOf(path) !== null;
   const container = useRef<HTMLDivElement | null>(null);
@@ -157,6 +160,7 @@ export function FileViewer({
         model,
         automaticLayout: true,
         fontFamily: codeFont,
+        fontWeight: `${codeFontWeight}`,
         fontSize: appearance.codeFontSize,
         lineHeight: Math.round(appearance.codeFontSize * 1.6),
         minimap: { enabled: false },
@@ -232,10 +236,11 @@ export function FileViewer({
   useEffect(() => {
     editorRef.current?.updateOptions({
       fontFamily: codeFont,
+      fontWeight: `${codeFontWeight}`,
       fontSize: appearance.codeFontSize,
       lineHeight: Math.round(appearance.codeFontSize * 1.6),
     });
-  }, [appearance.codeFontSize, codeFont]);
+  }, [appearance.codeFontSize, codeFont, codeFontWeight]);
 
   useEffect(() => {
     const editor = editorRef.current;

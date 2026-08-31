@@ -257,7 +257,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .canvas-editor * {
+  html:not([data-reduce-motion="off"]) .canvas-editor * {
     transition-duration: 0ms;
     animation-duration: 0ms;
   }
