@@ -18,6 +18,7 @@ function config(overrides = {}) {
     providersStatus: "ready",
     provider: "codex",
     onProvider: () => {},
+    onProviderModel: () => {},
     onReloadProviders: () => {},
     mode: "ask",
     sandbox: "workspace_write",

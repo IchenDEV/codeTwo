@@ -10,18 +10,33 @@ import type {
 import type { SessionMode } from "./mode";
 import type { SceneInfo } from "./scene";
 
+export function transitionProviderModelSelection({
+  hasActiveSession,
+  createSession,
+  apply,
+}: {
+  hasActiveSession: boolean;
+  createSession: () => string | null;
+  apply: () => void;
+}): boolean {
+  if (hasActiveSession && createSession() === null) return false;
+  apply();
+  return true;
+}
+
 /**
  * Everything configured once per session rather than once per turn.
  *
- * This is one bag of state, but deliberately *not* one panel: each field is reached from its own
- * chip in the control row, so choosing a provider shows providers and nothing else. See the pickers
- * in `Composer.tsx`.
+ * This is one bag of state, but deliberately *not* one panel: related Provider/model choices share
+ * one picker while policy, worktree, scene, and memory settings keep their own controls.
  */
 export interface SessionConfig {
   providers: ProviderInfo[];
   providersStatus: "loading" | "ready" | "error";
   provider: string;
   onProvider: (v: string) => void;
+  /** A foreign Provider choice starts a fresh session; null leaves its model unspecified. */
+  onProviderModel: (provider: string, model: string | null) => void;
   onReloadProviders: () => void;
   /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */
   mode: PermissionMode;
@@ -63,4 +78,38 @@ export interface SessionConfig {
   scenePendingFields: string[];
   /** New session, full-apply, in the active scene — closes the soft-apply gap. */
   onRestartInScene: () => void;
+}
+
+export type MemoryPresetId =
+  | "codex_default"
+  | "standard"
+  | "read_only"
+  | "private"
+  | "learn_only";
+
+export interface MemoryPreset {
+  id: MemoryPresetId;
+  read: MemoryAccess;
+  write: MemoryAccess;
+  isDefault?: boolean;
+}
+
+const MEMORY_PRESETS: readonly MemoryPreset[] = [
+  { id: "standard", read: "inherit", write: "inherit", isDefault: true },
+  { id: "read_only", read: "allow", write: "deny" },
+  { id: "private", read: "deny", write: "deny" },
+  { id: "learn_only", read: "deny", write: "allow" },
+];
+
+const CODEX_MEMORY_PRESETS: readonly MemoryPreset[] = [
+  { id: "codex_default", read: "inherit", write: "inherit", isDefault: true },
+  { id: "standard", read: "allow", write: "allow" },
+  { id: "read_only", read: "allow", write: "deny" },
+  { id: "private", read: "deny", write: "deny" },
+  { id: "learn_only", read: "deny", write: "allow" },
+];
+
+/** Codex keeps inherited C2 recall out of its visible ACP user turn. */
+export function memoryPresetsForProvider(provider: string): readonly MemoryPreset[] {
+  return provider === "codex" ? CODEX_MEMORY_PRESETS : MEMORY_PRESETS;
 }
