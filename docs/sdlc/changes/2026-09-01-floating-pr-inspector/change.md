@@ -116,6 +116,7 @@ covered by existing automated behavior rather than this visual pass.
 
 ## Review and release
 
+Review handoff: [Draft PR #212](https://github.com/IchenDEV/codeTwo/pull/212).
 Approval: implementation plus Draft PR delivery from the user's 2026-09-01 requests.
 Release target: none.
 Release identity: not applicable until released.

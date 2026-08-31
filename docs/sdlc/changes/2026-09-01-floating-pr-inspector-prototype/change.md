@@ -123,6 +123,7 @@ selects a prototype variant.
 
 ## Review and release
 
+Review handoff: [Draft PR #212](https://github.com/IchenDEV/codeTwo/pull/212).
 Approval: comparison implementation, subsequent production selection, and Draft PR delivery were
 authorized by the user's 2026-09-01 requests.
 Release target: none.
