@@ -251,7 +251,10 @@ import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
 import { synchronizeLspRuntimePolicy } from "./lsp/runtimePolicy";
 import { configurePluginLanguageServers } from "./lsp/client";
 import { quickQuotaProviderFor, quickQuotaSummary } from "./usage/quickQuota";
-import type { SessionConfig } from "./session/config";
+import {
+  transitionProviderModelSelection,
+  type SessionConfig,
+} from "./session/config";
 import {
   SESSION_MODES,
   executionPolicyChangeDisabled,
@@ -1401,17 +1404,6 @@ export default function App() {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [fileReveal, setFileReveal] = useState<FileRevealTarget | null>(null);
   const fileRevealRequestRef = useRef(0);
-  // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
-  // taken over the whole column for long-form authoring. The persisted value is the default; each
-  // pane then remembers its own height in-session (see composerHByPane) so resizing one tiled
-  // composer never drags the others with it.
-  const [composerH, setComposerH] = usePersistedNumber(
-    "codetwo.composerHeight",
-    190,
-  );
-  const [composerHByPane, setComposerHByPane] = useState<Record<string, number>>(
-    {},
-  );
   const [dockWidth, setDockWidth] = usePersistedNumber(
     "codetwo.dockWidth",
     440,
@@ -2651,11 +2643,6 @@ export default function App() {
   const focusedDefaultModel = defaultModel;
   const focusedConfigOptions = configOptions;
   const focusedSessionUsage = sessionUsage;
-  // Composer height: the persisted value is each pane's default; resizing the focused pane also
-  // persists it so new panes inherit the latest preference.
-  const focusedComposerHeight = composerH;
-  const persistComposerHeight = setComposerH;
-
   const activeWorktreeState = useMemo(() => {
       const stored =
         sessions.find((session) => session.id === activeSession) ??
@@ -7299,6 +7286,22 @@ export default function App() {
         setDefaultModel(null);
       }
     },
+    onProviderModel: (nextProvider, nextModel) => {
+      transitionProviderModelSelection({
+        hasActiveSession: activeSessionRef.current !== null,
+        createSession,
+        apply: () => {
+          providerPinned.current = true;
+          setProvider(nextProvider);
+          setModels(
+            providers.find((candidate) => candidate.id === nextProvider)?.models ?? [],
+          );
+          setCurrentModel(nextModel);
+          setDefaultModel(null);
+          setConfigOptions([]);
+        },
+      });
+    },
     onReloadProviders: () => {
       void refreshProviders().catch(() => {});
     },
@@ -7947,12 +7950,6 @@ export default function App() {
                 // Usage is polled only for the focused session; a background pane hides its cost
                 // segment rather than borrow the focused figures.
                 const sessionUsage = paneFocused ? focusedSessionUsage : null;
-                // Each pane keeps its own composer height so a resize stays local to that tile.
-                const composerH = composerHByPane[paneId] ?? focusedComposerHeight;
-                const setComposerH = (h: number) => {
-                  setComposerHByPane((prev) => ({ ...prev, [paneId]: h }));
-                  if (paneFocused) persistComposerHeight(h);
-                };
                 const activeInteractionCapabilities = activeSession
                   ? interactionCapabilities[activeSession] ?? null
                   : null;
@@ -8325,8 +8322,6 @@ export default function App() {
                   }}
                   docMode={docMode}
                   onDocMode={toggleDocMode}
-                  height={composerH}
-                  onHeight={setComposerH}
                   boundsRef={mainRef}
                   models={activeSession === null
                     ? providers.find((candidate) => candidate.id === provider)?.models ?? []
