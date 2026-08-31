@@ -154,7 +154,7 @@ describe("Settings page layout contract", () => {
       /\.appearance-theme-grid\s*{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
     );
     expect(compactAppearanceStyles).toMatch(
-      /\.appearance-palette-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+      /\.appearance-palette-grid,\s*\.appearance-profile-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
     );
     expect(appearanceStyles).toMatch(
       /@container \(max-width:\s*30rem\)[\s\S]*?\.appearance-scheme-grid,[\s\S]*?\.appearance-theme-grid\s*{[^}]*minmax\(0, 1fr\)/,

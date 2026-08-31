@@ -49,7 +49,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
-import { diffPreviewLines } from "./state";
+import { diffLinePresentation, diffPreviewLines } from "./state";
 
 type PullRequestLoadState =
   | { kind: "loading"; pullRequest: null; error: null }
@@ -134,14 +134,20 @@ function DiffPreview({ result }: { result: GitHubPullRequestDiff }) {
       )}
       <pre className="diff">
         {preview.lines.map((line, index) => {
-          let className = "";
-          if (line.startsWith("+") && !line.startsWith("+++")) className = "add";
-          else if (line.startsWith("-") && !line.startsWith("---")) className = "del";
-          else if (line.startsWith("@@")) className = "hunk";
-          else if (line.startsWith("diff ") || line.startsWith("index ")) className = "meta";
+          const presentation = diffLinePresentation(line);
+          const changedLineLabel = presentation.kind === "add"
+            ? `Added line: ${presentation.content}`
+            : presentation.kind === "del"
+              ? `Removed line: ${presentation.content}`
+              : undefined;
           return (
-            <div key={index} className={cn("diff-line", className)}>
-              {line || " "}
+            <div
+              key={index}
+              className={cn("diff-line", presentation.kind === "context" ? "" : presentation.kind)}
+              aria-label={changedLineLabel}
+            >
+              <span className="diff-line-marker" aria-hidden="true">{presentation.marker}</span>
+              <span>{presentation.content}</span>
             </div>
           );
         })}

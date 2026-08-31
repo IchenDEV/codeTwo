@@ -16,6 +16,9 @@ export type ThemePreference = ColorScheme | "system";
 export type AppearanceColorKey = "accent" | "background" | "foreground";
 export type PetSize = "small" | "medium" | "large";
 export type PetSource = "builtin" | "petshare";
+export type FontWeightId = "regular" | "medium" | "semibold";
+export type ReduceMotionPreference = "system" | "on" | "off";
+export type DiffMarkerPreference = "color" | "symbols";
 
 export interface AppearanceTheme {
   id: string;
@@ -25,8 +28,17 @@ export interface AppearanceTheme {
   dark: ThemePalette;
 }
 
+export interface SchemeAppearanceProfile {
+  uiFont: UiFontId;
+  uiFontWeight: FontWeightId;
+  codeFont: CodeFontId;
+  codeFontWeight: FontWeightId;
+  sidebarOpacity: number;
+  contrast: number;
+}
+
 export interface AppearanceSettings {
-  version: 2;
+  version: 3;
   preference: ThemePreference;
   activeThemeId: string;
   customThemes: AppearanceTheme[];
@@ -36,12 +48,13 @@ export interface AppearanceSettings {
   petSource: PetSource;
   petId: string;
   petName: string;
-  uiFont: UiFontId;
-  codeFont: CodeFontId;
+  light: SchemeAppearanceProfile;
+  dark: SchemeAppearanceProfile;
   uiFontSize: number;
   codeFontSize: number;
-  sidebarOpacity: number;
-  contrast: number;
+  pointerCursors: boolean;
+  reduceMotion: ReduceMotionPreference;
+  diffMarkers: DiffMarkerPreference;
 }
 
 export const UI_FONTS = [
@@ -56,6 +69,12 @@ export const CODE_FONTS = [
   { id: "sf-mono", label: "SF Mono", stack: '"SF Mono", ui-monospace, Menlo, monospace' },
   { id: "menlo", label: "Menlo", stack: 'Menlo, Monaco, ui-monospace, monospace' },
   { id: "monaco", label: "Monaco", stack: 'Monaco, Menlo, ui-monospace, monospace' },
+] as const;
+
+export const FONT_WEIGHTS = [
+  { id: "regular", value: 400 },
+  { id: "medium", value: 500 },
+  { id: "semibold", value: 600 },
 ] as const;
 
 export type UiFontId = (typeof UI_FONTS)[number]["id"];
@@ -101,8 +120,17 @@ export const BUILT_IN_THEMES: AppearanceTheme[] = [
   builtInTheme("rose", "Rose"),
 ];
 
+const DEFAULT_SCHEME_PROFILE: SchemeAppearanceProfile = {
+  uiFont: "system",
+  uiFontWeight: "regular",
+  codeFont: "system-mono",
+  codeFontWeight: "regular",
+  sidebarOpacity: 80,
+  contrast: 45,
+};
+
 export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
-  version: 2,
+  version: 3,
   preference: "system",
   activeThemeId: "code2",
   customThemes: [],
@@ -112,12 +140,13 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   petSource: "builtin",
   petId: "naiwa",
   petName: "Naiwa",
-  uiFont: "system",
-  codeFont: "system-mono",
+  light: { ...DEFAULT_SCHEME_PROFILE },
+  dark: { ...DEFAULT_SCHEME_PROFILE },
   uiFontSize: DEFAULT_UI_FONT_SIZE,
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
-  sidebarOpacity: 80,
-  contrast: 45,
+  pointerCursors: true,
+  reduceMotion: "system",
+  diffMarkers: "color",
 };
 
 function clamp(value: unknown, min: number, max: number, fallback: number): number {
@@ -136,6 +165,18 @@ function isPetSize(value: unknown): value is PetSize {
 
 function isPetSource(value: unknown): value is PetSource {
   return value === "builtin" || value === "petshare";
+}
+
+function isFontWeight(value: unknown): value is FontWeightId {
+  return includesId(FONT_WEIGHTS, value);
+}
+
+function isReduceMotion(value: unknown): value is ReduceMotionPreference {
+  return value === "system" || value === "on" || value === "off";
+}
+
+function isDiffMarkers(value: unknown): value is DiffMarkerPreference {
+  return value === "color" || value === "symbols";
 }
 
 function safePetId(value: unknown): string | null {
@@ -186,13 +227,41 @@ function includesId<T extends readonly { id: string }[]>(items: T, value: unknow
   return typeof value === "string" && items.some((item) => item.id === value);
 }
 
+function safeSchemeProfile(value: unknown, fallback: SchemeAppearanceProfile): SchemeAppearanceProfile {
+  const candidate = value && typeof value === "object"
+    ? value as Partial<SchemeAppearanceProfile>
+    : {};
+  return {
+    uiFont: includesId(UI_FONTS, candidate.uiFont) ? candidate.uiFont : fallback.uiFont,
+    uiFontWeight: isFontWeight(candidate.uiFontWeight) ? candidate.uiFontWeight : fallback.uiFontWeight,
+    codeFont: includesId(CODE_FONTS, candidate.codeFont) ? candidate.codeFont : fallback.codeFont,
+    codeFontWeight: isFontWeight(candidate.codeFontWeight) ? candidate.codeFontWeight : fallback.codeFontWeight,
+    sidebarOpacity: clamp(candidate.sidebarOpacity, 40, 100, fallback.sidebarOpacity),
+    contrast: clamp(candidate.contrast, 0, 100, fallback.contrast),
+  };
+}
+
 export function normalizeAppearanceSettings(value: unknown): AppearanceSettings {
   const candidate = value && typeof value === "object"
-    ? value as Omit<Partial<AppearanceSettings>, "version"> & { version?: number }
+    ? value as Omit<Partial<AppearanceSettings>, "version" | "light" | "dark"> & {
+      version?: number;
+      light?: unknown;
+      dark?: unknown;
+      uiFont?: unknown;
+      codeFont?: unknown;
+      sidebarOpacity?: unknown;
+      contrast?: unknown;
+    }
     : {};
-  const uiFontSize = candidate.version !== 2 && candidate.uiFontSize === 13
+  const uiFontSize = candidate.version !== 2 && candidate.version !== 3 && candidate.uiFontSize === 13
     ? DEFAULT_UI_FONT_SIZE
     : candidate.uiFontSize;
+  const legacyProfile = safeSchemeProfile({
+    uiFont: candidate.uiFont,
+    codeFont: candidate.codeFont,
+    sidebarOpacity: candidate.sidebarOpacity,
+    contrast: candidate.contrast,
+  }, DEFAULT_SCHEME_PROFILE);
   const requestedPetSource = isPetSource(candidate.petSource)
     ? candidate.petSource
     : DEFAULT_APPEARANCE_SETTINGS.petSource;
@@ -213,7 +282,7 @@ export function normalizeAppearanceSettings(value: unknown): AppearanceSettings 
   }
   const availableIds = new Set([...BUILT_IN_THEMES.map((theme) => theme.id), ...customThemes.map((theme) => theme.id)]);
   return {
-    version: 2,
+    version: 3,
     preference: isPreference(candidate.preference) ? candidate.preference : DEFAULT_APPEARANCE_SETTINGS.preference,
     activeThemeId: typeof candidate.activeThemeId === "string" && availableIds.has(candidate.activeThemeId)
       ? candidate.activeThemeId
@@ -231,12 +300,19 @@ export function normalizeAppearanceSettings(value: unknown): AppearanceSettings 
     petName: petSource === "petshare"
       ? safeName(candidate.petName, petId ?? DEFAULT_APPEARANCE_SETTINGS.petName)
       : DEFAULT_APPEARANCE_SETTINGS.petName,
-    uiFont: includesId(UI_FONTS, candidate.uiFont) ? candidate.uiFont : DEFAULT_APPEARANCE_SETTINGS.uiFont,
-    codeFont: includesId(CODE_FONTS, candidate.codeFont) ? candidate.codeFont : DEFAULT_APPEARANCE_SETTINGS.codeFont,
+    light: safeSchemeProfile(candidate.light, legacyProfile),
+    dark: safeSchemeProfile(candidate.dark, legacyProfile),
     uiFontSize: clamp(uiFontSize, 12, 16, DEFAULT_APPEARANCE_SETTINGS.uiFontSize),
     codeFontSize: clamp(candidate.codeFontSize, 11, 18, DEFAULT_APPEARANCE_SETTINGS.codeFontSize),
-    sidebarOpacity: clamp(candidate.sidebarOpacity, 40, 100, DEFAULT_APPEARANCE_SETTINGS.sidebarOpacity),
-    contrast: clamp(candidate.contrast, 0, 100, DEFAULT_APPEARANCE_SETTINGS.contrast),
+    pointerCursors: typeof candidate.pointerCursors === "boolean"
+      ? candidate.pointerCursors
+      : DEFAULT_APPEARANCE_SETTINGS.pointerCursors,
+    reduceMotion: isReduceMotion(candidate.reduceMotion)
+      ? candidate.reduceMotion
+      : DEFAULT_APPEARANCE_SETTINGS.reduceMotion,
+    diffMarkers: isDiffMarkers(candidate.diffMarkers)
+      ? candidate.diffMarkers
+      : DEFAULT_APPEARANCE_SETTINGS.diffMarkers,
   };
 }
 
@@ -424,6 +500,10 @@ function fontStack<T extends readonly { id: string; stack: string }[]>(items: T,
   return items.find((item) => item.id === id)?.stack ?? items[0].stack;
 }
 
+function fontWeight(id: FontWeightId): number {
+  return FONT_WEIGHTS.find((item) => item.id === id)?.value ?? FONT_WEIGHTS[0].value;
+}
+
 /** Applies validated appearance settings to both the legacy and new semantic token layers. */
 export function applyAppearanceSettings(
   root: HTMLElement,
@@ -432,15 +512,22 @@ export function applyAppearanceSettings(
 ): void {
   const selected = themeById(settings.activeThemeId, settings);
   const source = selected[scheme];
+  const profile = settings[scheme];
+  const uiWeight = fontWeight(profile.uiFontWeight);
   const properties: Record<string, string> = {
-    ...resolveThemeColorProperties(source, scheme, settings.contrast),
-    "--appearance-font-ui": fontStack(UI_FONTS, settings.uiFont),
-    "--font-mono": fontStack(CODE_FONTS, settings.codeFont),
-    "--ds-font-ui": fontStack(UI_FONTS, settings.uiFont),
-    "--ds-font-mono": fontStack(CODE_FONTS, settings.codeFont),
+    ...resolveThemeColorProperties(source, scheme, profile.contrast),
+    "--appearance-font-ui": fontStack(UI_FONTS, profile.uiFont),
+    "--appearance-font-ui-weight": `${uiWeight}`,
+    "--appearance-font-code-weight": `${fontWeight(profile.codeFontWeight)}`,
+    "--font-mono": fontStack(CODE_FONTS, profile.codeFont),
+    "--ds-font-ui": fontStack(UI_FONTS, profile.uiFont),
+    "--ds-font-mono": fontStack(CODE_FONTS, profile.codeFont),
     ...resolveTypographyProperties(settings),
-    "--appearance-sidebar-opacity": `${settings.sidebarOpacity}%`,
-    "--appearance-macos-panel-tint-opacity": `${Math.round(settings.sidebarOpacity * 0.45)}%`,
+    "--appearance-sidebar-opacity": `${profile.sidebarOpacity}%`,
+    "--appearance-macos-panel-tint-opacity": `${Math.round(profile.sidebarOpacity * 0.45)}%`,
   };
   for (const [name, value] of Object.entries(properties)) root.style.setProperty(name, value);
+  root.dataset.appearancePointerCursors = settings.pointerCursors ? "true" : "false";
+  root.dataset.reduceMotion = settings.reduceMotion;
+  root.dataset.diffMarkers = settings.diffMarkers;
 }

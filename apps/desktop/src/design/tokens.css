@@ -391,8 +391,15 @@
   );
 }
 
+:root[data-reduce-motion="on"] {
+  --ds-motion-feedback: 0ms;
+  --ds-motion-layer: 0ms;
+  --ds-motion-dialog: 0ms;
+  --ds-motion-page: 0ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  :root:not([data-reduce-motion="off"]) {
     --ds-motion-feedback: 0ms;
     --ds-motion-layer: 0ms;
     --ds-motion-dialog: 0ms;

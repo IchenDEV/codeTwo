@@ -685,9 +685,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ds-preview *,
-  .ds-preview *::before,
-  .ds-preview *::after {
+  html:not([data-reduce-motion="off"]) .ds-preview *,
+  html:not([data-reduce-motion="off"]) .ds-preview *::before,
+  html:not([data-reduce-motion="off"]) .ds-preview *::after {
     animation-duration: 0ms;
     animation-iteration-count: 1;
     scroll-behavior: auto;

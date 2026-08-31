@@ -195,3 +195,23 @@ export function diffPreviewLines(
   if (lines.length <= limit) return { lines, truncated: false };
   return { lines: lines.slice(0, limit), truncated: true };
 }
+
+export type DiffLineKind = "add" | "del" | "hunk" | "meta" | "context";
+
+export function diffLinePresentation(line: string): {
+  kind: DiffLineKind;
+  marker: "+" | "-" | "";
+  content: string;
+} {
+  if (line.startsWith("+") && !line.startsWith("+++")) {
+    return { kind: "add", marker: "+", content: line.slice(1) || " " };
+  }
+  if (line.startsWith("-") && !line.startsWith("---")) {
+    return { kind: "del", marker: "-", content: line.slice(1) || " " };
+  }
+  if (line.startsWith("@@")) return { kind: "hunk", marker: "", content: line };
+  if (line.startsWith("diff ") || line.startsWith("index ")) {
+    return { kind: "meta", marker: "", content: line };
+  }
+  return { kind: "context", marker: "", content: line || " " };
+}

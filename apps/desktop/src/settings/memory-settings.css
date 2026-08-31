@@ -485,8 +485,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .memory-disclosure-chevron,
-  .memory-row {
+  html:not([data-reduce-motion="off"]) .memory-disclosure-chevron,
+  html:not([data-reduce-motion="off"]) .memory-row {
     transition: none;
   }
 }

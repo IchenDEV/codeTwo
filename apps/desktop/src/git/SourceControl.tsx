@@ -35,6 +35,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   changeRequestPresentation,
+  diffLinePresentation,
   diffPreviewLines,
   gitFileDisplayState,
   gitFilePathspecs,
@@ -95,14 +96,20 @@ function DiffView({ state }: { state: DiffState }) {
       )}
       <pre className="diff">
         {preview.lines.map((line, index) => {
-          let cls = "";
-          if (line.startsWith("+") && !line.startsWith("+++")) cls = "add";
-          else if (line.startsWith("-") && !line.startsWith("---")) cls = "del";
-          else if (line.startsWith("@@")) cls = "hunk";
-          else if (line.startsWith("diff ") || line.startsWith("index ")) cls = "meta";
+          const presentation = diffLinePresentation(line);
+          const changedLineLabel = presentation.kind === "add"
+            ? `Added line: ${presentation.content}`
+            : presentation.kind === "del"
+              ? `Removed line: ${presentation.content}`
+              : undefined;
           return (
-            <div key={index} className={cn("diff-line", cls)}>
-              {line || " "}
+            <div
+              key={index}
+              className={cn("diff-line", presentation.kind === "context" ? "" : presentation.kind)}
+              aria-label={changedLineLabel}
+            >
+              <span className="diff-line-marker" aria-hidden="true">{presentation.marker}</span>
+              <span>{presentation.content}</span>
             </div>
           );
         })}
