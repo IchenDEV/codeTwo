@@ -120,7 +120,11 @@ checks.
   the T3 vertical rail, shortcut badges, and legacy section were not copied. A final rendered
   Browser check confirmed the compact switcher exposes `Codex` visually and through its accessible
   label, with zero remaining `OpenAI Codex` labels; the screenshot is
-  `/tmp/codetwo-provider-picker-codex-label.png`.
+  `/tmp/codetwo-provider-picker-codex-label.png`. That label-only fixture contained
+  two placeholder models and is not model-catalogue completeness evidence. A follow-up live
+  `codex app-server` `model/list` query returned all seven current families (Sol, Terra, Luna,
+  GPT-5.5, GPT-5.4, GPT-5.4-Mini, and GPT-5.3-Codex-Spark), and the focused rendered component test
+  now asserts seven rows plus every corresponding visible name.
 - AC-3: PASS — `bun test tests/sceneChip.test.tsx` confirms Provider browsing invokes neither
   legacy session callback, while final selection emits exactly `grok / grok-4.6` through the atomic
   callback. `bun test tests/providerModelTransition.test.ts` confirms App creates a fresh draft
@@ -132,7 +136,7 @@ checks.
 - AC-4: PASS — `bun test tests/reasoningScaleRendered.test.tsx tests/sceneChip.test.tsx` passed 26
   tests and 92 expectations; `bunx tsc --noEmit` and focused ESLint also passed. Model-only picker
   tests remain in that passing suite.
-- AC-5: PASS — the final `bun test` passed 809 tests and 3,853 expectations; `bun run build`
+- AC-5: PASS — the final `bun test` passed 809 tests and 3,852 expectations; `bun run build`
   completed the production renderer and native package. Repository lifecycle commands are recorded
   by the final verification pass below.
 
@@ -156,6 +160,9 @@ Core process, as required by the repository's single-owner rule. The App integra
 the typed callback and fresh-session implementation, while the visual fixture proves the emitted
 atomic intent rather than opening a real Provider subprocess. T3-only shortcut labels, Legacy
 models, and global favorite navigation were intentionally not copied; no provider protocol changed.
+The attempted replacement screenshot for the complete catalogue was blocked by the in-app
+Browser's local-URL policy, so completeness is evidenced by the live CLI response and component DOM
+regression rather than a new screenshot.
 
 ## Review and release
 
@@ -175,3 +182,6 @@ that such Providers should be selectable directly and do not require any preset 
 After the reviewed fixes, the user requested a more polished UI that keeps the simplified unified
 flow without copying T3's permanent left icon rail.
 The user then requested the compact switcher label `OpenAI Codex` be shortened to `Codex`.
+After reviewing that screenshot, the user noted that the model list appeared incomplete. Diagnosis
+confirmed the screenshot fixture contained only two placeholder model families while the current
+Codex catalogue exposes seven; the acceptance evidence must use the complete catalogue.
