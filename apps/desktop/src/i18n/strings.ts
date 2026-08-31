@@ -872,7 +872,6 @@ export const en = {
   "composer.runEmpty": "Write a prompt first",
   "composer.loadingSession": "Wait for this session to finish loading",
   "composer.toSend": "{key} to send",
-  "composer.grip": "Drag to resize · double-click for full page",
   "composer.cliNotFound": "CLI not found",
   "checkout.title": "Checkout",
   "checkout.choose": "Choose where the next session runs",
@@ -1588,6 +1587,9 @@ export const en = {
   "memory.saveAction": "Save",
   "memory.cancel": "Cancel",
   "memory.corrected": "Correction saved. The original memory was deactivated.",
+  "memory.preset.codex_default": "Codex default",
+  "memory.preset.codex_defaultHint":
+    "Keep C2 memory out of the visible Codex conversation; still learn according to global settings.",
   "memory.preset.standard": "Memory on",
   "memory.preset.standardHint":
     "Recall relevant memory and learn from completed turns.",
@@ -3408,7 +3410,6 @@ export const zhCN: Record<StringKey, string> = {
   "composer.runEmpty": "先写点什么",
   "composer.loadingSession": "请等待会话加载完成",
   "composer.toSend": "{key} 发送",
-  "composer.grip": "拖动调整高度 · 双击整页",
   "composer.cliNotFound": "未找到 CLI",
   "checkout.title": "检出位置",
   "checkout.choose": "选择下一个会话的运行位置",
@@ -4096,6 +4097,9 @@ export const zhCN: Record<StringKey, string> = {
   "memory.saveAction": "保存",
   "memory.cancel": "取消",
   "memory.corrected": "纠正已保存，原记忆已停用。",
+  "memory.preset.codex_default": "Codex 默认",
+  "memory.preset.codex_defaultHint":
+    "不向可见的 Codex 对话注入 C2 记忆；仍按全局设置学习。",
   "memory.preset.standard": "启用记忆",
   "memory.preset.standardHint": "回忆相关记忆，并从完成的轮次中学习。",
   "memory.preset.read_only": "只回忆",

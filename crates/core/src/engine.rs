@@ -41,9 +41,9 @@ use crate::permission::{
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::session::{
     initial_session_title, tool_status_is_in_flight, tool_status_is_terminal,
-    transcript_context_with_omission, Part, PlanEntry, Role, Session, SessionActivity, SessionId,
-    SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
-    DEFAULT_TRANSCRIPT_TURNS,
+    transcript_context_with_omission, MemoryAccess, Part, PlanEntry, Role, Session,
+    SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
+    TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
     canonical_doc_text, compile_with_appshots, compile_with_canvas,
@@ -1517,6 +1517,33 @@ fn codex_launch_with_static_provider_context(
             .push(("DISABLE_MCP_CONFIG_FILTERING".into(), "true".into()));
     }
     Ok(launch)
+}
+
+fn without_codex_native_project_rules(prompt: String, cwd: &str) -> String {
+    let rules = crate::rules::load(std::path::Path::new(cwd));
+    let compiled_rules = crate::rules::to_context(&rules);
+    if compiled_rules.is_empty() {
+        return prompt;
+    }
+    let remainder = if prompt == compiled_rules {
+        String::new()
+    } else if let Some(remainder) = prompt.strip_prefix(&format!("{compiled_rules}\n\n")) {
+        remainder.to_string()
+    } else {
+        return prompt;
+    };
+    let portable_rules = rules
+        .into_iter()
+        // Codex loads AGENTS.md from its session cwd. C2's other supported formats still need
+        // provider-neutral transport or they disappear from Codex sessions entirely.
+        .filter(|rule| rule.path != "AGENTS.md")
+        .collect::<Vec<_>>();
+    let portable_context = crate::rules::to_context(&portable_rules);
+    match (portable_context.is_empty(), remainder.is_empty()) {
+        (true, _) => remainder,
+        (_, true) => portable_context,
+        _ => format!("{portable_context}\n\n{remainder}"),
+    }
 }
 
 fn auto_scene_routing_instructions(
@@ -6079,6 +6106,11 @@ impl Engine {
                         })
                 };
                 let is_codex = current_provider == ProviderId::Codex;
+                if is_codex {
+                    // Codex loads AGENTS.md from its session cwd. Avoid repeating that native
+                    // file as visible user text while preserving C2's provider-neutral rules.
+                    compiled.prompt = without_codex_native_project_rules(compiled.prompt, &cwd);
+                }
                 attach_host_mcp_servers(
                     &mut compiled.mcp_servers,
                     provider_toolset.mcp_servers.iter().cloned(),
@@ -6120,8 +6152,13 @@ impl Engine {
                     .get(&session)
                     .map(|runtime| runtime.injected_memory_keys.clone())
                     .unwrap_or_default();
-                let memory_turn = native_command
-                    .is_none()
+                let codex_memory_explicitly_allowed = !is_codex
+                    || self.state.store.as_ref().is_some_and(|store| {
+                        store
+                            .session_memory_policy(&session)
+                            .is_ok_and(|(read, _)| read == MemoryAccess::Allow)
+                    });
+                let memory_turn = (native_command.is_none() && codex_memory_explicitly_allowed)
                     .then(|| {
                         self.state.memory.as_ref().and_then(|memory| {
                             match memory.recall(&cwd, &session, &memory_source) {
@@ -6163,8 +6200,10 @@ impl Engine {
                         })
                     })
                     .flatten();
-                let provider_prompt =
-                    with_auto_scene_routing(provider_prompt, auto_scene_instructions);
+                let provider_prompt = with_auto_scene_routing(
+                    provider_prompt,
+                    (!is_codex).then_some(auto_scene_instructions).flatten(),
+                );
                 let (caps, attached_mcp, inject_provider_context) = {
                     let map = self.state.sessions.lock().unwrap();
                     map.get(&session)
@@ -9085,6 +9124,7 @@ mod mcp_tests {
         assert!(developer.contains("HOST_TOOL_MARKER"));
         assert!(developer.contains("[C2 desktop browser routing]"));
         assert!(developer.contains("[C2 Sites routing and safety]"));
+        assert!(!developer.contains("[C2 Auto Scene]"));
         assert_eq!(
             developer.matches("[C2 Sites routing and safety]").count(),
             1

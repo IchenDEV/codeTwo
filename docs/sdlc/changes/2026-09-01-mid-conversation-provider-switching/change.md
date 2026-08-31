@@ -12,8 +12,8 @@ updated: 2026-09-01
 source: direct user request on 2026-09-01 to prioritize switching providers during an existing conversation and resolve compatibility problems
 inputs: existing single-provider Session runtime, ACP adapters, durable transcript store, Composer provider picker, and provider lifecycle registry
 outputs: atomic idle-session provider replacement, bounded provider-neutral continuation context, stale-runtime fencing, synchronized desktop state, live multi-provider canary, and compatibility regressions
-scope: crates/core/src/engine.rs, crates/core/src/error.rs, crates/core/src/event.rs, crates/core/src/session.rs, crates/core/src/store.rs, crates/core/examples/exec.rs, crates/core/examples/live_demo.rs, crates/core/tests/engine_provider_switch.rs, crates/plugins/src/app/plugins/engine.rs, crates/tui/src/app.rs, apps/desktop/src/App.tsx, apps/desktop/src/bridge.ts, apps/desktop/src/i18n/strings.ts, apps/desktop/src/session/Composer.tsx, apps/desktop/src/session/config.ts, apps/desktop/tests/sceneChip.test.tsx, docs/sdlc/changes/2026-09-01-mid-conversation-provider-switching
-next_trigger: human product and code review decides whether to merge this verified local change
+scope: crates/core/src/engine.rs, crates/core/src/error.rs, crates/core/src/event.rs, crates/core/src/session.rs, crates/core/src/store.rs, crates/core/examples/exec.rs, crates/core/examples/live_demo.rs, crates/core/tests/engine_provider_switch.rs, crates/plugins/src/app/plugins/engine.rs, crates/tui/src/app.rs, apps/desktop/src/App.tsx, apps/desktop/src/bridge.ts, apps/desktop/src/i18n/strings.ts, apps/desktop/src/session/Composer.tsx, apps/desktop/src/session/config.ts, apps/desktop/tests/providerModelTransition.test.ts, apps/desktop/tests/sceneChip.test.tsx, docs/sdlc/changes/2026-09-01-mid-conversation-provider-switching
+next_trigger: await human review of the provider-switch continuity PR
 verification_mode: owner
 verified_by: codex
 verified_at: 2026-09-01
@@ -120,6 +120,12 @@ configuration reads each durable Session provider, disables the picker while a t
 active, and clears provider-owned model/config/capability/goal/context projections before Core
 repopulates them. Canvas retries remain in the same conversation after a successful switch.
 
+After merging current `origin/main`, the desktop retains its unified provider/model picker instead
+of restoring the old standalone ProviderPicker. Selecting another provider for an active Session
+now invokes the in-place Core switch with the selected model; selecting one for an unsent draft
+updates only draft state. The obsolete helper and test that created a fresh Session for a foreign
+provider were removed, and busy or switching Sessions lock the complete unified picker.
+
 The opt-in live canary drives the same Engine against locally authenticated real CLIs with an
 in-memory Store and supports per-provider model selection. It writes a runtime-random continuity
 key in the first user turn, asserts that both the user prompt and streamed provider reply are
@@ -141,9 +147,9 @@ acceptance criteria for local handoff. No merge or release is authorized.
 - AC-1: PASS — `cargo test -p codetwo-core --test engine_provider_switch` passed five stdio integration tests; the success test retained the Session id, transcript, workspace, policy, creation time, and recency while persisting the new provider and clearing its old ACP cursor.
 - AC-2: PASS — `cargo test -p codetwo-core` proved a fresh target `session/new`, ordered neutral history before the current prompt, excluded reasoning and raw tool secrets, enforced the 48 Ki character bound and newest-tail truncation, fenced detached callbacks, and cleared persisted continuation after the first successful target prompt.
 - AC-3: PASS — `cargo test -p codetwo-core --test engine_provider_switch` passed awaiting-input rejection, missing-target rollback with a usable old provider, concurrent single-owner switching, and Task-lease rejection; the full `cargo test -p codetwo-core` command passed 488 unit tests and every Core integration suite.
-- AC-4: PASS — `bun test tests/sceneChip.test.tsx tests/canvasDesktop.test.ts` passed 29 rendered/component tests, `cargo test -p codetwo-tui provider_change_reconciles_the_active_tui_shell` passed, and in-app Browser QA at `http://127.0.0.1:1420/` verified the C2 page, expandable provider menu, disabled-busy behavior, no framework overlay, and no console warnings or errors.
+- AC-4: PASS — `bun test tests/sceneChip.test.tsx tests/canvasDesktop.test.ts` passed 31 rendered/component tests, including the unified picker's disabled-busy behavior; `cargo test -p codetwo-tui provider_change_reconciles_the_active_tui_shell` passed. In-app Browser QA against the isolated renderer at `http://127.0.0.1:1420/` verified the C2 page identity, meaningful first render, expandable unified provider/model menu, no framework overlay, and no console warnings or errors.
 - AC-5: PASS — `bun run build:renderer`, `cargo check -p codetwo-plugins`, and `cargo check --workspace --all-targets` passed; `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts`, `bun script/verify/sdlc.ts --worktree`, and `git diff --check` also passed in the final Gate run.
-- AC-6: PASS — `CODETWO_LIVE_SWITCH_PROVIDERS=codex,grok,cursor,codex cargo test -p codetwo-core --test engine_provider_switch live_providers_switch_in_place_and_back -- --ignored --nocapture` and the equivalent `opencode,kimi,opencode` run both passed after each pre-switch transcript durably contained the user prompt and streamed provider reply; every later real provider recovered a runtime-random continuity key available only in prior conversation content. `cargo test -p codetwo-core --example exec advertised_amp_and_droid_providers_use_builtin_identities` and `cargo test -p codetwo-core rpc_error_surfaces_structured_provider_detail_without_request_metadata` passed.
+- AC-6: PASS — after merging current `origin/main`, `CODETWO_LIVE_SWITCH_PROVIDERS=codex,grok,cursor,codex cargo test -p codetwo-core --test engine_provider_switch live_providers_switch_in_place_and_back -- --ignored --nocapture` and the equivalent `opencode,kimi,opencode` run both passed after each pre-switch transcript durably contained the user prompt and streamed provider reply; every later real provider recovered a runtime-random continuity key available only in prior conversation content. `cargo test -p codetwo-core --example exec advertised_amp_and_droid_providers_use_builtin_identities` and `cargo test -p codetwo-core rpc_error_surfaces_structured_provider_detail_without_request_metadata` passed.
 
 Residual risk: Provider-neutral continuation intentionally trades exact native state migration for
 safe compatibility across unlike provider protocols; the bounded projection can omit old context,

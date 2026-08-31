@@ -38,9 +38,17 @@ function renderEnvironment(onRefresh = () => {}, preview = null, props = {}) {
 describe("EnvironmentPopover layout", () => {
   test("remains mounted in the session header", () => {
     const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const environmentSource = readFileSync(
+      new URL("../src/environment/EnvironmentPopover.tsx", import.meta.url),
+      "utf8",
+    );
 
     expect(appSource).toContain('from "./environment/EnvironmentPopover"');
     expect(appSource).toContain("<EnvironmentPopover");
+    expect(environmentSource).toMatch(
+      /<PopoverContent\s+align="start"\s+sideOffset=\{16\}/,
+    );
+    expect(environmentSource).not.toContain("alignOffset={-36}");
   });
 
   test("stays out of the reading surface until requested and dismisses on outside press", async () => {
