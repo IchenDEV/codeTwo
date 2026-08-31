@@ -73,6 +73,15 @@ The composer has four session presets: **Memory on**, **Recall only**, **Private
 the session. The global master, capture, and recall switches still win; a session may narrow global
 behavior but cannot silently re-enable a disabled feature.
 
+Codex is the one provider-specific transport boundary: its **Codex default** preset uses the
+inherited session policy but does not append C2 memory to Codex's ACP user message, because Codex
+exposes every `session/prompt` text block as user-authored conversation. It still learns according
+to the global settings. Choosing **Memory on** or **Recall only** sets an explicit read `allow`,
+sends the bounded recalled block, and retains the normal receipt. Other providers continue to use
+**Memory on** as their default and resolve `inherit` from the global recall switch.
+Codex Quick Chat and Side Chat explicitly use recall-only policy so their existing project-memory
+context remains available without learning durable memory from those app-lifetime conversations.
+
 When recall is used, C2 emits and stores a turn receipt containing the exact memory ids, layers,
 categories, evidence pointer, retrieval score, text sent, and estimated prompt tokens. The Turn UI
 shows it under **Memory used**. Receipts are metadata beside the transcript; the injected memory

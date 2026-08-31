@@ -251,8 +251,7 @@ export function EnvironmentPopover({
       />
 
       <PopoverContent
-        align="end"
-        alignOffset={-36}
+        align="start"
         sideOffset={16}
         className="max-h-(--available-height) overflow-y-auto p-2"
         initialFocus={false}

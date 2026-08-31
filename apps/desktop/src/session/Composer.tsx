@@ -25,7 +25,7 @@ import {
   X,
 } from "@/components/ui/icons";
 
-import type { SessionConfig } from "./config";
+import { memoryPresetsForProvider, type SessionConfig } from "./config";
 import type { SceneInfo } from "./scene";
 import { briefOfferVisible } from "../editor/slotCard";
 import { SceneChip } from "./SceneChip";
@@ -38,7 +38,6 @@ import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import {
   fallbackProviders,
-  providerDisplayName,
   type ConfigOptionInfo,
   type AppshotCapture,
   type GoalCapabilityInfo,
@@ -64,8 +63,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
@@ -85,10 +84,7 @@ interface ComposerProps {
   /** Full-page authoring: the document takes the whole column and the transcript steps aside. */
   docMode: boolean;
   onDocMode: (v: boolean) => void;
-  /** Height of the document area in compact mode, in px — dragged by the grip, persisted. */
-  height: number;
-  onHeight: (n: number) => void;
-  /** The column the composer lives in; bounds the drag so it can't swallow the transcript. */
+  /** The column the composer lives in; bounds compact content so it can't swallow the transcript. */
   boundsRef: React.MutableRefObject<HTMLElement | null>;
   /** What the agent reported it can run. Empty until a session exists, or if it reports none. */
   models: ModelChoice[];
@@ -480,20 +476,14 @@ export function ModePicker({ config }: { config: SessionConfig }) {
   );
 }
 
-const MEMORY_PRESETS = [
-  { id: "standard", read: "inherit", write: "inherit" },
-  { id: "read_only", read: "allow", write: "deny" },
-  { id: "private", read: "deny", write: "deny" },
-  { id: "learn_only", read: "deny", write: "allow" },
-] as const;
-
 export function MemoryPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const presets = memoryPresetsForProvider(config.provider);
   const active =
-    MEMORY_PRESETS.find(
+    presets.find(
       (preset) => preset.read === config.memoryRead && preset.write === config.memoryWrite,
-    ) ?? MEMORY_PRESETS[0];
+    ) ?? presets[0];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -509,13 +499,13 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
       />
       <PopoverContent align="start" side="top" className="w-72 p-1.5">
         <MenuSection>{t("config.memory")}</MenuSection>
-        {MEMORY_PRESETS.map((preset) => (
+        {presets.map((preset) => (
           <SelectableRow
             key={preset.id}
             selected={preset.id === active.id}
             label={t(`memory.preset.${preset.id}` as "memory.preset.standard")}
             description={t(`memory.preset.${preset.id}Hint` as "memory.preset.standardHint")}
-            meta={preset.id === "standard" ? <DefaultBadge /> : undefined}
+            meta={preset.isDefault ? <DefaultBadge /> : undefined}
             onSelect={() => {
               config.onMemoryPolicy(preset.read, preset.write);
               setOpen(false);
@@ -772,107 +762,6 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
   );
 }
 
-export function ProviderPicker({ config }: { config: SessionConfig }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const registry = config.providers.length > 0 ? config.providers : fallbackProviders();
-  // Disabled providers stop being new-session choices. Keep the active one visible so a resumed
-  // session still identifies the runtime it already owns.
-  const providers = registry.filter((candidate) => candidate.enabled !== false || candidate.id === config.provider);
-  const active = providers.find((p) => p.id === config.provider);
-  const activeLabel = active?.display_name ?? providerDisplayName(config.provider);
-  const registryReady = config.providersStatus === "ready";
-
-  useEffect(() => {
-    const openProviderPicker = () => {
-      setOpen(true);
-      window.setTimeout(() => triggerRef.current?.focus(), 0);
-    };
-    window.addEventListener("codetwo-open-provider-picker", openProviderPicker);
-    return () => window.removeEventListener("codetwo-open-provider-picker", openProviderPicker);
-  }, []);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={<Chip
-          ref={triggerRef}
-          title={config.providersStatus === "error" ? t("config.providersLoadFailed") : t("config.provider")}
-          aria-label={`${t("config.provider")}: ${activeLabel}`}
-          aria-busy={config.providersStatus === "loading"}
-        >
-          {registryReady && active && !active.available && (
-            <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
-          )}
-          <span className="max-w-40 truncate text-foreground/80">
-            {activeLabel}
-          </span>
-          <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>}
-      />
-      <PopoverContent align="start" side="top" className="w-64 p-1.5">
-        <MenuSection>{t("config.provider")}</MenuSection>
-        {config.providersStatus === "loading" && (
-          <p role="status" className="px-2.5 pb-2 text-callout text-muted-foreground">
-            {t("config.providersLoading")}
-          </p>
-        )}
-        {config.providersStatus === "error" && (
-          <div className="mb-1 flex items-center gap-2 rounded-control bg-muted/60 px-module-inset py-2 text-callout">
-            <span role="alert" className="min-w-0 flex-1 text-muted-foreground">
-              {t("config.providersLoadFailed")}
-            </span>
-            <Button
-              type="button"
-              variant="link"
-              size="compact"
-              className="shrink-0 px-0 font-medium text-foreground"
-              onClick={config.onReloadProviders}
-            >
-              {t("config.retryProviders")}
-            </Button>
-          </div>
-        )}
-        {providers.map((p) => (
-          <SelectableRow
-            key={p.id}
-            selected={p.id === config.provider}
-            label={p.display_name}
-            // The dot says installed; the line under it says what's missing, so the list itself
-            // answers "why can't I use that one?" without a paragraph of warning text.
-            description={registryReady && !p.available
-              ? p.enabled === false
-                ? t("settings.providerDisabled")
-                : p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")
-              : null}
-            leading={
-              <>
-                <span
-                  className={cn(
-                    "size-1.5 shrink-0 rounded-full",
-                    registryReady && p.available ? "bg-success" : "bg-border",
-                  )}
-                />
-                {/* The brand mark; dimmed when the CLI isn't installed, like the row's text. */}
-                <ProviderIcon
-                  provider={p.id}
-                  className={cn("size-3.5 shrink-0", registryReady && !p.available && "opacity-40")}
-                />
-              </>
-            }
-            disabled={registryReady && !p.available}
-            onSelect={() => {
-              config.onProvider(p.id);
-              setOpen(false);
-            }}
-          />
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 /**
  * The model this turn will run on: a model chip, and an effort chip when the model comes in
  * reasoning variants.
@@ -904,6 +793,7 @@ export function ModelPicker({
   configOptions,
   onConfigOption,
   hasSession,
+  providerConfig,
   showWhenUnavailable = false,
   disabled = false,
 }: {
@@ -915,6 +805,8 @@ export function ModelPicker({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   hasSession: boolean;
+  /** Primary Composer only: fold Provider browsing into the model surface. */
+  providerConfig?: SessionConfig;
   /** Keep an explicit model affordance while a host surface is waiting for provider metadata. */
   showWhenUnavailable?: boolean;
   /** A live turn owns its provider runtime; model and effort changes wait until it ends. */
@@ -924,25 +816,67 @@ export function ModelPicker({
   const [modelOpen, setModelOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [effortOpen, setEffortOpen] = useState(false);
+  const [browseProvider, setBrowseProvider] = useState(provider);
+  const modelTriggerRef = useRef<HTMLButtonElement>(null);
+  const providerSwitcherEnabled = providerConfig !== undefined;
+  const providerRegistry = providerConfig
+    ? providerConfig.providers.length > 0 ? providerConfig.providers : fallbackProviders()
+    : [];
+  const providerChoices = providerConfig
+    ? providerRegistry.filter(
+        (candidate) => candidate.enabled !== false || candidate.id === providerConfig.provider,
+      )
+    : [];
+  const pickerProvider = providerSwitcherEnabled ? browseProvider : provider;
+  const pickerProviderInfo = providerChoices.find((candidate) => candidate.id === pickerProvider);
+  const browsingCurrentProvider = pickerProvider === provider;
+  const pickerModels = browsingCurrentProvider ? models : pickerProviderInfo?.models ?? [];
+  const pickerConfigOptions = browsingCurrentProvider ? configOptions : [];
+  const pickerCurrent = browsingCurrentProvider ? current : null;
+  const pickerDefaultModel = browsingCurrentProvider ? defaultModel : null;
+  const selectPickerModel = (id: string) => {
+    if (providerConfig && pickerProvider !== provider) {
+      providerConfig.onProviderModel(pickerProvider, id);
+      return;
+    }
+    onModel(id);
+  };
   const families = useMemo(() => groupModels(models), [models]);
-  const { favorites, toggle: toggleFavorite } = useProviderModelFavorites(provider);
-  const { hidden: hiddenModels } = useProviderModelPreferences(provider);
+  const pickerFamilies = useMemo(() => groupModels(pickerModels), [pickerModels]);
+  const { favorites, toggle: toggleFavorite } = useProviderModelFavorites(pickerProvider);
+  const { hidden: hiddenModels } = useProviderModelPreferences(pickerProvider);
   useEffect(() => {
     if (disabled) {
       setModelOpen(false);
       setEffortOpen(false);
     }
   }, [disabled]);
-  if (!hasSession && models.length === 0 && !showWhenUnavailable) return null;
+  useEffect(() => {
+    if (!modelOpen) setBrowseProvider(provider);
+  }, [modelOpen, provider]);
+  useEffect(() => {
+    if (!providerSwitcherEnabled) return;
+    const openProviderModelPicker = () => {
+      setBrowseProvider(provider);
+      setModelOpen(true);
+      window.setTimeout(() => modelTriggerRef.current?.focus(), 0);
+    };
+    window.addEventListener("codetwo-open-provider-picker", openProviderModelPicker);
+    return () => window.removeEventListener("codetwo-open-provider-picker", openProviderModelPicker);
+  }, [provider, providerSwitcherEnabled]);
+  if (!providerSwitcherEnabled && !hasSession && models.length === 0 && !showWhenUnavailable) return null;
 
   const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
 
   const modelOpt = configOptions.find((o) => o.category === "model" || o.id === "model");
+  const pickerModelOpt = pickerConfigOptions.find((o) => o.category === "model" || o.id === "model");
   const effortOpt = configOptions.find(
     (o) => o.category === "thought_level" || o.id === "effort" || o.id === "reasoning_effort",
   );
   const activeFamily = familyOf(families, current);
   const activeVariant = variantOf(families, current);
+  const pickerActiveFamily = familyOf(pickerFamilies, pickerCurrent);
+  const pickerActiveVariant = variantOf(pickerFamilies, pickerCurrent);
 
   let modelLabel: string;
   let modelRows: PickerRow[];
@@ -950,30 +884,37 @@ export function ModelPicker({
   let effortRows: PickerRow[] = [];
 
   if (modelOpt) {
-    // The adapter described its own selectors; show them as described.
+    // Keep the trigger anchored to the active Provider even while the popup browses another one.
     modelLabel =
       modelOpt.choices.find((c) => c.id === modelOpt.current)?.name ||
       modelOpt.current ||
       t("composer.defaultModel");
-    modelRows = modelOpt.choices.map((c) => ({
+  } else {
+    const active = models.find((m) => m.id === current);
+    modelLabel = activeFamily?.label ?? active?.name ?? current ?? t("composer.defaultModel");
+  }
+
+  if (pickerModelOpt) {
+    // The active adapter described its own selector; preserve that provider-owned path.
+    modelRows = pickerModelOpt.choices.map((c) => ({
       key: c.id,
       label: c.name,
       detail: c.description,
-      isDefault: c.id === defaultModel,
-      selected: c.id === modelOpt.current,
-      select: () => onConfigOption(modelOpt.id, c.id),
+      isDefault: c.id === pickerDefaultModel,
+      selected: c.id === pickerModelOpt.current,
+      select: () => onConfigOption(pickerModelOpt.id, c.id),
     }));
   } else {
-    // Flat list: regroup by the effort suffix parsed out of each name.
-    const active = models.find((m) => m.id === current);
-    modelLabel = activeFamily?.label ?? active?.name ?? current ?? t("composer.defaultModel");
-    modelRows = families.map((f) => ({
+    // Flat lists from either the active runtime or another registry Provider share one projection.
+    modelRows = pickerFamilies.map((f) => ({
       key: f.key,
       label: f.label,
       detail: f.variants[0]?.choice.description,
-      isDefault: f.variants.some((v) => v.choice.id === defaultModel),
-      selected: f === activeFamily,
-      select: () => onModel(pickVariant(f, activeVariant?.effort ?? null, defaultModel).id),
+      isDefault: f.variants.some((v) => v.choice.id === pickerDefaultModel),
+      selected: f === pickerActiveFamily,
+      select: () => selectPickerModel(
+        pickVariant(f, pickerActiveVariant?.effort ?? null, pickerDefaultModel).id,
+      ),
     }));
   }
 
@@ -1022,6 +963,46 @@ export function ModelPicker({
       onToggleFavorite={() => toggleFavorite(row.key)}
     />
   );
+  const modelMenu = modelRows.length === 0 ? (
+    <p className="px-2 py-2 text-callout text-muted-foreground">
+      {t("composer.noModels")}
+    </p>
+  ) : (
+    <>
+      <SearchField
+        autoFocus
+        label={t("composer.searchModels")}
+        placeholder={t("composer.searchModels")}
+        value={modelSearch}
+        clearLabel={t("composer.clearModelSearch")}
+        onClear={() => setModelSearch("")}
+        onChange={(event) => setModelSearch(event.target.value)}
+        className="mb-1"
+      />
+      <div
+        data-model-picker-list
+        className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+      >
+        {filteredModelRows.length === 0 ? (
+          <p className="px-2 py-3 text-center text-fine text-muted-foreground">
+            {normalizedSearch ? t("composer.noMatchingModels") : t("composer.noVisibleModels")}
+          </p>
+        ) : favoriteRows.length > 0 ? (
+          <>
+            <MenuSection>{t("composer.favorites")}</MenuSection>
+            {favoriteRows.map(renderModelRow)}
+            {regularRows.length > 0 ? <MenuSection>{t("composer.model")}</MenuSection> : null}
+            {regularRows.map(renderModelRow)}
+          </>
+        ) : (
+          <>
+            <MenuSection>{t("composer.model")}</MenuSection>
+            {filteredModelRows.map(renderModelRow)}
+          </>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -1035,6 +1016,7 @@ export function ModelPicker({
         <PopoverTrigger
           render={
             <Chip
+              ref={modelTriggerRef}
               title={t("composer.model")}
               disabled={disabled}
               aria-busy={disabled}
@@ -1051,49 +1033,96 @@ export function ModelPicker({
         <PopoverContent
           align="start"
           side="top"
-          className="flex max-h-(--available-height) w-64 flex-col overflow-hidden p-1.5"
+          className={cn(
+            "flex max-h-(--available-height) overflow-hidden",
+            providerSwitcherEnabled
+              ? "w-menu-wide max-w-(--available-width) flex-col p-0"
+              : "w-64 flex-col p-1.5",
+          )}
         >
-          {modelRows.length === 0 ? (
-            <p className="px-2 py-2 text-callout text-muted-foreground">
-              {t("composer.noModels")}
-            </p>
-          ) : (
-            <>
-              <SearchField
-                autoFocus
-                label={t("composer.searchModels")}
-                placeholder={t("composer.searchModels")}
-                value={modelSearch}
-                clearLabel={t("composer.clearModelSearch")}
-                onClear={() => setModelSearch("")}
-                onChange={(event) => setModelSearch(event.target.value)}
-                className="mb-1"
-              />
+          {providerConfig ? (
+            <div data-provider-model-picker className="flex min-h-72 min-w-0 flex-1 flex-col">
               <div
-                data-model-picker-list
-                className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+                data-provider-switcher
+                role="listbox"
+                aria-label={t("config.provider")}
+                className="flex shrink-0 gap-1 overflow-x-auto overscroll-x-contain p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
-                {filteredModelRows.length === 0 ? (
-                  <p className="px-2 py-3 text-center text-fine text-muted-foreground">
-                    {normalizedSearch ? t("composer.noMatchingModels") : t("composer.noVisibleModels")}
-                  </p>
-                ) : favoriteRows.length > 0 ? (
-                  <>
-                    <MenuSection>{t("composer.favorites")}</MenuSection>
-                    {favoriteRows.map(renderModelRow)}
-                    {regularRows.length > 0 ? (
-                      <MenuSection>{t("composer.model")}</MenuSection>
-                    ) : null}
-                    {regularRows.map(renderModelRow)}
-                  </>
-                ) : (
-                  <>
-                    <MenuSection>{t("composer.model")}</MenuSection>
-                    {filteredModelRows.map(renderModelRow)}
-                  </>
-                )}
+                {providerChoices.map((candidate) => {
+                  const selected = candidate.id === pickerProvider;
+                  const unavailable = providerConfig.providersStatus === "ready" && !candidate.available;
+                  const displayName = candidate.id === "codex" ? "Codex" : candidate.display_name;
+                  return (
+                    <Button
+                      key={candidate.id}
+                      type="button"
+                      variant="selectable"
+                      size="compact"
+                      role="option"
+                      aria-label={displayName}
+                      aria-selected={selected}
+                      data-selected={selected ? "true" : "false"}
+                      disabled={unavailable}
+                      className="max-w-40 shrink-0 justify-start px-2 font-normal"
+                      onClick={() => {
+                        setModelSearch("");
+                        if (
+                          candidate.id !== provider
+                          && candidate.models.length === 0
+                          && providerConfig.providersStatus === "ready"
+                          && candidate.available
+                        ) {
+                          providerConfig.onProviderModel(candidate.id, null);
+                          setModelOpen(false);
+                          return;
+                        }
+                        setBrowseProvider(candidate.id);
+                      }}
+                    >
+                      <ProviderIcon
+                        provider={candidate.id}
+                        className={cn("size-3.5", unavailable && "opacity-40")}
+                      />
+                      <span className="truncate">{displayName}</span>
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "ml-auto size-1.5 shrink-0 rounded-full",
+                          unavailable ? "bg-border" : "bg-success",
+                        )}
+                      />
+                    </Button>
+                  );
+                })}
               </div>
-            </>
+              <Separator />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2">
+                {providerConfig.providersStatus === "loading" ? (
+                  <p role="status" className="px-2 pb-2 text-callout text-muted-foreground">
+                    {t("config.providersLoading")}
+                  </p>
+                ) : null}
+                {providerConfig.providersStatus === "error" ? (
+                  <div className="mb-1 flex items-center gap-2 rounded-control bg-fill-quiet px-module-inset py-2 text-callout">
+                    <span role="alert" className="min-w-0 flex-1 text-muted-foreground">
+                      {t("config.providersLoadFailed")}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="compact"
+                      className="shrink-0 px-0 font-medium text-foreground"
+                      onClick={providerConfig.onReloadProviders}
+                    >
+                      {t("config.retryProviders")}
+                    </Button>
+                  </div>
+                ) : null}
+                {modelMenu}
+              </div>
+            </div>
+          ) : (
+            modelMenu
           )}
         </PopoverContent>
       </Popover>
@@ -1176,7 +1205,6 @@ export function SessionControls({
     <div data-session-controls className="flex min-w-0 flex-col items-start gap-0.5">
       <div className="flex max-w-full flex-wrap items-center gap-0.5">
         {config.scenesEnabled ? <SceneChip config={config} /> : null}
-        <ProviderPicker config={config} />
         <ModelPicker
           models={models}
           current={currentModel}
@@ -1186,7 +1214,8 @@ export function SessionControls({
           configOptions={configOptions}
           onConfigOption={onConfigOption}
           hasSession={config.hasSession}
-          disabled={modelChangeDisabled}
+          providerConfig={config}
+          disabled={modelChangeDisabled || config.providerChangeDisabled}
         />
         <Tooltip>
           <TooltipTrigger
@@ -1250,8 +1279,6 @@ export function Composer({
   hero,
   docMode,
   onDocMode,
-  height,
-  onHeight,
   boundsRef,
   models,
   currentModel,
@@ -1344,16 +1371,7 @@ export function Composer({
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [boundsRef]);
-  const applied = Math.min(height, maxHeight);
-
-  const resizeHandle = useResizeHandle({
-    axis: "y",
-    direction: -1,
-    value: applied,
-    min: 72,
-    max: maxHeight,
-    onResize: onHeight,
-  });
+  const applied = Math.min(190, maxHeight);
 
   const controls = (
     <>
@@ -1616,16 +1634,6 @@ export function Composer({
               : "rounded-composer bg-card shadow-raised transition-shadow duration-feedback ease-enter focus-within:focus-ring-inset",
           )}
         >
-          {/* Grip: drag for any height, double-click for the full page. Meaningless once the
-              document owns the column, so it's hidden — but kept mounted to preserve the tree. */}
-          <div
-            className={cn("composer-grip", docMode && "hidden")}
-            aria-label={t("composer.grip")}
-            onDoubleClick={() => onDocMode(true)}
-            title={t("composer.grip")}
-            {...resizeHandle}
-          />
-
           <div
             className={cn(
               "min-h-0 overflow-y-auto",
