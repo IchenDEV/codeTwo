@@ -94,7 +94,8 @@ data path changed.
 
 ## Review and release
 
-Approval: PR creation authorized by the user's follow-up `pr`; merge pending human review.
+Approval: [PR #208](https://github.com/IchenDEV/codeTwo/pull/208) created by user authorization;
+merge pending human review.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
