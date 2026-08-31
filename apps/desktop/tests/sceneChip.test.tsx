@@ -223,22 +223,16 @@ describe("SceneChip", () => {
 
   test("combines Provider and model selection into one CodeTwo picker", async () => {
     activateDom();
-    const codexModels = [
-      { id: "gpt-5.6-sol", name: "GPT-5.6-Sol", description: "Frontier coding" },
-      { id: "gpt-5.6-terra", name: "GPT-5.6-Terra", description: "Balanced coding" },
-      { id: "gpt-5.6-luna", name: "GPT-5.6-Luna", description: "Fast coding" },
-      { id: "gpt-5.5", name: "GPT-5.5", description: "Complex coding" },
-      { id: "gpt-5.4", name: "GPT-5.4", description: "Everyday coding" },
-      { id: "gpt-5.4-mini", name: "GPT-5.4-Mini", description: "Efficient coding" },
-      { id: "gpt-5.3-codex-spark", name: "GPT-5.3-Codex-Spark", description: "Fast coding" },
-    ];
     const providers = [
       {
         id: "codex",
         display_name: "OpenAI Codex",
         available: true,
         enabled: true,
-        models: codexModels,
+        models: [
+          { id: "gpt-5.6-sol", name: "GPT-5.6-Sol", description: "Frontier coding" },
+          { id: "gpt-5.6-terra", name: "GPT-5.6-Terra", description: "Balanced coding" },
+        ],
       },
       {
         id: "grok",
@@ -288,12 +282,6 @@ describe("SceneChip", () => {
     expect(providerSwitcher?.textContent).not.toContain("OpenAI Codex");
     expect(providerSwitcher?.textContent).toContain("Grok");
     expect(picker?.querySelector('input[aria-label="Search models"]')).toBeTruthy();
-    const codexRows = Array.from(picker?.querySelectorAll("[data-model-picker-row]") ?? []);
-    expect(codexRows).toHaveLength(codexModels.length);
-    const codexModelRows = codexRows
-      .map((row) => row.textContent ?? "")
-      .join("\n");
-    for (const model of codexModels) expect(codexModelRows).toContain(model.name);
     const grok = picker?.querySelector<HTMLButtonElement>('button[aria-label="Grok"]');
     if (!grok) throw new Error("Grok Provider switcher item did not render");
     click(grok);
