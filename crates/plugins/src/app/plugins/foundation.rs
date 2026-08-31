@@ -9,7 +9,9 @@ use crate::app::service::{EventBus, Paths, ProviderService, StoreService};
 use crate::app::{json, take_args};
 use codetwo_core::host_tools::HostToolDiscovery;
 use codetwo_core::provider::default_registry;
-use codetwo_core::provider_lifecycle::{ProviderLifecycleAction, ProviderLifecycleManager};
+use codetwo_core::provider_lifecycle::{
+    ProviderLifecycleAction, ProviderLifecycleManager, ProviderRuntimeOverride,
+};
 use codetwo_core::store::Store;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
@@ -245,6 +247,11 @@ impl Plugin for ProvidersPlugin {
         struct ProviderActionArgs {
             provider: String,
         }
+        #[derive(Deserialize)]
+        struct ProviderConfigureArgs {
+            provider: String,
+            configuration: ProviderRuntimeOverride,
+        }
 
         let enabled_service = service.clone();
         let enabled_context = ctx.clone();
@@ -256,6 +263,23 @@ impl Plugin for ProvidersPlugin {
                 service
                     .lifecycle()
                     .set_enabled(&args.provider, args.enabled)
+                    .map_err(PluginError::new)?;
+                let summaries = service.summaries().await;
+                context.reload();
+                json(summaries)
+            }
+        })?;
+
+        let configured_service = service.clone();
+        let configured_context = ctx.clone();
+        ctx.command("providers.configure", move |args| {
+            let service = configured_service.clone();
+            let context = configured_context.clone();
+            async move {
+                let args: ProviderConfigureArgs = take_args(args)?;
+                service
+                    .lifecycle()
+                    .set_runtime_configuration(&args.provider, args.configuration)
                     .map_err(PluginError::new)?;
                 let summaries = service.summaries().await;
                 context.reload();

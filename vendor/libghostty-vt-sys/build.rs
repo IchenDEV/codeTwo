@@ -5,6 +5,7 @@ use std::process::Command;
 /// Pinned ghostty commit. Update this to pull a newer version.
 const GHOSTTY_REPO: &str = "https://github.com/ghostty-org/ghostty.git";
 const GHOSTTY_COMMIT: &str = "a887df42c56f6de86c0fe6da9c4eeca37931e083";
+const GHOSTTY_XCODE27_PATCH: &str = "patches/ghostty-xcode27-sdk.patch";
 
 #[derive(Clone, Copy)]
 enum LinkMode {
@@ -78,7 +79,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=HOST");
     println!("cargo:rerun-if-env-changed=DEBUG");
     println!("cargo:rerun-if-env-changed=OPT_LEVEL");
-    println!("cargo:rerun-if-changed=crates/libghostty-vt-sys/build.rs");
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed={GHOSTTY_XCODE27_PATCH}");
 
     // An explicit source override should stay authoritative even when the
     // pkg-config feature is enabled, so local Ghostty checkouts remain easy to
@@ -359,6 +361,7 @@ fn fetch_ghostty(out_dir: &Path) -> PathBuf {
         && let Ok(existing) = std::fs::read_to_string(&stamp)
         && existing.trim() == GHOSTTY_COMMIT
     {
+        apply_ghostty_xcode27_patch(&src_dir);
         return src_dir;
     }
 
@@ -386,9 +389,43 @@ fn fetch_ghostty(out_dir: &Path) -> PathBuf {
         .current_dir(&src_dir);
     run(checkout, "git checkout ghostty commit");
 
+    apply_ghostty_xcode27_patch(&src_dir);
+
     std::fs::write(&stamp, GHOSTTY_COMMIT).unwrap_or_else(|e| panic!("failed to write stamp: {e}"));
 
     src_dir
+}
+
+/// Backport Ghostty 1c861e3c4 so Zig 0.15.2 can compile libc++ against Xcode 27 SDK headers.
+/// The reverse check keeps repeated Cargo builds idempotent when OUT_DIR already has the source.
+fn apply_ghostty_xcode27_patch(src_dir: &Path) {
+    let patch = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set"))
+        .join(GHOSTTY_XCODE27_PATCH);
+    assert!(patch.exists(), "missing Ghostty compatibility patch at {}", patch.display());
+
+    let already_applied = Command::new("git")
+        .arg("apply")
+        .arg("--reverse")
+        .arg("--check")
+        .arg(&patch)
+        .current_dir(src_dir)
+        .output()
+        .unwrap_or_else(|error| panic!("failed to inspect Ghostty compatibility patch: {error}"));
+    if already_applied.status.success() {
+        return;
+    }
+
+    let mut check = Command::new("git");
+    check
+        .arg("apply")
+        .arg("--check")
+        .arg(&patch)
+        .current_dir(src_dir);
+    run(check, "check Ghostty Xcode 27 compatibility patch");
+
+    let mut apply = Command::new("git");
+    apply.arg("apply").arg(&patch).current_dir(src_dir);
+    run(apply, "apply Ghostty Xcode 27 compatibility patch");
 }
 
 fn run(mut command: Command, context: &str) {

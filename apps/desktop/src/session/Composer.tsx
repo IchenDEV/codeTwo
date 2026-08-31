@@ -18,6 +18,7 @@ import {
   Sparkles,
   SlidersHorizontal,
   Square,
+  Star,
   Store,
   Target,
   Ticket,
@@ -32,6 +33,8 @@ import { SceneChip } from "./SceneChip";
 import { SESSION_MODES, sessionMode } from "./mode";
 import { worktreeGatingReason } from "./sessionEvents";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
+import { useProviderModelFavorites } from "./modelFavorites";
+import { useProviderModelPreferences } from "./modelPreferences";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import {
@@ -52,6 +55,7 @@ import { ControlChip as Chip } from "@/components/ui/control-chip";
 import { Input } from "@/components/ui/input";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { SelectableRow } from "@/components/business/selectable-row";
+import { SearchField } from "@/components/business/search-field";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -397,6 +401,59 @@ interface PickerRow {
   isDefault: boolean;
   selected: boolean;
   select: () => void;
+}
+
+function ModelPickerRow({
+  row,
+  favorite,
+  disabled,
+  onSelect,
+  onToggleFavorite,
+}: {
+  row: PickerRow;
+  favorite: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+  onToggleFavorite: () => void;
+}) {
+  const t = useT();
+  const favoriteLabel = t(
+    favorite ? "composer.unfavoriteModel" : "composer.favoriteModel",
+    { model: row.label },
+  );
+  return (
+    <div data-model-picker-row className="flex min-w-0 items-center gap-control-group">
+      <div className="min-w-0 flex-1">
+        <SelectableRow
+          selected={row.selected}
+          label={row.label}
+          description={row.detail}
+          meta={row.isDefault ? <DefaultBadge /> : undefined}
+          disabled={disabled}
+          onSelect={onSelect}
+        />
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={favoriteLabel}
+        aria-pressed={favorite}
+        title={favoriteLabel}
+        onClick={onToggleFavorite}
+        className={cn(
+          "self-center text-muted-foreground",
+          favorite && "text-foreground",
+        )}
+      >
+        <Star
+          aria-hidden="true"
+          className="size-3.5"
+          fill={favorite ? "currentColor" : "none"}
+        />
+      </Button>
+    </div>
+  );
 }
 
 /**
@@ -918,8 +975,11 @@ export function ModelPicker({
 }) {
   const t = useT();
   const [modelOpen, setModelOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
   const [effortOpen, setEffortOpen] = useState(false);
   const families = useMemo(() => groupModels(models), [models]);
+  const { favorites, toggle: toggleFavorite } = useProviderModelFavorites(provider);
+  const { hidden: hiddenModels } = useProviderModelPreferences(provider);
   useEffect(() => {
     if (disabled) {
       setModelOpen(false);
@@ -994,9 +1054,37 @@ export function ModelPicker({
     }));
   }
 
+  const favoriteRows: PickerRow[] = [];
+  const regularRows: PickerRow[] = [];
+  const normalizedSearch = modelSearch.trim().toLocaleLowerCase();
+  const visibleModelRows = modelRows.filter((row) => row.selected || !hiddenModels.has(row.key));
+  const filteredModelRows = normalizedSearch
+    ? visibleModelRows.filter((row) => `${row.label}\n${row.key}\n${row.detail ?? ""}`.toLocaleLowerCase().includes(normalizedSearch))
+    : visibleModelRows;
+  for (const row of filteredModelRows) (favorites.has(row.key) ? favoriteRows : regularRows).push(row);
+  const renderModelRow = (row: PickerRow) => (
+    <ModelPickerRow
+      key={row.key}
+      row={row}
+      favorite={favorites.has(row.key)}
+      disabled={disabled}
+      onSelect={() => {
+        row.select();
+        setModelOpen(false);
+      }}
+      onToggleFavorite={() => toggleFavorite(row.key)}
+    />
+  );
+
   return (
     <>
-      <Popover open={modelOpen} onOpenChange={(open) => setModelOpen(disabled ? false : open)}>
+      <Popover
+        open={modelOpen}
+        onOpenChange={(open) => {
+          setModelOpen(disabled ? false : open);
+          if (!open) setModelSearch("");
+        }}
+      >
         <PopoverTrigger
           render={
             <Chip
@@ -1024,25 +1112,39 @@ export function ModelPicker({
             </p>
           ) : (
             <>
-              <MenuSection>{t("composer.model")}</MenuSection>
+              <SearchField
+                autoFocus
+                label={t("composer.searchModels")}
+                placeholder={t("composer.searchModels")}
+                value={modelSearch}
+                clearLabel={t("composer.clearModelSearch")}
+                onClear={() => setModelSearch("")}
+                onChange={(event) => setModelSearch(event.target.value)}
+                className="mb-1"
+              />
               <div
                 data-model-picker-list
                 className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
               >
-                {modelRows.map((r) => (
-                  <SelectableRow
-                    key={r.key}
-                    selected={r.selected}
-                    label={r.label}
-                    description={r.detail}
-                    meta={r.isDefault ? <DefaultBadge /> : undefined}
-                    disabled={disabled}
-                    onSelect={() => {
-                      r.select();
-                      setModelOpen(false);
-                    }}
-                  />
-                ))}
+                {filteredModelRows.length === 0 ? (
+                  <p className="px-2 py-3 text-center text-fine text-muted-foreground">
+                    {normalizedSearch ? t("composer.noMatchingModels") : t("composer.noVisibleModels")}
+                  </p>
+                ) : favoriteRows.length > 0 ? (
+                  <>
+                    <MenuSection>{t("composer.favorites")}</MenuSection>
+                    {favoriteRows.map(renderModelRow)}
+                    {regularRows.length > 0 ? (
+                      <MenuSection>{t("composer.model")}</MenuSection>
+                    ) : null}
+                    {regularRows.map(renderModelRow)}
+                  </>
+                ) : (
+                  <>
+                    <MenuSection>{t("composer.model")}</MenuSection>
+                    {filteredModelRows.map(renderModelRow)}
+                  </>
+                )}
               </div>
             </>
           )}

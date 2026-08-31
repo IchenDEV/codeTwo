@@ -2732,9 +2732,43 @@ export default function App() {
     const request = ++providerRegistryRequestRef.current;
     setProvidersStatus("loading");
     try {
-      const list = checkUpdates
+      let list = checkUpdates
         ? await listProviders(true)
         : await loadProviderRegistry(listProviders);
+      if (import.meta.env.DEV) {
+        const query = new URLSearchParams(window.location.search);
+        const fixtureProvider = query.get("mockProviderSettings");
+        if (fixtureProvider) {
+          const fixtureModels = [
+            ...new Set(
+              (query.get("mockModels") ?? "gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna")
+                .split(",")
+                .map((id) => id.trim())
+                .filter((id) => id.length > 0 && id.length <= 120),
+            ),
+          ].slice(0, 20).map((id) => ({ id, name: id, description: null }));
+          list = list.map((candidate) => candidate.id === fixtureProvider
+            ? {
+                ...candidate,
+                available: true,
+                models: fixtureModels,
+                management: {
+                  ...candidate.management,
+                  installed: true,
+                  version: "0.151.0",
+                  latest_version: "0.151.0",
+                  update_available: false,
+                  launch_mode: "installed" as const,
+                },
+                configuration: {
+                  ...candidate.configuration,
+                  effective_command: fixtureProvider === "codex" ? "codex-acp" : candidate.configuration.effective_command,
+                  effective_args: ["--stdio"],
+                },
+              }
+            : candidate);
+        }
+      }
       if (request !== providerRegistryRequestRef.current) return list;
       setProviders(list);
       setProvidersStatus("ready");
@@ -3537,11 +3571,25 @@ export default function App() {
       return;
     }
     const session = query.get("session") || "dev-context-window";
+    const requestedModels = [
+      ...new Set(
+        (query.get("mockModels") ?? "")
+          .split(",")
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0 && id.length <= 120),
+      ),
+    ].slice(0, 20);
+    const mockModels = requestedModels.length > 0
+      ? requestedModels.map((id) => ({ id, name: id, description: null }))
+      : [{ id: "dev-model", name: "Context QA", description: null }];
+    const mockModel = mockModels[0].id;
+    const mockProvider = query.get("mockProviderSettings");
+    if (mockProvider) setProvider(mockProvider);
     activeSessionRef.current = session;
-    knownModelsRef.current.set(session, "dev-model");
+    knownModelsRef.current.set(session, mockModel);
     setActiveSession(session);
-    setModels([{ id: "dev-model", name: "Context QA", description: null }]);
-    setCurrentModel("dev-model");
+    setModels(mockModels);
+    setCurrentModel(mockModel);
     setContextWindows((previous) => ({
       ...previous,
       [session]: { usedTokens, contextWindow, breakdown: null },

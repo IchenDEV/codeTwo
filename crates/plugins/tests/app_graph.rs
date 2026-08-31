@@ -110,6 +110,7 @@ async fn plugins_contribute_the_app_surface() {
         "computer_use.settings",
         "computer_use.select",
         "diagnostics.redacted_snapshot",
+        "providers.configure",
         "providers.list",
         "scenes.apply",
         "sessions.list",
@@ -202,6 +203,42 @@ async fn plugins_contribute_the_app_surface() {
     assert!(attachment["preview_data_url"]
         .as_str()
         .is_some_and(|value| value.starts_with("data:image/png;base64,")));
+}
+
+#[tokio::test]
+async fn provider_configuration_command_returns_only_safe_runtime_metadata() {
+    let (app, _dir) = boot().await;
+    let configured = app
+        .call(
+            "providers.configure",
+            json!({
+                "provider": "codex",
+                "configuration": {
+                    "display_name": "Work Codex",
+                    "command": "/opt/codex-acp",
+                    "args": ["--stdio", "--profile", "work"],
+                    "home_path": "~/work-codex",
+                    "forwarded_environment": ["CODETWO_TEST_SECRET_THAT_IS_NOT_SET"]
+                }
+            }),
+        )
+        .await
+        .expect("providers.configure");
+    let codex = configured
+        .as_array()
+        .and_then(|providers| providers.iter().find(|provider| provider["id"] == "codex"))
+        .expect("configured Codex provider");
+    assert_eq!(codex["configuration"]["display_name"], "Work Codex");
+    assert_eq!(codex["configuration"]["home_environment"], "CODEX_HOME");
+    assert_eq!(
+        codex["configuration"]["forwarded_environment"],
+        json!(["CODETWO_TEST_SECRET_THAT_IS_NOT_SET"])
+    );
+    assert_eq!(
+        codex["configuration"]["missing_environment"],
+        json!(["CODETWO_TEST_SECRET_THAT_IS_NOT_SET"])
+    );
+    assert!(codex["configuration"].get("environment_values").is_none());
 }
 
 #[tokio::test]
