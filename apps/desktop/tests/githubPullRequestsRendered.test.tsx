@@ -15,6 +15,10 @@ const { githubPullRequestReference } = await import("../src/github/pullRequests"
 const layoutSpec = JSON.parse(
   readFileSync(new URL("../layout-spec.json", import.meta.url), "utf8"),
 );
+const pullRequestCss = readFileSync(
+  new URL("../src/github/pull-requests.css", import.meta.url),
+  "utf8",
+);
 
 const mounted = [];
 let restoreCanvasContext = null;
@@ -45,7 +49,7 @@ const summary = {
   isDraft: false,
   updatedAt: "2026-08-24T10:00:00Z",
   createdAt: "2026-08-23T10:00:00Z",
-  labels: [],
+  labels: [{ name: "enhancement", color: "2f81f7" }],
   commentsCount: 2,
   authored: true,
   reviewRequested: false,
@@ -63,8 +67,8 @@ const detail = {
   state: "OPEN",
   mergeStateStatus: "CLEAN",
   mergeable: "MERGEABLE",
-  reviewDecision: "",
-  reviewers: [],
+  reviewDecision: "APPROVED",
+  reviewers: [{ login: "reviewer", state: "APPROVED" }],
   checks: [{ name: "test", status: "COMPLETED", conclusion: "SUCCESS", detailsUrl: null }],
   files: [{ path: "src/github.ts", additions: 120, deletions: 8, changeType: "MODIFIED" }],
 };
@@ -86,7 +90,7 @@ const reviewingDetail = {
 };
 
 describe("PullRequestsPage", () => {
-  test("loads real data projections, switches code view, and starts chat", async () => {
+  test("renders the PR workspace, reviews changes and checks, and starts chat", async () => {
     activateDom();
     disableCanvasDrawing();
     dom.window.localStorage.setItem("codetwo.language", "en");
@@ -112,6 +116,22 @@ describe("PullRequestsPage", () => {
       listContentLine: 32,
       listControlsOuterInset: 16,
     });
+    expect(layoutSpec.content.workbench.pullRequests).toMatchObject({
+      inspectorMinWidth: 192,
+      inspectorPreferredWidth: "23cqw",
+      inspectorMaxWidth: 256,
+      inspectorCollapseAt: 960,
+      inspectorInset: 12,
+      inspectorRadius: "modal",
+      inspectorElevation: "raised",
+    });
+    expect(pullRequestCss).toContain("@container (max-width: 60rem)");
+    expect(pullRequestCss).toContain(".pull-request-inspector");
+    expect(pullRequestCss).toContain("margin: var(--ds-space-surface-inset)");
+    expect(pullRequestCss).toContain("margin-inline-start: 0");
+    expect(pullRequestCss).toContain("border-radius: var(--ds-radius-modal)");
+    expect(pullRequestCss).toContain("box-shadow: var(--ds-elevation-raised)");
+    expect(pullRequestCss).toContain(".pull-request-secondary-action-label");
     expect(listHeader?.className).toContain("pl-page-section");
     expect(listHeader?.contains(views)).toBeFalse();
     expect(listControls?.contains(views)).toBeTrue();
@@ -125,12 +145,29 @@ describe("PullRequestsPage", () => {
     });
     expect(dom.document.body.textContent).toContain("1 checks passed");
     expect(dom.document.body.textContent).toContain("Added real pull request data");
+    const inspector = view.container.querySelector("[data-pull-request-inspector]");
+    expect(inspector?.getAttribute("aria-label")).toBe("Pull request status");
+    expect(inspector?.className).not.toContain("border-l");
+    expect(inspector?.className).not.toContain("bg-sidebar");
+    expect(inspector?.textContent).toContain("Ready to merge");
+    expect(inspector?.textContent).toContain("reviewer");
+    expect(inspector?.textContent).toContain("enhancement");
 
-    click(button(dom.document.body, "Code"));
+    click(button(dom.document.body, "Changes"));
     await flush();
     expect(dom.document.body.textContent).toContain("src/github.ts");
 
-    click(button(dom.document.body, "Chat"));
+    click(button(dom.document.body, "Checks"));
+    await flush();
+    expect(dom.document.body.textContent).toContain("test");
+    expect(dom.document.body.textContent).toContain("Passed");
+
+    click(button(dom.document.body, "Summary"));
+    click(button(dom.document.body, "Review changes"));
+    await flush();
+    expect(dom.document.body.textContent).toContain("src/github.ts");
+
+    click(button(dom.document.body, "Join conversation"));
     expect(chatted).toEqual(detail);
   });
 

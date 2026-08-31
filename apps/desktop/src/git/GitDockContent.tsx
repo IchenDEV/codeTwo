@@ -8,17 +8,19 @@ import { cn } from "@/lib/utils";
 import { GitHubPullRequestPanel } from "./GitHubPullRequestPanel";
 
 type GitDockContentProps = {
-  cwd: string | null;
   status: GitStatus | null;
-  onRefresh: () => void;
   onOpenSourceControl: () => void;
 };
 
-/** Source-control summary rendered inside the generic Dock container. */
+type PullRequestDockContentProps = {
+  cwd: string | null;
+  status: GitStatus | null;
+  onRefresh: () => void;
+};
+
+/** Working-tree summary rendered inside the generic Dock container. */
 export function GitDockContent({
-  cwd,
   status,
-  onRefresh,
   onOpenSourceControl,
 }: GitDockContentProps) {
   const t = useT();
@@ -27,55 +29,72 @@ export function GitDockContent({
     <ScrollArea className="h-full min-h-0 flex-1">
       <div className="space-y-module-inset p-4 text-metadata">
         {status?.is_repo ? (
-          <>
-            <GitHubPullRequestPanel
-              key={`${cwd ?? "."}:${status.branch}`}
-              cwd={cwd ?? "."}
-              branch={status.branch}
-              onRefreshGit={onRefresh}
-            />
+          <section className="space-y-module-inset" aria-label={t("dock.workingTree")}>
+            <div className="flex items-center gap-2">
+              <GitBranch className="size-3.5" />
+              <h3 className="text-body font-semibold">{t("dock.workingTree")}</h3>
+              <span className="min-w-0 truncate font-mono text-metadata text-muted-foreground">
+                {status.branch || "?"}
+              </span>
+              {status.ahead > 0 && <span className="text-primary">↑{status.ahead}</span>}
+              {status.behind > 0 && <span className="text-primary">↓{status.behind}</span>}
+            </div>
 
-            <section className="space-y-module-inset pt-3" aria-label={t("dock.workingTree")}>
-              <div className="flex items-center gap-2">
-                <GitBranch className="size-3.5" />
-                <h3 className="text-body font-semibold">{t("dock.workingTree")}</h3>
-                <span className="min-w-0 truncate font-mono text-metadata text-muted-foreground">
-                  {status.branch || "?"}
-                </span>
-                {status.ahead > 0 && <span className="text-primary">↑{status.ahead}</span>}
-                {status.behind > 0 && <span className="text-primary">↓{status.behind}</span>}
+            {status.files.length === 0 ? (
+              <p className="text-muted-foreground">{t("rail.clean")}</p>
+            ) : (
+              <div className="space-y-0.5">
+                {status.files.map((file) => (
+                  <div key={file.path} className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-metadata font-bold",
+                        file.staged
+                          ? "bg-success/15 text-success"
+                          : "bg-warning/15 text-warning",
+                      )}
+                      title={file.state}
+                    >
+                      {file.state.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="truncate font-mono text-callout text-muted-foreground">
+                      {file.path}
+                    </span>
+                  </div>
+                ))}
               </div>
+            )}
 
-              {status.files.length === 0 ? (
-                <p className="text-muted-foreground">{t("rail.clean")}</p>
-              ) : (
-                <div className="space-y-0.5">
-                  {status.files.map((file) => (
-                    <div key={file.path} className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-metadata font-bold",
-                          file.staged
-                            ? "bg-success/15 text-success"
-                            : "bg-warning/15 text-warning",
-                        )}
-                        title={file.state}
-                      >
-                        {file.state.charAt(0).toUpperCase()}
-                      </span>
-                      <span className="truncate font-mono text-callout text-muted-foreground">
-                        {file.path}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <Button size="sm" className="w-full" onClick={onOpenSourceControl}>
+              {t("dock.reviewCommit")}
+            </Button>
+          </section>
+        ) : (
+          <p className="text-muted-foreground">{t("rail.notARepo")}</p>
+        )}
+      </div>
+    </ScrollArea>
+  );
+}
 
-              <Button size="sm" className="w-full" onClick={onOpenSourceControl}>
-                {t("dock.reviewCommit")}
-              </Button>
-            </section>
-          </>
+/** Current-branch pull request rendered as its own conversation-side Dock surface. */
+export function PullRequestDockContent({
+  cwd,
+  status,
+  onRefresh,
+}: PullRequestDockContentProps) {
+  const t = useT();
+
+  return (
+    <ScrollArea className="h-full min-h-0 flex-1">
+      <div className="p-4 text-metadata">
+        {status?.is_repo ? (
+          <GitHubPullRequestPanel
+            key={`${cwd ?? "."}:${status.branch}`}
+            cwd={cwd ?? "."}
+            branch={status.branch}
+            onRefreshGit={onRefresh}
+          />
         ) : (
           <p className="text-muted-foreground">{t("rail.notARepo")}</p>
         )}

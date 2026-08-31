@@ -73,7 +73,7 @@ describe("Dock plugin component gate", () => {
     activateDom();
     const opened = [];
     const view = renderDock(
-      ["trajectory", "browser", "terminal", "side-chat", "files", "git"],
+      ["trajectory", "browser", "terminal", "side-chat", "files", "git", "pull-request"],
       "home",
       true,
       (surface) => opened.push(surface),
@@ -83,6 +83,7 @@ describe("Dock plugin component gate", () => {
     const cards = Array.from(view.container.querySelectorAll(".dock-surface-grid > button"));
     expect(cards[2]?.textContent).toContain("Terminal");
     expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
+    expect(cards[6]?.getAttribute("aria-label")).toBe("PR");
     expect(cards.every((card) => card.classList.contains("dock-surface-card"))).toBe(true);
     expect(cards.every((card) => card.classList.contains("bg-card"))).toBe(true);
     expect(cards.every((card) => card.classList.contains("p-3"))).toBe(true);

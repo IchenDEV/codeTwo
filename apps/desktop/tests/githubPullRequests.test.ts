@@ -4,7 +4,9 @@ import {
   filterPullRequests,
   githubPullRequestReference,
   groupPullRequests,
+  pullRequestCheckResult,
   pullRequestCheckState,
+  pullRequestMergeReadiness,
   shortPullRequestAge,
 } from "../src/github/pullRequests";
 import type { GitHubPullRequestDetail, GitHubPullRequestSummary } from "../src/bridge";
@@ -85,6 +87,17 @@ describe("GitHub pull request projections", () => {
     expect(pullRequestCheckState({ ...base, checks: [] })).toBe("none");
     expect(pullRequestCheckState({ ...base, checks: [{ name: "test", status: "IN_PROGRESS", conclusion: "", detailsUrl: null }] })).toBe("pending");
     expect(pullRequestCheckState({ ...base, checks: [{ name: "test", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: null }] })).toBe("failed");
+    expect(pullRequestCheckResult({ name: "neutral", status: "COMPLETED", conclusion: "NEUTRAL", detailsUrl: null })).toBe("passed");
+    expect(pullRequestMergeReadiness({ ...base, checks: [] })).toBe("ready");
+    expect(pullRequestMergeReadiness({ ...base, isDraft: true, checks: [] })).toBe("draft");
+    expect(pullRequestMergeReadiness({ ...base, mergeable: "CONFLICTING", checks: [] })).toBe("conflicting");
+    expect(pullRequestMergeReadiness({ ...base, state: "CLOSED", checks: [] })).toBe("closed");
+    expect(pullRequestMergeReadiness({ ...base, reviewDecision: "REVIEW_REQUIRED", checks: [] })).toBe("review_required");
+    expect(pullRequestMergeReadiness({
+      ...base,
+      reviewDecision: "CHANGES_REQUESTED",
+      checks: [],
+    })).toBe("changes_requested");
   });
 
   test("projects the stable GitHub identity stored by task links", () => {
