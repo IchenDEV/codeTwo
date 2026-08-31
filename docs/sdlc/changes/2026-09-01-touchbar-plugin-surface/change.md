@@ -111,7 +111,7 @@ Verdict: verified.
   contribution family; the Rust installer validator reports three valid contributions. Evidence:
   `bun test tests/agentSessionMonitorPluginRuntime.test.ts`, `bun run plugin:validate ../../packs/agent-session-monitor`,
   and `cargo run -p codetwo-plugins --example validate_bundle -- packs/agent-session-monitor`.
-- AC-5: PASS — `bun test` and the recorded checks covered lint, TypeScript, all 797 desktop tests, 38 Rust library/parser tests, Rust host
+- AC-5: PASS — `bun test` and the recorded checks covered lint, TypeScript, all 815 desktop tests, 38 Rust library/parser tests, Rust host
   compilation, changed-file Rust formatting, the native harness, `git diff --check`, and repository
   documentation/lifecycle/worktree Gates passed. Evidence: `bun run lint:code`, `bunx tsc --noEmit`,
   `bun test`, `cargo test -p codetwo-plugins --lib`, `cargo check -p codetwo-plugins -p codetwo-desktop-host`,
