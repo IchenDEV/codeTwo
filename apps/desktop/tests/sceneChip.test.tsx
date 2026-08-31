@@ -214,6 +214,77 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
+  test("combines Provider and model selection into one T3-style picker", async () => {
+    activateDom();
+    const providers = [
+      {
+        id: "codex",
+        display_name: "OpenAI Codex",
+        available: true,
+        enabled: true,
+        models: [
+          { id: "gpt-5.6-sol", name: "GPT-5.6-Sol", description: "Frontier coding" },
+          { id: "gpt-5.6-terra", name: "GPT-5.6-Terra", description: "Balanced coding" },
+        ],
+      },
+      {
+        id: "grok",
+        display_name: "Grok",
+        available: true,
+        enabled: true,
+        models: [{ id: "grok-4.6", name: "Grok 4.6", description: "Fast reasoning" }],
+      },
+    ];
+    const providerChanges = [];
+    const modelChanges = [];
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config({
+            hasSession: false,
+            provider: "codex",
+            providers,
+            onProvider: (provider) => providerChanges.push(provider),
+          })}
+          models={providers[0].models}
+          currentModel="gpt-5.6-sol"
+          defaultModel="gpt-5.6-sol"
+          onModel={(model) => modelChanges.push(model)}
+          configOptions={[]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    const controls = rendered.container.querySelector("[data-session-controls]");
+    expect(controls?.querySelector('button[aria-label^="Provider:"]')).toBeNull();
+    const trigger = controls?.querySelector<HTMLButtonElement>('button[title="Model"]');
+    expect(trigger?.textContent).toContain("GPT-5.6-Sol");
+    if (!trigger) throw new Error("combined Provider/model trigger did not render");
+    click(trigger);
+    await flush();
+
+    const picker = dom.document.body.querySelector("[data-provider-model-picker]");
+    expect(picker).toBeTruthy();
+    expect(picker?.querySelector("[data-provider-rail]")).toBeTruthy();
+    expect(picker?.querySelector('input[aria-label="Search models"]')).toBeTruthy();
+    const grok = picker?.querySelector<HTMLButtonElement>('button[aria-label="Grok"]');
+    if (!grok) throw new Error("Grok Provider rail item did not render");
+    click(grok);
+    await flush();
+
+    expect(providerChanges).toEqual(["grok"]);
+    const grokModel = Array.from(
+      picker?.querySelectorAll<HTMLButtonElement>('[data-model-picker-row] [data-slot="selectable-row"]') ?? [],
+    ).find((row) => row.textContent?.includes("Grok 4.6"));
+    if (!grokModel) throw new Error("Grok model did not render after switching Provider");
+    click(grokModel);
+    await flush();
+    expect(modelChanges).toEqual(["grok-4.6"]);
+
+    rendered.unmount();
+  });
+
   test("does not duplicate the worktree control when the checkout bar owns it", async () => {
     activateDom();
     const rendered = mount(

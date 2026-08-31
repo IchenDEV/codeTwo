@@ -1931,11 +1931,12 @@ impl Store {
         Ok(())
     }
 
-    /// The most recent text in each session, for the rail's preview line.
+    /// The most recent Agent text in each session, for the rail's preview line.
     ///
     /// One query for every session rather than one per row: the rail redraws on every event, and a
     /// query per visible session would put the transcript table in the hot path of streaming.
-    /// Non-text parts (tool calls, plans) are skipped — "ran a command" is not a conversation.
+    /// User prompts and non-text parts (tool calls, plans) are skipped — the preview answers
+    /// "what did the AI say?", rather than echoing the Task title or the user's latest question.
     pub fn last_texts(&self) -> Result<Vec<(String, String)>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -1944,7 +1945,8 @@ impl Store {
              WHERE p.seq = (
                SELECT MAX(q.seq) FROM parts q
                WHERE q.session_id = p.session_id
-                 AND json_extract(q.part_json,'$.kind') IN ('text','prompt')
+                 AND q.role='\"agent\"'
+                 AND json_extract(q.part_json,'$.kind')='text'
              )",
         )?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
@@ -4220,7 +4222,7 @@ mod tests {
     }
 
     #[test]
-    fn last_texts_returns_the_newest_text_per_session() {
+    fn last_texts_returns_the_newest_agent_text_per_session() {
         let store = Store::open_in_memory().unwrap();
         let a = Session::new(ProviderId::Grok, "/a");
         store.upsert_session(&a).unwrap();
@@ -4243,6 +4245,17 @@ mod tests {
                 },
             )
             .unwrap();
+        // A newer user prompt must not replace the latest AI reply in the sidebar.
+        store
+            .append_part(
+                &a.id,
+                Role::User,
+                &Part::Prompt {
+                    text: "latest user question".into(),
+                    display: "latest user question".into(),
+                },
+            )
+            .unwrap();
         // A tool call lands last, but "ran a command" is not a conversation preview.
         store
             .append_part(
@@ -4262,7 +4275,8 @@ mod tests {
         let previews = store.last_texts().unwrap();
         assert_eq!(previews.len(), 1);
         assert_eq!(previews[0].0, a.id);
-        // Whitespace is flattened so a multi-line answer stays one line in the rail.
+        // Whitespace is flattened so a multi-line answer stays one line in the rail, and the
+        // later user prompt does not replace the newest AI reply.
         assert_eq!(previews[0].1, "second answer");
     }
 
@@ -4389,6 +4403,15 @@ mod tests {
                 },
             )
             .unwrap();
+        store
+            .append_part(
+                &durable.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "durable preview".into(),
+                },
+            )
+            .unwrap();
         for index in 0..3 {
             store
                 .append_part(
@@ -4397,6 +4420,15 @@ mod tests {
                     &Part::Prompt {
                         text: format!("unified plugin kernel {index}"),
                         display: "transient preview".into(),
+                    },
+                )
+                .unwrap();
+            store
+                .append_part(
+                    &transient.id,
+                    Role::Agent,
+                    &Part::Text {
+                        text: "transient preview".into(),
                     },
                 )
                 .unwrap();

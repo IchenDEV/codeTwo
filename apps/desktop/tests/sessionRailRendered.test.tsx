@@ -3,6 +3,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { activateDom, click, dom, mount, restoreDom, waitFor } from "./domTestHarness";
 
 activateDom();
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+globalThis.IntersectionObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 const { I18nProvider } = await import("../src/i18n");
 const { SessionRail } = await import("../src/sidebar/SessionRail");
 const { SIDEBAR_SECTIONS_STORAGE_KEY } = await import("../src/sidebar/sidebarSections");
@@ -99,25 +109,6 @@ function renderRail(overrides = {}) {
       </ToastProvider>
     </I18nProvider>,
   );
-}
-
-function dragAndDrop(source: Element, target: Element) {
-  const values = new Map<string, string>();
-  const dataTransfer = {
-    effectAllowed: "none",
-    dropEffect: "none",
-    setData: (type: string, value: string) => values.set(type, value),
-    getData: (type: string) => values.get(type) ?? "",
-  };
-  const dispatch = (node: Element, type: string) => {
-    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
-    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
-    node.dispatchEvent(event);
-  };
-  dispatch(source, "dragstart");
-  dispatch(target, "dragover");
-  dispatch(target, "drop");
-  dispatch(source, "dragend");
 }
 
 describe("SessionRail row layout", () => {
@@ -262,7 +253,25 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("applies direct drag ordering to Tasks and Projects", async () => {
+  test("keeps Project rows collapsible without a trailing disclosure icon", async () => {
+    activateDom();
+    const view = renderRail();
+    const toggle = view.container.querySelector('[data-project-toggle="/tmp/repo"]');
+
+    expect(toggle?.querySelectorAll("svg")).toHaveLength(1);
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.querySelector('[data-project-content="/tmp/repo"]')).toBeTruthy();
+
+    click(toggle);
+    await waitFor(() => {
+      expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+      expect(view.container.querySelector('[data-project-content="/tmp/repo"]')).toBeNull();
+    });
+
+    view.unmount();
+  });
+
+  test("exposes dnd-kit keyboard guidance without native HTML5 drag attributes", async () => {
     activateDom();
     const first = { ...session("first", "First task"), last_active_at: 300 };
     const second = { ...session("second", "Second task"), last_active_at: 200 };
@@ -276,28 +285,27 @@ describe("SessionRail row layout", () => {
       previews: {},
     });
 
-    dragAndDrop(
-      view.container.querySelector('[data-session-id="second"] [data-session-drag-handle]'),
-      view.container.querySelector('[data-session-id="first"]'),
+    const secondButton = view.container.querySelector<HTMLElement>(
+      '[data-session-id="second"] [data-session-select]',
     );
-    await waitFor(() => {
-      expect(Array.from(view.container.querySelectorAll(
-        '[data-project-content="/tmp/repo"] [data-session-id]',
-      )).map((row) => row.getAttribute("data-session-id"))).toEqual(["second", "first"]);
-    });
+    if (!secondButton) throw new Error("missing Task drag fixture");
 
-    dragAndDrop(
-      view.container.querySelector('[data-project-drag-handle="/tmp/repo"]'),
-      view.container.querySelector('[data-project-header="/tmp/other"]'),
+    const repoButton = view.container.querySelector<HTMLElement>(
+      '[data-project-toggle="/tmp/repo"]',
     );
+    if (!repoButton) throw new Error("missing Project drag fixture");
+
     await waitFor(() => {
-      expect(Array.from(view.container.querySelectorAll('[data-project-list="root"] > [data-project-group]'))
-        .map((group) => group.getAttribute("data-project-group")))
-        .toEqual(["/tmp/repo", "/tmp/other"]);
+      expect(repoButton.getAttribute("aria-roledescription")).toBe("draggable");
+      expect(secondButton.getAttribute("aria-roledescription")).toBe("draggable");
     });
-    expect(view.container.querySelector(
-      '[data-session-id="second"] [data-session-drag-handle]',
-    )?.getAttribute("draggable")).toBe("true");
+    expect(repoButton.getAttribute("draggable")).toBeNull();
+    expect(secondButton.getAttribute("draggable")).toBeNull();
+    expect(view.container.querySelector("[draggable=true]")).toBeNull();
+    const description = dom.document.getElementById(
+      repoButton.getAttribute("aria-describedby") ?? "",
+    );
+    expect(description?.textContent).toContain("use the arrow keys");
     expect(view.container.querySelector(
       '[data-session-id="second"] [data-session-drag-handle] svg',
     )?.getAttribute("class")).toContain("pointer-events-none");
@@ -386,6 +394,18 @@ describe("SessionRail row layout", () => {
 
     click(search);
     expect(opened).toEqual(["search"]);
+
+    view.unmount();
+  });
+
+  test("lets the search launcher stretch between equal rail insets without overflowing", () => {
+    activateDom();
+    const view = renderRail();
+    const search = view.container.querySelector("[data-rail-search]");
+
+    expect(search?.classList.contains("mx-2")).toBe(true);
+    expect(search?.classList.contains("w-auto")).toBe(true);
+    expect(search?.classList.contains("w-full")).toBe(false);
 
     view.unmount();
   });
@@ -592,20 +612,21 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("shows a recent conversation between the title and workspace only when it is useful", () => {
+  test("shows a recent AI reply between the title and workspace when it is useful", () => {
     activateDom();
     const view = renderRail();
     const punctuation = view.container.querySelector('[data-session-id="punctuation"]');
     const meaningful = view.container.querySelector('[data-session-id="meaningful"]');
 
-    expect(punctuation?.querySelectorAll("[data-session-line]")).toHaveLength(2);
+    expect(punctuation?.querySelectorAll("[data-session-line]")).toHaveLength(3);
     expect(punctuation?.querySelector('[data-session-line="preview"]')).toBeNull();
+    expect(punctuation?.querySelector("[data-session-preview]")).toBeNull();
     expect(punctuation?.getAttribute("title")).toBeNull();
 
     expect(meaningful?.querySelectorAll("[data-session-line]")).toHaveLength(3);
-    expect(meaningful?.querySelector('[data-session-line="preview"]')?.textContent)
+    expect(meaningful?.querySelector("[data-session-preview]")?.textContent)
       .toBe("A useful preview");
-    expect(meaningful?.querySelector('[data-session-line="preview"]')?.className)
+    expect(meaningful?.querySelector("[data-session-preview]")?.className)
       .toContain("truncate");
     expect(meaningful?.querySelector("[data-session-select]")?.getAttribute("aria-describedby"))
       .toBe("session-preview-meaningful");
@@ -618,7 +639,9 @@ describe("SessionRail row layout", () => {
       expect(workspace?.firstElementChild?.textContent).toBe("");
       expect(workspace?.querySelector('[data-session-checkout-kind="checkout"]')).toBeTruthy();
       expect(workspace?.querySelector("svg")).toBeTruthy();
-      expect(row?.querySelector('[data-session-line="provider"]')).toBeNull();
+      expect(row?.querySelector('[data-session-line="summary"]')).toBeTruthy();
+      expect(row?.querySelector('[data-session-provider="codex"] svg')).toBeTruthy();
+      expect(row?.querySelector("[data-session-age]")).toBeTruthy();
       expect(row?.querySelector("[data-session-status]")).toBeNull();
       expect(row?.querySelector("[data-session-actions]")?.className).toContain("hidden");
       expect(row?.querySelector("[data-session-actions]")?.className).toContain("group-hover:flex");
@@ -627,12 +650,12 @@ describe("SessionRail row layout", () => {
 
     const meaningfulLines = Array.from(meaningful?.querySelectorAll("[data-session-line]") ?? [])
       .map((line) => line.getAttribute("data-session-line"));
-    expect(meaningfulLines).toEqual(["title", "preview", "workspace"]);
+    expect(meaningfulLines).toEqual(["title", "summary", "workspace"]);
 
     view.unmount();
   });
 
-  test("keeps provider identity accessible without adding provider branding to the row", () => {
+  test("keeps provider identity accessible and shows its compact mark", () => {
     activateDom();
     const openCodeSession = { ...session("opencode", "OpenCode task"), provider: "opencode2" };
     const view = renderRail({
@@ -643,10 +666,40 @@ describe("SessionRail row layout", () => {
     });
     const row = view.container.querySelector('[data-session-id="opencode"]');
 
-    expect(row?.textContent).not.toContain("OpenCode 2 (Beta)");
+    expect(row?.querySelector('[data-session-provider="opencode2"]')?.getAttribute("title"))
+      .toBe("OpenCode 2 (Beta)");
+    expect(row?.querySelector('[data-session-provider="opencode2"] svg')?.getAttribute("viewBox"))
+      .toBe("96 96 320 320");
     expect(row?.querySelector("[data-session-select]")?.getAttribute("aria-label"))
       .toContain("OpenCode 2 (Beta)");
-    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(2);
+    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(3);
+
+    view.unmount();
+  });
+
+  test("shows the latest AI reply, Provider mark, and relative age on the second line", () => {
+    activateDom();
+    const recent = {
+      ...session("recent", "Recent task"),
+      provider: "opencode2",
+      created_at: Date.now() - 5 * 60_000,
+      last_active_at: Date.now() - 5 * 60_000,
+    };
+    const view = renderRail({
+      sessions: [recent],
+      activeSession: recent.id,
+      previews: { recent: "The newest AI reply" },
+      displayProvider: () => "OpenCode 2 (Beta)",
+    });
+    const row = view.container.querySelector('[data-session-id="recent"]');
+    const lines = Array.from(row?.querySelectorAll("[data-session-line]") ?? []);
+    const summary = row?.querySelector('[data-session-line="summary"]');
+
+    expect(lines[0]?.getAttribute("data-session-line")).toBe("title");
+    expect(lines[1]?.getAttribute("data-session-line")).toBe("summary");
+    expect(summary?.textContent).toContain("The newest AI reply");
+    expect(summary?.querySelector("svg")?.getAttribute("viewBox")).toBe("96 96 320 320");
+    expect(summary?.querySelector("time")?.textContent).toBe("5m");
 
     view.unmount();
   });
@@ -714,18 +767,20 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("omits previews that merely restate the session title", () => {
+  test("omits punctuation-only previews without dropping Provider and age metadata", () => {
     activateDom();
     const view = renderRail({
       sessions: [session("echo", "Paste support")],
-      previews: { echo: "Paste support" },
+      previews: { echo: " · " },
       activeSession: "echo",
     });
     const row = view.container.querySelector('[data-session-id="echo"]');
 
-    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(2);
+    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(3);
     expect(row?.querySelector('[data-session-line="preview"]')).toBeNull();
     expect(row?.querySelector("#session-preview-echo")).toBeNull();
+    expect(row?.querySelector('[data-session-provider="codex"] svg')).toBeTruthy();
+    expect(row?.querySelector("[data-session-age]")).toBeTruthy();
     expect(row?.querySelector("[data-session-select]")?.getAttribute("aria-describedby")).toBeNull();
     expect(row?.getAttribute("title")).toBeNull();
 

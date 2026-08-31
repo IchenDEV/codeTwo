@@ -72,6 +72,94 @@ describe("PaneTiles", () => {
     rendered.unmount();
   });
 
+  test("animates only newly split panes from their placement edge", async () => {
+    const pane = (paneId: string) => <div>{paneId}</div>;
+    let layout = singlePaneLayout("p1");
+    const rendered = mount(
+      <PaneTiles
+        layout={layout}
+        renderPane={pane}
+        onFocusPane={() => {}}
+        onResizeSplit={() => {}}
+      />,
+    );
+    await flush();
+
+    const initialPane = rendered.container.querySelector("[data-pane-id='p1']")!;
+    expect(initialPane.hasAttribute("data-pane-entrance")).toBe(false);
+
+    layout = splitPane(layout, "p1", "row", "after", "p2");
+    rendered.rerender(
+      <PaneTiles
+        layout={layout}
+        renderPane={pane}
+        onFocusPane={() => {}}
+        onResizeSplit={() => {}}
+      />,
+    );
+    await flush();
+
+    const rightPane = rendered.container.querySelector("[data-pane-id='p2']")!;
+    expect(rightPane.getAttribute("data-pane-entrance")).toBe("right");
+    expect(rightPane.classList.contains("pane-tile-enter-right")).toBe(true);
+    expect(initialPane.classList.contains("pane-tile-enter")).toBe(false);
+
+    rendered.rerender(
+      <PaneTiles
+        layout={layout}
+        renderPane={pane}
+        onFocusPane={() => {}}
+        onResizeSplit={() => {}}
+      />,
+    );
+    await flush();
+    expect(rendered.container.querySelector("[data-pane-id='p2']")).toBe(rightPane);
+    expect(rightPane.classList.contains("pane-tile-enter-right")).toBe(true);
+
+    layout = splitPane(layout, "p2", "col", "after", "p3");
+    rendered.rerender(
+      <PaneTiles
+        layout={layout}
+        renderPane={pane}
+        onFocusPane={() => {}}
+        onResizeSplit={() => {}}
+      />,
+    );
+    await flush();
+    const bottomPane = rendered.container.querySelector("[data-pane-id='p3']")!;
+    expect(bottomPane.getAttribute("data-pane-entrance")).toBe("bottom");
+    expect(bottomPane.classList.contains("pane-tile-enter-bottom")).toBe(true);
+
+    layout = splitPane(layout, "p1", "row", "before", "p4");
+    rendered.rerender(
+      <PaneTiles
+        layout={layout}
+        renderPane={pane}
+        onFocusPane={() => {}}
+        onResizeSplit={() => {}}
+      />,
+    );
+    await flush();
+    expect(
+      rendered.container.querySelector("[data-pane-id='p4']")?.getAttribute("data-pane-entrance"),
+    ).toBe("left");
+
+    layout = splitPane(layout, "p1", "col", "before", "p5");
+    rendered.rerender(
+      <PaneTiles
+        layout={layout}
+        renderPane={pane}
+        onFocusPane={() => {}}
+        onResizeSplit={() => {}}
+      />,
+    );
+    await flush();
+    expect(
+      rendered.container.querySelector("[data-pane-id='p5']")?.getAttribute("data-pane-entrance"),
+    ).toBe("top");
+    rendered.unmount();
+  });
+
   test("renders a resize handle per split", async () => {
     const rendered = mount(
       <PaneTiles

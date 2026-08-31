@@ -9,11 +9,24 @@ import {
   computeDividers,
   computePaneRects,
   listPanes,
+  type PaneEdge,
   type PaneLayout,
+  type PaneNode,
 } from "./paneLayout";
 import { PaneDivider } from "./PaneDivider";
 
 const percent = (value: number): string => `${value * 100}%`;
+
+function paneEntranceEdge(node: PaneNode, paneId: string): PaneEdge | null {
+  if (node.kind === "leaf") return null;
+  if (node.a.kind === "leaf" && node.a.id === paneId) {
+    return node.direction === "row" ? "left" : "top";
+  }
+  if (node.b.kind === "leaf" && node.b.id === paneId) {
+    return node.direction === "row" ? "right" : "bottom";
+  }
+  return paneEntranceEdge(node.a, paneId) ?? paneEntranceEdge(node.b, paneId);
+}
 
 export interface PaneTilesProps {
   layout: PaneLayout;
@@ -41,6 +54,18 @@ export function PaneTiles({
   const paneIds = listPanes(layout.root);
   const rects = computePaneRects(layout.root);
   const dividers = computeDividers(layout.root);
+  const knownPaneIdsRef = useRef(new Set(paneIds));
+  const entranceEdgesRef = useRef(new Map<string, PaneEdge>());
+  const currentPaneIds = new Set(paneIds);
+  for (const paneId of paneIds) {
+    if (knownPaneIdsRef.current.has(paneId)) continue;
+    const edge = paneEntranceEdge(layout.root, paneId);
+    if (edge) entranceEdgesRef.current.set(paneId, edge);
+  }
+  for (const paneId of entranceEdgesRef.current.keys()) {
+    if (!currentPaneIds.has(paneId)) entranceEdgesRef.current.delete(paneId);
+  }
+  knownPaneIdsRef.current = currentPaneIds;
   // A lone pane fills the workspace, so a focus ring would just outline the whole column; only
   // show it once tiling actually splits the space.
   const multiPane = paneIds.length > 1;
@@ -54,6 +79,7 @@ export function PaneTiles({
         const rect = rects.get(paneId);
         if (!rect) return null;
         const focused = paneId === layout.focused;
+        const entranceEdge = entranceEdgesRef.current.get(paneId);
         const style: CSSProperties = {
           position: "absolute",
           left: percent(rect.x),
@@ -66,8 +92,11 @@ export function PaneTiles({
             key={paneId}
             data-pane-id={paneId}
             data-focused={focused || undefined}
+            data-pane-entrance={entranceEdge}
             className={cn(
               "overflow-hidden",
+              entranceEdge && "pane-tile-enter",
+              entranceEdge && `pane-tile-enter-${entranceEdge}`,
               focused && multiPane && "outline outline-1 -outline-offset-1 outline-ring",
             )}
             style={style}
