@@ -144,6 +144,7 @@ user-authored prompt text.
 
 ## Review and release
 
+Review: [pull request #209](https://github.com/IchenDEV/codeTwo/pull/209).
 Approval: local implementation and verification authorized; human review remains pending.
 Release target: none.
 Release identity: not applicable until released.
