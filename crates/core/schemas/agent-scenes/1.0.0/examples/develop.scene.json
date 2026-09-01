@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "title": "Develop",
   "description": "Plan-first implementation in an isolated worktree, producing a plan and a change summary.",
-  "icon": "🛠️",
   "localizations": {
     "zh-CN": { "title": "开发", "description": "在隔离 worktree 中计划先行地实现，产出计划与变更摘要。" }
   },

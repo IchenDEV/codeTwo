@@ -42,6 +42,11 @@ fn all_six_fixtures_load() {
     );
     assert_eq!(lib.pipelines().len(), 1);
     assert_eq!(lib.pipelines()[0].pipeline.name, "rnd-lifecycle");
+    assert!(lib.scenes().iter().all(|entry| entry.scene.icon.is_none()));
+    assert!(lib
+        .pipelines()
+        .iter()
+        .all(|entry| entry.pipeline.icon.is_none()));
 }
 
 #[test]

@@ -15,6 +15,7 @@ import {
 } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Check } from "@/components/ui/icons";
 import { StatusIndicator } from "@/components/business/status-indicator";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -305,7 +306,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 <div className="break-all rounded-control bg-fill-rest px-3 py-2 font-mono text-metadata">{link.url}</div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" disabled={linkBusy} onClick={() => void copy()}>
-                    {copied ? "Copied ✓" : "Copy link"}
+                    {copied ? <><Check data-icon="inline-start" aria-hidden />Copied</> : "Copy link"}
                   </Button>
                   <Button
                     variant="outline"
