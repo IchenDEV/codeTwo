@@ -6,6 +6,7 @@ import type { DocBlock } from "../bridge";
 import type { SceneSlotDef } from "../session/scene";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Sparkles } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -436,10 +437,12 @@ export function SlotCardView({
       onKeyDown={onKeyDown}
     >
       <div className="flex items-center gap-1.5 pb-2">
-        {block.props.icon && (
+        {block.props.icon.trim() && block.props.icon !== "✦" ? (
           <span className="shrink-0 text-body" aria-hidden>
             {block.props.icon}
           </span>
+        ) : (
+          <Sparkles className="size-3.5 shrink-0" aria-hidden />
         )}
         <span className="min-w-0 flex-1 truncate text-body font-medium text-foreground">
           {block.props.title}

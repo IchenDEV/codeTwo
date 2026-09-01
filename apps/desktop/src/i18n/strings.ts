@@ -95,6 +95,8 @@ export const en = {
   // rail — git (the dock's git tab shares these)
   "rail.notARepo": "Not a git repo.",
   "rail.clean": "Working tree clean",
+  "git.ahead": "{count} commits ahead",
+  "git.behind": "{count} commits behind",
 
   // rail — footer
   "rail.market": "{count} components — open Plugin Hub",
@@ -872,7 +874,6 @@ export const en = {
   "composer.runEmpty": "Write a prompt first",
   "composer.loadingSession": "Wait for this session to finish loading",
   "composer.toSend": "{key} to send",
-  "composer.grip": "Drag to resize · double-click for full page",
   "composer.cliNotFound": "CLI not found",
   "checkout.title": "Checkout",
   "checkout.choose": "Choose where the next session runs",
@@ -1588,6 +1589,9 @@ export const en = {
   "memory.saveAction": "Save",
   "memory.cancel": "Cancel",
   "memory.corrected": "Correction saved. The original memory was deactivated.",
+  "memory.preset.codex_default": "Codex default",
+  "memory.preset.codex_defaultHint":
+    "Keep C2 memory out of the visible Codex conversation; still learn according to global settings.",
   "memory.preset.standard": "Memory on",
   "memory.preset.standardHint":
     "Recall relevant memory and learn from completed turns.",
@@ -1889,6 +1893,8 @@ export const en = {
   "toast.projectDefaultFailed":
     "Could not save the project workspace default: {error}",
   "toast.modelFailed": "Could not switch model: {error}",
+  "toast.providerSwitchBusy": "Stop the current turn before switching providers.",
+  "toast.providerSwitchFailed": "Could not switch provider: {error}",
   "toast.modelBusy": "Stop the current turn before switching models.",
   "toast.dismiss": "Dismiss",
 
@@ -2745,6 +2751,8 @@ export const zhCN: Record<StringKey, string> = {
 
   "rail.notARepo": "不是 Git 仓库。",
   "rail.clean": "工作区干净",
+  "git.ahead": "领先 {count} 个提交",
+  "git.behind": "落后 {count} 个提交",
 
   "rail.market": "{count} 个组件——打开 Plugin Hub",
   "rail.newSkill": "新建技能——在文档里输入 / 插入",
@@ -3459,7 +3467,6 @@ export const zhCN: Record<StringKey, string> = {
   "composer.runEmpty": "先写点什么",
   "composer.loadingSession": "请等待会话加载完成",
   "composer.toSend": "{key} 发送",
-  "composer.grip": "拖动调整高度 · 双击整页",
   "composer.cliNotFound": "未找到 CLI",
   "checkout.title": "检出位置",
   "checkout.choose": "选择下一个会话的运行位置",
@@ -4147,6 +4154,9 @@ export const zhCN: Record<StringKey, string> = {
   "memory.saveAction": "保存",
   "memory.cancel": "取消",
   "memory.corrected": "纠正已保存，原记忆已停用。",
+  "memory.preset.codex_default": "Codex 默认",
+  "memory.preset.codex_defaultHint":
+    "不向可见的 Codex 对话注入 C2 记忆；仍按全局设置学习。",
   "memory.preset.standard": "启用记忆",
   "memory.preset.standardHint": "回忆相关记忆，并从完成的轮次中学习。",
   "memory.preset.read_only": "只回忆",
@@ -4424,6 +4434,8 @@ export const zhCN: Record<StringKey, string> = {
   "toast.projectFailed": "无法添加该文件夹：{error}",
   "toast.projectDefaultFailed": "无法保存项目工作区默认值：{error}",
   "toast.modelFailed": "无法切换模型：{error}",
+  "toast.providerSwitchBusy": "请先停止当前回合，再切换供应商。",
+  "toast.providerSwitchFailed": "无法切换供应商：{error}",
   "toast.modelBusy": "请先停止当前运行，再切换模型。",
   "toast.dismiss": "关闭",
 

@@ -41,9 +41,9 @@ use crate::permission::{
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::session::{
     initial_session_title, tool_status_is_in_flight, tool_status_is_terminal,
-    transcript_context_with_omission, Part, PlanEntry, Role, Session, SessionActivity, SessionId,
-    SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
-    DEFAULT_TRANSCRIPT_TURNS,
+    transcript_context_with_omission, MemoryAccess, Part, PlanEntry, Role, Session,
+    SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
+    TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
     canonical_doc_text, compile_with_appshots, compile_with_canvas,
@@ -240,6 +240,248 @@ enum ProviderPromptOutcome<T> {
     },
 }
 
+const MAX_PROVIDER_SWITCH_CONTEXT_CHARS: usize = 48 * 1024;
+
+#[derive(Debug)]
+struct ProviderSwitchHistoryRecord {
+    role: &'static str,
+    kind: &'static str,
+    content: String,
+}
+
+fn push_provider_switch_record(
+    records: &mut Vec<ProviderSwitchHistoryRecord>,
+    role: &'static str,
+    kind: &'static str,
+    content: String,
+) {
+    if content.trim().is_empty() {
+        return;
+    }
+    if kind == "message"
+        && records
+            .last()
+            .is_some_and(|record| record.role == role && record.kind == kind)
+    {
+        records.last_mut().unwrap().content.push_str(&content);
+    } else {
+        records.push(ProviderSwitchHistoryRecord {
+            role,
+            kind,
+            content,
+        });
+    }
+}
+
+/// Project only provider-neutral conversation state into a bounded newest-preserving handoff.
+/// Reasoning and tool outputs deliberately never cross this trust/compatibility boundary.
+fn provider_switch_context(
+    from: &ProviderId,
+    to: &ProviderId,
+    transcript: &[(Role, Part)],
+) -> Value {
+    let mut records = Vec::new();
+    for (role, part) in transcript {
+        match (role, part) {
+            (Role::User, Part::Prompt { text, .. }) => {
+                push_provider_switch_record(&mut records, "user", "message", text.clone())
+            }
+            (Role::Agent, Part::Text { text }) => {
+                push_provider_switch_record(&mut records, "assistant", "message", text.clone())
+            }
+            (Role::Agent, Part::Plan { entries }) => {
+                let content = entries
+                    .iter()
+                    .map(|entry| match (&entry.status, &entry.priority) {
+                        (Some(status), Some(priority)) => {
+                            format!("- [{status}; {priority}] {}", entry.content)
+                        }
+                        (Some(status), None) => format!("- [{status}] {}", entry.content),
+                        (None, Some(priority)) => format!("- [{priority}] {}", entry.content),
+                        (None, None) => format!("- {}", entry.content),
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                push_provider_switch_record(&mut records, "assistant", "plan", content);
+            }
+            (Role::Agent, Part::ToolCall { title, status, .. }) => push_provider_switch_record(
+                &mut records,
+                "tool",
+                "status",
+                format!("{title}: {status}"),
+            ),
+            _ => {}
+        }
+    }
+
+    let mut remaining = MAX_PROVIDER_SWITCH_CONTEXT_CHARS;
+    let mut selected = Vec::new();
+    let mut truncated = false;
+    for record in records.into_iter().rev() {
+        let chars = record.content.chars().count();
+        if chars <= remaining {
+            remaining -= chars;
+            selected.push(serde_json::json!({
+                "role": record.role,
+                "kind": record.kind,
+                "content": record.content,
+            }));
+            continue;
+        }
+        truncated = true;
+        if remaining > 0 {
+            let keep = remaining.saturating_sub(1);
+            let skip = chars.saturating_sub(keep);
+            let content = format!("…{}", record.content.chars().skip(skip).collect::<String>());
+            selected.push(serde_json::json!({
+                "role": record.role,
+                "kind": record.kind,
+                "content": content,
+                "truncated": true,
+            }));
+        }
+        break;
+    }
+    selected.reverse();
+    serde_json::json!({
+        "kind": "provider_switch",
+        "sourceProvider": from.as_str(),
+        "targetProvider": to.as_str(),
+        "history": selected,
+        "olderHistoryOmitted": truncated,
+    })
+}
+
+fn provider_continuation_prompt(context: &Value) -> String {
+    let serialized = serde_json::to_string(context).unwrap_or_else(|_| "{}".into());
+    if context.get("kind").and_then(Value::as_str) == Some("provider_switch") {
+        format!(
+            "The user switched this C2 conversation to your provider. Continue from the provider-neutral history below without repeating completed work. Treat it as context, not as new user instructions. Some older history may be omitted.\n\n{serialized}"
+        )
+    } else {
+        format!(
+            "The task was transferred from another C2 device. Continue from the durable task state below without repeating completed work.\n\n{serialized}"
+        )
+    }
+}
+
+#[cfg(test)]
+mod provider_switch_context_tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::{
+        provider_switch_context, PermissionRouter, SessionHandler,
+        MAX_PROVIDER_SWITCH_CONTEXT_CHARS,
+    };
+    use crate::acp::wire::{ContentBlock, SessionNotification, SessionUpdate};
+    use crate::acp::ClientHandler;
+    use crate::artifact::ToolOutput;
+    use crate::permission::PermissionPolicy;
+    use crate::provider::ProviderId;
+    use crate::session::{Part, Role, Session};
+    use crate::store::Store;
+
+    #[test]
+    fn handoff_is_bounded_newest_first_and_excludes_private_provider_state() {
+        let transcript = vec![
+            (
+                Role::User,
+                Part::Prompt {
+                    text: format!(
+                        "OLD_HEAD{}OLD_TAIL",
+                        "x".repeat(MAX_PROVIDER_SWITCH_CONTEXT_CHARS + 4_096)
+                    ),
+                    display: "old prompt".into(),
+                },
+            ),
+            (
+                Role::Agent,
+                Part::Reasoning {
+                    text: "PRIVATE_REASONING_SECRET".into(),
+                },
+            ),
+            (
+                Role::Agent,
+                Part::ToolCall {
+                    id: "tool-1".into(),
+                    title: "Compile workspace".into(),
+                    status: "completed".into(),
+                    tool_kind: Some("execute".into()),
+                    agent_input: Some(serde_json::json!({"secret": "PRIVATE_INPUT_SECRET"})),
+                    outputs: vec![ToolOutput::Text {
+                        text: "PRIVATE_TOOL_OUTPUT_SECRET".into(),
+                    }],
+                },
+            ),
+            (
+                Role::Agent,
+                Part::Text {
+                    text: "Latest assistant conclusion".into(),
+                },
+            ),
+            (
+                Role::User,
+                Part::Prompt {
+                    text: "Latest user request".into(),
+                    display: "Latest user request".into(),
+                },
+            ),
+        ];
+
+        let context = provider_switch_context(&ProviderId::Grok, &ProviderId::Pi, &transcript);
+        let serialized = serde_json::to_string(&context).unwrap();
+        let content_chars = context["history"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|record| record["content"].as_str().unwrap().chars().count())
+            .sum::<usize>();
+
+        assert!(content_chars <= MAX_PROVIDER_SWITCH_CONTEXT_CHARS);
+        assert_eq!(context["olderHistoryOmitted"], true);
+        assert!(serialized.contains("OLD_TAIL"));
+        assert!(!serialized.contains("OLD_HEAD"));
+        assert!(serialized.contains("Compile workspace: completed"));
+        assert!(serialized.contains("Latest assistant conclusion"));
+        assert!(serialized.contains("Latest user request"));
+        assert!(!serialized.contains("PRIVATE_REASONING_SECRET"));
+        assert!(!serialized.contains("PRIVATE_INPUT_SECRET"));
+        assert!(!serialized.contains("PRIVATE_TOOL_OUTPUT_SECRET"));
+    }
+
+    #[tokio::test]
+    async fn detached_runtime_callbacks_cannot_emit_or_persist_late_frames() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let mut session = Session::new(ProviderId::Grok, "/work");
+        session.id = "switch-fence-session".into();
+        store.upsert_session(&session).unwrap();
+        let (events, mut received) = tokio::sync::mpsc::unbounded_channel();
+        let handler = SessionHandler::new(
+            session.id.clone(),
+            ProviderId::Grok,
+            events,
+            Arc::new(Mutex::new(PermissionPolicy::default())),
+            PermissionRouter::default(),
+            Some(store.clone()),
+        );
+        handler
+            .activity_flag()
+            .store(false, std::sync::atomic::Ordering::Release);
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "detached-provider-session".into(),
+                update: SessionUpdate::AgentMessageChunk {
+                    content: ContentBlock::text("late detached output"),
+                },
+            })
+            .await;
+
+        assert!(store.transcript(&session.id).unwrap().is_empty());
+        assert!(received.try_recv().is_err());
+    }
+}
+
 async fn await_provider_prompt<F, T>(
     future: F,
     mut progress: watch::Receiver<ProviderProgress>,
@@ -314,6 +556,9 @@ pub struct SessionHandler {
     /// store and the UI, so updates arriving under this flag are dropped — neither re-persisted
     /// nor re-emitted. Set/cleared by the engine around the `session/load` call.
     replaying: Arc<AtomicBool>,
+    /// Runtime-generation fence. A provider replacement flips the old handler inactive before
+    /// terminating its process, so late stdio frames cannot repaint or append to the new runtime.
+    active: Arc<AtomicBool>,
     /// Goal continuation can start a provider turn without a matching `session/prompt` future.
     /// Retain its activity lease until a provider-owned `session_info_update` closes the turn.
     external_turn: Mutex<Option<TurnLease>>,
@@ -327,6 +572,18 @@ impl SessionHandler {
         policy: Arc<Mutex<PermissionPolicy>>,
         router: PermissionRouter,
         store: Option<Arc<Store>>,
+    ) -> Self {
+        Self::new_with_activity(session_id, provider, events, policy, router, store, true)
+    }
+
+    fn new_with_activity(
+        session_id: SessionId,
+        provider: ProviderId,
+        events: mpsc::UnboundedSender<Event>,
+        policy: Arc<Mutex<PermissionPolicy>>,
+        router: PermissionRouter,
+        store: Option<Arc<Store>>,
+        active: bool,
     ) -> Self {
         Self {
             session_id,
@@ -343,8 +600,24 @@ impl SessionHandler {
             native_commands: Arc::new(RwLock::new(HashSet::new())),
             liveness: ProviderLiveness::default(),
             replaying: Arc::default(),
+            active: Arc::new(AtomicBool::new(active)),
             external_turn: Mutex::new(None),
         }
+    }
+
+    fn inactive(
+        session_id: SessionId,
+        provider: ProviderId,
+        events: mpsc::UnboundedSender<Event>,
+        policy: Arc<Mutex<PermissionPolicy>>,
+        router: PermissionRouter,
+        store: Option<Arc<Store>>,
+    ) -> Self {
+        Self::new_with_activity(session_id, provider, events, policy, router, store, false)
+    }
+
+    fn activity_flag(&self) -> Arc<AtomicBool> {
+        self.active.clone()
     }
 
     /// The shared flag that mutes this handler during a `session/load` replay.
@@ -1246,6 +1519,33 @@ fn codex_launch_with_static_provider_context(
     Ok(launch)
 }
 
+fn without_codex_native_project_rules(prompt: String, cwd: &str) -> String {
+    let rules = crate::rules::load(std::path::Path::new(cwd));
+    let compiled_rules = crate::rules::to_context(&rules);
+    if compiled_rules.is_empty() {
+        return prompt;
+    }
+    let remainder = if prompt == compiled_rules {
+        String::new()
+    } else if let Some(remainder) = prompt.strip_prefix(&format!("{compiled_rules}\n\n")) {
+        remainder.to_string()
+    } else {
+        return prompt;
+    };
+    let portable_rules = rules
+        .into_iter()
+        // Codex loads AGENTS.md from its session cwd. C2's other supported formats still need
+        // provider-neutral transport or they disappear from Codex sessions entirely.
+        .filter(|rule| rule.path != "AGENTS.md")
+        .collect::<Vec<_>>();
+    let portable_context = crate::rules::to_context(&portable_rules);
+    match (portable_context.is_empty(), remainder.is_empty()) {
+        (true, _) => remainder,
+        (_, true) => portable_context,
+        _ => format!("{portable_context}\n\n{remainder}"),
+    }
+}
+
 fn auto_scene_routing_instructions(
     scenes: &crate::scene::SceneLibrary,
     current: Option<&str>,
@@ -2010,6 +2310,9 @@ mod tool_update_persistence_tests {
 #[async_trait]
 impl ClientHandler for SessionHandler {
     async fn session_update(&self, note: SessionNotification) {
+        if !self.active.load(Ordering::Acquire) {
+            return;
+        }
         // History replayed by `session/load` is already persisted and rendered; drop it.
         // Usage and session metadata are provider state rather than transcript content, so both
         // must still reach the UI while the provider replays a loaded session's history.
@@ -2327,6 +2630,11 @@ impl ClientHandler for SessionHandler {
     }
 
     async fn request_permission(&self, req: RequestPermissionRequest) -> RequestPermissionResponse {
+        if !self.active.load(Ordering::Acquire) {
+            return RequestPermissionResponse {
+                outcome: PermissionOutcome::Cancelled,
+            };
+        }
         self.liveness.advance();
         let kind = req
             .tool_call
@@ -2412,6 +2720,9 @@ impl ClientHandler for SessionHandler {
     /// not what it may ask. Anything we can't render — URL mode, a schema with no answerable field
     /// — is declined, which tells the agent "nothing was chosen" and lets the turn continue.
     async fn create_elicitation(&self, req: CreateElicitationRequest) -> CreateElicitationResponse {
+        if !self.active.load(Ordering::Acquire) {
+            return CreateElicitationResponse::Cancel;
+        }
         self.liveness.advance();
         if !req.is_form() {
             return CreateElicitationResponse::Decline;
@@ -2507,6 +2818,7 @@ struct SessionRuntime {
     mcp_servers: Vec<McpServer>,
     /// Mutes this session's [`SessionHandler`] while `session/load` replays history.
     replaying: Arc<AtomicBool>,
+    callback_active: Arc<AtomicBool>,
     cwd: String,
     policy: Arc<Mutex<PermissionPolicy>>,
     /// The models this session can be switched to: what the agent reported at `session/new`, or
@@ -2573,6 +2885,8 @@ struct EngineState {
     /// Process-local half of the task-transfer fence. The durable store fence protects restarts;
     /// this set closes the interval before and during the SQLite handoff transaction.
     handoff_fences: Mutex<HashSet<SessionId>>,
+    /// Serializes runtime replacement against new turn claims for the same Session.
+    provider_switches: Mutex<HashSet<SessionId>>,
     pending_creation_options: Mutex<HashMap<String, SessionCreationOptions>>,
     pending_parallel_tasks: Mutex<HashMap<String, PendingParallelTask>>,
     /// Provider processes that have spawned but are not yet a fully initialized session.
@@ -2595,6 +2909,21 @@ struct EngineState {
     /// entry on creation because ACP accepts MCP servers only at session creation/load.
     provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
     turn_liveness_timeouts: RwLock<TurnLivenessTimeouts>,
+}
+
+struct ProviderSwitchGuard {
+    state: Arc<EngineState>,
+    session: SessionId,
+}
+
+impl Drop for ProviderSwitchGuard {
+    fn drop(&mut self) {
+        self.state
+            .provider_switches
+            .lock()
+            .unwrap()
+            .remove(&self.session);
+    }
 }
 
 /// Desktop-only bootstrap material for C2's authenticated browser MCP sidecar. The master
@@ -2819,6 +3148,7 @@ impl Engine {
             events,
             sessions: Mutex::new(HashMap::new()),
             handoff_fences: Mutex::new(HashSet::new()),
+            provider_switches: Mutex::new(HashSet::new()),
             pending_creation_options: Mutex::new(HashMap::new()),
             pending_parallel_tasks: Mutex::new(HashMap::new()),
             starting_clients: Mutex::new(Vec::new()),
@@ -2852,6 +3182,25 @@ impl Engine {
                 .map_err(|error| error.to_string())?;
         }
         Ok(())
+    }
+
+    fn begin_provider_switch(&self, session: &str) -> Result<ProviderSwitchGuard, String> {
+        let mut switches = self.state.provider_switches.lock().unwrap();
+        if !switches.insert(session.to_string()) {
+            return Err("this session is already switching providers".into());
+        }
+        Ok(ProviderSwitchGuard {
+            state: self.state.clone(),
+            session: session.to_string(),
+        })
+    }
+
+    pub fn session_is_switching_provider(&self, session: &str) -> bool {
+        self.state
+            .provider_switches
+            .lock()
+            .unwrap()
+            .contains(session)
     }
 
     /// Atomically fence and snapshot one durable session for transfer. Once the store commits the
@@ -3113,9 +3462,23 @@ impl Engine {
     }
 
     /// Atomically reserve one core-owned turn generation for this session.
-    fn try_start_turn(&self, session: &str, request_id: Option<String>) -> Option<TurnLease> {
-        let initial = self.session_activity(session)?;
-        self.state.activity.claim(session, request_id, initial)
+    fn try_start_turn(
+        &self,
+        session: &str,
+        request_id: Option<String>,
+    ) -> Result<TurnLease, &'static str> {
+        let switches = self.state.provider_switches.lock().unwrap();
+        if switches.contains(session) {
+            return Err("the provider is still switching for this session");
+        }
+        let initial = self.session_activity(session).ok_or("no such session")?;
+        let lease = self
+            .state
+            .activity
+            .claim(session, request_id, initial)
+            .ok_or("a turn is already running for this session")?;
+        drop(switches);
+        Ok(lease)
     }
 
     /// Compile the full provider prompt before accepting a turn so validation can happen before
@@ -3978,6 +4341,272 @@ impl Engine {
         Ok(())
     }
 
+    /// Replace the ACP runtime for one idle conversation without changing its durable Session id,
+    /// workspace, policies, or transcript. Candidate startup is completed before the compare-and-
+    /// set commit, and the detached handler is fenced before its process is terminated.
+    pub async fn switch_provider(
+        &self,
+        session: &str,
+        provider: ProviderId,
+        model: Option<String>,
+    ) -> Result<Session, String> {
+        self.assert_session_active(session)?;
+        let _switch = self.begin_provider_switch(session)?;
+        if self.session_is_busy(session) {
+            return Err("can't switch providers while a turn is running or awaiting input".into());
+        }
+
+        let (mut original, expected_client) = {
+            let sessions = self.state.sessions.lock().unwrap();
+            if let Some(runtime) = sessions.get(session) {
+                (runtime.session.clone(), Some(runtime.client.clone()))
+            } else {
+                drop(sessions);
+                let stored = self
+                    .state
+                    .store
+                    .as_ref()
+                    .ok_or_else(|| "no such session".to_string())?
+                    .get_session(session)
+                    .map_err(|error| format!("couldn't load session to switch provider: {error}"))?
+                    .ok_or_else(|| "no such session".to_string())?;
+                (stored, None)
+            }
+        };
+        if let Some(store) = &self.state.store {
+            original = store
+                .get_session(session)
+                .map_err(|error| format!("couldn't load session to switch provider: {error}"))?
+                .ok_or_else(|| "no such session".to_string())?;
+        }
+        if original.provider == provider {
+            return Err(format!("this session already uses {}", provider.as_str()));
+        }
+        validate_session_checkout(&original).await?;
+        let target = self
+            .state
+            .providers
+            .iter()
+            .find(|candidate| candidate.id == provider)
+            .cloned()
+            .ok_or_else(|| format!("provider {} is unavailable", provider.as_str()))?;
+
+        let transcript = match &self.state.store {
+            Some(store) => store
+                .transcript(session)
+                .map_err(|error| format!("couldn't read conversation history: {error}"))?,
+            None => Vec::new(),
+        };
+        let continuation = provider_switch_context(&original.provider, &provider, &transcript);
+        let policy = Arc::new(Mutex::new(PermissionPolicy {
+            mode: original.permission_mode,
+            sandbox: original.sandbox_policy,
+            ..Default::default()
+        }));
+        let handler = Arc::new(SessionHandler::inactive(
+            session.to_string(),
+            provider.clone(),
+            self.state.events.clone(),
+            policy.clone(),
+            self.state.router.clone(),
+            self.state.store.clone(),
+        ));
+        let provider_toolset = self.provider_toolset(&provider);
+        let provider_context_injected = provider == ProviderId::Codex;
+        let launch = if provider_context_injected {
+            codex_launch_with_static_provider_context(
+                &target.launch,
+                &provider_toolset.instructions,
+                provider_toolset.browser_access_enabled
+                    && self
+                        .state
+                        .desktop_mcp
+                        .as_ref()
+                        .is_some_and(|config| config.browser_enabled),
+                provider_toolset.browser_access_enabled,
+            )
+            .map_err(|error| format!("couldn't configure {}: {error}", target.display_name))?
+        } else {
+            target.launch.clone()
+        };
+        let replaying = handler.replay_flag();
+        let callback_active = handler.activity_flag();
+        let native_commands = handler.native_commands();
+        let liveness = handler.liveness();
+        let client = Arc::new(
+            acp::spawn(&launch, handler.clone())
+                .await
+                .map_err(|error| format!("couldn't start {}: {error}", target.display_name))?,
+        );
+        if !self.track_starting_client(&client) {
+            return Err("engine is shutting down".into());
+        }
+        let init = match client.initialize(client_capabilities()).await {
+            Ok(init) => init,
+            Err(error) => {
+                self.untrack_starting_client(&client);
+                client.terminate();
+                return Err(format!(
+                    "couldn't initialize {}: {error}",
+                    target.display_name
+                ));
+            }
+        };
+        let interaction = init.interaction_capabilities();
+        handler.set_interaction_capabilities(interaction.clone());
+        let models = available_models(&target).await;
+
+        let mut live_sessions = self.state.sessions.lock().unwrap();
+        if self.state.shutting_down.load(Ordering::Acquire) {
+            drop(live_sessions);
+            self.untrack_starting_client(&client);
+            client.terminate();
+            return Err("engine is shutting down".into());
+        }
+        let runtime_matches = match (&expected_client, live_sessions.get(session)) {
+            (Some(expected), Some(current)) => {
+                Arc::ptr_eq(expected, &current.client)
+                    && current.session.provider == original.provider
+            }
+            (None, None) => true,
+            _ => false,
+        };
+        if !runtime_matches {
+            drop(live_sessions);
+            self.untrack_starting_client(&client);
+            client.terminate();
+            return Err("the session runtime changed while its provider was switching".into());
+        }
+
+        let old_callback = live_sessions
+            .get(session)
+            .map(|runtime| runtime.callback_active.clone());
+        if let Some(active) = &old_callback {
+            active.store(false, Ordering::Release);
+        }
+        if self.session_is_busy(session) {
+            if let Some(active) = &old_callback {
+                active.store(true, Ordering::Release);
+            }
+            drop(live_sessions);
+            self.untrack_starting_client(&client);
+            client.terminate();
+            return Err("can't switch providers while a turn is running or awaiting input".into());
+        }
+
+        let mut updated = original.clone();
+        updated.provider = provider.clone();
+        updated.model = model.clone();
+        updated.acp_session_id = None;
+        {
+            let mut replacement_policy = policy.lock().unwrap();
+            replacement_policy.mode = updated.permission_mode;
+            replacement_policy.sandbox = updated.sandbox_policy;
+        }
+        if let Some(store) = &self.state.store {
+            match store.switch_session_provider(
+                session,
+                &original.provider,
+                &provider,
+                model.as_deref(),
+                &continuation,
+            ) {
+                Ok(true) => {}
+                Ok(false) => {
+                    if let Some(active) = &old_callback {
+                        active.store(true, Ordering::Release);
+                    }
+                    drop(live_sessions);
+                    self.untrack_starting_client(&client);
+                    client.terminate();
+                    return Err(
+                        "the durable provider changed while this switch was starting".into(),
+                    );
+                }
+                Err(error) => {
+                    if let Some(active) = &old_callback {
+                        active.store(true, Ordering::Release);
+                    }
+                    drop(live_sessions);
+                    self.untrack_starting_client(&client);
+                    client.terminate();
+                    return Err(format!("couldn't persist provider switch: {error}"));
+                }
+            }
+        }
+
+        let old_runtime = live_sessions.remove(session);
+        callback_active.store(true, Ordering::Release);
+        self.untrack_starting_client(&client);
+        live_sessions.insert(
+            session.to_string(),
+            SessionRuntime {
+                session: updated.clone(),
+                provider_toolset,
+                provider_context_injected,
+                injected_memory_keys: HashSet::new(),
+                client: client.clone(),
+                acp_session_id: None,
+                resume_acp_session_id: None,
+                protocol_version: init.protocol_version,
+                adapter_name: init
+                    .agent_info
+                    .as_ref()
+                    .map(|info| info.name.clone())
+                    .filter(|name| !name.is_empty()),
+                adapter_version: init
+                    .agent_info
+                    .as_ref()
+                    .map(|info| info.version.clone())
+                    .filter(|version| !version.is_empty()),
+                caps: init.caps(),
+                interaction: interaction.clone(),
+                native_commands: native_commands.clone(),
+                liveness,
+                mcp_servers: Vec::new(),
+                replaying,
+                callback_active,
+                cwd: updated.cwd.clone(),
+                policy,
+                models: models.clone(),
+                config_options: Vec::new(),
+                models_reported: false,
+                initial_reasoning_effort: None,
+                handoff_context: Some(continuation),
+            },
+        );
+        drop(live_sessions);
+        if let Some(runtime) = old_runtime {
+            runtime.client.terminate();
+        }
+
+        self.emit(Event::ProviderChanged {
+            session: session.to_string(),
+            provider: provider.clone(),
+            model: model.clone(),
+        });
+        self.emit(Event::ConfigOptions {
+            session: session.to_string(),
+            options: Vec::new(),
+        });
+        self.emit(Event::GoalChanged {
+            session: session.to_string(),
+            goal: None,
+        });
+        self.emit(Event::SessionCapabilities {
+            session: session.to_string(),
+            steering: interaction.steering,
+            goal: interaction.goal,
+            compact_context: compact_context_supported(&native_commands),
+        });
+        self.emit(Event::Models {
+            session: session.to_string(),
+            available: models,
+            current: model.unwrap_or_default(),
+        });
+        Ok(updated)
+    }
+
     /// Establish the provider-side session when a command (currently goal control) needs an ACP
     /// session id before any prompt has done so.
     async fn ensure_acp_session(&self, session: &str) -> Result<(), String> {
@@ -4439,6 +5068,7 @@ impl Engine {
             prov.launch.clone()
         };
         let replaying = handler.replay_flag();
+        let callback_active = handler.activity_flag();
         let native_commands = handler.native_commands();
         let liveness = handler.liveness();
         let client = Arc::new(
@@ -4500,6 +5130,7 @@ impl Engine {
                 liveness,
                 mcp_servers: Vec::new(),
                 replaying,
+                callback_active,
                 cwd: cwd.clone(),
                 policy,
                 models: models.clone(),
@@ -4895,6 +5526,7 @@ impl Engine {
                     prov.launch.clone()
                 };
                 let replaying = handler.replay_flag();
+                let callback_active = handler.activity_flag();
                 let native_commands = handler.native_commands();
                 let liveness = handler.liveness();
                 let client = Arc::new(acp::spawn(&launch, handler.clone()).await?);
@@ -5096,6 +5728,7 @@ impl Engine {
                         liveness,
                         mcp_servers: Vec::new(),
                         replaying,
+                        callback_active,
                         cwd: cwd_stored.clone(),
                         policy,
                         models: models.clone(),
@@ -5246,13 +5879,13 @@ impl Engine {
                     Some(compiled)
                 };
                 let turn_lease = match self.try_start_turn(&session, request_id.clone()) {
-                    Some(lease) => lease,
-                    None => {
+                    Ok(lease) => lease,
+                    Err(message) => {
                         // This prompt never started. Marking the rejection terminal would clear the
                         // real turn that already owns the session in every connected frontend.
                         self.emit(Event::Error {
                             session: Some(session),
-                            message: "a turn is already running for this session".into(),
+                            message: message.into(),
                             terminal: false,
                             request_id,
                         });
@@ -5473,6 +6106,11 @@ impl Engine {
                         })
                 };
                 let is_codex = current_provider == ProviderId::Codex;
+                if is_codex {
+                    // Codex loads AGENTS.md from its session cwd. Avoid repeating that native
+                    // file as visible user text while preserving C2's provider-neutral rules.
+                    compiled.prompt = without_codex_native_project_rules(compiled.prompt, &cwd);
+                }
                 attach_host_mcp_servers(
                     &mut compiled.mcp_servers,
                     provider_toolset.mcp_servers.iter().cloned(),
@@ -5514,8 +6152,13 @@ impl Engine {
                     .get(&session)
                     .map(|runtime| runtime.injected_memory_keys.clone())
                     .unwrap_or_default();
-                let memory_turn = native_command
-                    .is_none()
+                let codex_memory_explicitly_allowed = !is_codex
+                    || self.state.store.as_ref().is_some_and(|store| {
+                        store
+                            .session_memory_policy(&session)
+                            .is_ok_and(|(read, _)| read == MemoryAccess::Allow)
+                    });
+                let memory_turn = (native_command.is_none() && codex_memory_explicitly_allowed)
                     .then(|| {
                         self.state.memory.as_ref().and_then(|memory| {
                             match memory.recall(&cwd, &session, &memory_source) {
@@ -5557,8 +6200,10 @@ impl Engine {
                         })
                     })
                     .flatten();
-                let provider_prompt =
-                    with_auto_scene_routing(provider_prompt, auto_scene_instructions);
+                let provider_prompt = with_auto_scene_routing(
+                    provider_prompt,
+                    (!is_codex).then_some(auto_scene_instructions).flatten(),
+                );
                 let (caps, attached_mcp, inject_provider_context) = {
                     let map = self.state.sessions.lock().unwrap();
                     map.get(&session)
@@ -6013,9 +6658,18 @@ impl Engine {
                 };
                 let clear_handoff_after_prompt = handoff_context.is_some();
                 let provider_prompt = match handoff_context {
+                    Some(context)
+                        if context.get("kind").and_then(Value::as_str)
+                            == Some("provider_switch") =>
+                    {
+                        format!(
+                            "{}\n\n{provider_prompt}",
+                            provider_continuation_prompt(&context)
+                        )
+                    }
                     Some(context) => format!(
-                        "{provider_prompt}\n\nThe task was transferred from another C2 device. Continue from the durable task state below without repeating completed work.\n\n{}",
-                        serde_json::to_string(&context).unwrap_or_else(|_| "{}".into())
+                        "{provider_prompt}\n\n{}",
+                        provider_continuation_prompt(&context)
                     ),
                     None => provider_prompt,
                 };
@@ -8470,6 +9124,7 @@ mod mcp_tests {
         assert!(developer.contains("HOST_TOOL_MARKER"));
         assert!(developer.contains("[C2 desktop browser routing]"));
         assert!(developer.contains("[C2 Sites routing and safety]"));
+        assert!(!developer.contains("[C2 Auto Scene]"));
         assert_eq!(
             developer.matches("[C2 Sites routing and safety]").count(),
             1
@@ -8980,6 +9635,7 @@ mod cancel_recovery_tests {
                 liveness: ProviderLiveness::default(),
                 mcp_servers: Vec::new(),
                 replaying: Arc::new(AtomicBool::new(false)),
+                callback_active: Arc::new(AtomicBool::new(true)),
                 cwd: "/tmp".into(),
                 policy: Arc::new(Mutex::new(PermissionPolicy::default())),
                 models: Vec::new(),

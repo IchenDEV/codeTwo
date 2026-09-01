@@ -7,7 +7,7 @@ import {
   FileType,
   MessageSquare,
   Package,
-  type HugeIcon,
+  type AppIcon,
 } from "@/components/ui/icons";
 import type { SuggestionMenuProps } from "@blocknote/react";
 
@@ -48,7 +48,7 @@ export interface ArtifactAtItem {
 /** Everything the `@` picker can insert: chats, then artifacts, then workspace files. */
 export type AtItem = ChatItem | ArtifactAtItem | FileItem;
 
-const BY_EXTENSION: Record<string, HugeIcon> = {
+const BY_EXTENSION: Record<string, AppIcon> = {
   ts: FileCode, tsx: FileCode, js: FileCode, jsx: FileCode, rs: FileCode, py: FileCode,
   go: FileCode, rb: FileCode, sh: FileCode, css: FileCode, html: FileCode, swift: FileCode,
   json: FileJson, lock: FileJson,
@@ -58,7 +58,7 @@ const BY_EXTENSION: Record<string, HugeIcon> = {
 };
 
 /** A page icon on every row says only "this is a file", which the user already knows. */
-function iconFor(name: string): HugeIcon {
+function iconFor(name: string): AppIcon {
   const dot = name.lastIndexOf(".");
   return (dot > 0 && BY_EXTENSION[name.slice(dot + 1).toLowerCase()]) || FileText;
 }

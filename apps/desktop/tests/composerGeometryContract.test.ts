@@ -25,6 +25,10 @@ const controlChip = readFileSync(
   new URL("../src/components/ui/control-chip.tsx", import.meta.url),
   "utf8",
 );
+const styles = readFileSync(
+  new URL("../src/styles.css", import.meta.url),
+  "utf8",
+);
 describe("composer geometry contract", () => {
   test("paints the compact composer on the same DOM card as its interactive content", () => {
     expect(composer).not.toContain("function ComposerLiquidSurface");
@@ -64,6 +68,16 @@ describe("composer geometry contract", () => {
     expect(composer).not.toContain(
       'className="size-8 shrink-0 rounded-(--ds-radius-control) transition-transform active:scale-90"',
     );
+  });
+
+  test("does not advertise the removed composer resize grip", () => {
+    expect(composer).not.toContain("composer-grip");
+    expect(composer).not.toContain("useResizeHandle");
+    expect(composer).toContain("const applied = Math.min(190, maxHeight);");
+    expect(styles).not.toContain(".composer-grip");
+    expect(app).not.toContain("codetwo.composerHeight");
+    expect(app).not.toContain("composerHByPane");
+    expect(composer).toContain('aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}');
   });
 });
 

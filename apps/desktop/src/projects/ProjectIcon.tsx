@@ -61,7 +61,7 @@ export function ProjectIcon({
       {url ? (
         <img src={url} alt="" className="size-full object-cover" />
       ) : (
-        <Folder style={{ width: size * 0.52, height: size * 0.52 }} strokeWidth={1.7} />
+        <Folder style={{ width: size * 0.52, height: size * 0.52 }} />
       )}
     </span>
   );
