@@ -13,7 +13,7 @@ source: User request in the current Codex task to implement the Superdot interac
 inputs: docs/archive/research/superdot-product-design-research-2026-09-01.md section 8 and the live origin/main Git surfaces
 outputs: One workspace-owned Git next-action projection reused by the session header and Git dock
 scope: apps/desktop/src/App.tsx, apps/desktop/src/components/ui/split-button.tsx, apps/desktop/src/git, apps/desktop/src/i18n/strings.ts, apps/desktop/src/session/SessionHeaderActions.tsx, apps/desktop/tests, docs/sdlc/changes/2026-09-01-git-next-action
-next_trigger: human review, PR creation, merge, or release request
+next_trigger: PR creation, code review, merge, or release request
 verification_mode: owner
 verified_by: Codex
 verified_at: 2026-09-01
@@ -129,7 +129,8 @@ the test suite and were not introduced by this change.
 
 ## Review and release
 
-Approval: pending human review.
+Approval: Chenli confirmed the rendered interaction acceptance was complete on 2026-09-01 with
+no changes requested. PR-level code review and merge approval remain separate Gates.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: production renderer Browser pass recorded above; native release smoke is not
@@ -141,4 +142,6 @@ Preparing this section does not authorize merge, deployment, release, or product
 
 ## Feedback
 
-No feedback exists yet; the observation boundary is the completed rendered acceptance pass.
+Chenli confirmed “验收完了” on 2026-09-01. No corrective feedback was requested; the accepted
+observation boundary is the completed light, dark, narrow-layout, interaction, and automated-test
+pass recorded above.
