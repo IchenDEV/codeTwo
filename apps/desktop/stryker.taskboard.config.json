@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun test tests/taskBoard.test.ts tests/taskBoardRendered.test.tsx tests/taskBoardWorkspaceModel.test.ts"
+  },
+  "coverageAnalysis": "off",
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.stryker.json",
+  "mutate": ["src/taskboard/workspaceModel.ts"],
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": {
+    "fileName": "reports/taskboard-mutation.json"
+  },
+  "thresholds": {
+    "high": 100,
+    "low": 100,
+    "break": 100
+  },
+  "concurrency": 4,
+  "timeoutMS": 10000
+}

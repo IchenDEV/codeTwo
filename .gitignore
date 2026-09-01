@@ -21,6 +21,7 @@ website/.vitepress/dist
 # Electrobun build output
 apps/desktop/build
 apps/desktop/artifacts
+apps/desktop/reports/taskboard-mutation.json
 
 # OS / editor
 .DS_Store
