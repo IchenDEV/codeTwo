@@ -1,6 +1,5 @@
-import type { ReactNode } from "react"
-
-import { ChevronRight, Filter, PanelRight, Plus } from "@/components/ui/icons"
+import { Filter, Plus } from "@/components/ui/icons"
+import { PageHeader } from "@/components/business/page-header"
 import { SearchField } from "@/components/business/search-field"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,9 +20,6 @@ import { taskPriorityLabel } from "./TaskEditorDialog"
 interface TaskBoardHeaderProps {
   t: Translate
   taskCount: number
-  headerLeadingAction?: ReactNode
-  inspectorOpen: boolean
-  onShowInspector: () => void
   filtersOpen: boolean
   onFiltersOpenChange: (open: boolean) => void
   activeFilterCount: number
@@ -42,43 +38,16 @@ export function TaskBoardHeader(props: TaskBoardHeaderProps) {
   const { t } = props
   return (
     <header className="shrink-0 bg-background">
-      <div className="flex h-layout-titlebar items-center gap-3 border-b border-border px-4 sm:px-6">
-        {props.headerLeadingAction ? (
-          <div data-taskboard-leading-action className="shrink-0">{props.headerLeadingAction}</div>
-        ) : null}
-        <nav aria-label={t("taskboard.breadcrumb")} className="flex min-w-0 items-center gap-2 text-body">
-          <span className="text-muted-foreground">{t("taskboard.title")}</span>
-          <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
-          <strong className="truncate">{t("taskboard.allTasks")}</strong>
-        </nav>
-        <div className="flex-1" />
-        {!props.inspectorOpen ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("taskboard.showInspector")}
-            onClick={props.onShowInspector}
-          >
-            <PanelRight aria-hidden />
-          </Button>
-        ) : null}
-      </div>
-
-      <div className="flex flex-wrap items-start gap-4 px-4 py-5 sm:px-6">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-page font-semibold tracking-tight">{t("taskboard.allTasks")}</h1>
+      <div className="task-board-panel-header px-4 py-5 sm:px-6">
+        <PageHeader
+          title={t("taskboard.allTasks")}
+          titleAccessory={
             <Badge variant="secondary" className="tabular-nums text-muted-foreground">
               {props.taskCount}
             </Badge>
-          </div>
-          <p className="mt-1 max-w-2xl text-body text-muted-foreground">
-            {t("taskboard.workspaceDescription")}
-          </p>
-        </div>
-
-        <div data-page-header-controls className="flex shrink-0 items-center gap-2">
+          }
+          description={t("taskboard.workspaceDescription")}
+          actions={<>
           <Popover open={props.filtersOpen} onOpenChange={props.onFiltersOpenChange}>
             <PopoverTrigger
               render={
@@ -146,7 +115,8 @@ export function TaskBoardHeader(props: TaskBoardHeaderProps) {
             <Plus aria-hidden />
             {t("taskboard.new")}
           </Button>
-        </div>
+          </>}
+        />
       </div>
     </header>
   )

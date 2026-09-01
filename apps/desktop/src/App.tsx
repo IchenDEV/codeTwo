@@ -420,6 +420,7 @@ import {
   unlinkTaskPullRequest,
   type BoardTask,
 } from "./taskboard/taskBoard";
+import { continueTaskBoardPrompt } from "./taskboard/taskBoardContinuation";
 
 import {
   actionForEvent,
@@ -7760,14 +7761,25 @@ export default function App() {
               void selectSession(id);
             }}
             onAskSession={(id, prompt) => {
+              const paneId =
+                paneBoundToSession(paneContentsRef.current, id) ??
+                focusedPaneRef.current;
               setShowTaskBoard(false);
-              void selectSession(id).then(() => {
-                clearEditorRef.current?.();
-                setDocMode(true);
-                setTimeout(() => {
-                  void insertMarkdownRef.current?.(prompt, "replace");
-                  focusEditorRef.current?.();
-                }, 0);
+              void continueTaskBoardPrompt({
+                target: { paneId, sessionId: id },
+                prompt,
+                selectSession: (sessionId, targetPaneId) =>
+                  selectSession(sessionId, targetPaneId),
+                isTargetActive: () =>
+                  focusedPaneRef.current === paneId &&
+                  paneContentsRef.current[paneId]?.sessionId === id,
+                openDocumentMode: () => setDocMode(true),
+                insertMarkdown: (markdown, mode) =>
+                  paneEditorRefsFor(paneId).insertMarkdownRef.current?.(
+                    markdown,
+                    mode,
+                  ) ?? Promise.resolve(),
+                focusEditor: () => paneEditorRefsFor(paneId).focusRef.current?.(),
               });
             }}
             onStartTask={startBoardTask}

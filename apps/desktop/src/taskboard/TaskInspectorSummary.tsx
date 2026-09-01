@@ -11,14 +11,14 @@ interface TaskInspectorSummaryProps {
   t: Translate
   task: BoardTask
   session: SessionProjection | null
-  pullRequest: SidebarPullRequestStatus | null
+  pullRequest: SidebarPullRequestStatus | null | undefined
 }
 
 export function TaskInspectorDetails({ t, task }: TaskInspectorSummaryProps) {
   return (
     <div className="grid gap-5">
       <InspectorSection title={t("taskboard.taskDetails")}>
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 rounded-module border border-border bg-card p-3 text-body">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 rounded-module bg-fill-rest p-3 text-body">
           <span className="text-muted-foreground">{t("taskboard.editor.status")}</span>
           <strong>{taskStatusLabel(t, task.status)}</strong>
           <span className="text-muted-foreground">{t("taskboard.editor.priority")}</span>
@@ -28,7 +28,7 @@ export function TaskInspectorDetails({ t, task }: TaskInspectorSummaryProps) {
         </div>
       </InspectorSection>
       <InspectorSection title={t("taskboard.editor.description")}>
-        <p className="rounded-module border border-border bg-card p-3 text-body leading-relaxed text-foreground/85">
+        <p className="rounded-module bg-fill-rest p-3 text-body leading-relaxed text-foreground/85">
           {task.description || t("taskboard.noDescription")}
         </p>
       </InspectorSection>
@@ -52,15 +52,15 @@ export function TaskInspectorInsights({
   return (
     <div className="grid gap-5">
       <InspectorSection title={t("taskboard.relationshipTitle")}>
-        <p className="rounded-module border border-border bg-card p-3 text-body leading-relaxed">
+        <p className="rounded-module bg-fill-rest p-3 text-body leading-relaxed">
           {t("taskboard.relationshipDescription")}
         </p>
       </InspectorSection>
       <InspectorSection title={t("taskboard.currentProjection")}>
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 rounded-module border border-border bg-card p-3 text-body">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 rounded-module bg-fill-rest p-3 text-body">
           <span className="text-muted-foreground">{t("taskboard.taskLabel")}</span>
           <strong className="truncate">{task.title}</strong>
-          <span className="text-muted-foreground">{t("taskboard.currentSession")}</span>
+          <span className="text-muted-foreground">{t("taskboard.selectedSession")}</span>
           <strong className="truncate">{session?.title ?? t("taskboard.none")}</strong>
           <span className="text-muted-foreground">{t("taskboard.primaryPullRequest")}</span>
           <strong>{pullRequest ? `#${pullRequest.number}` : t("taskboard.none")}</strong>

@@ -15,7 +15,7 @@ describe("theme color resolution", () => {
     expect(properties).toMatchObject({
       "--background": palette.background,
       "--ds-color-canvas": palette.background,
-      "--ds-color-surface": "color-mix(in oklch, #172033 1%, #ffffff)",
+      "--ds-color-surface": "color-mix(in oklch, #172033 2%, #ffffff)",
       "--ds-color-raised": "color-mix(in oklch, #172033 0.25%, #ffffff)",
       "--ds-color-modal": palette.background,
       "--ds-color-fill-quiet": "color-mix(in oklch, #172033 2.5%, #ffffff)",

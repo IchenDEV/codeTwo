@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { StatusIndicator } from "@/components/business/status-indicator"
 import type { Translate } from "@/i18n"
 import { cn } from "@/lib/utils"
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
@@ -35,7 +36,7 @@ interface TaskInspectorAgentProps {
   t: Translate
   task: BoardTask
   session: SessionProjection | null
-  pullRequest: SidebarPullRequestStatus | null
+  pullRequest: SidebarPullRequestStatus | null | undefined
   prompt: string
   onPromptChange: (value: string) => void
   onSubmitPrompt: (event: FormEvent<HTMLFormElement>) => void
@@ -72,10 +73,9 @@ export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
 
   return (
     <div className="flex min-h-full flex-col gap-5">
-      <InspectorSection title={t("taskboard.currentSessionTitle")}>
-        <div className="rounded-module border border-border bg-card p-3">
+      <InspectorSection title={t("taskboard.selectedSession")}>
+        <div className="rounded-module bg-fill-rest p-3">
           <div className="flex min-w-0 items-center gap-2">
-            <span aria-hidden className={cn("size-2 shrink-0 rounded-full", sessionStatusTone(session))} />
             <strong className="min-w-0 flex-1 truncate text-body">
               {t("taskboard.sessionOrdinal", { number: session.number })} · {session.title}
             </strong>
@@ -95,7 +95,7 @@ export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
       </InspectorSection>
 
       <InspectorSection title={t("taskboard.checkoutTitle")}>
-        <div className="flex min-w-0 items-center gap-2 rounded-module border border-border bg-card p-3">
+        <div className="flex min-w-0 items-center gap-2 rounded-module bg-fill-rest p-3">
           <GitBranch aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <strong className="block truncate text-body" title={checkoutPath ?? undefined}>
@@ -120,8 +120,12 @@ export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
       </InspectorSection>
 
       <InspectorSection title={t("taskboard.primaryPullRequest")}>
-        {props.pullRequest ? (
-          <div className="rounded-module border border-border bg-card p-3">
+        {props.pullRequest === undefined ? (
+          <div className="rounded-module bg-fill-rest px-3 py-4 text-metadata text-muted-foreground">
+            {t("taskboard.checkingPullRequest")}
+          </div>
+        ) : props.pullRequest ? (
+          <div className="rounded-module bg-fill-rest p-3">
             <div className="flex items-center gap-2">
               <GitPullRequest aria-hidden className={cn("size-4", pullRequestTone)} />
               <strong className={cn("min-w-0 flex-1 truncate text-body", pullRequestTone)}>
@@ -139,14 +143,14 @@ export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
             </div>
           </div>
         ) : (
-          <div className="rounded-module border border-border bg-card px-3 py-4 text-metadata text-muted-foreground">
+          <div className="rounded-module bg-fill-rest px-3 py-4 text-metadata text-muted-foreground">
             {t("taskboard.noPullRequestForSession")}
           </div>
         )}
       </InspectorSection>
 
       <InspectorSection title={t("taskboard.checksTitle")}>
-        <div className="rounded-module border border-border bg-card p-3">
+        <div className="rounded-module bg-fill-rest p-3">
           <div className="flex items-center gap-2 text-body">
             {props.pullRequest?.state === "merged" || props.pullRequest?.state === "open" ? (
               <CheckCircle2 aria-hidden className="size-4 text-success" />
@@ -155,25 +159,24 @@ export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
             )}
             <span className="min-w-0 flex-1 truncate">{t("taskboard.deliveryCheck")}</span>
             <span className={cn("text-metadata", pullRequestTone)}>
-              {props.pullRequest
-                ? pullRequestStatusLabel(t, props.pullRequest.state)
-                : t("taskboard.notAvailable")}
+              {props.pullRequest === undefined
+                ? t("taskboard.checkingPullRequest")
+                : props.pullRequest
+                  ? pullRequestStatusLabel(t, props.pullRequest.state)
+                  : t("taskboard.notAvailable")}
             </span>
           </div>
         </div>
       </InspectorSection>
 
       <InspectorSection title={t("taskboard.recentActivity")}>
-        <div className="rounded-module border border-border bg-card p-3">
-          <div className="flex items-start gap-2 text-body">
-            <span aria-hidden className={cn("mt-1 size-2 shrink-0 rounded-full", sessionStatusTone(session))} />
-            <span className="min-w-0 flex-1">{statusDescription}</span>
-          </div>
+        <div className="rounded-module bg-fill-rest p-3">
+          <StatusIndicator tone={sessionStatusTone(session)} label={statusDescription} />
         </div>
       </InspectorSection>
 
       {props.onOpenSession ? (
-        <form className="mt-auto grid gap-2 rounded-module border border-border bg-card p-3" onSubmit={props.onSubmitPrompt}>
+        <form className="mt-auto grid gap-2 rounded-module bg-fill-rest p-3" onSubmit={props.onSubmitPrompt}>
           <label htmlFor="task-board-agent-prompt" className="text-metadata font-medium text-muted-foreground">
             {t("taskboard.askAgent")}
           </label>

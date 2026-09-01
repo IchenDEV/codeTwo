@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import type { Locale, Translate } from "@/i18n"
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
 
@@ -31,13 +32,15 @@ export function TaskBoardList(props: TaskBoardListProps) {
   const { t } = props
   return (
     <div className="min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-6 sm:pb-6">
-      <div className="task-board-list min-w-0 border-y border-border">
+      <Separator />
+      <div className="task-board-list min-w-0">
         <div className="task-board-list-header items-center px-3 py-2 text-metadata text-muted-foreground" aria-hidden>
           <span>{t("taskboard.titleHeader")}</span>
           <span className="task-board-task-sessions text-center">{t("taskboard.sessionsHeader")}</span>
           <span className="task-board-task-prs text-center">{t("taskboard.openPullRequestsHeader")}</span>
           <span className="text-right">{t("taskboard.updatedHeader")}</span>
         </div>
+        <Separator />
         {props.renderedTasks.length > 0 ? (
           <ul aria-label={t("taskboard.taskList")}>
             {props.renderedTasks.map((projected) => (

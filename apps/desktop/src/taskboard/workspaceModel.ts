@@ -1,4 +1,5 @@
 import type { Locale, Translate } from "@/i18n"
+import type { StatusIndicatorTone } from "@/components/business/status-indicator"
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
 
 import { taskBoardLane, type BoardTask, type TaskSessionActivityKind } from "./taskBoard"
@@ -6,11 +7,11 @@ import type { ProjectedTask, SessionProjection } from "./workspaceTypes"
 
 export const INITIAL_TASK_LIMIT = 40
 
-export const LANE_DOT_TONES: Record<ProjectedTask["lane"], string> = {
-  queue: "bg-muted-foreground/55",
-  running: "bg-primary",
-  needs_you: "bg-warning",
-  done: "bg-success",
+export const LANE_TONES: Record<ProjectedTask["lane"], StatusIndicatorTone> = {
+  queue: "neutral",
+  running: "success",
+  needs_you: "warning",
+  done: "success",
 }
 
 export const PULL_REQUEST_TONES: Record<SidebarPullRequestStatus["state"], string> = {
@@ -70,12 +71,19 @@ export function sessionStatusLabel(t: Translate, session: SessionProjection): st
   return t("session.completed")
 }
 
-export function sessionStatusTone(session: SessionProjection): string {
+export function sessionStatusTone(session: SessionProjection): StatusIndicatorTone {
   const kind = sessionActivityKind(session)
-  if (kind === "awaiting_input") return "bg-warning"
-  if (kind === "failed") return "bg-destructive"
-  if (kind === "running") return "bg-primary"
-  return session.archived ? "bg-muted-foreground/40" : "bg-success"
+  if (kind === "awaiting_input") return "warning"
+  if (kind === "failed") return "destructive"
+  if (kind === "running") return "success"
+  return session.archived ? "neutral" : "success"
+}
+
+export function laneLabel(t: Translate, lane: ProjectedTask["lane"]): string {
+  if (lane === "queue") return t("taskboard.lane.queue")
+  if (lane === "running") return t("taskboard.lane.running")
+  if (lane === "needs_you") return t("taskboard.lane.needsYou")
+  return t("taskboard.lane.done")
 }
 
 export function sessionActivityDescription(t: Translate, session: SessionProjection): string {
@@ -120,12 +128,16 @@ export function projectTasks(
 export function openPullRequestCount(
   sessions: readonly SessionProjection[],
   pullRequestsByPath: ReadonlyMap<string, SidebarPullRequestStatus | null>,
-): number {
-  return sessions.filter((session) => {
+): number | null {
+  let count = 0
+  let unresolved = false
+  for (const session of sessions) {
     const path = sessionCheckoutPath(session)
+    if (path && !pullRequestsByPath.has(path)) unresolved = true
     const state = path ? pullRequestsByPath.get(path)?.state : null
-    return Boolean(state && state !== "merged" && state !== "closed")
-  }).length
+    if (state && state !== "merged" && state !== "closed") count += 1
+  }
+  return unresolved ? null : count
 }
 
 export function pullRequestStatusLabel(

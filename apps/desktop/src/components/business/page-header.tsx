@@ -2,20 +2,24 @@ import type { ReactNode } from "react"
 
 interface PageHeaderProps {
   title: ReactNode
+  titleAccessory?: ReactNode
   description?: ReactNode
   actions?: ReactNode
 }
 
-function PageHeader({ title, description, actions }: PageHeaderProps) {
+function PageHeader({ title, titleAccessory, description, actions }: PageHeaderProps) {
   return (
     <header
       data-slot="page-header"
       className="flex flex-col items-start justify-between gap-section sm:flex-row"
     >
       <div className="min-w-0 flex-1">
-        <h1 data-slot="page-header-title" className="text-page font-semibold tracking-tight">
-          {title}
-        </h1>
+        <div className="flex items-center gap-module-inset">
+          <h1 data-slot="page-header-title" className="text-page font-semibold tracking-tight">
+            {title}
+          </h1>
+          {titleAccessory}
+        </div>
         {description ? (
           <p
             data-slot="page-header-description"

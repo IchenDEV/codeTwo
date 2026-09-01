@@ -27,6 +27,7 @@ const { TaskBoardPage } = await import("../src/taskboard/TaskBoardPage")
 const mountedRoots = []
 const previousLocalStorage = globalThis.localStorage
 const originalConfirm = dom.window.confirm
+const originalResizeObserver = globalThis.ResizeObserver
 
 function installStorage() {
   Object.defineProperty(globalThis, "localStorage", {
@@ -43,6 +44,8 @@ afterEach(async () => {
   dom.document.body.replaceChildren()
   dom.window.localStorage.clear()
   dom.window.confirm = originalConfirm
+  if (originalResizeObserver === undefined) delete globalThis.ResizeObserver
+  else globalThis.ResizeObserver = originalResizeObserver
   if (previousLocalStorage === undefined) delete globalThis.localStorage
   else {
     Object.defineProperty(globalThis, "localStorage", {
@@ -142,6 +145,8 @@ describe("TaskBoardPage rendered", () => {
     expect(view.container.textContent).toContain("每个 Session 最多对应一个当前 pull request")
     expect(view.container.querySelector("[data-task-board-page]")).not.toBeNull()
     expect(view.container.querySelectorAll("[data-task-column]")).toHaveLength(0)
+    expect(view.container.querySelectorAll('[data-slot="status-indicator"]').length).toBeGreaterThan(0)
+    expect(view.container.textContent).toContain("队列")
     expect(view.container.querySelectorAll("[data-task-item]")).toHaveLength(9)
     expect(view.container.querySelector('[aria-label="任务列表"]')).not.toBeNull()
     expect(view.container.querySelector('[aria-label="任务检查器"]')).not.toBeNull()
@@ -286,9 +291,10 @@ describe("TaskBoardPage rendered", () => {
       "/worktrees/session-current",
     ]))
 
-    await click(button(view.container, "选择 Session 1：历史实现"))
+    await click(button(view.container, "选择 Session 1：历史实现，状态：已完成"))
     expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).toContain("#101 · 未合并")
     expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).toContain("worktrees/session-old")
+    expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).toContain("选中的 Session")
     await click(button(view.container, "打开 Session"))
     expect(opened).toEqual(["session-old"])
   })
@@ -310,6 +316,68 @@ describe("TaskBoardPage rendered", () => {
     await setValue(prompt, "检查这个方案")
     await click(button(view.container, "带提示继续"))
     expect(prompts).toEqual([["session-1", "检查这个方案"]])
+  })
+
+  test("loads a selected historical Session PR beyond the initial lookup cap", async () => {
+    const sessionIds = Array.from({ length: 49 }, (_, index) => `session-${index + 1}`)
+    const task = createBoardTask(
+      { title: "大型历史", status: "in_progress", sessionIds },
+      { id: "TASK-LARGE-HISTORY", now: 1_700_000_000_000 },
+    )
+    storeTasks([task])
+    const loadedPaths = []
+    let resolveSelectedPullRequest = null
+    const view = await renderBoard({
+      sessions: sessionIds.map((id, index) => ({
+        id,
+        title: `历史 ${index + 1}`,
+        worktreePath: `/worktrees/${id}`,
+      })),
+      loadPullRequest: async (path) => {
+        loadedPaths.push(path)
+        if (path === "/worktrees/session-1") {
+          return new Promise((resolve) => {
+            resolveSelectedPullRequest = () => resolve(githubPullRequest(1))
+          })
+        }
+        return githubPullRequest(Number(path.match(/\d+$/)?.[0] ?? 0))
+      },
+    })
+
+    await waitFor(() => expect(new Set(loadedPaths).size).toBe(48))
+    expect(loadedPaths).not.toContain("/worktrees/session-1")
+    await click(button(view.container, "展开任务：大型历史"))
+    await click(button(view.container, "选择 Session 1：历史 1，状态：已完成"))
+
+    await waitFor(() => expect(loadedPaths).toContain("/worktrees/session-1"))
+    expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).toContain("正在检查 PR…")
+    await reactAct(async () => resolveSelectedPullRequest?.())
+    await flush()
+    await waitFor(() =>
+      expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).toContain("#1 · 未合并"),
+    )
+  })
+
+  test("settles a failed PR lookup as unavailable instead of checking forever", async () => {
+    const task = createBoardTask(
+      { title: "离线检出", status: "in_progress", sessionIds: ["session-offline"] },
+      { id: "TASK-OFFLINE-PR", now: 1_700_000_000_000 },
+    )
+    storeTasks([task])
+    const view = await renderBoard({
+      sessions: [{
+        id: "session-offline",
+        title: "离线执行",
+        worktreePath: "/worktrees/offline",
+      }],
+      loadPullRequest: async () => { throw new Error("offline") },
+    })
+
+    const inspector = view.container.querySelector('[aria-label="任务检查器"]')
+    await waitFor(() =>
+      expect(inspector?.textContent).toContain("这个 Session 的检出目录没有当前 pull request。"),
+    )
+    expect(inspector?.textContent).not.toContain("正在检查 PR…")
   })
 
   test("searches from the Filter popover and clears the query", async () => {
@@ -426,13 +494,60 @@ describe("TaskBoardPage rendered", () => {
     expect(started).toEqual(["TASK-2002"])
   })
 
-  test("closes and restores the Inspector without losing selection", async () => {
+  test("keeps the Inspector integrated and persistent on wide layouts", async () => {
     const view = await renderBoard()
     const page = view.container.querySelector("[data-task-board-page]")
 
-    await click(button(view.container, "隐藏检查器"))
-    expect(page?.getAttribute("data-inspector-open")).toBe("false")
-    await click(button(view.container, "显示检查器"))
     expect(page?.getAttribute("data-inspector-open")).toBe("true")
+    expect(view.container.querySelector('aside[aria-label="任务检查器"]')).not.toBeNull()
+    expect(view.container.querySelector('[aria-label="隐藏检查器"]')).toBeNull()
+    expect(view.container.querySelector('[aria-label="显示检查器"]')).toBeNull()
+    expect(dom.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull()
+  })
+
+  test("keeps Task expansion in the narrow list and switches in place to the Inspector", async () => {
+    let notifyResize = null
+    globalThis.ResizeObserver = class ResizeObserver {
+      constructor(callback) {
+        this.callback = callback
+      }
+      observe(element) {
+        if (element.hasAttribute?.("data-task-board-page")) notifyResize = this.callback
+      }
+      disconnect() {}
+    }
+    const view = await renderBoard()
+    const page = view.container.querySelector("[data-task-board-page]")
+    Object.defineProperty(page, "clientWidth", {
+      configurable: true,
+      value: 760,
+    })
+    expect(page.clientWidth).toBe(760)
+    expect(notifyResize).not.toBeNull()
+    await reactAct(async () => notifyResize([]))
+    await flush()
+
+    await waitFor(() => {
+      expect(
+        view.container.querySelector("[data-task-board-page]")?.getAttribute("data-inspector-open"),
+      ).toBe("false")
+    })
+    await click(button(view.container, "展开任务：确认任务流转规则"))
+    expect(page?.getAttribute("data-inspector-open")).toBe("false")
+
+    const showInspector = button(view.container, "显示检查器")
+    showInspector.focus()
+    await click(showInspector)
+    expect(dom.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull()
+    expect(dom.document.body.querySelector('[data-slot="dialog-overlay"]')).toBeNull()
+    expect(view.container.querySelector(".task-board-workspace")).toBeNull()
+    expect(view.container.querySelector('aside[aria-label="任务检查器"]')).not.toBeNull()
+    await waitFor(() => expect(dom.document.activeElement).toBe(button(view.container, "返回任务列表")))
+
+    await click(button(view.container, "返回任务列表"))
+    expect(page?.getAttribute("data-inspector-open")).toBe("false")
+    expect(view.container.querySelector(".task-board-workspace")).not.toBeNull()
+    expect(view.container.querySelector('aside[aria-label="任务检查器"]')).toBeNull()
+    await waitFor(() => expect(dom.document.activeElement).toBe(button(view.container, "显示检查器")))
   })
 })
