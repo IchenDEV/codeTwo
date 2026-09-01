@@ -84,6 +84,7 @@ user's populated screenshot remains the final visual acceptance for that specifi
 
 ## Review and release
 
+Draft PR: [#218](https://github.com/IchenDEV/codeTwo/pull/218).
 Approval: the user approved implementation through direct screenshot feedback on 2026-09-01.
 Release target: none.
 Release identity: not applicable until released.

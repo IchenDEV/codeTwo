@@ -180,6 +180,7 @@ tests because the native minimum window size prevents reaching that breakpoint.
 
 ## Review and release
 
+Draft PR: [#218](https://github.com/IchenDEV/codeTwo/pull/218).
 Approval: the user approved implementation on 2026-09-01.
 Release target: none.
 Release identity: not applicable until released.

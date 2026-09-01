@@ -91,6 +91,7 @@ the existing wrapping behavior and only makes the interactive text typographical
 
 ## Review and release
 
+Draft PR: [#218](https://github.com/IchenDEV/codeTwo/pull/218).
 Approval: the user approved implementation on 2026-09-01.
 Release target: none.
 Release identity: not applicable until released.
