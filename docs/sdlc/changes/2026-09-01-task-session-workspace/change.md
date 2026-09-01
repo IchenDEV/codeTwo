@@ -13,7 +13,7 @@ source: direct user requests following the approved Task, Session, worktree, and
 inputs: existing TaskBoard tasks, ordered Task sessionIds, Session worktree provenance, and current GitHub pull-request lookup
 outputs: production Task list with inline Session history and a Session-scoped inspector
 scope: .github/workflows/desktop-design-system.yml, .gitignore, apps/desktop/bun.lock, apps/desktop/eslint.config.mjs, apps/desktop/package.json, apps/desktop/src/App.tsx, apps/desktop/src/i18n/strings.ts, apps/desktop/src/taskboard, apps/desktop/stryker.taskboard.config.json, apps/desktop/tests/desktopPerformanceContract.test.ts, apps/desktop/tests/taskBoardRendered.test.tsx, apps/desktop/tests/taskBoardWorkspaceModel.test.ts, apps/desktop/tsconfig.stryker.json, docs/sdlc/changes/2026-09-01-task-session-workspace
-next_trigger: human review and feedback
+next_trigger: human review of the draft pull request
 verification_mode: owner
 verified_by: codex
 verified_at: 2026-09-01
@@ -154,12 +154,12 @@ Verdict: verified.
   and a 760-by-900 narrow viewport. At narrow width the 360-pixel inspector was an absolute right
   drawer, secondary list columns collapsed, the Task/Session/PR hierarchy remained operable, and
   the Browser console contained no warnings or errors.
-- AC-6: PASS — the final JUnit-backed `bun test` run passed 804 desktop tests across 138 files with
-  3,807 assertions and zero failures. `bun run build:renderer` passed and retained only the
-  repository's existing large-chunk advisory.
+- AC-6: PASS — after merging `origin/main` at `623af2b3`, the final JUnit-backed `bun test` run
+  passed 826 desktop tests across 142 files with 4,908 assertions and zero failures.
+  `bun run build:renderer` passed and retained only the repository's existing large-chunk advisory.
   `bun script/verify/docs.ts`, both SDLC verification modes, `git diff --check`, and the five Gate
   self-tests all passed.
-- AC-7: PASS — `bun run lint` and `bunx tsc --noEmit` passed. A temporary new-file probe proved the
+- AC-7: PASS — post-merge `bun run lint` and `bunx tsc --noEmit` passed. A temporary new-file probe proved the
   TaskBoard glob automatically applies the gate: inferred `any` from `JSON.parse` failed
   `no-unsafe-assignment`, explicit `any` failed `no-explicit-any`, and a narrowed `unknown` boundary
   passed; the probes were then removed. The fresh `bun run mutation:taskboard` run generated 170
