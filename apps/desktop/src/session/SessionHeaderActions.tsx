@@ -1,22 +1,26 @@
 import {
   Box,
   Folder,
-  GitBranch,
   GitCommitHorizontal,
-  History,
   Ellipsis,
   MessageSquareText,
   Orbit,
   Plus,
   Play,
   Send,
-  Upload,
 } from "@/components/ui/icons";
 
 import { useT } from "../i18n";
 import { formatCombo } from "../keys";
 import type { ProjectScript } from "../bridge";
+import {
+  gitNextActionLabel,
+  runGitNextAction,
+  type GitNextActionItem,
+  type GitNextActionProjection,
+} from "../git/nextAction";
 import { Button } from "@/components/ui/button";
+import { SplitButton } from "@/components/ui/split-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function SessionHeaderActions({
-  canCommit,
+  gitAction,
   onAddAction,
   onOpenCursor,
   onOpenAntigravity,
@@ -37,12 +41,14 @@ export function SessionHeaderActions({
   finderHint,
   actions = [],
   onRunAction,
-  onCommit,
+  onOpenSourceControl,
+  onOpenPullRequest,
+  onCleanupWorktree,
   onCheckpoint,
   onPush,
   onMoveTask,
 }: {
-  canCommit: boolean;
+  gitAction: GitNextActionProjection;
   onAddAction: () => void;
   onOpenCursor: () => void;
   onOpenAntigravity: () => void;
@@ -52,12 +58,37 @@ export function SessionHeaderActions({
   finderHint: string;
   actions?: ProjectScript[];
   onRunAction?: (action: ProjectScript) => void;
-  onCommit: () => void;
+  onOpenSourceControl: () => void;
+  onOpenPullRequest: () => void;
+  onCleanupWorktree: () => void;
   onCheckpoint: () => void;
   onPush: () => void;
   onMoveTask: () => void;
 }) {
   const t = useT();
+  const runGitAction = (item: GitNextActionItem) => runGitNextAction(item, {
+    openSourceControl: onOpenSourceControl,
+    push: onPush,
+    openPullRequest: onOpenPullRequest,
+    cleanupWorktree: onCleanupWorktree,
+  });
+  const primaryGitLabel = gitNextActionLabel(
+    t,
+    gitAction.primary,
+    gitAction.changeRequestLabel,
+  );
+  const gitAlternatives = gitAction.alternatives.map((item) => ({
+    label: gitNextActionLabel(t, item, gitAction.changeRequestLabel),
+    onClick: () => runGitAction(item),
+    disabled: item.disabled,
+  }));
+  if (!gitAction.primary.disabled) {
+    gitAlternatives.push({
+      label: t("header.checkpoint"),
+      onClick: onCheckpoint,
+      disabled: false,
+    });
+  }
   const renderOpenMenu = () => (
     <DropdownMenuContent align="end">
       <DropdownMenuGroup>
@@ -85,25 +116,6 @@ export function SessionHeaderActions({
       </DropdownMenuGroup>
     </DropdownMenuContent>
   );
-  const renderCommitMenu = () => (
-    <DropdownMenuContent align="end">
-      <DropdownMenuGroup>
-        <DropdownMenuItem onClick={onCommit}>
-          <GitBranch aria-hidden />
-          {t("action.open_source_control")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onCheckpoint}>
-          <History aria-hidden />
-          {t("header.checkpoint")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onPush}>
-          <Upload aria-hidden />
-          {t("header.push")}
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
-    </DropdownMenuContent>
-  );
-
   return (
     <div
       className="session-header-actions flex shrink-0 items-center gap-2"
@@ -195,24 +207,26 @@ export function SessionHeaderActions({
         {renderOpenMenu()}
       </DropdownMenu>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={(
-            <Button
-              type="button"
-              variant="ghost"
-              size="compact"
-              disabled={!canCommit}
-              className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground disabled:opacity-60"
-              aria-label={t("header.commit")}
-            >
-              <GitCommitHorizontal className="session-header-action-icon size-4 text-muted-foreground" aria-hidden />
-              <span className="session-header-action-label">{t("header.commit")}</span>
-            </Button>
-          )}
-        />
-        {renderCommitMenu()}
-      </DropdownMenu>
+      <SplitButton
+        label={(
+          <>
+            <GitCommitHorizontal className="session-header-action-icon size-4 text-muted-foreground" aria-hidden />
+            <span className="session-header-action-label">{primaryGitLabel}</span>
+          </>
+        )}
+        primaryLabel={primaryGitLabel}
+        onClick={() => runGitAction(gitAction.primary)}
+        actions={gitAlternatives}
+        disabled={gitAction.primary.disabled}
+        variant="ghost"
+        size="compact"
+        menuSide="bottom"
+        menuAlign="end"
+        menuLabel={t("git.next.moreActions")}
+        className="session-header-git-action"
+        primaryClassName="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground disabled:opacity-60"
+        menuButtonClassName="bg-fill-rest text-muted-foreground hover:bg-fill-hover hover:text-muted-foreground disabled:opacity-60"
+      />
     </div>
   );
 }

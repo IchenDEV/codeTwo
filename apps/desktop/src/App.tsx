@@ -73,7 +73,9 @@ import {
   gitDiffStat,
   gitPush,
   gitRevert,
+  gitSourceControlInfo,
   gitStatus,
+  githubCurrentPullRequest,
   githubImportPlugin,
   installMarketplacePlugin,
   importPromptImage,
@@ -158,6 +160,7 @@ import {
   type Annotation,
   type AppshotCapture,
   type GitStatus,
+  type GitHubPullRequest,
   type GoalSnapshot,
   type GitHubPullRequestDetail,
   type Issue,
@@ -179,6 +182,7 @@ import {
   type Sandbox,
   type SessionActivity,
   type SessionInfo,
+  type SourceControlInfo,
   type SessionInteractionCapabilities,
   type SkillInfo,
   type WorktreeBaselineKind,
@@ -400,6 +404,7 @@ import {
 } from "./dock/Dock";
 import { BrowserPanel } from "./browser/Browser";
 import { GitDockContent, PullRequestDockContent } from "./git/GitDockContent";
+import { resolveGitNextAction } from "./git/nextAction";
 import { TerminalDockContent } from "./terminal/TerminalDockContent";
 import { TrajectoryView } from "./session/TrajectoryView";
 import { SessionRail } from "./sidebar/SessionRail";
@@ -653,12 +658,18 @@ function localCanvasScene(
 interface GitWorkspaceData {
   status: GitStatus | null;
   diffStat: { added: number; deleted: number; truncated: boolean };
+  sourceControl: SourceControlInfo | null;
+  pullRequest: GitHubPullRequest | null;
+  forgeError: string | null;
 }
 
 const EMPTY_DIFF_STAT = { added: 0, deleted: 0, truncated: false } as const;
 const EMPTY_GIT_WORKSPACE: GitWorkspaceData = {
   status: null,
   diffStat: EMPTY_DIFF_STAT,
+  sourceControl: null,
+  pullRequest: null,
+  forgeError: null,
 };
 const EMPTY_CHECKPOINTS: Checkpoint[] = [];
 
@@ -1364,6 +1375,26 @@ export default function App() {
   );
   const git = currentGitWorkspace.value.status;
   const diffStat = currentGitWorkspace.value.diffStat;
+  const activeSessionRecord = useMemo(
+    () =>
+      sessions.find((session) => session.id === activeSession)
+      ?? archivedSessions.find((session) => session.id === activeSession)
+      ?? null,
+    [activeSession, archivedSessions, sessions],
+  );
+  const gitNextAction = resolveGitNextAction({
+    status: git,
+    loading: currentGitWorkspace.loading,
+    sourceControl: currentGitWorkspace.value.sourceControl,
+    pullRequest: currentGitWorkspace.value.pullRequest,
+    forgeError: currentGitWorkspace.value.forgeError,
+    taskWorktree: Boolean(
+      activeSessionRecord?.worktree_path && !activeSessionRecord.worktree_discarded,
+    ),
+    canCleanup: Boolean(
+      activeSessionRecord?.worktree_path && !activeSessionRecord.worktree_discarded,
+    ),
+  });
   const currentCheckpointWorkspace = workspaceStateForCwd(
     checkpointWorkspace,
     workspaceCwd,
@@ -2598,14 +2629,7 @@ export default function App() {
     }
   }, [refreshProjects, selectProject, toast]);
 
-  const activeSessionTitle = useMemo(
-    () =>
-      (
-        sessions.find((s) => s.id === activeSession) ??
-        archivedSessions.find((s) => s.id === activeSession)
-      )?.title ?? null,
-    [sessions, archivedSessions, activeSession],
-  );
+  const activeSessionTitle = activeSessionRecord?.title ?? null;
   const activeTitle = activeBoardTask?.title
     ?? activeSessionTitle
     ?? t(temporarySession ? "rail.newTemporarySession" : "rail.newTask");
@@ -2645,15 +2669,12 @@ export default function App() {
   const focusedConfigOptions = configOptions;
   const focusedSessionUsage = sessionUsage;
   const activeWorktreeState = useMemo(() => {
-      const stored =
-        sessions.find((session) => session.id === activeSession) ??
-        archivedSessions.find((session) => session.id === activeSession);
     return activeSessionWorktreeState(
       activeSession,
-      stored,
+      activeSessionRecord ?? undefined,
       activeSessionReceipt,
-  );
-  }, [sessions, archivedSessions, activeSession, activeSessionReceipt]);
+    );
+  }, [activeSession, activeSessionReceipt, activeSessionRecord]);
   const activeWorktreeBaseline = activeWorktreeState.baseline;
   const activeWorktreeUnknown = activeWorktreeState.legacyUnknown;
 
@@ -2671,6 +2692,7 @@ export default function App() {
   const focusedActiveProjectRecord = activeProjectRecord;
   const focusedActiveProjectName = activeProjectName;
   const focusedGit = git;
+  const focusedGitNextAction = gitNextAction;
 
   const taskBoardSessions = useMemo(
     () =>
@@ -5529,46 +5551,84 @@ export default function App() {
     const fresh = () =>
       gitRefreshSeq.current === request && (cwdRef.current || ".") === target;
     setGitWorkspace({ cwd: target, loading: true, value: EMPTY_GIT_WORKSPACE });
-    gitStatus(target)
-      .then((s) => {
-        if (!fresh()) return;
+    void (async () => {
+      const [statusResult, sourceControlResult] = await Promise.allSettled([
+        gitStatus(target),
+        gitSourceControlInfo(target),
+      ]);
+      if (!fresh()) return;
+      if (statusResult.status === "rejected") {
         setGitWorkspace({
           cwd: target,
           loading: false,
-          value: { status: s, diffStat: EMPTY_DIFF_STAT },
+          value: EMPTY_GIT_WORKSPACE,
         });
-        if (s.is_repo && s.files.length > 0) {
-          gitDiffStat(target)
-            .then((stat) => {
-              if (!fresh()) return;
-              setGitWorkspace((current) =>
-                current.cwd === target
-                  ? {
-                      ...current,
-                      value: {
-                        ...current.value,
-                        diffStat: {
-                          added: stat.added,
-                          deleted: stat.deleted,
-                          truncated: stat.truncated,
-                        },
-                      },
-                    }
-                  : current,
-              );
-            })
-            .catch(() => {});
+        return;
+      }
+
+      const status = statusResult.value;
+      const sourceControl = sourceControlResult.status === "fulfilled"
+        ? sourceControlResult.value
+        : null;
+      let forgeError = sourceControlResult.status === "rejected"
+        ? String(sourceControlResult.reason)
+        : null;
+      let pullRequest: GitHubPullRequest | null = null;
+      if (status.is_repo && sourceControl?.provider === "github") {
+        if (sourceControl.required_cli && !sourceControl.required_cli_available) {
+          forgeError = `${sourceControl.required_cli} is unavailable`;
+        } else {
+          try {
+            pullRequest = await githubCurrentPullRequest(target);
+          } catch (error) {
+            forgeError = String(error);
+          }
         }
-      })
-      .catch(() => {
-        if (fresh()) {
-          setGitWorkspace({
-            cwd: target,
-            loading: false,
-            value: EMPTY_GIT_WORKSPACE,
-          });
-        }
+      }
+
+      if (!fresh()) return;
+      setGitWorkspace({
+        cwd: target,
+        loading: false,
+        value: {
+          status,
+          diffStat: EMPTY_DIFF_STAT,
+          sourceControl,
+          pullRequest,
+          forgeError,
+        },
       });
+      if (status.is_repo && status.files.length > 0) {
+        gitDiffStat(target)
+          .then((stat) => {
+            if (!fresh()) return;
+            setGitWorkspace((current) =>
+              current.cwd === target
+                ? {
+                    ...current,
+                    value: {
+                      ...current.value,
+                      diffStat: {
+                        added: stat.added,
+                        deleted: stat.deleted,
+                        truncated: stat.truncated,
+                      },
+                    },
+                  }
+                : current,
+            );
+          })
+          .catch(() => {});
+      }
+    })().catch(() => {
+      if (fresh()) {
+        setGitWorkspace({
+          cwd: target,
+          loading: false,
+          value: EMPTY_GIT_WORKSPACE,
+        });
+      }
+    });
   }, [cwd]);
 
   const refreshCheckpoints = useCallback(() => {
@@ -8033,13 +8093,29 @@ export default function App() {
                 const activeProjectName = paneFocused
                   ? focusedActiveProjectName
                   : activeProjectRecord?.name ?? null;
-                const git = paneFocused
-                  ? focusedGit
+                const paneGitWorkspace = paneFocused
+                  ? currentGitWorkspace
                   : workspaceStateForCwd(
                       gitWorkspace,
                       cwd || ".",
                       EMPTY_GIT_WORKSPACE,
-                    ).value.status;
+                    );
+                const git = paneFocused ? focusedGit : paneGitWorkspace.value.status;
+                const gitAction = paneFocused
+                  ? focusedGitNextAction
+                  : resolveGitNextAction({
+                      status: paneGitWorkspace.value.status,
+                      loading: paneGitWorkspace.loading,
+                      sourceControl: paneGitWorkspace.value.sourceControl,
+                      pullRequest: paneGitWorkspace.value.pullRequest,
+                      forgeError: paneGitWorkspace.value.forgeError,
+                      taskWorktree: Boolean(
+                        paneStored?.worktree_path && !paneStored.worktree_discarded,
+                      ),
+                      canCleanup: Boolean(
+                        paneStored?.worktree_path && !paneStored.worktree_discarded,
+                      ),
+                    });
                 // Per-session model/config/usage: the focused pane keeps the authoritative single
                 // values; a background pane reads its own session's recorded snapshot.
                 const models = paneFocused
@@ -8215,7 +8291,7 @@ export default function App() {
               </div>
 
               <SessionHeaderActions
-                canCommit={git?.is_repo === true}
+                gitAction={gitAction}
                 actions={scripts}
                 editorLaunchersAvailable={editorLaunchersAvailable}
                 fileManagerLabel={fileManagerLabel}
@@ -8225,7 +8301,11 @@ export default function App() {
                 onOpenAntigravity={() => void openWorkingDirectory("antigravity")}
                 onOpenFinder={() => void openWorkingDirectory("finder")}
                 finderHint={hint("open_finder")}
-                onCommit={openSourceControl}
+                onOpenSourceControl={openSourceControl}
+                onOpenPullRequest={() => manualDockTab("pull-request")}
+                onCleanupWorktree={() => {
+                  if (paneStored) void discardWorktreeForSession(paneStored);
+                }}
                 onCheckpoint={() => void doCheckpoint()}
                 onPush={() => void doPush().catch(() => {})}
                 onMoveTask={() => activeSession && setShowTaskHandoff(true)}
@@ -8690,7 +8770,15 @@ export default function App() {
                 git: (
                   <GitDockContent
                     status={git}
+                    action={gitNextAction}
                     onOpenSourceControl={openSourceControl}
+                    onPush={() => void doPush().catch(() => {})}
+                    onOpenPullRequest={() => manualDockTab("pull-request")}
+                    onCleanupWorktree={() => {
+                      if (activeSessionRecord) {
+                        void discardWorktreeForSession(activeSessionRecord);
+                      }
+                    }}
                   />
                 ),
                 "pull-request": (
