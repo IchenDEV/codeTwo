@@ -28,7 +28,7 @@ const manifest = {
       },
       ui: [{
         id: "review",
-        slot: "session.header",
+        slot: "host.actions",
         label: "Review",
         command: "review.run",
       }],
@@ -185,7 +185,7 @@ describe("C2 plugin package model", () => {
 
     expect(() => parsePluginManifest({
       ...manifest,
-      extensions: { "dev.codetwo": { standardVersion: "1.3.0" } },
+      extensions: { "dev.codetwo": { standardVersion: "1.4.0" } },
     })).toThrow("Unsupported C2 plugin standard");
 
     expect(() => parsePluginManifest({

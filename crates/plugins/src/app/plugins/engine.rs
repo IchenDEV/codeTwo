@@ -22,7 +22,7 @@ use codetwo_core::session::TranscriptCursor;
 use codetwo_core::task::TaskId;
 use codetwo_core::worktree::WorktreeBaseline;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -203,6 +203,14 @@ fn register_commands(
     bus: Arc<EventBus>,
     paths: Arc<Paths>,
 ) -> Result<(), PluginError> {
+    #[derive(Serialize)]
+    struct SessionSummary {
+        id: String,
+        title: String,
+        last_active_at: i64,
+        activity_revision: u64,
+        activity_state: &'static str,
+    }
     #[derive(Deserialize)]
     struct SubmitArgs {
         op: Op,
@@ -225,6 +233,35 @@ fn register_commands(
     ctx.command("sessions.list", move |_| {
         let engine = listing.clone();
         async move { json(engine.list_sessions().map_err(PluginError::new)?) }
+    })?;
+
+    let summarizing = engine.clone();
+    ctx.command_extension_public("sessions.summary", move |_| {
+        let engine = summarizing.clone();
+        async move {
+            let sessions = engine
+                .list_sessions()
+                .map_err(PluginError::new)?
+                .into_iter()
+                .filter(|session| !session.transient)
+                .take(100)
+                .map(|session| SessionSummary {
+                    id: session.id,
+                    title: session.title,
+                    last_active_at: session.last_active_at,
+                    activity_revision: session.activity.revision,
+                    activity_state: match session.activity.state {
+                        codetwo_core::session::SessionRunState::Idle => "idle",
+                        codetwo_core::session::SessionRunState::Running { .. } => "running",
+                        codetwo_core::session::SessionRunState::AwaitingInput { .. } => {
+                            "awaiting_input"
+                        }
+                        codetwo_core::session::SessionRunState::Failed { .. } => "failed",
+                    },
+                })
+                .collect::<Vec<_>>();
+            json(sessions)
+        }
     })?;
 
     let diagnostics_engine = engine.clone();

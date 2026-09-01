@@ -1,18 +1,26 @@
 //! Scope-owned forwarding from core broadcasts to the desktop host protocol.
 
 use codetwo_kernel::{
-    async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult,
+    async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult, Service,
 };
 use codetwo_plugins::events::{ConnectorEvent, PluginsChanged};
 use codetwo_plugins::{EventBus, TerminalEvent, TerminalOutputEvent};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use crate::EventSink;
 
 pub struct HostEventsPlugin {
     host: EventSink,
+}
+
+/// Marker service for Runtimes that contribute desktop-hosted actions.
+pub struct DesktopHostActions;
+
+impl Service for DesktopHostActions {
+    const NAME: &'static str = "desktop-host-actions";
 }
 
 impl HostEventsPlugin {
@@ -56,6 +64,38 @@ impl Plugin for HostEventsPlugin {
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        ctx.provide(Arc::new(DesktopHostActions))?;
+
+        #[derive(Deserialize)]
+        struct RevealSessionArgs {
+            session: String,
+        }
+        let host = self.host.clone();
+        ctx.command_extension_public("desktop.reveal_session", move |args| {
+            let host = host.clone();
+            async move {
+                let args: RevealSessionArgs = serde_json::from_value(args)
+                    .map_err(|error| PluginError::new(format!("bad arguments: {error}")))?;
+                if args.session.is_empty()
+                    || args.session.len() > 128
+                    || !args
+                        .session
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+                {
+                    return Err(PluginError::new("session id is invalid"));
+                }
+                host.emit(
+                    "desktop-reveal-session",
+                    serde_json::json!({
+                        "session": args.session,
+                    }),
+                )
+                .map_err(PluginError::new)?;
+                Ok(Value::Bool(true))
+            }
+        })?;
+
         let mut engine_events = ctx
             .get::<EventBus>()
             .ok_or_else(|| PluginError::new("event bus is unavailable"))?
@@ -126,6 +166,7 @@ impl Plugin for HostEventsPlugin {
             let _ = host.emit("plugin-connector-event", (*event).clone());
             None
         });
+
         Ok(())
     }
 }

@@ -21,6 +21,8 @@ import type {
 } from "./rpc";
 import { nativeContextMenuAction, nativeContextMenuConfig } from "./contextMenuHost";
 import { NativeHost } from "./nativeHost";
+import { PluginHostActionController } from "./pluginHostActions";
+import { createMacOSTouchBar } from "./touchBar";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
 import { AppshotManager } from "./appshots";
 import { macOSApplicationMenu } from "./applicationMenu";
@@ -118,6 +120,7 @@ let rendererReady = false;
 let rpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
 let desktopPetRpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
 let appshots: AppshotManager;
+let pluginHostActions: PluginHostActionController | null = null;
 const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 if (process.platform === "darwin") {
   ApplicationMenu.setApplicationMenu(macOSApplicationMenu());
@@ -214,6 +217,7 @@ const host = new NativeHost({
   executable: join(PATHS.RESOURCES_FOLDER, "app", "bin", hostExecutable),
   dataDir,
   onEvent: (event) => {
+    pluginHostActions?.handleHostEvent(event);
     if (rendererReady) rpc.send.event(event);
     else queuedEvents.push(event);
   },
@@ -399,6 +403,17 @@ if (process.platform === "darwin") {
   if (!windowEffectsStatus.backdrop) {
     console.warn("The macOS system backdrop could not be installed");
   }
+  const touchBar = createMacOSTouchBar(
+    mainWindow.ptr,
+    (contributionKey, itemId) => pluginHostActions?.invoke(contributionKey, itemId),
+  );
+  if (touchBar) {
+    pluginHostActions = new PluginHostActionController(
+      (name, args, projectPath) => host.call(name, args, projectPath),
+      touchBar,
+    );
+    void pluginHostActions.start();
+  }
   // AppKit can reset standard-window-button frames during its own resize layout pass. Reapply the
   // same fixed position afterward; the 46px titlebar has no runtime geometry to measure.
   mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(22, 16));
@@ -434,5 +449,6 @@ Electrobun.events.on("before-quit", (event) => {
   event.response = { allow: false };
   shuttingDown = true;
   appshots.shutdown();
+  pluginHostActions?.dispose();
   void host.shutdown().finally(() => Utils.quit());
 });
