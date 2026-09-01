@@ -235,6 +235,7 @@ merge. No PR, push, merge, deployment, or release has been performed.
 
 Approval: the user approved implementation on 2026-09-01.
 Baseline pull request: [#214](https://github.com/IchenDEV/codeTwo/pull/214) (merged).
+Interaction follow-up: [#215](https://github.com/IchenDEV/codeTwo/pull/215) (draft).
 Release target: none requested.
 Rollback: revert this change; Task and Session persistence is unchanged.
 No release: the interaction follow-up is owner-verified; human review remains pending.
