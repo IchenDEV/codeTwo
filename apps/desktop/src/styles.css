@@ -818,10 +818,13 @@ html[data-appearance-pointer-cursors="false"]
   }
 
   /* Keep every session in DOM and focus order while allowing WebKit to skip off-screen paint in
-     long rails. `auto` lets the browser remember the real height after a row is first revealed. */
+     long rails. `auto` remembers measured heights; the active row always paints immediately. */
   .session-rail-row {
     content-visibility: auto;
     contain-intrinsic-size: auto 64px;
+  }
+  .session-rail-row:has([aria-current="page"]) {
+    content-visibility: visible;
   }
 
   /* Archiving is reversible but spatial: the row leaves its current collection before the bridge

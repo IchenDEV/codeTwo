@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use codetwo_core::{Engine, Event, Store};
+use codetwo_core::{Engine, Event, Member, MemberId, Store, WorkspaceId, WorkspaceRole};
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use codetwo_plugins::{CanvasService, EngineService, EventBus, StoreService};
 use serde::{Deserialize, Serialize};
@@ -39,6 +39,14 @@ struct RemotePairingLink {
     token: String,
     expires_in: u64,
     qr_svg: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    member_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TeamInvite {
+    member: Member,
+    pairing: RemotePairingLink,
 }
 
 struct RemoteHandle {
@@ -207,6 +215,37 @@ impl RemoteRuntime {
     fn shutdown(&self) {
         self.lifecycle.lock().unwrap().shutdown();
     }
+
+    fn member_pairing_link(
+        &self,
+        member_id: &MemberId,
+        ttl: std::time::Duration,
+        endpoint_id: Option<&str>,
+    ) -> Result<RemotePairingLink, String> {
+        let (port, auth) = self
+            .lifecycle
+            .lock()
+            .unwrap()
+            .running_access()
+            .ok_or_else(|| "turn on network access first".to_string())?;
+        let endpoints = Self::endpoints(port);
+        let endpoint = codetwo_server::select_pairing_endpoint(&endpoints, endpoint_id)?;
+        let token = auth.issue_member_pairing_token(member_id.as_str(), ttl);
+        let url = codetwo_server::pairing_url_for_endpoint(&endpoint.url, &token);
+        let qr_svg = if endpoint.qr_shareable {
+            codetwo_server::pairing_qr_svg(&url).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        Ok(RemotePairingLink {
+            endpoint_id: endpoint.id.clone(),
+            url,
+            token,
+            expires_in: ttl.as_secs(),
+            qr_svg,
+            member_id: Some(member_id.as_str().to_string()),
+        })
+    }
 }
 
 fn take_args<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, PluginError> {
@@ -221,6 +260,14 @@ fn take_args<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, PluginEr
 
 fn json<T: Serialize>(value: T) -> Result<Value, PluginError> {
     serde_json::to_value(value).map_err(PluginError::new)
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
 }
 
 #[async_trait]
@@ -404,7 +451,100 @@ impl Plugin for RemotePlugin {
                     token,
                     expires_in: ttl.as_secs(),
                     qr_svg,
+                    member_id: None,
                 })
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct TeamBootstrapArgs {
+            workspace_name: String,
+            admin_name: String,
+            #[serde(default)]
+            ttl_secs: Option<u64>,
+            #[serde(default)]
+            endpoint_id: Option<String>,
+        }
+        let service = runtime.clone();
+        ctx.command("remote.team_bootstrap", move |args| {
+            let service = service.clone();
+            async move {
+                let args: TeamBootstrapArgs = take_args(args)?;
+                let now_ms = now_millis();
+                let member = match service.store.workspace().map_err(PluginError::new)? {
+                    Some(_) => service
+                        .store
+                        .list_members()
+                        .map_err(PluginError::new)?
+                        .into_iter()
+                        .find(|member| member.active && member.role == WorkspaceRole::Admin)
+                        .ok_or_else(|| PluginError::new("Workspace has no active Admin"))?,
+                    None => {
+                        let workspace_id =
+                            WorkspaceId::new(format!("workspace-{}", uuid::Uuid::new_v4()));
+                        service
+                            .store
+                            .create_workspace(workspace_id.clone(), &args.workspace_name, now_ms)
+                            .map_err(PluginError::new)?;
+                        service
+                            .store
+                            .create_member(
+                                &workspace_id,
+                                MemberId::new(format!("member-{}", uuid::Uuid::new_v4())),
+                                &args.admin_name,
+                                WorkspaceRole::Admin,
+                                now_ms,
+                            )
+                            .map_err(PluginError::new)?
+                    }
+                };
+                let ttl = std::time::Duration::from_secs(
+                    args.ttl_secs
+                        .unwrap_or(codetwo_server::DEFAULT_PAIRING_TTL.as_secs()),
+                );
+                let pairing = service
+                    .member_pairing_link(&member.id, ttl, args.endpoint_id.as_deref())
+                    .map_err(PluginError::new)?;
+                json(TeamInvite { member, pairing })
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct TeamInviteArgs {
+            display_name: String,
+            #[serde(default)]
+            ttl_secs: Option<u64>,
+            #[serde(default)]
+            endpoint_id: Option<String>,
+        }
+        let service = runtime.clone();
+        ctx.command("remote.team_invite", move |args| {
+            let service = service.clone();
+            async move {
+                let args: TeamInviteArgs = take_args(args)?;
+                let workspace = service
+                    .store
+                    .workspace()
+                    .map_err(PluginError::new)?
+                    .ok_or_else(|| PluginError::new("bootstrap the Workspace first"))?;
+                let member = service
+                    .store
+                    .create_member(
+                        &workspace.id,
+                        MemberId::new(format!("member-{}", uuid::Uuid::new_v4())),
+                        &args.display_name,
+                        WorkspaceRole::Member,
+                        now_millis(),
+                    )
+                    .map_err(PluginError::new)?;
+                let ttl = std::time::Duration::from_secs(
+                    args.ttl_secs
+                        .unwrap_or(codetwo_server::DEFAULT_PAIRING_TTL.as_secs()),
+                );
+                let pairing = service
+                    .member_pairing_link(&member.id, ttl, args.endpoint_id.as_deref())
+                    .map_err(PluginError::new)?;
+                json(TeamInvite { member, pairing })
             }
         })?;
 

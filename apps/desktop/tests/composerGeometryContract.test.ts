@@ -1,35 +1,24 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-const composer = readFileSync(
-  new URL("../src/session/Composer.tsx", import.meta.url),
-  "utf8",
+const normalizeSource = (source: string) => source.replace(/\r\n?/g, "\n");
+const readSource = (relativePath: string) => normalizeSource(
+  readFileSync(new URL(relativePath, import.meta.url), "utf8"),
 );
-const app = readFileSync(
-  new URL("../src/App.tsx", import.meta.url),
-  "utf8",
-);
-const bridge = readFileSync(
-  new URL("../src/bridge.ts", import.meta.url),
-  "utf8",
-);
-const tokens = readFileSync(
-  new URL("../src/design/tokens.css", import.meta.url),
-  "utf8",
-);
-const voiceButton = readFileSync(
-  new URL("../src/voice/VoiceButton.tsx", import.meta.url),
-  "utf8",
-);
-const controlChip = readFileSync(
-  new URL("../src/components/ui/control-chip.tsx", import.meta.url),
-  "utf8",
-);
-const styles = readFileSync(
-  new URL("../src/styles.css", import.meta.url),
-  "utf8",
-);
+
+const composer = readSource("../src/session/Composer.tsx");
+const app = readSource("../src/App.tsx");
+const bridge = readSource("../src/bridge.ts");
+const tokens = readSource("../src/design/tokens.css");
+const voiceButton = readSource("../src/voice/VoiceButton.tsx");
+const controlChip = readSource("../src/components/ui/control-chip.tsx");
+const styles = readSource("../src/styles.css");
+
 describe("composer geometry contract", () => {
+  test("normalizes source contracts across platform line endings", () => {
+    expect(normalizeSource("first\r\nsecond\rthird")).toBe("first\nsecond\nthird");
+  });
+
   test("paints the compact composer on the same DOM card as its interactive content", () => {
     expect(composer).not.toContain("function ComposerLiquidSurface");
     expect(composer).not.toContain("data-gooey-composer");
@@ -78,6 +67,15 @@ describe("composer geometry contract", () => {
     expect(app).not.toContain("codetwo.composerHeight");
     expect(app).not.toContain("composerHByPane");
     expect(composer).toContain('aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}');
+  });
+
+  test("keeps the interactive Project name typographically continuous with the empty heading", () => {
+    expect(app).toContain(
+      "[font-size:inherit] [font-weight:inherit] [letter-spacing:inherit] [line-height:inherit]",
+    );
+    expect(app).toContain(
+      '</DropdownMenu>\n                  {" "}\n                  {t("transcript.greetingEnd")}',
+    );
   });
 });
 

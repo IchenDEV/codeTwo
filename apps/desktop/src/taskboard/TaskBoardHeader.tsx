@@ -1,6 +1,7 @@
 import { Filter, Plus } from "@/components/ui/icons"
 import { PageHeader } from "@/components/business/page-header"
 import { SearchField } from "@/components/business/search-field"
+import { ViewSwitcher } from "@/components/business/view-switcher"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,10 +17,13 @@ import type { Translate } from "@/i18n"
 
 import { PRIORITIES, type TaskPriority } from "./taskBoard"
 import { taskPriorityLabel } from "./TaskEditorDialog"
+import type { TaskBoardView } from "./workspaceTypes"
 
 interface TaskBoardHeaderProps {
   t: Translate
   taskCount: number
+  view: TaskBoardView
+  onViewChange: (view: TaskBoardView) => void
   filtersOpen: boolean
   onFiltersOpenChange: (open: boolean) => void
   activeFilterCount: number
@@ -48,6 +52,15 @@ export function TaskBoardHeader(props: TaskBoardHeaderProps) {
           }
           description={t("taskboard.workspaceDescription")}
           actions={<>
+          <ViewSwitcher<TaskBoardView>
+            label={t("taskboard.viewSwitcher")}
+            value={props.view}
+            options={[
+              { value: "list", label: t("taskboard.view.list") },
+              { value: "board", label: t("taskboard.view.board") },
+            ]}
+            onValueChange={props.onViewChange}
+          />
           <Popover open={props.filtersOpen} onOpenChange={props.onFiltersOpenChange}>
             <PopoverTrigger
               render={

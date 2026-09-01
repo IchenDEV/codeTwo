@@ -172,13 +172,16 @@ pub use store::{
 };
 pub use task::{
     AgentAssignment, AgentId, AgentRole, AgentSkillOrigin, AgentSkillRef, AgentStatus,
-    ArtifactProvenance, LoopCeilings, LoopGuardState, MaterialGoalChangeReceipt,
-    OrchestrationEvent, OrchestrationEventKind, ProviderCacheMetrics, ProviderConfiguration,
-    ResultContract, ResultContractRefinement, RunSnapshot, SceneOrigin, SceneRef,
-    StructuralPromptReuse, Task, TaskArtifactStatus, TaskBudget, TaskBudgetState, TaskCacheReceipt,
-    TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus,
-    TaskUsageObservation, WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
-    WorkItemId, WorkItemStatus,
+    ArtifactProvenance, AttentionItem, IdempotentCommand, LoopCeilings, LoopGuardState,
+    MaterialGoalChangeReceipt, Member, MemberId, OrchestrationEvent, OrchestrationEventKind,
+    ProviderCacheMetrics, ProviderConfiguration, ResultContract, ResultContractRefinement,
+    RunSnapshot, SceneOrigin, SceneRef, SharedTaskSnapshot, StructuralPromptReuse,
+    SuggestionApprovalReceipt, SuggestionId, SuggestionStatus, Task, TaskActivityEvent,
+    TaskActivityKind, TaskArtifactStatus, TaskBudget, TaskBudgetState, TaskCacheReceipt,
+    TaskCollaborationSnapshot, TaskComment, TaskCommentId, TaskCompletionEvaluation, TaskGraph,
+    TaskId, TaskSessionLease, TaskStatus, TaskSuggestion, TaskUsageObservation, WorkItem,
+    WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus, Workspace,
+    WorkspaceId, WorkspaceRole,
 };
 pub use task_capsule::{
     compile_task_capsule, session_compatibility_key, CapabilityManifestEntry, CompiledTaskCapsule,

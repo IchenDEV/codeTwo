@@ -585,6 +585,10 @@ export function SessionRail({
     [assignedProjectSection, projectEntries, projectOrganization.order, taskSections.sections],
   );
 
+  const [allProjectsOpen, setAllProjectsOpen] = usePersistedBoolean(
+    "rail.allProjectsOpen",
+    true,
+  );
   // Folded by default: archived threads are reference material, not the working set, so they
   // shouldn't compete with the live rows for attention. The fold survives a restart.
   const [archivedOpen, setArchivedOpen] = usePersistedBoolean("rail.archivedOpen", false);
@@ -929,6 +933,39 @@ export function SessionRail({
         : pullRequest?.state === "ci_running"
           ? "text-warning"
           : "text-muted-foreground";
+    const checkoutBadge = (
+      <span
+        data-session-checkout-kind={isWorktree ? "worktree" : "checkout"}
+        title={t(isWorktree ? "rail.gitWorktreeHint" : "rail.gitCheckoutHint")}
+        aria-label={t(isWorktree ? "rail.gitWorktreeHint" : "rail.gitCheckoutHint")}
+        className="flex shrink-0 items-center gap-0.5 rounded-micro bg-fill-quiet px-1 text-fine leading-4 text-foreground/55"
+      >
+        <GitBranch className="size-2.5" aria-hidden="true" />
+        {t(isWorktree ? "rail.gitWorktree" : "rail.gitCheckout")}
+      </span>
+    );
+    const pullRequestBadge = pullRequest && pullRequestLabel ? (
+      <span
+        data-session-pull-request={pullRequest.state}
+        title={`#${pullRequest.number} · ${pullRequestLabel}`}
+        aria-label={`#${pullRequest.number} · ${pullRequestLabel}`}
+        className={cn(
+          "flex shrink-0 items-center gap-0.5 rounded-micro bg-fill-quiet px-1 text-fine leading-4",
+          pullRequestTone,
+        )}
+      >
+        {pullRequest.state === "merged" ? (
+          <GitMerge className="size-2.5" aria-hidden="true" />
+        ) : pullRequest.state === "ci_running" ? (
+          <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
+        ) : (
+          <GitPullRequest className="size-2.5" aria-hidden="true" />
+        )}
+        #{pullRequest.number} {pullRequestLabel}
+      </span>
+    ) : null;
+    const provenanceInSummary = pullRequest === null;
+    const showWorkspaceLine = pullRequest !== null;
 
     const commitRename = () => {
       if (renaming?.id !== s.id) return;
@@ -1185,9 +1222,12 @@ export function SessionRail({
                 onKeyDown={onRowKeyDown}
                 className="absolute inset-0 z-0 h-auto rounded-control p-0 hover:bg-transparent"
               />
-              <div className="pointer-events-none relative z-10">
+              <div
+                data-session-content
+                className="pointer-events-none relative z-10 pl-1.5"
+              >
                 {/* Title owns the row. Routine controls appear on demand. */}
-                <div data-session-line="title" className="flex h-control-mini items-center gap-1.5">
+                <div data-session-line="title" className="flex h-control-mini items-center gap-2">
                   {renaming?.id === s.id ? (
                     <Input
                       autoFocus
@@ -1307,22 +1347,11 @@ export function SessionRail({
                   </span>
                 </div>
 
-                {/* The glanceable second line: who answered, what they said, and when. */}
+                {/* Keep the preview aligned with the title; trail provider and timing metadata. */}
                 <div
                   data-session-line="summary"
                   className="mt-0.5 flex h-4 items-center gap-1.5 text-callout text-muted-foreground"
                 >
-                  <span
-                    data-session-provider={providerLabel(s.provider)}
-                    title={displayProvider(s.provider)}
-                    aria-label={displayProvider(s.provider)}
-                    className="flex size-3.5 shrink-0 items-center justify-center"
-                  >
-                    <ProviderIcon
-                      provider={providerLabel(s.provider)}
-                      className="size-3 opacity-70"
-                    />
-                  </span>
                   {hasUsefulPreview ? (
                     <span
                       id={`session-preview-${s.id}`}
@@ -1334,6 +1363,17 @@ export function SessionRail({
                   ) : (
                     <span className="min-w-0 flex-1" aria-hidden="true" />
                   )}
+                  <span
+                    data-session-provider={providerLabel(s.provider)}
+                    title={displayProvider(s.provider)}
+                    aria-label={displayProvider(s.provider)}
+                    className="flex size-3.5 shrink-0 items-center justify-center"
+                  >
+                    <ProviderIcon
+                      provider={providerLabel(s.provider)}
+                      className="size-3 opacity-70"
+                    />
+                  </span>
                   <time
                     data-session-age
                     dateTime={new Date(lastActiveAt).toISOString()}
@@ -1342,51 +1382,25 @@ export function SessionRail({
                   >
                     {shortAge(lastActiveAt, ageNow)}
                   </time>
+                  {provenanceInSummary ? checkoutBadge : null}
                 </div>
 
                 {/* Workspace identity and Git provenance close the hierarchy. */}
-                <div
-                  data-session-line="workspace"
-                  className="mt-0.5 flex h-4 items-center gap-1.5 text-callout text-muted-foreground"
-                >
-                  {showProjectIdentity ? (
-                    <>
-                      <Folder className="size-3 shrink-0 opacity-70" aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
-                    </>
-                  ) : (
-                    <span className="min-w-0 flex-1" />
-                  )}
-                  <span
-                    data-session-checkout-kind={isWorktree ? "worktree" : "checkout"}
-                    title={t(isWorktree ? "rail.gitWorktreeHint" : "rail.gitCheckoutHint")}
-                    aria-label={t(isWorktree ? "rail.gitWorktreeHint" : "rail.gitCheckoutHint")}
-                    className="flex shrink-0 items-center gap-0.5 rounded-micro bg-fill-quiet px-1 text-fine leading-4 text-foreground/55"
+                {showWorkspaceLine && (
+                  <div
+                    data-session-line="workspace"
+                    className="mt-0.5 flex h-4 items-center gap-1.5 text-callout text-muted-foreground"
                   >
-                    <GitBranch className="size-2.5" aria-hidden="true" />
-                    {t(isWorktree ? "rail.gitWorktree" : "rail.gitCheckout")}
-                  </span>
-                  {pullRequest && pullRequestLabel ? (
-                    <span
-                      data-session-pull-request={pullRequest.state}
-                      title={`#${pullRequest.number} · ${pullRequestLabel}`}
-                      aria-label={`#${pullRequest.number} · ${pullRequestLabel}`}
-                      className={cn(
-                        "flex shrink-0 items-center gap-0.5 rounded-micro bg-fill-quiet px-1 text-fine leading-4",
-                        pullRequestTone,
-                      )}
-                    >
-                      {pullRequest.state === "merged" ? (
-                        <GitMerge className="size-2.5" aria-hidden="true" />
-                      ) : pullRequest.state === "ci_running" ? (
-                        <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
-                      ) : (
-                        <GitPullRequest className="size-2.5" aria-hidden="true" />
-                      )}
-                      #{pullRequest.number} {pullRequestLabel}
-                    </span>
-                  ) : null}
-                </div>
+                    {showProjectIdentity ? (
+                      <>
+                        <Folder className="size-3 shrink-0 opacity-70" aria-hidden="true" />
+                        <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
+                      </>
+                    ) : null}
+                    {checkoutBadge}
+                    {pullRequestBadge}
+                  </div>
+                )}
               </div>
             </div>
           }
@@ -1569,7 +1583,7 @@ export function SessionRail({
             }
             data-project-toggle={project.path}
             title={t(open ? "rail.hideProject" : "rail.showProject", { name: project.name })}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-ui leading-4 outline-none focus-visible:focus-ring-inset"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-ui leading-4 outline-none hover:bg-transparent focus-visible:focus-ring-inset dark:hover:bg-transparent"
           >
             <Folder className="size-4 shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate text-left">{project.name}</span>
@@ -1621,14 +1635,16 @@ export function SessionRail({
         </div>
         <CollapsibleContent
           data-project-content={project.path}
-          className="ml-6"
+          className="ml-0"
         >
           {rows.length > 0 ? (
             <div className="flex flex-col gap-0.5">
               {rows.map((row) => sessionRow(row, false, false))}
             </div>
           ) : (
-            <p className="px-2 py-1.5 text-fine text-foreground/35">{t("rail.projectEmpty")}</p>
+            <p className="py-1.5 pl-8 pr-2 text-fine text-foreground/35">
+              {t("rail.projectEmpty")}
+            </p>
           )}
         </CollapsibleContent>
       </Collapsible>
@@ -2035,22 +2051,58 @@ export function SessionRail({
                 )}
               </SidebarDropZone>
               {rootProjects.length > 0 || dragItem?.kind === "project" ? (
-                <SidebarDropZone
-                  location={{ kind: "projects", sectionId: null }}
-                  accept="project"
-                  collisionPriority={rootProjects.length === 0 ? 2 : 0}
+                <Collapsible
+                  open={allProjectsOpen || dragItem?.kind === "project"}
+                  onOpenChange={setAllProjectsOpen}
                 >
-                  {({ ref, isDropTarget }) => (
-                <div
-                  ref={ref}
-                  data-project-list="root"
-                  data-sidebar-drop-target={isDropTarget ? "true" : undefined}
-                  className={cn(rootProjects.length === 0 && "min-h-control")}
-                >
-                  {rootProjects.map(renderProject)}
-                </div>
-                  )}
-                </SidebarDropZone>
+                  <div data-default-project-group>
+                    <div className="flex min-h-control-mini items-center pb-1 pr-2 pt-2">
+                      <CollapsibleTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            focusStyle="inset"
+                          />
+                        }
+                        data-default-project-toggle
+                        title={t(
+                          allProjectsOpen ? "rail.hideSection" : "rail.showSection",
+                          { name: t("rail.allProjects") },
+                        )}
+                        className="min-w-0 justify-start gap-1 font-normal text-foreground/55 hover:text-foreground"
+                      >
+                        <span className="truncate">{t("rail.allProjects")}</span>
+                        <ChevronRight
+                          className={cn(
+                            "size-3.5 shrink-0 transition-transform",
+                            (allProjectsOpen || dragItem?.kind === "project") && "rotate-90",
+                          )}
+                          aria-hidden="true"
+                        />
+                      </CollapsibleTrigger>
+                    </div>
+                    <CollapsibleContent data-default-project-content>
+                      <SidebarDropZone
+                        location={{ kind: "projects", sectionId: null }}
+                        accept="project"
+                        collisionPriority={rootProjects.length === 0 ? 2 : 0}
+                      >
+                        {({ ref, isDropTarget }) => (
+                          <div
+                            ref={ref}
+                            data-project-list="root"
+                            data-sidebar-drop-target={isDropTarget ? "true" : undefined}
+                            className={cn(rootProjects.length === 0 && "min-h-control")}
+                          >
+                            {rootProjects.map(renderProject)}
+                          </div>
+                        )}
+                      </SidebarDropZone>
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
               ) : null}
               {creatingSectionFor !== undefined ? (
                 <div data-task-section-creation className="px-2 pb-1 pt-2">

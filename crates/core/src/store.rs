@@ -84,6 +84,15 @@ pub enum StoreError {
         expected: u64,
         actual: u64,
     },
+    #[error("collaboration conflict: {0}")]
+    CollaborationConflict(String),
+    #[error("member is not authorized: {member_id}")]
+    MemberUnauthorized { member_id: String },
+    #[error("suggestion not found: {task_id}/{suggestion_id}")]
+    SuggestionNotFound {
+        task_id: String,
+        suggestion_id: String,
+    },
     #[error("invalid Result Contract refinement: {0}")]
     InvalidResultContractRefinement(String),
     #[error("invalid Task control: {0}")]

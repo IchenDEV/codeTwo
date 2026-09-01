@@ -23,6 +23,7 @@ const {
   createBoardTask,
 } = await import("../src/taskboard/taskBoard")
 const { TaskBoardPage } = await import("../src/taskboard/TaskBoardPage")
+const { TASKBOARD_VIEW_STORAGE_KEY } = await import("../src/taskboard/useTaskBoardView")
 
 const mountedRoots = []
 const previousLocalStorage = globalThis.localStorage
@@ -151,6 +152,78 @@ describe("TaskBoardPage rendered", () => {
     expect(view.container.querySelector('[aria-label="任务列表"]')).not.toBeNull()
     expect(view.container.querySelector('[aria-label="任务检查器"]')).not.toBeNull()
     expect(view.container.textContent).toContain("标题Sessions打开的 PR更新时间")
+  })
+
+  test("switches the shared Task projection between list and board views", async () => {
+    const view = await renderBoard()
+    const page = view.container.querySelector("[data-task-board-page]")
+
+    expect(page?.getAttribute("data-task-board-view")).toBe("list")
+    expect(button(view.container, "列表").getAttribute("aria-pressed")).toBe("true")
+
+    await click(button(view.container, "筛选"))
+    const search = dom.document.body.querySelector('input[aria-label="搜索任务"]')
+    await setValue(search, "本地持久化")
+    await click(button(view.container, "看板"))
+
+    expect(page?.getAttribute("data-task-board-view")).toBe("board")
+    expect(view.container.querySelector('[aria-label="任务列表"]')).toBeNull()
+    expect(view.container.querySelectorAll("[data-task-column]")).toHaveLength(4)
+    expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(1)
+    expect(view.container.querySelectorAll('[data-task-column] [data-slot="status-indicator"]'))
+      .toHaveLength(4)
+    const boardScroll = view.container.querySelector("[data-task-board-scroll]")
+    expect(boardScroll?.className).toContain("overflow-x-auto")
+    expect(boardScroll?.className).toContain("max-w-full")
+    const card = view.container.querySelector("[data-task-card]")
+    expect(card?.className).toContain("overflow-hidden")
+    expect(card?.querySelector("[data-task-card-meta]")?.className).toContain("overflow-hidden")
+    expect(card?.textContent).not.toContain("0 个会话")
+    expect(card?.textContent).not.toContain("PR 0")
+    expect(view.container.textContent).toContain("接入任务本地持久化")
+    expect(dom.window.localStorage.getItem(TASKBOARD_VIEW_STORAGE_KEY)).toBe("board")
+
+    await click(button(view.container, "列表"))
+    expect(page?.getAttribute("data-task-board-view")).toBe("list")
+    expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(0)
+    expect(view.container.querySelectorAll("[data-task-item]")).toHaveLength(1)
+    expect(dom.window.localStorage.getItem(TASKBOARD_VIEW_STORAGE_KEY)).toBe("list")
+  })
+
+  test("restores a valid view preference and falls back from an invalid value", async () => {
+    installStorage()
+    dom.window.localStorage.setItem(TASKBOARD_VIEW_STORAGE_KEY, "board")
+    const view = await renderBoard()
+
+    expect(
+      view.container.querySelector("[data-task-board-page]")?.getAttribute("data-task-board-view"),
+    ).toBe("board")
+    expect(view.container.querySelectorAll("[data-task-column]")).toHaveLength(4)
+
+    await reactAct(async () => view.unmount())
+    mountedRoots.splice(mountedRoots.indexOf(view), 1)
+    dom.document.body.replaceChildren()
+    dom.window.localStorage.setItem(TASKBOARD_VIEW_STORAGE_KEY, "grid")
+
+    const fallback = await renderBoard()
+    expect(
+      fallback.container.querySelector("[data-task-board-page]")?.getAttribute("data-task-board-view"),
+    ).toBe("list")
+    expect(dom.window.localStorage.getItem(TASKBOARD_VIEW_STORAGE_KEY)).toBe("list")
+  })
+
+  test("selects board Tasks without breaking the persistent Inspector", async () => {
+    const view = await renderBoard()
+    await click(button(view.container, "看板"))
+    await click(button(view.container, "选择任务：完善空状态与操作提示"))
+
+    expect(
+      view.container.querySelector('[data-task-card][data-selected="true"]')
+        ?.getAttribute("data-task-card"),
+    ).toBe("seed-empty-state-copy")
+    await click(button(view.container, "详情"))
+    expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent)
+      .toContain("为第一次使用看板的成员准备简洁、可行动的中文引导。")
   })
 
   test("keeps a large persisted list progressive on first render", async () => {
@@ -549,5 +622,41 @@ describe("TaskBoardPage rendered", () => {
     expect(view.container.querySelector(".task-board-workspace")).not.toBeNull()
     expect(view.container.querySelector('aside[aria-label="任务检查器"]')).toBeNull()
     await waitFor(() => expect(dom.document.activeElement).toBe(button(view.container, "显示检查器")))
+  })
+
+  test("keeps the board view and selection through narrow in-place Inspector navigation", async () => {
+    let notifyResize = null
+    globalThis.ResizeObserver = class ResizeObserver {
+      constructor(callback) {
+        this.callback = callback
+      }
+      observe(element) {
+        if (element.hasAttribute?.("data-task-board-page")) notifyResize = this.callback
+      }
+      disconnect() {}
+    }
+    const view = await renderBoard()
+    const page = view.container.querySelector("[data-task-board-page]")
+    Object.defineProperty(page, "clientWidth", { configurable: true, value: 760 })
+    await reactAct(async () => notifyResize([]))
+    await flush()
+
+    await click(button(view.container, "看板"))
+    await click(button(view.container, "选择任务：完善空状态与操作提示"))
+    expect(page?.getAttribute("data-task-board-view")).toBe("board")
+    expect(page?.getAttribute("data-inspector-open")).toBe("false")
+
+    await click(button(view.container, "显示检查器"))
+    expect(view.container.querySelector(".task-board-workspace")).toBeNull()
+    await click(button(view.container, "详情"))
+    expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent)
+      .toContain("为第一次使用看板的成员准备简洁、可行动的中文引导。")
+
+    await click(button(view.container, "返回任务列表"))
+    expect(page?.getAttribute("data-task-board-view")).toBe("board")
+    expect(
+      view.container.querySelector('[data-task-card][data-selected="true"]')
+        ?.getAttribute("data-task-card"),
+    ).toBe("seed-empty-state-copy")
   })
 })

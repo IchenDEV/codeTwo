@@ -40,6 +40,8 @@ export interface ProjectedTask {
   currentSession?: SessionProjection
 }
 
+export type TaskBoardView = "list" | "board"
+
 export interface EditorState {
   task: BoardTask | null
   initialStatus: TaskStatus

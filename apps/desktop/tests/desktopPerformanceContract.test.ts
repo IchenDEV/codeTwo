@@ -101,6 +101,9 @@ describe("desktop interaction performance contracts", () => {
     expect(styleSource).toMatch(
       /\.session-rail-row\s*\{[\s\S]*content-visibility:\s*auto;[\s\S]*contain-intrinsic-size:/,
     );
+    expect(styleSource).toMatch(
+      /\.session-rail-row:has\(\[aria-current="page"\]\)\s*\{[\s\S]*content-visibility:\s*visible;/,
+    );
     expect(sessionRailSource).not.toContain("react-window");
     expect(sessionRailSource).not.toContain("react-virtualized");
   });
