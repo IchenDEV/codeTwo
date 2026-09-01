@@ -131,6 +131,7 @@ the test suite and were not introduced by this change.
 
 Approval: Chenli confirmed the rendered interaction acceptance was complete on 2026-09-01 with
 no changes requested. PR-level code review and merge approval remain separate Gates.
+Review surface: [PR #217](https://github.com/IchenDEV/codeTwo/pull/217).
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: production renderer Browser pass recorded above; native release smoke is not
