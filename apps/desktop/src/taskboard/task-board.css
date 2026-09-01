@@ -1,0 +1,125 @@
+.task-board-page {
+  container-type: inline-size;
+  position: relative;
+}
+
+.task-board-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22.5rem;
+  position: relative;
+}
+
+.task-board-page[data-inspector-open="false"] .task-board-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.task-board-page[data-inspector-open="false"] .task-board-inspector {
+  display: none;
+}
+
+.task-board-task-row,
+.task-board-list-header {
+  display: grid;
+  grid-template-columns: minmax(17rem, 1fr) 5.5rem 6.5rem 6rem;
+}
+
+.task-board-session-row {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) minmax(9rem, 13rem) 9.5rem 6rem;
+}
+
+.task-board-inspector {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.task-board-inspector > [data-slot="tabs"] {
+  min-height: 0;
+}
+
+.task-board-row-action {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.task-board-task-row:hover .task-board-row-action,
+.task-board-task-row:focus-within .task-board-row-action {
+  opacity: 1;
+}
+
+@container (max-width: 64rem) {
+  .task-board-layout {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+  }
+
+  .task-board-task-row,
+  .task-board-list-header {
+    grid-template-columns: minmax(15rem, 1fr) 5rem 5.5rem;
+  }
+
+  .task-board-session-row {
+    grid-template-columns: minmax(14rem, 1fr) minmax(8rem, 1fr) 8.5rem;
+  }
+
+  .task-board-task-prs,
+  .task-board-session-updated {
+    display: none;
+  }
+}
+
+@container (max-width: 48rem) {
+  .task-board-layout,
+  .task-board-page[data-inspector-open="false"] .task-board-layout {
+    display: block;
+  }
+
+  .task-board-workspace {
+    height: 100%;
+  }
+
+  .task-board-inspector {
+    box-shadow: var(--ds-elevation-modal);
+    height: 100%;
+    inset-block: 0;
+    inset-inline-end: 0;
+    position: absolute;
+    width: min(22.5rem, calc(100% - 4rem));
+    z-index: 30;
+  }
+
+  .task-board-page[data-inspector-open="false"] .task-board-inspector {
+    display: none;
+  }
+
+  .task-board-task-row,
+  .task-board-list-header {
+    grid-template-columns: minmax(13rem, 1fr) 5.5rem;
+  }
+
+  .task-board-session-row {
+    grid-template-columns: minmax(13rem, 1fr) 8.5rem;
+  }
+
+  .task-board-task-sessions,
+  .task-board-session-checkout {
+    display: none;
+  }
+}
+
+@container (max-width: 34rem) {
+  .task-board-session-pr {
+    display: none;
+  }
+
+  .task-board-session-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-board-row-action {
+    transition-duration: 0.01ms;
+  }
+}

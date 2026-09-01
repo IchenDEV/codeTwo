@@ -2693,6 +2693,12 @@ export default function App() {
           archived: false,
           activity: session.activity,
           running: runningSessions.has(session.id),
+          cwd: session.cwd,
+          worktreePath: session.worktree_path,
+          projectPath: session.project_path,
+          worktreeDiscarded: session.worktree_discarded === true,
+          createdAt: session.created_at,
+          lastActiveAt: session.last_active_at,
         })),
         ...archivedSessions.map((session) => ({
           id: session.id,
@@ -2700,6 +2706,12 @@ export default function App() {
           archived: true,
           activity: session.activity,
           running: false,
+          cwd: session.cwd,
+          worktreePath: session.worktree_path,
+          projectPath: session.project_path,
+          worktreeDiscarded: session.worktree_discarded === true,
+          createdAt: session.created_at,
+          lastActiveAt: session.last_active_at,
         })),
       ],
     [archivedSessions, runningSessions, sessions],
@@ -7663,6 +7675,17 @@ export default function App() {
             onOpenSession={(id) => {
               setShowTaskBoard(false);
               void selectSession(id);
+            }}
+            onAskSession={(id, prompt) => {
+              setShowTaskBoard(false);
+              void selectSession(id).then(() => {
+                clearEditorRef.current?.();
+                setDocMode(true);
+                setTimeout(() => {
+                  void insertMarkdownRef.current?.(prompt, "replace");
+                  focusEditorRef.current?.();
+                }, 0);
+              });
             }}
             onStartTask={startBoardTask}
             headerLeadingAction={railExpandAction}

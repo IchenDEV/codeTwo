@@ -33,6 +33,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Run desktop tests
         run: bun test
+      - name: Require zero surviving TaskBoard model mutants
+        run: bun run mutation:taskboard
       - name: Lint and build desktop renderer
         env:
           NODE_OPTIONS: --max-old-space-size=4096

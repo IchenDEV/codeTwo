@@ -13,6 +13,11 @@ const tabsSource = source("src/components/ui/tabs.tsx");
 const composerSource = source("src/session/Composer.tsx");
 const packageSource = source("package.json");
 const lockSource = source("bun.lock");
+const taskBoardSearchSource = [
+  source("src/taskboard/TaskBoardPage.tsx"),
+  source("src/taskboard/TaskBoardHeader.tsx"),
+  source("src/taskboard/useTaskBoardData.ts"),
+].join("\n");
 const pageSources = [
   source("src/taskboard/TaskBoardPage.tsx"),
   source("src/github/PullRequestsPage.tsx"),
@@ -80,15 +85,14 @@ describe("desktop interaction performance contracts", () => {
   });
 
   test("defers collection filtering while search inputs stay controlled", () => {
-    for (const path of [
-      "src/taskboard/TaskBoardPage.tsx",
-      "src/github/PullRequestsPage.tsx",
-      "src/plugins/PluginManagerPage.tsx",
+    for (const pageSource of [
+      taskBoardSearchSource,
+      source("src/github/PullRequestsPage.tsx"),
+      source("src/plugins/PluginManagerPage.tsx"),
     ]) {
-      const pageSource = source(path);
       expect(pageSource).toContain("useDeferredValue");
       expect(pageSource).toContain("deferredQuery");
-      expect(pageSource).toMatch(/value=\{query\}/);
+      expect(pageSource).toMatch(/value=\{(?:props\.)?query\}/);
     }
   });
 
