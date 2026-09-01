@@ -36,9 +36,16 @@ const ThemeContext = createContext<ThemeValue>({
  * at sunset while the app is open. An explicit light/dark must *stop* listening, or the user's
  * choice would be silently overridden the next time the OS changed its mind.
  */
-export function ThemeProvider({ children }: { children: ReactNode }) {
+export function ThemeProvider({
+  children,
+  preferenceOverride,
+}: {
+  children: ReactNode;
+  /** A non-persistent preview value. UI Lab uses this without changing the user's app setting. */
+  preferenceOverride?: ThemePreference;
+}) {
   const appearance = useAppearanceSettings();
-  const preference = appearance.preference;
+  const preference = preferenceOverride ?? appearance.preference;
   const [system, setSystem] = useState<ColorScheme>(systemScheme);
 
   useEffect(() => {
@@ -72,8 +79,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [appearance, scheme]);
 
   const setPreference = useCallback((p: ThemePreference) => {
+    if (preferenceOverride !== undefined) return;
     setAppearanceSettings({ preference: p });
-  }, []);
+  }, [preferenceOverride]);
 
   return (
     <ThemeContext.Provider value={{ preference, scheme, setPreference }}>{children}</ThemeContext.Provider>

@@ -23,6 +23,16 @@ const showPetPreview =
   import.meta.env.DEV && searchParams.has("pet-preview");
 const showRichTranscript =
   import.meta.env.DEV && searchParams.has("rich-transcript");
+const uiLabRoute = import.meta.env.DEV ? searchParams.get("ui-lab") : null;
+const showUiLab = uiLabRoute !== null;
+const uiLabThemeOverride = showUiLab
+  ? searchParams.get("theme") === "light" || searchParams.get("theme") === "dark"
+    ? searchParams.get("theme") as "light" | "dark"
+    : "system"
+  : undefined;
+const uiLabLanguageOverride = showUiLab
+  ? searchParams.get("lang") === "zh" ? "zh-CN" : "en"
+  : undefined;
 if (showDesktopPet) document.documentElement.classList.add("desktop-pet-window-root");
 
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
@@ -63,7 +73,9 @@ if (!showDesktopPet && currentDesktopPlatform() === "macos") {
 async function render() {
   const Root = showDesktopPet
     ? DesktopPetWindow
-    : showPetPreview
+    : showUiLab
+      ? (await import("./design/ui-lab/UiLab")).UiLab
+      : showPetPreview
       ? (await import("./pet/PetPreview")).PetPreview
       : showRichTranscript
         ? (await import("./session/RichTranscriptPreview")).RichTranscriptPreview
@@ -73,8 +85,8 @@ async function render() {
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <ThemeProvider>
-        <I18nProvider>
+      <ThemeProvider preferenceOverride={uiLabThemeOverride}>
+        <I18nProvider preferenceOverride={uiLabLanguageOverride}>
           <ErrorBoundary>
             <TooltipProvider>
               <ToastProvider>

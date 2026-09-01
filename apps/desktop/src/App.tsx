@@ -398,7 +398,7 @@ import {
   type DockTab,
 } from "./dock/Dock";
 import { BrowserPanel } from "./browser/Browser";
-import { GitDockContent } from "./git/GitDockContent";
+import { GitDockContent, PullRequestDockContent } from "./git/GitDockContent";
 import { TerminalDockContent } from "./terminal/TerminalDockContent";
 import { TrajectoryView } from "./session/TrajectoryView";
 import { SessionRail } from "./sidebar/SessionRail";
@@ -5383,6 +5383,7 @@ export default function App() {
       "side-chat",
       ...(componentEnabled("files.surface") ? ["files" as const] : []),
       ...(componentEnabled("git.surface") ? ["git" as const] : []),
+      ...(componentEnabled("git.surface") ? ["pull-request" as const] : []),
     ],
     [componentEnabled],
   );
@@ -5863,6 +5864,7 @@ export default function App() {
         terminal: "terminal.dock",
         files: "files.surface",
         git: "git.surface",
+        "pull-request": "git.surface",
       };
       const componentId = component[t];
       if (componentId && !componentEnabled(componentId)) {
@@ -8641,10 +8643,15 @@ export default function App() {
                 ),
                 git: (
                   <GitDockContent
+                    status={git}
+                    onOpenSourceControl={openSourceControl}
+                  />
+                ),
+                "pull-request": (
+                  <PullRequestDockContent
                     cwd={cwd || null}
                     status={git}
                     onRefresh={refreshGit}
-                    onOpenSourceControl={openSourceControl}
                   />
                 ),
               }}
