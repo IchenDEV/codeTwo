@@ -39,6 +39,14 @@
   min-height: 0;
 }
 
+.task-board-inspector-dialog {
+  box-shadow: var(--ds-elevation-modal);
+  height: 100dvh;
+  inset: 0 0 0 auto;
+  position: fixed;
+  width: min(22.5rem, calc(100% - 4rem));
+}
+
 .task-board-row-action {
   opacity: 0;
   transition: opacity 150ms ease;

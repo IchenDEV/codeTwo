@@ -5,11 +5,12 @@ import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
 import { TaskListItem } from "./TaskListItem"
 import type { BoardTask, TaskStatus } from "./taskBoard"
 import { INITIAL_TASK_LIMIT } from "./workspaceModel"
-import type { ProjectedTask } from "./workspaceTypes"
+import type { ProjectedTask, TaskBoardView } from "./workspaceTypes"
 
 interface TaskBoardListProps {
   t: Translate
   locale: Locale
+  view: TaskBoardView
   projectedTasks: readonly ProjectedTask[]
   renderedTasks: readonly ProjectedTask[]
   remainingTaskCount: number
@@ -39,7 +40,11 @@ export function TaskBoardList(props: TaskBoardListProps) {
           <span className="text-right">{t("taskboard.updatedHeader")}</span>
         </div>
         {props.renderedTasks.length > 0 ? (
-          <ul aria-label={t("taskboard.taskList")}>
+          <ul
+            aria-label={t("taskboard.taskList")}
+            tabIndex={0}
+            className="outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
             {props.renderedTasks.map((projected) => (
               <TaskListItem
                 key={projected.task.id}
@@ -61,19 +66,28 @@ export function TaskBoardList(props: TaskBoardListProps) {
           </ul>
         ) : (
           <div className="px-4 py-16 text-center text-body text-muted-foreground">
-            {props.activeFilterCount > 0 ? t("taskboard.emptyFiltered") : t("taskboard.emptyList")}
+            {props.activeFilterCount > 0
+              ? t("taskboard.emptyFiltered")
+              : props.view === "attention"
+                ? t("taskboard.attentionEmpty")
+                : t("taskboard.emptyList")}
           </div>
         )}
       </div>
-      <div className="mt-4 flex items-center justify-between gap-3 text-metadata text-muted-foreground">
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-metadata text-muted-foreground">
         <span>
           {t("taskboard.visibleCount", {
             visible: props.renderedTasks.length,
             total: props.projectedTasks.length,
           })}
         </span>
+        <span className="flex items-center gap-3" aria-label={t("taskboard.keyboardHints")}>
+          <span><kbd className="font-mono text-foreground">↑↓ / J K</kbd> {t("taskboard.keyboard.select")}</span>
+          <span><kbd className="font-mono text-foreground">Space</kbd> {t("taskboard.keyboard.preview")}</span>
+          <span><kbd className="font-mono text-foreground">↵</kbd> {t("taskboard.keyboard.open")}</span>
+        </span>
         {props.remainingTaskCount > 0 ? (
-          <Button type="button" variant="ghost" size="compact" onClick={props.onShowMore}>
+          <Button type="button" variant="ghost" size="compact" className="ml-auto" onClick={props.onShowMore}>
             {t("taskboard.more", {
               count: Math.min(INITIAL_TASK_LIMIT, props.remainingTaskCount),
             })}

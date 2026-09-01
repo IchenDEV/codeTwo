@@ -242,6 +242,7 @@ import { ProjectIcon } from "./projects/ProjectIcon";
 import { SourceControlModal } from "./git/SourceControl";
 import { workspaceStateForCwd, type WorkspaceLoadState } from "./git/state";
 import { CommandPalette, type Command } from "./palette/CommandPalette";
+import { currentFirstSessionHits } from "./palette/merge";
 import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
@@ -420,6 +421,11 @@ import {
   unlinkTaskPullRequest,
   type BoardTask,
 } from "./taskboard/taskBoard";
+import {
+  continueTaskBoardPrompt,
+  taskBoardTranscriptPreview,
+} from "./taskboard/taskBoardContinuation";
+import type { TaskBoardTranscriptPreview } from "./taskboard/workspaceTypes";
 
 import {
   actionForEvent,
@@ -983,7 +989,7 @@ export default function App() {
   // Split whichever pane is passed (focusing it first, so the reducer's focused-relative split
   // lands on that pane), seeding an empty draft for the new leaf.
   const splitPaneById = useCallback(
-    (targetId: string, edge: PaneEdge) => {
+    (targetId: string, edge: PaneEdge): string => {
       const id = nextPaneId();
       const nextContents = {
         ...paneContentsRef.current,
@@ -1001,6 +1007,7 @@ export default function App() {
       activeSessionRef.current = null;
       activeSessionProvenanceRef.current = null;
       setPaneLayout((layout) => splitFocused(focusPane(layout, targetId), edge, id));
+      return id;
     },
     [nextPaneId, updatePaneTranscriptState],
   );
@@ -2702,6 +2709,13 @@ export default function App() {
         })),
       ],
     [archivedSessions, runningSessions, sessions],
+  );
+  const loadTaskBoardTranscript = useCallback(
+    async (sessionId: string): Promise<TaskBoardTranscriptPreview> => {
+      const page = await getTranscriptPage(sessionId, null, 12);
+      return taskBoardTranscriptPreview(page.entries);
+    },
+    [],
   );
 
   const quickQuotaProvider = useMemo(() => {
@@ -4541,44 +4555,70 @@ export default function App() {
     [createSession, setDocMode, setTaskContext, t],
   );
 
+  const answerPermissionRequest = useCallback(
+    async (request: PermissionQueueItem, optionId: string | null): Promise<boolean> => {
+      try {
+        const accepted = await answerPermission(
+          request.session,
+          request.requestId,
+          optionId,
+        );
+        setPermissionQueue((previous) =>
+          permissionQueueAfterAnswer(
+            previous,
+            request.session,
+            request.requestId,
+            accepted,
+          ),
+        );
+        if (!accepted) toast(t("taskboard.answerNotAccepted"), "error");
+        return accepted;
+      } catch {
+        toast(t("taskboard.answerFailed"), "error");
+        return false;
+      }
+    },
+    [t, toast],
+  );
+
+  const answerElicitationRequest = useCallback(
+    async (request: PermissionQueueItem, value: ElicitationAnswer): Promise<boolean> => {
+      try {
+        const accepted = await answerElicitation(
+          request.session,
+          request.requestId,
+          value,
+        );
+        setPermissionQueue((previous) =>
+          permissionQueueAfterAnswer(
+            previous,
+            request.session,
+            request.requestId,
+            accepted,
+          ),
+        );
+        if (!accepted) toast(t("taskboard.answerNotAccepted"), "error");
+        return accepted;
+      } catch {
+        toast(t("taskboard.answerFailed"), "error");
+        return false;
+      }
+    },
+    [t, toast],
+  );
+
   const answer = useCallback(
     async (optionId: string | null) => {
-      if (!permission) return;
-      const accepted = await answerPermission(
-        permission.session,
-        permission.requestId,
-        optionId,
-      );
-      setPermissionQueue((previous) =>
-        permissionQueueAfterAnswer(
-          previous,
-          permission.session,
-          permission.requestId,
-          accepted,
-        ),
-      );
+      if (permission) await answerPermissionRequest(permission, optionId);
     },
-    [permission],
+    [answerPermissionRequest, permission],
   );
 
   const answerQuestion = useCallback(
     async (value: ElicitationAnswer) => {
-      if (!permission) return;
-      const accepted = await answerElicitation(
-        permission.session,
-        permission.requestId,
-        value,
-      );
-      setPermissionQueue((previous) =>
-        permissionQueueAfterAnswer(
-          previous,
-          permission.session,
-          permission.requestId,
-          accepted,
-        ),
-      );
+      if (permission) await answerElicitationRequest(permission, value);
     },
-    [permission],
+    [answerElicitationRequest, permission],
   );
 
   /**
@@ -4910,6 +4950,36 @@ export default function App() {
     return () => dispose?.();
   }, [selectSession]);
 
+  const splitTaskBoardSession = useCallback(
+    (sessionId: string, edge: "right" | "bottom") => {
+      const existingPane = paneBoundToSession(paneContentsRef.current, sessionId);
+      setShowTaskBoard(false);
+      if (existingPane) {
+        void selectSession(sessionId, existingPane);
+        return;
+      }
+      const paneId = splitPaneById(focusedPaneRef.current, edge);
+      void selectSession(sessionId, paneId);
+    },
+    [selectSession, splitPaneById],
+  );
+
+  const forkTaskBoardSession = useCallback(
+    (sessionId: string, throughSeq: number, title: string) => {
+      const paneId = focusedPaneRef.current;
+      const insertSession = paneEditorRefsFor(paneId).insertSessionRef.current;
+      if (!Number.isSafeInteger(throughSeq) || throughSeq <= 0 || !insertSession) {
+        toast(t("turn.forkFailed"), "error");
+        return;
+      }
+      setShowTaskBoard(false);
+      if (!createTaskDraft()) return;
+      insertSession({ id: sessionId, title, throughSeq });
+      toast(t("turn.forked"), "success");
+    },
+    [createTaskDraft, paneEditorRefsFor, t, toast],
+  );
+
   const activatePaneById = useCallback(
     (paneId: string) => {
       const session = paneContentsRef.current[paneId]?.sessionId ?? null;
@@ -5052,7 +5122,11 @@ export default function App() {
   const searchPaletteCommands = useCallback(
     async (query: string): Promise<Command[]> => {
       const hits = await searchSessions(query, 12);
-      return hits.map((hit) => {
+      const uniqueHits = currentFirstSessionHits(
+        [...new Map(hits.map((hit) => [hit.session_id, hit])).values()],
+        activeSession,
+      );
+      return uniqueHits.map((hit) => {
         const stored =
           sessions.find((session) => session.id === hit.session_id) ??
           archivedSessions.find((session) => session.id === hit.session_id);
@@ -5067,13 +5141,24 @@ export default function App() {
           category: "session",
           label: hit.title,
           detail: `${t(hit.role === "user" ? "palette.you" : "palette.agent")}: ${hit.snippet}`,
-          hint: hit.archived ? t("palette.archived") : project,
+          hint: hit.session_id === activeSession
+            ? t("palette.current")
+            : hit.archived
+              ? t("palette.archived")
+              : project,
           keywords: `${sourcePath} ${hit.cwd}`,
+          preview: {
+            title: hit.title,
+            body: hit.snippet,
+            context: project,
+            current: hit.session_id === activeSession,
+            archived: hit.archived,
+          },
           run: () => void selectSession(hit.session_id),
         };
       });
     },
-    [projects, sessions, archivedSessions, selectSession, t],
+    [activeSession, projects, sessions, archivedSessions, selectSession, t],
   );
 
   // Skills depend on the workspace: harness skill directories (.claude/skills …) are rescanned
@@ -7755,19 +7840,36 @@ export default function App() {
         {showTaskBoard && (
           <TaskBoardPage
             sessions={taskBoardSessions}
+            loadTranscript={loadTaskBoardTranscript}
+            pendingInputs={permissionQueue}
+            onAnswerPermission={answerPermissionRequest}
+            onAnswerElicitation={answerElicitationRequest}
+            onSplitSession={splitTaskBoardSession}
+            onForkSession={forkTaskBoardSession}
             onOpenSession={(id) => {
               setShowTaskBoard(false);
               void selectSession(id);
             }}
             onAskSession={(id, prompt) => {
-              setShowTaskBoard(false);
-              void selectSession(id).then(() => {
-                clearEditorRef.current?.();
-                setDocMode(true);
-                setTimeout(() => {
-                  void insertMarkdownRef.current?.(prompt, "replace");
-                  focusEditorRef.current?.();
-                }, 0);
+              const paneId =
+                paneBoundToSession(paneContentsRef.current, id) ??
+                focusedPaneRef.current;
+              return continueTaskBoardPrompt({
+                target: { paneId, sessionId: id },
+                prompt,
+                selectSession: (sessionId, targetPaneId) =>
+                  selectSession(sessionId, targetPaneId, true, true),
+                isTargetActive: () =>
+                  focusedPaneRef.current === paneId &&
+                  paneContentsRef.current[paneId]?.sessionId === id,
+                openDocumentMode: () => setDocMode(true),
+                insertMarkdown: (markdown, mode) =>
+                  paneEditorRefsFor(paneId).insertMarkdownRef.current?.(
+                    markdown,
+                    mode,
+                  ) ?? Promise.resolve(),
+                // Keep TaskBoard active; the draft is staged until the Session is opened.
+                focusEditor: () => undefined,
               });
             }}
             onStartTask={startBoardTask}

@@ -62,6 +62,7 @@ export function TaskListItem({
       >
         <div className="flex min-w-0 items-center gap-1 px-2">
           <Button
+            data-task-select={task.id}
             type="button"
             variant="ghost"
             size="icon-xs"

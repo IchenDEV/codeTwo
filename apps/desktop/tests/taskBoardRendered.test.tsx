@@ -26,6 +26,7 @@ const { TaskBoardPage } = await import("../src/taskboard/TaskBoardPage")
 
 const mountedRoots = []
 const previousLocalStorage = globalThis.localStorage
+const previousResizeObserver = globalThis.ResizeObserver
 const originalConfirm = dom.window.confirm
 
 function installStorage() {
@@ -43,6 +44,8 @@ afterEach(async () => {
   dom.document.body.replaceChildren()
   dom.window.localStorage.clear()
   dom.window.confirm = originalConfirm
+  if (previousResizeObserver === undefined) delete globalThis.ResizeObserver
+  else globalThis.ResizeObserver = previousResizeObserver
   if (previousLocalStorage === undefined) delete globalThis.localStorage
   else {
     Object.defineProperty(globalThis, "localStorage", {
@@ -52,9 +55,10 @@ afterEach(async () => {
   }
 })
 
-async function renderBoard(props = {}, locale = "zh-CN") {
+async function renderBoard(props = {}, locale = "zh-CN", preserveResizeObserver = false) {
   activateDom()
   installStorage()
+  if (!preserveResizeObserver) delete globalThis.ResizeObserver
   dom.window.localStorage.setItem("codetwo.language", locale)
   const mounted = mount(
     <I18nProvider>
@@ -79,6 +83,13 @@ async function setValue(element, value) {
 async function click(element) {
   await reactAct(async () => {
     element.click()
+  })
+  await flush()
+}
+
+async function keyDown(element, key) {
+  await reactAct(async () => {
+    Simulate.keyDown(element, { key })
   })
   await flush()
 }
@@ -143,9 +154,44 @@ describe("TaskBoardPage rendered", () => {
     expect(view.container.querySelector("[data-task-board-page]")).not.toBeNull()
     expect(view.container.querySelectorAll("[data-task-column]")).toHaveLength(0)
     expect(view.container.querySelectorAll("[data-task-item]")).toHaveLength(9)
-    expect(view.container.querySelector('[aria-label="任务列表"]')).not.toBeNull()
+    expect(view.container.querySelector('[aria-label="任务列表"]')?.getAttribute("tabindex")).toBe("0")
     expect(view.container.querySelector('[aria-label="任务检查器"]')).not.toBeNull()
     expect(view.container.textContent).toContain("标题Sessions打开的 PR更新时间")
+  })
+
+  test("switches to the existing needs-you projection and selects from its visible tasks", async () => {
+    const view = await renderBoard()
+    const attentionView = button(view.container, "有 2 项任务需要你处理")
+
+    expect(attentionView.getAttribute("aria-pressed")).toBe("false")
+    await click(attentionView)
+
+    expect(view.container.querySelector("h1")?.textContent).toBe("需要你处理")
+    expect(view.container.querySelectorAll("[data-task-item]")).toHaveLength(2)
+    expect(view.container.textContent).toContain("审阅移动端看板布局")
+    expect(view.container.textContent).toContain("验证跨列拖拽顺序")
+    expect(view.container.textContent).not.toContain("接入任务本地持久化")
+    expect(
+      view.container.querySelector('[data-task-row="seed-review-mobile-layout"]')?.getAttribute("data-selected"),
+    ).toBe("true")
+    expect(attentionView.getAttribute("aria-pressed")).toBe("true")
+
+    await click(button(view.container, "全部任务"))
+    expect(view.container.querySelectorAll("[data-task-item]")).toHaveLength(9)
+  })
+
+  test("explains when the needs-you projection is empty", async () => {
+    const task = createBoardTask(
+      { title: "无需处理", status: "todo" },
+      { id: "TASK-QUIET", now: 1_700_000_000_000 },
+    )
+    storeTasks([task])
+    const view = await renderBoard()
+
+    await click(button(view.container, "有 0 项任务需要你处理"))
+
+    expect(view.container.querySelectorAll("[data-task-item]")).toHaveLength(0)
+    expect(view.container.textContent).toContain("当前没有需要你处理的任务")
   })
 
   test("keeps a large persisted list progressive on first render", async () => {
@@ -287,9 +333,13 @@ describe("TaskBoardPage rendered", () => {
     ]))
 
     await click(button(view.container, "选择 Session 1：历史实现"))
-    expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).toContain("#101 · 未合并")
-    expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).toContain("worktrees/session-old")
-    await click(button(view.container, "打开 Session"))
+    const inspector = view.container.querySelector('[aria-label="任务检查器"]')
+    expect(inspector?.textContent).toContain("S-1 · 历史实现")
+    await click(button(inspector, "详情"))
+    expect(inspector?.textContent).toContain("#101 · 未合并")
+    expect(inspector?.textContent).toContain("worktrees/session-old")
+    await click(button(inspector, "Agent"))
+    await click(button(inspector, "打开 Session"))
     expect(opened).toEqual(["session-old"])
   })
 
@@ -303,13 +353,229 @@ describe("TaskBoardPage rendered", () => {
     const view = await renderBoard({
       sessions: [{ id: "session-1", title: "执行", cwd: "/repo" }],
       onOpenSession: () => {},
-      onAskSession: (id, prompt) => prompts.push([id, prompt]),
+      onAskSession: (id, prompt) => {
+        prompts.push([id, prompt])
+        return true
+      },
     })
 
     const prompt = view.container.querySelector('textarea[placeholder="添加提示并在这个 Session 中继续…"]')
     await setValue(prompt, "检查这个方案")
     await click(button(view.container, "带提示继续"))
     expect(prompts).toEqual([["session-1", "检查这个方案"]])
+    expect(prompt.value).toBe("")
+  })
+
+  test("previews a bounded transcript before exposing the existing fork and split actions", async () => {
+    const task = createBoardTask(
+      { title: "预览后操作", status: "in_progress", sessionIds: ["session-preview"] },
+      { id: "TASK-PREVIEW", now: 1_700_000_000_000 },
+    )
+    storeTasks([task])
+    const forks = []
+    const splits = []
+    const view = await renderBoard({
+      sessions: [{ id: "session-preview", title: "实现预览", cwd: "/repo" }],
+      loadTranscript: async () => ({
+        entries: [
+          { seq: 10, role: "user", text: "检查现有交互" },
+          { seq: 11, role: "agent", text: "已完成第一轮检查。" },
+        ],
+        latestTurnSeq: 10,
+      }),
+      onForkSession: (...args) => forks.push(args),
+      onSplitSession: (...args) => splits.push(args),
+    })
+
+    await waitFor(() => expect(view.container.textContent).toContain("已完成第一轮检查。"))
+    expect(view.container.textContent).not.toContain("洞察")
+    await click(button(view.container, "从预览分叉"))
+    await click(button(view.container, "向右分屏"))
+    await click(button(view.container, "向下分屏"))
+
+    expect(forks).toEqual([["session-preview", 10, "实现预览"]])
+    expect(splits).toEqual([
+      ["session-preview", "right"],
+      ["session-preview", "bottom"],
+    ])
+  })
+
+  test("answers a permission inline and advances only after Core accepts it", async () => {
+    const first = createBoardTask(
+      { title: "第一项授权", status: "in_progress", order: 0, sessionIds: ["session-1"] },
+      { id: "TASK-PERMISSION-1", now: 1_700_000_000_000 },
+    )
+    const second = createBoardTask(
+      { title: "第二项授权", status: "in_progress", order: 1, sessionIds: ["session-2"] },
+      { id: "TASK-PERMISSION-2", now: 1_700_000_000_001 },
+    )
+    storeTasks([first, second])
+    const activity = (inputId, title) => ({
+      revision: 1,
+      state: {
+        kind: "awaiting_input",
+        turn_id: `turn-${inputId}`,
+        pending: [{ input_id: inputId, kind: "permission", title, options: [["allow", "允许"]], sequence: 1 }],
+      },
+    })
+    const pendingInputs = [
+      { session: "session-1", requestId: "input-1", title: "允许修改文件？", options: [["allow", "允许"]] },
+      { session: "session-2", requestId: "input-2", title: "允许运行检查？", options: [["allow", "允许"]] },
+    ]
+    let accepted = false
+    const answers = []
+    const view = await renderBoard({
+      sessions: [
+        { id: "session-1", title: "实现一", activity: activity("input-1", "允许修改文件？") },
+        { id: "session-2", title: "实现二", activity: activity("input-2", "允许运行检查？") },
+      ],
+      pendingInputs,
+      onAnswerPermission: async (request, optionId) => {
+        answers.push([request.requestId, optionId])
+        return accepted
+      },
+    })
+
+    expect(view.container.textContent).toContain("允许修改文件？")
+    await click(button(view.container, "允许"))
+    expect(view.container.querySelector('[data-task-row="TASK-PERMISSION-1"]')?.getAttribute("data-selected")).toBe("true")
+
+    accepted = true
+    await click(button(view.container, "允许"))
+    expect(view.container.querySelector('[data-task-row="TASK-PERMISSION-2"]')?.getAttribute("data-selected")).toBe("true")
+    expect(view.container.textContent).toContain("允许运行检查？")
+    expect(answers).toEqual([
+      ["input-1", "allow"],
+      ["input-1", "allow"],
+    ])
+  })
+
+  test("preserves an inline question draft when Core rejects the answer", async () => {
+    const task = createBoardTask(
+      { title: "回答问题", status: "in_progress", sessionIds: ["session-question"] },
+      { id: "TASK-QUESTION", now: 1_700_000_000_000 },
+    )
+    storeTasks([task])
+    const request = {
+      session: "session-question",
+      requestId: "question-1",
+      title: "选择方案",
+      options: [],
+      form: {
+        message: "说明选择原因",
+        fields: [{ key: "reason", kind: "text", title: "原因", required: true }],
+      },
+    }
+    const answers = []
+    const view = await renderBoard({
+      sessions: [{
+        id: "session-question",
+        title: "问答实现",
+        activity: {
+          revision: 1,
+          state: {
+            kind: "awaiting_input",
+            turn_id: "turn-question",
+            pending: [{ input_id: "question-1", kind: "elicitation", title: "选择方案", options: [], sequence: 1, form: request.form }],
+          },
+        },
+      }],
+      pendingInputs: [request],
+      onAnswerElicitation: async (_pending, answer) => {
+        answers.push(answer)
+        return false
+      },
+    })
+    const input = view.container.querySelector('input[aria-label="原因"]')
+    await reactAct(async () => {
+      input.value = "保留现有架构"
+      Simulate.input(input, { target: { value: "保留现有架构" } })
+    })
+    await flush()
+    await click(button(view.container, "提交"))
+
+    expect(input.value).toBe("保留现有架构")
+    expect(view.container.textContent).toContain("说明选择原因")
+    expect(answers).toEqual([{ action: "accept", content: { reason: "保留现有架构" } }])
+  })
+
+  test("uses contextual list shortcuts without intercepting the Session prompt field", async () => {
+    const first = createBoardTask(
+      { title: "键盘任务一", status: "in_progress", order: 0, sessionIds: ["session-key-1"] },
+      { id: "TASK-KEY-1", now: 1_700_000_000_000 },
+    )
+    const second = createBoardTask(
+      { title: "键盘任务二", status: "in_progress", order: 1, sessionIds: ["session-key-2"] },
+      { id: "TASK-KEY-2", now: 1_700_000_000_001 },
+    )
+    storeTasks([first, second])
+    const opened = []
+    const view = await renderBoard({
+      sessions: [
+        { id: "session-key-1", title: "键盘一" },
+        { id: "session-key-2", title: "键盘二" },
+      ],
+      onOpenSession: (id) => opened.push(id),
+      onAskSession: async () => true,
+    })
+    const firstControl = view.container.querySelector('[data-task-select="TASK-KEY-1"]')
+    firstControl.focus()
+    await keyDown(firstControl, "j")
+    expect(view.container.querySelector('[data-task-row="TASK-KEY-2"]')?.getAttribute("data-selected")).toBe("true")
+
+    await click(button(view.container, "隐藏检查器"))
+    await keyDown(firstControl, " ")
+    expect(view.container.querySelector("[data-task-board-page]")?.getAttribute("data-inspector-open")).toBe("true")
+
+    const prompt = view.container.querySelector('textarea[placeholder="添加提示并在这个 Session 中继续…"]')
+    await keyDown(prompt, "k")
+    expect(view.container.querySelector('[data-task-row="TASK-KEY-2"]')?.getAttribute("data-selected")).toBe("true")
+
+    await keyDown(firstControl, "Enter")
+    expect(opened).toEqual(["session-key-2"])
+    expect(view.container.textContent).toContain("↑↓ / J K")
+    expect(view.container.textContent).toContain("Space")
+  })
+
+  test("loads a selected historical Session PR beyond the initial lookup cap", async () => {
+    const sessionIds = Array.from({ length: 49 }, (_, index) => `session-${index + 1}`)
+    const task = createBoardTask(
+      { title: "大型历史", status: "in_progress", sessionIds },
+      { id: "TASK-LARGE-HISTORY", now: 1_700_000_000_000 },
+    )
+    storeTasks([task])
+    const loadedPaths = []
+    let resolveSelectedPullRequest = null
+    const view = await renderBoard({
+      sessions: sessionIds.map((id, index) => ({
+        id,
+        title: `历史 ${index + 1}`,
+        worktreePath: `/worktrees/${id}`,
+      })),
+      loadPullRequest: async (path) => {
+        loadedPaths.push(path)
+        if (path === "/worktrees/session-1") {
+          return new Promise((resolve) => {
+            resolveSelectedPullRequest = () => resolve(githubPullRequest(1))
+          })
+        }
+        return githubPullRequest(Number(path.match(/\d+$/)?.[0] ?? 0))
+      },
+    })
+
+    await waitFor(() => expect(new Set(loadedPaths).size).toBe(48))
+    expect(loadedPaths).not.toContain("/worktrees/session-1")
+    await click(button(view.container, "展开任务：大型历史"))
+    await click(button(view.container, "选择 Session 1：历史 1"))
+    await click(button(view.container, "详情"))
+
+    await waitFor(() => expect(loadedPaths).toContain("/worktrees/session-1"))
+    expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).toContain("正在检查 PR…")
+    expect(view.container.querySelector('[aria-label="任务检查器"]')?.textContent).not.toContain("这个 Session 的检出目录没有当前 pull request。")
+    await reactAct(async () => resolveSelectedPullRequest?.())
+    await waitFor(() => expect(
+      view.container.querySelector('[aria-label="任务检查器"]')?.textContent,
+    ).toContain("#1 · 未合并"))
   })
 
   test("searches from the Filter popover and clears the query", async () => {
@@ -362,6 +628,26 @@ describe("TaskBoardPage rendered", () => {
     expect(toast).toBeTruthy()
     await click(button(toast, "清除筛选"))
     expect(view.container.textContent).toContain("隐藏后可找回的任务")
+  })
+
+  test("offers to leave the needs-you view when it hides a newly created Task", async () => {
+    const view = await renderBoard()
+    await click(button(view.container, "有 2 项任务需要你处理"))
+    await click(button(view.container, "新建任务"))
+    const title = dom.document.body.querySelector(
+      'input[placeholder="例如：完善任务筛选体验"]',
+    )
+    await setValue(title, "稍后处理的新任务")
+    await click(button(dom.document.body, "创建任务"))
+
+    expect(view.container.querySelector('[aria-label="任务操作：稍后处理的新任务"]')).toBeNull()
+    const toast = Array.from(dom.document.body.querySelectorAll('[role="status"]')).find(
+      (status) => status.textContent?.includes("但它被当前筛选隐藏"),
+    )
+    expect(toast).toBeTruthy()
+    await click(button(toast, "清除筛选"))
+    expect(view.container.querySelector("h1")?.textContent).toBe("全部任务")
+    expect(view.container.textContent).toContain("稍后处理的新任务")
   })
 
   test("moves a Task from its menu and persists the stage", async () => {
@@ -432,7 +718,34 @@ describe("TaskBoardPage rendered", () => {
 
     await click(button(view.container, "隐藏检查器"))
     expect(page?.getAttribute("data-inspector-open")).toBe("false")
-    await click(button(view.container, "显示检查器"))
+    const showInspector = button(view.container, "显示检查器")
+    showInspector.focus()
+    await click(showInspector)
     expect(page?.getAttribute("data-inspector-open")).toBe("true")
+  })
+
+  test("keeps Task expansion in the list and uses the shared modal for the narrow Inspector", async () => {
+    globalThis.ResizeObserver = class ResizeObserver {
+      observe() {}
+      disconnect() {}
+    }
+    const view = await renderBoard({}, "zh-CN", true)
+    const page = view.container.querySelector("[data-task-board-page]")
+
+    expect(page?.getAttribute("data-inspector-open")).toBe("false")
+    await click(button(view.container, "展开任务：确认任务流转规则"))
+    expect(page?.getAttribute("data-inspector-open")).toBe("false")
+
+    const showInspector = button(view.container, "显示检查器")
+    await click(showInspector)
+    const dialog = dom.document.body.querySelector('[data-slot="dialog-content"]')
+    expect(dialog).not.toBeNull()
+    expect(dialog?.getAttribute("role")).toBe("dialog")
+    expect(view.container.querySelector(".task-board-workspace")?.hasAttribute("inert")).toBe(true)
+    expect(dialog?.contains(dom.document.activeElement)).toBe(true)
+
+    await click(button(dom.document.body, "隐藏检查器"))
+    expect(page?.getAttribute("data-inspector-open")).toBe("false")
+    await waitFor(() => expect(dom.document.activeElement).toBe(button(view.container, "显示检查器")))
   })
 })

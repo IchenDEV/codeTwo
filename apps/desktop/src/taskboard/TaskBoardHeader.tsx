@@ -17,10 +17,16 @@ import type { Translate } from "@/i18n"
 
 import { PRIORITIES, type TaskPriority } from "./taskBoard"
 import { taskPriorityLabel } from "./TaskEditorDialog"
+import type { TaskBoardView } from "./workspaceTypes"
 
 interface TaskBoardHeaderProps {
   t: Translate
   taskCount: number
+  pageTitle: string
+  pageDescription: string
+  view: TaskBoardView
+  attentionCount: number
+  onViewChange: (view: TaskBoardView) => void
   headerLeadingAction?: ReactNode
   inspectorOpen: boolean
   onShowInspector: () => void
@@ -49,11 +55,12 @@ export function TaskBoardHeader(props: TaskBoardHeaderProps) {
         <nav aria-label={t("taskboard.breadcrumb")} className="flex min-w-0 items-center gap-2 text-body">
           <span className="text-muted-foreground">{t("taskboard.title")}</span>
           <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
-          <strong className="truncate">{t("taskboard.allTasks")}</strong>
+          <strong className="truncate">{props.pageTitle}</strong>
         </nav>
         <div className="flex-1" />
         {!props.inspectorOpen ? (
           <Button
+            data-task-board-show-inspector
             type="button"
             variant="ghost"
             size="icon-sm"
@@ -68,17 +75,45 @@ export function TaskBoardHeader(props: TaskBoardHeaderProps) {
       <div className="flex flex-wrap items-start gap-4 px-4 py-5 sm:px-6">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-page font-semibold tracking-tight">{t("taskboard.allTasks")}</h1>
+            <h1 className="text-page font-semibold tracking-tight">{props.pageTitle}</h1>
             <Badge variant="secondary" className="tabular-nums text-muted-foreground">
               {props.taskCount}
             </Badge>
           </div>
           <p className="mt-1 max-w-2xl text-body text-muted-foreground">
-            {t("taskboard.workspaceDescription")}
+            {props.pageDescription}
           </p>
         </div>
 
         <div data-page-header-controls className="flex shrink-0 items-center gap-2">
+          <div
+            role="group"
+            aria-label={t("taskboard.views")}
+            className="flex items-center rounded-control bg-fill-rest p-0.5"
+          >
+            <Button
+              type="button"
+              variant={props.view === "all" ? "secondary" : "ghost"}
+              size="compact"
+              aria-pressed={props.view === "all"}
+              onClick={() => props.onViewChange("all")}
+            >
+              {t("taskboard.allTasks")}
+            </Button>
+            <Button
+              type="button"
+              variant={props.view === "attention" ? "secondary" : "ghost"}
+              size="compact"
+              aria-label={t("taskboard.attentionSummary", { count: props.attentionCount })}
+              aria-pressed={props.view === "attention"}
+              onClick={() => props.onViewChange("attention")}
+            >
+              {t("taskboard.lane.needsYou")}
+              <Badge variant="secondary" className="min-w-4 px-1 text-metadata tabular-nums">
+                {props.attentionCount}
+              </Badge>
+            </Button>
+          </div>
           <Popover open={props.filtersOpen} onOpenChange={props.onFiltersOpenChange}>
             <PopoverTrigger
               render={

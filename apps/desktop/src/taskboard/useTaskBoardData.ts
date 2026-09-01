@@ -17,7 +17,32 @@ import {
   type TaskPriority,
 } from "./taskBoard"
 import { projectTasks } from "./workspaceModel"
-import type { SessionProjection, TaskBoardSession } from "./workspaceTypes"
+import type { ProjectedTask, SessionProjection, TaskBoardSession, TaskBoardView } from "./workspaceTypes"
+
+export function toggleFilterValue<T extends string>(values: readonly T[], value: T): T[] {
+  return values.includes(value)
+    ? values.filter((candidate) => candidate !== value)
+    : [...values, value]
+}
+
+export function taskBoardViewData(
+  view: TaskBoardView,
+  projectedTasks: readonly ProjectedTask[],
+  allProjectedTasks: readonly ProjectedTask[],
+  t: Translate,
+) {
+  const attentionCount = allProjectedTasks.filter(({ lane }) => lane === "needs_you").length
+  return {
+    tasks: view === "attention"
+      ? projectedTasks.filter(({ lane }) => lane === "needs_you")
+      : projectedTasks,
+    attentionCount,
+    title: view === "attention" ? t("taskboard.lane.needsYou") : t("taskboard.allTasks"),
+    description: view === "attention"
+      ? t("taskboard.attentionSummary", { count: attentionCount })
+      : t("taskboard.workspaceDescription"),
+  }
+}
 
 function warningText(warning: string, t: Translate): string {
   if (warning === CORRUPT_BOARD_WARNING) return t("taskboard.warning.corrupt")

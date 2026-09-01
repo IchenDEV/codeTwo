@@ -70,4 +70,57 @@ describe("CommandPalette", () => {
     expect(dom.document.body.querySelector('[data-palette-group="setting"]')).toBeNull();
     view.unmount();
   });
+
+  test("previews current and archived Session results without opening them", async () => {
+    const opened = [];
+    const view = mount(
+      <I18nProvider>
+        <CommandPalette
+          commands={[
+            {
+              id: "current-session",
+              category: "session",
+              label: "Current implementation",
+              preview: {
+                title: "Current implementation",
+                body: "The current transcript match",
+                context: "CodeTwo",
+                current: true,
+              },
+              run: () => opened.push("current"),
+            },
+            {
+              id: "archived-session",
+              category: "session",
+              label: "Archived exploration",
+              preview: {
+                title: "Archived exploration",
+                body: "A readable historical transcript match",
+                context: "CodeTwo",
+                archived: true,
+              },
+              run: () => opened.push("archived"),
+            },
+          ]}
+          onClose={() => {}}
+        />
+      </I18nProvider>,
+    );
+    await flush();
+
+    const preview = dom.document.body.querySelector("[data-palette-preview]");
+    expect(preview?.textContent).toContain("Read-only preview");
+    expect(preview?.textContent).toContain("Current");
+    expect(preview?.textContent).toContain("The current transcript match");
+    expect(opened).toEqual([]);
+
+    const archivedItem = Array.from(dom.document.body.querySelectorAll('[data-slot="command-item"]'))
+      .find((item) => item.textContent?.includes("Archived exploration"));
+    archivedItem?.dispatchEvent(new dom.window.MouseEvent("mousemove", { bubbles: true }));
+    await flush();
+    expect(preview?.textContent).toContain("Archived");
+    expect(preview?.textContent).toContain("A readable historical transcript match");
+    expect(opened).toEqual([]);
+    view.unmount();
+  });
 });

@@ -1,69 +1,89 @@
-import { useEffect, useState } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 
 import { githubCurrentPullRequest } from "@/bridge"
-import { Button } from "@/components/ui/button"
-import { X } from "@/components/ui/icons"
 import { useLanguage } from "@/i18n"
 
 import { TaskBoardHeader } from "./TaskBoardHeader"
+import { TaskBoardInspectorSurface } from "./TaskBoardInspectorSurface"
 import { TaskBoardList } from "./TaskBoardList"
 import { TaskEditorDialog } from "./TaskEditorDialog"
-import { TaskInspector } from "./TaskInspector"
 import { type BoardTask, type TaskPriority } from "./taskBoard"
 import { useTaskBoardActions } from "./useTaskBoardActions"
-import { useTaskBoardData } from "./useTaskBoardData"
+import { taskBoardViewData, toggleFilterValue, useTaskBoardData } from "./useTaskBoardData"
+import { useTaskBoardKeyboard } from "./useTaskBoardKeyboard"
 import { useTaskBoardSelection } from "./useTaskBoardSelection"
+import { useTaskBoardTranscript } from "./useTaskBoardTranscript"
+import { useTaskBoardViewport } from "./useTaskBoardViewport"
 import { useTaskPullRequests } from "./useTaskPullRequests"
 import { INITIAL_TASK_LIMIT, sessionCheckoutPath } from "./workspaceModel"
-import type { EditorState, InspectorTab, TaskBoardPageProps } from "./workspaceTypes"
+import type {
+  EditorState,
+  InspectorTab,
+  TaskBoardPageProps,
+  TaskBoardView,
+} from "./workspaceTypes"
 import "./task-board.css"
 
-export type { TaskBoardSession } from "./workspaceTypes"
+export type { TaskBoardSession, TaskBoardTranscriptLine, TaskBoardTranscriptPreview } from "./workspaceTypes"
 
-function toggleValue<T extends string>(values: readonly T[], value: T): T[] {
-  return values.includes(value)
-    ? values.filter((candidate) => candidate !== value)
-    : [...values, value]
-}
-
-export function TaskBoardPage({
-  sessions = [],
-  onOpenSession,
-  onAskSession,
-  onStartTask,
-  headerLeadingAction,
-  loadPullRequest = githubCurrentPullRequest,
-}: TaskBoardPageProps) {
+export function TaskBoardPage(props: TaskBoardPageProps) {
+  const {
+    sessions = [], pendingInputs = [], loadPullRequest = githubCurrentPullRequest,
+    onOpenSession, onAskSession, onStartTask, loadTranscript, onAnswerPermission,
+    onAnswerElicitation, onSplitSession, onForkSession, headerLeadingAction,
+  } = props
   const { locale, t } = useLanguage()
   const [query, setQuery] = useState("")
   const [priorities, setPriorities] = useState<TaskPriority[]>([])
   const [labels, setLabels] = useState<string[]>([])
+  const [view, setView] = useState<TaskBoardView>("all")
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [inspectorOpen, setInspectorOpen] = useState(true)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("agent")
   const [prompt, setPrompt] = useState("")
+  const [promptSubmitting, setPromptSubmitting] = useState(false)
   const [visibleTaskLimit, setVisibleTaskLimit] = useState(INITIAL_TASK_LIMIT)
+  const pageRef = useRef<HTMLElement | null>(null)
+  const viewport = useTaskBoardViewport(pageRef)
+  const { inspectorOpen, isNarrow, setInspectorOpen, closeInspector } = viewport
   const data = useTaskBoardData(locale, t, sessions, query, priorities, labels)
+  const viewData = taskBoardViewData(view, data.projectedTasks, data.allProjectedTasks, t)
+  const { tasks: viewTasks, attentionCount, title: pageTitle, description: pageDescription } = viewData
+  const selection = useTaskBoardSelection(viewTasks)
+  const transcript = useTaskBoardTranscript(selection.selectedSession?.id ?? null, loadTranscript)
 
-  const selection = useTaskBoardSelection(data.allProjectedTasks, data.projectedTasks)
-
-  useEffect(() => setPrompt(""), [selection.selectedSessionId])
-  useEffect(() => setVisibleTaskLimit(INITIAL_TASK_LIMIT), [data.deferredQuery, labels, priorities])
-
-  const pullRequestsByPath = useTaskPullRequests(data.allProjectedTasks, loadPullRequest)
+  useEffect(() => {
+    setPrompt("")
+    setPromptSubmitting(false)
+  }, [selection.selectedSessionId])
+  useEffect(() => setVisibleTaskLimit(INITIAL_TASK_LIMIT), [data.deferredQuery, labels, priorities, view])
   const selectedCheckoutPath = sessionCheckoutPath(selection.selectedSession ?? undefined)
+  const pullRequestsByPath = useTaskPullRequests(
+    data.allProjectedTasks,
+    loadPullRequest,
+    selectedCheckoutPath,
+  )
   const selectedPullRequest = selectedCheckoutPath
-    ? pullRequestsByPath.get(selectedCheckoutPath) ?? null
+    ? pullRequestsByPath.get(selectedCheckoutPath)
+    : null
+  const selectedPendingInput = selection.selectedSession
+    ? pendingInputs.find((request) => request.session === selection.selectedSession?.id) ?? null
     : null
   const activeFilterCount = (query.trim() ? 1 : 0) + priorities.length + labels.length
-  const renderedTasks = data.projectedTasks.slice(0, visibleTaskLimit)
-  const remainingTaskCount = Math.max(0, data.projectedTasks.length - renderedTasks.length)
-
+  const renderedTasks = viewTasks.slice(0, visibleTaskLimit)
+  const remainingTaskCount = Math.max(0, viewTasks.length - renderedTasks.length)
   const clearFilters = (): void => {
     setQuery("")
     setPriorities([])
     setLabels([])
+  }
+  const revealAllTasks = (): void => {
+    clearFilters()
+    setView("all")
   }
   const actions = useTaskBoardActions({
     t,
@@ -71,8 +91,10 @@ export function TaskBoardPage({
     tasks: data.state.tasks,
     filters: data.filters,
     editor,
+    view,
     selectedSession: selection.selectedSession,
     prompt,
+    promptSubmitting,
     onAskSession,
     dispatch: data.dispatch,
     setEditor,
@@ -82,23 +104,56 @@ export function TaskBoardPage({
     setInspectorOpen,
     setInspectorTab,
     setPrompt,
-    clearFilters,
+    setPromptSubmitting,
+    revealAllTasks,
+    openInspectorForSelection: viewport.openInspectorForSelection,
   })
   const moveTask = (task: BoardTask, status: BoardTask["status"]): void => {
     data.dispatch({ type: "move", id: task.id, status, now: Date.now() })
   }
+  const advanceAfterAttention = (): void => {
+    if (!selection.selectedTask) return
+    const index = viewTasks.findIndex(({ task }) => task.id === selection.selectedTask?.id)
+    const next = viewTasks[index + 1] ?? viewTasks[index - 1]
+    if (!next || next.task.id === selection.selectedTask.id) return
+    selection.setSelectedTaskId(next.task.id)
+    selection.setSelectedSessionId(next.currentSession?.id ?? next.sessions[0]?.id ?? null)
+    setInspectorTab("agent")
+  }
+  const handleBoardKeyDown = useTaskBoardKeyboard({
+    pageRef,
+    renderedTasks,
+    selectedTask: selection.selectedTask,
+    selectedSession: selection.selectedSession,
+    setSelectedTaskId: selection.setSelectedTaskId,
+    setSelectedSessionId: selection.setSelectedSessionId,
+    setInspectorTab,
+    setInspectorOpen,
+    onOpenSession,
+    onStartTask,
+  })
 
   return (
     <main
+      ref={pageRef}
       data-task-board-page
       data-inspector-open={inspectorOpen}
+      onKeyDown={handleBoardKeyDown}
       className="task-board-page animate-data-page-in min-h-0 min-w-0 flex-1 bg-background text-foreground"
     >
       <div className="task-board-layout h-full min-h-0">
-        <section className="task-board-workspace flex min-h-0 min-w-0 flex-col">
+        <section
+          {...(isNarrow && inspectorOpen ? { inert: "" } : {})}
+          className="task-board-workspace flex min-h-0 min-w-0 flex-col"
+        >
           <TaskBoardHeader
             t={t}
-            taskCount={data.state.tasks.length}
+            taskCount={viewTasks.length}
+            pageTitle={pageTitle}
+            pageDescription={pageDescription}
+            view={view}
+            attentionCount={attentionCount}
+            onViewChange={setView}
             headerLeadingAction={headerLeadingAction}
             inspectorOpen={inspectorOpen}
             onShowInspector={() => setInspectorOpen(true)}
@@ -108,10 +163,10 @@ export function TaskBoardPage({
             query={query}
             onQueryChange={setQuery}
             priorities={priorities}
-            onTogglePriority={(priority) => setPriorities((values) => toggleValue(values, priority))}
+            onTogglePriority={(priority) => setPriorities((values) => toggleFilterValue(values, priority))}
             labels={labels}
             availableLabels={data.availableLabels}
-            onToggleLabel={(label) => setLabels((values) => toggleValue(values, label))}
+            onToggleLabel={(label) => setLabels((values) => toggleFilterValue(values, label))}
             onClearFilters={clearFilters}
             onCreateTask={() => actions.openEditor(null, "todo")}
           />
@@ -123,7 +178,8 @@ export function TaskBoardPage({
           <TaskBoardList
             t={t}
             locale={locale}
-            projectedTasks={data.projectedTasks}
+            view={view}
+            projectedTasks={viewTasks}
             renderedTasks={renderedTasks}
             remainingTaskCount={remainingTaskCount}
             activeFilterCount={activeFilterCount}
@@ -140,35 +196,34 @@ export function TaskBoardPage({
             onShowMore={() => setVisibleTaskLimit((limit) => limit + INITIAL_TASK_LIMIT)}
           />
         </section>
-        <aside
-          aria-label={t("taskboard.inspector")}
-          className="task-board-inspector min-h-0 min-w-0 border-l border-border bg-background"
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="task-board-inspector-close absolute right-3 top-2.5 z-10"
-            aria-label={t("taskboard.hideInspector")}
-            onClick={() => setInspectorOpen(false)}
-          >
-            <X aria-hidden />
-          </Button>
-          <TaskInspector
-            t={t}
-            task={selection.selectedTask}
-            session={selection.selectedSession}
-            pullRequest={selectedPullRequest}
-            tab={inspectorTab}
-            prompt={prompt}
-            onTabChange={setInspectorTab}
-            onPromptChange={setPrompt}
-            onSubmitPrompt={actions.submitPrompt}
-            onOpenSession={onOpenSession}
-            onStartTask={onStartTask}
-            onCopyCheckout={actions.copyCheckout}
-          />
-        </aside>
+
+        <TaskBoardInspectorSurface
+          t={t}
+          task={selection.selectedTask}
+          session={selection.selectedSession}
+          pullRequest={selectedPullRequest}
+          transcript={transcript}
+          pendingInput={selectedPendingInput}
+          tab={inspectorTab}
+          prompt={prompt}
+          promptSubmitting={promptSubmitting}
+          canAskSession={Boolean(onAskSession)}
+          onTabChange={setInspectorTab}
+          onPromptChange={setPrompt}
+          onSubmitPrompt={actions.submitPrompt}
+          onOpenSession={onOpenSession}
+          onStartTask={onStartTask}
+          onCopyCheckout={actions.copyCheckout}
+          onAnswerPermission={onAnswerPermission}
+          onAnswerElicitation={onAnswerElicitation}
+          onAttentionAccepted={advanceAfterAttention}
+          onSplitSession={onSplitSession}
+          onForkSession={onForkSession}
+          isNarrow={isNarrow}
+          inspectorOpen={inspectorOpen}
+          onClose={closeInspector}
+          onOpenChange={(open) => open ? setInspectorOpen(true) : closeInspector()}
+        />
       </div>
       {editor ? (
         <TaskEditorDialog

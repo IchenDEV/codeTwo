@@ -1,27 +1,42 @@
 import type { FormEvent } from "react"
 
-import type { Translate } from "@/i18n"
-import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
+import type { ElicitationAnswer } from "@/bridge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { Translate } from "@/i18n"
+import type { PermissionQueueItem } from "@/session/sessionEvents"
+import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
 
-import { TaskInspectorAgent } from "./TaskInspectorAgent"
-import { TaskInspectorDetails, TaskInspectorInsights } from "./TaskInspectorSummary"
 import type { BoardTask } from "./taskBoard"
-import type { InspectorTab, SessionProjection } from "./workspaceTypes"
+import { TaskInspectorAgent } from "./TaskInspectorAgent"
+import { TaskInspectorDetails } from "./TaskInspectorSummary"
+import type {
+  InspectorTab,
+  SessionProjection,
+  TranscriptPreviewState,
+} from "./workspaceTypes"
 
-interface TaskInspectorProps {
+export interface TaskInspectorProps {
   t: Translate
   task: BoardTask | null
   session: SessionProjection | null
-  pullRequest: SidebarPullRequestStatus | null
+  pullRequest: SidebarPullRequestStatus | null | undefined
+  transcript: TranscriptPreviewState
+  pendingInput: PermissionQueueItem | null
   tab: InspectorTab
   prompt: string
+  promptSubmitting: boolean
+  canAskSession: boolean
   onTabChange: (tab: InspectorTab) => void
   onPromptChange: (value: string) => void
   onSubmitPrompt: (event: FormEvent<HTMLFormElement>) => void
   onOpenSession?: (id: string) => void
   onStartTask?: (task: BoardTask) => void
   onCopyCheckout: (path: string) => void
+  onAnswerPermission?: (request: PermissionQueueItem, optionId: string | null) => Promise<boolean>
+  onAnswerElicitation?: (request: PermissionQueueItem, answer: ElicitationAnswer) => Promise<boolean>
+  onAttentionAccepted: () => void
+  onSplitSession?: (id: string, edge: "right" | "bottom") => void
+  onForkSession?: (id: string, throughSeq: number, title: string) => void
 }
 
 export function TaskInspector(props: TaskInspectorProps) {
@@ -44,17 +59,19 @@ export function TaskInspector(props: TaskInspectorProps) {
         <TabsList variant="line" aria-label={props.t("taskboard.inspectorViews")} className="h-full">
           <TabsTrigger value="agent">{props.t("taskboard.inspector.agent")}</TabsTrigger>
           <TabsTrigger value="details">{props.t("taskboard.inspector.details")}</TabsTrigger>
-          <TabsTrigger value="insights">{props.t("taskboard.inspector.insights")}</TabsTrigger>
         </TabsList>
       </div>
       <TabsContent value="agent" className="min-h-0 overflow-y-auto px-4 py-4">
         <TaskInspectorAgent {...props} task={task} />
       </TabsContent>
       <TabsContent value="details" className="min-h-0 overflow-y-auto px-4 py-4">
-        <TaskInspectorDetails {...props} task={task} />
-      </TabsContent>
-      <TabsContent value="insights" className="min-h-0 overflow-y-auto px-4 py-4">
-        <TaskInspectorInsights {...props} task={task} />
+        <TaskInspectorDetails
+          t={props.t}
+          task={task}
+          session={props.session}
+          pullRequest={props.pullRequest}
+          onCopyCheckout={props.onCopyCheckout}
+        />
       </TabsContent>
     </Tabs>
   )

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { SessionActivity } from "../src/bridge";
-import { mergeCommandResults } from "../src/palette/merge";
+import { currentFirstSessionHits, mergeCommandResults } from "../src/palette/merge";
 import {
   executionPolicyChangeDisabled,
   sessionExecutionPolicy,
@@ -723,6 +723,28 @@ describe("command palette result union", () => {
     expect(mergeCommandResults(base, matches)).toEqual([
       { id: "settings" },
       { id: "conversation-a", identity: "session-a", label: "matched snippet" },
+    ]);
+  });
+
+  test("ranks the current Session first and archived Sessions after active matches", () => {
+    const hits = [
+      { session_id: "archived", archived: true },
+      { session_id: "active", archived: false },
+      { session_id: "current", archived: false },
+      { session_id: "active-2", archived: false },
+    ];
+
+    expect(currentFirstSessionHits(hits, "current").map((hit) => hit.session_id)).toEqual([
+      "current",
+      "active",
+      "active-2",
+      "archived",
+    ]);
+    expect(hits.map((hit) => hit.session_id)).toEqual([
+      "archived",
+      "active",
+      "current",
+      "active-2",
     ]);
   });
 });

@@ -174,50 +174,90 @@ export function QuestionDialog({
   form: ElicitationForm;
   onAnswer: (answer: ElicitationAnswer) => void;
 }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onAnswer({ action: "cancel" })}>
+      <DialogContent className="max-w-2xl">
+        <QuestionForm form={form} onAnswer={onAnswer} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The shared, stateful elicitation body. TaskBoard embeds this directly so an unanswered draft
+ * stays mounted when Core rejects or fails an answer; the chat wraps the same body in a dialog.
+ */
+export function QuestionForm({
+  form,
+  onAnswer,
+  embedded = false,
+}: {
+  form: ElicitationForm;
+  onAnswer: (
+    answer: ElicitationAnswer,
+  ) => boolean | void | Promise<boolean | void>;
+  embedded?: boolean;
+}) {
   const t = useT();
   const [values, setValues] = useState<ElicitationValues>({});
+  const [answering, setAnswering] = useState(false);
   const questions = questionFields(form);
   // With one question the message *is* the question, so repeating it above the options would just
   // read as the same sentence twice.
   const single = questions.length === 1;
 
+  const answer = async (value: ElicitationAnswer) => {
+    if (answering) return;
+    setAnswering(true);
+    try {
+      await onAnswer(value);
+    } finally {
+      setAnswering(false);
+    }
+  };
+
   return (
-    <Dialog open onOpenChange={(open) => !open && onAnswer({ action: "cancel" })}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+    <div className="flex min-h-0 flex-col gap-4" aria-busy={answering}>
+      <DialogHeader>
+        {embedded ? (
+          <h2 className="flex items-start gap-2 text-dialog font-semibold">
+            <MessageCircleQuestion className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+            <span className="min-w-0 whitespace-pre-wrap break-words">{form.message}</span>
+          </h2>
+        ) : (
           <DialogTitle className="flex items-start gap-2">
             <MessageCircleQuestion className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
             <span className="min-w-0 whitespace-pre-wrap break-words">{form.message}</span>
           </DialogTitle>
-        </DialogHeader>
+        )}
+      </DialogHeader>
 
-        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-          {questions.map((field) => (
-            <Question
-              key={field.key}
-              form={form}
-              field={single ? { ...field, description: null } : field}
-              values={values}
-              onChange={setValues}
-            />
-          ))}
-        </div>
+      <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+        {questions.map((field) => (
+          <Question
+            key={field.key}
+            form={form}
+            field={single ? { ...field, description: null } : field}
+            values={values}
+            onChange={setValues}
+          />
+        ))}
+      </div>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onAnswer({ action: "cancel" })}>
-            {t("question.cancel")}
-          </Button>
-          <Button variant="outline" onClick={() => onAnswer({ action: "decline" })}>
-            {t("question.skip")}
-          </Button>
-          <Button
-            disabled={!canSubmit(form, values)}
-            onClick={() => onAnswer(acceptAnswer(form, values))}
-          >
-            {t("question.submit")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter>
+        <Button variant="ghost" disabled={answering} onClick={() => void answer({ action: "cancel" })}>
+          {t("question.cancel")}
+        </Button>
+        <Button variant="outline" disabled={answering} onClick={() => void answer({ action: "decline" })}>
+          {t("question.skip")}
+        </Button>
+        <Button
+          disabled={answering || !canSubmit(form, values)}
+          onClick={() => void answer(acceptAnswer(form, values))}
+        >
+          {t("question.submit")}
+        </Button>
+      </DialogFooter>
+    </div>
   );
 }

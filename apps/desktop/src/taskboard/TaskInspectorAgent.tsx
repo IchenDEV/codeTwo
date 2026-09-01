@@ -1,47 +1,52 @@
 import type { FormEvent } from "react"
 
-import { openExternal } from "@/bridge"
+import { StatusIndicator, type StatusIndicatorTone } from "@/components/business/status-indicator"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
-  CheckCircle2,
-  Copy,
-  ExternalLink,
-  GitBranch,
-  GitPullRequest,
+  GitFork,
+  Loader2,
   MessageSquareText,
+  PanelBottom,
+  PanelRight,
   Plus,
   Send,
 } from "@/components/ui/icons"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import type { Translate } from "@/i18n"
-import { cn } from "@/lib/utils"
-import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
+import type { PermissionQueueItem } from "@/session/sessionEvents"
 
 import { InspectorSection } from "./InspectorSection"
+import { TaskBoardPendingInput, type TaskBoardPendingInputProps } from "./TaskBoardPendingInput"
 import type { BoardTask } from "./taskBoard"
-import {
-  checkoutLabel,
-  PULL_REQUEST_TONES,
-  pullRequestStatusLabel,
-  sessionActivityDescription,
-  sessionCheckoutPath,
-  sessionStatusLabel,
-  sessionStatusTone,
-} from "./workspaceModel"
-import type { SessionProjection } from "./workspaceTypes"
+import { sessionActivityDescription, sessionActivityKind } from "./workspaceModel"
+import type { SessionProjection, TranscriptPreviewState } from "./workspaceTypes"
 
 interface TaskInspectorAgentProps {
   t: Translate
   task: BoardTask
   session: SessionProjection | null
-  pullRequest: SidebarPullRequestStatus | null
+  transcript: TranscriptPreviewState
+  pendingInput: PermissionQueueItem | null
   prompt: string
+  promptSubmitting: boolean
+  canAskSession: boolean
   onPromptChange: (value: string) => void
   onSubmitPrompt: (event: FormEvent<HTMLFormElement>) => void
   onOpenSession?: (id: string) => void
   onStartTask?: (task: BoardTask) => void
-  onCopyCheckout: (path: string) => void
+  onAnswerPermission?: TaskBoardPendingInputProps["onAnswerPermission"]
+  onAnswerElicitation?: TaskBoardPendingInputProps["onAnswerElicitation"]
+  onAttentionAccepted: () => void
+  onSplitSession?: (id: string, edge: "right" | "bottom") => void
+  onForkSession?: (id: string, throughSeq: number, title: string) => void
+}
+
+function indicatorTone(session: SessionProjection): StatusIndicatorTone {
+  const activity = sessionActivityKind(session)
+  if (activity === "awaiting_input") return "warning"
+  if (activity === "failed") return "destructive"
+  return activity === "running" || session.archived ? "neutral" : "success"
 }
 
 export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
@@ -64,116 +69,59 @@ export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
     )
   }
 
-  const checkoutPath = sessionCheckoutPath(session)
-  const statusDescription = sessionActivityDescription(t, session)
-  const pullRequestTone = props.pullRequest
-    ? PULL_REQUEST_TONES[props.pullRequest.state]
-    : "text-muted-foreground"
-
+  const preview = props.transcript.status === "success" ? props.transcript.preview : null
   return (
-    <div className="flex min-h-full flex-col gap-5">
-      <InspectorSection title={t("taskboard.currentSessionTitle")}>
-        <div className="rounded-module border border-border bg-card p-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span aria-hidden className={cn("size-2 shrink-0 rounded-full", sessionStatusTone(session))} />
-            <strong className="min-w-0 flex-1 truncate text-body">
-              {t("taskboard.sessionOrdinal", { number: session.number })} · {session.title}
-            </strong>
-            {session.current ? (
-              <Badge variant="secondary" className="px-1.5 text-metadata text-primary">
-                {t("taskboard.currentSession")}
-              </Badge>
-            ) : null}
-          </div>
-          <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-metadata">
-            <span className="text-muted-foreground">{t("taskboard.taskLabel")}</span>
-            <strong className="truncate">{task.title}</strong>
-            <span className="text-muted-foreground">{t("taskboard.activityLabel")}</span>
-            <strong className="truncate">{sessionStatusLabel(t, session)}</strong>
-          </div>
-        </div>
-      </InspectorSection>
-
-      <InspectorSection title={t("taskboard.checkoutTitle")}>
-        <div className="flex min-w-0 items-center gap-2 rounded-module border border-border bg-card p-3">
-          <GitBranch aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <strong className="block truncate text-body" title={checkoutPath ?? undefined}>
-              {checkoutLabel(t, session, checkoutPath)}
-            </strong>
-            <span className="text-metadata text-muted-foreground">
-              {session.worktreePath ? t("checkout.worktreeBadge") : t("checkout.projectBadge")}
-            </span>
-          </div>
-          {checkoutPath ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("taskboard.copyCheckout")}
-              onClick={() => props.onCopyCheckout(checkoutPath)}
-            >
-              <Copy aria-hidden />
-            </Button>
+    <div className="flex min-h-full flex-col gap-4">
+      <header className="border-b border-border pb-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <strong className="min-w-0 flex-1 truncate text-body">
+            {t("taskboard.sessionOrdinal", { number: session.number })} · {session.title}
+          </strong>
+          {session.current ? (
+            <Badge variant="secondary" className="px-1.5 text-metadata text-primary">
+              {t("taskboard.currentSession")}
+            </Badge>
           ) : null}
         </div>
-      </InspectorSection>
+        <div className="mt-2">
+          <StatusIndicator tone={indicatorTone(session)} label={sessionActivityDescription(t, session)} />
+        </div>
+      </header>
 
-      <InspectorSection title={t("taskboard.primaryPullRequest")}>
-        {props.pullRequest ? (
-          <div className="rounded-module border border-border bg-card p-3">
-            <div className="flex items-center gap-2">
-              <GitPullRequest aria-hidden className={cn("size-4", pullRequestTone)} />
-              <strong className={cn("min-w-0 flex-1 truncate text-body", pullRequestTone)}>
-                #{props.pullRequest.number} · {pullRequestStatusLabel(t, props.pullRequest.state)}
-              </strong>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("taskboard.openPullRequest")}
-                onClick={() => void openExternal(props.pullRequest?.url ?? "")}
-              >
-                <ExternalLink aria-hidden />
-              </Button>
+      {props.pendingInput ? (
+        <TaskBoardPendingInput
+          t={t}
+          request={props.pendingInput}
+          onAnswerPermission={props.onAnswerPermission}
+          onAnswerElicitation={props.onAnswerElicitation}
+          onAccepted={props.onAttentionAccepted}
+        />
+      ) : null}
+
+      <InspectorSection title={t("taskboard.transcript.title")}>
+        <div data-task-board-transcript className="divide-y divide-border border-y border-border">
+          {props.transcript.status === "loading" ? (
+            <div className="flex items-center gap-2 py-4 text-body text-muted-foreground">
+              <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
+              {t("taskboard.transcript.loading")}
             </div>
-          </div>
-        ) : (
-          <div className="rounded-module border border-border bg-card px-3 py-4 text-metadata text-muted-foreground">
-            {t("taskboard.noPullRequestForSession")}
-          </div>
-        )}
-      </InspectorSection>
-
-      <InspectorSection title={t("taskboard.checksTitle")}>
-        <div className="rounded-module border border-border bg-card p-3">
-          <div className="flex items-center gap-2 text-body">
-            {props.pullRequest?.state === "merged" || props.pullRequest?.state === "open" ? (
-              <CheckCircle2 aria-hidden className="size-4 text-success" />
-            ) : (
-              <GitPullRequest aria-hidden className={cn("size-4", pullRequestTone)} />
-            )}
-            <span className="min-w-0 flex-1 truncate">{t("taskboard.deliveryCheck")}</span>
-            <span className={cn("text-metadata", pullRequestTone)}>
-              {props.pullRequest
-                ? pullRequestStatusLabel(t, props.pullRequest.state)
-                : t("taskboard.notAvailable")}
-            </span>
-          </div>
+          ) : props.transcript.status === "error" ? (
+            <p className="py-4 text-body text-muted-foreground">{t("taskboard.transcript.failed")}</p>
+          ) : preview && preview.entries.length > 0 ? preview.entries.map((entry) => (
+            <div key={entry.seq} className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-2 py-3 text-body">
+              <span className="text-metadata font-medium text-muted-foreground">
+                {t(entry.role === "user" ? "taskboard.transcript.you" : "taskboard.transcript.agent")}
+              </span>
+              <p className="line-clamp-4 whitespace-pre-wrap break-words text-foreground/85">{entry.text}</p>
+            </div>
+          )) : (
+            <p className="py-4 text-body text-muted-foreground">{t("taskboard.transcript.empty")}</p>
+          )}
         </div>
       </InspectorSection>
 
-      <InspectorSection title={t("taskboard.recentActivity")}>
-        <div className="rounded-module border border-border bg-card p-3">
-          <div className="flex items-start gap-2 text-body">
-            <span aria-hidden className={cn("mt-1 size-2 shrink-0 rounded-full", sessionStatusTone(session))} />
-            <span className="min-w-0 flex-1">{statusDescription}</span>
-          </div>
-        </div>
-      </InspectorSection>
-
-      {props.onOpenSession ? (
-        <form className="mt-auto grid gap-2 rounded-module border border-border bg-card p-3" onSubmit={props.onSubmitPrompt}>
+      {props.canAskSession ? (
+        <form className="grid gap-2 border-t border-border pt-3" onSubmit={props.onSubmitPrompt}>
           <label htmlFor="task-board-agent-prompt" className="text-metadata font-medium text-muted-foreground">
             {t("taskboard.askAgent")}
           </label>
@@ -182,18 +130,55 @@ export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
             rows={3}
             value={props.prompt}
             placeholder={t("taskboard.askAgentPlaceholder")}
+            disabled={props.promptSubmitting}
             onChange={(event) => props.onPromptChange(event.currentTarget.value)}
           />
-          <div className="flex items-center justify-between gap-2">
-            <Button type="button" variant="ghost" size="compact" onClick={() => props.onOpenSession?.(session.id)}>
-              {t("taskboard.openSession")}
-            </Button>
-            <Button type="submit" size="icon-sm" aria-label={t("taskboard.continueWithPrompt")} disabled={!props.prompt.trim()}>
-              <Send aria-hidden />
+          <div className="flex justify-end">
+            <Button type="submit" size="compact" disabled={props.promptSubmitting || !props.prompt.trim()}>
+              {props.promptSubmitting
+                ? <Loader2 aria-hidden className="animate-spin motion-reduce:animate-none" />
+                : <Send aria-hidden />}
+              {t("taskboard.continueWithPrompt")}
             </Button>
           </div>
         </form>
       ) : null}
+
+      <div className="mt-auto flex flex-wrap gap-2 border-t border-border pt-3">
+        {props.onOpenSession ? (
+          <Button type="button" size="compact" onClick={() => props.onOpenSession?.(session.id)}>
+            {t("taskboard.openSession")}
+          </Button>
+        ) : null}
+        {props.onForkSession ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="compact"
+            disabled={session.archived || preview?.latestTurnSeq == null}
+            onClick={() => {
+              if (preview?.latestTurnSeq != null) {
+                props.onForkSession?.(session.id, preview.latestTurnSeq, session.title)
+              }
+            }}
+          >
+            <GitFork aria-hidden />
+            {t("taskboard.forkFromPreview")}
+          </Button>
+        ) : null}
+        {props.onSplitSession ? (
+          <>
+            <Button type="button" variant="ghost" size="compact" onClick={() => props.onSplitSession?.(session.id, "right")}>
+              <PanelRight aria-hidden />
+              {t("taskboard.splitRight")}
+            </Button>
+            <Button type="button" variant="ghost" size="compact" onClick={() => props.onSplitSession?.(session.id, "bottom")}>
+              <PanelBottom aria-hidden />
+              {t("taskboard.splitBelow")}
+            </Button>
+          </>
+        ) : null}
+      </div>
     </div>
   )
 }

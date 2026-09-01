@@ -18,6 +18,7 @@ import type {
   InspectorTab,
   ProjectedTask,
   SessionProjection,
+  TaskBoardView,
 } from "./workspaceTypes"
 
 interface TaskBoardActionsOptions {
@@ -26,9 +27,11 @@ interface TaskBoardActionsOptions {
   tasks: readonly BoardTask[]
   filters: BoardFilters
   editor: EditorState | null
+  view: TaskBoardView
   selectedSession: SessionProjection | null
   prompt: string
-  onAskSession?: (id: string, prompt: string) => void
+  promptSubmitting: boolean
+  onAskSession?: (id: string, prompt: string) => boolean | Promise<boolean>
   dispatch: Dispatch<BoardAction>
   setEditor: Dispatch<SetStateAction<EditorState | null>>
   setSelectedTaskId: Dispatch<SetStateAction<string | null>>
@@ -37,7 +40,9 @@ interface TaskBoardActionsOptions {
   setInspectorOpen: Dispatch<SetStateAction<boolean>>
   setInspectorTab: Dispatch<SetStateAction<InspectorTab>>
   setPrompt: Dispatch<SetStateAction<string>>
-  clearFilters: () => void
+  setPromptSubmitting: Dispatch<SetStateAction<boolean>>
+  revealAllTasks: () => void
+  openInspectorForSelection: () => void
 }
 
 function nextColumnOrder(tasks: readonly BoardTask[], status: TaskStatus): number {
@@ -69,11 +74,13 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
       options.dispatch({ type: "create", task })
       options.setSelectedTaskId(task.id)
       options.setExpandedTaskIds((current) => new Set(current).add(task.id))
-      options.setInspectorOpen(true)
-      if (filterBoardTasks([task], options.filters).length === 0) {
+      options.openInspectorForSelection()
+      const hiddenByFilters = filterBoardTasks([task], options.filters).length === 0
+      const hiddenByView = options.view === "attention"
+      if (hiddenByFilters || hiddenByView) {
         options.toast(options.t("taskboard.createdHidden", { title: task.title }), "info", {
           label: options.t("taskboard.clearFilters"),
-          run: options.clearFilters,
+          run: options.revealAllTasks,
         })
       }
     }
@@ -96,7 +103,7 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
       else next.add(projected.task.id)
       return next
     })
-    options.setInspectorOpen(true)
+    options.openInspectorForSelection()
   }
 
   const selectSession = (taskId: string, sessionId: string): void => {
@@ -110,9 +117,19 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
   const submitPrompt = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
     const value = options.prompt.trim()
-    if (!value || !options.selectedSession || !options.onAskSession) return
-    options.onAskSession(options.selectedSession.id, value)
-    options.setPrompt("")
+    if (
+      !value ||
+      !options.selectedSession ||
+      !options.onAskSession ||
+      options.promptSubmitting
+    ) return
+    options.setPromptSubmitting(true)
+    void Promise.resolve(options.onAskSession(options.selectedSession.id, value)).then(
+      (accepted) => {
+        if (accepted) options.setPrompt("")
+      },
+      () => options.toast(options.t("taskboard.promptFailed"), "error"),
+    ).finally(() => options.setPromptSubmitting(false))
   }
 
   const copyCheckout = (path: string): void => {

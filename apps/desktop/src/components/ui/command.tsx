@@ -33,6 +33,8 @@ function CommandDialog({
   children,
   className,
   showCloseButton = true,
+  commandValue,
+  onCommandValueChange,
   ...props
 }: Omit<React.ComponentProps<typeof Dialog>, "children"> & {
   children: React.ReactNode
@@ -40,6 +42,8 @@ function CommandDialog({
   description?: string
   className?: string
   showCloseButton?: boolean
+  commandValue?: string
+  onCommandValueChange?: (value: string) => void
 }) {
   return (
     <Dialog {...props}>
@@ -51,7 +55,12 @@ function CommandDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <Command label={title} className="bg-transparent **:data-[slot=command-input-wrapper]:h-control-field [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:size-icon-control [&_[cmdk-input]]:h-control-field [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2 [&_[cmdk-item]_svg]:size-icon-control">
+        <Command
+          label={title}
+          value={commandValue}
+          onValueChange={onCommandValueChange}
+          className="bg-transparent **:data-[slot=command-input-wrapper]:h-control-field [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:size-icon-control [&_[cmdk-input]]:h-control-field [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2 [&_[cmdk-item]_svg]:size-icon-control"
+        >
           {children}
         </Command>
       </DialogContent>

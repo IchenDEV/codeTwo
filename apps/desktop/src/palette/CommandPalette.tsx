@@ -16,6 +16,14 @@ import { mergeCommandResults } from "./merge";
 
 export type CommandCategory = "action" | "session" | "setting";
 
+export interface CommandPreview {
+  title: string;
+  body: string;
+  context?: string;
+  current?: boolean;
+  archived?: boolean;
+}
+
 export interface Command {
   id: string;
   /** Stable entity identity lets a richer async result replace its metadata-only row. */
@@ -25,6 +33,7 @@ export interface Command {
   hint?: string;
   detail?: string;
   keywords?: string;
+  preview?: CommandPreview;
   run: () => void;
 }
 
@@ -43,6 +52,7 @@ export function CommandPalette({
   const [matches, setMatches] = useState<Command[]>([]);
   const [searchState, setSearchState] = useState<"idle" | "pending" | "loading" | "success" | "error">("idle");
   const [filter, setFilter] = useState<"all" | CommandCategory>("all");
+  const [selectedId, setSelectedId] = useState(commands[0]?.id ?? "");
 
   useEffect(() => {
     const value = query.trim();
@@ -114,6 +124,19 @@ export function CommandPalette({
       : searchState === "pending" || searchState === "loading"
         ? t("palette.searching")
         : null;
+  const listedCommands = useMemo(
+    () => groups.flatMap((group) => group.commands),
+    [groups],
+  );
+  const selectedCommand = listedCommands.find((command) => command.id === selectedId)
+    ?? listedCommands[0]
+    ?? null;
+
+  useEffect(() => {
+    if (selectedCommand && selectedCommand.id !== selectedId) {
+      setSelectedId(selectedCommand.id);
+    }
+  }, [selectedCommand, selectedId]);
 
   return (
     <CommandDialog
@@ -123,6 +146,8 @@ export function CommandPalette({
       description={t("palette.description")}
       className="command-palette-surface gap-0 p-0 shadow-(--ds-elevation-modal) sm:max-w-3xl"
       showCloseButton={false}
+      commandValue={selectedId}
+      onCommandValueChange={setSelectedId}
     >
       <CommandInput
         value={query}
@@ -153,40 +178,76 @@ export function CommandPalette({
           </Button>
         ))}
       </div>
-      <CommandList className="min-h-0 max-h-none flex-1">
-        <CommandEmpty>{searchStatus ? null : t("palette.empty")}</CommandEmpty>
-        {groups.map((group) => (
-          <CommandGroup
-            key={group.category}
-            heading={groupLabel(group.category)}
-            data-palette-group={group.category}
+      <div className="flex min-h-0 flex-1">
+        <CommandList className="min-h-0 max-h-none flex-1">
+          <CommandEmpty>{searchStatus ? null : t("palette.empty")}</CommandEmpty>
+          {groups.map((group) => (
+            <CommandGroup
+              key={group.category}
+              heading={groupLabel(group.category)}
+              data-palette-group={group.category}
+            >
+              {group.commands.map((command) => (
+                <CommandItem
+                  key={command.id}
+                  value={command.id}
+                  keywords={[command.label, command.hint ?? "", command.detail ?? "", command.keywords ?? ""]}
+                  onFocus={() => setSelectedId(command.id)}
+                  onMouseMove={() => setSelectedId(command.id)}
+                  onSelect={() => {
+                    onClose();
+                    command.run();
+                  }}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{command.label}</span>
+                    {command.detail && (
+                      <span className="block truncate text-callout text-muted-foreground">{command.detail}</span>
+                    )}
+                  </span>
+                  {command.hint && <CommandShortcut>{command.hint}</CommandShortcut>}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ))}
+          {searchStatus && (filter === "all" || filter === "session") && (
+            <p role="status" className="px-3 py-2 text-callout text-muted-foreground">
+              {searchStatus}
+            </p>
+          )}
+        </CommandList>
+        {selectedCommand?.preview ? (
+          <aside
+            data-palette-preview
+            aria-label={t("palette.preview")}
+            aria-live="polite"
+            className="hidden w-64 shrink-0 border-l border-border p-4 sm:flex sm:flex-col"
           >
-            {group.commands.map((command) => (
-              <CommandItem
-                key={command.id}
-                value={`${command.label} ${command.hint ?? ""} ${command.detail ?? ""} ${command.keywords ?? ""}`}
-                onSelect={() => {
-                  onClose();
-                  command.run();
-                }}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{command.label}</span>
-                  {command.detail && (
-                    <span className="block truncate text-callout text-muted-foreground">{command.detail}</span>
-                  )}
+            <div className="flex flex-wrap items-center gap-1.5 text-metadata text-muted-foreground">
+              <span>{t("palette.readOnlyPreview")}</span>
+              {selectedCommand.preview.current ? (
+                <span className="rounded-control bg-primary/10 px-1.5 py-0.5 font-medium text-primary">
+                  {t("palette.current")}
                 </span>
-                {command.hint && <CommandShortcut>{command.hint}</CommandShortcut>}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ))}
-        {searchStatus && (filter === "all" || filter === "session") && (
-          <p role="status" className="px-3 py-2 text-callout text-muted-foreground">
-            {searchStatus}
-          </p>
-        )}
-      </CommandList>
+              ) : null}
+              {selectedCommand.preview.archived ? (
+                <span className="rounded-control bg-fill-rest px-1.5 py-0.5 font-medium">
+                  {t("palette.archived")}
+                </span>
+              ) : null}
+            </div>
+            <h2 className="mt-3 text-body font-semibold leading-snug">{selectedCommand.preview.title}</h2>
+            {selectedCommand.preview.context ? (
+              <p className="mt-1 truncate text-metadata text-muted-foreground">
+                {selectedCommand.preview.context}
+              </p>
+            ) : null}
+            <p className="mt-4 line-clamp-[10] whitespace-pre-wrap break-words text-body leading-relaxed text-foreground/85">
+              {selectedCommand.preview.body}
+            </p>
+          </aside>
+        ) : null}
+      </div>
       <CommandSeparator className="mx-0" />
       <div className="flex items-center gap-4 px-3 py-2 text-callout text-muted-foreground">
         <span><kbd className="font-mono text-foreground">↑↓</kbd> {t("palette.navigate")}</span>
