@@ -21,7 +21,15 @@ function renderActions(overrides = {}) {
   const calls: string[] = [];
   const callback = (name: string) => () => calls.push(name);
   const props = {
-    canCommit: true,
+    gitAction: {
+      primary: { id: "review_changes", destination: "source_control" },
+      alternatives: [
+        { id: "push", destination: "push" },
+        { id: "view_pull_request", destination: "pull_request" },
+      ],
+      reason: { id: "local_changes", count: 2 },
+      changeRequestLabel: "PR",
+    },
     onAddAction: callback("add"),
     onOpenCursor: callback("cursor"),
     onOpenAntigravity: callback("antigravity"),
@@ -29,7 +37,9 @@ function renderActions(overrides = {}) {
     editorLaunchersAvailable: true,
     fileManagerLabel: "Finder",
     finderHint: "⌘O",
-    onCommit: callback("commit"),
+    onOpenSourceControl: callback("source-control"),
+    onOpenPullRequest: callback("pull-request"),
+    onCleanupWorktree: callback("cleanup"),
     onCheckpoint: callback("checkpoint"),
     onPush: callback("push"),
     onMoveTask: callback("move"),
@@ -70,7 +80,7 @@ describe("SessionHeaderActions", () => {
 
     const group = view.container.querySelector(".session-header-actions");
     expect(group).not.toBeNull();
-    for (const label of ["Add action", "Open", "Commit"]) {
+    for (const label of ["Add action", "Open", "Review changes"]) {
       const action = button(view.container, label);
       expect(action.classList.contains("session-header-action-main")).toBe(true);
       expect(action.querySelector(".session-header-action-label")?.textContent).toBe(label);
@@ -90,7 +100,7 @@ describe("SessionHeaderActions", () => {
     const addAction = button(view.container, "Add action");
     expect(addAction.dataset.variant).toBe("ghost");
 
-    for (const label of ["Add action", "Open", "Commit"]) {
+    for (const label of ["Add action", "Open", "Review changes"]) {
       const action = button(view.container, label);
       expect(action.dataset.variant).toBe("ghost");
       expect(action.classList.contains("bg-fill-rest")).toBe(true);
@@ -101,9 +111,9 @@ describe("SessionHeaderActions", () => {
       expect(action.classList.contains("button-toolbar-outline")).toBe(false);
     }
 
-    expect(view.container.querySelectorAll("button")).toHaveLength(3);
+    expect(view.container.querySelectorAll("button")).toHaveLength(4);
     expect(view.container.querySelector('[data-slot="button-group"]')).toBeNull();
-    expect(view.container.querySelector(".session-header-split-trigger")).toBeNull();
+    expect(view.container.querySelector(".session-header-git-action")).not.toBeNull();
     expect(view.container.querySelector(".session-header-compact-action")).toBeNull();
 
     for (const action of Array.from(view.container.querySelectorAll("button"))) {
@@ -143,26 +153,53 @@ describe("SessionHeaderActions", () => {
     await press(moveItem);
     expect(calls).toEqual(["add", "finder", "move"]);
 
-    await press(button(view.container, "Commit"));
-    expect(dom.document.body.textContent).toContain("Source control");
+    await press(button(view.container, "Review changes"));
+    expect(calls).toEqual(["add", "finder", "move", "source-control"]);
+
+    await press(button(view.container, "More Git actions"));
     expect(dom.document.body.textContent).toContain("Checkpoint now");
     expect(dom.document.body.textContent).toContain("Push");
-    const sourceControlItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("Source control"));
-    if (!sourceControlItem) throw new Error("Source control menu item not found");
-    await press(sourceControlItem);
-    expect(calls).toEqual(["add", "finder", "move", "commit"]);
+    expect(dom.document.body.textContent).toContain("View PR");
+    const pushItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes("Push"));
+    if (!pushItem) throw new Error("Push menu item not found");
+    await press(pushItem);
+    expect(calls).toEqual(["add", "finder", "move", "source-control", "push"]);
 
     view.unmount();
   });
 
-  test("disables the complete commit menu outside a repository", () => {
+  test("disables the complete Git action while state is unavailable", () => {
     activateDom();
-    const { view } = renderActions({ canCommit: false });
+    const { view } = renderActions({
+      gitAction: {
+        primary: { id: "unavailable", destination: "none", disabled: true },
+        alternatives: [],
+        reason: { id: "not_repository" },
+        changeRequestLabel: "change request",
+      },
+    });
 
-    expect(button(view.container, "Commit").disabled).toBe(true);
-    expect(button(view.container, "Commit").classList.contains("disabled:opacity-60")).toBe(true);
-    expect(view.container.querySelectorAll('[aria-label="Commit"]')).toHaveLength(1);
+    expect(button(view.container, "Source control unavailable").disabled).toBe(true);
+    expect(button(view.container, "Source control unavailable").classList.contains("disabled:opacity-60")).toBe(true);
+    expect(view.container.querySelector('[aria-label="More Git actions"]')).toBeNull();
+
+    view.unmount();
+  });
+
+  test("labels a merge-ready route as a guarded review step", async () => {
+    activateDom();
+    const { calls, view } = renderActions({
+      gitAction: {
+        primary: { id: "merge_pull_request", destination: "pull_request" },
+        alternatives: [{ id: "source_control", destination: "source_control" }],
+        reason: { id: "merge_ready" },
+        changeRequestLabel: "PR",
+      },
+    });
+
+    await press(button(view.container, "Review & merge PR"));
+    expect(calls).toEqual(["pull-request"]);
 
     view.unmount();
   });

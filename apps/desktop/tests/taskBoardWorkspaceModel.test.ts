@@ -7,6 +7,7 @@ import {
   checkoutLabel,
   formatUpdatedAt,
   LANE_TONES,
+  laneLabel,
   openPullRequestCount,
   projectTasks,
   PULL_REQUEST_TONES,
@@ -78,6 +79,13 @@ describe("TaskBoard workspace model", () => {
     })
   })
 
+  test("labels every projected task lane", () => {
+    expect(laneLabel(t, "queue")).toBe("taskboard.lane.queue:")
+    expect(laneLabel(t, "running")).toBe("taskboard.lane.running:")
+    expect(laneLabel(t, "needs_you")).toBe("taskboard.lane.needsYou:")
+    expect(laneLabel(t, "done")).toBe("taskboard.lane.done:")
+  })
+
   test("formats each relative-time boundary and the dated fallback", () => {
     const now = Date.UTC(2026, 0, 10, 12)
     Date.now = () => now
@@ -137,6 +145,7 @@ describe("TaskBoard workspace model", () => {
     expect(sessionStatusTone(awaiting)).toBe("warning")
     expect(sessionStatusTone(failed)).toBe("destructive")
     expect(sessionStatusTone(running)).toBe("success")
+    expect(sessionStatusTone({ ...running, archived: true })).toBe("success")
     expect(sessionStatusTone(session({ archived: true }))).toBe("neutral")
     expect(sessionStatusTone(session())).toBe("success")
   })

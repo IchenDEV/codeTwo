@@ -1,16 +1,27 @@
 import { GitBranch } from "@/components/ui/icons";
 
 import type { GitStatus } from "../bridge";
-import { Button } from "@/components/ui/button";
+import { SplitButton } from "@/components/ui/split-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 import { GitHubPullRequestPanel } from "./GitHubPullRequestPanel";
 import { GitSyncStatus } from "./GitSyncStatus";
+import {
+  gitNextActionLabel,
+  gitNextActionReason,
+  runGitNextAction,
+  type GitNextActionItem,
+  type GitNextActionProjection,
+} from "./nextAction";
 
 type GitDockContentProps = {
   status: GitStatus | null;
+  action: GitNextActionProjection;
   onOpenSourceControl: () => void;
+  onPush: () => void;
+  onOpenPullRequest: () => void;
+  onCleanupWorktree: () => void;
 };
 
 type PullRequestDockContentProps = {
@@ -22,9 +33,20 @@ type PullRequestDockContentProps = {
 /** Working-tree summary rendered inside the generic Dock container. */
 export function GitDockContent({
   status,
+  action,
   onOpenSourceControl,
+  onPush,
+  onOpenPullRequest,
+  onCleanupWorktree,
 }: GitDockContentProps) {
   const t = useT();
+  const runAction = (item: GitNextActionItem) => runGitNextAction(item, {
+    openSourceControl: onOpenSourceControl,
+    push: onPush,
+    openPullRequest: onOpenPullRequest,
+    cleanupWorktree: onCleanupWorktree,
+  });
+  const primaryLabel = gitNextActionLabel(t, action.primary, action.changeRequestLabel);
 
   return (
     <ScrollArea className="h-full min-h-0 flex-1">
@@ -65,13 +87,29 @@ export function GitDockContent({
               </div>
             )}
 
-            <Button size="sm" className="w-full" onClick={onOpenSourceControl}>
-              {t("dock.reviewCommit")}
-            </Button>
           </section>
-        ) : (
-          <p className="text-muted-foreground">{t("rail.notARepo")}</p>
-        )}
+        ) : null}
+        <div className="space-y-1.5">
+          <SplitButton
+            label={primaryLabel}
+            primaryLabel={primaryLabel}
+            onClick={() => runAction(action.primary)}
+            actions={action.alternatives.map((item) => ({
+              label: gitNextActionLabel(t, item, action.changeRequestLabel),
+              onClick: () => runAction(item),
+              disabled: item.disabled,
+            }))}
+            disabled={action.primary.disabled}
+            variant={action.primary.disabled ? "secondary" : "default"}
+            size="sm"
+            className="w-full"
+            primaryClassName="flex-1"
+            menuLabel={t("git.next.moreActions")}
+          />
+          <p className="text-metadata text-muted-foreground">
+            {gitNextActionReason(t, action)}
+          </p>
+        </div>
       </div>
     </ScrollArea>
   );
