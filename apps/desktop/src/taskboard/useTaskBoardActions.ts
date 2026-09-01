@@ -38,6 +38,7 @@ interface TaskBoardActionsOptions {
   setInspectorTab: Dispatch<SetStateAction<InspectorTab>>
   setPrompt: Dispatch<SetStateAction<string>>
   clearFilters: () => void
+  keepInspectorInPlace: boolean
 }
 
 function nextColumnOrder(tasks: readonly BoardTask[], status: TaskStatus): number {
@@ -69,7 +70,7 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
       options.dispatch({ type: "create", task })
       options.setSelectedTaskId(task.id)
       options.setExpandedTaskIds((current) => new Set(current).add(task.id))
-      options.setInspectorOpen(true)
+      if (!options.keepInspectorInPlace) options.setInspectorOpen(true)
       if (filterBoardTasks([task], options.filters).length === 0) {
         options.toast(options.t("taskboard.createdHidden", { title: task.title }), "info", {
           label: options.t("taskboard.clearFilters"),
@@ -96,7 +97,7 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
       else next.add(projected.task.id)
       return next
     })
-    options.setInspectorOpen(true)
+    if (!options.keepInspectorInPlace) options.setInspectorOpen(true)
   }
 
   const selectSession = (taskId: string, sessionId: string): void => {

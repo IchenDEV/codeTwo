@@ -1,20 +1,18 @@
 .task-board-page {
   container-type: inline-size;
-  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .task-board-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 22.5rem;
-  position: relative;
+  grid-template-columns: minmax(0, 1fr) 24rem;
+  min-height: 0;
+  flex: 1;
 }
 
-.task-board-page[data-inspector-open="false"] .task-board-layout {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.task-board-page[data-inspector-open="false"] .task-board-inspector {
-  display: none;
+.task-board-panel-header {
+  min-height: 6rem;
 }
 
 .task-board-task-row,
@@ -31,8 +29,15 @@
 .task-board-inspector {
   display: flex;
   flex-direction: column;
+  margin: 0.75rem;
   overflow: hidden;
-  position: relative;
+  border-radius: var(--ds-radius-module);
+  box-shadow: var(--ds-elevation-surface);
+}
+
+.task-board-inspector .task-board-panel-header {
+  min-height: 5.25rem;
+  padding-block: 0.5rem;
 }
 
 .task-board-inspector > [data-slot="tabs"] {
@@ -41,7 +46,6 @@
 
 .task-board-row-action {
   opacity: 0;
-  transition: opacity 150ms ease;
 }
 
 .task-board-task-row:hover .task-board-row-action,
@@ -51,7 +55,7 @@
 
 @container (max-width: 64rem) {
   .task-board-layout {
-    grid-template-columns: minmax(0, 1fr) 20rem;
+    grid-template-columns: minmax(0, 1fr) 21.5rem;
   }
 
   .task-board-task-row,
@@ -70,27 +74,24 @@
 }
 
 @container (max-width: 48rem) {
-  .task-board-layout,
-  .task-board-page[data-inspector-open="false"] .task-board-layout {
+  .task-board-layout {
     display: block;
   }
 
-  .task-board-workspace {
+  .task-board-workspace,
+  .task-board-inspector {
     height: 100%;
   }
 
   .task-board-inspector {
-    box-shadow: var(--ds-elevation-modal);
-    height: 100%;
-    inset-block: 0;
-    inset-inline-end: 0;
-    position: absolute;
-    width: min(22.5rem, calc(100% - 4rem));
-    z-index: 30;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 
-  .task-board-page[data-inspector-open="false"] .task-board-inspector {
-    display: none;
+  .task-board-inspector .task-board-panel-header {
+    min-height: 6rem;
+    padding-block: 1.25rem;
   }
 
   .task-board-task-row,

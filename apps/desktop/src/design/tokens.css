@@ -63,7 +63,7 @@
   /* Foundation: light palette. */
   --ds-foundation-light-canvas: oklch(0.976 0.003 250);
   --ds-foundation-light-sidebar: oklch(0.956 0.004 250);
-  --ds-foundation-light-surface: oklch(0.992 0.002 250);
+  --ds-foundation-light-surface: oklch(0.984 0.002 250);
   --ds-foundation-light-raised: oklch(0.998 0.001 250);
   --ds-foundation-light-modal: oklch(1 0 0);
   --ds-foundation-light-text: oklch(0.18 0.02 265);

@@ -1,6 +1,7 @@
 import { GitBranch, GitPullRequest } from "@/components/ui/icons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusIndicator } from "@/components/business/status-indicator"
 import type { Locale, Translate } from "@/i18n"
 import { cn } from "@/lib/utils"
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
@@ -12,6 +13,7 @@ import {
   PULL_REQUEST_TONES,
   pullRequestStatusLabel,
   sessionCheckoutPath,
+  sessionStatusLabel,
   sessionStatusTone,
   sessionUpdatedAt,
 } from "./workspaceModel"
@@ -23,7 +25,7 @@ interface TaskSessionRowProps {
   task: BoardTask
   session: SessionProjection
   selected: boolean
-  pullRequest: SidebarPullRequestStatus | null
+  pullRequest: SidebarPullRequestStatus | null | undefined
   onSelect: () => void
 }
 
@@ -53,11 +55,15 @@ export function TaskSessionRow({
       aria-label={t("taskboard.selectSession", {
         number: session.number,
         title: session.title,
+        status: sessionStatusLabel(t, session),
       })}
       onClick={onSelect}
     >
       <span className="flex min-w-0 items-center gap-2">
-        <span aria-hidden className={cn("size-2 shrink-0 rounded-full", sessionStatusTone(session))} />
+        <StatusIndicator
+          tone={sessionStatusTone(session)}
+          label={sessionStatusLabel(t, session)}
+        />
         <span className="truncate font-medium">
           {t("taskboard.sessionOrdinal", { number: session.number })} · {session.title}
         </span>
@@ -79,9 +85,13 @@ export function TaskSessionRow({
         </span>
       </span>
       <span className="task-board-session-pr min-w-0">
-        {pullRequest ? (
+        {pullRequest === undefined ? (
+          <span className="text-metadata text-muted-foreground">
+            {t("taskboard.checkingPullRequest")}
+          </span>
+        ) : pullRequest ? (
           <span className={cn(
-            "inline-flex max-w-full items-center gap-1 rounded-control border border-border px-2 py-1 text-metadata font-medium",
+            "inline-flex max-w-full items-center gap-1 rounded-control bg-fill-rest px-2 py-1 text-metadata font-medium",
             PULL_REQUEST_TONES[pullRequest.state],
           )}>
             <GitPullRequest aria-hidden className="size-3.5 shrink-0" />

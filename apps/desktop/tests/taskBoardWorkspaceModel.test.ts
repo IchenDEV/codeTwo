@@ -6,7 +6,7 @@ import type { BoardTask } from "../src/taskboard/taskBoard"
 import {
   checkoutLabel,
   formatUpdatedAt,
-  LANE_DOT_TONES,
+  LANE_TONES,
   openPullRequestCount,
   projectTasks,
   PULL_REQUEST_TONES,
@@ -62,11 +62,11 @@ afterEach(() => {
 
 describe("TaskBoard workspace model", () => {
   test("keeps every lane and pull-request tone explicit", () => {
-    expect(LANE_DOT_TONES).toEqual({
-      queue: "bg-muted-foreground/55",
-      running: "bg-primary",
-      needs_you: "bg-warning",
-      done: "bg-success",
+    expect(LANE_TONES).toEqual({
+      queue: "neutral",
+      running: "success",
+      needs_you: "warning",
+      done: "success",
     })
     expect(PULL_REQUEST_TONES).toEqual({
       merged: "text-success",
@@ -134,11 +134,11 @@ describe("TaskBoard workspace model", () => {
     expect(sessionStatusLabel(t, failed)).toBe("session.failed:")
     expect(sessionStatusLabel(t, running)).toBe("session.running:")
     expect(sessionStatusLabel(t, session())).toBe("session.completed:")
-    expect(sessionStatusTone(awaiting)).toBe("bg-warning")
-    expect(sessionStatusTone(failed)).toBe("bg-destructive")
-    expect(sessionStatusTone(running)).toBe("bg-primary")
-    expect(sessionStatusTone(session({ archived: true }))).toBe("bg-muted-foreground/40")
-    expect(sessionStatusTone(session())).toBe("bg-success")
+    expect(sessionStatusTone(awaiting)).toBe("warning")
+    expect(sessionStatusTone(failed)).toBe("destructive")
+    expect(sessionStatusTone(running)).toBe("success")
+    expect(sessionStatusTone(session({ archived: true }))).toBe("neutral")
+    expect(sessionStatusTone(session())).toBe("success")
   })
 
   test("describes attention, failure, and ordinary activity", () => {
@@ -191,6 +191,7 @@ describe("TaskBoard workspace model", () => {
     const pullRequests = new Map(states.map((state, index) => [`/${index}`, pullRequest(state)]))
     expect(openPullRequestCount(sessions, pullRequests)).toBe(4)
     expect(openPullRequestCount([], pullRequests)).toBe(0)
+    expect(openPullRequestCount(sessions, new Map())).toBeNull()
   })
 
   test("uses the matching pull-request translation key", () => {

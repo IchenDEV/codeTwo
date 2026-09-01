@@ -1,5 +1,7 @@
 import { ChevronRight, Plus } from "@/components/ui/icons"
 import { Button } from "@/components/ui/button"
+import { StatusIndicator } from "@/components/business/status-indicator"
+import { Separator } from "@/components/ui/separator"
 import type { Locale, Translate } from "@/i18n"
 import { cn } from "@/lib/utils"
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
@@ -9,7 +11,8 @@ import { TaskSessionRow } from "./TaskSessionRow"
 import type { BoardTask, TaskStatus } from "./taskBoard"
 import {
   formatUpdatedAt,
-  LANE_DOT_TONES,
+  LANE_TONES,
+  laneLabel,
   openPullRequestCount,
   sessionCheckoutPath,
 } from "./workspaceModel"
@@ -51,7 +54,7 @@ export function TaskListItem({
   const selected = selectedTaskId === task.id
 
   return (
-    <li data-task-item={task.id} className="border-b border-border last:border-b-0">
+    <li data-task-item={task.id}>
       <div
         data-task-row={task.id}
         data-selected={selected || undefined}
@@ -90,7 +93,7 @@ export function TaskListItem({
             aria-expanded={expanded}
             onClick={onToggle}
           >
-            <span aria-hidden className={cn("size-2 shrink-0 rounded-full", LANE_DOT_TONES[lane])} />
+            <StatusIndicator tone={LANE_TONES[lane]} label={laneLabel(t, lane)} />
             <span className="truncate">{task.title}</span>
           </Button>
           <TaskActionsMenu
@@ -110,9 +113,13 @@ export function TaskListItem({
         </span>
         <span
           className="task-board-task-prs text-center text-body tabular-nums text-muted-foreground"
-          aria-label={t("taskboard.openPullRequestCount", { count: openPrs })}
+          aria-label={
+            openPrs === null
+              ? t("taskboard.openPullRequestCountPending")
+              : t("taskboard.openPullRequestCount", { count: openPrs })
+          }
         >
-          {openPrs}
+          {openPrs ?? "—"}
         </span>
         <span className="pr-4 text-right text-metadata tabular-nums text-muted-foreground">
           {formatUpdatedAt(task.updatedAt, locale, t)}
@@ -121,7 +128,7 @@ export function TaskListItem({
 
       {expanded ? (
         <div
-          className="task-board-session-stack ml-8 border-l border-border"
+          className="task-board-session-stack ml-8 bg-fill-rest/40"
           aria-label={t("taskboard.taskSessions", { title: task.title })}
         >
           {sessions.length > 0 ? sessions.map((session) => {
@@ -134,7 +141,7 @@ export function TaskListItem({
                 task={task}
                 session={session}
                 selected={session.id === selectedSessionId}
-                pullRequest={path ? pullRequestsByPath.get(path) ?? null : null}
+                pullRequest={path ? pullRequestsByPath.get(path) : null}
                 onSelect={() => onSelectSession(session.id)}
               />
             )
@@ -151,6 +158,7 @@ export function TaskListItem({
           )}
         </div>
       ) : null}
+      <Separator />
     </li>
   )
 }
