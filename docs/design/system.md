@@ -34,7 +34,10 @@ desktop tool, not a mobile layout and not a showcase for decorative effects.
 - Persistent panels, cards, inputs, and dialogs are borderless and separated by solid surface tones
   plus controlled elevation. Menu-like transient layers add one restrained shared material.
 - Hover changes surface or text tone only. It never lifts, scales, or blooms a shadow.
-- Icons use Hugeicons and `currentColor`. Provider marks may keep their shape, never their brand color.
+- Icons use Phosphor's rounded regular weight and `currentColor`, imported through the shared icon
+  adapter. Built-in skills, market entries, and Scenes omit emoji icon metadata so the renderer's
+  semantic Phosphor defaults remain authoritative. Provider marks and explicitly authored external
+  content may keep their shape, never their brand color.
 - Official schemes are light, dark, and system. Built-in and custom palettes pass through the same
   theme resolver; product modules never branch on a palette name.
 

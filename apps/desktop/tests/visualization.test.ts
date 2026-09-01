@@ -47,7 +47,7 @@ describe("visualize transcript references", () => {
     expect(document).toContain("window.openai={sendFollowUpMessage");
     expect(document).toContain("background:var(--background)");
     expect(document).toContain("document.body.scrollHeight");
-    expect(document).toContain(".viz-icon{");
+    expect(document).not.toContain(".viz-icon{");
     expect(document).toContain("--visualization-radius-control:12px");
     expect(document).toContain("--visualization-radius-module:16px");
     expect(document).toContain("border-radius:var(--visualization-radius-control)");

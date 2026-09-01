@@ -1163,7 +1163,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             id: "plan-first".into(),
             name: "Plan first".into(),
             description: "Propose a plan and wait for approval before editing".into(),
-            icon: Some("🗺️".into()),
+            icon: None,
             source: None,
             payload: SkillPayload::Fragment {
                 text: "Before changing anything, produce a short numbered plan of the steps you \
@@ -1176,7 +1176,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             id: "reviewer".into(),
             name: "Code Reviewer".into(),
             description: "Meticulous senior reviewer persona".into(),
-            icon: Some("🔍".into()),
+            icon: None,
             source: None,
             payload: SkillPayload::Fragment {
                 text: "Act as a meticulous senior code reviewer. Flag bugs, unsafe patterns, and \
@@ -1188,7 +1188,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             id: "test-writer".into(),
             name: "Test Writer".into(),
             description: "Write thorough tests".into(),
-            icon: Some("🧪".into()),
+            icon: None,
             source: None,
             payload: SkillPayload::Fragment {
                 text: "Write thorough, isolated unit tests covering happy paths and edge cases. \
@@ -1200,7 +1200,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             id: "security-audit".into(),
             name: "Security Audit".into(),
             description: "Audit for vulnerabilities".into(),
-            icon: Some("🛡️".into()),
+            icon: None,
             source: None,
             payload: SkillPayload::Fragment {
                 text: "Audit the code for security vulnerabilities: injection, auth gaps, unsafe \
@@ -1212,7 +1212,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             id: "commit-macro".into(),
             name: "Commit Message".into(),
             description: "Parameterized commit message".into(),
-            icon: Some("📝".into()),
+            icon: None,
             source: None,
             payload: SkillPayload::Macro {
                 template: "Write a {{style}} commit message for changes to {{scope}}.".into(),
@@ -1808,6 +1808,11 @@ mod tests {
         assert!(style.required);
         let scope = slots.iter().find(|s| s.id == "scope").unwrap();
         assert_eq!(scope.kind, SlotKind::Text);
+    }
+
+    #[test]
+    fn builtin_skills_leave_icons_to_the_host_design_system() {
+        assert!(builtin_skills().iter().all(|skill| skill.icon.is_none()));
     }
 
     fn write_appshot_fixture(data_dir: &std::path::Path, id: &str) -> Vec<u8> {

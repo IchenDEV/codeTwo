@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "title": "Fix",
   "description": "Resolve reported failures one by one, keeping the fix summary current.",
-  "icon": "🩹",
   "localizations": {
     "zh-CN": { "title": "修复", "description": "逐项修复报告的失败用例，维护修复摘要。" }
   },

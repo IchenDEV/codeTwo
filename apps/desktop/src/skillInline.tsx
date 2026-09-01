@@ -24,6 +24,7 @@ import { workspaceReferenceBlock } from "./editor/workspaceReference";
 import { SlotCardBlock, slotCardToDocBlocks, type SlotCardProps } from "./editor/slotCard";
 import { IssueRefBlock, issueRefToDocBlock, type IssueRefProps } from "./editor/issueBlock";
 import { Button } from "@/components/ui/button";
+import { Package, Sparkles, X } from "@/components/ui/icons";
 import { TooltipButton } from "@/components/ui/tooltip";
 
 /** Props kept on the interactive BlockNote node. Scene JSON is intentionally not emitted by
@@ -49,6 +50,12 @@ export interface CanvasBlockHandle {
   freeze: () => Promise<{ snapshot: CanvasSnapshot; exports: readonly CanvasExport[] }>;
   markFrozen: (revision: number) => void;
   setError: (message: string, kind?: "provider_image" | "other") => void;
+}
+
+function SkillGlyph({ icon }: { icon: string }) {
+  const authored = icon.trim();
+  if (authored && authored !== "✦") return <span aria-hidden>{authored}</span>;
+  return <Sparkles className="size-3.5 shrink-0" aria-hidden />;
 }
 
 /** The Composer-owned seam for draft persistence and send-time freezing. Keeping this context
@@ -308,7 +315,8 @@ export const SkillInline = createReactInlineContentSpec(
   {
     render: (props) => (
       <span className="skill-chip" contentEditable={false}>
-        {props.inlineContent.props.icon} {props.inlineContent.props.name}
+        <SkillGlyph icon={props.inlineContent.props.icon} />
+        {props.inlineContent.props.name}
       </span>
     ),
   },
@@ -375,7 +383,8 @@ export const ArtifactInline = createReactInlineContentSpec(
   {
     render: (props) => (
       <span className="chat-chip" contentEditable={false}>
-        ⌘ {props.inlineContent.props.title || props.inlineContent.props.artifactId}
+        <Package className="size-3.5 shrink-0" aria-hidden />
+        {props.inlineContent.props.title || props.inlineContent.props.artifactId}
       </span>
     ),
   },
@@ -430,7 +439,7 @@ export const BrowserNoteBlock = createReactBlockSpec(
               className="bn-annotation-x"
               onClick={() => props.editor.removeBlocks([props.block])}
             >
-              ×
+              <X className="size-3.5" aria-hidden />
             </TooltipButton>
           </div>
           {selectedText && <div className="bn-annotation-quote">“{selectedText}”</div>}

@@ -95,6 +95,8 @@ export const en = {
   // rail — git (the dock's git tab shares these)
   "rail.notARepo": "Not a git repo.",
   "rail.clean": "Working tree clean",
+  "git.ahead": "{count} commits ahead",
+  "git.behind": "{count} commits behind",
 
   // rail — footer
   "rail.market": "{count} components — open Plugin Hub",
@@ -2727,6 +2729,8 @@ export const zhCN: Record<StringKey, string> = {
 
   "rail.notARepo": "不是 Git 仓库。",
   "rail.clean": "工作区干净",
+  "git.ahead": "领先 {count} 个提交",
+  "git.behind": "落后 {count} 个提交",
 
   "rail.market": "{count} 个组件——打开 Plugin Hub",
   "rail.newSkill": "新建技能——在文档里输入 / 插入",

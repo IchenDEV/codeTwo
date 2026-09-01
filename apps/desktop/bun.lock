@@ -11,10 +11,9 @@
         "@blocknote/react": "^0.25.0",
         "@dnd-kit/react": "0.5.0",
         "@excalidraw/excalidraw": "0.18.1",
-        "@hugeicons/core-free-icons": "^4.3.0",
-        "@hugeicons/react": "^1.1.10",
         "@noble/hashes": "^2.2.0",
         "@petx/react": "0.2.0",
+        "@phosphor-icons/react": "^2.1.10",
         "@shikijs/monaco": "^4.4.1",
         "@xterm/addon-fit": "^0.10.0",
         "@xterm/addon-search": "^0.16.0",
@@ -244,10 +243,6 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
-    "@hugeicons/core-free-icons": ["@hugeicons/core-free-icons@4.3.0", "", {}, "sha512-5DC5gq2psNDKBQThOjpuFCtMco8nl2FkrBzZgG15cFGM0kSwUoych/pw0DmjBygF9qRDITdBPtmzJqLsOeImMg=="],
-
-    "@hugeicons/react": ["@hugeicons/react@1.1.10", "", { "peerDependencies": { "react": ">=16.0.0" } }, "sha512-9tAsd92yMVVGP+E+d8cM+wc0VnXuYZHNbWQi7TOe8k2neawmhiaFmVFbzyruejhOMa197/LbgvSED32ayUo3ZA=="],
-
     "@humanfs/core": ["@humanfs/core@0.19.2", "", { "dependencies": { "@humanfs/types": "^0.15.0" } }, "sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA=="],
 
     "@humanfs/node": ["@humanfs/node@0.16.8", "", { "dependencies": { "@humanfs/core": "^0.19.2", "@humanfs/types": "^0.15.0", "@humanwhocodes/retry": "^0.4.0" } }, "sha512-gE1eQNZ3R++kTzFUpdGlpmy8kDZD/MLyHqDwqjkVQI0JMdI1D51sy1H958PNXYkM2rAac7e5/CnIKZrHtPh3BQ=="],
@@ -297,6 +292,8 @@
     "@petx/core": ["@petx/core@0.2.0", "", {}, "sha512-27hREQU7miWMk4C6rPKx0WlDD3X6sAoxZ27RF2fNaHx90y/BcW4UIr6qRcb7wn3jMBywZpu1VfdMqn32nvx32Q=="],
 
     "@petx/react": ["@petx/react@0.2.0", "", { "dependencies": { "@petx/core": "0.2.0" }, "peerDependencies": { "react": ">=18" } }, "sha512-qzUwBUHxRFMgrxBUbChalkJRFhEnpMi8jVta4Mx/SqNHk0xQQbBHE39FMxvuXawEPYdFaIft4c500lRJse1S0g=="],
+
+    "@phosphor-icons/react": ["@phosphor-icons/react@2.1.10", "", { "peerDependencies": { "react": ">= 16.8", "react-dom": ">= 16.8" } }, "sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA=="],
 
     "@pkgr/core": ["@pkgr/core@0.3.6", "", {}, "sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA=="],
 

@@ -13,7 +13,7 @@ import {
   Settings,
   SlidersHorizontal,
   SquarePlus,
-  type HugeIcon,
+  type AppIcon,
 } from "@/components/ui/icons";
 
 import { getArtifact, type GitStatus, type PlanEntry, type Project } from "../bridge";
@@ -23,6 +23,7 @@ import type { InteractiveToolPreview } from "../session/toolActivity";
 import type { Turn } from "../session/turns";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { GitSyncStatus } from "../git/GitSyncStatus";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -36,7 +37,7 @@ function EnvironmentRow({
   active = false,
   disabled = false,
 }: {
-  icon: HugeIcon;
+  icon: AppIcon;
   label: string;
   description?: string;
   detail?: ReactNode;
@@ -324,11 +325,7 @@ export function EnvironmentPopover({
           label={isRepo ? git.branch || "?" : t("rail.notARepo")}
           detail={
             isRepo && (git.ahead > 0 || git.behind > 0) ? (
-              <span className="font-mono text-primary">
-                {git.ahead > 0 && `↑${git.ahead}`}
-                {git.ahead > 0 && git.behind > 0 && " "}
-                {git.behind > 0 && `↓${git.behind}`}
-              </span>
+              <GitSyncStatus ahead={git.ahead} behind={git.behind} className="font-mono text-primary" />
             ) : undefined
           }
         />
