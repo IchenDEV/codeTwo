@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 import { GitHubPullRequestPanel } from "./GitHubPullRequestPanel";
+import { GitSyncStatus } from "./GitSyncStatus";
 
 type GitDockContentProps = {
   cwd: string | null;
@@ -42,8 +43,7 @@ export function GitDockContent({
                 <span className="min-w-0 truncate font-mono text-metadata text-muted-foreground">
                   {status.branch || "?"}
                 </span>
-                {status.ahead > 0 && <span className="text-primary">↑{status.ahead}</span>}
-                {status.behind > 0 && <span className="text-primary">↓{status.behind}</span>}
+                <GitSyncStatus ahead={status.ahead} behind={status.behind} className="text-primary" />
               </div>
 
               {status.files.length === 0 ? (

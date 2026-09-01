@@ -5480,7 +5480,7 @@ export default function App() {
       id: slug(skillDraft.name),
       name: skillDraft.name.trim(),
       description: "",
-      icon: "✦",
+      icon: null,
       payload: { kind: "fragment", text: skillDraft.text },
     });
     setSkillDraft(null);

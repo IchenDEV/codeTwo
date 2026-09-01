@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "title": "R&D lifecycle",
   "description": "The default research → develop → test → fix → acceptance pipeline with a test/fix loop.",
-  "icon": "🔁",
   "localizations": {
     "zh-CN": { "title": "研发生命周期", "description": "默认的调研 → 开发 → 测试 → 修复 → 验收流水线，含测试/修复循环。" }
   },

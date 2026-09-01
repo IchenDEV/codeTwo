@@ -1594,11 +1594,11 @@ export function providerDisplayName(providerId: string): string {
 }
 
 const FALLBACK_SKILLS: SkillInfo[] = [
-  { id: "reviewer", name: "Code Reviewer", description: "Meticulous reviewer", icon: "🔍", kind: "fragment", source: null },
-  { id: "test-writer", name: "Test Writer", description: "Thorough tests", icon: "🧪", kind: "fragment", source: null },
-  { id: "security-audit", name: "Security Audit", description: "Find vulns", icon: "🛡️", kind: "fragment", source: null },
+  { id: "reviewer", name: "Code Reviewer", description: "Meticulous reviewer", icon: null, kind: "fragment", source: null },
+  { id: "test-writer", name: "Test Writer", description: "Thorough tests", icon: null, kind: "fragment", source: null },
+  { id: "security-audit", name: "Security Audit", description: "Find vulns", icon: null, kind: "fragment", source: null },
   {
-    id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: "📝", kind: "macro", source: null,
+    id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: null, kind: "macro", source: null,
     macro_template: "Write a {{style}} commit message for changes to {{scope}}.",
     macro_slots: [
       { id: "style", label: "Style", kind: "select", options: ["conventional", "descriptive"], required: true },
@@ -2167,7 +2167,7 @@ export async function readVisualization(path: string): Promise<string> {
     <div><p class="text-small text-muted">Renderer build</p><p class="viz-stat-value">Passed</p></div>
   </div>
   <div class="viz-row" style="margin-top:14px">
-    <button class="btn btn-primary" onclick="window.openai.sendFollowUpMessage({prompt:'Show the failed checks only',title:'Filter verification results'})"><svg class="viz-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.85746 12.5061C6.36901 10.6456 4.59564 8.59915 3.62734 7.44867C3.3276 7.09253 3.22938 6.8319 3.17033 6.3728C2.96811 4.8008 2.86701 4.0148 3.32795 3.5074C3.7889 3 4.60404 3 6.23433 3H17.7657C19.396 3 20.2111 3 20.672 3.5074C21.133 4.0148 21.0319 4.8008 20.8297 6.37281C20.7706 6.83191 20.6724 7.09254 20.3726 7.44867C19.403 8.60062 17.6261 10.6507 15.1326 12.5135C14.907 12.6821 14.7583 12.9567 14.7307 13.2614C14.4837 15.992 14.2559 17.4876 14.1141 18.2442C13.8853 19.4657 12.1532 20.2006 11.226 20.8563C10.6741 21.2466 10.0043 20.782 9.93278 20.1778C9.79643 19.0261 9.53961 16.6864 9.25927 13.2614C9.23409 12.9539 9.08486 12.6761 8.85746 12.5061Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></svg>Filter results</button>
+    <button class="btn btn-primary" onclick="window.openai.sendFollowUpMessage({prompt:'Show the failed checks only',title:'Filter verification results'})">Filter results</button>
     <span class="text-small text-muted">Updated just now</span>
   </div>
 </section>`;
@@ -2967,9 +2967,9 @@ export interface MarketItem {
 }
 
 const FALLBACK_MARKET: MarketItem[] = [
-  { id: "architect", name: "System Architect", description: "Design before coding.", author: "codetwo", tags: ["design"], icon: "🏛️", kind: "fragment", installed: false },
-  { id: "test-suite", name: "Test Suite Author", description: "Thorough deterministic tests.", author: "codetwo", tags: ["testing"], icon: "🧪", kind: "fragment", installed: false },
-  { id: "browser-tool", name: "Browser Tool (MCP)", description: "Give the agent a browser.", author: "codetwo", tags: ["mcp", "browser"], icon: "🌐", kind: "mcp", installed: false },
+  { id: "architect", name: "System Architect", description: "Design before coding.", author: "codetwo", tags: ["design"], icon: null, kind: "fragment", installed: false },
+  { id: "test-suite", name: "Test Suite Author", description: "Thorough deterministic tests.", author: "codetwo", tags: ["testing"], icon: null, kind: "fragment", installed: false },
+  { id: "browser-tool", name: "Browser Tool (MCP)", description: "Give the agent a browser.", author: "codetwo", tags: ["mcp", "browser"], icon: null, kind: "mcp", installed: false },
 ];
 
 export async function marketCatalog(): Promise<MarketItem[]> {
@@ -4380,18 +4380,18 @@ export async function onAutoSceneChanged(
 /** Browser-preview stand-ins (same convention as FALLBACK_SKILLS): the five builtin scenes. */
 const FALLBACK_SCENES: SceneInfo[] = (
   [
-    ["research", "Research", "调研", "🔎", "read_only", "Survey the problem space read-only and produce a cited research report."],
-    ["develop", "Develop", "开发", "🛠️", "auto_edit", "Plan-first implementation in an isolated worktree."],
-    ["test", "Test", "测试", "🧪", "auto_edit", "Exercise the change against its acceptance criteria."],
-    ["fix", "Fix", "修复", "🩹", "auto_edit", "Resolve reported failures one by one."],
-    ["acceptance", "Acceptance", "验收", "✅", "read_only", "Read-only verification against the original acceptance criteria."],
+    ["research", "Research", "调研", "read_only", "Survey the problem space read-only and produce a cited research report."],
+    ["develop", "Develop", "开发", "auto_edit", "Plan-first implementation in an isolated worktree."],
+    ["test", "Test", "测试", "auto_edit", "Exercise the change against its acceptance criteria."],
+    ["fix", "Fix", "修复", "auto_edit", "Resolve reported failures one by one."],
+    ["acceptance", "Acceptance", "验收", "read_only", "Read-only verification against the original acceptance criteria."],
   ] as const
-).map(([name, title, zh, icon, mode, description]) => ({
+).map(([name, title, zh, mode, description]) => ({
   reference: `builtin:${name}`,
   name,
   title,
   description,
-  icon,
+  icon: null,
   source: "builtin" as const,
   keywords: [],
   has_brief: true,
