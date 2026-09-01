@@ -188,6 +188,7 @@ merge. No PR, push, merge, deployment, or release has been performed.
 ## Review and release
 
 Approval: the user approved implementation on 2026-09-01.
+Pull request: [#214](https://github.com/IchenDEV/codeTwo/pull/214) (draft).
 Release target: none requested.
 Rollback: revert this change; Task and Session persistence is unchanged.
 No release: implementation is verified; human review is still pending.
