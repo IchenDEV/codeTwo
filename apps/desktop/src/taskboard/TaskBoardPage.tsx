@@ -1,13 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-
 import { githubCurrentPullRequest } from "@/bridge"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, PanelRight } from "@/components/ui/icons"
 import { Separator } from "@/components/ui/separator"
 import { useLanguage } from "@/i18n"
-
 import { TaskBoardHeader } from "./TaskBoardHeader"
-import { TaskBoardList } from "./TaskBoardList"
+import { TaskBoardCollection } from "./TaskBoardCollection"
 import { TaskEditorDialog } from "./TaskEditorDialog"
 import { TaskInspector } from "./TaskInspector"
 import { type BoardTask, type TaskPriority } from "./taskBoard"
@@ -15,6 +13,7 @@ import { useTaskBoardActions } from "./useTaskBoardActions"
 import { useTaskBoardData } from "./useTaskBoardData"
 import { useTaskBoardSelection } from "./useTaskBoardSelection"
 import { useTaskPullRequests } from "./useTaskPullRequests"
+import { useTaskBoardView } from "./useTaskBoardView"
 import { INITIAL_TASK_LIMIT, sessionCheckoutPath } from "./workspaceModel"
 import type { EditorState, InspectorTab, TaskBoardPageProps } from "./workspaceTypes"
 import "./task-board.css"
@@ -39,6 +38,7 @@ export function TaskBoardPage({
   const [labels, setLabels] = useState<string[]>([])
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [view, setView] = useTaskBoardView()
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [isNarrow, setIsNarrow] = useState(false)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("agent")
@@ -86,9 +86,7 @@ export function TaskBoardPage({
     selectedCheckoutPath,
     loadPullRequest,
   )
-  const selectedPullRequest = selectedCheckoutPath
-    ? pullRequestsByPath.get(selectedCheckoutPath)
-    : null
+  const selectedPullRequest = selectedCheckoutPath ? pullRequestsByPath.get(selectedCheckoutPath) : null
   const activeFilterCount = (query.trim() ? 1 : 0) + priorities.length + labels.length
   const renderedTasks = data.projectedTasks.slice(0, visibleTaskLimit)
   const remainingTaskCount = Math.max(0, data.projectedTasks.length - renderedTasks.length)
@@ -117,9 +115,8 @@ export function TaskBoardPage({
     clearFilters,
     keepInspectorInPlace: isNarrow,
   })
-  const moveTask = (task: BoardTask, status: BoardTask["status"]): void => {
+  const moveTask = (task: BoardTask, status: BoardTask["status"]): void =>
     data.dispatch({ type: "move", id: task.id, status, now: Date.now() })
-  }
   const changeInspectorOpen = (open: boolean): void => {
     if (!open && isNarrow) restoreInspectorFocus.current = true
     setInspectorOpen(open)
@@ -128,6 +125,7 @@ export function TaskBoardPage({
     <main
       ref={pageRef}
       data-task-board-page
+      data-task-board-view={view}
       data-inspector-open={inspectorOpen}
       className="task-board-page animate-data-page-in min-h-0 min-w-0 flex-1 bg-background text-foreground"
     >
@@ -172,6 +170,8 @@ export function TaskBoardPage({
             <TaskBoardHeader
               t={t}
               taskCount={data.state.tasks.length}
+              view={view}
+              onViewChange={setView}
               filtersOpen={filtersOpen}
               onFiltersOpenChange={setFiltersOpen}
               activeFilterCount={activeFilterCount}
@@ -190,7 +190,8 @@ export function TaskBoardPage({
                 {data.warning}
               </p>
             ) : null}
-            <TaskBoardList
+            <TaskBoardCollection
+              view={view}
               t={t}
               locale={locale}
               projectedTasks={data.projectedTasks}
@@ -202,6 +203,7 @@ export function TaskBoardPage({
               selectedSessionId={selection.selectedSession?.id ?? null}
               pullRequestsByPath={pullRequestsByPath}
               onToggleTask={actions.toggleTask}
+              onSelectTask={actions.selectTask}
               onSelectSession={actions.selectSession}
               onEditTask={(task) => actions.openEditor(task, task.status)}
               onDeleteTask={(task) => void actions.deleteTask(task)}

@@ -100,6 +100,12 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
     if (!options.keepInspectorInPlace) options.setInspectorOpen(true)
   }
 
+  const selectTask = (projected: ProjectedTask): void => {
+    options.setSelectedTaskId(projected.task.id)
+    options.setSelectedSessionId(projected.currentSession?.id ?? projected.sessions[0]?.id ?? null)
+    if (!options.keepInspectorInPlace) options.setInspectorOpen(true)
+  }
+
   const selectSession = (taskId: string, sessionId: string): void => {
     options.setSelectedTaskId(taskId)
     options.setSelectedSessionId(sessionId)
@@ -128,5 +134,14 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
     )
   }
 
-  return { openEditor, saveEditor, deleteTask, toggleTask, selectSession, submitPrompt, copyCheckout }
+  return {
+    openEditor,
+    saveEditor,
+    deleteTask,
+    toggleTask,
+    selectTask,
+    selectSession,
+    submitPrompt,
+    copyCheckout,
+  }
 }

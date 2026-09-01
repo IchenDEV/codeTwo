@@ -267,6 +267,7 @@ impl App {
     /// Pure state transition for a core event. Unit-tested.
     pub fn on_engine_event(&mut self, ev: Event) {
         match ev {
+            Event::TaskSnapshotChanged { .. } => {}
             Event::SessionCreated {
                 session,
                 cwd,

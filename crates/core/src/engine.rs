@@ -2868,6 +2868,7 @@ struct PendingParallelTask {
     work_item_id: WorkItemId,
     agent_id: AgentId,
     goal: String,
+    attach_existing: bool,
 }
 
 struct EngineState {
@@ -5303,6 +5304,23 @@ impl Engine {
         &self,
         creation: ParallelTaskCreation,
     ) -> Result<(), AcpError> {
+        self.begin_parallel_task_session(creation, false).await
+    }
+
+    /// Start an approved collaboration Suggestion on a Task that was already created in the
+    /// authoritative Store. Runtime identities remain Core-owned just like ordinary parallel Tasks.
+    pub async fn attach_parallel_task_session(
+        &self,
+        creation: ParallelTaskCreation,
+    ) -> Result<(), AcpError> {
+        self.begin_parallel_task_session(creation, true).await
+    }
+
+    async fn begin_parallel_task_session(
+        &self,
+        creation: ParallelTaskCreation,
+        attach_existing: bool,
+    ) -> Result<(), AcpError> {
         if self.state.store.is_none() {
             return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
                 "parallel task creation requires durable storage",
@@ -5331,6 +5349,7 @@ impl Engine {
             work_item_id: WorkItemId::new(format!("work-{}", uuid::Uuid::new_v4())),
             agent_id: AgentId::new(format!("agent-{}", uuid::Uuid::new_v4())),
             goal: goal.to_string(),
+            attach_existing,
         };
         {
             let mut pending_parallel_tasks = self.state.pending_parallel_tasks.lock().unwrap();
@@ -5646,14 +5665,25 @@ impl Engine {
                                 task.id.as_str(),
                                 blake3::hash(&compatibility_payload).to_hex()
                             );
-                            store.create_parallel_task_session(
-                                &sess,
-                                &task,
-                                &work_item,
-                                &parallel_task.agent_id,
-                                &compatibility_identity,
-                                sess.created_at,
-                            )
+                            if parallel_task.attach_existing {
+                                store.attach_parallel_task_session(
+                                    &sess,
+                                    &task.id,
+                                    &work_item,
+                                    &parallel_task.agent_id,
+                                    &compatibility_identity,
+                                    sess.created_at,
+                                )
+                            } else {
+                                store.create_parallel_task_session(
+                                    &sess,
+                                    &task,
+                                    &work_item,
+                                    &parallel_task.agent_id,
+                                    &compatibility_identity,
+                                    sess.created_at,
+                                )
+                            }
                         }
                         None => match creation_receipt.as_ref() {
                             Some((command_id, public_thread_id)) => store

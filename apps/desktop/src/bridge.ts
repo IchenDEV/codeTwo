@@ -817,6 +817,12 @@ export function describeBlock(b: DocBlock): string {
 /// Mirrors core `Event` (tagged by `event`, snake_case).
 export type CoreEvent =
   | {
+      event: "task_snapshot_changed";
+      session: null;
+      task_id: string;
+      revision: number;
+    }
+  | {
       event: "session_created";
       session: string;
       cwd?: string;

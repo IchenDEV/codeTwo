@@ -204,6 +204,27 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
+  test("wraps root Projects in one expanded default Project group", async () => {
+    activateDom();
+    const view = renderRail({ activeSession: null });
+    const group = view.container.querySelector("[data-default-project-group]");
+    const toggle = group?.querySelector("[data-default-project-toggle]");
+    const content = group?.querySelector("[data-default-project-content]");
+
+    expect(toggle?.textContent).toContain("All projects");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(content?.querySelectorAll("[data-project-group]")).toHaveLength(1);
+    expect(content?.querySelector('[data-project-group="/tmp/repo"]')).toBeTruthy();
+
+    click(toggle);
+    await waitFor(() => {
+      expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+      expect(group?.querySelector("[data-default-project-content]")).toBeNull();
+    });
+
+    view.unmount();
+  });
+
   test("keeps explicit Sections separate from the ordinary unsectioned feed", async () => {
     activateDom();
     disableCanvasDrawing();
@@ -260,13 +281,41 @@ describe("SessionRail row layout", () => {
 
     expect(toggle?.querySelectorAll("svg")).toHaveLength(1);
     expect(toggle?.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.querySelector('[data-project-content="/tmp/repo"]')).toBeTruthy();
+    expect(toggle?.className).toContain("hover:bg-transparent");
+    expect(toggle?.className).toContain("dark:hover:bg-transparent");
+    expect(toggle?.className).not.toContain("hover:bg-accent");
+    const projectContent = view.container.querySelector('[data-project-content="/tmp/repo"]');
+    expect(projectContent).toBeTruthy();
+    expect(projectContent?.className).toContain("ml-0");
+    expect(projectContent?.className).not.toContain("ml-2");
+    expect(projectContent?.className).not.toContain("ml-6");
+    const groupedRow = projectContent?.querySelector('[data-session-id="meaningful"]');
+    expect(groupedRow?.className).not.toContain("ml-6");
+    expect(toggle?.className).toContain("px-2");
+    expect(groupedRow?.className).toContain("px-2");
+    expect(groupedRow?.querySelector("[data-session-content]")?.className).toContain("pl-1.5");
+    expect(groupedRow?.querySelector("[data-session-content]")?.className).not.toContain("pl-2");
+    expect(groupedRow?.querySelector("[data-session-content]")?.className).not.toContain("pl-6");
 
     click(toggle);
     await waitFor(() => {
       expect(toggle?.getAttribute("aria-expanded")).toBe("false");
       expect(view.container.querySelector('[data-project-content="/tmp/repo"]')).toBeNull();
     });
+
+    view.unmount();
+  });
+
+  test("aligns an empty Project placeholder beneath the Project label", () => {
+    activateDom();
+    const view = renderRail({ sessions: [], activeSession: null, previews: {} });
+    const projectContent = view.container.querySelector('[data-project-content="/tmp/repo"]');
+    const placeholder = projectContent?.querySelector("p");
+
+    expect(placeholder?.textContent).toBe("No chats");
+    expect(placeholder?.className).toContain("pl-8");
+    expect(placeholder?.className).toContain("pr-2");
+    expect(placeholder?.className).not.toContain("px-2");
 
     view.unmount();
   });
@@ -612,18 +661,18 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("shows a recent AI reply between the title and workspace when it is useful", () => {
+  test("shows a recent AI reply and metadata beneath the title when it is useful", () => {
     activateDom();
     const view = renderRail();
     const punctuation = view.container.querySelector('[data-session-id="punctuation"]');
     const meaningful = view.container.querySelector('[data-session-id="meaningful"]');
 
-    expect(punctuation?.querySelectorAll("[data-session-line]")).toHaveLength(3);
+    expect(punctuation?.querySelectorAll("[data-session-line]")).toHaveLength(2);
     expect(punctuation?.querySelector('[data-session-line="preview"]')).toBeNull();
     expect(punctuation?.querySelector("[data-session-preview]")).toBeNull();
     expect(punctuation?.getAttribute("title")).toBeNull();
 
-    expect(meaningful?.querySelectorAll("[data-session-line]")).toHaveLength(3);
+    expect(meaningful?.querySelectorAll("[data-session-line]")).toHaveLength(2);
     expect(meaningful?.querySelector("[data-session-preview]")?.textContent)
       .toBe("A useful preview");
     expect(meaningful?.querySelector("[data-session-preview]")?.className)
@@ -631,15 +680,22 @@ describe("SessionRail row layout", () => {
     expect(meaningful?.querySelector("[data-session-select]")?.getAttribute("aria-describedby"))
       .toBe("session-preview-meaningful");
     expect(meaningful?.getAttribute("title")).toBe("A useful preview");
+    const meaningfulSummary = meaningful?.querySelector('[data-session-line="summary"]');
+    const meaningfulSummaryOrder = Array.from(meaningfulSummary?.children ?? []).map((child) => {
+      if (child.hasAttribute("data-session-preview")) return "preview";
+      if (child.hasAttribute("data-session-provider")) return "provider";
+      if (child.hasAttribute("data-session-age")) return "age";
+      if (child.hasAttribute("data-session-checkout-kind")) return "checkout";
+      return "other";
+    });
+    expect(meaningfulSummaryOrder).toEqual(["preview", "provider", "age", "checkout"]);
 
     for (const row of [punctuation, meaningful]) {
-      const workspace = row?.querySelector('[data-session-line="workspace"]');
+      const summary = row?.querySelector('[data-session-line="summary"]');
       expect(view.container.querySelector('[data-project-toggle="/tmp/repo"]')?.textContent)
         .toContain("repo");
-      expect(workspace?.firstElementChild?.textContent).toBe("");
-      expect(workspace?.querySelector('[data-session-checkout-kind="checkout"]')).toBeTruthy();
-      expect(workspace?.querySelector("svg")).toBeTruthy();
-      expect(row?.querySelector('[data-session-line="summary"]')).toBeTruthy();
+      expect(row?.querySelector('[data-session-line="workspace"]')).toBeNull();
+      expect(summary?.querySelector('[data-session-checkout-kind="checkout"]')).toBeTruthy();
       expect(row?.querySelector('[data-session-provider="codex"] svg')).toBeTruthy();
       expect(row?.querySelector("[data-session-age]")).toBeTruthy();
       expect(row?.querySelector("[data-session-status]")).toBeNull();
@@ -650,7 +706,7 @@ describe("SessionRail row layout", () => {
 
     const meaningfulLines = Array.from(meaningful?.querySelectorAll("[data-session-line]") ?? [])
       .map((line) => line.getAttribute("data-session-line"));
-    expect(meaningfulLines).toEqual(["title", "summary", "workspace"]);
+    expect(meaningfulLines).toEqual(["title", "summary"]);
 
     view.unmount();
   });
@@ -672,7 +728,7 @@ describe("SessionRail row layout", () => {
       .toBe("96 96 320 320");
     expect(row?.querySelector("[data-session-select]")?.getAttribute("aria-label"))
       .toContain("OpenCode 2 (Beta)");
-    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(3);
+    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(2);
 
     view.unmount();
   });
@@ -700,6 +756,50 @@ describe("SessionRail row layout", () => {
     expect(summary?.textContent).toContain("The newest AI reply");
     expect(summary?.querySelector("svg")?.getAttribute("viewBox")).toBe("96 96 320 320");
     expect(summary?.querySelector("time")?.textContent).toBe("5m");
+
+    view.unmount();
+  });
+
+  test("keeps grouped Task provenance on the summary rail instead of an empty third line", () => {
+    activateDom();
+    const grouped = {
+      ...session("grouped", "Grouped task"),
+      last_active_at: Date.now() - 60 * 60_000,
+    };
+    const view = renderRail({
+      sessions: [grouped],
+      activeSession: null,
+      previews: { grouped: "A long reply that must truncate before metadata" },
+    });
+    const row = view.container.querySelector('[data-session-id="grouped"]');
+    const summary = row?.querySelector('[data-session-line="summary"]');
+
+    expect(summary?.querySelector("[data-session-age]")?.textContent).toBe("1h");
+    expect(summary?.querySelector('[data-session-checkout-kind="checkout"]')).toBeTruthy();
+    expect(Boolean(row?.querySelector('[data-session-line="workspace"]'))).toBe(false);
+
+    view.unmount();
+  });
+
+  test("uses the same two-line style for ordinary ungrouped Tasks", () => {
+    activateDom();
+    const ungrouped = { ...session("ungrouped", "Ungrouped task"), project_path: null };
+    const view = renderRail({
+      projects: [],
+      sessions: [ungrouped],
+      activeSession: null,
+      previews: { ungrouped: "A useful reply" },
+    });
+    const row = view.container.querySelector('[data-session-id="ungrouped"]');
+    const summary = row?.querySelector('[data-session-line="summary"]');
+
+    expect(Boolean(row?.querySelector('[data-session-line="workspace"]'))).toBe(false);
+    expect(summary?.querySelector('[data-session-checkout-kind="checkout"]')).toBeTruthy();
+    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(2);
+    expect(row?.textContent).not.toContain("repo");
+    expect(row?.querySelector("[data-session-content]")?.className).toContain("pl-1.5");
+    expect(row?.querySelector("[data-session-content]")?.className).not.toContain("pl-2");
+    expect(row?.querySelector("[data-session-content]")?.className).not.toContain("pl-6");
 
     view.unmount();
   });
@@ -776,7 +876,7 @@ describe("SessionRail row layout", () => {
     });
     const row = view.container.querySelector('[data-session-id="echo"]');
 
-    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(3);
+    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(2);
     expect(row?.querySelector('[data-session-line="preview"]')).toBeNull();
     expect(row?.querySelector("#session-preview-echo")).toBeNull();
     expect(row?.querySelector('[data-session-provider="codex"] svg')).toBeTruthy();
@@ -856,7 +956,10 @@ describe("SessionRail row layout", () => {
     expect(failedStatus?.getAttribute("aria-label")).toBe("Failed");
     expect(failedStatus?.getAttribute("title")).toBe("Provider stopped");
     expect(failedStatus?.className).toContain("text-destructive");
-    expect(view.container.querySelectorAll('[data-session-line="workspace"]')).toHaveLength(2);
+    expect(view.container.querySelectorAll('[data-session-line="workspace"]')).toHaveLength(0);
+    expect(view.container.querySelectorAll(
+      '[data-session-line="summary"] [data-session-checkout-kind="checkout"]',
+    )).toHaveLength(2);
 
     view.unmount();
   });
@@ -874,6 +977,7 @@ describe("SessionRail row layout", () => {
     expect(activeRow?.className.split(/\s+/)).not.toContain("bg-accent");
     expect(row?.className).toContain("hover:bg-fill-quiet");
     expect(row?.className).toContain("focus-within:bg-fill-quiet");
+    expect(row?.querySelector('[data-session-line="title"]')?.className).toContain("gap-2");
     expect(row?.querySelector("[data-session-actions]")?.querySelector('button[aria-label="Pin"]'))
       .toBeTruthy();
 

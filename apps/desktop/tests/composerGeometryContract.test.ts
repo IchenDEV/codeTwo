@@ -79,6 +79,15 @@ describe("composer geometry contract", () => {
     expect(app).not.toContain("composerHByPane");
     expect(composer).toContain('aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}');
   });
+
+  test("keeps the interactive Project name typographically continuous with the empty heading", () => {
+    expect(app).toContain(
+      "[font-size:inherit] [font-weight:inherit] [letter-spacing:inherit] [line-height:inherit]",
+    );
+    expect(app).toContain(
+      '</DropdownMenu>\n                  {" "}\n                  {t("transcript.greetingEnd")}',
+    );
+  });
 });
 
 describe("composer multitask contract", () => {

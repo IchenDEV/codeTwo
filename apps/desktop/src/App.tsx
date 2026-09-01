@@ -2897,6 +2897,9 @@ export default function App() {
     let unlisten: (() => void) | null = null;
     void (async () => {
       unlisten = await onEngineEvent((ev: CoreEvent) => {
+        // Shared Task clients refetch the revisioned Task snapshot. The production TaskBoard is
+        // still local in this P0 and must not render this control-plane event as transcript data.
+        if (ev.event === "task_snapshot_changed") return;
         if (ev.event === "session_created") {
           const refreshed = refreshSessions();
           if (!matchesSessionCreation(ev, awaitingSessionRef.current)) return;
@@ -8408,7 +8411,7 @@ export default function App() {
                           type="button"
                           variant="link"
                           size="compact"
-                          className="h-auto px-0 py-0 text-inherit decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]"
+                          className="h-auto px-0 py-0 text-inherit [font-size:inherit] [font-weight:inherit] [letter-spacing:inherit] [line-height:inherit] decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]"
                           title={activeProject ?? undefined}
                         >
                           {activeProjectName ?? t("rail.noProject")}
@@ -8441,6 +8444,7 @@ export default function App() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  {" "}
                   {t("transcript.greetingEnd")}
                 </h1>
               )}
