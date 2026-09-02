@@ -95,6 +95,7 @@ were rendered live.
 ## Review and release
 
 Approval: implementation approved by the user on 2026-09-02; merge and release are not approved.
+Review: Draft PR [#219](https://github.com/IchenDEV/codeTwo/pull/219) contains this change.
 Release target: none.
 Release identity: not applicable until released.
 Smoke evidence: not applicable until released.
