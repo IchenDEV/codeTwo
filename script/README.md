@@ -7,8 +7,11 @@ Use the directory that matches the job:
 | [`dev/`](dev/) | Build and launch the local macOS desktop app |
 | [`build/`](build/) | Build distributable Rust hosts and the tool broker |
 | [`verify/`](verify/) | Check documentation and SDLC repository contracts |
+| [`devflow`](devflow) | Create change bundles, record approvals, and run lifecycle helpers |
 
 ```bash
+./script/devflow new <slug> [source] [risk]
+./script/devflow validate --worktree
 ./script/dev/run.sh
 ./script/build/hosts.sh release
 bun script/verify/docs.ts

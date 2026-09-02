@@ -10,7 +10,7 @@ The top level is organized by purpose. Start with the directory that matches the
 | [`design/`](design/README.md) | Current design system plus accepted future product designs |
 | [`adr/`](adr/0001-scenes-v2-dynamic-task-orchestration.md) | Accepted architecture decisions |
 | [`screenshots/`](screenshots/README.md) | Images used by the README and published documentation |
-| [`sdlc/`](sdlc/workflow.md) | Development workflow, change records, templates, and Evals |
+| [`sdlc/`](sdlc/workflow.md) | Development workflow, change records, templates, Evals, and [`development-workflow.md`](sdlc/development-workflow.md) operator guide |
 | [`archive/`](archive/README.md) | Historical research, completed plans, and old visual evidence |
 
 The public user guide lives under [`../website`](../website/). Archived material is non-normative

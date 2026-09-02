@@ -17,12 +17,12 @@ next_trigger: any project instruction, lifecycle checker, template, CI Gate, or 
 ## Provenance
 
 This Eval comes from the real
-[AI-native SDLC migration](../changes/2026-08-30-ai-native-sdlc-migration/change.md), which replaces a
+[AI-native SDLC migration](../changes/2026-08-30-ai-native-sdlc-migration/intent.md), which replaces a
 shape-only checker that could accept implementation before Intent approval and did not close
 verification, release, Incident, or Eval evidence. The
-[strict schema-2 hardening](../changes/2026-08-31-strict-sdlc-v2/change.md) extends this same Eval
+[strict schema-3 hardening](../changes/2026-08-31-strict-sdlc-v2/intent.md) extends this same Eval
 with risk, scope, criterion-to-evidence, verifier-identity, and local worktree regressions. The
-[script organization](../changes/2026-08-31-organize-scripts/change.md) condenses those failure
+[script organization](../changes/2026-08-31-organize-scripts/intent.md) condenses those failure
 classes into one focused suite without changing either Gate.
 
 ## Fixed input and environment
