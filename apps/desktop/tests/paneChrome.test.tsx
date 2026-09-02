@@ -18,6 +18,7 @@ afterEach(() => {
 });
 
 const LABELS = { splitRight: "Split right", splitDown: "Split down", close: "Close pane" };
+const SHORTCUTS = { splitRight: "⌘⌥R", splitDown: "⌘⌥D", sidePanel: "⌘⌥P" };
 
 function click(element: Element) {
   element.dispatchEvent(
@@ -80,6 +81,7 @@ describe("PaneChrome", () => {
           labels={LABELS}
           groupLabel="Pane and panel layout"
           viewLabel="View"
+          shortcuts={SHORTCUTS}
           panelLabel="Side panel"
           panelActive
           onTogglePanel={() => calls.push("panel")}
@@ -104,6 +106,7 @@ describe("PaneChrome", () => {
     expect(dom.document.body.textContent).not.toContain("Close pane");
     const panel = dom.document.body.querySelector('[role="menuitemcheckbox"]');
     expect(panel?.textContent).toContain("Side panel");
+    expect(panel?.querySelector("span")?.textContent).toBe("⌘⌥P");
     expect(panel?.getAttribute("data-checked")).not.toBeNull();
     if (!panel) throw new Error("Side panel menu item not found");
     await press(panel);
@@ -112,6 +115,10 @@ describe("PaneChrome", () => {
     const splitRight = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
       .find((item) => item.textContent?.includes("Split right"));
     if (!splitRight) throw new Error("Split right menu item not found");
+    expect(splitRight.querySelector("span")?.textContent).toBe("⌘⌥R");
+    const splitDown = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes("Split down"));
+    expect(splitDown?.querySelector("span")?.textContent).toBe("⌘⌥D");
     await press(splitRight);
     expect(calls).toEqual(["panel", "right"]);
     rendered.unmount();
@@ -129,6 +136,7 @@ describe("PaneChrome", () => {
           labels={LABELS}
           groupLabel="Pane and panel layout"
           viewLabel="View"
+          shortcuts={SHORTCUTS}
           panelLabel="Side panel"
           panelActive={false}
           onTogglePanel={() => calls.push("panel")}

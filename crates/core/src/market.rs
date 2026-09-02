@@ -46,14 +46,21 @@ pub fn parse_catalog(json: &str) -> serde_json::Result<Vec<MarketEntry>> {
     serde_json::from_str(json)
 }
 
-fn fragment(id: &str, name: &str, icon: &str, author: &str, tags: &[&str], desc: &str, text: &str) -> MarketEntry {
+fn fragment(
+    id: &str,
+    name: &str,
+    author: &str,
+    tags: &[&str],
+    desc: &str,
+    text: &str,
+) -> MarketEntry {
     MarketEntry {
         id: id.into(),
         name: name.into(),
         description: desc.into(),
         author: author.into(),
         tags: tags.iter().map(|t| t.to_string()).collect(),
-        icon: Some(icon.into()),
+        icon: None,
         payload: SkillPayload::Fragment { text: text.into() },
     }
 }
@@ -64,7 +71,6 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
         fragment(
             "architect",
             "System Architect",
-            "🏛️",
             "codetwo",
             &["design", "planning"],
             "Design before coding: propose a component breakdown, data flow, and trade-offs.",
@@ -74,7 +80,6 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
         fragment(
             "test-suite",
             "Test Suite Author",
-            "🧪",
             "codetwo",
             &["testing", "quality"],
             "Generate a thorough, deterministic test suite.",
@@ -84,7 +89,6 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
         fragment(
             "doc-writer",
             "Docs Writer",
-            "📚",
             "codetwo",
             &["docs"],
             "Write clear docstrings and a concise README section.",
@@ -94,7 +98,6 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
         fragment(
             "refactor-guru",
             "Refactor Guru",
-            "🧹",
             "codetwo",
             &["refactor", "quality"],
             "Improve clarity and structure with behavior-preserving refactors.",
@@ -104,7 +107,6 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
         fragment(
             "sql-optimizer",
             "SQL Optimizer",
-            "🗄️",
             "community",
             &["database", "performance"],
             "Analyze and speed up SQL queries.",
@@ -114,7 +116,6 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
         fragment(
             "rustacean",
             "Rust Expert",
-            "🦀",
             "community",
             &["rust", "language"],
             "Idiomatic, safe Rust with clear ownership.",
@@ -124,7 +125,6 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
         fragment(
             "a11y-audit",
             "Accessibility Audit",
-            "♿",
             "community",
             &["frontend", "a11y"],
             "Audit UI for accessibility issues.",
@@ -137,7 +137,7 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             description: "Generate a Conventional Commits message.".into(),
             author: "codetwo".into(),
             tags: vec!["git".into(), "workflow".into()],
-            icon: Some("📝".into()),
+            icon: None,
             payload: SkillPayload::Macro {
                 template: "Write a Conventional Commits message ({{type}}) for changes to {{scope}}, \
                            with a concise body explaining the why."
@@ -151,7 +151,7 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             description: "Draft a pull-request description.".into(),
             author: "codetwo".into(),
             tags: vec!["git".into(), "workflow".into()],
-            icon: Some("🔀".into()),
+            icon: None,
             payload: SkillPayload::Macro {
                 template: "Draft a pull-request description for {{branch}}: summary, motivation, key \
                            changes, and a test plan."
@@ -165,7 +165,7 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             description: "Give the agent a browser via an MCP server.".into(),
             author: "codetwo".into(),
             tags: vec!["mcp", "browser", "tools"].iter().map(|s| s.to_string()).collect(),
-            icon: Some("🌐".into()),
+            icon: None,
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "browser".into(),
@@ -184,7 +184,7 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             description: "Let the agent search the web for docs and answers.".into(),
             author: "codetwo".into(),
             tags: vec!["mcp".into(), "search".into(), "tools".into()],
-            icon: Some("🔎".into()),
+            icon: None,
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "web-search".into(),
@@ -203,7 +203,7 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             description: "Scoped filesystem access via an MCP server.".into(),
             author: "community".into(),
             tags: vec!["mcp".into(), "tools".into()],
-            icon: Some("📂".into()),
+            icon: None,
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "filesystem".into(),
@@ -251,5 +251,10 @@ mod tests {
     #[test]
     fn includes_a_browser_tool_entry() {
         assert!(builtin_catalog().iter().any(|e| e.id == "browser-tool" && e.kind() == SkillKind::Mcp));
+    }
+
+    #[test]
+    fn builtin_catalog_leaves_icons_to_the_host_design_system() {
+        assert!(builtin_catalog().iter().all(|entry| entry.icon.is_none()));
     }
 }

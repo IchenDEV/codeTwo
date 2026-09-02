@@ -14,12 +14,15 @@ use crate::risk_v2::{
 use crate::session::Session;
 use crate::store::{Store, StoreError};
 use crate::task::{
-    AgentAssignment, AgentId, AgentRole, AgentStatus, ArtifactProvenance, LoopGuardState,
-    MaterialGoalChangeReceipt, OrchestrationEvent, OrchestrationEventKind, ResultContract,
-    ResultContractRefinement, RunSnapshot, Task, TaskBudget, TaskBudgetState, TaskCacheReceipt,
-    TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus,
-    TaskUsageObservation, WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
-    WorkItemId, WorkItemStatus,
+    AgentAssignment, AgentId, AgentRole, AgentStatus, ArtifactProvenance, AttentionItem,
+    IdempotentCommand, LoopGuardState, MaterialGoalChangeReceipt, Member, MemberId,
+    OrchestrationEvent, OrchestrationEventKind, ResultContract, ResultContractRefinement,
+    RunSnapshot, SharedTaskSnapshot, SuggestionApprovalReceipt, SuggestionId, SuggestionStatus,
+    Task, TaskActivityEvent, TaskActivityKind, TaskBudget, TaskBudgetState, TaskCacheReceipt,
+    TaskCollaborationSnapshot, TaskComment, TaskCommentId, TaskCompletionEvaluation, TaskGraph,
+    TaskId, TaskSessionLease, TaskStatus, TaskSuggestion, TaskUsageObservation, WorkItem,
+    WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus, Workspace,
+    WorkspaceId, WorkspaceRole,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -161,6 +164,96 @@ CREATE TABLE IF NOT EXISTS task_risk_gates_v2 (
 );
 CREATE INDEX IF NOT EXISTS task_risk_gates_v2_order
   ON task_risk_gates_v2(task_id, created_at_ms, request_id);
+CREATE TABLE IF NOT EXISTS team_workspaces_v1 (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS team_members_v1 (
+  id            TEXT PRIMARY KEY,
+  workspace_id  TEXT NOT NULL,
+  display_name  TEXT NOT NULL,
+  role          TEXT NOT NULL,
+  active        INTEGER NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  FOREIGN KEY (workspace_id) REFERENCES team_workspaces_v1(id)
+);
+CREATE INDEX IF NOT EXISTS team_members_v1_workspace
+  ON team_members_v1(workspace_id, created_at_ms, id);
+CREATE TABLE IF NOT EXISTS task_collaboration_v1 (
+  task_id        TEXT PRIMARY KEY,
+  workspace_id   TEXT NOT NULL,
+  owner_id       TEXT NOT NULL,
+  cwd            TEXT NOT NULL,
+  revision       INTEGER NOT NULL,
+  created_at_ms  INTEGER NOT NULL,
+  updated_at_ms  INTEGER NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES tasks_v2(id),
+  FOREIGN KEY (workspace_id) REFERENCES team_workspaces_v1(id),
+  FOREIGN KEY (owner_id) REFERENCES team_members_v1(id)
+);
+CREATE TABLE IF NOT EXISTS task_collaborators_v1 (
+  task_id    TEXT NOT NULL,
+  member_id  TEXT NOT NULL,
+  position   INTEGER NOT NULL,
+  PRIMARY KEY (task_id, member_id),
+  FOREIGN KEY (task_id) REFERENCES task_collaboration_v1(task_id),
+  FOREIGN KEY (member_id) REFERENCES team_members_v1(id)
+);
+CREATE INDEX IF NOT EXISTS task_collaborators_v1_order
+  ON task_collaborators_v1(task_id, position, member_id);
+CREATE TABLE IF NOT EXISTS task_comments_v1 (
+  id            TEXT PRIMARY KEY,
+  task_id       TEXT NOT NULL,
+  author_id     TEXT NOT NULL,
+  body          TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES task_collaboration_v1(task_id),
+  FOREIGN KEY (author_id) REFERENCES team_members_v1(id)
+);
+CREATE INDEX IF NOT EXISTS task_comments_v1_order
+  ON task_comments_v1(task_id, created_at_ms, id);
+CREATE TABLE IF NOT EXISTS task_suggestions_v1 (
+  id                   TEXT PRIMARY KEY,
+  task_id              TEXT NOT NULL,
+  author_id            TEXT NOT NULL,
+  body                 TEXT NOT NULL,
+  status                TEXT NOT NULL,
+  decided_by            TEXT,
+  decided_at_ms         INTEGER,
+  execution_command_id  TEXT,
+  execution_session_id  TEXT,
+  execution_error       TEXT,
+  created_at_ms         INTEGER NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES task_collaboration_v1(task_id),
+  FOREIGN KEY (author_id) REFERENCES team_members_v1(id),
+  FOREIGN KEY (decided_by) REFERENCES team_members_v1(id),
+  FOREIGN KEY (execution_session_id) REFERENCES sessions(id)
+);
+CREATE INDEX IF NOT EXISTS task_suggestions_v1_order
+  ON task_suggestions_v1(task_id, created_at_ms, id);
+CREATE UNIQUE INDEX IF NOT EXISTS task_suggestions_v1_execution_command
+  ON task_suggestions_v1(execution_command_id) WHERE execution_command_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS task_activity_v1 (
+  task_id        TEXT NOT NULL,
+  sequence       INTEGER NOT NULL,
+  actor_id       TEXT NOT NULL,
+  kind_json      TEXT NOT NULL,
+  created_at_ms  INTEGER NOT NULL,
+  PRIMARY KEY (task_id, sequence),
+  FOREIGN KEY (task_id) REFERENCES task_collaboration_v1(task_id),
+  FOREIGN KEY (actor_id) REFERENCES team_members_v1(id)
+);
+CREATE TABLE IF NOT EXISTS task_collaboration_commands_v1 (
+  command_id    TEXT PRIMARY KEY,
+  task_id       TEXT NOT NULL,
+  actor_id      TEXT NOT NULL,
+  action        TEXT NOT NULL,
+  receipt_json  TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES task_collaboration_v1(task_id),
+  FOREIGN KEY (actor_id) REFERENCES team_members_v1(id)
+);
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -315,6 +408,130 @@ impl Store {
                 work_item.id.as_str(),
                 agent_id.as_str(),
                 session.id,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Attach the first Executor Session to a shared Task that already exists. Approval owns the
+    /// collaboration claim; this transaction owns the runtime identities and refuses any second
+    /// active execution before mutating the Session or Task graph.
+    pub fn attach_parallel_task_session(
+        &self,
+        session: &Session,
+        task_id: &TaskId,
+        work_item: &WorkItem,
+        agent_id: &AgentId,
+        compatibility_identity: &str,
+        now_ms: i64,
+    ) -> Result<(), StoreError> {
+        let graph = TaskGraph {
+            revision: 1,
+            work_items: vec![work_item.clone()],
+            edges: Vec::new(),
+        };
+        validate_graph(&graph)?;
+        if work_item.status != WorkItemStatus::Running
+            || work_item.assigned_session_id.as_deref() != Some(session.id.as_str())
+        {
+            return Err(StoreError::InvalidTaskGraph(
+                "attached Task Work Item must be running in its created Session".into(),
+            ));
+        }
+
+        let item_json = serde_json::to_string(work_item)?;
+        let graph_changed = serde_json::to_string(&OrchestrationEventKind::TaskGraphChanged {
+            reason: "Approved collaboration Suggestion started".into(),
+        })?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let graph_revision: Option<i64> = tx
+            .query_row(
+                "SELECT revision FROM task_graph_revisions_v2 WHERE task_id=?1",
+                [task_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(graph_revision) = graph_revision else {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        };
+        let running: bool = tx.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM task_work_item_attempts_v2
+               WHERE task_id=?1 AND status='running'
+             )",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        if running {
+            return Err(StoreError::TaskExecutorBusy {
+                task_id: task_id.as_str().to_string(),
+            });
+        }
+        if graph_revision != 0 {
+            return Err(StoreError::TaskRevisionConflict {
+                task_id: task_id.as_str().to_string(),
+                expected: 0,
+                actual: graph_revision as u64,
+            });
+        }
+
+        Store::upsert_session_on(&tx, session)?;
+        tx.execute(
+            "UPDATE task_graph_revisions_v2 SET revision=1,updated_at_ms=?2 WHERE task_id=?1",
+            rusqlite::params![task_id.as_str(), now_ms],
+        )?;
+        tx.execute(
+            "INSERT INTO task_work_items_v2
+               (task_id,graph_revision,work_item_id,position,item_json)
+             VALUES (?1,1,?2,0,?3)",
+            rusqlite::params![task_id.as_str(), work_item.id.as_str(), item_json],
+        )?;
+        let sequence: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0)+1 FROM task_orchestration_events_v2
+             WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,?2,1,?3,?4)",
+            rusqlite::params![task_id.as_str(), sequence, graph_changed, now_ms],
+        )?;
+        tx.execute(
+            "INSERT INTO task_session_leases_v2
+               (task_id,session_id,agent_id,role,compatibility_identity,leased_at_ms)
+             VALUES (?1,?2,?3,'executor',?4,?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                session.id,
+                agent_id.as_str(),
+                compatibility_identity,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_work_item_attempts_v2
+               (task_id,work_item_id,attempt,agent_id,session_id,status,started_at_ms)
+             VALUES (?1,?2,1,?3,?4,'running',?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                work_item.id.as_str(),
+                agent_id.as_str(),
+                session.id,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "UPDATE tasks_v2 SET status_json=?2,updated_at_ms=?3 WHERE id=?1",
+            rusqlite::params![
+                task_id.as_str(),
+                serde_json::to_string(&TaskStatus::Active)?,
                 now_ms,
             ],
         )?;
@@ -1940,6 +2157,822 @@ impl Store {
         })
     }
 
+    pub fn create_workspace(
+        &self,
+        id: WorkspaceId,
+        name: &str,
+        now_ms: i64,
+    ) -> Result<Workspace, StoreError> {
+        validate_collaboration_text("workspace name", name, 128)?;
+        let conn = self.conn.lock().unwrap();
+        let existing: Option<(String, String, i64)> = conn
+            .query_row(
+                "SELECT id,name,created_at_ms FROM team_workspaces_v1 LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        if let Some((existing_id, existing_name, created_at_ms)) = existing {
+            if existing_id != id.as_str() {
+                return Err(StoreError::CollaborationConflict(
+                    "this server already owns a different Workspace".into(),
+                ));
+            }
+            return Ok(Workspace {
+                id,
+                name: existing_name,
+                created_at_ms,
+            });
+        }
+        conn.execute(
+            "INSERT INTO team_workspaces_v1(id,name,created_at_ms) VALUES (?1,?2,?3)",
+            rusqlite::params![id.as_str(), name.trim(), now_ms],
+        )?;
+        Ok(Workspace {
+            id,
+            name: name.trim().to_string(),
+            created_at_ms: now_ms,
+        })
+    }
+
+    pub fn workspace(&self) -> Result<Option<Workspace>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT id,name,created_at_ms FROM team_workspaces_v1 LIMIT 1",
+            [],
+            |row| {
+                Ok(Workspace {
+                    id: WorkspaceId::new(row.get::<_, String>(0)?),
+                    name: row.get(1)?,
+                    created_at_ms: row.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
+    pub fn create_member(
+        &self,
+        workspace_id: &WorkspaceId,
+        id: MemberId,
+        display_name: &str,
+        role: WorkspaceRole,
+        now_ms: i64,
+    ) -> Result<Member, StoreError> {
+        validate_collaboration_text("member display name", display_name, 128)?;
+        let conn = self.conn.lock().unwrap();
+        let workspace_exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM team_workspaces_v1 WHERE id=?1)",
+            [workspace_id.as_str()],
+            |row| row.get(0),
+        )?;
+        if !workspace_exists {
+            return Err(StoreError::CollaborationConflict(
+                "Workspace must exist before adding a Member".into(),
+            ));
+        }
+        conn.execute(
+            "INSERT INTO team_members_v1
+               (id,workspace_id,display_name,role,active,created_at_ms)
+             VALUES (?1,?2,?3,?4,1,?5)",
+            rusqlite::params![
+                id.as_str(),
+                workspace_id.as_str(),
+                display_name.trim(),
+                serde_json::to_string(&role)?,
+                now_ms,
+            ],
+        )?;
+        Ok(Member {
+            id,
+            workspace_id: workspace_id.clone(),
+            display_name: display_name.trim().to_string(),
+            role,
+            active: true,
+            created_at_ms: now_ms,
+        })
+    }
+
+    pub fn member(&self, member_id: &MemberId) -> Result<Option<Member>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT workspace_id,display_name,role,active,created_at_ms
+             FROM team_members_v1 WHERE id=?1",
+            [member_id.as_str()],
+            |row| {
+                let role: String = row.get(2)?;
+                let role = serde_json::from_str(&role).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?;
+                Ok(Member {
+                    id: member_id.clone(),
+                    workspace_id: WorkspaceId::new(row.get::<_, String>(0)?),
+                    display_name: row.get(1)?,
+                    role,
+                    active: row.get(3)?,
+                    created_at_ms: row.get(4)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
+    pub fn list_members(&self) -> Result<Vec<Member>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT id,workspace_id,display_name,role,active,created_at_ms
+             FROM team_members_v1 ORDER BY created_at_ms,id",
+        )?;
+        let rows = statement.query_map([], |row| {
+            let role: String = row.get(3)?;
+            let role = serde_json::from_str(&role).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    3,
+                    rusqlite::types::Type::Text,
+                    error.into(),
+                )
+            })?;
+            Ok(Member {
+                id: MemberId::new(row.get::<_, String>(0)?),
+                workspace_id: WorkspaceId::new(row.get::<_, String>(1)?),
+                display_name: row.get(2)?,
+                role,
+                active: row.get(4)?,
+                created_at_ms: row.get(5)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn create_shared_task(
+        &self,
+        task: &Task,
+        workspace_id: &WorkspaceId,
+        owner_id: &MemberId,
+        collaborator_ids: &[MemberId],
+        cwd: &str,
+        now_ms: i64,
+    ) -> Result<SharedTaskSnapshot, StoreError> {
+        validate_collaboration_text("Task id", task.id.as_str(), 256)?;
+        validate_collaboration_text("Task goal", &task.result_contract.goal, 16_384)?;
+        validate_collaboration_text("Task working directory", cwd, 4_096)?;
+        let status = serde_json::to_string(&task.status)?;
+        let provider_configuration = serde_json::to_string(&task.provider_configuration)?;
+        let budget = serde_json::to_string(&task.budget)?;
+        let result_contract = serde_json::to_string(&task.result_contract)?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        require_active_member_on(&tx, owner_id)?;
+        let owner_workspace: String = tx.query_row(
+            "SELECT workspace_id FROM team_members_v1 WHERE id=?1",
+            [owner_id.as_str()],
+            |row| row.get(0),
+        )?;
+        if owner_workspace != workspace_id.as_str() {
+            return Err(StoreError::MemberUnauthorized {
+                member_id: owner_id.as_str().to_string(),
+            });
+        }
+        let mut unique_collaborators = BTreeSet::new();
+        for collaborator_id in collaborator_ids {
+            if collaborator_id == owner_id || !unique_collaborators.insert(collaborator_id.as_str())
+            {
+                continue;
+            }
+            require_active_member_on(&tx, collaborator_id)?;
+            let collaborator_workspace: String = tx.query_row(
+                "SELECT workspace_id FROM team_members_v1 WHERE id=?1",
+                [collaborator_id.as_str()],
+                |row| row.get(0),
+            )?;
+            if collaborator_workspace != workspace_id.as_str() {
+                return Err(StoreError::MemberUnauthorized {
+                    member_id: collaborator_id.as_str().to_string(),
+                });
+            }
+        }
+
+        tx.execute(
+            "INSERT INTO tasks_v2
+               (id,status_json,provider_configuration_json,budget_json,
+                result_contract_revision,created_at_ms,updated_at_ms)
+             VALUES (?1,?2,?3,?4,1,?5,?5)",
+            rusqlite::params![
+                task.id.as_str(),
+                status,
+                provider_configuration,
+                budget,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_result_contracts_v2
+               (task_id,revision,contract_json,reason,created_at_ms)
+             VALUES (?1,1,?2,'shared_task_created',?3)",
+            rusqlite::params![task.id.as_str(), result_contract, now_ms],
+        )?;
+        tx.execute(
+            "INSERT INTO task_graph_revisions_v2(task_id,revision,updated_at_ms)
+             VALUES (?1,0,?2)",
+            rusqlite::params![task.id.as_str(), now_ms],
+        )?;
+        tx.execute(
+            "INSERT INTO task_loop_guard_v2(task_id,state_json,updated_at_ms)
+             VALUES (?1,?2,?3)",
+            rusqlite::params![
+                task.id.as_str(),
+                serde_json::to_string(&LoopGuardState::default())?,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_budget_state_v2(task_id,state_json,updated_at_ms)
+             VALUES (?1,?2,?3)",
+            rusqlite::params![
+                task.id.as_str(),
+                serde_json::to_string(&TaskBudgetState::default())?,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,1,0,?2,?3)",
+            rusqlite::params![
+                task.id.as_str(),
+                serde_json::to_string(&OrchestrationEventKind::TaskCreated)?,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_collaboration_v1
+               (task_id,workspace_id,owner_id,cwd,revision,created_at_ms,updated_at_ms)
+             VALUES (?1,?2,?3,?4,1,?5,?5)",
+            rusqlite::params![
+                task.id.as_str(),
+                workspace_id.as_str(),
+                owner_id.as_str(),
+                cwd.trim(),
+                now_ms,
+            ],
+        )?;
+        for (position, collaborator_id) in collaborator_ids
+            .iter()
+            .filter(|candidate| candidate != &owner_id)
+            .filter(|candidate| unique_collaborators.contains(candidate.as_str()))
+            .enumerate()
+        {
+            tx.execute(
+                "INSERT OR IGNORE INTO task_collaborators_v1(task_id,member_id,position)
+                 VALUES (?1,?2,?3)",
+                rusqlite::params![task.id.as_str(), collaborator_id.as_str(), position as i64],
+            )?;
+        }
+        tx.execute(
+            "INSERT INTO task_activity_v1(task_id,sequence,actor_id,kind_json,created_at_ms)
+             VALUES (?1,1,?2,?3,?4)",
+            rusqlite::params![
+                task.id.as_str(),
+                owner_id.as_str(),
+                serde_json::to_string(&TaskActivityKind::TaskCreated)?,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        drop(conn);
+        self.shared_task_snapshot(&task.id, owner_id)
+    }
+
+    pub fn shared_task_snapshot(
+        &self,
+        task_id: &TaskId,
+        actor_id: &MemberId,
+    ) -> Result<SharedTaskSnapshot, StoreError> {
+        let collaboration = self.task_collaboration_snapshot(task_id, actor_id)?;
+        let runtime = self.task_snapshot(task_id)?;
+        Ok(SharedTaskSnapshot {
+            runtime,
+            collaboration,
+        })
+    }
+
+    pub fn list_shared_tasks(
+        &self,
+        actor_id: &MemberId,
+    ) -> Result<Vec<SharedTaskSnapshot>, StoreError> {
+        let ids = {
+            let conn = self.conn.lock().unwrap();
+            require_active_member_on(&conn, actor_id)?;
+            let mut statement = conn.prepare(
+                "SELECT DISTINCT c.task_id
+                 FROM task_collaboration_v1 c
+                 LEFT JOIN task_collaborators_v1 x ON x.task_id=c.task_id
+                 WHERE c.owner_id=?1 OR x.member_id=?1
+                 ORDER BY c.updated_at_ms DESC,c.task_id",
+            )?;
+            let rows = statement.query_map([actor_id.as_str()], |row| {
+                Ok(TaskId::new(row.get::<_, String>(0)?))
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        ids.iter()
+            .map(|task_id| self.shared_task_snapshot(task_id, actor_id))
+            .collect()
+    }
+
+    pub fn list_attention_items(
+        &self,
+        actor_id: &MemberId,
+    ) -> Result<Vec<AttentionItem>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        require_active_member_on(&conn, actor_id)?;
+        let mut statement = conn.prepare(
+            "SELECT task.task_id,task.revision,suggestion.id,suggestion.author_id,
+                    suggestion.created_at_ms
+             FROM task_collaboration_v1 task
+             JOIN task_suggestions_v1 suggestion ON suggestion.task_id=task.task_id
+             WHERE task.owner_id=?1 AND suggestion.status='pending'
+             ORDER BY suggestion.created_at_ms,task.task_id,suggestion.id",
+        )?;
+        let rows = statement.query_map([actor_id.as_str()], |row| {
+            Ok(AttentionItem::PendingSuggestion {
+                task_id: TaskId::new(row.get::<_, String>(0)?),
+                task_revision: row.get::<_, i64>(1)? as u64,
+                suggestion_id: SuggestionId::new(row.get::<_, String>(2)?),
+                author_id: MemberId::new(row.get::<_, String>(3)?),
+                created_at_ms: row.get(4)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn member_can_access_task(
+        &self,
+        member_id: &MemberId,
+        task_id: &TaskId,
+    ) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        if require_active_member_on(&conn, member_id).is_err() {
+            return Ok(false);
+        }
+        let allowed: Option<bool> = conn
+            .query_row(
+                "SELECT owner_id=?2 OR EXISTS(
+                     SELECT 1 FROM task_collaborators_v1
+                     WHERE task_id=?1 AND member_id=?2
+                   )
+                 FROM task_collaboration_v1 WHERE task_id=?1",
+                rusqlite::params![task_id.as_str(), member_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(allowed == Some(true))
+    }
+
+    pub fn member_can_access_session(
+        &self,
+        member_id: &MemberId,
+        session_id: &str,
+    ) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        if require_active_member_on(&conn, member_id).is_err() {
+            return Ok(false);
+        }
+        conn.query_row(
+            "SELECT EXISTS(
+               SELECT 1
+               FROM task_session_leases_v2 lease
+               JOIN task_collaboration_v1 task ON task.task_id=lease.task_id
+               LEFT JOIN task_collaborators_v1 collaborator
+                 ON collaborator.task_id=task.task_id AND collaborator.member_id=?2
+               WHERE lease.session_id=?1
+                 AND (task.owner_id=?2 OR collaborator.member_id IS NOT NULL)
+             )",
+            rusqlite::params![session_id, member_id.as_str()],
+            |row| row.get(0),
+        )
+        .map_err(Into::into)
+    }
+
+    pub fn member_controls_session(
+        &self,
+        member_id: &MemberId,
+        session_id: &str,
+    ) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        if require_active_member_on(&conn, member_id).is_err() {
+            return Ok(false);
+        }
+        conn.query_row(
+            "SELECT EXISTS(
+               SELECT 1
+               FROM task_session_leases_v2 lease
+               JOIN task_collaboration_v1 task ON task.task_id=lease.task_id
+               WHERE lease.session_id=?1 AND task.owner_id=?2
+             )",
+            rusqlite::params![session_id, member_id.as_str()],
+            |row| row.get(0),
+        )
+        .map_err(Into::into)
+    }
+
+    pub fn session_is_team_managed(&self, session_id: &str) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT EXISTS(
+               SELECT 1
+               FROM task_session_leases_v2 lease
+               JOIN task_collaboration_v1 task ON task.task_id=lease.task_id
+               WHERE lease.session_id=?1
+             )",
+            [session_id],
+            |row| row.get(0),
+        )
+        .map_err(Into::into)
+    }
+
+    pub fn add_task_comment(
+        &self,
+        task_id: &TaskId,
+        actor_id: &MemberId,
+        expected_revision: u64,
+        body: &str,
+        now_ms: i64,
+    ) -> Result<TaskCollaborationSnapshot, StoreError> {
+        validate_collaboration_text("comment", body, 16_384)?;
+        let comment_id = TaskCommentId::new(format!("comment-{}", uuid::Uuid::new_v4()));
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        require_task_access_on(&tx, task_id, actor_id)?;
+        let revision = advance_collaboration_revision_on(&tx, task_id, expected_revision, now_ms)?;
+        tx.execute(
+            "INSERT INTO task_comments_v1(id,task_id,author_id,body,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                comment_id.as_str(),
+                task_id.as_str(),
+                actor_id.as_str(),
+                body.trim(),
+                now_ms,
+            ],
+        )?;
+        append_task_activity_on(
+            &tx,
+            task_id,
+            actor_id,
+            &TaskActivityKind::CommentAdded { comment_id },
+            now_ms,
+        )?;
+        tx.commit()?;
+        drop(conn);
+        debug_assert_eq!(revision, expected_revision.saturating_add(1));
+        self.task_collaboration_snapshot(task_id, actor_id)
+    }
+
+    pub fn create_task_suggestion(
+        &self,
+        task_id: &TaskId,
+        actor_id: &MemberId,
+        expected_revision: u64,
+        body: &str,
+        now_ms: i64,
+    ) -> Result<TaskCollaborationSnapshot, StoreError> {
+        validate_collaboration_text("suggestion", body, 16_384)?;
+        let suggestion_id = SuggestionId::new(format!("suggestion-{}", uuid::Uuid::new_v4()));
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        require_task_access_on(&tx, task_id, actor_id)?;
+        advance_collaboration_revision_on(&tx, task_id, expected_revision, now_ms)?;
+        tx.execute(
+            "INSERT INTO task_suggestions_v1
+               (id,task_id,author_id,body,status,created_at_ms)
+             VALUES (?1,?2,?3,?4,'pending',?5)",
+            rusqlite::params![
+                suggestion_id.as_str(),
+                task_id.as_str(),
+                actor_id.as_str(),
+                body.trim(),
+                now_ms,
+            ],
+        )?;
+        append_task_activity_on(
+            &tx,
+            task_id,
+            actor_id,
+            &TaskActivityKind::SuggestionCreated { suggestion_id },
+            now_ms,
+        )?;
+        tx.commit()?;
+        drop(conn);
+        self.task_collaboration_snapshot(task_id, actor_id)
+    }
+
+    pub fn approve_task_suggestion(
+        &self,
+        task_id: &TaskId,
+        suggestion_id: &SuggestionId,
+        actor_id: &MemberId,
+        command_id: &str,
+        expected_revision: u64,
+        now_ms: i64,
+    ) -> Result<IdempotentCommand<SuggestionApprovalReceipt>, StoreError> {
+        validate_command_id(command_id)?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        if let Some((stored_task, stored_actor, action, receipt_json)) = tx
+            .query_row(
+                "SELECT task_id,actor_id,action,receipt_json
+                 FROM task_collaboration_commands_v1 WHERE command_id=?1",
+                [command_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                },
+            )
+            .optional()?
+        {
+            if stored_task != task_id.as_str()
+                || stored_actor != actor_id.as_str()
+                || action != "approve_suggestion"
+            {
+                return Err(StoreError::CommandReceiptConflict {
+                    protocol: "team".into(),
+                    command_id: command_id.to_string(),
+                });
+            }
+            let receipt = serde_json::from_str(&receipt_json)?;
+            tx.commit()?;
+            return Ok(IdempotentCommand {
+                receipt,
+                replayed: true,
+            });
+        }
+        require_active_member_on(&tx, actor_id)?;
+        let owner_id: String = tx
+            .query_row(
+                "SELECT owner_id FROM task_collaboration_v1 WHERE task_id=?1",
+                [task_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            })?;
+        if owner_id != actor_id.as_str() {
+            return Err(StoreError::MemberUnauthorized {
+                member_id: actor_id.as_str().to_string(),
+            });
+        }
+        let status: Option<String> = tx
+            .query_row(
+                "SELECT status FROM task_suggestions_v1 WHERE task_id=?1 AND id=?2",
+                rusqlite::params![task_id.as_str(), suggestion_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(status) = status else {
+            return Err(StoreError::SuggestionNotFound {
+                task_id: task_id.as_str().to_string(),
+                suggestion_id: suggestion_id.as_str().to_string(),
+            });
+        };
+        if status != "pending" {
+            return Err(StoreError::CollaborationConflict(format!(
+                "Suggestion is already {status}"
+            )));
+        }
+        let revision = advance_collaboration_revision_on(&tx, task_id, expected_revision, now_ms)?;
+        tx.execute(
+            "UPDATE task_suggestions_v1
+             SET status='approved',decided_by=?3,decided_at_ms=?4,execution_command_id=?5
+             WHERE task_id=?1 AND id=?2",
+            rusqlite::params![
+                task_id.as_str(),
+                suggestion_id.as_str(),
+                actor_id.as_str(),
+                now_ms,
+                command_id,
+            ],
+        )?;
+        append_task_activity_on(
+            &tx,
+            task_id,
+            actor_id,
+            &TaskActivityKind::SuggestionApproved {
+                suggestion_id: suggestion_id.clone(),
+            },
+            now_ms,
+        )?;
+        let receipt = SuggestionApprovalReceipt {
+            task_id: task_id.clone(),
+            suggestion_id: suggestion_id.clone(),
+            revision,
+            execution_claimed: true,
+        };
+        tx.execute(
+            "INSERT INTO task_collaboration_commands_v1
+               (command_id,task_id,actor_id,action,receipt_json,created_at_ms)
+             VALUES (?1,?2,?3,'approve_suggestion',?4,?5)",
+            rusqlite::params![
+                command_id,
+                task_id.as_str(),
+                actor_id.as_str(),
+                serde_json::to_string(&receipt)?,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(IdempotentCommand {
+            receipt,
+            replayed: false,
+        })
+    }
+
+    pub fn task_suggestion(
+        &self,
+        task_id: &TaskId,
+        suggestion_id: &SuggestionId,
+        actor_id: &MemberId,
+    ) -> Result<TaskSuggestion, StoreError> {
+        let snapshot = self.task_collaboration_snapshot(task_id, actor_id)?;
+        snapshot
+            .suggestions
+            .into_iter()
+            .find(|suggestion| &suggestion.id == suggestion_id)
+            .ok_or_else(|| StoreError::SuggestionNotFound {
+                task_id: task_id.as_str().to_string(),
+                suggestion_id: suggestion_id.as_str().to_string(),
+            })
+    }
+
+    pub fn link_suggestion_execution(
+        &self,
+        task_id: &TaskId,
+        suggestion_id: &SuggestionId,
+        actor_id: &MemberId,
+        session_id: &str,
+        now_ms: i64,
+    ) -> Result<u64, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        require_task_access_on(&tx, task_id, actor_id)?;
+        let changed = tx.execute(
+            "UPDATE task_suggestions_v1
+             SET execution_session_id=?3,execution_error=NULL
+             WHERE task_id=?1 AND id=?2 AND status='approved'
+               AND execution_session_id IS NULL",
+            rusqlite::params![task_id.as_str(), suggestion_id.as_str(), session_id],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::CollaborationConflict(
+                "Suggestion execution was already linked or is not approved".into(),
+            ));
+        }
+        let revision = bump_collaboration_revision_on(&tx, task_id, now_ms)?;
+        append_task_activity_on(
+            &tx,
+            task_id,
+            actor_id,
+            &TaskActivityKind::SuggestionExecutionStarted {
+                suggestion_id: suggestion_id.clone(),
+                session_id: session_id.to_string(),
+            },
+            now_ms,
+        )?;
+        tx.commit()?;
+        Ok(revision)
+    }
+
+    pub fn fail_suggestion_execution(
+        &self,
+        task_id: &TaskId,
+        suggestion_id: &SuggestionId,
+        actor_id: &MemberId,
+        message: &str,
+        now_ms: i64,
+    ) -> Result<u64, StoreError> {
+        validate_collaboration_text("execution failure", message, 4_096)?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        require_task_access_on(&tx, task_id, actor_id)?;
+        let changed = tx.execute(
+            "UPDATE task_suggestions_v1
+             SET status='execution_failed',execution_error=?3
+             WHERE task_id=?1 AND id=?2 AND status='approved'
+               AND execution_session_id IS NULL",
+            rusqlite::params![task_id.as_str(), suggestion_id.as_str(), message.trim()],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::CollaborationConflict(
+                "Suggestion execution was already resolved".into(),
+            ));
+        }
+        let revision = bump_collaboration_revision_on(&tx, task_id, now_ms)?;
+        append_task_activity_on(
+            &tx,
+            task_id,
+            actor_id,
+            &TaskActivityKind::SuggestionExecutionFailed {
+                suggestion_id: suggestion_id.clone(),
+                message: message.trim().to_string(),
+            },
+            now_ms,
+        )?;
+        tx.commit()?;
+        Ok(revision)
+    }
+
+    fn task_collaboration_snapshot(
+        &self,
+        task_id: &TaskId,
+        actor_id: &MemberId,
+    ) -> Result<TaskCollaborationSnapshot, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        require_task_access_on(&conn, task_id, actor_id)?;
+        let (owner_id, cwd, revision): (String, String, i64) = conn.query_row(
+            "SELECT owner_id,cwd,revision FROM task_collaboration_v1 WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let collaborator_ids = {
+            let mut statement = conn.prepare(
+                "SELECT member_id FROM task_collaborators_v1
+                 WHERE task_id=?1 ORDER BY position,member_id",
+            )?;
+            let rows = statement.query_map([task_id.as_str()], |row| {
+                Ok(MemberId::new(row.get::<_, String>(0)?))
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        let comments = {
+            let mut statement = conn.prepare(
+                "SELECT id,author_id,body,created_at_ms FROM task_comments_v1
+                 WHERE task_id=?1 ORDER BY created_at_ms,id",
+            )?;
+            let rows = statement.query_map([task_id.as_str()], |row| {
+                Ok(TaskComment {
+                    id: TaskCommentId::new(row.get::<_, String>(0)?),
+                    author_id: MemberId::new(row.get::<_, String>(1)?),
+                    body: row.get(2)?,
+                    created_at_ms: row.get(3)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        let suggestions = {
+            let mut statement = conn.prepare(
+                "SELECT id,author_id,body,status,decided_by,decided_at_ms,
+                        execution_session_id,execution_error,created_at_ms
+                 FROM task_suggestions_v1 WHERE task_id=?1 ORDER BY created_at_ms,id",
+            )?;
+            let rows = statement.query_map([task_id.as_str()], suggestion_row)?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        let activity = {
+            let mut statement = conn.prepare(
+                "SELECT sequence,actor_id,kind_json,created_at_ms FROM task_activity_v1
+                 WHERE task_id=?1 ORDER BY sequence",
+            )?;
+            let rows = statement.query_map([task_id.as_str()], |row| {
+                let kind: String = row.get(2)?;
+                let kind = serde_json::from_str(&kind).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?;
+                Ok(TaskActivityEvent {
+                    sequence: row.get::<_, i64>(0)? as u64,
+                    actor_id: MemberId::new(row.get::<_, String>(1)?),
+                    kind,
+                    created_at_ms: row.get(3)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        Ok(TaskCollaborationSnapshot {
+            task_id: task_id.clone(),
+            revision: revision as u64,
+            owner_id: MemberId::new(owner_id),
+            collaborator_ids,
+            cwd,
+            comments,
+            suggestions,
+            activity,
+        })
+    }
+
     fn write_loop_guard(
         &self,
         task_id: &TaskId,
@@ -1958,6 +2991,182 @@ impl Store {
         }
         Ok(())
     }
+}
+
+fn validate_collaboration_text(field: &str, value: &str, maximum: usize) -> Result<(), StoreError> {
+    let length = value.trim().chars().count();
+    if length == 0 || length > maximum {
+        return Err(StoreError::CollaborationConflict(format!(
+            "{field} must contain between 1 and {maximum} characters"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_command_id(command_id: &str) -> Result<(), StoreError> {
+    let length = command_id.trim().chars().count();
+    if length == 0 || length > 256 {
+        return Err(StoreError::CollaborationConflict(
+            "command_id must contain between 1 and 256 characters".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn require_active_member_on(
+    conn: &rusqlite::Connection,
+    member_id: &MemberId,
+) -> Result<(), StoreError> {
+    let active: Option<bool> = conn
+        .query_row(
+            "SELECT active FROM team_members_v1 WHERE id=?1",
+            [member_id.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if active != Some(true) {
+        return Err(StoreError::MemberUnauthorized {
+            member_id: member_id.as_str().to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn require_task_access_on(
+    conn: &rusqlite::Connection,
+    task_id: &TaskId,
+    member_id: &MemberId,
+) -> Result<(), StoreError> {
+    require_active_member_on(conn, member_id)?;
+    let allowed: Option<bool> = conn
+        .query_row(
+            "SELECT owner_id=?2 OR EXISTS(
+                 SELECT 1 FROM task_collaborators_v1
+                 WHERE task_id=?1 AND member_id=?2
+               )
+             FROM task_collaboration_v1 WHERE task_id=?1",
+            rusqlite::params![task_id.as_str(), member_id.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match allowed {
+        Some(true) => Ok(()),
+        Some(false) => Err(StoreError::MemberUnauthorized {
+            member_id: member_id.as_str().to_string(),
+        }),
+        None => Err(StoreError::TaskNotFound {
+            task_id: task_id.as_str().to_string(),
+        }),
+    }
+}
+
+fn advance_collaboration_revision_on(
+    conn: &rusqlite::Connection,
+    task_id: &TaskId,
+    expected_revision: u64,
+    now_ms: i64,
+) -> Result<u64, StoreError> {
+    let actual: Option<i64> = conn
+        .query_row(
+            "SELECT revision FROM task_collaboration_v1 WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(actual) = actual else {
+        return Err(StoreError::TaskNotFound {
+            task_id: task_id.as_str().to_string(),
+        });
+    };
+    if actual as u64 != expected_revision {
+        return Err(StoreError::TaskRevisionConflict {
+            task_id: task_id.as_str().to_string(),
+            expected: expected_revision,
+            actual: actual as u64,
+        });
+    }
+    let revision = expected_revision
+        .checked_add(1)
+        .ok_or_else(|| StoreError::CollaborationConflict("Task revision is exhausted".into()))?;
+    conn.execute(
+        "UPDATE task_collaboration_v1 SET revision=?2,updated_at_ms=?3 WHERE task_id=?1",
+        rusqlite::params![task_id.as_str(), revision as i64, now_ms],
+    )?;
+    Ok(revision)
+}
+
+fn bump_collaboration_revision_on(
+    conn: &rusqlite::Connection,
+    task_id: &TaskId,
+    now_ms: i64,
+) -> Result<u64, StoreError> {
+    let revision: i64 = conn
+        .query_row(
+            "UPDATE task_collaboration_v1
+             SET revision=revision+1,updated_at_ms=?2 WHERE task_id=?1
+             RETURNING revision",
+            rusqlite::params![task_id.as_str(), now_ms],
+            |row| row.get(0),
+        )
+        .optional()?
+        .ok_or_else(|| StoreError::TaskNotFound {
+            task_id: task_id.as_str().to_string(),
+        })?;
+    Ok(revision as u64)
+}
+
+fn append_task_activity_on(
+    conn: &rusqlite::Connection,
+    task_id: &TaskId,
+    actor_id: &MemberId,
+    kind: &TaskActivityKind,
+    now_ms: i64,
+) -> Result<(), StoreError> {
+    let sequence: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(sequence),0)+1 FROM task_activity_v1 WHERE task_id=?1",
+        [task_id.as_str()],
+        |row| row.get(0),
+    )?;
+    conn.execute(
+        "INSERT INTO task_activity_v1(task_id,sequence,actor_id,kind_json,created_at_ms)
+         VALUES (?1,?2,?3,?4,?5)",
+        rusqlite::params![
+            task_id.as_str(),
+            sequence,
+            actor_id.as_str(),
+            serde_json::to_string(kind)?,
+            now_ms,
+        ],
+    )?;
+    Ok(())
+}
+
+fn suggestion_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskSuggestion> {
+    let status: String = row.get(3)?;
+    let status = match status.as_str() {
+        "pending" => SuggestionStatus::Pending,
+        "approved" => SuggestionStatus::Approved,
+        "rejected" => SuggestionStatus::Rejected,
+        "execution_failed" => SuggestionStatus::ExecutionFailed,
+        other => {
+            return Err(rusqlite::Error::FromSqlConversionFailure(
+                3,
+                rusqlite::types::Type::Text,
+                format!("unknown Suggestion status `{other}`").into(),
+            ))
+        }
+    };
+    Ok(TaskSuggestion {
+        id: SuggestionId::new(row.get::<_, String>(0)?),
+        author_id: MemberId::new(row.get::<_, String>(1)?),
+        body: row.get(2)?,
+        status,
+        decided_by: row.get::<_, Option<String>>(4)?.map(MemberId::new),
+        decided_at_ms: row.get(5)?,
+        execution_session_id: row.get(6)?,
+        execution_error: row.get(7)?,
+        created_at_ms: row.get(8)?,
+    })
 }
 
 fn validate_graph(graph: &TaskGraph) -> Result<(), StoreError> {

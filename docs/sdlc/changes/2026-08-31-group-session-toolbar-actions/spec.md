@@ -22,9 +22,11 @@ complete pull-down button apiece, without a separate trailing chevron.
 
 Present plugin, environment, and View as quiet icon-only toolbar controls beside the primary action
 set. Keep their accessible names and tooltips. View retains one menu for split, conditional close,
-and side-panel commands. Keep 8px inside the context group and 16px between context, task, and
-layout groups. Below the compact breakpoint, hide primary labels and remove resting fills so each
-action becomes a 28px bare icon.
+and side-panel commands. Show each persistent View command's live keymap binding at the trailing
+edge of its menu row, and let those same bindings invoke the focused-pane or side-panel action.
+Keep 8px inside the context group and 16px between context, task, and layout groups. Below the
+compact breakpoint, hide primary labels and remove resting fills so each action becomes a 28px bare
+icon.
 
 Remove only the horizontal hairline between the session rail title row and its search/content area.
 Keep the rail's vertical edge, the session header's content-dependent divider, and unrelated
@@ -69,6 +71,10 @@ deployment, and production mutation remain separate pending Gates.
       remain intact.
 - [x] AC-7: Focused tests, renderer build, lifecycle checks, and diff hygiene pass without relevant
       runtime errors; the documentation check is run and any inherited base failure is recorded.
+- [x] AC-8: Split right, Split down, and Side panel show their current customizable keymap bindings
+      in the View menu, including user overrides.
+- [x] AC-9: The three displayed shortcuts execute against the focused pane or current side-panel
+      state, and rendered-browser interaction plus focused keymap tests pass.
 
 ## Decision
 

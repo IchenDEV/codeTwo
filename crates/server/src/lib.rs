@@ -26,6 +26,7 @@ pub use auth::{AuthState, Device, DeviceInfo, Paired, DEFAULT_PAIRING_TTL, WS_TI
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -38,17 +39,23 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc};
+use tower_http::services::{ServeDir, ServeFile};
 
 use codetwo_core::device_sync::DeviceSyncDocument;
+use codetwo_core::worktree::WorktreeBaseline;
 use codetwo_core::{
     CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasFeatureGate, CanvasFreezeInput,
-    CanvasRevision, CanvasStaticAsset, DocBlock, Engine, Event, Op, PortableTaskHandoff, Session,
-    SessionId, Store, TaskHandoffManager, TranscriptCursor, TranscriptEntry,
+    CanvasRevision, CanvasStaticAsset, DocBlock, Engine, Event, MemberId, Op, ParallelTaskCreation,
+    PortableTaskHandoff, ProviderConfiguration, ProviderId, ResultContract, Session, SessionId,
+    SharedTaskSnapshot, Store, StoreError, SuggestionApprovalReceipt, SuggestionId, Task,
+    TaskBudget, TaskHandoffManager, TaskId, TaskStatus, TranscriptCursor, TranscriptEntry,
     DEFAULT_TRANSCRIPT_TURNS,
 };
+use codetwo_plugins::PluginManager;
 
 const MAX_HANDOFF_BODY_BYTES: usize = 384 * 1024 * 1024;
 const MAX_DEVICE_SYNC_BODY_BYTES: usize = 64 * 1024 * 1024;
+const MAX_WEB_UI_CALL_BODY_BYTES: usize = 2 * 1024 * 1024;
 
 /// Transport-neutral device-sync surface supplied by a host plugin.
 ///
@@ -62,6 +69,95 @@ pub trait DeviceSyncHttp: Send + Sync + 'static {
         document: &DeviceSyncDocument,
         expected_version: &str,
     ) -> Result<DeviceSyncWriteResult, String>;
+}
+
+/// Host-owned command seam for the full React renderer running in a paired browser.
+///
+/// The server authenticates and frames the request; the supplying host owns which commands are
+/// exposed and dispatches them through the same Kernel context as its native renderer.
+#[async_trait::async_trait]
+pub trait WebUiCommandCaller: Send + Sync + 'static {
+    async fn call(
+        &self,
+        device_id: &str,
+        name: &str,
+        args: serde_json::Value,
+        project_path: Option<String>,
+    ) -> Result<serde_json::Value, String>;
+}
+
+/// Shared host adapter for the paired full React renderer.
+///
+/// Desktop Remote and the standalone server both use this adapter so browser capability policy
+/// and root/project Kernel dispatch cannot drift between launch surfaces.
+pub struct KernelWebUiCommands {
+    plugin_manager: Arc<PluginManager>,
+}
+
+impl KernelWebUiCommands {
+    pub fn new(plugin_manager: Arc<PluginManager>) -> Self {
+        Self { plugin_manager }
+    }
+}
+
+fn web_ui_command_allowed(name: &str) -> bool {
+    matches!(
+        name,
+        "providers.list"
+            | "projects.list"
+            | "workspace.default_cwd"
+            | "sessions.list"
+            | "sessions.archived"
+            | "sessions.previews"
+            | "sessions.transcript"
+            | "sessions.rename"
+            | "sessions.set_archived"
+            | "sessions.set_pinned"
+            | "engine.new_session"
+            | "engine.new_parallel_task"
+            | "engine.close_transient_session"
+            | "engine.prompt"
+            | "engine.prepare_session"
+            | "engine.queue"
+            | "engine.steer"
+            | "engine.answer_permission"
+            | "engine.answer_elicitation"
+            | "engine.set_permission_mode"
+            | "engine.set_execution_policy"
+            | "engine.set_sandbox"
+            | "engine.set_model"
+            | "engine.set_config_option"
+            | "engine.cancel"
+    )
+}
+
+#[async_trait::async_trait]
+impl WebUiCommandCaller for KernelWebUiCommands {
+    async fn call(
+        &self,
+        _device_id: &str,
+        name: &str,
+        args: serde_json::Value,
+        project_path: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        if !web_ui_command_allowed(name) {
+            return Err(format!(
+                "command is unavailable in the browser renderer: {name}"
+            ));
+        }
+
+        if let Some(project_path) = project_path {
+            self.plugin_manager
+                .call_in_project(project_path, name, args)
+                .await
+                .map_err(|error| error.to_string())
+        } else {
+            self.plugin_manager
+                .call(name, args)
+                .await
+                .map_err(|error| error.to_string())
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -557,6 +653,7 @@ struct ServerState {
     terminals: Arc<terminal::TerminalRegistry>,
     handoff: Arc<TaskHandoffManager>,
     device_sync: Option<Arc<dyn DeviceSyncHttp>>,
+    web_ui_commands: Option<Arc<dyn WebUiCommandCaller>>,
 }
 
 /// Forward the engine's single event receiver into a broadcast channel so multiple clients (and the
@@ -603,16 +700,7 @@ pub async fn bind_and_serve_with_canvas(
     store: Arc<Store>,
     canvas_gate: CanvasFeatureGate,
 ) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
-    bind_and_serve_with_services(
-        engine,
-        events,
-        addr,
-        auth,
-        store,
-        canvas_gate,
-        None,
-    )
-    .await
+    bind_and_serve_with_services(engine, events, addr, auth, store, canvas_gate, None).await
 }
 
 /// Bind the server with optional host-owned services. Desktop uses this entry point so the Remote
@@ -625,6 +713,36 @@ pub async fn bind_and_serve_with_services(
     store: Arc<Store>,
     canvas_gate: CanvasFeatureGate,
     device_sync: Option<Arc<dyn DeviceSyncHttp>>,
+) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
+    bind_and_serve_with_web_ui(
+        engine,
+        events,
+        addr,
+        auth,
+        store,
+        canvas_gate,
+        device_sync,
+        None,
+        None,
+    )
+    .await
+}
+
+/// Bind the paired server with the host's optional full-renderer command adapter.
+///
+/// The compact remote protocol remains available without this adapter. Supplying commands adds the
+/// authenticated generic command route. Supplying a Web asset directory also replaces the compact
+/// root with the existing React SPA while leaving protocol, terminal, and Canvas routes intact.
+pub async fn bind_and_serve_with_web_ui(
+    engine: Arc<Engine>,
+    events: broadcast::Sender<Event>,
+    addr: SocketAddr,
+    auth: Arc<AuthState>,
+    store: Arc<Store>,
+    canvas_gate: CanvasFeatureGate,
+    device_sync: Option<Arc<dyn DeviceSyncHttp>>,
+    web_ui_commands: Option<Arc<dyn WebUiCommandCaller>>,
+    web_ui_dir: Option<PathBuf>,
 ) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
     let t3 = Arc::new(
         t3_compat::T3CompatState::new(engine.clone(), events.clone(), auth.clone())
@@ -644,6 +762,7 @@ pub async fn bind_and_serve_with_services(
         terminals: Arc::new(terminal::TerminalRegistry::default()),
         handoff,
         device_sync,
+        web_ui_commands,
     });
     let handoff_routes = Router::new()
         .route("/api/codetwo/handoffs", post(accept_handoff))
@@ -662,13 +781,28 @@ pub async fn bind_and_serve_with_services(
         )
         .with_state(state.clone())
         .layer(DefaultBodyLimit::max(MAX_DEVICE_SYNC_BODY_BYTES));
+    let web_ui_routes = Router::new()
+        .route("/api/web-ui/call", post(web_ui_call))
+        .with_state(state.clone())
+        .layer(DefaultBodyLimit::max(MAX_WEB_UI_CALL_BODY_BYTES));
     let app = Router::new()
-        .route("/", get(index))
-        .route("/pair", get(index))
         .route("/terminal", get(index))
         .route("/health", get(|| async { "ok" }))
         .route("/api/pair", post(pair))
         .route("/api/ws-ticket", post(ws_ticket))
+        .route("/api/team/v1/workspace", get(team_workspace))
+        .route("/api/team/v1/attention", get(team_attention))
+        .route("/api/team/v1/tasks", get(team_tasks).post(team_create_task))
+        .route("/api/team/v1/tasks/:id", get(team_task))
+        .route("/api/team/v1/tasks/:id/comments", post(team_add_comment))
+        .route(
+            "/api/team/v1/tasks/:id/suggestions",
+            post(team_create_suggestion),
+        )
+        .route(
+            "/api/team/v1/tasks/:id/suggestions/:suggestion_id/approve",
+            post(team_approve_suggestion),
+        )
         .route("/api/terminals", get(list_terminals))
         .route("/api/terminals/:id/kill", post(kill_terminal))
         .route("/term/*path", get(term_asset))
@@ -725,7 +859,14 @@ pub async fn bind_and_serve_with_services(
         .merge(handoff_routes)
         .merge(device_sync_pair_route)
         .merge(device_sync_snapshot_routes)
-        .layer(axum::middleware::map_response(no_store_headers));
+        .merge(web_ui_routes);
+    let app = if let Some(web_ui_dir) = web_ui_dir {
+        let index = web_ui_dir.join("index.html");
+        app.fallback_service(ServeDir::new(web_ui_dir).not_found_service(ServeFile::new(index)))
+    } else {
+        app.route("/", get(index)).route("/pair", get(index))
+    }
+    .layer(axum::middleware::map_response(no_store_headers));
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
@@ -733,6 +874,44 @@ pub async fn bind_and_serve_with_services(
         let _ = axum::serve(listener, app.into_make_service()).await;
     });
     Ok((local, handle))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WebUiCallBody {
+    name: String,
+    #[serde(default)]
+    args: serde_json::Value,
+    #[serde(default)]
+    project_path: Option<String>,
+}
+
+async fn web_ui_call(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(body): Json<WebUiCallBody>,
+) -> Response {
+    let Some(commands) = &st.web_ui_commands else {
+        return (StatusCode::NOT_FOUND, "C2 Web UI commands are unavailable").into_response();
+    };
+    let device_id = match require_device(&st, &headers) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
+    if body.name.is_empty() || body.name.len() > 160 {
+        return (StatusCode::BAD_REQUEST, "C2 Web UI command name is invalid").into_response();
+    }
+    match commands
+        .call(&device_id, &body.name, body.args, body.project_path)
+        .await
+    {
+        Ok(result) => Json(serde_json::json!({ "result": result })).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        )
+            .into_response(),
+    }
 }
 
 #[derive(Deserialize)]
@@ -763,8 +942,7 @@ async fn pair_c2_device(
     {
         Ok(Some(paired)) => paired,
         Ok(None) => {
-            return (StatusCode::UNAUTHORIZED, "invalid or expired pairing token")
-                .into_response()
+            return (StatusCode::UNAUTHORIZED, "invalid or expired pairing token").into_response()
         }
         Err(error) => return (StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
     };
@@ -795,10 +973,7 @@ struct DeviceSyncSnapshotReply {
     replica: DeviceSyncReplica,
 }
 
-async fn device_sync_snapshot(
-    State(st): State<Arc<ServerState>>,
-    headers: HeaderMap,
-) -> Response {
+async fn device_sync_snapshot(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
     let Some(device_sync) = &st.device_sync else {
         return (StatusCode::NOT_FOUND, "C2 device sync is unavailable").into_response();
     };
@@ -856,9 +1031,17 @@ async fn no_store_headers(mut response: Response) -> Response {
 }
 
 fn require_device(st: &ServerState, headers: &HeaderMap) -> Result<String, Response> {
-    bearer_from(headers)
+    let device_id = bearer_from(headers)
         .and_then(|bearer| st.auth.authorize_bearer(bearer))
-        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "invalid bearer").into_response())
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "invalid bearer").into_response())?;
+    if st.auth.member_for_device(&device_id).is_some() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "team members must use the shared Task surface",
+        )
+            .into_response());
+    }
+    Ok(device_id)
 }
 
 fn require_t3_scope(
@@ -1290,6 +1473,401 @@ async fn pair(State(st): State<Arc<ServerState>>, Json(body): Json<PairBody>) ->
     }
 }
 
+#[derive(Serialize)]
+struct TeamWorkspaceReply {
+    workspace: codetwo_core::Workspace,
+    me: codetwo_core::Member,
+    members: Vec<codetwo_core::Member>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TeamCreateTaskBody {
+    task_id: String,
+    goal: String,
+    cwd: String,
+    provider: ProviderId,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    reasoning_effort: Option<String>,
+    #[serde(default)]
+    collaborator_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TeamTextMutationBody {
+    expected_revision: u64,
+    body: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TeamApproveSuggestionBody {
+    command_id: String,
+    expected_revision: u64,
+    #[serde(default)]
+    worktree_base_sha: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TeamApproveSuggestionReply {
+    receipt: SuggestionApprovalReceipt,
+    snapshot: SharedTaskSnapshot,
+}
+
+fn team_actor(st: &ServerState, headers: &HeaderMap) -> Result<MemberId, Response> {
+    let Some(authorization) =
+        bearer_from(headers).and_then(|bearer| st.auth.authorize_member_bearer(bearer))
+    else {
+        return Err((StatusCode::UNAUTHORIZED, "member-bound bearer required").into_response());
+    };
+    let member_id = MemberId::new(authorization.member_id);
+    match st.store.member(&member_id) {
+        Ok(Some(member)) if member.active => Ok(member_id),
+        Ok(_) => Err((StatusCode::FORBIDDEN, "Member is inactive or unknown").into_response()),
+        Err(error) => Err(team_store_error(error)),
+    }
+}
+
+fn team_store_error(error: StoreError) -> Response {
+    let status = match error {
+        StoreError::TaskNotFound { .. } | StoreError::SuggestionNotFound { .. } => {
+            StatusCode::NOT_FOUND
+        }
+        StoreError::MemberUnauthorized { .. } => StatusCode::FORBIDDEN,
+        StoreError::TaskRevisionConflict { .. }
+        | StoreError::CommandReceiptConflict { .. }
+        | StoreError::CollaborationConflict(_)
+        | StoreError::TaskExecutorBusy { .. } => StatusCode::CONFLICT,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    (
+        status,
+        Json(serde_json::json!({ "error": error.to_string() })),
+    )
+        .into_response()
+}
+
+fn publish_task_snapshot(st: &ServerState, task_id: &TaskId, revision: u64) {
+    let _ = st.events.send(Event::TaskSnapshotChanged {
+        session: None,
+        task_id: task_id.clone(),
+        revision,
+    });
+}
+
+async fn team_workspace(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+    let actor_id = match team_actor(&st, &headers) {
+        Ok(actor_id) => actor_id,
+        Err(response) => return response,
+    };
+    let workspace = match st.store.workspace() {
+        Ok(Some(workspace)) => workspace,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Workspace is not configured").into_response(),
+        Err(error) => return team_store_error(error),
+    };
+    let me = match st.store.member(&actor_id) {
+        Ok(Some(member)) => member,
+        Ok(None) => return (StatusCode::FORBIDDEN, "Member is unknown").into_response(),
+        Err(error) => return team_store_error(error),
+    };
+    let members = match st.store.list_members() {
+        Ok(members) => members,
+        Err(error) => return team_store_error(error),
+    };
+    Json(TeamWorkspaceReply {
+        workspace,
+        me,
+        members,
+    })
+    .into_response()
+}
+
+async fn team_tasks(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+    let actor_id = match team_actor(&st, &headers) {
+        Ok(actor_id) => actor_id,
+        Err(response) => return response,
+    };
+    match st.store.list_shared_tasks(&actor_id) {
+        Ok(tasks) => Json(tasks).into_response(),
+        Err(error) => team_store_error(error),
+    }
+}
+
+async fn team_attention(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+    let actor_id = match team_actor(&st, &headers) {
+        Ok(actor_id) => actor_id,
+        Err(response) => return response,
+    };
+    match st.store.list_attention_items(&actor_id) {
+        Ok(items) => Json(items).into_response(),
+        Err(error) => team_store_error(error),
+    }
+}
+
+async fn team_task(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let actor_id = match team_actor(&st, &headers) {
+        Ok(actor_id) => actor_id,
+        Err(response) => return response,
+    };
+    match st.store.shared_task_snapshot(&TaskId::new(id), &actor_id) {
+        Ok(snapshot) => Json(snapshot).into_response(),
+        Err(error) => team_store_error(error),
+    }
+}
+
+async fn team_create_task(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(body): Json<TeamCreateTaskBody>,
+) -> Response {
+    let actor_id = match team_actor(&st, &headers) {
+        Ok(actor_id) => actor_id,
+        Err(response) => return response,
+    };
+    let workspace = match st.store.workspace() {
+        Ok(Some(workspace)) => workspace,
+        Ok(None) => return (StatusCode::CONFLICT, "Workspace is not configured").into_response(),
+        Err(error) => return team_store_error(error),
+    };
+    let task_id = TaskId::new(body.task_id);
+    let task = Task {
+        id: task_id.clone(),
+        status: TaskStatus::Active,
+        result_contract: ResultContract {
+            goal: body.goal.trim().to_string(),
+            required_deliverables: Vec::new(),
+            completion_conditions: Vec::new(),
+            boundaries: Vec::new(),
+            known_risks: Vec::new(),
+            unresolved_facts: Vec::new(),
+        },
+        provider_configuration: ProviderConfiguration {
+            provider: body.provider,
+            model: body.model,
+            reasoning_effort: body.reasoning_effort,
+        },
+        budget: TaskBudget {
+            max_cost_microusd: None,
+            max_tokens: None,
+            max_duration_seconds: None,
+        },
+    };
+    let collaborators = body
+        .collaborator_ids
+        .into_iter()
+        .map(MemberId::new)
+        .collect::<Vec<_>>();
+    match st.store.create_shared_task(
+        &task,
+        &workspace.id,
+        &actor_id,
+        &collaborators,
+        &body.cwd,
+        now_millis(),
+    ) {
+        Ok(snapshot) => {
+            publish_task_snapshot(&st, &task_id, snapshot.collaboration.revision);
+            (StatusCode::CREATED, Json(snapshot)).into_response()
+        }
+        Err(error) => team_store_error(error),
+    }
+}
+
+async fn team_add_comment(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<TeamTextMutationBody>,
+) -> Response {
+    let actor_id = match team_actor(&st, &headers) {
+        Ok(actor_id) => actor_id,
+        Err(response) => return response,
+    };
+    let task_id = TaskId::new(id);
+    match st.store.add_task_comment(
+        &task_id,
+        &actor_id,
+        body.expected_revision,
+        &body.body,
+        now_millis(),
+    ) {
+        Ok(snapshot) => {
+            publish_task_snapshot(&st, &task_id, snapshot.revision);
+            Json(snapshot).into_response()
+        }
+        Err(error) => team_store_error(error),
+    }
+}
+
+async fn team_create_suggestion(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<TeamTextMutationBody>,
+) -> Response {
+    let actor_id = match team_actor(&st, &headers) {
+        Ok(actor_id) => actor_id,
+        Err(response) => return response,
+    };
+    let task_id = TaskId::new(id);
+    match st.store.create_task_suggestion(
+        &task_id,
+        &actor_id,
+        body.expected_revision,
+        &body.body,
+        now_millis(),
+    ) {
+        Ok(snapshot) => {
+            publish_task_snapshot(&st, &task_id, snapshot.revision);
+            (StatusCode::CREATED, Json(snapshot)).into_response()
+        }
+        Err(error) => team_store_error(error),
+    }
+}
+
+async fn team_approve_suggestion(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path((id, suggestion_id)): Path<(String, String)>,
+    Json(body): Json<TeamApproveSuggestionBody>,
+) -> Response {
+    let actor_id = match team_actor(&st, &headers) {
+        Ok(actor_id) => actor_id,
+        Err(response) => return response,
+    };
+    let task_id = TaskId::new(id);
+    let suggestion_id = SuggestionId::new(suggestion_id);
+    let approval = match st.store.approve_task_suggestion(
+        &task_id,
+        &suggestion_id,
+        &actor_id,
+        &body.command_id,
+        body.expected_revision,
+        now_millis(),
+    ) {
+        Ok(approval) => approval,
+        Err(error) => return team_store_error(error),
+    };
+    publish_task_snapshot(&st, &task_id, approval.receipt.revision);
+
+    if !approval.replayed && approval.receipt.execution_claimed {
+        let before = match st.store.shared_task_snapshot(&task_id, &actor_id) {
+            Ok(snapshot) => snapshot,
+            Err(error) => return team_store_error(error),
+        };
+        let suggestion = match before
+            .collaboration
+            .suggestions
+            .iter()
+            .find(|suggestion| suggestion.id == suggestion_id)
+        {
+            Some(suggestion) => suggestion.clone(),
+            None => {
+                return team_store_error(StoreError::SuggestionNotFound {
+                    task_id: task_id.as_str().to_string(),
+                    suggestion_id: suggestion_id.as_str().to_string(),
+                })
+            }
+        };
+        let creation = ParallelTaskCreation {
+            provider: before.runtime.provider_configuration.provider.clone(),
+            cwd: before.collaboration.cwd.clone(),
+            worktree_base: WorktreeBaseline::Current,
+            worktree_base_sha: body.worktree_base_sha,
+            request_id: format!("team-approve:{}", body.command_id),
+            model: before.runtime.provider_configuration.model.clone(),
+            initial_policy: None,
+            reasoning_effort: before
+                .runtime
+                .provider_configuration
+                .reasoning_effort
+                .clone(),
+            task_id: task_id.clone(),
+            goal: suggestion.body.clone(),
+        };
+        if let Err(error) = st.engine.attach_parallel_task_session(creation).await {
+            let message = error.to_string();
+            if let Ok(revision) = st.store.fail_suggestion_execution(
+                &task_id,
+                &suggestion_id,
+                &actor_id,
+                &message,
+                now_millis(),
+            ) {
+                publish_task_snapshot(&st, &task_id, revision);
+            }
+            return (StatusCode::INTERNAL_SERVER_ERROR, message).into_response();
+        }
+        let runtime = match st.store.task_snapshot(&task_id) {
+            Ok(runtime) => runtime,
+            Err(error) => return team_store_error(error),
+        };
+        let session_id = runtime
+            .session_leases
+            .iter()
+            .filter(|lease| lease.released_at_ms.is_none())
+            .max_by_key(|lease| lease.lease_id)
+            .map(|lease| lease.session_id.clone());
+        let Some(session_id) = session_id else {
+            let message = "Core did not attach an execution Session";
+            if let Ok(revision) = st.store.fail_suggestion_execution(
+                &task_id,
+                &suggestion_id,
+                &actor_id,
+                message,
+                now_millis(),
+            ) {
+                publish_task_snapshot(&st, &task_id, revision);
+            }
+            return (StatusCode::INTERNAL_SERVER_ERROR, message).into_response();
+        };
+        let revision = match st.store.link_suggestion_execution(
+            &task_id,
+            &suggestion_id,
+            &actor_id,
+            &session_id,
+            now_millis(),
+        ) {
+            Ok(revision) => revision,
+            Err(error) => return team_store_error(error),
+        };
+        publish_task_snapshot(&st, &task_id, revision);
+        if let Err(error) = st
+            .engine
+            .submit(Op::Prompt {
+                session: session_id,
+                doc: vec![DocBlock::Text {
+                    text: suggestion.body,
+                }],
+                request_id: Some(format!("team-execute:{}", body.command_id)),
+            })
+            .await
+        {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Session was attached but the Suggestion could not start: {error}"),
+            )
+                .into_response();
+        }
+    }
+
+    match st.store.shared_task_snapshot(&task_id, &actor_id) {
+        Ok(snapshot) => Json(TeamApproveSuggestionReply {
+            receipt: approval.receipt,
+            snapshot,
+        })
+        .into_response(),
+        Err(error) => team_store_error(error),
+    }
+}
+
 fn bearer_from(headers: &HeaderMap) -> Option<&str> {
     headers
         .get(header::AUTHORIZATION)?
@@ -1399,6 +1977,13 @@ async fn terminal_ws_handler(
             None => return (StatusCode::UNAUTHORIZED, "invalid or expired ticket").into_response(),
         }
     };
+    if st.auth.member_for_device(&device_id).is_some() {
+        return (
+            StatusCode::FORBIDDEN,
+            "team members cannot operate the shared terminal directly",
+        )
+            .into_response();
+    }
     let registry = st.terminals.clone();
     ws.on_upgrade(move |socket| terminal::handle_socket(socket, registry, device_id))
 }
@@ -1432,8 +2017,33 @@ fn validate_canvas_op(st: &ServerState, _device_id: &str, op: &Op) -> Result<(),
     Ok(())
 }
 
+fn op_session_id(op: &Op) -> Option<&str> {
+    match op {
+        Op::NewSession { .. } => None,
+        Op::Prompt { session, .. }
+        | Op::Cancel { session }
+        | Op::AnswerPermission { session, .. }
+        | Op::AnswerElicitation { session, .. }
+        | Op::SetPermissionMode { session, .. }
+        | Op::SetSandbox { session, .. }
+        | Op::SetExecutionPolicy { session, .. }
+        | Op::SetModel { session, .. }
+        | Op::SetConfigOption { session, .. } => Some(session),
+    }
+}
+
+fn event_session_id(event: &Event) -> Option<String> {
+    serde_json::to_value(event)
+        .ok()?
+        .get("session")?
+        .as_str()
+        .map(str::to_string)
+}
+
 async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: String) {
     let (mut sender, mut receiver) = socket.split();
+    let team_member_id = st.auth.member_for_device(&device_id).map(MemberId::new);
+    let mut revocations = st.auth.subscribe_revocations();
 
     // One outbound lane per client: engine events and request replies both go through it, so the
     // socket sender lives in exactly one task.
@@ -1441,7 +2051,22 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
 
     // Welcome: a snapshot of sessions.
     let welcome = match st.engine.list_sessions() {
-        Ok(sessions) => Outbound::Sessions { sessions },
+        Ok(mut sessions) => {
+            if let Some(member_id) = &team_member_id {
+                sessions.retain(|session| {
+                    st.store
+                        .member_can_access_session(member_id, &session.id)
+                        .unwrap_or(false)
+                });
+            } else {
+                sessions.retain(|session| {
+                    !st.store
+                        .session_is_team_managed(&session.id)
+                        .unwrap_or(true)
+                });
+            }
+            Outbound::Sessions { sessions }
+        }
         Err(error) => Outbound::SessionsError {
             message: error.to_string(),
         },
@@ -1452,10 +2077,41 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
     // buffer is told what it missed and stays connected, instead of being silently dropped.
     let mut ev_rx = st.events.subscribe();
     let ev_out = out_tx.clone();
+    let event_store = st.store.clone();
+    let event_member_id = team_member_id.clone();
     let event_task = tokio::spawn(async move {
         loop {
             match ev_rx.recv().await {
                 Ok(ev) => {
+                    if let Some(member_id) = &event_member_id {
+                        let visible = match &ev {
+                            Event::TaskSnapshotChanged { task_id, .. } => event_store
+                                .member_can_access_task(member_id, task_id)
+                                .unwrap_or(false),
+                            _ => event_session_id(&ev).is_some_and(|session_id| {
+                                event_store
+                                    .member_can_access_session(member_id, &session_id)
+                                    .unwrap_or(false)
+                            }),
+                        };
+                        if !visible {
+                            continue;
+                        }
+                    } else {
+                        let team_event = match &ev {
+                            Event::TaskSnapshotChanged { .. } => true,
+                            _ => event_session_id(&ev).is_some_and(|session_id| {
+                                event_store
+                                    .session_is_team_managed(&session_id)
+                                    .unwrap_or(true)
+                            }),
+                        };
+                        if team_event {
+                            // Team collaboration state and its execution stream are visible only
+                            // to member-bound devices. Personal clients retain personal Sessions.
+                            continue;
+                        }
+                    }
                     if ev_out.send(Outbound::Event { event: ev }).await.is_err() {
                         break;
                     }
@@ -1486,6 +2142,8 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
     let (in_tx, mut in_rx) = mpsc::channel::<Inbound>(16);
     let work_engine = st.engine.clone();
     let work_out = out_tx.clone();
+    let work_member_id = team_member_id.clone();
+    let work_device_id = device_id.clone();
     let _work_task = tokio::spawn(async move {
         while let Some(inbound) = in_rx.recv().await {
             match inbound {
@@ -1499,7 +2157,45 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
                         } => (Some(session.clone()), request_id.clone()),
                         _ => (None, None),
                     };
-                    if let Err(error) = validate_canvas_op(&st, &device_id, &op) {
+                    if let Some(member_id) = &work_member_id {
+                        let allowed = op_session_id(&op).is_some_and(|session_id| {
+                            st.store
+                                .member_controls_session(member_id, session_id)
+                                .unwrap_or(false)
+                        });
+                        if !allowed {
+                            let _ = work_out
+                                .send(Outbound::Event {
+                                    event: Event::Error {
+                                        session,
+                                        message:
+                                            "Task owner approval is required for this operation"
+                                                .into(),
+                                        terminal: true,
+                                        request_id,
+                                    },
+                                })
+                                .await;
+                            continue;
+                        }
+                    } else if op_session_id(&op).is_some_and(|session_id| {
+                        st.store.session_is_team_managed(session_id).unwrap_or(true)
+                    }) {
+                        let _ = work_out
+                            .send(Outbound::Event {
+                                event: Event::Error {
+                                    session,
+                                    message:
+                                        "A member-bound device is required for shared Task Sessions"
+                                            .into(),
+                                    terminal: true,
+                                    request_id,
+                                },
+                            })
+                            .await;
+                        continue;
+                    }
+                    if let Err(error) = validate_canvas_op(&st, &work_device_id, &op) {
                         let _ = work_out
                             .send(Outbound::Event {
                                 event: Event::Error {
@@ -1533,35 +2229,79 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
                     before,
                     limit,
                     request_id,
-                }) => match work_engine.transcript_page(
-                    &session,
-                    before,
-                    limit.unwrap_or(DEFAULT_TRANSCRIPT_TURNS),
-                ) {
-                    Ok(page) => {
-                        let _ = work_out
-                            .send(Outbound::Transcript {
-                                session,
-                                request_id,
-                                entries: page.entries,
-                                next_before: page.next_before,
-                                snapshot_through: page.snapshot_through,
-                            })
-                            .await;
-                    }
-                    Err(error) => {
+                }) => {
+                    if let Some(member_id) = &work_member_id {
+                        if !st
+                            .store
+                            .member_can_access_session(member_id, &session)
+                            .unwrap_or(false)
+                        {
+                            let _ = work_out
+                                .send(Outbound::TranscriptError {
+                                    session,
+                                    request_id,
+                                    message: "Session is not visible to this Member".into(),
+                                })
+                                .await;
+                            continue;
+                        }
+                    } else if st.store.session_is_team_managed(&session).unwrap_or(true) {
                         let _ = work_out
                             .send(Outbound::TranscriptError {
                                 session,
                                 request_id,
-                                message: error.to_string(),
+                                message:
+                                    "A member-bound device is required for shared Task Sessions"
+                                        .into(),
                             })
                             .await;
+                        continue;
                     }
-                },
+                    match work_engine.transcript_page(
+                        &session,
+                        before,
+                        limit.unwrap_or(DEFAULT_TRANSCRIPT_TURNS),
+                    ) {
+                        Ok(page) => {
+                            let _ = work_out
+                                .send(Outbound::Transcript {
+                                    session,
+                                    request_id,
+                                    entries: page.entries,
+                                    next_before: page.next_before,
+                                    snapshot_through: page.snapshot_through,
+                                })
+                                .await;
+                        }
+                        Err(error) => {
+                            let _ = work_out
+                                .send(Outbound::TranscriptError {
+                                    session,
+                                    request_id,
+                                    message: error.to_string(),
+                                })
+                                .await;
+                        }
+                    }
+                }
                 Inbound::Req(Req::Sessions) => {
                     let reply = match work_engine.list_sessions() {
-                        Ok(sessions) => Outbound::Sessions { sessions },
+                        Ok(mut sessions) => {
+                            if let Some(member_id) = &work_member_id {
+                                sessions.retain(|session| {
+                                    st.store
+                                        .member_can_access_session(member_id, &session.id)
+                                        .unwrap_or(false)
+                                });
+                            } else {
+                                sessions.retain(|session| {
+                                    !st.store
+                                        .session_is_team_managed(&session.id)
+                                        .unwrap_or(true)
+                                });
+                            }
+                            Outbound::Sessions { sessions }
+                        }
                         Err(error) => Outbound::SessionsError {
                             message: error.to_string(),
                         },
@@ -1589,9 +2329,27 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: Strin
     });
 
     // If either side ends, tear down the rest.
+    let revoked_device_id = device_id.clone();
+    let revocation_task = async move {
+        loop {
+            match revocations.recv().await {
+                Ok(device_id) if device_id == revoked_device_id => break,
+                Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => std::future::pending::<()>().await,
+            }
+        }
+    };
+    tokio::pin!(revocation_task);
     tokio::select! {
         _ = &mut send_task => { recv_task.abort(); event_task.abort(); }
         _ = &mut recv_task => { send_task.abort(); event_task.abort(); }
+        _ = &mut revocation_task => {
+            // Disconnect immediately so the revoked device cannot submit or read anything else.
+            // Work already accepted into the ordered lane keeps the same disconnect semantics.
+            send_task.abort();
+            recv_task.abort();
+            event_task.abort();
+        }
     }
 }
 
@@ -1944,8 +2702,9 @@ const INDEX_HTML: &str = include_str!("client.html");
 #[cfg(test)]
 mod tests {
     use super::{
-        DeviceSyncHttp, DeviceSyncIdentity, DeviceSyncReplica, DeviceSyncWriteResult,
-        DeviceSyncWriteState, Outbound, PairingEndpoint, TranscriptCursor, TranscriptEntry,
+        web_ui_command_allowed, DeviceSyncHttp, DeviceSyncIdentity, DeviceSyncReplica,
+        DeviceSyncWriteResult, DeviceSyncWriteState, Outbound, PairingEndpoint, TranscriptCursor,
+        TranscriptEntry,
     };
     use codetwo_core::device_sync::{device_sync_snapshot_version, DeviceSyncDocument};
     use codetwo_core::provider::ProviderId;
@@ -1963,6 +2722,16 @@ mod tests {
             url: format!("http://{id}.example/"),
             qr_shareable,
         }
+    }
+
+    #[test]
+    fn browser_renderer_has_one_bounded_core_capability_set() {
+        assert!(web_ui_command_allowed("sessions.list"));
+        assert!(web_ui_command_allowed("engine.prompt"));
+        assert!(web_ui_command_allowed("workspace.default_cwd"));
+        assert!(!web_ui_command_allowed("plugins.set_trusted"));
+        assert!(!web_ui_command_allowed("remote.stop"));
+        assert!(!web_ui_command_allowed("workspace.delete"));
     }
 
     fn git(cwd: &std::path::Path, args: &[&str]) {
@@ -2176,11 +2945,8 @@ mod tests {
     #[tokio::test]
     async fn c2_device_sync_routes_pair_conflict_and_revoke_independently() {
         let store = Arc::new(Store::open_in_memory().unwrap());
-        let (engine, events) = Engine::with_store(
-            Vec::new(),
-            SkillLibrary::new(Vec::new()),
-            store.clone(),
-        );
+        let (engine, events) =
+            Engine::with_store(Vec::new(), SkillLibrary::new(Vec::new()), store.clone());
         let events = super::fanout(events);
         let auth = Arc::new(super::AuthState::load(None));
         let token = auth.issue_c2_pairing_token(Duration::from_secs(60));
@@ -2230,11 +2996,7 @@ mod tests {
             .unwrap();
         assert_eq!(replay.status(), reqwest::StatusCode::UNAUTHORIZED);
 
-        let unauthorized = client
-            .get(format!("{base}/snapshot"))
-            .send()
-            .await
-            .unwrap();
+        let unauthorized = client.get(format!("{base}/snapshot")).send().await.unwrap();
         assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
 
         let snapshot = client

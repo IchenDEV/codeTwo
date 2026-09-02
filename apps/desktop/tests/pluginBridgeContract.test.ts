@@ -15,6 +15,7 @@ function rustFiles(directory: string): string[] {
 describe("plugin bridge contract", () => {
   test("keeps one typed renderer request and one versioned Plugin Kernel process boundary", () => {
     const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
+    const coreTransport = readFileSync(resolve(desktop, "src/coreTransport.ts"), "utf8");
     const client = readFileSync(resolve(desktop, "src/electrobun/client.ts"), "utf8");
     const main = readFileSync(resolve(desktop, "src/electrobun/index.ts"), "utf8");
     const adapter = readFileSync(resolve(desktop, "src/electrobun/nativeHost.ts"), "utf8");
@@ -34,7 +35,9 @@ describe("plugin bridge contract", () => {
       "utf8",
     );
 
-    expect(bridge).toContain("return desktopCall<T>(name, args ?? null, projectPath)");
+    expect(bridge).toContain("return coreCall<T>(name, args ?? null, projectPath)");
+    expect(coreTransport).toContain("call: desktopCall");
+    expect(coreTransport).toContain("listen: listenDesktop");
     expect(bridge).toContain("projectPath: string | null = callProjectPath");
     expect(bridge).toContain(
       'call<ManagedPluginCatalog>("plugins.catalog", { scope: managedPluginScopeToWire(scope) }, null)',
@@ -59,7 +62,7 @@ describe("plugin bridge contract", () => {
     expect(macBundlePatch).not.toContain('"--deep"');
     expect(macPackageSigning).toContain('join(bundle, "Contents", "Resources", metadata)');
     expect(macPackageSigning).toContain('"--force", "--deep", "--sign", "-"');
-    expect(`${bridge}\n${client}\n${main}\n${host}`).not.toContain("@tauri-apps");
+    expect(`${bridge}\n${coreTransport}\n${client}\n${main}\n${host}`).not.toContain("@tauri-apps");
     expect(`${main}\n${adapter}`).not.toContain("PureBunHost");
     for (const legacyHost of ["builtinPlugins.ts", "database.ts", "index.ts", "remote.ts"]) {
       expect(existsSync(resolve(desktop, "src/electrobun/host", legacyHost))).toBe(false);

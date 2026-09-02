@@ -46,6 +46,7 @@ import {
   type GitPhase,
   type SourceControlLoadState,
 } from "./state";
+import { GitSyncStatus } from "./GitSyncStatus";
 
 type DiffSelection =
   | { kind: "working"; scope: GitDiffScope; path: string | null; label: string }
@@ -544,8 +545,7 @@ export function SourceControlModal({
               <span className="flex items-center gap-1 text-metadata font-semibold text-primary">
                 <GitBranch className="size-3.5" aria-hidden="true" />
                 {status.branch}
-                {status.ahead > 0 && ` ↑${status.ahead}`}
-                {status.behind > 0 && ` ↓${status.behind}`}
+                <GitSyncStatus ahead={status.ahead} behind={status.behind} />
               </span>
             )}
             <TooltipButton

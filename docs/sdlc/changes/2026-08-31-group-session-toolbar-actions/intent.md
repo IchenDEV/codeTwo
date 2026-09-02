@@ -5,7 +5,7 @@ schema: 3
 status: accepted
 owner: codex
 created: 2026-08-31
-source: user-supplied session-toolbar screenshots and iterative visual feedback on 2026-08-31
+source: user-supplied session-toolbar screenshots and iterative visual feedback on 2026-08-31; View-menu browser comment requesting shortcuts on 2026-09-02
 risk: medium
 approved_by: "[user]"
 approved_at: "2026-08-31"

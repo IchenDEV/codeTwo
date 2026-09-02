@@ -73,7 +73,9 @@ import {
   gitDiffStat,
   gitPush,
   gitRevert,
+  gitSourceControlInfo,
   gitStatus,
+  githubCurrentPullRequest,
   githubImportPlugin,
   installMarketplacePlugin,
   importPromptImage,
@@ -102,6 +104,7 @@ import {
   onAppshotCaptured,
   onAppshotFailed,
   onDeviceSyncChanged,
+  onDesktopRevealSession,
   onPluginConnectorEvent,
   onPluginsChanged,
   onEngineEvent,
@@ -128,6 +131,7 @@ import {
   setCallProjectPath,
   setKeymap,
   setModel,
+  switchProvider,
   setPluginEnabled,
   setPluginTrusted,
   setProjectAgentDefaults,
@@ -156,6 +160,7 @@ import {
   type Annotation,
   type AppshotCapture,
   type GitStatus,
+  type GitHubPullRequest,
   type GoalSnapshot,
   type GitHubPullRequestDetail,
   type Issue,
@@ -177,6 +182,7 @@ import {
   type Sandbox,
   type SessionActivity,
   type SessionInfo,
+  type SourceControlInfo,
   type SessionInteractionCapabilities,
   type SkillInfo,
   type WorktreeBaselineKind,
@@ -332,7 +338,6 @@ import {
   canvasAcceptedRequestKey,
   canvasIdsToPurgeAfterTurnStart,
   canvasRetryDocument,
-  canvasRetryTargetSession,
   canvasUnmountPlan,
   canvasRetryRefsForTerminal,
   isCanvasProviderImageError,
@@ -398,7 +403,8 @@ import {
   type DockTab,
 } from "./dock/Dock";
 import { BrowserPanel } from "./browser/Browser";
-import { GitDockContent } from "./git/GitDockContent";
+import { GitDockContent, PullRequestDockContent } from "./git/GitDockContent";
+import { resolveGitNextAction } from "./git/nextAction";
 import { TerminalDockContent } from "./terminal/TerminalDockContent";
 import { TrajectoryView } from "./session/TrajectoryView";
 import { SessionRail } from "./sidebar/SessionRail";
@@ -419,6 +425,7 @@ import {
   unlinkTaskPullRequest,
   type BoardTask,
 } from "./taskboard/taskBoard";
+import { continueTaskBoardPrompt } from "./taskboard/taskBoardContinuation";
 
 import {
   actionForEvent,
@@ -651,12 +658,18 @@ function localCanvasScene(
 interface GitWorkspaceData {
   status: GitStatus | null;
   diffStat: { added: number; deleted: number; truncated: boolean };
+  sourceControl: SourceControlInfo | null;
+  pullRequest: GitHubPullRequest | null;
+  forgeError: string | null;
 }
 
 const EMPTY_DIFF_STAT = { added: 0, deleted: 0, truncated: false } as const;
 const EMPTY_GIT_WORKSPACE: GitWorkspaceData = {
   status: null,
   diffStat: EMPTY_DIFF_STAT,
+  sourceControl: null,
+  pullRequest: null,
+  forgeError: null,
 };
 const EMPTY_CHECKPOINTS: Checkpoint[] = [];
 
@@ -836,6 +849,9 @@ export default function App() {
   // preview is a glance, and requerying the transcript table on every token would be absurd.
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [provider, setProvider] = useState("grok");
+  const [providerSwitchingSessions, setProviderSwitchingSessions] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [cwd, setCwd] = useState(".");
   const [mode, setMode] = useState<PermissionMode>("ask");
   const [sandbox, setSandboxState] = useState<Sandbox>("workspace_write");
@@ -1359,6 +1375,26 @@ export default function App() {
   );
   const git = currentGitWorkspace.value.status;
   const diffStat = currentGitWorkspace.value.diffStat;
+  const activeSessionRecord = useMemo(
+    () =>
+      sessions.find((session) => session.id === activeSession)
+      ?? archivedSessions.find((session) => session.id === activeSession)
+      ?? null,
+    [activeSession, archivedSessions, sessions],
+  );
+  const gitNextAction = resolveGitNextAction({
+    status: git,
+    loading: currentGitWorkspace.loading,
+    sourceControl: currentGitWorkspace.value.sourceControl,
+    pullRequest: currentGitWorkspace.value.pullRequest,
+    forgeError: currentGitWorkspace.value.forgeError,
+    taskWorktree: Boolean(
+      activeSessionRecord?.worktree_path && !activeSessionRecord.worktree_discarded,
+    ),
+    canCleanup: Boolean(
+      activeSessionRecord?.worktree_path && !activeSessionRecord.worktree_discarded,
+    ),
+  });
   const currentCheckpointWorkspace = workspaceStateForCwd(
     checkpointWorkspace,
     workspaceCwd,
@@ -1401,17 +1437,6 @@ export default function App() {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [fileReveal, setFileReveal] = useState<FileRevealTarget | null>(null);
   const fileRevealRequestRef = useRef(0);
-  // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
-  // taken over the whole column for long-form authoring. The persisted value is the default; each
-  // pane then remembers its own height in-session (see composerHByPane) so resizing one tiled
-  // composer never drags the others with it.
-  const [composerH, setComposerH] = usePersistedNumber(
-    "codetwo.composerHeight",
-    190,
-  );
-  const [composerHByPane, setComposerHByPane] = useState<Record<string, number>>(
-    {},
-  );
   const [dockWidth, setDockWidth] = usePersistedNumber(
     "codetwo.dockWidth",
     440,
@@ -1736,10 +1761,9 @@ export default function App() {
   const acceptedCanvasRequestsRef = useRef<Map<string, PendingPromptRequest>>(
     new Map(),
   );
-  // A provider picker selection after an asynchronous Canvas image rejection stages the retry in
-  // a fresh session; an existing ACP session keeps its original provider for its lifetime.
+  // An asynchronous Canvas image rejection keeps the immutable retry document until either the
+  // original provider accepts a structure-only retry or an idle runtime switch succeeds.
   const canvasProviderRetrySessionRef = useRef<string | null>(null);
-  const forceNewSessionForCanvasRetryRef = useRef(false);
   // Only session/new calls initiated by this window may take over its active conversation. A
   // remote client can create sessions on the same engine without stealing desktop focus.
   const awaitingSessionRef = useRef<string | null>(null);
@@ -1985,7 +2009,7 @@ export default function App() {
       });
       canvasProviderRetrySessionRef.current = session;
       toast(
-        "Canvas images are unsupported by this provider. Choose Send structure only in each restored Canvas, or switch provider to stage a new-session retry.",
+        "Canvas images are unsupported by this provider. Choose Send structure only in each restored Canvas, or switch provider and retry in this conversation.",
         "error",
       );
     },
@@ -2605,14 +2629,7 @@ export default function App() {
     }
   }, [refreshProjects, selectProject, toast]);
 
-  const activeSessionTitle = useMemo(
-    () =>
-      (
-        sessions.find((s) => s.id === activeSession) ??
-        archivedSessions.find((s) => s.id === activeSession)
-      )?.title ?? null,
-    [sessions, archivedSessions, activeSession],
-  );
+  const activeSessionTitle = activeSessionRecord?.title ?? null;
   const activeTitle = activeBoardTask?.title
     ?? activeSessionTitle
     ?? t(temporarySession ? "rail.newTemporarySession" : "rail.newTask");
@@ -2651,21 +2668,13 @@ export default function App() {
   const focusedDefaultModel = defaultModel;
   const focusedConfigOptions = configOptions;
   const focusedSessionUsage = sessionUsage;
-  // Composer height: the persisted value is each pane's default; resizing the focused pane also
-  // persists it so new panes inherit the latest preference.
-  const focusedComposerHeight = composerH;
-  const persistComposerHeight = setComposerH;
-
   const activeWorktreeState = useMemo(() => {
-      const stored =
-        sessions.find((session) => session.id === activeSession) ??
-        archivedSessions.find((session) => session.id === activeSession);
     return activeSessionWorktreeState(
       activeSession,
-      stored,
+      activeSessionRecord ?? undefined,
       activeSessionReceipt,
-  );
-  }, [sessions, archivedSessions, activeSession, activeSessionReceipt]);
+    );
+  }, [activeSession, activeSessionReceipt, activeSessionRecord]);
   const activeWorktreeBaseline = activeWorktreeState.baseline;
   const activeWorktreeUnknown = activeWorktreeState.legacyUnknown;
 
@@ -2683,6 +2692,7 @@ export default function App() {
   const focusedActiveProjectRecord = activeProjectRecord;
   const focusedActiveProjectName = activeProjectName;
   const focusedGit = git;
+  const focusedGitNextAction = gitNextAction;
 
   const taskBoardSessions = useMemo(
     () =>
@@ -2693,6 +2703,12 @@ export default function App() {
           archived: false,
           activity: session.activity,
           running: runningSessions.has(session.id),
+          cwd: session.cwd,
+          worktreePath: session.worktree_path,
+          projectPath: session.project_path,
+          worktreeDiscarded: session.worktree_discarded === true,
+          createdAt: session.created_at,
+          lastActiveAt: session.last_active_at,
         })),
         ...archivedSessions.map((session) => ({
           id: session.id,
@@ -2700,6 +2716,12 @@ export default function App() {
           archived: true,
           activity: session.activity,
           running: false,
+          cwd: session.cwd,
+          worktreePath: session.worktree_path,
+          projectPath: session.project_path,
+          worktreeDiscarded: session.worktree_discarded === true,
+          createdAt: session.created_at,
+          lastActiveAt: session.last_active_at,
         })),
       ],
     [archivedSessions, runningSessions, sessions],
@@ -2875,6 +2897,9 @@ export default function App() {
     let unlisten: (() => void) | null = null;
     void (async () => {
       unlisten = await onEngineEvent((ev: CoreEvent) => {
+        // Shared Task clients refetch the revisioned Task snapshot. The production TaskBoard is
+        // still local in this P0 and must not render this control-plane event as transcript data.
+        if (ev.event === "task_snapshot_changed") return;
         if (ev.event === "session_created") {
           const refreshed = refreshSessions();
           if (!matchesSessionCreation(ev, awaitingSessionRef.current)) return;
@@ -3022,7 +3047,6 @@ export default function App() {
             }
           });
           {
-            forceNewSessionForCanvasRetryRef.current = false;
             setPendingSessionRunning(false);
             setPendingCreationPane(null);
             updateRunningSession(ev.session, true);
@@ -3098,6 +3122,75 @@ export default function App() {
             );
           setSessions(rename);
           setArchivedSessions(rename);
+          return;
+        }
+        if (ev.event === "provider_changed") {
+          const nextProvider = providerLabel(ev.provider);
+          const nextModel = ev.model ?? null;
+          const applyProvider = (items: SessionInfo[]) =>
+            items.map((session) =>
+              session.id === ev.session
+                ? {
+                    ...session,
+                    provider: ev.provider,
+                    model: nextModel,
+                    acp_session_id: null,
+                  }
+                : session,
+            );
+          setSessions(applyProvider);
+          setArchivedSessions(applyProvider);
+          setProviderSwitchingSessions((current) => {
+            if (!current.has(ev.session)) return current;
+            const next = new Set(current);
+            next.delete(ev.session);
+            return next;
+          });
+          knownModelsRef.current.delete(ev.session);
+          pendingModelChangesRef.current.delete(ev.session);
+          setModelsBySession((current) => {
+            const { [ev.session]: _old, ...rest } = current;
+            return rest;
+          });
+          setCurrentModelBySession((current) => ({
+            ...current,
+            [ev.session]: nextModel,
+          }));
+          setDefaultModelBySession((current) => {
+            const { [ev.session]: _old, ...rest } = current;
+            return rest;
+          });
+          setConfigOptionsBySession((current) => ({
+            ...current,
+            [ev.session]: [],
+          }));
+          setContextWindows((current) => clearContextWindow(current, ev.session));
+          setInteractionCapabilities((current) => {
+            const { [ev.session]: _old, ...rest } = current;
+            return rest;
+          });
+          setGoals((current) => ({ ...current, [ev.session]: null }));
+          sceneEffortAppliedRef.current.delete(ev.session);
+          scenePlanAppliedRef.current.delete(ev.session);
+          if (ev.session === activeSessionRef.current) {
+            setProvider(nextProvider);
+            setModels([]);
+            setCurrentModel(nextModel);
+            setDefaultModel(null);
+            setConfigOptions([]);
+            setPlanMode(false);
+            const scene = scenesRef.current.find(
+              (candidate) => candidate.reference === activeSceneNameRef.current,
+            );
+            setScenePendingFields([
+              ...(scene?.execution?.reasoning_effort ? ["reasoning_effort"] : []),
+              ...(scene?.execution?.plan_first !== undefined ? ["plan_first"] : []),
+            ]);
+          }
+          if (canvasProviderRetrySessionRef.current === ev.session) {
+            canvasProviderRetrySessionRef.current = null;
+          }
+          refreshSessions();
           return;
         }
         if (ev.event === "worktree_discarded") {
@@ -3685,12 +3778,7 @@ export default function App() {
       toast(t("toast.alreadyRunning"));
       return;
     }
-    const targetSession = newSessionTarget
-      ? null
-      : canvasRetryTargetSession(
-          paneSession,
-          forceNewSessionForCanvasRetryRef.current,
-        );
+    const targetSession = newSessionTarget ? null : paneSession;
     const creationWorktreeBase = newSessionTarget?.worktreeBase ?? worktreeBase;
     const stagedTask = activeBoardTaskRef.current;
     const temporary = temporarySessionRef.current;
@@ -4645,6 +4733,7 @@ export default function App() {
         archivedSessions.find((s) => s.id === id);
       if (stored) {
         setCwd(stored.cwd);
+        setProvider(providerLabel(stored.provider));
         const policy = sessionExecutionPolicy(stored);
         if (policy) {
           setMode(policy.mode);
@@ -4836,6 +4925,16 @@ export default function App() {
       configOptionsBySession,
     ],
   );
+
+  useEffect(() => {
+    let dispose: (() => void) | null = null;
+    void onDesktopRevealSession(({ session }) => {
+      void selectSession(session);
+    }).then((unlisten) => {
+      dispose = unlisten;
+    });
+    return () => dispose?.();
+  }, [selectSession]);
 
   const activatePaneById = useCallback(
     (paneId: string) => {
@@ -5333,6 +5432,7 @@ export default function App() {
       "side-chat",
       ...(componentEnabled("files.surface") ? ["files" as const] : []),
       ...(componentEnabled("git.surface") ? ["git" as const] : []),
+      ...(componentEnabled("git.surface") ? ["pull-request" as const] : []),
     ],
     [componentEnabled],
   );
@@ -5430,7 +5530,7 @@ export default function App() {
       id: slug(skillDraft.name),
       name: skillDraft.name.trim(),
       description: "",
-      icon: "✦",
+      icon: null,
       payload: { kind: "fragment", text: skillDraft.text },
     });
     setSkillDraft(null);
@@ -5454,46 +5554,84 @@ export default function App() {
     const fresh = () =>
       gitRefreshSeq.current === request && (cwdRef.current || ".") === target;
     setGitWorkspace({ cwd: target, loading: true, value: EMPTY_GIT_WORKSPACE });
-    gitStatus(target)
-      .then((s) => {
-        if (!fresh()) return;
+    void (async () => {
+      const [statusResult, sourceControlResult] = await Promise.allSettled([
+        gitStatus(target),
+        gitSourceControlInfo(target),
+      ]);
+      if (!fresh()) return;
+      if (statusResult.status === "rejected") {
         setGitWorkspace({
           cwd: target,
           loading: false,
-          value: { status: s, diffStat: EMPTY_DIFF_STAT },
+          value: EMPTY_GIT_WORKSPACE,
         });
-        if (s.is_repo && s.files.length > 0) {
-          gitDiffStat(target)
-            .then((stat) => {
-              if (!fresh()) return;
-              setGitWorkspace((current) =>
-                current.cwd === target
-                  ? {
-                      ...current,
-                      value: {
-                        ...current.value,
-                        diffStat: {
-                          added: stat.added,
-                          deleted: stat.deleted,
-                          truncated: stat.truncated,
-                        },
-                      },
-                    }
-                  : current,
-              );
-            })
-            .catch(() => {});
+        return;
+      }
+
+      const status = statusResult.value;
+      const sourceControl = sourceControlResult.status === "fulfilled"
+        ? sourceControlResult.value
+        : null;
+      let forgeError = sourceControlResult.status === "rejected"
+        ? String(sourceControlResult.reason)
+        : null;
+      let pullRequest: GitHubPullRequest | null = null;
+      if (status.is_repo && sourceControl?.provider === "github") {
+        if (sourceControl.required_cli && !sourceControl.required_cli_available) {
+          forgeError = `${sourceControl.required_cli} is unavailable`;
+        } else {
+          try {
+            pullRequest = await githubCurrentPullRequest(target);
+          } catch (error) {
+            forgeError = String(error);
+          }
         }
-      })
-      .catch(() => {
-        if (fresh()) {
-          setGitWorkspace({
-            cwd: target,
-            loading: false,
-            value: EMPTY_GIT_WORKSPACE,
-          });
-        }
+      }
+
+      if (!fresh()) return;
+      setGitWorkspace({
+        cwd: target,
+        loading: false,
+        value: {
+          status,
+          diffStat: EMPTY_DIFF_STAT,
+          sourceControl,
+          pullRequest,
+          forgeError,
+        },
       });
+      if (status.is_repo && status.files.length > 0) {
+        gitDiffStat(target)
+          .then((stat) => {
+            if (!fresh()) return;
+            setGitWorkspace((current) =>
+              current.cwd === target
+                ? {
+                    ...current,
+                    value: {
+                      ...current.value,
+                      diffStat: {
+                        added: stat.added,
+                        deleted: stat.deleted,
+                        truncated: stat.truncated,
+                      },
+                    },
+                  }
+                : current,
+            );
+          })
+          .catch(() => {});
+      }
+    })().catch(() => {
+      if (fresh()) {
+        setGitWorkspace({
+          cwd: target,
+          loading: false,
+          value: EMPTY_GIT_WORKSPACE,
+        });
+      }
+    });
   }, [cwd]);
 
   const refreshCheckpoints = useCallback(() => {
@@ -5813,6 +5951,7 @@ export default function App() {
         terminal: "terminal.dock",
         files: "files.surface",
         git: "git.surface",
+        "pull-request": "git.surface",
       };
       const componentId = component[t];
       if (componentId && !componentEnabled(componentId)) {
@@ -5828,6 +5967,11 @@ export default function App() {
     },
     [componentEnabled, manualDockTab, toast],
   );
+
+  const toggleSidePanel = useCallback(() => {
+    manualDockTab(dockTabRef.current !== null ? null : "home");
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+  }, [manualDockTab]);
 
   const runProjectAction = useCallback((script: ProjectScript) => {
     if (script.kind === "prompt") {
@@ -6736,6 +6880,15 @@ export default function App() {
         case "close_panel":
           manualDockTab(null);
           break;
+        case "split_pane_right":
+          splitPaneById(focusedPaneRef.current, "right");
+          break;
+        case "split_pane_down":
+          splitPaneById(focusedPaneRef.current, "bottom");
+          break;
+        case "toggle_side_panel":
+          toggleSidePanel();
+          break;
         case "open_skill_picker":
           openSkillPickerRef.current?.();
           break;
@@ -6851,6 +7004,8 @@ export default function App() {
       openWorkingDirectory,
       toggleDock,
       manualDockTab,
+      splitPaneById,
+      toggleSidePanel,
       toggleDocMode,
       docMode,
       stepSession,
@@ -7272,33 +7427,53 @@ export default function App() {
     [refreshSessions, t, toast],
   );
 
+  const changeConversationProvider = useCallback((
+    sessionId: string | null,
+    next: string,
+    nextModel: string | null = null,
+  ) => {
+    providerPinned.current = true;
+    if (sessionId === null) {
+      setProvider(next);
+      setModels(providers.find((candidate) => candidate.id === next)?.models ?? []);
+      setCurrentModel(nextModel);
+      setDefaultModel(null);
+      setConfigOptions([]);
+      return;
+    }
+    const stored = [...sessions, ...archivedSessions].find(
+      (candidate) => candidate.id === sessionId,
+    );
+    if (stored && providerLabel(stored.provider) === next) return;
+    if (runningSessionsRef.current.has(sessionId)) {
+      toast(t("toast.providerSwitchBusy"), "error");
+      return;
+    }
+    setProviderSwitchingSessions((current) => new Set(current).add(sessionId));
+    void switchProvider(sessionId, next, nextModel)
+      .catch((error) => {
+        toast(t("toast.providerSwitchFailed", { error: String(error) }), "error");
+      })
+      .finally(() => {
+        setProviderSwitchingSessions((current) => {
+          if (!current.has(sessionId)) return current;
+          const remaining = new Set(current);
+          remaining.delete(sessionId);
+          return remaining;
+        });
+      });
+  }, [archivedSessions, providers, sessions, t, toast]);
+
   const sessionConfig: SessionConfig = {
     providers,
     providersStatus,
     provider,
-    onProvider: (p) => {
-      providerPinned.current = true;
-      setProvider(p);
-      if (activeSessionRef.current === null) {
-        setCurrentModel(null);
-        setDefaultModel(null);
-        setConfigOptions([]);
-      }
-      if (canvasProviderRetrySessionRef.current !== null) {
-        // ACP sessions keep their provider. Switching after an asynchronous Canvas image failure
-        // therefore stages a fresh session instead of silently resubmitting to the failed one.
-        canvasProviderRetrySessionRef.current = null;
-        forceNewSessionForCanvasRetryRef.current = true;
-        activeSessionRef.current = null;
-        activeSessionProvenanceRef.current = null;
-        setActiveSessionReceipt(null);
-        setActiveSession(null);
-        setFocusedTurns([]);
-        setModels([]);
-        setCurrentModel(null);
-        setDefaultModel(null);
-      }
-    },
+    onProvider: (next) => changeConversationProvider(activeSessionRef.current, next, null),
+    onProviderModel: (nextProvider, nextModel) =>
+      changeConversationProvider(activeSessionRef.current, nextProvider, nextModel),
+    providerChangeDisabled:
+      activeSession !== null &&
+      (runningSessions.has(activeSession) || providerSwitchingSessions.has(activeSession)),
     onReloadProviders: () => {
       void refreshProviders().catch(() => {});
     },
@@ -7664,6 +7839,28 @@ export default function App() {
               setShowTaskBoard(false);
               void selectSession(id);
             }}
+            onAskSession={(id, prompt) => {
+              const paneId =
+                paneBoundToSession(paneContentsRef.current, id) ??
+                focusedPaneRef.current;
+              setShowTaskBoard(false);
+              void continueTaskBoardPrompt({
+                target: { paneId, sessionId: id },
+                prompt,
+                selectSession: (sessionId, targetPaneId) =>
+                  selectSession(sessionId, targetPaneId),
+                isTargetActive: () =>
+                  focusedPaneRef.current === paneId &&
+                  paneContentsRef.current[paneId]?.sessionId === id,
+                openDocumentMode: () => setDocMode(true),
+                insertMarkdown: (markdown, mode) =>
+                  paneEditorRefsFor(paneId).insertMarkdownRef.current?.(
+                    markdown,
+                    mode,
+                  ) ?? Promise.resolve(),
+                focusEditor: () => paneEditorRefsFor(paneId).focusRef.current?.(),
+              });
+            }}
             onStartTask={startBoardTask}
             headerLeadingAction={railExpandAction}
           />
@@ -7915,13 +8112,29 @@ export default function App() {
                 const activeProjectName = paneFocused
                   ? focusedActiveProjectName
                   : activeProjectRecord?.name ?? null;
-                const git = paneFocused
-                  ? focusedGit
+                const paneGitWorkspace = paneFocused
+                  ? currentGitWorkspace
                   : workspaceStateForCwd(
                       gitWorkspace,
                       cwd || ".",
                       EMPTY_GIT_WORKSPACE,
-                    ).value.status;
+                    );
+                const git = paneFocused ? focusedGit : paneGitWorkspace.value.status;
+                const gitAction = paneFocused
+                  ? focusedGitNextAction
+                  : resolveGitNextAction({
+                      status: paneGitWorkspace.value.status,
+                      loading: paneGitWorkspace.loading,
+                      sourceControl: paneGitWorkspace.value.sourceControl,
+                      pullRequest: paneGitWorkspace.value.pullRequest,
+                      forgeError: paneGitWorkspace.value.forgeError,
+                      taskWorktree: Boolean(
+                        paneStored?.worktree_path && !paneStored.worktree_discarded,
+                      ),
+                      canCleanup: Boolean(
+                        paneStored?.worktree_path && !paneStored.worktree_discarded,
+                      ),
+                    });
                 // Per-session model/config/usage: the focused pane keeps the authoritative single
                 // values; a background pane reads its own session's recorded snapshot.
                 const models = paneFocused
@@ -7947,12 +8160,6 @@ export default function App() {
                 // Usage is polled only for the focused session; a background pane hides its cost
                 // segment rather than borrow the focused figures.
                 const sessionUsage = paneFocused ? focusedSessionUsage : null;
-                // Each pane keeps its own composer height so a resize stays local to that tile.
-                const composerH = composerHByPane[paneId] ?? focusedComposerHeight;
-                const setComposerH = (h: number) => {
-                  setComposerHByPane((prev) => ({ ...prev, [paneId]: h }));
-                  if (paneFocused) persistComposerHeight(h);
-                };
                 const activeInteractionCapabilities = activeSession
                   ? interactionCapabilities[activeSession] ?? null
                   : null;
@@ -7961,6 +8168,20 @@ export default function App() {
                   activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
                 const activeAppshots =
                   pendingAppshots[activeAppshotKey] ?? EMPTY_APPSHOTS;
+                const paneProvider = activeSession && paneStored
+                  ? providerLabel(paneStored.provider)
+                  : provider;
+                const paneSessionConfig: SessionConfig = {
+                  ...sessionConfig,
+                  provider: paneProvider,
+                  hasSession: activeSession !== null,
+                  providerChangeDisabled:
+                    activeSession !== null &&
+                    (running || providerSwitchingSessions.has(activeSession)),
+                  onProvider: (next) => changeConversationProvider(activeSession, next, null),
+                  onProviderModel: (nextProvider, nextModel) =>
+                    changeConversationProvider(activeSession, nextProvider, nextModel),
+                };
                 return (
             <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
@@ -8089,7 +8310,7 @@ export default function App() {
               </div>
 
               <SessionHeaderActions
-                canCommit={git?.is_repo === true}
+                gitAction={gitAction}
                 actions={scripts}
                 editorLaunchersAvailable={editorLaunchersAvailable}
                 fileManagerLabel={fileManagerLabel}
@@ -8099,7 +8320,11 @@ export default function App() {
                 onOpenAntigravity={() => void openWorkingDirectory("antigravity")}
                 onOpenFinder={() => void openWorkingDirectory("finder")}
                 finderHint={hint("open_finder")}
-                onCommit={openSourceControl}
+                onOpenSourceControl={openSourceControl}
+                onOpenPullRequest={() => manualDockTab("pull-request")}
+                onCleanupWorktree={() => {
+                  if (paneStored) void discardWorktreeForSession(paneStored);
+                }}
                 onCheckpoint={() => void doCheckpoint()}
                 onPush={() => void doPush().catch(() => {})}
                 onMoveTask={() => activeSession && setShowTaskHandoff(true)}
@@ -8118,12 +8343,14 @@ export default function App() {
                 }}
                 groupLabel={t("pane.layoutActions")}
                 viewLabel={t("pane.viewMenu")}
+                shortcuts={{
+                  splitRight: hint("split_pane_right"),
+                  splitDown: hint("split_pane_down"),
+                  sidePanel: hint("toggle_side_panel"),
+                }}
                 panelLabel={t("pane.sidePanel")}
                 panelActive={dockTab !== null}
-                onTogglePanel={() => {
-                  manualDockTab(dockTab !== null ? null : "home");
-                  setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-                }}
+                onTogglePanel={toggleSidePanel}
               />
             </div>
           </header>
@@ -8202,7 +8429,7 @@ export default function App() {
                           type="button"
                           variant="link"
                           size="compact"
-                          className="h-auto px-0 py-0 text-inherit decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]"
+                          className="h-auto px-0 py-0 text-inherit [font-size:inherit] [font-weight:inherit] [letter-spacing:inherit] [line-height:inherit] decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]"
                           title={activeProject ?? undefined}
                         >
                           {activeProjectName ?? t("rail.noProject")}
@@ -8235,6 +8462,7 @@ export default function App() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  {" "}
                   {t("transcript.greetingEnd")}
                 </h1>
               )}
@@ -8315,7 +8543,7 @@ export default function App() {
               )}
               <div className={cn("contents", activeArchived && "hidden")}>
                 <Composer
-                  config={sessionConfig}
+                  config={paneSessionConfig}
                   hero={turns.length === 0 && !sessionLoading}
                   checkout={{
                     project: activeProjectName ?? cwd,
@@ -8325,8 +8553,6 @@ export default function App() {
                   }}
                   docMode={docMode}
                   onDocMode={toggleDocMode}
-                  height={composerH}
-                  onHeight={setComposerH}
                   boundsRef={mainRef}
                   models={activeSession === null
                     ? providers.find((candidate) => candidate.id === provider)?.models ?? []
@@ -8565,10 +8791,23 @@ export default function App() {
                 ),
                 git: (
                   <GitDockContent
+                    status={git}
+                    action={gitNextAction}
+                    onOpenSourceControl={openSourceControl}
+                    onPush={() => void doPush().catch(() => {})}
+                    onOpenPullRequest={() => manualDockTab("pull-request")}
+                    onCleanupWorktree={() => {
+                      if (activeSessionRecord) {
+                        void discardWorktreeForSession(activeSessionRecord);
+                      }
+                    }}
+                  />
+                ),
+                "pull-request": (
+                  <PullRequestDockContent
                     cwd={cwd || null}
                     status={git}
                     onRefresh={refreshGit}
-                    onOpenSourceControl={openSourceControl}
                   />
                 ),
               }}

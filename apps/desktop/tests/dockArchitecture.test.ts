@@ -30,11 +30,15 @@ describe("Dock container and content seam", () => {
     expect(app).toContain("<TerminalDockContent");
     expect(app).toContain("<FileDockContent");
     expect(app).toContain("<GitDockContent");
+    expect(app).toContain("<PullRequestDockContent");
     expect(terminal).toContain("ptyDump");
     expect(terminal).toContain("<TerminalPanel");
     expect(files).toContain("useDirtyPaths");
     expect(files).toContain("<FileViewer");
     expect(files).toContain("<FilePanel");
+    expect(git).toContain("export function PullRequestDockContent");
     expect(git).toContain("<GitHubPullRequestPanel");
+    expect(git.indexOf("export function PullRequestDockContent"))
+      .toBeLessThan(git.indexOf("<GitHubPullRequestPanel"));
   });
 });

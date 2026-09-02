@@ -180,11 +180,17 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
   );
 }
 
-export function DesignSystemPreview() {
+export function DesignSystemPreview({
+  catalogHref = "?ui-lab=home",
+  initialThemeMode = "system",
+}: {
+  catalogHref?: string;
+  initialThemeMode?: ThemeMode;
+}) {
   const toast = useToast();
   const systemDark = useSystemDark();
   const appearance = useAppearanceSettings();
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [themeMode, setThemeMode] = useState<ThemeMode>(initialThemeMode);
   const [boldText, setBoldText] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState("codex");
   const [selectedChoice, setSelectedChoice] = useState("automatic");
@@ -252,6 +258,7 @@ export function DesignSystemPreview() {
       data-ds-theme={resolvedTheme}
     >
       <aside className="ds-preview-sidebar">
+        <a className="ds-lab-link" href={catalogHref}>← UI Lab</a>
         <div className="ds-brand-lockup">
           <span className="ds-brand-mark">C2</span>
           <div>

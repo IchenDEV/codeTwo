@@ -644,6 +644,32 @@ html[data-appearance-pointer-cursors="false"]
     animation: slide-in-right var(--motion-normal) var(--ease-standard) both;
   }
 
+  @keyframes pane-tile-enter {
+    from {
+      opacity: 0;
+      transform: translate3d(var(--pane-enter-x, 0), var(--pane-enter-y, 0), 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .pane-tile-enter {
+    animation: pane-tile-enter var(--motion-normal) var(--ease-standard);
+  }
+  .pane-tile-enter-left {
+    --pane-enter-x: -12px;
+  }
+  .pane-tile-enter-right {
+    --pane-enter-x: 12px;
+  }
+  .pane-tile-enter-top {
+    --pane-enter-y: -12px;
+  }
+  .pane-tile-enter-bottom {
+    --pane-enter-y: 12px;
+  }
+
   /* ---- floating layers ---------------------------------------------------------------------
      The shadcn components ship `animate-in`/`fade-in-0`-style utilities from a Tailwind plugin
      this project doesn't carry, so every overlay used to pop into place fully formed. These are
@@ -792,10 +818,13 @@ html[data-appearance-pointer-cursors="false"]
   }
 
   /* Keep every session in DOM and focus order while allowing WebKit to skip off-screen paint in
-     long rails. `auto` lets the browser remember the real height after a row is first revealed. */
+     long rails. `auto` remembers measured heights; the active row always paints immediately. */
   .session-rail-row {
     content-visibility: auto;
     contain-intrinsic-size: auto 64px;
+  }
+  .session-rail-row:has([aria-current="page"]) {
+    content-visibility: visible;
   }
 
   /* Archiving is reversible but spatial: the row leaves its current collection before the bridge
@@ -1022,36 +1051,6 @@ html[data-appearance-pointer-cursors="false"]
     font-weight: 600;
   }
 
-  /* The composer's top rim: drag it for any height, double-click for the full column. The grabber
-     stays invisible until you're near it, so the resting state reads as a plain card. */
-  .composer-grip {
-    height: 11px;
-    flex-shrink: 0;
-    cursor: row-resize;
-    position: relative;
-    touch-action: none;
-    user-select: none;
-  }
-  .composer-grip::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 4px;
-    transform: translateX(-50%);
-    width: 32px;
-    height: 3px;
-    border-radius: var(--ds-radius-control);
-    background: var(--muted-foreground);
-    opacity: 0;
-    transition: opacity var(--motion-fast) ease-out;
-  }
-  .composer-card:hover .composer-grip::after {
-    opacity: 0.35;
-  }
-  .composer-grip:hover::after {
-    opacity: 0.7;
-  }
-
   /* The dock's left edge as a grab target. Inside the module (not overhanging it) so the module's
      overflow clipping — which the rounded corners need — can't eat it. */
   .dock-grip {
@@ -1132,7 +1131,6 @@ html[data-appearance-pointer-cursors="false"]
     touch-action: none;
     user-select: none;
   }
-  .composer-grip:focus-visible,
   .dock-grip:focus-visible,
   .rail-grip:focus-visible {
     outline: 2px solid var(--foreground);
@@ -1528,15 +1526,15 @@ pre {
   display: none;
 }
 
+.plugin-manager-tabs {
+  gap: var(--ds-space-inline);
+}
+
+.plugin-manager-tabs .plugin-manager-tab {
+  padding-inline: var(--ds-space-inline);
+}
+
 @container plugin-manager-list (max-width: 24rem) {
-  .plugin-manager-tabs {
-    gap: var(--ds-space-optical);
-  }
-
-  .plugin-manager-tab:not(:first-of-type) {
-    padding-inline: var(--ds-space-optical);
-  }
-
   .plugin-manager-tab-count {
     display: none;
   }

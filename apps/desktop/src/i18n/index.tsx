@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { LOCALES, type Locale, type StringKey } from "./strings";
 
@@ -50,10 +50,27 @@ const I18nContext = createContext<I18nValue>({
   t: (k) => k,
 });
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] = useState<LanguagePreference>(storedPreference);
+export function I18nProvider({
+  children,
+  preferenceOverride,
+}: {
+  children: ReactNode;
+  /** A non-persistent preview value. UI Lab uses this without changing the user's app setting. */
+  preferenceOverride?: LanguagePreference;
+}) {
+  const [storedPreferenceState, setPreferenceState] = useState<LanguagePreference>(storedPreference);
+  const preference = preferenceOverride ?? storedPreferenceState;
 
   const locale: Locale = preference === "system" ? resolveSystemLocale() : preference;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.lang;
+    root.lang = locale;
+    return () => {
+      root.lang = previous;
+    };
+  }, [locale]);
 
   const t = useMemo<Translate>(() => {
     const table = LOCALES[locale].strings;
@@ -61,16 +78,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   const setPreference = useCallback((p: LanguagePreference) => {
+    if (preferenceOverride !== undefined) return;
     setPreferenceState(p);
     try {
       localStorage.setItem(STORAGE_KEY, p);
     } catch {
       /* private mode — the choice just won't survive a restart */
     }
-    // `lang` drives font fallback and hyphenation; leaving it as "en" makes CJK text render with
-    // the wrong face on some systems.
-    document.documentElement.lang = p === "system" ? resolveSystemLocale() : p;
-  }, []);
+  }, [preferenceOverride]);
 
   return (
     <I18nContext.Provider value={{ preference, locale, setPreference, t }}>

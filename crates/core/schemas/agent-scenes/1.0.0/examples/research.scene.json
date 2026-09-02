@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "title": "Research",
   "description": "Survey the problem space read-only and produce a cited research report.",
-  "icon": "🔎",
   "localizations": {
     "zh-CN": { "title": "调研", "description": "只读勘察问题空间，产出带引用的调研报告。" }
   },

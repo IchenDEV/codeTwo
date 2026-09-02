@@ -19,7 +19,7 @@ interface ToneScale {
 
 const TONE_SCALE: Record<ColorScheme, ToneScale> = {
   light: {
-    surface: 1,
+    surface: 2,
     raised: 0.25,
     sidebar: 3,
     muted: 6,

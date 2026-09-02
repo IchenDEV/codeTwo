@@ -30,6 +30,10 @@ apps/desktop, docs/sdlc/changes/2026-08-31-prevent-list-header-tab-overflow
    4px grid; correct their shared optical line with existing spacing tokens and repeat rendered QA.
 5. Record one 32px split-list content line in the layout specification, apply it to the three peer
    workbenches, and keep unrelated full-canvas page shells outside this rule.
+6. Replace the Plugin Manager compact row's asymmetric 8px/2px tab padding and 2px gap with the
+   existing 4px inline spacing token, preserving the 24rem count-hiding breakpoint.
+7. Replace the Plugin Manager category-and-search stack's 16px inline padding with the existing
+   8px spacing utility, then repeat focused and rendered checks at the annotated viewport.
 
 Rollback restores the two prior single-row headers and page-level plugin breakpoint rules; no data,
 configuration, or external state is changed.
@@ -55,6 +59,9 @@ See legacy Review and release.
 [PR #191](https://github.com/IchenDEV/codeTwo/pull/191) carries the scoped implementation and its
 schema-2 lifecycle record.
 
+[PR #219](https://github.com/IchenDEV/codeTwo/pull/219) carries the 2026-09-02 Web UI follow-up and
+the local Plugin Manager spacing correction.
+
 - Automations keeps its 48px title/action row and renders the existing accessible filter group plus
   search field in a dedicated list-control stack below it. The macOS safe-area class remains on the
   actual titlebar and the create action retains its accessible name and behavior.
@@ -75,6 +82,12 @@ schema-2 lifecycle record.
   padding keep every label inside the control width without restoring a horizontal scroller.
 - Focused assertions protect the alignment-token classes, tab-label measurement hooks, compact
   end padding, title/control separation, and existing leading-action exception.
+- The 2026-09-02 follow-up replaces Plugin Manager's asymmetric 8px/2px category padding and 2px
+  compact gap with the existing 4px inline token for every tab and every adjacent gap. The 24rem
+  container breakpoint continues to hide only numeric counts.
+- The later 2026-09-02 follow-up replaces only the Plugin Manager category-and-search control
+  stack's 16px inline inset with the existing 8px spacing utility. List cards, the detail pane,
+  category-tab spacing, and responsive breakpoints remain unchanged.
 
 ## Decision
 
@@ -90,3 +103,10 @@ The user's follow-up concern about other pages and direct request to improve the
 the same change to the peer Pull requests split-list surface and one shared 32px workbench rule.
 The user's 2026-08-31 request, “pr & merge,” separately authorizes PR creation and merge after the
 required repository checks pass; it does not authorize a product release or deployment.
+
+The user's 2026-09-02 browser annotations accept reopening this change for one local spacing
+correction: 4px inline padding on each Plugin Manager category tab and a larger 4px inter-tab gap.
+
+The user's later 2026-09-02 browser annotation accepts reopening this change for an additional
+local correction: reduce only the Plugin Manager category-and-search control stack's inline inset
+from 16px to 8px, preserving its existing responsive behavior and adjacent surfaces.

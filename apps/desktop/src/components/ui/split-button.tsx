@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { ChevronDown } from "./icons";
 
 import { cn } from "@/lib/utils";
@@ -20,7 +22,9 @@ type SplitButtonSize = "default" | "sm" | "compact" | "field";
 
 interface SplitButtonProps {
   /** Text shown on the primary (left) half. */
-  label: string;
+  label: ReactNode;
+  /** Accessible name when the visible label is responsive or otherwise composite. */
+  primaryLabel?: string;
   /** Handler for the primary button click. */
   onClick: () => void;
   /** Alternative actions rendered inside the chevron dropdown. */
@@ -29,6 +33,9 @@ interface SplitButtonProps {
   size?: SplitButtonSize;
   disabled?: boolean;
   className?: string;
+  primaryClassName?: string;
+  menuButtonClassName?: string;
+  menuLabel?: string;
   /** Where the dropdown aligns relative to the trigger. */
   menuAlign?: "start" | "center" | "end";
   menuSide?: "top" | "bottom";
@@ -48,12 +55,16 @@ const separatorClass: Record<SplitButtonVariant, string> = {
  */
 function SplitButton({
   label,
+  primaryLabel,
   onClick,
   actions,
   variant = "default",
   size = "default",
   disabled = false,
   className,
+  primaryClassName,
+  menuButtonClassName,
+  menuLabel = "More actions",
   menuAlign = "end",
   menuSide = "top",
 }: SplitButtonProps) {
@@ -64,7 +75,8 @@ function SplitButton({
         variant={variant}
         size={size}
         disabled={disabled}
-        className={className}
+        aria-label={primaryLabel}
+        className={cn(className, primaryClassName)}
         onClick={onClick}
       >
         {label}
@@ -85,7 +97,8 @@ function SplitButton({
         variant={variant}
         size={size}
         disabled={disabled}
-        className="rounded-r-none focus-visible:z-10"
+        aria-label={primaryLabel}
+        className={cn("rounded-r-none focus-visible:z-10", primaryClassName)}
         onClick={onClick}
       >
         {label}
@@ -99,10 +112,11 @@ function SplitButton({
               variant={variant}
               size={size}
               disabled={disabled}
-              aria-label="More actions"
+              aria-label={menuLabel}
               className={cn(
                 "relative rounded-l-none px-1.5 focus-visible:z-10 before:absolute before:left-0 before:h-4 before:w-px",
                 separatorClass[variant],
+                menuButtonClassName,
               )}
             >
               <ChevronDown className="size-3.5" />

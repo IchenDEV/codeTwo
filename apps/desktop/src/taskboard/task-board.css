@@ -1,0 +1,166 @@
+.task-board-page {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-board-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.task-board-panel-header {
+  min-height: 6rem;
+}
+
+.task-board-task-row,
+.task-board-list-header {
+  display: grid;
+  grid-template-columns: minmax(17rem, 1fr) 5.5rem 6.5rem 6rem;
+}
+
+.task-board-session-row {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) minmax(9rem, 13rem) 9.5rem 6rem;
+}
+
+.task-board-workspace {
+  overflow: hidden;
+}
+
+.task-board-kanban-shell {
+  overscroll-behavior-inline: contain;
+}
+
+.task-board-kanban {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(340px, 1fr));
+  min-width: calc(1360px + 1.5rem);
+}
+
+.task-board-kanban-column {
+  align-self: stretch;
+}
+
+.task-board-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 6.75rem;
+  overflow-wrap: anywhere;
+}
+
+.task-board-kanban-column [data-slot="status-indicator"] {
+  color: var(--foreground);
+  font-size: inherit;
+  font-weight: 600;
+}
+
+[data-task-board-view="board"] .task-board-layout {
+  grid-template-columns: minmax(0, 1fr) 20rem;
+}
+
+.task-board-inspector {
+  display: flex;
+  flex-direction: column;
+  margin: 0.75rem;
+  overflow: hidden;
+  border-radius: var(--ds-radius-module);
+  box-shadow: var(--ds-elevation-surface);
+}
+
+.task-board-inspector .task-board-panel-header {
+  min-height: 5.25rem;
+  padding-block: 0.5rem;
+}
+
+.task-board-inspector > [data-slot="tabs"] {
+  min-height: 0;
+}
+
+.task-board-row-action {
+  opacity: 0;
+}
+
+.task-board-task-row:hover .task-board-row-action,
+.task-board-task-row:focus-within .task-board-row-action,
+.task-board-card:hover .task-board-row-action,
+.task-board-card:focus-within .task-board-row-action {
+  opacity: 1;
+}
+
+@container (max-width: 64rem) {
+  .task-board-layout {
+    grid-template-columns: minmax(0, 1fr) 21.5rem;
+  }
+
+  [data-task-board-view="board"] .task-board-layout {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+  }
+
+  .task-board-task-row,
+  .task-board-list-header {
+    grid-template-columns: minmax(15rem, 1fr) 5rem 5.5rem;
+  }
+
+  .task-board-session-row {
+    grid-template-columns: minmax(14rem, 1fr) minmax(8rem, 1fr) 8.5rem;
+  }
+
+  .task-board-task-prs,
+  .task-board-session-updated {
+    display: none;
+  }
+}
+
+@container (max-width: 48rem) {
+  .task-board-layout {
+    display: block;
+  }
+
+  .task-board-workspace,
+  .task-board-inspector {
+    height: 100%;
+  }
+
+  .task-board-inspector {
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .task-board-inspector .task-board-panel-header {
+    min-height: 6rem;
+    padding-block: 1.25rem;
+  }
+
+  .task-board-task-row,
+  .task-board-list-header {
+    grid-template-columns: minmax(13rem, 1fr) 5.5rem;
+  }
+
+  .task-board-session-row {
+    grid-template-columns: minmax(13rem, 1fr) 8.5rem;
+  }
+
+  .task-board-task-sessions,
+  .task-board-session-checkout {
+    display: none;
+  }
+}
+
+@container (max-width: 34rem) {
+  .task-board-session-pr {
+    display: none;
+  }
+
+  .task-board-session-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-board-row-action {
+    transition-duration: 0.01ms;
+  }
+}

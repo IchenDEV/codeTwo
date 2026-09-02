@@ -9,7 +9,7 @@ based_on: plan.md
 commit: ""
 verification_mode: owner
 verified_by: "codex"
-verified_at: "2026-08-31"
+verified_at: "2026-09-02"
 release_target: none requested
 release_identity: "not applicable until released."
 ---
@@ -20,6 +20,22 @@ release_identity: "not applicable until released."
 
 Verdict: verified.
 
+- 2026-09-02 focused checks: `bun test ./tests/paneChrome.test.tsx` — 5 passed, 0 failed,
+  35 expectations; `cargo test -p codetwo-core keymap` — 3 passed, 0 failed; `bunx tsc --noEmit`
+  passed; and exact `rustfmt --check --edition 2021 crates/core/src/keymap.rs` passed.
+- `bun run build:renderer` passed ESLint, Stylelint, TypeScript, and the 6,604-module production
+  build. The existing large-chunk advisory remains non-failing.
+- Browser QA at `http://127.0.0.1:4599/` rendered `⌘⌥R`, `⌘⌥D`, and `⌘⌥P` at the trailing edge of
+  the View menu. Real keyboard input produced a 50/50 right split, then split only the focused right
+  pane into 50/50 top and bottom panes. Side panel input toggled the Dock between 339px and 0px.
+- The browser-preview transport remained intentionally unpaired, so its existing
+  `C2 Web UI is not paired` conversation-load error was visible; menu and local-layout interaction
+  remained available and no new UI runtime error appeared.
+- `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts`,
+  `bun script/verify/sdlc.ts --worktree`, and `git diff --check` passed. Whole-workspace
+  `cargo fmt --check` still reports pre-existing formatting drift in unchanged Rust files; the
+  changed keymap file passes exact rustfmt validation.
+
 - Focused post-rebase command:
   `bun test apps/desktop/tests/tabsToolbarRendered.test.tsx
   apps/desktop/tests/sessionHeaderActionsRendered.test.tsx apps/desktop/tests/paneChrome.test.tsx
@@ -64,6 +80,10 @@ Verdict: verified.
 - AC-7: PASS — `bun run build:renderer`, `bun script/verify/sdlc.ts --worktree`, and
   `git diff --check origin/main...HEAD` passed; `bun script/verify/docs.ts` is
   recorded separately because current `origin/main` has 16 unclassified website evidence images.
+- AC-8: PASS — `bun test ./tests/paneChrome.test.tsx` covers the rendered View hints, and the
+  settings page lists the same three shared actions for user rebinding.
+- AC-9: PASS — `cargo test -p codetwo-core keymap` covers the shared defaults; browser keypress
+  evidence proves focused right/down splitting and side-panel open/close behavior.
 
 Residual risk: truly compact windows necessarily return to multiple icons; accessible names and
 tooltips carry distinction there. Multiple third-party plugin actions can look similar at that
@@ -73,6 +93,22 @@ width. Native Core behavior is outside this renderer-only visual change.
 
 Verdict: verified.
 
+- 2026-09-02 focused checks: `bun test ./tests/paneChrome.test.tsx` — 5 passed, 0 failed,
+  35 expectations; `cargo test -p codetwo-core keymap` — 3 passed, 0 failed; `bunx tsc --noEmit`
+  passed; and exact `rustfmt --check --edition 2021 crates/core/src/keymap.rs` passed.
+- `bun run build:renderer` passed ESLint, Stylelint, TypeScript, and the 6,604-module production
+  build. The existing large-chunk advisory remains non-failing.
+- Browser QA at `http://127.0.0.1:4599/` rendered `⌘⌥R`, `⌘⌥D`, and `⌘⌥P` at the trailing edge of
+  the View menu. Real keyboard input produced a 50/50 right split, then split only the focused right
+  pane into 50/50 top and bottom panes. Side panel input toggled the Dock between 339px and 0px.
+- The browser-preview transport remained intentionally unpaired, so its existing
+  `C2 Web UI is not paired` conversation-load error was visible; menu and local-layout interaction
+  remained available and no new UI runtime error appeared.
+- `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts`,
+  `bun script/verify/sdlc.ts --worktree`, and `git diff --check` passed. Whole-workspace
+  `cargo fmt --check` still reports pre-existing formatting drift in unchanged Rust files; the
+  changed keymap file passes exact rustfmt validation.
+
 - Focused post-rebase command:
   `bun test apps/desktop/tests/tabsToolbarRendered.test.tsx
   apps/desktop/tests/sessionHeaderActionsRendered.test.tsx apps/desktop/tests/paneChrome.test.tsx
@@ -117,6 +153,10 @@ Verdict: verified.
 - AC-7: PASS — `bun run build:renderer`, `bun script/verify/sdlc.ts --worktree`, and
   `git diff --check origin/main...HEAD` passed; `bun script/verify/docs.ts` is
   recorded separately because current `origin/main` has 16 unclassified website evidence images.
+- AC-8: PASS — `bun test ./tests/paneChrome.test.tsx` covers the rendered View hints, and the
+  settings page lists the same three shared actions for user rebinding.
+- AC-9: PASS — `cargo test -p codetwo-core keymap` covers the shared defaults; browser keypress
+  evidence proves focused right/down splitting and side-panel open/close behavior.
 
 Residual risk: truly compact windows necessarily return to multiple icons; accessible names and
 tooltips carry distinction there. Multiple third-party plugin actions can look similar at that
@@ -142,6 +182,7 @@ Verdict: verified..
 
 Approval: implementation, final screenshot review, and PR creation were authorized by the user.
 Review surface: [PR #198](https://github.com/IchenDEV/codeTwo/pull/198).
+Follow-up review surface: [Draft PR #219](https://github.com/IchenDEV/codeTwo/pull/219).
 Release target: none requested.
 Release identity: not applicable until released.
 Smoke evidence: renderer evidence is recorded above.

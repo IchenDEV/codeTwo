@@ -5,7 +5,7 @@ schema: 3
 status: accepted
 owner: codex
 created: 2026-08-31
-source: user-supplied clipping and alignment screenshots plus direct remediation requests on 2026-08-31
+source: user-supplied clipping and alignment screenshots plus direct remediation requests on 2026-08-31; Plugin Manager tab spacing and control-stack inset annotations on 2026-09-02
 risk: low
 approved_by: "userthe 2026-08-31 screenshot feedback and PR-and-merge request"
 approved_at: "2026-08-31"
@@ -49,6 +49,13 @@ the same change to the peer Pull requests split-list surface and one shared 32px
 The user's 2026-08-31 request, “pr & merge,” separately authorizes PR creation and merge after the
 required repository checks pass; it does not authorize a product release or deployment.
 
+The user's 2026-09-02 browser annotations accept reopening this change for one local spacing
+correction: 4px inline padding on each Plugin Manager category tab and a larger 4px inter-tab gap.
+
+The user's later 2026-09-02 browser annotation accepts reopening this change for an additional
+local correction: reduce only the Plugin Manager category-and-search control stack's inline inset
+from 16px to 8px, preserving its existing responsive behavior and adjacent surfaces.
+
 ## Out of scope
 
 Not recorded in the legacy single-file Artifact.
@@ -75,3 +82,10 @@ The user's follow-up concern about other pages and direct request to improve the
 the same change to the peer Pull requests split-list surface and one shared 32px workbench rule.
 The user's 2026-08-31 request, “pr & merge,” separately authorizes PR creation and merge after the
 required repository checks pass; it does not authorize a product release or deployment.
+
+The user's 2026-09-02 browser annotations accept reopening this change for one local spacing
+correction: 4px inline padding on each Plugin Manager category tab and a larger 4px inter-tab gap.
+
+The user's later 2026-09-02 browser annotation accepts reopening this change for an additional
+local correction: reduce only the Plugin Manager category-and-search control stack's inline inset
+from 16px to 8px, preserving its existing responsive behavior and adjacent surfaces.

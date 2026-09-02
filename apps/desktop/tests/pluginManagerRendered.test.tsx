@@ -431,6 +431,8 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelectorAll(".plugin-manager-tab-count")).toHaveLength(5);
     expect(view.container.querySelectorAll("[data-plugin-manager-tab-label]")).toHaveLength(5);
     const listControls = view.container.querySelector("[data-plugin-manager-list-controls]");
+    expect(listControls?.className).toContain("px-2");
+    expect(listControls?.className).not.toContain("px-4");
     expect(listControls?.querySelectorAll('[role="tab"]')).toHaveLength(5);
     expect(listControls?.querySelector("[data-plugin-manager-search]")).not.toBeNull();
     expect(listControls?.querySelector("[data-plugin-manager-search-field]")).not.toBeNull();
@@ -438,8 +440,9 @@ describe("PluginManagerPage", () => {
       .toContain("ms-inline");
     expect(desktopStyles).toContain("container: plugin-manager-list / inline-size");
     expect(desktopStyles).toContain("@container plugin-manager-list (max-width: 24rem)");
-    expect(desktopStyles).toContain(".plugin-manager-tab:not(:first-of-type)");
-    expect(desktopStyles).toContain("padding-inline: var(--ds-space-optical)");
+    expect(desktopStyles).toMatch(/\.plugin-manager-tabs\s*{[^}]*gap:\s*var\(--ds-space-inline\)/s);
+    expect(desktopStyles).toMatch(/\.plugin-manager-tabs \.plugin-manager-tab\s*{[^}]*padding-inline:\s*var\(--ds-space-inline\)/s);
+    expect(desktopStyles).not.toContain(".plugin-manager-tab:not(:first-of-type)");
     expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();
     expect(view.container.querySelector("[data-plugin-manager-page]")?.getAttribute("data-compact-detail")).toBe("true");
     expect(view.container.querySelector("[data-plugin-manager-scroll]")?.classList.contains("w-full")).toBe(true);

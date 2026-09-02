@@ -15,7 +15,7 @@ export function PluginUiSlot({
   onInvoke,
   activeCommand,
 }: {
-  slot: PluginUiSlotId;
+  slot: Exclude<PluginUiSlotId, "host.actions">;
   contributions: ActivePluginUiContribution[];
   onInvoke: (contribution: ActivePluginUiContribution) => Promise<void>;
   activeCommand?: string;

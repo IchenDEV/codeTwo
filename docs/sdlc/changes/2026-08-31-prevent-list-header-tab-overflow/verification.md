@@ -9,7 +9,7 @@ based_on: plan.md
 commit: ""
 verification_mode: owner
 verified_by: "codex"
-verified_at: "2026-08-31"
+verified_at: "2026-09-02"
 release_target: none requested
 release_identity: "not applicable until released."
 ---
@@ -56,6 +56,22 @@ Verdict: verified.
   and `bun script/verify/sdlc.ts` then passed. The first `--worktree` pass correctly rejected the
   transitional deletion of the pre-rebase flat Artifact until the migration was folded into the
   branch commit.
+- The 2026-09-02 focused follow-up passed 18 tests and 127 expectations in
+  `pluginManagerRendered.test.tsx`, plus `bunx tsc --noEmit` and a fresh static Web UI build.
+  Browser measurement at the annotated 1247x1576 viewport found 4px left/right padding on all five
+  category tabs, four exact 4px adjacent gaps, and a tab list whose client and scroll widths both
+  measured 310px. All five categories remained clickable and ArrowRight moved focus from Hooks to
+  Marketplace. The only console errors were the existing unpaired-static-Web-UI transport errors.
+- The later 2026-09-02 focused follow-up passed 18 tests and 129 expectations in
+  `pluginManagerRendered.test.tsx`. `bun run build:renderer` passed ESLint, Stylelint, TypeScript,
+  and the 6,604-module production Vite build; a fresh static Web UI build also passed with the same
+  module count and existing large-chunk advisory. Because the Browser plugin was not available in
+  this environment, local Playwright measured the rendered page at the annotated 1247x1576
+  viewport: the control stack had exactly 8px left and right padding, the category row retained
+  matching 310px client/scroll widths, and the document retained matching 1247px client/scroll
+  widths with no framework overlay. Hooks selection and its `Search hooks…` placeholder worked,
+  then Features selection was restored. The only console errors were the existing unpaired static
+  Web UI transport errors.
 
 ### Acceptance evidence
 
@@ -66,6 +82,12 @@ Verdict: verified.
 - AC-5: PASS — `in-app Browser DOM measurement at 1280x720` recorded exact 32px Automations title, All-label, and search-icon offsets plus the collapsed-shell exception.
 - AC-6: PASS — `in-app Browser DOM measurement at 1280x720` recorded exact 32px / 32px / 32px offsets on Automations, Features & plugins, and Pull requests.
 - AC-7: PASS — `githubPullRequestsRendered.test.tsx` and the rendered interaction check preserved view selection, search, filter, refresh, and compact structure after row separation.
+- AC-8: PASS — `bun test ./tests/pluginManagerRendered.test.tsx` protected the 4px token contract;
+  in-app Browser DOM measurement at 1247x1576 confirmed 4px inline padding, 4px adjacent gaps, and
+  matched 310px client/scroll widths across the category row.
+- AC-9: PASS — `bun test ./tests/pluginManagerRendered.test.tsx` protects the local 8px utility;
+  local Playwright at 1247x1576 confirmed exact 8px left/right computed padding, preserved category
+  interaction, matched category and document client/scroll widths, and no framework overlay.
 
 Residual risk: verification used the isolated renderer with fixture data rather than launching
 this worktree's native app because another worktree already owns the default desktop data directory.
@@ -113,6 +135,22 @@ Verdict: verified.
   and `bun script/verify/sdlc.ts` then passed. The first `--worktree` pass correctly rejected the
   transitional deletion of the pre-rebase flat Artifact until the migration was folded into the
   branch commit.
+- The 2026-09-02 focused follow-up passed 18 tests and 127 expectations in
+  `pluginManagerRendered.test.tsx`, plus `bunx tsc --noEmit` and a fresh static Web UI build.
+  Browser measurement at the annotated 1247x1576 viewport found 4px left/right padding on all five
+  category tabs, four exact 4px adjacent gaps, and a tab list whose client and scroll widths both
+  measured 310px. All five categories remained clickable and ArrowRight moved focus from Hooks to
+  Marketplace. The only console errors were the existing unpaired-static-Web-UI transport errors.
+- The later 2026-09-02 focused follow-up passed 18 tests and 129 expectations in
+  `pluginManagerRendered.test.tsx`. `bun run build:renderer` passed ESLint, Stylelint, TypeScript,
+  and the 6,604-module production Vite build; a fresh static Web UI build also passed with the same
+  module count and existing large-chunk advisory. Because the Browser plugin was not available in
+  this environment, local Playwright measured the rendered page at the annotated 1247x1576
+  viewport: the control stack had exactly 8px left and right padding, the category row retained
+  matching 310px client/scroll widths, and the document retained matching 1247px client/scroll
+  widths with no framework overlay. Hooks selection and its `Search hooks…` placeholder worked,
+  then Features selection was restored. The only console errors were the existing unpaired static
+  Web UI transport errors.
 
 ### Acceptance evidence
 
@@ -123,6 +161,12 @@ Verdict: verified.
 - AC-5: PASS — `in-app Browser DOM measurement at 1280x720` recorded exact 32px Automations title, All-label, and search-icon offsets plus the collapsed-shell exception.
 - AC-6: PASS — `in-app Browser DOM measurement at 1280x720` recorded exact 32px / 32px / 32px offsets on Automations, Features & plugins, and Pull requests.
 - AC-7: PASS — `githubPullRequestsRendered.test.tsx` and the rendered interaction check preserved view selection, search, filter, refresh, and compact structure after row separation.
+- AC-8: PASS — `bun test ./tests/pluginManagerRendered.test.tsx` protected the 4px token contract;
+  in-app Browser DOM measurement at 1247x1576 confirmed 4px inline padding, 4px adjacent gaps, and
+  matched 310px client/scroll widths across the category row.
+- AC-9: PASS — `bun test ./tests/pluginManagerRendered.test.tsx` protects the local 8px utility;
+  local Playwright at 1247x1576 confirmed exact 8px left/right computed padding, preserved category
+  interaction, matched category and document client/scroll widths, and no framework overlay.
 
 Residual risk: verification used the isolated renderer with fixture data rather than launching
 this worktree's native app because another worktree already owns the default desktop data directory.

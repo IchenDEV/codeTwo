@@ -11,6 +11,7 @@ use crate::permission::ExecutionPolicy;
 use crate::provider::ProviderId;
 use crate::session::{PlanEntry, SessionActivity, SessionId};
 use crate::skill::DocBlock;
+use crate::task::TaskId;
 use crate::worktree::ResolvedWorktreeBaseline;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -104,6 +105,14 @@ pub enum Op {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum Event {
+    /// A member-visible collaboration snapshot changed. Clients refetch by Task id; the event does
+    /// not duplicate comments or Suggestions into the execution stream.
+    TaskSnapshotChanged {
+        /// Kept null so existing session-event consumers can safely treat this as a global event.
+        session: Option<SessionId>,
+        task_id: TaskId,
+        revision: u64,
+    },
     SessionCreated {
         session: SessionId,
         /// Durable provider working directory, including the selected subdirectory inside a newly
@@ -131,6 +140,14 @@ pub enum Event {
     },
     /// Durable automatic-title update; frontends can refresh a shell without reloading sessions.
     SessionTitleChanged { session: SessionId, title: String },
+    /// Authoritative durable provider replacement for an existing conversation. Provider-owned
+    /// model/config/capability projections are reset and republished separately after this event.
+    ProviderChanged {
+        session: SessionId,
+        provider: ProviderId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+    },
     /// Authoritative, revisioned session lifecycle projection.
     SessionActivityChanged {
         session: SessionId,

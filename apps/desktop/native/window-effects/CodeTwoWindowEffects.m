@@ -4,6 +4,192 @@
 
 static char codeTwoBackdropKey;
 static char codeTwoFillRestoreFrameKey;
+static char codeTwoTouchBarManagerKey;
+
+typedef void (*CodeTwoTouchBarAction)(const char *contributionKey, const char *itemId);
+
+@interface CodeTwoTouchBarManager : NSObject <NSTouchBarDelegate>
+@property(nonatomic, weak) NSWindow *window;
+@property(nonatomic, copy) NSArray<NSDictionary *> *items;
+@property(nonatomic, assign) CodeTwoTouchBarAction action;
+- (instancetype)initWithWindow:(NSWindow *)window action:(CodeTwoTouchBarAction)action;
+- (BOOL)updateWithJSON:(const char *)json;
+- (void)clear;
+@end
+
+@implementation CodeTwoTouchBarManager
+
+- (instancetype)initWithWindow:(NSWindow *)window action:(CodeTwoTouchBarAction)action {
+  self = [super init];
+  if (self != nil) {
+    _window = window;
+    _action = action;
+    _items = @[];
+  }
+  return self;
+}
+
+- (void)clear {
+  self.items = @[];
+  self.window.touchBar = nil;
+}
+
+- (BOOL)updateWithJSON:(const char *)json {
+  if (json == NULL) {
+    [self clear];
+    return YES;
+  }
+  NSData *data = [NSData dataWithBytes:json length:strlen(json)];
+  id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  if (![decoded isKindOfClass:NSArray.class] || [decoded count] > 8) return NO;
+
+  NSMutableArray<NSDictionary *> *validated = [NSMutableArray array];
+  NSUInteger index = 0;
+  for (id value in decoded) {
+    if (![value isKindOfClass:NSDictionary.class]) return NO;
+    NSDictionary *item = value;
+    NSString *contributionKey = item[@"contributionKey"];
+    NSString *itemId = item[@"id"];
+    NSString *label = item[@"label"];
+    NSString *detail = item[@"detail"];
+    NSString *state = item[@"state"];
+    NSNumber *enabled = item[@"enabled"];
+    NSString *accessibilityLabel = item[@"accessibilityLabel"];
+    if (![contributionKey isKindOfClass:NSString.class] || contributionKey.length == 0 ||
+        ![itemId isKindOfClass:NSString.class] || itemId.length == 0 ||
+        ![label isKindOfClass:NSString.class] || label.length == 0 || label.length > 80 ||
+        (detail != nil && ![detail isKindOfClass:NSString.class]) ||
+        (state != nil && ![state isKindOfClass:NSString.class]) ||
+        (enabled != nil && ![enabled isKindOfClass:NSNumber.class]) ||
+        (accessibilityLabel != nil && ![accessibilityLabel isKindOfClass:NSString.class])) {
+      return NO;
+    }
+    NSMutableDictionary *normalized = [item mutableCopy];
+    normalized[@"_identifier"] = [NSString stringWithFormat:@"dev.codetwo.host-action.%lu", (unsigned long)index++];
+    [validated addObject:normalized];
+  }
+  self.items = validated;
+
+  if (validated.count == 0) {
+    self.window.touchBar = nil;
+    return YES;
+  }
+  NSTouchBar *touchBar = [[NSTouchBar alloc] init];
+  touchBar.delegate = self;
+  touchBar.defaultItemIdentifiers = [validated valueForKey:@"_identifier"];
+  self.window.touchBar = touchBar;
+  return YES;
+}
+
+- (NSTouchBarItem *)touchBar:(NSTouchBar *)touchBar
+      makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier {
+  NSDictionary *item = nil;
+  for (NSDictionary *candidate in self.items) {
+    if ([candidate[@"_identifier"] isEqualToString:identifier]) {
+      item = candidate;
+      break;
+    }
+  }
+  if (item == nil) return nil;
+
+  NSString *label = item[@"label"];
+  NSString *detail = item[@"detail"];
+  NSString *title = detail.length > 0
+    ? [NSString stringWithFormat:@"%@  ·  %@", label, detail]
+    : label;
+  NSButton *button = [NSButton buttonWithTitle:title target:self action:@selector(performItem:)];
+  button.identifier = identifier;
+  button.enabled = item[@"enabled"] == nil || [item[@"enabled"] boolValue];
+  NSString *state = item[@"state"];
+  if ([state isEqualToString:@"running"]) button.bezelColor = NSColor.systemBlueColor;
+  else if ([state isEqualToString:@"attention"]) button.bezelColor = NSColor.systemOrangeColor;
+  else if ([state isEqualToString:@"failure"]) button.bezelColor = NSColor.systemRedColor;
+  NSString *accessibilityLabel = item[@"accessibilityLabel"];
+  button.accessibilityLabel = accessibilityLabel.length > 0 ? accessibilityLabel : title;
+
+  NSCustomTouchBarItem *touchBarItem = [[NSCustomTouchBarItem alloc] initWithIdentifier:identifier];
+  touchBarItem.view = button;
+  touchBarItem.customizationLabel = accessibilityLabel.length > 0 ? accessibilityLabel : label;
+  touchBarItem.visibilityPriority = [state isEqualToString:@"attention"]
+    ? NSTouchBarItemPriorityHigh
+    : NSTouchBarItemPriorityNormal;
+  return touchBarItem;
+}
+
+- (void)performItem:(NSButton *)sender {
+  NSDictionary *item = nil;
+  for (NSDictionary *candidate in self.items) {
+    if ([candidate[@"_identifier"] isEqualToString:sender.identifier]) {
+      item = candidate;
+      break;
+    }
+  }
+  if (item == nil || self.action == NULL) return;
+  self.action([item[@"contributionKey"] UTF8String], [item[@"id"] UTF8String]);
+}
+
+@end
+
+static CodeTwoTouchBarManager *touchBarManager(NSWindow *window) {
+  return window == nil ? nil : objc_getAssociatedObject(window, &codeTwoTouchBarManagerKey);
+}
+
+uint32_t codetwoConfigureTouchBar(void *windowPointer, CodeTwoTouchBarAction action) {
+  if (windowPointer == NULL || action == NULL) return 0;
+  NSWindow *window = (__bridge NSWindow *)windowPointer;
+  __block BOOL configured = NO;
+  void (^configure)(void) = ^{
+    CodeTwoTouchBarManager *manager = [[CodeTwoTouchBarManager alloc] initWithWindow:window action:action];
+    objc_setAssociatedObject(
+      window,
+      &codeTwoTouchBarManagerKey,
+      manager,
+      OBJC_ASSOCIATION_RETAIN_NONATOMIC
+    );
+    configured = YES;
+  };
+  if ([NSThread isMainThread]) configure();
+  else dispatch_sync(dispatch_get_main_queue(), configure);
+  return configured ? 1 : 0;
+}
+
+uint32_t codetwoUpdateTouchBar(void *windowPointer, const char *json) {
+  if (windowPointer == NULL) return 0;
+  NSWindow *window = (__bridge NSWindow *)windowPointer;
+  __block BOOL updated = NO;
+  void (^update)(void) = ^{
+    updated = [touchBarManager(window) updateWithJSON:json];
+  };
+  if ([NSThread isMainThread]) update();
+  else dispatch_sync(dispatch_get_main_queue(), update);
+  return updated ? 1 : 0;
+}
+
+void codetwoClearTouchBar(void *windowPointer) {
+  if (windowPointer == NULL) return;
+  NSWindow *window = (__bridge NSWindow *)windowPointer;
+  void (^clear)(void) = ^{
+    [touchBarManager(window) clear];
+  };
+  if ([NSThread isMainThread]) clear();
+  else dispatch_sync(dispatch_get_main_queue(), clear);
+}
+
+void codetwoDisposeTouchBar(void *windowPointer) {
+  if (windowPointer == NULL) return;
+  NSWindow *window = (__bridge NSWindow *)windowPointer;
+  void (^dispose)(void) = ^{
+    [touchBarManager(window) clear];
+    objc_setAssociatedObject(
+      window,
+      &codeTwoTouchBarManagerKey,
+      nil,
+      OBJC_ASSOCIATION_RETAIN_NONATOMIC
+    );
+  };
+  if ([NSThread isMainThread]) dispose();
+  else dispatch_sync(dispatch_get_main_queue(), dispose);
+}
 
 enum CodeTwoWindowEffect : uint32_t {
   CodeTwoWindowEffectShadow = 1 << 0,

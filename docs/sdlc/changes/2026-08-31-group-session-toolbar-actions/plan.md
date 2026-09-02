@@ -7,7 +7,7 @@ owner: codex
 created: 2026-08-31
 based_on: spec.md
 risk: medium
-scope: apps/desktop/src/App.tsx, apps/desktop/src/environment/EnvironmentPopover.tsx, apps/desktop/src/i18n/strings.ts, apps/desktop/src/session/PaneChrome.tsx, apps/desktop/src/session/SessionHeaderActions.tsx, apps/desktop/src/styles.css, apps/desktop/tests/environmentPopoverRendered.test.tsx, apps/desktop/tests/paneChrome.test.tsx, apps/desktop/tests/sessionHeaderActionsRendered.test.tsx, apps/desktop/tests/windowChromeContract.test.ts, docs/sdlc/changes/2026-08-31-group-session-toolbar-actions.md, docs/sdlc/changes/2026-08-31-group-session-toolbar-actions
+scope: apps/desktop/src/App.tsx, apps/desktop/src/bridge.ts, apps/desktop/src/environment/EnvironmentPopover.tsx, apps/desktop/src/i18n/strings.ts, apps/desktop/src/session/PaneChrome.tsx, apps/desktop/src/session/SessionHeaderActions.tsx, apps/desktop/src/settings/PersonalSettings.tsx, apps/desktop/src/styles.css, apps/desktop/tests/environmentPopoverRendered.test.tsx, apps/desktop/tests/paneChrome.test.tsx, apps/desktop/tests/sessionHeaderActionsRendered.test.tsx, apps/desktop/tests/windowChromeContract.test.ts, crates/core/src/keymap.rs, docs/sdlc/changes/2026-08-31-group-session-toolbar-actions.md, docs/sdlc/changes/2026-08-31-group-session-toolbar-actions
 approved_by: "[user]"
 approved_at: "2026-08-31"
 ---
@@ -16,7 +16,7 @@ approved_at: "2026-08-31"
 
 ## Files and ownership
 
-apps/desktop/src/App.tsx, apps/desktop/src/environment/EnvironmentPopover.tsx, apps/desktop/src/i18n/strings.ts, apps/desktop/src/session/PaneChrome.tsx, apps/desktop/src/session/SessionHeaderActions.tsx, apps/desktop/src/styles.css, apps/desktop/tests/environmentPopoverRendered.test.tsx, apps/desktop/tests/paneChrome.test.tsx, apps/desktop/tests/sessionHeaderActionsRendered.test.tsx, apps/desktop/tests/windowChromeContract.test.ts, docs/sdlc/changes/2026-08-31-group-session-toolbar-actions.md, docs/sdlc/changes/2026-08-31-group-session-toolbar-actions
+apps/desktop/src/App.tsx, apps/desktop/src/bridge.ts, apps/desktop/src/environment/EnvironmentPopover.tsx, apps/desktop/src/i18n/strings.ts, apps/desktop/src/session/PaneChrome.tsx, apps/desktop/src/session/SessionHeaderActions.tsx, apps/desktop/src/settings/PersonalSettings.tsx, apps/desktop/src/styles.css, apps/desktop/tests/environmentPopoverRendered.test.tsx, apps/desktop/tests/paneChrome.test.tsx, apps/desktop/tests/sessionHeaderActionsRendered.test.tsx, apps/desktop/tests/windowChromeContract.test.ts, crates/core/src/keymap.rs, docs/sdlc/changes/2026-08-31-group-session-toolbar-actions.md, docs/sdlc/changes/2026-08-31-group-session-toolbar-actions
 
 ## Order of work
 
@@ -25,6 +25,8 @@ apps/desktop/src/App.tsx, apps/desktop/src/environment/EnvironmentPopover.tsx, a
 2. Keep plugin, environment, and View icon-only with existing accessible labels and menu behavior.
 3. Protect hierarchy and interaction with focused tests, then validate standard, narrow, light, and
    dark renderer states plus repository Gates.
+4. Extend the shared Core keymap with View commands, dispatch them through the existing renderer
+   shortcut handler, and render the live bindings with the existing menu-shortcut primitive.
 
 Rollback reverts the scoped titlebar, pane-chrome, responsive-style, and test changes. It does not
 affect stored sessions, pane layout data, or repository data.
@@ -58,6 +60,12 @@ See legacy Review and release.
 - The implementation was rebased onto `origin/main` at `a224a752`. Conflict resolution preserved
   main's Feishu-page suppression, pet conversation work, and semantic radius while retaining the
   accepted toolbar hierarchy.
+- The 2026-09-02 follow-up adds Split pane right, Split pane down, and Toggle side panel to the
+  shared Core keymap with `Mod+Alt+R`, `Mod+Alt+D`, and `Mod+Alt+P` defaults. Existing keymap loading
+  layers user overrides over those defaults, so the menu and settings page stay synchronized.
+- `PaneLayoutToolbar` reuses the repository's `DropdownMenuShortcut` primitive. `App` routes the
+  three actions through the existing global key dispatcher and shares one side-panel callback
+  between the menu and keyboard path.
 
 ## Decision
 
