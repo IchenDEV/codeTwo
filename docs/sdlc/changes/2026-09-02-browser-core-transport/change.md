@@ -12,7 +12,7 @@ updated: 2026-09-02
 source: direct user request to begin a browser Web UI mode while reusing existing modules and preventing future product-surface divergence
 inputs: existing React renderer, Electrobun Core command transport, paired Axum remote server, and shared CoreApp command graph
 outputs: first shared browser-to-Core transport slice for the existing React renderer
-scope: Cargo.lock, apps/desktop/package.json, apps/desktop/src/bridge.ts, apps/desktop/src/coreTransport.ts, apps/desktop/tests/coreTransport.test.ts, apps/desktop/vite.config.ts, apps/desktop/src-host/src/remote.rs, crates/plugins/src/app/mod.rs, crates/plugins/src/app/plugin_manager.rs, crates/server/Cargo.toml, crates/server/src/lib.rs, crates/server/tests/web_ui_commands.rs, docs/sdlc/changes/2026-09-02-browser-core-transport
+scope: Cargo.lock, apps/desktop/package.json, apps/desktop/src/bridge.ts, apps/desktop/src/coreTransport.ts, apps/desktop/tests/coreTransport.test.ts, apps/desktop/tests/pluginBridgeContract.test.ts, apps/desktop/vite.config.ts, apps/desktop/src-host/src/remote.rs, crates/plugins/src/app/mod.rs, crates/plugins/src/app/plugin_manager.rs, crates/server/Cargo.toml, crates/server/src/lib.rs, crates/server/tests/web_ui_commands.rs, docs/sdlc/changes/2026-09-02-browser-core-transport
 next_trigger: human review and an explicit merge or release decision
 verification_mode: owner
 verified_by: codex
@@ -143,9 +143,21 @@ Verdict: verified.
   single-use ticket per connection, and retry after an intermediate ticket request failed. In the
   live browser, stopping Core for 6.5 seconds caused repeated ticket failures; after restart the
   same unreloaded tab received a newly created Session event.
-- AC-5: PASS — `bun run lint:code`, `bunx tsc --noEmit`, `bunx vite build --mode web`, focused Bun
-  and Rust tests, changed-file `rustfmt --check`, `git diff --check`, and the repository
-  documentation/lifecycle/worktree Gates passed.
+- AC-5: PASS — `bun test` passed the full desktop suite with 864 tests and 5,122 expectations; the focused Core
+  transport and bridge contract suite passed 6 tests with 53 expectations; task-board mutation
+  testing scored 100%; and `bun run build:renderer` passed lint, TypeScript, and the 6,604-module
+  Vite production build. Focused Rust tests, changed-file `rustfmt --check`, `git diff --check`, and
+  the repository documentation/lifecycle/worktree Gates also passed.
+
+Draft PR #219 `Desktop design system / validate` failed after 700 passing tests because the reconnect
+test expected the second fake socket exactly 5ms after closing the first. The same test passed in
+focused runs, identifying test scheduling under full-suite load rather than a product reconnect
+failure.
+
+The next full local desktop run passed that reconnect point and exposed the adjacent source
+contract after 863 passing tests: it still required `bridge.ts` to call `desktopCall` directly.
+The contract now verifies the intended single chain through `coreTransport.ts`, including its
+desktop delegation, without weakening the one-boundary assertion.
 
 Residual risk: this is intentionally a development Web mode. React assets are not yet embedded in
 the Rust server, the compact phone remote remains separate, and desktop-container-only features

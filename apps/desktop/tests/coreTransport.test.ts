@@ -41,6 +41,14 @@ function jsonResponse(value: unknown, status = 200): Response {
   });
 }
 
+async function waitUntil(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("condition did not become true");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 function dependencies(
   fetcher: WebCoreTransportDependencies["fetch"],
   storage = new MemoryStorage(),
@@ -133,7 +141,7 @@ describe("paired Web Core transport", () => {
     const events: unknown[] = [];
     const unlisten = transport.listen("engine-event", (event) => events.push(event));
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitUntil(() => setup.sockets.length === 1);
     expect(setup.sockets).toHaveLength(1);
     expect(setup.sockets[0]?.url).toBe(
       "ws://127.0.0.1:1420/ws?ticket=single-use-ticket-1",
@@ -156,7 +164,7 @@ describe("paired Web Core transport", () => {
       setup.sockets[0]?.socket as unknown as WebSocket,
       {} as CloseEvent,
     );
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await waitUntil(() => setup.sockets.length === 2);
     expect(setup.sockets).toHaveLength(2);
     expect(setup.sockets[1]?.url).toBe(
       "ws://127.0.0.1:1420/ws?ticket=single-use-ticket-3",
