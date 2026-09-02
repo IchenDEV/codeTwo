@@ -36,8 +36,8 @@
 
 .task-board-kanban {
   display: grid;
-  grid-template-columns: repeat(4, minmax(14rem, 1fr));
-  min-width: calc(56rem + 1.5rem);
+  grid-template-columns: repeat(4, minmax(340px, 1fr));
+  min-width: calc(1360px + 1.5rem);
 }
 
 .task-board-kanban-column {
