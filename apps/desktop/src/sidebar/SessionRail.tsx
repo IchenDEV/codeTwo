@@ -1900,7 +1900,7 @@ export function SessionRail({
             render={<Button
               variant="ghost"
               size="icon"
-              className="size-7 shrink-0 text-muted-foreground"
+              className="mr-2 size-7 shrink-0 text-muted-foreground"
               aria-label={t("rail.collapse")}
               onClick={onToggleCollapse}
               disabled={taskBoardOpen && !overlay}
