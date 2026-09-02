@@ -33,6 +33,9 @@ pub enum Action {
     SearchWorkspace,
     OpenIssues,
     ClosePanel,
+    SplitPaneRight,
+    SplitPaneDown,
+    ToggleSidePanel,
     PrevSession,
     NextSession,
     CycleScene,
@@ -40,7 +43,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 25] = [
+    pub const ALL: [Action; 28] = [
         Action::Run,
         Action::NewSession,
         Action::Cancel,
@@ -48,6 +51,9 @@ impl Action {
         Action::ToggleBrowser,
         Action::ToggleGit,
         Action::ClosePanel,
+        Action::SplitPaneRight,
+        Action::SplitPaneDown,
+        Action::ToggleSidePanel,
         Action::OpenSkillPicker,
         Action::FocusEditor,
         Action::ToggleDocMode,
@@ -91,6 +97,9 @@ impl Action {
             Action::SearchWorkspace => "search_workspace",
             Action::OpenIssues => "open_issues",
             Action::ClosePanel => "close_panel",
+            Action::SplitPaneRight => "split_pane_right",
+            Action::SplitPaneDown => "split_pane_down",
+            Action::ToggleSidePanel => "toggle_side_panel",
             Action::PrevSession => "prev_session",
             Action::NextSession => "next_session",
             Action::CycleScene => "cycle_scene",
@@ -121,6 +130,9 @@ impl Action {
             Action::SearchWorkspace => "Search workspace contents",
             Action::OpenIssues => "Open issues",
             Action::ClosePanel => "Close side panel",
+            Action::SplitPaneRight => "Split pane right",
+            Action::SplitPaneDown => "Split pane down",
+            Action::ToggleSidePanel => "Toggle side panel",
             Action::PrevSession => "Previous session",
             Action::NextSession => "Next session",
             Action::CycleScene => "Cycle scene",
@@ -151,6 +163,9 @@ impl Action {
             Action::SearchWorkspace => "Mod+Shift+F",
             Action::OpenIssues => "Mod+Shift+I",
             Action::ClosePanel => "Escape",
+            Action::SplitPaneRight => "Mod+Alt+R",
+            Action::SplitPaneDown => "Mod+Alt+D",
+            Action::ToggleSidePanel => "Mod+Alt+P",
             Action::PrevSession => "Mod+Alt+ArrowUp",
             Action::NextSession => "Mod+Alt+ArrowDown",
             Action::CycleScene => "Shift+Tab",
@@ -228,6 +243,9 @@ mod tests {
         assert_eq!(km.entries().len(), Action::ALL.len());
         assert_eq!(km.key(Action::Run), "Mod+Enter");
         assert_eq!(km.key(Action::OpenFinder), "Mod+O");
+        assert_eq!(km.key(Action::SplitPaneRight), "Mod+Alt+R");
+        assert_eq!(km.key(Action::SplitPaneDown), "Mod+Alt+D");
+        assert_eq!(km.key(Action::ToggleSidePanel), "Mod+Alt+P");
     }
 
     #[test]

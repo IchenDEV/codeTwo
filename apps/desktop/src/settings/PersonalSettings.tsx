@@ -32,7 +32,15 @@ const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
   },
   {
     labelKey: "settings.groupPanels",
-    actions: ["toggle_terminal", "toggle_browser", "toggle_git", "close_panel"],
+    actions: [
+      "toggle_terminal",
+      "toggle_browser",
+      "toggle_git",
+      "split_pane_right",
+      "split_pane_down",
+      "toggle_side_panel",
+      "close_panel",
+    ],
   },
   { labelKey: "settings.groupGit", actions: ["refresh_git", "open_source_control"] },
   {
