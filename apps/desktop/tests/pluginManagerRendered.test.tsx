@@ -431,6 +431,8 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelectorAll(".plugin-manager-tab-count")).toHaveLength(5);
     expect(view.container.querySelectorAll("[data-plugin-manager-tab-label]")).toHaveLength(5);
     const listControls = view.container.querySelector("[data-plugin-manager-list-controls]");
+    expect(listControls?.className).toContain("px-2");
+    expect(listControls?.className).not.toContain("px-4");
     expect(listControls?.querySelectorAll('[role="tab"]')).toHaveLength(5);
     expect(listControls?.querySelector("[data-plugin-manager-search]")).not.toBeNull();
     expect(listControls?.querySelector("[data-plugin-manager-search-field]")).not.toBeNull();

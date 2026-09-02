@@ -9,9 +9,9 @@ approvers: user via the 2026-08-31 screenshot feedback and PR-and-merge request
 approved_at: 2026-08-31
 created: 2026-08-31
 updated: 2026-09-02
-source: user-supplied clipping and alignment screenshots plus direct remediation requests on 2026-08-31; Plugin Manager tab padding and gap annotations on 2026-09-02
+source: user-supplied clipping and alignment screenshots plus direct remediation requests on 2026-08-31; Plugin Manager tab spacing and control-stack inset annotations on 2026-09-02
 inputs: screenshots, live checkout, existing split-panel layout, layout specification, and design tokens
-outputs: responsive aligned list controls, consistent Plugin Manager tab spacing, focused regression coverage, and rendered narrow-state evidence
+outputs: responsive aligned list controls, consistent Plugin Manager tab spacing and compact control-stack inset, focused regression coverage, and rendered narrow-state evidence
 scope: apps/desktop, docs/sdlc/changes/2026-08-31-prevent-list-header-tab-overflow
 next_trigger: pull request review and explicit merge approval
 verification_mode: owner
@@ -75,6 +75,8 @@ Docker layouts keep their existing page/chrome grids because they are not split-
       tab, filter, refresh, selection, or compact list/detail behavior.
 - [x] AC-8: Every Plugin Manager category tab uses 4px inline padding and adjacent tabs use a 4px
       gap at the annotated list-pane width, without clipping or horizontal overflow.
+- [x] AC-9: The Plugin Manager category-and-search control stack uses 8px left and right padding at
+      the annotated viewport without changing list cards, detail layout, interaction, or overflow behavior.
 
 ## Decision and gates
 
@@ -94,6 +96,10 @@ required repository checks pass; it does not authorize a product release or depl
 The user's 2026-09-02 browser annotations accept reopening this change for one local spacing
 correction: 4px inline padding on each Plugin Manager category tab and a larger 4px inter-tab gap.
 
+The user's later 2026-09-02 browser annotation accepts reopening this change for an additional
+local correction: reduce only the Plugin Manager category-and-search control stack's inline inset
+from 16px to 8px, preserving its existing responsive behavior and adjacent surfaces.
+
 ## Plan
 
 1. Separate each affected title/action row from its filter or category row while retaining existing
@@ -108,6 +114,8 @@ correction: 4px inline padding on each Plugin Manager category tab and a larger 
    workbenches, and keep unrelated full-canvas page shells outside this rule.
 6. Replace the Plugin Manager compact row's asymmetric 8px/2px tab padding and 2px gap with the
    existing 4px inline spacing token, preserving the 24rem count-hiding breakpoint.
+7. Replace the Plugin Manager category-and-search stack's 16px inline padding with the existing
+   8px spacing utility, then repeat focused and rendered checks at the annotated viewport.
 
 Rollback restores the two prior single-row headers and page-level plugin breakpoint rules; no data,
 configuration, or external state is changed.
@@ -143,6 +151,9 @@ the local Plugin Manager spacing correction.
 - The 2026-09-02 follow-up replaces Plugin Manager's asymmetric 8px/2px category padding and 2px
   compact gap with the existing 4px inline token for every tab and every adjacent gap. The 24rem
   container breakpoint continues to hide only numeric counts.
+- The later 2026-09-02 follow-up replaces only the Plugin Manager category-and-search control
+  stack's 16px inline inset with the existing 8px spacing utility. List cards, the detail pane,
+  category-tab spacing, and responsive breakpoints remain unchanged.
 
 ## Verification
 
@@ -190,6 +201,16 @@ Verdict: verified.
   category tabs, four exact 4px adjacent gaps, and a tab list whose client and scroll widths both
   measured 310px. All five categories remained clickable and ArrowRight moved focus from Hooks to
   Marketplace. The only console errors were the existing unpaired-static-Web-UI transport errors.
+- The later 2026-09-02 focused follow-up passed 18 tests and 129 expectations in
+  `pluginManagerRendered.test.tsx`. `bun run build:renderer` passed ESLint, Stylelint, TypeScript,
+  and the 6,604-module production Vite build; a fresh static Web UI build also passed with the same
+  module count and existing large-chunk advisory. Because the Browser plugin was not available in
+  this environment, local Playwright measured the rendered page at the annotated 1247x1576
+  viewport: the control stack had exactly 8px left and right padding, the category row retained
+  matching 310px client/scroll widths, and the document retained matching 1247px client/scroll
+  widths with no framework overlay. Hooks selection and its `Search hooks…` placeholder worked,
+  then Features selection was restored. The only console errors were the existing unpaired static
+  Web UI transport errors.
 
 ### Acceptance evidence
 
@@ -203,6 +224,9 @@ Verdict: verified.
 - AC-8: PASS — `bun test ./tests/pluginManagerRendered.test.tsx` protected the 4px token contract;
   in-app Browser DOM measurement at 1247x1576 confirmed 4px inline padding, 4px adjacent gaps, and
   matched 310px client/scroll widths across the category row.
+- AC-9: PASS — `bun test ./tests/pluginManagerRendered.test.tsx` protects the local 8px utility;
+  local Playwright at 1247x1576 confirmed exact 8px left/right computed padding, preserved category
+  interaction, matched category and document client/scroll widths, and no framework overlay.
 
 Residual risk: verification used the isolated renderer with fixture data rather than launching
 this worktree's native app because another worktree already owns the default desktop data directory.
