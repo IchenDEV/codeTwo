@@ -305,6 +305,45 @@ impl PluginManager {
         Self::new_with_project_idle_ttl(loader, config, defaults, context, PROJECT_IDLE_TTL)
     }
 
+    fn root_context(&self) -> Result<Context, KernelError> {
+        self.context.upgrade().ok_or_else(|| KernelError::Config {
+            name: "plugin-manager".into(),
+            message: PluginManagerError::RuntimeGone.to_string(),
+        })
+    }
+
+    /// Invoke a global command through the root Core context.
+    ///
+    /// Host transports use this seam so plugin-scoped contexts never become competing command
+    /// dispatch implementations.
+    pub async fn call(&self, name: &str, args: Value) -> Result<Value, KernelError> {
+        self.root_context()?.call(name, args).await
+    }
+
+    /// Invoke one project command with the same lazy graph, activity lease, flush, and fallback
+    /// behavior used by every host transport.
+    pub async fn call_in_project(
+        &self,
+        project_path: impl AsRef<std::path::Path>,
+        name: &str,
+        args: Value,
+    ) -> Result<Value, KernelError> {
+        let (project_path, _activity) =
+            self.lease_project_command(project_path)
+                .map_err(|error| KernelError::Config {
+                    name: "plugin-manager".into(),
+                    message: error.to_string(),
+                })?;
+        // Child-loader reconciliation is synchronous, while plugin application settles on the
+        // shared driver. Flush before the first dispatch into a newly created project realm.
+        let context = self.root_context()?;
+        context.flush().await;
+        context
+            .with_command_realm(CommandRealm::project(project_path))
+            .call(name, args)
+            .await
+    }
+
     /// Construct a manager with a custom project idle timeout.
     ///
     /// This is primarily useful for deterministic host tests; production uses five minutes.

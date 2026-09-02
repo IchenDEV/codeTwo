@@ -593,6 +593,8 @@ describe("SessionRail row layout", () => {
     expect(control?.querySelector('[data-rail-side-chat]')).toBeNull();
     expect(quickChat?.getAttribute("aria-label")).toBe("Toggle Quick Chat");
     expect(quickChat?.getAttribute("aria-pressed")).toBe("false");
+    expect(quickChat?.className).toContain("mr-2");
+    expect(quickChat?.className).not.toContain("mr-1");
 
     click(primary);
     click(quickChat);

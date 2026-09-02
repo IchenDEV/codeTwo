@@ -1,5 +1,4 @@
 import {
-  desktopCall,
   desktopAppshotSettings,
   desktopCaptureAppshot,
   desktopGetAppshot,
@@ -23,6 +22,7 @@ import {
   onDesktopAppshotCaptured,
   onDesktopAppshotFailed,
 } from "./container";
+import { coreAvailable, coreCall, listenCore } from "./coreTransport";
 import type {
   AppshotCapture,
   AppshotDestination,
@@ -1259,19 +1259,19 @@ function browserDockerCall<T>(name: string, rawArgs: unknown): T {
 // ---- the plugin graph -------------------------------------------------------------------------
 
 /**
- * Call a command through the trusted desktop host — `call("git.status", { cwd })`.
+ * Call a command through the selected Core transport — `call("git.status", { cwd })`.
  *
- * This transport carries both internal host commands and extension-contributed commands. It is
- * broader than the public Extension API exposed to child processes. A runtime module that
- * registers `foo.bar` is callable from here without adding another desktop RPC method.
+ * The desktop adapter carries the full trusted host surface. Paired Web mode keeps the same typed
+ * product projection but the remote host enforces a smaller allowlist. A runtime module that
+ * registers `foo.bar` remains callable without adding a command-specific renderer RPC method.
  */
 export async function call<T = unknown>(
   name: string,
   args?: unknown,
   projectPath: string | null = callProjectPath,
 ): Promise<T> {
-  if (!inDesktop) return browserDockerCall<T>(name, args);
-  return desktopCall<T>(name, args ?? null, projectPath);
+  if (!coreAvailable) return browserDockerCall<T>(name, args);
+  return coreCall<T>(name, args ?? null, projectPath);
 }
 
 /** Lifecycle state of one plugin instance, as the kernel reports it. */
@@ -1617,7 +1617,7 @@ const FALLBACK_SKILLS: SkillInfo[] = [
 ];
 
 export async function listProviders(checkUpdates = false): Promise<ProviderInfo[]> {
-  const providers = inDesktop
+  const providers = coreAvailable
     ? await call<ProviderInfoWire[]>("providers.list", { check_updates: checkUpdates })
     : fallbackProviders();
   return providers.map(normalizeProviderInfo);
@@ -1722,7 +1722,7 @@ export async function listSkills(cwd?: string): Promise<SkillInfo[]> {
 }
 
 export async function listSessions(): Promise<SessionInfo[]> {
-  return inDesktop ? call<SessionInfo[]>("sessions.list") : [];
+  return coreAvailable ? call<SessionInfo[]>("sessions.list") : [];
 }
 
 export interface ImportedSessionSummary {
@@ -1875,7 +1875,7 @@ export async function newSession(
   initialReasoningEffort?: string | null,
   parallelTask?: { taskId: string; goal: string } | null,
 ): Promise<void> {
-  if (inDesktop) {
+  if (coreAvailable) {
     if (parallelTask) {
       if (worktreeBase === null) {
         throw new Error("Parallel tasks require an isolated worktree");
@@ -1911,7 +1911,7 @@ export async function newSession(
 
 /** Stop and forget one app-lifetime side-chat session. Durable sessions are rejected. */
 export async function closeTransientSession(session: string): Promise<boolean> {
-  return inDesktop
+  return coreAvailable
     ? call<boolean>("engine.close_transient_session", { session })
     : true;
 }
@@ -1967,12 +1967,12 @@ export async function discardOrphanWorktree(
 }
 
 export async function submitPrompt(session: string, doc: DocBlock[], requestId: string): Promise<void> {
-  if (inDesktop) await call("engine.prompt", { session, doc, request_id: requestId });
+  if (coreAvailable) await call("engine.prompt", { session, doc, request_id: requestId });
 }
 
 /** Connect a durable session early so provider-native modes are available before its next turn. */
 export async function prepareSession(session: string): Promise<void> {
-  if (inDesktop) await call("engine.prepare_session", { session });
+  if (coreAvailable) await call("engine.prepare_session", { session });
 }
 
 export async function queuePrompt(
@@ -1980,7 +1980,7 @@ export async function queuePrompt(
   doc: DocBlock[],
   requestId: string,
 ): Promise<{ position: number }> {
-  return inDesktop
+  return coreAvailable
     ? call<{ position: number }>("engine.queue", { session, doc, request_id: requestId })
     : { position: 0 };
 }
@@ -2056,7 +2056,7 @@ export async function answerPermission(
   requestId: string,
   optionId: string | null,
 ): Promise<boolean> {
-  if (inDesktop) {
+  if (coreAvailable) {
     return call<boolean>("engine.answer_permission", {
       session,
       request_id: requestId,
@@ -2071,7 +2071,7 @@ export async function answerElicitation(
   requestId: string,
   answer: ElicitationAnswer,
 ): Promise<boolean> {
-  if (inDesktop) {
+  if (coreAvailable) {
     return call<boolean>("engine.answer_elicitation", {
       session,
       request_id: requestId,
@@ -2082,7 +2082,7 @@ export async function answerElicitation(
 }
 
 export async function setPermissionMode(session: string, mode: string): Promise<void> {
-  if (inDesktop) await call("engine.set_permission_mode", { session, mode });
+  if (coreAvailable) await call("engine.set_permission_mode", { session, mode });
 }
 
 export async function setExecutionPolicy(
@@ -2091,7 +2091,7 @@ export async function setExecutionPolicy(
   sandbox: Sandbox,
   requestId: string,
 ): Promise<void> {
-  if (inDesktop) {
+  if (coreAvailable) {
     await call("engine.set_execution_policy", {
       session,
       mode,
@@ -2518,7 +2518,7 @@ export async function onLspExit(cb: (key: string) => void): Promise<() => void> 
 
 /** Newest text per session id, for the rail's preview line. */
 export async function sessionPreviews(): Promise<Record<string, string>> {
-  if (!inDesktop) return {};
+  if (!coreAvailable) return {};
   const rows = await call<[string, string][]>("sessions.previews");
   return Object.fromEntries(rows);
 }
@@ -2541,7 +2541,7 @@ export async function searchSessions(query: string, limit = 12): Promise<Session
 // ---- projects ----------------------------------------------------------------------------------
 
 export async function listProjects(): Promise<Project[]> {
-  return inDesktop ? call<Project[]>("projects.list") : [];
+  return coreAvailable ? call<Project[]>("projects.list") : [];
 }
 
 /**
@@ -2628,11 +2628,11 @@ export async function removeProject(path: string): Promise<void> {
 
 /** Where a new session should start. Resolved by the core, never `"."` — see `default_cwd`. */
 export async function defaultCwd(): Promise<string> {
-  return inDesktop ? call<string>("workspace.default_cwd") : ".";
+  return coreAvailable ? call<string>("workspace.default_cwd") : ".";
 }
 
 export async function setModel(session: string, model: string): Promise<void> {
-  if (inDesktop) await call("engine.set_model", { session, model });
+  if (coreAvailable) await call("engine.set_model", { session, model });
 }
 
 /** Atomically replace an idle Session's provider while retaining its transcript and workspace. */
@@ -2649,11 +2649,11 @@ export async function switchProvider(
 
 /** Set an agent-reported config option (model, reasoning effort, …) by its id. */
 export async function setConfigOption(session: string, configId: string, value: string): Promise<void> {
-  if (inDesktop) await call("engine.set_config_option", { session, config_id: configId, value });
+  if (coreAvailable) await call("engine.set_config_option", { session, config_id: configId, value });
 }
 
 export async function cancelTurn(session: string): Promise<void> {
-  if (inDesktop) await call("engine.cancel", { session });
+  if (coreAvailable) await call("engine.cancel", { session });
 }
 
 /**
@@ -2706,7 +2706,7 @@ export async function getTranscriptPage(
   before: number | null = null,
   limit = 20,
 ): Promise<TranscriptPage> {
-  return inDesktop
+  return coreAvailable
     ? call<TranscriptPage>("sessions.transcript", { session, before, limit })
     : { entries: [], next_before: null, snapshot_through: null };
 }
@@ -3995,7 +3995,7 @@ export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<
 // ---- sandbox + project scripts (G7/G8) ---------------------------------------------------------
 
 export async function setSandbox(session: string, sandbox: Sandbox): Promise<void> {
-  if (inDesktop) await call("engine.set_sandbox", { session, sandbox });
+  if (coreAvailable) await call("engine.set_sandbox", { session, sandbox });
 }
 
 export interface ProjectScript {
@@ -4214,16 +4214,16 @@ export async function listRules(cwd: string): Promise<string[]> {
 // ---- session management (G5) -----------------------------------------------------------------
 
 export async function renameSession(session: string, title: string): Promise<void> {
-  if (inDesktop) await call("sessions.rename", { session, title });
+  if (coreAvailable) await call("sessions.rename", { session, title });
 }
 export async function archiveSession(session: string, archived: boolean): Promise<void> {
-  if (inDesktop) await call("sessions.set_archived", { session, value: archived });
+  if (coreAvailable) await call("sessions.set_archived", { session, value: archived });
 }
 export async function pinSession(session: string, pinned: boolean): Promise<void> {
-  if (inDesktop) await call("sessions.set_pinned", { session, value: pinned });
+  if (coreAvailable) await call("sessions.set_pinned", { session, value: pinned });
 }
 export async function listArchivedSessions(): Promise<SessionInfo[]> {
-  return inDesktop ? call<SessionInfo[]>("sessions.archived") : [];
+  return coreAvailable ? call<SessionInfo[]>("sessions.archived") : [];
 }
 
 // ---- PR + commit message (G6) ------------------------------------------------------------------
@@ -4311,8 +4311,8 @@ export async function deleteSkill(id: string): Promise<void> {
 }
 
 export async function onEngineEvent(cb: (ev: CoreEvent) => void): Promise<() => void> {
-  if (!inDesktop) return () => {};
-  return listenDesktop<CoreEvent>("engine-event", cb);
+  if (!coreAvailable) return () => {};
+  return listenCore<CoreEvent>("engine-event", cb);
 }
 
 export async function onPtyOutput(cb: (p: PtyOutput) => void): Promise<() => void> {

@@ -843,7 +843,7 @@ function TransientChatPanel({
           ) : null}
           <div
             data-transient-chat-composer=""
-            className="rounded-module bg-card shadow-control focus-within:focus-ring-inset"
+            className="rounded-module bg-card shadow-control transition-colors duration-feedback ease-enter focus-within:bg-fill-hover"
           >
             <input
               ref={imageInputRef}

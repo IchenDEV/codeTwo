@@ -134,21 +134,27 @@ and notarization.
 From the repository root:
 
 ```sh
-# Build the TUI, server, and their sibling Bun Tool Broker
+# Build the TUI, server, shared Web UI, and Bun Tool Broker
 ./script/build/hosts.sh release
 
 # Terminal interface
 ./target/release/codetwo-tui
 
-# Paired remote web client
+# Paired compact remote client
 ./target/release/codetwo-server
+
+# Full React Web UI (starts one Core and opens the pairing link)
+./target/release/codetwo-server webui
 
 # Self-contained turn demo using a stub ACP agent (requires Node)
 cargo run -p codetwo-core --example live_demo
 ```
 
-The remote server prints a one-time pairing URL and token. Keep it on a trusted LAN or Tailscale
-tailnet; C2 does not provide a hosted relay.
+Both server modes print a one-time pairing URL and token. `webui` serves the same React renderer as
+the desktop app from the adjacent `web-ui` build directory and opens the local pairing URL; pass
+`--no-open` to suppress that side effect, or `--ui-dir <path>` when the assets are packaged
+elsewhere. Keep either mode on a trusted LAN or Tailscale tailnet; C2 does not provide a hosted
+relay.
 
 ## Repository map
 

@@ -265,7 +265,7 @@ describe("SideChatPanel", () => {
     view.unmount();
   });
 
-  test("keeps the transient composer as the only focus-ring owner", async () => {
+  test("uses a quiet surface state instead of a blue focus ring for transient composers", async () => {
     activateDom();
 
     for (const renderPanel of [quickPanel, panel]) {
@@ -274,7 +274,8 @@ describe("SideChatPanel", () => {
 
       const composer = view.container.querySelector<HTMLElement>("[data-transient-chat-composer]");
       const textarea = composer?.querySelector<HTMLTextAreaElement>("textarea");
-      expect(composer?.className).toContain("focus-within:focus-ring-inset");
+      expect(composer?.className).toContain("focus-within:bg-fill-hover");
+      expect(composer?.className).not.toContain("focus-within:focus-ring-inset");
       expect(textarea?.className).not.toContain("focus-visible:focus-ring");
       expect(textarea?.className).not.toContain("focus-visible:focus-ring-inset");
 

@@ -26,6 +26,7 @@ pub use auth::{AuthState, Device, DeviceInfo, Paired, DEFAULT_PAIRING_TTL, WS_TI
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -38,6 +39,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc};
+use tower_http::services::{ServeDir, ServeFile};
 
 use codetwo_core::device_sync::DeviceSyncDocument;
 use codetwo_core::worktree::WorktreeBaseline;
@@ -49,9 +51,11 @@ use codetwo_core::{
     TaskBudget, TaskHandoffManager, TaskId, TaskStatus, TranscriptCursor, TranscriptEntry,
     DEFAULT_TRANSCRIPT_TURNS,
 };
+use codetwo_plugins::PluginManager;
 
 const MAX_HANDOFF_BODY_BYTES: usize = 384 * 1024 * 1024;
 const MAX_DEVICE_SYNC_BODY_BYTES: usize = 64 * 1024 * 1024;
+const MAX_WEB_UI_CALL_BODY_BYTES: usize = 2 * 1024 * 1024;
 
 /// Transport-neutral device-sync surface supplied by a host plugin.
 ///
@@ -65,6 +69,95 @@ pub trait DeviceSyncHttp: Send + Sync + 'static {
         document: &DeviceSyncDocument,
         expected_version: &str,
     ) -> Result<DeviceSyncWriteResult, String>;
+}
+
+/// Host-owned command seam for the full React renderer running in a paired browser.
+///
+/// The server authenticates and frames the request; the supplying host owns which commands are
+/// exposed and dispatches them through the same Kernel context as its native renderer.
+#[async_trait::async_trait]
+pub trait WebUiCommandCaller: Send + Sync + 'static {
+    async fn call(
+        &self,
+        device_id: &str,
+        name: &str,
+        args: serde_json::Value,
+        project_path: Option<String>,
+    ) -> Result<serde_json::Value, String>;
+}
+
+/// Shared host adapter for the paired full React renderer.
+///
+/// Desktop Remote and the standalone server both use this adapter so browser capability policy
+/// and root/project Kernel dispatch cannot drift between launch surfaces.
+pub struct KernelWebUiCommands {
+    plugin_manager: Arc<PluginManager>,
+}
+
+impl KernelWebUiCommands {
+    pub fn new(plugin_manager: Arc<PluginManager>) -> Self {
+        Self { plugin_manager }
+    }
+}
+
+fn web_ui_command_allowed(name: &str) -> bool {
+    matches!(
+        name,
+        "providers.list"
+            | "projects.list"
+            | "workspace.default_cwd"
+            | "sessions.list"
+            | "sessions.archived"
+            | "sessions.previews"
+            | "sessions.transcript"
+            | "sessions.rename"
+            | "sessions.set_archived"
+            | "sessions.set_pinned"
+            | "engine.new_session"
+            | "engine.new_parallel_task"
+            | "engine.close_transient_session"
+            | "engine.prompt"
+            | "engine.prepare_session"
+            | "engine.queue"
+            | "engine.steer"
+            | "engine.answer_permission"
+            | "engine.answer_elicitation"
+            | "engine.set_permission_mode"
+            | "engine.set_execution_policy"
+            | "engine.set_sandbox"
+            | "engine.set_model"
+            | "engine.set_config_option"
+            | "engine.cancel"
+    )
+}
+
+#[async_trait::async_trait]
+impl WebUiCommandCaller for KernelWebUiCommands {
+    async fn call(
+        &self,
+        _device_id: &str,
+        name: &str,
+        args: serde_json::Value,
+        project_path: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        if !web_ui_command_allowed(name) {
+            return Err(format!(
+                "command is unavailable in the browser renderer: {name}"
+            ));
+        }
+
+        if let Some(project_path) = project_path {
+            self.plugin_manager
+                .call_in_project(project_path, name, args)
+                .await
+                .map_err(|error| error.to_string())
+        } else {
+            self.plugin_manager
+                .call(name, args)
+                .await
+                .map_err(|error| error.to_string())
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -560,6 +653,7 @@ struct ServerState {
     terminals: Arc<terminal::TerminalRegistry>,
     handoff: Arc<TaskHandoffManager>,
     device_sync: Option<Arc<dyn DeviceSyncHttp>>,
+    web_ui_commands: Option<Arc<dyn WebUiCommandCaller>>,
 }
 
 /// Forward the engine's single event receiver into a broadcast channel so multiple clients (and the
@@ -620,6 +714,36 @@ pub async fn bind_and_serve_with_services(
     canvas_gate: CanvasFeatureGate,
     device_sync: Option<Arc<dyn DeviceSyncHttp>>,
 ) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
+    bind_and_serve_with_web_ui(
+        engine,
+        events,
+        addr,
+        auth,
+        store,
+        canvas_gate,
+        device_sync,
+        None,
+        None,
+    )
+    .await
+}
+
+/// Bind the paired server with the host's optional full-renderer command adapter.
+///
+/// The compact remote protocol remains available without this adapter. Supplying commands adds the
+/// authenticated generic command route. Supplying a Web asset directory also replaces the compact
+/// root with the existing React SPA while leaving protocol, terminal, and Canvas routes intact.
+pub async fn bind_and_serve_with_web_ui(
+    engine: Arc<Engine>,
+    events: broadcast::Sender<Event>,
+    addr: SocketAddr,
+    auth: Arc<AuthState>,
+    store: Arc<Store>,
+    canvas_gate: CanvasFeatureGate,
+    device_sync: Option<Arc<dyn DeviceSyncHttp>>,
+    web_ui_commands: Option<Arc<dyn WebUiCommandCaller>>,
+    web_ui_dir: Option<PathBuf>,
+) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
     let t3 = Arc::new(
         t3_compat::T3CompatState::new(engine.clone(), events.clone(), auth.clone())
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?,
@@ -638,6 +762,7 @@ pub async fn bind_and_serve_with_services(
         terminals: Arc::new(terminal::TerminalRegistry::default()),
         handoff,
         device_sync,
+        web_ui_commands,
     });
     let handoff_routes = Router::new()
         .route("/api/codetwo/handoffs", post(accept_handoff))
@@ -656,9 +781,11 @@ pub async fn bind_and_serve_with_services(
         )
         .with_state(state.clone())
         .layer(DefaultBodyLimit::max(MAX_DEVICE_SYNC_BODY_BYTES));
+    let web_ui_routes = Router::new()
+        .route("/api/web-ui/call", post(web_ui_call))
+        .with_state(state.clone())
+        .layer(DefaultBodyLimit::max(MAX_WEB_UI_CALL_BODY_BYTES));
     let app = Router::new()
-        .route("/", get(index))
-        .route("/pair", get(index))
         .route("/terminal", get(index))
         .route("/health", get(|| async { "ok" }))
         .route("/api/pair", post(pair))
@@ -732,7 +859,14 @@ pub async fn bind_and_serve_with_services(
         .merge(handoff_routes)
         .merge(device_sync_pair_route)
         .merge(device_sync_snapshot_routes)
-        .layer(axum::middleware::map_response(no_store_headers));
+        .merge(web_ui_routes);
+    let app = if let Some(web_ui_dir) = web_ui_dir {
+        let index = web_ui_dir.join("index.html");
+        app.fallback_service(ServeDir::new(web_ui_dir).not_found_service(ServeFile::new(index)))
+    } else {
+        app.route("/", get(index)).route("/pair", get(index))
+    }
+    .layer(axum::middleware::map_response(no_store_headers));
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
@@ -740,6 +874,44 @@ pub async fn bind_and_serve_with_services(
         let _ = axum::serve(listener, app.into_make_service()).await;
     });
     Ok((local, handle))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WebUiCallBody {
+    name: String,
+    #[serde(default)]
+    args: serde_json::Value,
+    #[serde(default)]
+    project_path: Option<String>,
+}
+
+async fn web_ui_call(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(body): Json<WebUiCallBody>,
+) -> Response {
+    let Some(commands) = &st.web_ui_commands else {
+        return (StatusCode::NOT_FOUND, "C2 Web UI commands are unavailable").into_response();
+    };
+    let device_id = match require_device(&st, &headers) {
+        Ok(device_id) => device_id,
+        Err(response) => return response,
+    };
+    if body.name.is_empty() || body.name.len() > 160 {
+        return (StatusCode::BAD_REQUEST, "C2 Web UI command name is invalid").into_response();
+    }
+    match commands
+        .call(&device_id, &body.name, body.args, body.project_path)
+        .await
+    {
+        Ok(result) => Json(serde_json::json!({ "result": result })).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        )
+            .into_response(),
+    }
 }
 
 #[derive(Deserialize)]
@@ -2530,8 +2702,9 @@ const INDEX_HTML: &str = include_str!("client.html");
 #[cfg(test)]
 mod tests {
     use super::{
-        DeviceSyncHttp, DeviceSyncIdentity, DeviceSyncReplica, DeviceSyncWriteResult,
-        DeviceSyncWriteState, Outbound, PairingEndpoint, TranscriptCursor, TranscriptEntry,
+        web_ui_command_allowed, DeviceSyncHttp, DeviceSyncIdentity, DeviceSyncReplica,
+        DeviceSyncWriteResult, DeviceSyncWriteState, Outbound, PairingEndpoint, TranscriptCursor,
+        TranscriptEntry,
     };
     use codetwo_core::device_sync::{device_sync_snapshot_version, DeviceSyncDocument};
     use codetwo_core::provider::ProviderId;
@@ -2549,6 +2722,16 @@ mod tests {
             url: format!("http://{id}.example/"),
             qr_shareable,
         }
+    }
+
+    #[test]
+    fn browser_renderer_has_one_bounded_core_capability_set() {
+        assert!(web_ui_command_allowed("sessions.list"));
+        assert!(web_ui_command_allowed("engine.prompt"));
+        assert!(web_ui_command_allowed("workspace.default_cwd"));
+        assert!(!web_ui_command_allowed("plugins.set_trusted"));
+        assert!(!web_ui_command_allowed("remote.stop"));
+        assert!(!web_ui_command_allowed("workspace.delete"));
     }
 
     fn git(cwd: &std::path::Path, args: &[&str]) {
