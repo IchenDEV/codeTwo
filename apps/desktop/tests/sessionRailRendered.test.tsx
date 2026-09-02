@@ -427,17 +427,19 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("keeps collapse in the title row and exposes search as a labeled launcher", () => {
+  test("keeps collapse aligned in the title row and exposes search as a labeled launcher", () => {
     activateDom();
     const opened = [];
     const view = renderRail({ onOpenSearch: () => opened.push("search") });
     const header = view.container.querySelector("[data-rail-header]");
+    const collapse = header?.querySelector('button[aria-label="Collapse the sidebar"]');
     const search = view.container.querySelector("[data-rail-search]");
 
     expect(view.container.textContent).not.toContain("C2");
     expect(search).toBeTruthy();
     expect(header?.querySelector("[data-rail-search]")).toBeNull();
-    expect(header?.querySelector('button[aria-label="Collapse the sidebar"]')).toBeTruthy();
+    expect(collapse).toBeTruthy();
+    expect(collapse?.classList.contains("mr-2")).toBe(true);
     expect(search?.textContent).toContain("Search chats");
     expect(search?.querySelector("kbd")?.textContent).toBe("⌘K");
 
@@ -593,6 +595,8 @@ describe("SessionRail row layout", () => {
     expect(control?.querySelector('[data-rail-side-chat]')).toBeNull();
     expect(quickChat?.getAttribute("aria-label")).toBe("Toggle Quick Chat");
     expect(quickChat?.getAttribute("aria-pressed")).toBe("false");
+    expect(quickChat?.className).toContain("mr-2");
+    expect(quickChat?.className).not.toContain("mr-1");
 
     click(primary);
     click(quickChat);

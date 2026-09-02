@@ -5968,6 +5968,11 @@ export default function App() {
     [componentEnabled, manualDockTab, toast],
   );
 
+  const toggleSidePanel = useCallback(() => {
+    manualDockTab(dockTabRef.current !== null ? null : "home");
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+  }, [manualDockTab]);
+
   const runProjectAction = useCallback((script: ProjectScript) => {
     if (script.kind === "prompt") {
       const doc: DocBlock[] = [{ type: "text", text: script.prompt }];
@@ -6875,6 +6880,15 @@ export default function App() {
         case "close_panel":
           manualDockTab(null);
           break;
+        case "split_pane_right":
+          splitPaneById(focusedPaneRef.current, "right");
+          break;
+        case "split_pane_down":
+          splitPaneById(focusedPaneRef.current, "bottom");
+          break;
+        case "toggle_side_panel":
+          toggleSidePanel();
+          break;
         case "open_skill_picker":
           openSkillPickerRef.current?.();
           break;
@@ -6990,6 +7004,8 @@ export default function App() {
       openWorkingDirectory,
       toggleDock,
       manualDockTab,
+      splitPaneById,
+      toggleSidePanel,
       toggleDocMode,
       docMode,
       stepSession,
@@ -8327,12 +8343,14 @@ export default function App() {
                 }}
                 groupLabel={t("pane.layoutActions")}
                 viewLabel={t("pane.viewMenu")}
+                shortcuts={{
+                  splitRight: hint("split_pane_right"),
+                  splitDown: hint("split_pane_down"),
+                  sidePanel: hint("toggle_side_panel"),
+                }}
                 panelLabel={t("pane.sidePanel")}
                 panelActive={dockTab !== null}
-                onTogglePanel={() => {
-                  manualDockTab(dockTab !== null ? null : "home");
-                  setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-                }}
+                onTogglePanel={toggleSidePanel}
               />
             </div>
           </header>

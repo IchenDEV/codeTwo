@@ -1526,15 +1526,15 @@ pre {
   display: none;
 }
 
+.plugin-manager-tabs {
+  gap: var(--ds-space-inline);
+}
+
+.plugin-manager-tabs .plugin-manager-tab {
+  padding-inline: var(--ds-space-inline);
+}
+
 @container plugin-manager-list (max-width: 24rem) {
-  .plugin-manager-tabs {
-    gap: var(--ds-space-optical);
-  }
-
-  .plugin-manager-tab:not(:first-of-type) {
-    padding-inline: var(--ds-space-optical);
-  }
-
   .plugin-manager-tab-count {
     display: none;
   }

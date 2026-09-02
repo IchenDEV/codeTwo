@@ -128,7 +128,10 @@ export function TaskListItem({
 
       {expanded ? (
         <div
-          className="task-board-session-stack ml-8 bg-fill-rest/40"
+          className={cn(
+            "task-board-session-stack ml-8",
+            sessions.length > 0 && "bg-fill-rest/40",
+          )}
           aria-label={t("taskboard.taskSessions", { title: task.title })}
         >
           {sessions.length > 0 ? sessions.map((session) => {

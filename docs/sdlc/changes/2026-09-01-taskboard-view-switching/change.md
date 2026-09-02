@@ -8,15 +8,15 @@ owner: codex
 approvers: user via the 2026-09-01 direct request to support different TaskBoard views
 approved_at: 2026-09-01
 created: 2026-09-01
-updated: 2026-09-01
-source: direct user requests after PR #216 merged into main, including live feedback that the added sidebar title spacer made the hierarchy more confusing
+updated: 2026-09-02
+source: direct user requests after PR #216 merged into main, including live feedback that the added sidebar title spacer made the hierarchy more confusing and the 2026-09-02 annotated requests for 340px minimum board lanes and a background-free empty Session row
 inputs: the merged Task-to-Session list workspace, projected Task lanes, shared filters, selection, and responsive Inspector behavior
-outputs: list and board presentations over the same Task projection with a persisted personal view preference
+outputs: list and board presentations over the same Task projection with a persisted personal view preference, readable 340px minimum board lanes, and an unfilled empty Session row
 scope: apps/desktop/src/i18n/strings.ts, apps/desktop/src/taskboard, apps/desktop/src/sidebar/SessionRail.tsx, apps/desktop/tests/taskBoardRendered.test.tsx, apps/desktop/tests/sessionRailRendered.test.tsx, docs/sdlc/changes/2026-09-01-taskboard-view-switching
 next_trigger: human review; merge, release, and deployment remain unauthorized
 verification_mode: owner
 verified_by: codex
-verified_at: 2026-09-01
+verified_at: 2026-09-02
 ---
 
 # Add TaskBoard view switching
@@ -69,6 +69,10 @@ change Task status semantics, or alter the shared collaboration transport.
 - [x] AC-11: Remove the extra Session title spacer so a Project label and its child Session titles
       return to the established shared start line, while retaining the board overflow correction and
       all existing sidebar interactions.
+- [x] AC-12: Every Board lane keeps a 340px minimum width while horizontal overflow remains contained
+      by the existing board scroller at the annotated viewport.
+- [x] AC-13: An expanded Task with no Sessions renders its “No Sessions / Start task” row without a
+      fill background, while populated Session stacks retain their existing treatment.
 
 ## Decision and gates
 
@@ -80,6 +84,13 @@ introduced.
 This is medium risk because it changes the primary TaskBoard presentation while leaving data and
 execution untouched. Merge, release, and deployment are not authorized.
 
+The user's 2026-09-02 annotated request accepts reopening this change only to increase the existing
+Board lane minimum from 14rem to 340px. The current four-lane grid and contained horizontal scroller
+remain authoritative.
+
+The user's subsequent annotation accepts one local empty-state correction: remove the fill from an
+expanded Task's no-Sessions row without changing populated Session rows or the Inspector empty state.
+
 ## Plan
 
 1. Add the persisted personal view state and the existing header switcher.
@@ -88,6 +99,10 @@ execution untouched. Merge, release, and deployment are not authorized.
    actions, and narrow behavior with focused tests.
 4. Run renderer and repository Gates, then exercise list/board switching in real light, dark, and
    narrow windows.
+5. Increase the existing lane and four-track minimums to 340px, add focused contract coverage, and
+   repeat rendered overflow inspection at the annotated viewport.
+6. Apply the existing Session-stack fill only when Sessions are present, then verify the empty row's
+   background and Start task interaction in the rendered list.
 
 Rollback removes the board renderer and switcher and leaves the existing list as the fallback.
 The local preference key is inert if the UI is reverted.
@@ -114,13 +129,22 @@ spacer was removed: Project labels and child Session titles again use the establ
 line, while provider and workspace icons remain on metadata rows. No new view, preference, data
 path, drag-and-drop behavior, or dependency was introduced.
 
+The 2026-09-02 follow-up changes the existing four-lane grid minimum from 14rem to 340px and updates
+the explicit four-track width accordingly. The same board shell remains the sole horizontal scroller;
+the Task projection, cards, Inspector, responsive breakpoints, and view preference are unchanged.
+
+The subsequent empty-state follow-up applies the existing Session-stack fill only when the expanded
+Task has Sessions. An empty stack remains transparent while retaining its indentation, spacing,
+No Sessions label, Start task action, and collapse behavior; populated Session stacks are unchanged.
+
 ## Verification
 
 Verdict: verified
 
 The owner verified the initial view-switching slice, the compact-board follow-up, the
-overflow/minimum-width correction, and the sidebar spacer rollback on 2026-09-01. Human review
-remains the next Gate; merge, release, and deployment are not authorized.
+overflow/minimum-width correction, and the sidebar spacer rollback on 2026-09-01, then verified the
+340px lane-minimum and empty Session row follow-ups on 2026-09-02. Human review remains the next
+Gate; merge, release, and deployment are not authorized.
 
 ### Acceptance evidence
 
@@ -169,9 +193,22 @@ remains the next Gate; merge, release, and deployment are not authorized.
   assertions. Browser geometry remained four 224 px lanes with zero overflowing cards and document
   width equal to viewport width. The freshly rebuilt native window confirmed the extra title spacer
   is gone, and exactly one Core is listening on port 50000.
+- AC-12: PASS — `bun test ./tests/taskBoardRendered.test.tsx` passed 23 tests and 111 expectations,
+  including the 340px grid contract. Playwright at 1247 x 1576 measured all four lanes at exactly
+  340px, the board scroller at 671px client / 1416px scroll width, and a successful internal scroll
+  from 0px to 500px while document client and scroll widths both remained 1247px. Card selection,
+  page identity, nonblank content, and framework-overlay checks passed. `bun run build:renderer` and
+  `git diff --check` also passed; the only console errors were the known unpaired static Web UI
+  transport messages.
+- AC-13: PASS — `bun test ./tests/taskBoardRendered.test.tsx` passed 23 tests and 113 expectations,
+  proving empty Session stacks omit the fill and populated stacks retain it. Playwright at 1247 x
+  1576 measured both the empty stack and its row as transparent `rgba(0, 0, 0, 0)`, confirmed No
+  Sessions and Start task remain visible, exercised expand and collapse, and found no document
+  overflow or framework overlay. `bun run build:renderer` and `git diff --check` passed; the only
+  console errors were the known unpaired static Web UI transport messages.
 
 Residual risk: at very large Task counts, the board renders all filtered cards while the list keeps
-its existing 40-row progressive window. The board deliberately prefers readable 14 rem lanes and
+its existing 40-row progressive window. The board deliberately prefers readable 340px lanes and
 internal horizontal scrolling over compressing all four lanes into the viewport; drag-and-drop is
 out of scope, so Task status changes remain explicit menu actions. The standard 1152 px native
 window requires horizontal scrolling to reveal the whole fourth lane because the PR #216 Inspector

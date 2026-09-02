@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { act as reactAct } from "react"
 
 import {
@@ -24,6 +25,10 @@ const {
 } = await import("../src/taskboard/taskBoard")
 const { TaskBoardPage } = await import("../src/taskboard/TaskBoardPage")
 const { TASKBOARD_VIEW_STORAGE_KEY } = await import("../src/taskboard/useTaskBoardView")
+const taskBoardStyles = readFileSync(
+  new URL("../src/taskboard/task-board.css", import.meta.url),
+  "utf8",
+)
 
 const mountedRoots = []
 const previousLocalStorage = globalThis.localStorage
@@ -175,6 +180,8 @@ describe("TaskBoardPage rendered", () => {
     const boardScroll = view.container.querySelector("[data-task-board-scroll]")
     expect(boardScroll?.className).toContain("overflow-x-auto")
     expect(boardScroll?.className).toContain("max-w-full")
+    expect(taskBoardStyles).toContain("repeat(4, minmax(340px, 1fr))")
+    expect(taskBoardStyles).toContain("min-width: calc(1360px + 1.5rem)")
     const card = view.container.querySelector("[data-task-card]")
     expect(card?.className).toContain("overflow-hidden")
     expect(card?.querySelector("[data-task-card-meta]")?.className).toContain("overflow-hidden")
@@ -304,6 +311,8 @@ describe("TaskBoardPage rendered", () => {
     const view = await renderBoard({ onStartTask: (selected) => started.push(selected.id) })
 
     await click(button(view.container, "展开任务：开始待办任务"))
+    expect(view.container.querySelector(".task-board-session-stack")?.className)
+      .not.toContain("bg-fill-rest/40")
     await click(button(view.container, "开始任务"))
     expect(started).toEqual(["TASK-2000"])
   })
@@ -348,6 +357,8 @@ describe("TaskBoardPage rendered", () => {
 
     await click(button(view.container, "展开任务：优化任务管理"))
     await waitFor(() => expect(view.container.textContent).toContain("#102 · 未合并"))
+    expect(view.container.querySelector(".task-board-session-stack")?.className)
+      .toContain("bg-fill-rest/40")
 
     const rows = Array.from(view.container.querySelectorAll("[data-task-session]"))
     expect(rows.map((row) => row.getAttribute("data-task-session"))).toEqual([

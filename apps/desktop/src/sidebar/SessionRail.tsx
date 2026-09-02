@@ -1900,7 +1900,7 @@ export function SessionRail({
             render={<Button
               variant="ghost"
               size="icon"
-              className="size-7 shrink-0 text-muted-foreground"
+              className="mr-2 size-7 shrink-0 text-muted-foreground"
               aria-label={t("rail.collapse")}
               onClick={onToggleCollapse}
               disabled={taskBoardOpen && !overlay}
@@ -1965,7 +1965,7 @@ export function SessionRail({
                   size="icon-xs"
                   data-rail-quick-chat
                   className={cn(
-                    "mr-1 size-control-mini rounded-control text-muted-foreground hover:bg-fill-hover hover:text-foreground group-hover/new-task:text-foreground",
+                    "mr-2 size-control-mini rounded-control text-muted-foreground hover:bg-fill-hover hover:text-foreground group-hover/new-task:text-foreground",
                     quickChatOpen && "bg-fill-hover text-foreground",
                   )}
                   aria-label={t("quickChat.toggle")}

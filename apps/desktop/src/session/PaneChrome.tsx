@@ -7,6 +7,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,7 @@ interface PaneLayoutToolbarProps extends PaneToolbarProps {
   panelLabel: string;
   groupLabel: string;
   viewLabel: string;
+  shortcuts: { splitRight: string; splitDown: string; sidePanel: string };
 }
 
 /** Pane and panel controls grouped at the trailing edge of the focused session titlebar. */
@@ -84,6 +86,7 @@ export function PaneLayoutToolbar({
   panelLabel,
   groupLabel,
   viewLabel,
+  shortcuts,
   onSplitRight,
   onSplitDown,
   onClose,
@@ -120,10 +123,12 @@ export function PaneLayoutToolbar({
             <DropdownMenuItem onClick={onSplitRight}>
               <PanelRight aria-hidden />
               {labels.splitRight}
+              <DropdownMenuShortcut>{shortcuts.splitRight}</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onSplitDown}>
               <PanelBottom aria-hidden />
               {labels.splitDown}
+              <DropdownMenuShortcut>{shortcuts.splitDown}</DropdownMenuShortcut>
             </DropdownMenuItem>
             {canClose ? (
               <DropdownMenuItem onClick={onClose}>
@@ -138,6 +143,7 @@ export function PaneLayoutToolbar({
             >
               <PanelRight aria-hidden />
               {panelLabel}
+              <DropdownMenuShortcut>{shortcuts.sidePanel}</DropdownMenuShortcut>
             </DropdownMenuCheckboxItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>

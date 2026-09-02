@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use codetwo_core::{Engine, Event, Member, MemberId, Store, WorkspaceId, WorkspaceRole};
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
-use codetwo_plugins::{CanvasService, EngineService, EventBus, StoreService};
+use codetwo_plugins::{CanvasService, EngineService, EventBus, PluginManager, StoreService};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast;
@@ -190,6 +190,7 @@ struct RemoteRuntime {
     events: broadcast::Sender<Event>,
     canvas_gate: codetwo_core::CanvasFeatureGate,
     device_sync: Option<Arc<DeviceSyncRuntime>>,
+    web_ui_commands: Arc<codetwo_server::KernelWebUiCommands>,
     auth_path: PathBuf,
     lifecycle: Mutex<RemoteLifecycle>,
 }
@@ -277,7 +278,8 @@ impl Plugin for RemotePlugin {
     }
 
     fn inject(&self) -> Injection {
-        Injection::required(["engine", "store", "bus", "canvas"]).with_optional(["device-sync"])
+        Injection::required(["engine", "store", "bus", "canvas", "plugin-manager"])
+            .with_optional(["device-sync"])
     }
 
     fn description(&self) -> Option<&str> {
@@ -285,6 +287,10 @@ impl Plugin for RemotePlugin {
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        let web_ui_commands = Arc::new(codetwo_server::KernelWebUiCommands::new(
+            ctx.get::<PluginManager>()
+                .ok_or_else(|| PluginError::new("plugin manager is unavailable"))?,
+        ));
         let runtime = Arc::new(RemoteRuntime {
             engine: ctx
                 .get::<EngineService>()
@@ -306,6 +312,7 @@ impl Plugin for RemotePlugin {
                 .ok_or_else(|| PluginError::new("canvas service is unavailable"))?
                 .gate,
             device_sync: ctx.get::<DeviceSyncRuntime>(),
+            web_ui_commands,
             auth_path: self.auth_path.clone(),
             lifecycle: Mutex::new(RemoteLifecycle::default()),
         });
@@ -345,7 +352,7 @@ impl Plugin for RemotePlugin {
                     .device_sync
                     .clone()
                     .map(|device_sync| device_sync as Arc<dyn codetwo_server::DeviceSyncHttp>);
-                let bound = codetwo_server::bind_and_serve_with_services(
+                let bound = codetwo_server::bind_and_serve_with_web_ui(
                     service.engine.clone(),
                     service.events.clone(),
                     addr,
@@ -353,6 +360,8 @@ impl Plugin for RemotePlugin {
                     service.store.clone(),
                     service.canvas_gate,
                     device_sync_http,
+                    Some(service.web_ui_commands.clone()),
+                    None,
                 )
                 .await;
                 let (local, task) = match bound {

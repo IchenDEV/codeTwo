@@ -1709,14 +1709,14 @@ export function PluginManagerPage({
           <h1 className="shrink-0 text-dialog font-semibold">{labels.title}</h1>
           <div className="electrobun-webkit-app-region-drag flex-1" />
         </header>
-        <div data-plugin-manager-list-controls className="grid shrink-0 gap-2 px-4 pb-3">
+        <div data-plugin-manager-list-controls className="grid shrink-0 gap-2 px-2 pb-3">
           <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="ms-surface-inset min-w-0 gap-0">
             <TabsList variant="toolbar" aria-label={labels.title} className="plugin-manager-tabs min-w-0 max-w-full overflow-x-auto">
             {(["plugins", "mcps", "skills", "hooks", "marketplace"] as const).map((id) => (
               <TabsTrigger
                 key={id}
                 value={id}
-                className="plugin-manager-tab shrink-0 px-1"
+                className="plugin-manager-tab shrink-0"
               >
                 <span data-plugin-manager-tab-label>{labels[id]}</span>{" "}
                 <span className="plugin-manager-tab-count text-callout tabular-nums">{tabCounts[id]}</span>
