@@ -1716,7 +1716,7 @@ export function PluginManagerPage({
               <TabsTrigger
                 key={id}
                 value={id}
-                className="plugin-manager-tab shrink-0 px-1"
+                className="plugin-manager-tab shrink-0"
               >
                 <span data-plugin-manager-tab-label>{labels[id]}</span>{" "}
                 <span className="plugin-manager-tab-count text-callout tabular-nums">{tabCounts[id]}</span>

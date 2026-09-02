@@ -438,8 +438,9 @@ describe("PluginManagerPage", () => {
       .toContain("ms-inline");
     expect(desktopStyles).toContain("container: plugin-manager-list / inline-size");
     expect(desktopStyles).toContain("@container plugin-manager-list (max-width: 24rem)");
-    expect(desktopStyles).toContain(".plugin-manager-tab:not(:first-of-type)");
-    expect(desktopStyles).toContain("padding-inline: var(--ds-space-optical)");
+    expect(desktopStyles).toMatch(/\.plugin-manager-tabs\s*{[^}]*gap:\s*var\(--ds-space-inline\)/s);
+    expect(desktopStyles).toMatch(/\.plugin-manager-tabs \.plugin-manager-tab\s*{[^}]*padding-inline:\s*var\(--ds-space-inline\)/s);
+    expect(desktopStyles).not.toContain(".plugin-manager-tab:not(:first-of-type)");
     expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();
     expect(view.container.querySelector("[data-plugin-manager-page]")?.getAttribute("data-compact-detail")).toBe("true");
     expect(view.container.querySelector("[data-plugin-manager-scroll]")?.classList.contains("w-full")).toBe(true);

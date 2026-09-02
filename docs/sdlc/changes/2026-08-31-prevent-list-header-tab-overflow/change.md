@@ -8,15 +8,15 @@ owner: codex
 approvers: user via the 2026-08-31 screenshot feedback and PR-and-merge request
 approved_at: 2026-08-31
 created: 2026-08-31
-updated: 2026-08-31
-source: user-supplied clipping and alignment screenshots plus direct remediation requests on 2026-08-31
+updated: 2026-09-02
+source: user-supplied clipping and alignment screenshots plus direct remediation requests on 2026-08-31; Plugin Manager tab padding and gap annotations on 2026-09-02
 inputs: screenshots, live checkout, existing split-panel layout, layout specification, and design tokens
-outputs: responsive aligned list controls, focused regression coverage, and rendered narrow-state evidence
+outputs: responsive aligned list controls, consistent Plugin Manager tab spacing, focused regression coverage, and rendered narrow-state evidence
 scope: apps/desktop, docs/sdlc/changes/2026-08-31-prevent-list-header-tab-overflow
-next_trigger: the authorized pull request passes required checks and merges into origin/main
+next_trigger: pull request review and explicit merge approval
 verification_mode: owner
 verified_by: codex
-verified_at: 2026-08-31
+verified_at: 2026-09-02
 ---
 
 # Prevent list-header tabs from clipping in narrow panes
@@ -73,6 +73,8 @@ Docker layouts keep their existing page/chrome grids because they are not split-
       an explicit shell exception.
 - [x] AC-7: Pull requests separates its title/action row from its view/search controls without changing
       tab, filter, refresh, selection, or compact list/detail behavior.
+- [x] AC-8: Every Plugin Manager category tab uses 4px inline padding and adjacent tabs use a 4px
+      gap at the annotated list-pane width, without clipping or horizontal overflow.
 
 ## Decision and gates
 
@@ -89,6 +91,9 @@ the same change to the peer Pull requests split-list surface and one shared 32px
 The user's 2026-08-31 request, “pr & merge,” separately authorizes PR creation and merge after the
 required repository checks pass; it does not authorize a product release or deployment.
 
+The user's 2026-09-02 browser annotations accept reopening this change for one local spacing
+correction: 4px inline padding on each Plugin Manager category tab and a larger 4px inter-tab gap.
+
 ## Plan
 
 1. Separate each affected title/action row from its filter or category row while retaining existing
@@ -101,6 +106,8 @@ required repository checks pass; it does not authorize a product release or depl
    4px grid; correct their shared optical line with existing spacing tokens and repeat rendered QA.
 5. Record one 32px split-list content line in the layout specification, apply it to the three peer
    workbenches, and keep unrelated full-canvas page shells outside this rule.
+6. Replace the Plugin Manager compact row's asymmetric 8px/2px tab padding and 2px gap with the
+   existing 4px inline spacing token, preserving the 24rem count-hiding breakpoint.
 
 Rollback restores the two prior single-row headers and page-level plugin breakpoint rules; no data,
 configuration, or external state is changed.
@@ -109,6 +116,9 @@ configuration, or external state is changed.
 
 [PR #191](https://github.com/IchenDEV/codeTwo/pull/191) carries the scoped implementation and its
 schema-2 lifecycle record.
+
+[PR #219](https://github.com/IchenDEV/codeTwo/pull/219) carries the 2026-09-02 Web UI follow-up and
+the local Plugin Manager spacing correction.
 
 - Automations keeps its 48px title/action row and renders the existing accessible filter group plus
   search field in a dedicated list-control stack below it. The macOS safe-area class remains on the
@@ -130,6 +140,9 @@ schema-2 lifecycle record.
   padding keep every label inside the control width without restoring a horizontal scroller.
 - Focused assertions protect the alignment-token classes, tab-label measurement hooks, compact
   end padding, title/control separation, and existing leading-action exception.
+- The 2026-09-02 follow-up replaces Plugin Manager's asymmetric 8px/2px category padding and 2px
+  compact gap with the existing 4px inline token for every tab and every adjacent gap. The 24rem
+  container breakpoint continues to hide only numeric counts.
 
 ## Verification
 
@@ -171,6 +184,12 @@ Verdict: verified.
   and `bun script/verify/sdlc.ts` then passed. The first `--worktree` pass correctly rejected the
   transitional deletion of the pre-rebase flat Artifact until the migration was folded into the
   branch commit.
+- The 2026-09-02 focused follow-up passed 18 tests and 127 expectations in
+  `pluginManagerRendered.test.tsx`, plus `bunx tsc --noEmit` and a fresh static Web UI build.
+  Browser measurement at the annotated 1247x1576 viewport found 4px left/right padding on all five
+  category tabs, four exact 4px adjacent gaps, and a tab list whose client and scroll widths both
+  measured 310px. All five categories remained clickable and ArrowRight moved focus from Hooks to
+  Marketplace. The only console errors were the existing unpaired-static-Web-UI transport errors.
 
 ### Acceptance evidence
 
@@ -181,6 +200,9 @@ Verdict: verified.
 - AC-5: PASS — `in-app Browser DOM measurement at 1280x720` recorded exact 32px Automations title, All-label, and search-icon offsets plus the collapsed-shell exception.
 - AC-6: PASS — `in-app Browser DOM measurement at 1280x720` recorded exact 32px / 32px / 32px offsets on Automations, Features & plugins, and Pull requests.
 - AC-7: PASS — `githubPullRequestsRendered.test.tsx` and the rendered interaction check preserved view selection, search, filter, refresh, and compact structure after row separation.
+- AC-8: PASS — `bun test ./tests/pluginManagerRendered.test.tsx` protected the 4px token contract;
+  in-app Browser DOM measurement at 1247x1576 confirmed 4px inline padding, 4px adjacent gaps, and
+  matched 310px client/scroll widths across the category row.
 
 Residual risk: verification used the isolated renderer with fixture data rather than launching
 this worktree's native app because another worktree already owns the default desktop data directory.
