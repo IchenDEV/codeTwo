@@ -131,6 +131,28 @@ function parseChangedPaths(output: string): ChangedPath[] {
     .filter((change) => change.paths.length > 0);
 }
 
+function gateChangedPaths(changes: ChangedPath[]): string[] {
+  return changes.flatMap((change) => {
+    if (change.status === "D") return [];
+    if (/^R/.test(change.status)) {
+      const destination = change.paths.at(-1);
+      return destination ? [destination] : [];
+    }
+    return change.paths;
+  });
+}
+
+function legacyChangePathsInDiff(changes: ChangedPath[]): string[] {
+  return changes.flatMap((change) => {
+    if (change.status === "D") return [];
+    if (/^R/.test(change.status)) {
+      const destination = change.paths.at(-1) ?? "";
+      return /docs\/sdlc\/changes\/[^/]+\/change\.md$/.test(destination) ? [destination] : [];
+    }
+    return change.paths.filter((path) => /docs\/sdlc\/changes\/[^/]+\/change\.md$/.test(path));
+  });
+}
+
 function changedPaths(
   root: string,
   base: string | undefined,
@@ -176,15 +198,12 @@ function validateChangedArtifactGate(
   const { changes, errors } = changedPaths(root, base, worktree);
   if (errors.length > 0 || changes.length === 0) return errors;
 
-  const legacyChangePaths = changes
-    .filter((change) => change.status !== "D")
-    .flatMap((change) => change.paths)
-    .filter((path) => /docs\/sdlc\/changes\/[^/]+\/change\.md$/.test(path));
+  const legacyChangePaths = legacyChangePathsInDiff(changes);
   if (legacyChangePaths.length > 0) {
     return [`${legacyChangePaths[0]}: schema 3 forbids legacy change.md`];
   }
 
-  const changed = new Set(changes.flatMap((change) => change.paths));
+  const changed = new Set(gateChangedPaths(changes));
   const changedBundleIds = new Set(
     Array.from(changed)
       .filter(isCanonicalStagePath)
