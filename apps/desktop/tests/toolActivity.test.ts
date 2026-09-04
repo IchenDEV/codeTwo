@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { DockSurface } from "../src/dock/Dock";
 import {
   activeInteractivePreview,
   classifyToolSurface,
@@ -12,7 +13,6 @@ import type {
   ToolSurfaceHint,
 } from "../src/session/toolActivity";
 import type { Turn } from "../src/session/turns";
-import type { DockSurface } from "../src/dock/Dock";
 
 describe("classifyToolSurface", () => {
   const cases: {

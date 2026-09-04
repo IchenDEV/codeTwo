@@ -1,3 +1,5 @@
+import { asJsonObject } from "../lib/jsonValue";
+
 export const sidebarSectionsStorageKey = "codetwo.rail.taskSections.v2";
 export const legacySidebarSectionsStorageKey = "codetwo.rail.taskSections.v1";
 export const unsectionedTaskOrderKey = "unsectioned";
@@ -77,14 +79,9 @@ function cleanTaskOrder(
 function parseSidebarTaskSections(
   raw: string
 ): SidebarTaskSectionsState | null {
-  const value = JSON.parse(raw) as {
-    version?: unknown;
-    sections?: unknown;
-    assignments?: unknown;
-    taskOrder?: unknown;
-  } | null;
+  const value = asJsonObject(JSON.parse(raw) as unknown);
   if (
-    !value ||
+    value == null ||
     (value.version !== 1 && value.version !== 2) ||
     !Array.isArray(value.sections)
   ) {
@@ -95,10 +92,10 @@ function parseSidebarTaskSections(
   const names = new Set<string>();
   const sections: SidebarTaskSection[] = [];
   for (const candidate of value.sections.slice(0, 100)) {
-    if (candidate == null || typeof candidate !== "object") {
+    const row = asJsonObject(candidate);
+    if (row == null) {
       continue;
     }
-    const row = candidate as Record<string, unknown>;
     const id = typeof row.id === "string" ? row.id.trim() : "";
     const name = typeof row.name === "string" ? cleanSectionName(row.name) : "";
     const comparableName = name.toLocaleLowerCase();
@@ -117,15 +114,9 @@ function parseSidebarTaskSections(
   }
 
   const assignments: Record<string, string> = {};
-  const rawAssignments = value.assignments;
-  if (
-    rawAssignments != null &&
-    typeof rawAssignments === "object" &&
-    !Array.isArray(rawAssignments)
-  ) {
-    for (const [taskId, sectionId] of Object.entries(
-      rawAssignments as Record<string, unknown>
-    )) {
+  const rawAssignments = asJsonObject(value.assignments);
+  if (rawAssignments != null) {
+    for (const [taskId, sectionId] of Object.entries(rawAssignments)) {
       if (
         taskId !== "" &&
         typeof sectionId === "string" &&

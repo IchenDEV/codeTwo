@@ -168,12 +168,52 @@ export default [
           checkVariables: "always",
         },
       ],
+      // React Compiler emits `react-hooks/todo` for HIR gaps (try/finally, dynamic
+      // import). Those are compiler limitations, not product defects.
+      "react-hooks/todo": "off",
+      // Prefer-use-effect-event requires React 19; desktop is on React 18.3.
+      "react-doctor/prefer-use-effect-event": "off",
+      // Vite Fast Refresh tolerates colocated types/helpers next to components
+      // (shadcn-style UI modules). The rule has no allowConstantExport option here.
+      "react-doctor/only-export-components": "off",
+      // App and other surfaces are known large; splitting is a separate change.
+      "react-doctor/no-giant-component": "off",
+      // Syncing "latest value" refs during render is the React 18 pattern used by
+      // `useLatestRef`; the alternative is an effect that lags one frame.
+      "react-doctor/no-ref-current-in-render": "off",
     },
   },
   {
     files: ["src/components/ui/textarea.tsx"],
     rules: {
       "no-restricted-syntax": ["error", inlineRadiusRestriction],
+    },
+  },
+  {
+    // Excalidraw brands (FileId, DataURL, lineHeight) and sanitized element
+    // reconstitution are minted only in this seam file.
+    files: ["src/canvas/excalidrawAdapter.ts"],
+    rules: {
+      "@typescript-eslint/no-unsafe-type-assertion": "off",
+    },
+  },
+  {
+    // Desktop IPC / DOM Event.detail wire boundary: unknown→T and any→unknown.
+    files: ["src/lib/ipcResult.ts"],
+    rules: {
+      "@typescript-eslint/no-unsafe-type-assertion": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
+    // React-idiomatic `*Ref` hook names; assertion narrows null-initialized refs.
+    files: ["src/lib/useLatestRef.ts", "src/lib/useCollectionRef.ts"],
+    rules: {
+      "@typescript-eslint/no-unsafe-type-assertion": "off",
+      "github/filenames-match-regex": "off",
+      "unicorn/name-replacements": "off",
     },
   },
   {

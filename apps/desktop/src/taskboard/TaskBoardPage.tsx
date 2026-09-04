@@ -6,6 +6,21 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
+
+import { confirmNative, openExternal } from "@/bridge";
+import type { SessionActivity } from "@/bridge";
+import { SearchField } from "@/components/business/search-field";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   CheckCircle2,
   ExternalLink,
@@ -19,19 +34,6 @@ import {
   Trash2,
   X,
 } from "@/components/ui/icons";
-
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { SearchField } from "@/components/business/search-field";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -40,12 +42,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { useToast } from "@/ui/toast";
-import { confirmNative, openExternal } from "@/bridge";
-import type { SessionActivity } from "@/bridge";
 import { useLanguage } from "@/i18n";
 import type { Locale, Translate } from "@/i18n";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/ui/toast";
 
 import {
   corruptBoardWarning,
@@ -204,7 +204,7 @@ function laneLabel(t: Translate, lane: TaskBoardLane): string {
 
 function sessionActivityKind(session?: SessionProjection) {
   const kind = session?.activity?.state.kind ?? "idle";
-  return session?.running && kind === "idle" ? "running" : kind;
+  return session?.running === true && kind === "idle" ? "running" : kind;
 }
 
 function latestAvailableSession(
@@ -291,7 +291,7 @@ function attentionDetail(
   };
 }
 
-const TaskCard = ({
+function TaskCard({
   t,
   locale,
   projected,
@@ -311,9 +311,9 @@ const TaskCard = ({
   readonly onOpenSession?: (id: string) => void;
   readonly onStartTask?: (task: BoardTask) => void;
   readonly onUnlinkPullRequest?: () => void;
-}) => {
+}) {
   const { task, lane, latestSession } = projected;
-  const pullRequest = task.pullRequest;
+  const { pullRequest } = task;
   const attention =
     lane === "needs_you" ? attentionDetail(t, task, latestSession) : null;
   const openLatest =
@@ -443,7 +443,7 @@ const TaskCard = ({
 
       {lane === "queue" && (task.priority !== "none" || latestSession) ? (
         <div className="text-metadata text-muted-foreground mt-4 flex min-w-0 items-center gap-2">
-          {task.priority !== "none" ? (
+          {task.priority === "none" ? null : (
             <span
               className={cn(
                 "inline-flex items-center gap-1",
@@ -453,7 +453,7 @@ const TaskCard = ({
               <Flag aria-hidden className="size-3" />
               {taskPriorityLabel(t, task.priority)}
             </span>
-          ) : null}
+          )}
           {latestSession ? (
             <span className="ml-auto truncate">
               {t("taskboard.readyToContinue")}
@@ -520,9 +520,9 @@ const TaskCard = ({
       ) : null}
     </article>
   );
-};
+}
 
-const BoardColumn = ({
+function BoardColumn({
   t,
   locale,
   lane,
@@ -550,7 +550,7 @@ const BoardColumn = ({
   readonly deleteTask: (task: BoardTask) => void;
   readonly onOpenSession?: (id: string) => void;
   readonly onStartTask?: (task: BoardTask) => void;
-}) => {
+}) {
   const visibleTasks = expanded ? tasks : tasks.slice(0, collapsedLaneLimit);
   const hiddenCount = Math.max(0, tasks.length - visibleTasks.length);
   const visualCount = filtered ? `${tasks.length}/${totalCount}` : totalCount;
@@ -605,7 +605,7 @@ const BoardColumn = ({
             onUnlinkPullRequest={
               projected.task.pullRequest
                 ? () => {
-                    const pullRequest = projected.task.pullRequest;
+                    const { pullRequest } = projected.task;
                     if (!pullRequest) {
                       return;
                     }
@@ -657,14 +657,14 @@ const BoardColumn = ({
       </div>
     </section>
   );
-};
+}
 
-export const TaskBoardPage = ({
+export function TaskBoardPage({
   sessions = [],
   onOpenSession,
   onStartTask,
   headerLeadingAction,
-}: TaskBoardPageProps) => {
+}: TaskBoardPageProps) {
   const { locale, t } = useLanguage();
   const toast = useToast();
   const [state, dispatchBase] = useReducer(boardReducer, undefined, () =>
@@ -682,7 +682,7 @@ export const TaskBoardPage = ({
   const deferredQuery = useDeferredValue(query);
 
   useEffect(() => {
-    if (state.warning) {
+    if (state.warning != null && state.warning !== "") {
       toast(warningText(state.warning, t), "error");
     }
   }, [state.warning, t, toast]);
@@ -786,11 +786,11 @@ export const TaskBoardPage = ({
           className="grid min-w-0 items-center gap-3 xl:grid-cols-[minmax(0,auto)_minmax(24rem,1fr)]"
         >
           <div className="flex min-w-0 items-center gap-3">
-            {headerLeadingAction ? (
+            {headerLeadingAction == null ? null : (
               <div data-taskboard-leading-action className="shrink-0">
                 {headerLeadingAction}
               </div>
-            ) : null}
+            )}
             <h1 className="text-page shrink-0 font-semibold tracking-tight">
               {t("taskboard.title")}
             </h1>
@@ -922,7 +922,7 @@ export const TaskBoardPage = ({
         </div>
       </header>
 
-      {state.warning ? (
+      {state.warning != null && state.warning !== "" ? (
         <p
           role="alert"
           className="bg-destructive/10 text-metadata text-destructive px-6 py-2"
@@ -976,4 +976,4 @@ export const TaskBoardPage = ({
       ) : null}
     </main>
   );
-};
+}

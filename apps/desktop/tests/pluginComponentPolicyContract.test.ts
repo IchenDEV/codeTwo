@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 const desktop = resolve(import.meta.dir, "..");
 const source = (path: string) =>
-  readFileSync(resolve(desktop, "src", path), "utf8");
+  readFileSync(resolve(desktop, "src", path), "utf-8");
 
 describe("built-in component policy integration", () => {
   test("projects voice, memory, scenes, and LSP policy into their real runtimes", () => {
@@ -76,8 +76,14 @@ describe("built-in component policy integration", () => {
     const desktopPet = source("pet/DesktopPet.tsx");
     const pet = source("pet/CodeTwoPet.tsx");
     const transcript = source("session/TranscriptPane.tsx");
-    const petEntry = readFileSync(resolve(desktop, "desktop-pet.html"), "utf8");
-    const viteConfig = readFileSync(resolve(desktop, "vite.config.ts"), "utf8");
+    const petEntry = readFileSync(
+      resolve(desktop, "desktop-pet.html"),
+      "utf-8"
+    );
+    const viteConfig = readFileSync(
+      resolve(desktop, "vite.config.ts"),
+      "utf-8"
+    );
 
     expect(host).toContain('url: "views://main/desktop-pet.html"');
     expect(host).not.toContain("views://main/index.html?desktop-pet");

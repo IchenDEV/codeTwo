@@ -90,9 +90,9 @@ describe("Dock plugin component gate", () => {
     );
     await flush();
 
-    const cards = Array.from(
-      view.container.querySelectorAll(".dock-surface-grid > button")
-    );
+    const cards = [
+      ...view.container.querySelectorAll(".dock-surface-grid > button"),
+    ];
     expect(cards[2]?.textContent).toContain("Terminal");
     expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
     expect(

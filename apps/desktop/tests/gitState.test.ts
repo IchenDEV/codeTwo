@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import type { GitFile, SourceControlInfo } from "../src/bridge";
 import {
   changeRequestPresentation,

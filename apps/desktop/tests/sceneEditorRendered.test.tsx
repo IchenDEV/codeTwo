@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { act as reactAct } from "react";
 
 import {
@@ -124,9 +125,7 @@ describe("SceneEditor rendered", () => {
       dom.document.body.querySelector('[data-slot="dialog-content"]')
     ).toBeNull();
     expect(
-      dom.document.body
-        .querySelector('[data-slot="tabs"]')
-        ?.getAttribute("data-orientation")
+      dom.document.body.querySelector('[data-slot="tabs"]')?.dataset.orientation
     ).toBe("horizontal");
     expect(
       dom.document.body.querySelector('[data-slot="tabs"]')?.className

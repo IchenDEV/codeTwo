@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { act as reactAct } from "react";
+
 import {
   activateDom,
   dom,
@@ -164,9 +166,9 @@ describe("UsagePanel", () => {
     expect(trigger?.textContent).toContain("Codex");
 
     await openSelect(trigger);
-    const items = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="select-item"]')
-    );
+    const items = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ];
     expect(items.map((item) => item.textContent?.trim())).toEqual([
       "Codex",
       "Grok",
@@ -195,7 +197,7 @@ describe("UsagePanel", () => {
           window={{
             used_percent: 27,
             window_minutes: 300,
-            resets_at: now / 1_000 + 90 * 60,
+            resets_at: now / 1000 + 90 * 60,
           }}
         />
       </I18nProvider>
@@ -206,7 +208,7 @@ describe("UsagePanel", () => {
     const meter = view.container.querySelector('[role="progressbar"]');
     expect(meter?.getAttribute("aria-valuenow")).toBe("73");
     expect(meter?.getAttribute("aria-label")).toContain("Capacity remaining");
-    expect(meter?.getAttribute("data-tone")).toBe("success");
+    expect(meter?.dataset.tone).toBe("success");
     expect(
       meter
         ?.querySelector('[data-slot="progress-indicator"]')

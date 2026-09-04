@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
+
+import { SettingRow } from "@/components/business/setting-row";
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { Button } from "@/components/ui/button";
 import { ScanText } from "@/components/ui/icons";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   getAppshotSettings,
@@ -10,20 +22,9 @@ import {
 } from "../bridge";
 import type { AppshotSettings } from "../bridge";
 import { useT } from "../i18n";
-import { Button } from "@/components/ui/button";
-import { SettingRow } from "@/components/business/setting-row";
-import { SettingToggle } from "@/components/business/setting-toggle";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
-export const AppshotsSettingsPage = ({
+export function AppshotsSettingsPage({
   loader = getAppshotSettings,
   saver = updateAppshotSettings,
   permissionRequester = requestAppshotPermissions,
@@ -43,7 +44,7 @@ export const AppshotsSettingsPage = ({
     kind: "screen-recording" | "accessibility"
   ) => Promise<boolean>;
   readonly capturer?: () => Promise<unknown>;
-}) => {
+}) {
   const t = useT();
   const [appshotSettings, setAppshotSettings] =
     useState<AppshotSettings | null>(null);
@@ -60,9 +61,9 @@ export const AppshotsSettingsPage = ({
           setAppshotSettings(next);
         }
       })
-      .catch((cause) => {
+      .catch((error) => {
         if (isActive) {
-          setError(t("settings.appshotsLoadFailed", { error: String(cause) }));
+          setError(t("settings.appshotsLoadFailed", { error: String(error) }));
         }
       });
     return () => {
@@ -107,8 +108,8 @@ export const AppshotsSettingsPage = ({
     setError(null);
     try {
       setAppshotSettings(await saver(patch));
-    } catch (cause) {
-      setError(t("settings.appshotsSaveFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.appshotsSaveFailed", { error: String(error) }));
     } finally {
       setSaving(false);
     }
@@ -119,9 +120,9 @@ export const AppshotsSettingsPage = ({
     setError(null);
     try {
       setAppshotSettings(await permissionRequester(kind));
-    } catch (cause) {
+    } catch (error) {
       setError(
-        t("settings.appshotsPermissionFailed", { error: String(cause) })
+        t("settings.appshotsPermissionFailed", { error: String(error) })
       );
     } finally {
       setSaving(false);
@@ -133,8 +134,8 @@ export const AppshotsSettingsPage = ({
     setError(null);
     try {
       await capturer();
-    } catch (cause) {
-      setError(t("settings.appshotsCaptureFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.appshotsCaptureFailed", { error: String(error) }));
     } finally {
       setCapturing(false);
     }
@@ -177,123 +178,126 @@ export const AppshotsSettingsPage = ({
         </SettingRow>
       </div>
 
-      {error ? (
+      {error != null && error !== "" ? (
         <p data-appshots-error className="text-metadata text-destructive pb-2">
           {error}
         </p>
       ) : null}
-      {!appshotSettings ? (
+      {appshotSettings ? (
+        !appshotSettings.available ? (
+          <p className="py-section text-body text-muted-foreground">
+            {appshotSettings.unavailable_reason ??
+              t("settings.appshotsUnavailable")}
+          </p>
+        ) : (
+          <>
+            <Row
+              label={t("settings.appshotsHotkey")}
+              hint={t("settings.appshotsHotkeyHint")}
+            >
+              <Select
+                value={appshotSettings.hotkey}
+                disabled={saving}
+                onValueChange={(hotkey) => {
+                  if (hotkey) {
+                    void save({ hotkey: hotkey as AppshotSettings["hotkey"] });
+                  }
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-48 justify-between"
+                  aria-label={t("settings.appshotsHotkey")}
+                >
+                  <SelectValue>{hotkeyLabel}</SelectValue>
+                </SelectTrigger>
+                <SelectContent position="popper" align="end">
+                  <SelectGroup>
+                    <SelectItem value="both-command">
+                      {t("settings.appshotsHotkeyBothCommand")}
+                    </SelectItem>
+                    <SelectItem value="command-shift-2">
+                      {t("settings.appshotsHotkeyCommandShift2")}
+                    </SelectItem>
+                    <SelectItem value="command-option-2">
+                      {t("settings.appshotsHotkeyCommandOption2")}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Row>
+            <Row
+              label={t("settings.appshotsDestination")}
+              hint={t("settings.appshotsDestinationHint")}
+            >
+              <Select
+                value={appshotSettings.destination}
+                disabled={saving}
+                onValueChange={(destination) => {
+                  if (destination) {
+                    void save({
+                      destination:
+                        destination as AppshotSettings["destination"],
+                    });
+                  }
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-48 justify-between"
+                  aria-label={t("settings.appshotsDestination")}
+                >
+                  <SelectValue>{destinationLabel}</SelectValue>
+                </SelectTrigger>
+                <SelectContent position="popper" align="end">
+                  <SelectGroup>
+                    <SelectItem value="automatic">
+                      {t("settings.appshotsDestinationAutomatic")}
+                    </SelectItem>
+                    <SelectItem value="current">
+                      {t("settings.appshotsDestinationCurrent")}
+                    </SelectItem>
+                    <SelectItem value="new">
+                      {t("settings.appshotsDestinationNew")}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Row>
+            <SettingToggle
+              label={t("settings.appshotsSound")}
+              checked={appshotSettings.play_sound}
+              disabled={saving}
+              onCheckedChange={(play_sound) => void save({ play_sound })}
+            />
+
+            <GroupHeading>{t("settings.appshotsPermissions")}</GroupHeading>
+            <PermissionRow
+              label={t("settings.appshotsScreenRecording")}
+              hint={t("settings.appshotsScreenRecordingHint")}
+              allowed={appshotSettings.screen_recording}
+              onAllow={() => void grant("screen-recording")}
+              onOpen={() => void privacyOpener("screen-recording")}
+            />
+            <PermissionRow
+              label={t("settings.appshotsAccessibility")}
+              hint={t("settings.appshotsAccessibilityHint")}
+              allowed={appshotSettings.accessibility}
+              onAllow={() => void grant("accessibility")}
+              onOpen={() => void privacyOpener("accessibility")}
+            />
+          </>
+        )
+      ) : (
         <p className="py-section text-body text-muted-foreground">
           {t("settings.appshotsLoading")}
         </p>
-      ) : !appshotSettings.available ? (
-        <p className="py-section text-body text-muted-foreground">
-          {appshotSettings.unavailable_reason ??
-            t("settings.appshotsUnavailable")}
-        </p>
-      ) : (
-        <>
-          <Row
-            label={t("settings.appshotsHotkey")}
-            hint={t("settings.appshotsHotkeyHint")}
-          >
-            <Select
-              value={appshotSettings.hotkey}
-              disabled={saving}
-              onValueChange={(hotkey) => {
-                if (hotkey) {
-                  void save({ hotkey: hotkey as AppshotSettings["hotkey"] });
-                }
-              }}
-            >
-              <SelectTrigger
-                size="sm"
-                className="w-48 justify-between"
-                aria-label={t("settings.appshotsHotkey")}
-              >
-                <SelectValue>{hotkeyLabel}</SelectValue>
-              </SelectTrigger>
-              <SelectContent position="popper" align="end">
-                <SelectGroup>
-                  <SelectItem value="both-command">
-                    {t("settings.appshotsHotkeyBothCommand")}
-                  </SelectItem>
-                  <SelectItem value="command-shift-2">
-                    {t("settings.appshotsHotkeyCommandShift2")}
-                  </SelectItem>
-                  <SelectItem value="command-option-2">
-                    {t("settings.appshotsHotkeyCommandOption2")}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Row>
-          <Row
-            label={t("settings.appshotsDestination")}
-            hint={t("settings.appshotsDestinationHint")}
-          >
-            <Select
-              value={appshotSettings.destination}
-              disabled={saving}
-              onValueChange={(destination) => {
-                if (destination) {
-                  void save({
-                    destination: destination as AppshotSettings["destination"],
-                  });
-                }
-              }}
-            >
-              <SelectTrigger
-                size="sm"
-                className="w-48 justify-between"
-                aria-label={t("settings.appshotsDestination")}
-              >
-                <SelectValue>{destinationLabel}</SelectValue>
-              </SelectTrigger>
-              <SelectContent position="popper" align="end">
-                <SelectGroup>
-                  <SelectItem value="automatic">
-                    {t("settings.appshotsDestinationAutomatic")}
-                  </SelectItem>
-                  <SelectItem value="current">
-                    {t("settings.appshotsDestinationCurrent")}
-                  </SelectItem>
-                  <SelectItem value="new">
-                    {t("settings.appshotsDestinationNew")}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Row>
-          <SettingToggle
-            label={t("settings.appshotsSound")}
-            checked={appshotSettings.play_sound}
-            disabled={saving}
-            onCheckedChange={(play_sound) => void save({ play_sound })}
-          />
-
-          <GroupHeading>{t("settings.appshotsPermissions")}</GroupHeading>
-          <PermissionRow
-            label={t("settings.appshotsScreenRecording")}
-            hint={t("settings.appshotsScreenRecordingHint")}
-            allowed={appshotSettings.screen_recording}
-            onAllow={() => void grant("screen-recording")}
-            onOpen={() => void privacyOpener("screen-recording")}
-          />
-          <PermissionRow
-            label={t("settings.appshotsAccessibility")}
-            hint={t("settings.appshotsAccessibilityHint")}
-            allowed={appshotSettings.accessibility}
-            onAllow={() => void grant("accessibility")}
-            onOpen={() => void privacyOpener("accessibility")}
-          />
-        </>
       )}
     </Page>
   );
-};
+}
 
-const PermissionRow = ({
+function PermissionRow({
   label,
   hint,
   allowed,
@@ -305,7 +309,7 @@ const PermissionRow = ({
   readonly allowed: boolean;
   readonly onAllow: () => void;
   readonly onOpen: () => void;
-}) => {
+}) {
   const t = useT();
   return (
     <Row compact label={label} hint={hint}>
@@ -328,4 +332,4 @@ const PermissionRow = ({
       </Button>
     </Row>
   );
-};
+}

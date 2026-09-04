@@ -1,5 +1,6 @@
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
+import { filterSuggestionItems, locales } from "@blocknote/core";
 import { BlockNoteView } from "@blocknote/mantine";
 import {
   SuggestionMenuController,
@@ -7,27 +8,11 @@ import {
   useCreateBlockNote,
 } from "@blocknote/react";
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
-import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
+
 import { Bot, Server, Sparkles } from "@/components/ui/icons";
-import {
-  CanvasBlockRuntimeContext,
-  canvasBlockPropsFromDraft,
-  docToBlocks,
-  schema,
-} from "../skillInline";
-import type { CanvasBlockRuntime, CodeTwoEditor } from "../skillInline";
-import { FileMenu } from "./FileMenu";
-import type { AtItem, ChatItem, FileItem } from "./FileMenu";
-import {
-  focusSlotCardField,
-  normalizeSlots,
-  unfilledRequiredSlots,
-} from "./slotCard";
-import { issueContextMarkdown } from "./issueBlock";
-import { orderSkillsForScene } from "../session/scene";
-import type { SceneInfo } from "../session/scene";
+
 import {
   listArchivedSessions,
   listFiles,
@@ -42,8 +27,25 @@ import type {
   Issue,
   SkillInfo,
 } from "../bridge";
-import { useColorScheme } from "../theme";
 import { useT } from "../i18n";
+import { orderSkillsForScene } from "../session/scene";
+import type { SceneInfo } from "../session/scene";
+import {
+  CanvasBlockRuntimeContext,
+  canvasBlockPropsFromDraft,
+  docToBlocks,
+  schema,
+} from "../skillInline";
+import type { CanvasBlockRuntime, CodeTwoEditor } from "../skillInline";
+import { useColorScheme } from "../theme";
+import { FileMenu } from "./FileMenu";
+import type { AtItem, ChatItem, FileItem } from "./FileMenu";
+import { issueContextMarkdown } from "./issueBlock";
+import {
+  focusSlotCardField,
+  normalizeSlots,
+  unfilledRequiredSlots,
+} from "./slotCard";
 
 interface EditorProps {
   readonly skills: SkillInfo[];
@@ -333,7 +335,7 @@ async function chatMenuItems(
     }));
 }
 
-export const DocEditor = ({
+export function DocEditor({
   skills,
   cwd,
   sessionId,
@@ -361,7 +363,7 @@ export const DocEditor = ({
   onPasteImages,
   onEmptyChange,
   onDocumentChange,
-}: EditorProps) => {
+}: EditorProps) {
   // Sticky within the session: once expanded, the picker stays un-suppressed.
   const showAllSkillsRef = useRef(false);
   const t = useT();
@@ -405,7 +407,7 @@ export const DocEditor = ({
       return;
     }
     const last = editor.document[editor.document.length - 1];
-    if (!last) {
+    if (last == null) {
       return;
     }
     editor.insertBlocks(
@@ -461,7 +463,11 @@ export const DocEditor = ({
           const skill = skills.find(
             (candidate) => candidate.id === block.skill_id
           );
-          if (skill?.macro_template && Object.keys(block.params).length > 0) {
+          if (
+            skill?.macro_template != null &&
+            skill?.macro_template !== "" &&
+            Object.keys(block.params).length > 0
+          ) {
             return [
               {
                 props: {
@@ -568,7 +574,7 @@ export const DocEditor = ({
     const recovered = [...blocks, { content: "", type: "paragraph" }] as never;
     if (options.mode !== "replace" && docToBlocks(editor).length > 0) {
       const anchor = editor.document[editor.document.length - 1];
-      if (anchor) {
+      if (anchor != null) {
         editor.insertBlocks(recovered, anchor, "after");
       }
     } else {
@@ -658,7 +664,7 @@ export const DocEditor = ({
         continue;
       }
       const props = block.props as { id?: string };
-      if (props.id) {
+      if (props.id != null && props.id !== "") {
         currentIds.add(props.id);
       }
     }
@@ -707,7 +713,7 @@ export const DocEditor = ({
     insertTextRef.current = (text: string) => {
       const doc = editor.document;
       const last = doc[doc.length - 1];
-      if (last) {
+      if (last != null) {
         editor.insertBlocks(
           [{ content: text, type: "paragraph" }],
           last,
@@ -718,7 +724,7 @@ export const DocEditor = ({
     insertAnnotationRef.current = (a: Annotation, context: string) => {
       const doc = editor.document;
       const last = doc[doc.length - 1];
-      if (!last) {
+      if (last == null) {
         return;
       }
       editor.insertBlocks(
@@ -791,7 +797,7 @@ export const DocEditor = ({
           editor.replaceBlocks(editor.document, blocks as never);
         } else {
           const last = editor.document[editor.document.length - 1];
-          if (last) {
+          if (last != null) {
             editor.insertBlocks(blocks as never, last, "after");
           }
         }
@@ -990,7 +996,7 @@ export const DocEditor = ({
   // Stored scene artifacts for the active session, filtered by title (R4 cleanup: the spec's
   // "@-menu Artifacts section"). Degrades to nothing without a session or on an older core.
   const artifactMenuItems = async (query: string, session: string | null) => {
-    if (!session) {
+    if (session == null || session === "") {
       return [] as import("./FileMenu").ArtifactAtItem[];
     }
     const records = await listSceneArtifacts(session);
@@ -1107,4 +1113,4 @@ export const DocEditor = ({
       </CanvasBlockRuntimeContext.Provider>
     </div>
   );
-};
+}

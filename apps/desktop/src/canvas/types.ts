@@ -28,6 +28,10 @@ export const allowedElementTypes = [
 
 export type AllowedElementType = (typeof allowedElementTypes)[number];
 
+export function isAllowedElementType(type: string): type is AllowedElementType {
+  return allowedElementTypes.some((allowed) => allowed === type);
+}
+
 /**
 Toolbar tools are deliberately narrower than Excalidraw's complete tool set.
 */

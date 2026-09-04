@@ -10,8 +10,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+
 import { GlobalShortcut, Utils } from "electrobun/bun";
 
+import { asJsonObject } from "../lib/jsonValue";
 import {
   captureMacOSAppshot,
   macOSAppshotPermissions,
@@ -62,10 +64,7 @@ function isDestination(value: unknown): value is AppshotDestination {
 }
 
 export function normalizeAppshotSettings(value: unknown): StoredSettings {
-  const settings =
-    Boolean(value) && typeof value === "object"
-      ? (value as Record<string, unknown>)
-      : {};
+  const settings = asJsonObject(value) ?? {};
   return {
     destination: isDestination(settings.destination)
       ? settings.destination
@@ -102,7 +101,7 @@ export class AppshotManager {
     chmodSync(this.capturesDir, 0o700);
     try {
       this.settings = normalizeAppshotSettings(
-        JSON.parse(readFileSync(this.settingsPath, "utf8"))
+        JSON.parse(readFileSync(this.settingsPath, "utf-8"))
       );
     } catch {
       this.settings = { ...defaultSettings };
@@ -130,7 +129,7 @@ export class AppshotManager {
     writeFileSync(
       this.settingsPath,
       `${JSON.stringify(this.settings, null, 2)}\n`,
-      { encoding: "utf8", mode: 0o600 }
+      { encoding: "utf-8", mode: 0o600 }
     );
     this.applyHotkey();
     return this.getSettings();
@@ -182,7 +181,7 @@ export class AppshotManager {
         window_title: result.window_title ?? "Window",
       };
       writeFileSync(metadataPath, `${JSON.stringify(metadata)}\n`, {
-        encoding: "utf8",
+        encoding: "utf-8",
         mode: 0o600,
       });
       const capture: AppshotCapture = {
@@ -232,8 +231,8 @@ export class AppshotManager {
       throw new Error("Appshot metadata is invalid.");
     }
     const image = readFileSync(imagePath);
-    const rawMetadata = readFileSync(metadataPath, "utf8");
-    const value = JSON.parse(rawMetadata) as Record<string, unknown>;
+    const rawMetadata = readFileSync(metadataPath, "utf-8");
+    const value = asJsonObject(JSON.parse(rawMetadata) as unknown) ?? {};
     if (value.id !== id) {
       throw new Error("Appshot metadata does not match the image.");
     }

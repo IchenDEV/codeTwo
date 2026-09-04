@@ -1,5 +1,21 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+
+import { DetailMetric } from "@/components/business/detail-metric";
+import { MasterDetailRow } from "@/components/business/master-detail-row";
+import { SearchField } from "@/components/business/search-field";
+import { StatusBadge } from "@/components/business/status-badge";
+import { ViewSwitcher } from "@/components/business/view-switcher";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import {
   ArrowLeft,
   CalendarClock,
@@ -16,41 +32,6 @@ import {
   Trash2,
   X,
 } from "@/components/ui/icons";
-
-import {
-  confirmNative,
-  createAutomation,
-  deleteAutomation,
-  listAutomationRuns,
-  listAutomations,
-  onAutomationChanged,
-  runAutomationNow,
-  setAutomationEnabled,
-  updateAutomation,
-} from "../bridge";
-import type {
-  Automation,
-  AutomationInput,
-  AutomationRun,
-  AutomationRunStatus,
-  PermissionMode,
-  Project,
-  ProviderInfo,
-  Sandbox,
-} from "../bridge";
-import { providerLabel } from "../bridge";
-import { useT } from "../i18n";
-import { ProviderIcon } from "../providers/ProviderIcon";
-import { useToast } from "../ui/toast";
-import { cronFromSchedule, localTimezone, scheduleFromCron } from "./schedule";
-import type { AutomationCadence, ScheduleDraft } from "./schedule";
-import { Button } from "@/components/ui/button";
-import { SearchField } from "@/components/business/search-field";
-import { DetailMetric } from "@/components/business/detail-metric";
-import { MasterDetailRow } from "@/components/business/master-detail-row";
-import { StatusBadge } from "@/components/business/status-badge";
-import { ViewSwitcher } from "@/components/business/view-switcher";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -62,23 +43,45 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+import {
+  confirmNative,
+  createAutomation,
+  deleteAutomation,
+  listAutomationRuns,
+  listAutomations,
+  onAutomationChanged,
+  runAutomationNow,
+  setAutomationEnabled,
+  updateAutomation,
+  providerLabel,
+} from "../bridge";
+import type {
+  Automation,
+  AutomationInput,
+  AutomationRun,
+  AutomationRunStatus,
+  PermissionMode,
+  Project,
+  ProviderInfo,
+  Sandbox,
+} from "../bridge";
+import { useT } from "../i18n";
+import { useLatestRef } from "../lib/useLatestRef";
+import { ProviderIcon } from "../providers/ProviderIcon";
+import { useToast } from "../ui/toast";
+import { cronFromSchedule, localTimezone, scheduleFromCron } from "./schedule";
+import type { AutomationCadence, ScheduleDraft } from "./schedule";
+
 import "./automations.css";
 
 interface Draft {
@@ -184,7 +187,7 @@ function runIcon(status: AutomationRunStatus) {
   return null;
 }
 
-const AutomationRow = ({
+function AutomationRow({
   automation,
   projectName,
   schedule,
@@ -198,38 +201,40 @@ const AutomationRow = ({
   readonly status: string;
   readonly selected: boolean;
   readonly onSelect: () => void;
-}) => (
-  <MasterDetailRow
-    label={automation.name}
-    selected={selected}
-    onSelect={onSelect}
-    className="px-3"
-    leading={
-      <span className="text-muted-foreground relative flex size-6 items-center justify-center">
-        <CalendarClock className="size-4" />
-        <span
-          className={cn(
-            "ring-sidebar absolute right-0 bottom-0 size-1.5 rounded-full ring-2",
-            automation.enabled ? "bg-success" : "bg-muted-foreground"
-          )}
-        />
-      </span>
-    }
-    meta={
-      <StatusBadge tone={automation.enabled ? "success" : "neutral"}>
-        {status}
-      </StatusBadge>
-    }
-    description={
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 flex-1 truncate">{schedule}</span>
-        <span className="truncate">{projectName}</span>
-      </span>
-    }
-  />
-);
+}) {
+  return (
+    <MasterDetailRow
+      label={automation.name}
+      selected={selected}
+      onSelect={onSelect}
+      className="px-3"
+      leading={
+        <span className="text-muted-foreground relative flex size-6 items-center justify-center">
+          <CalendarClock className="size-4" />
+          <span
+            className={cn(
+              "ring-sidebar absolute right-0 bottom-0 size-1.5 rounded-full ring-2",
+              automation.enabled ? "bg-success" : "bg-muted-foreground"
+            )}
+          />
+        </span>
+      }
+      meta={
+        <StatusBadge tone={automation.enabled ? "success" : "neutral"}>
+          {status}
+        </StatusBadge>
+      }
+      description={
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate">{schedule}</span>
+          <span className="truncate">{projectName}</span>
+        </span>
+      }
+    />
+  );
+}
 
-export const AutomationsPage = ({
+export function AutomationsPage({
   projects,
   providers,
   defaultProject,
@@ -245,7 +250,7 @@ export const AutomationsPage = ({
   readonly onAddProject: () => void;
   readonly onOpenSession: (session: string) => void;
   readonly headerLeadingAction?: ReactNode;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const [automations, setAutomations] = useState<Automation[]>([]);
@@ -307,7 +312,9 @@ export const AutomationsPage = ({
     const next = await listAutomations();
     setAutomations(next);
     setSelectedId((current) =>
-      current && next.some((automation) => automation.id === current)
+      current != null &&
+      current !== "" &&
+      next.some((automation) => automation.id === current)
         ? current
         : (next[0]?.id ?? null)
     );
@@ -315,41 +322,43 @@ export const AutomationsPage = ({
   };
 
   const refreshRuns = async (id: string | null) => {
-    setRuns(id ? await listAutomationRuns(id) : []);
+    setRuns(id != null && id !== "" ? await listAutomationRuns(id) : []);
   };
 
+  const refreshRef = useLatestRef(refresh);
+  const refreshRunsRef = useLatestRef(refreshRuns);
+  const selectedIdRef = useLatestRef(selectedId);
+
   useEffect(() => {
-    void refresh().catch((error) => {
+    void refreshRef.current().catch((error) => {
       setLoading(false);
       toast(t("automations.loadFailed", { error: String(error) }), "error");
     });
     let unlisten: (() => void) | null = null;
     void onAutomationChanged(() => {
-      void refresh();
-      void refreshRuns(selectedId);
+      void refreshRef.current();
+      void refreshRunsRef.current(selectedIdRef.current);
     }).then((dispose) => {
       unlisten = dispose;
     });
     return () => unlisten?.();
-  }, [refresh, refreshRuns, selectedId, t, toast]);
+  }, [t, toast, refreshRef, refreshRunsRef, selectedIdRef]);
 
   useEffect(() => {
-    void refreshRuns(selectedId);
-  }, [refreshRuns, selectedId]);
+    void refreshRunsRef.current(selectedId);
+  }, [selectedId, refreshRunsRef]);
 
-  useEffect(() => {
-    if (draft) {
-      return;
-    }
-    if (
+  if (!draft) {
+    const nextSelectedId =
       selectedId &&
       filteredAutomations.some((automation) => automation.id === selectedId)
-    ) {
-      return;
+        ? selectedId
+        : (filteredAutomations[0]?.id ?? null);
+    if (nextSelectedId !== selectedId) {
+      setSelectedId(nextSelectedId);
+      setDetailTab("overview");
     }
-    setSelectedId(filteredAutomations[0]?.id ?? null);
-    setDetailTab("overview");
-  }, [draft, filteredAutomations, selectedId]);
+  }
 
   const emptyDraft = (): Draft => ({
     enabled: true,
@@ -395,7 +404,11 @@ export const AutomationsPage = ({
       await refresh();
       setSelectedId(saved.id);
       toast(
-        t(draft.id ? "automations.updated" : "automations.created"),
+        t(
+          draft.id != null && draft.id !== ""
+            ? "automations.updated"
+            : "automations.created"
+        ),
         "success"
       );
     } catch (error) {
@@ -549,11 +562,11 @@ export const AutomationsPage = ({
                     <CalendarClock />
                   </EmptyMedia>
                   <EmptyTitle>{t("automations.empty")}</EmptyTitle>
-                  {!hasProjects ? (
+                  {hasProjects ? null : (
                     <EmptyDescription>
                       {t("automations.projectRequired")}
                     </EmptyDescription>
-                  ) : null}
+                  )}
                 </EmptyHeader>
                 <EmptyContent>
                   <Button
@@ -616,7 +629,9 @@ export const AutomationsPage = ({
           data-automation-detail-header
           className={cn(
             "electrobun-webkit-app-region-drag h-layout-titlebar flex shrink-0 items-center gap-2 pr-4",
-            headerLeadingAction ? "window-controls-safe-compact-main" : "pl-4"
+            headerLeadingAction == null
+              ? "pl-4"
+              : "window-controls-safe-compact-main"
           )}
         >
           {headerLeadingAction ? (
@@ -758,14 +773,7 @@ export const AutomationsPage = ({
               onSave={() => void save()}
             />
           </ScrollArea>
-        ) : !selected ? (
-          <div className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-            <div>
-              <CalendarClock className="mx-auto mb-3 size-4" />
-              <p>{t("automations.select")}</p>
-            </div>
-          </div>
-        ) : (
+        ) : selected ? (
           <ScrollArea className="min-h-0 flex-1">
             {detailTab === "overview" ? (
               <article className="mx-auto w-full max-w-5xl px-8 pt-5 pb-12">
@@ -889,7 +897,9 @@ export const AutomationsPage = ({
                           disabled={!isOpenable}
                           className="min-h-control-field bg-fill-quiet grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 disabled:opacity-80"
                           onClick={() =>
-                            run.session_id && onOpenSession(run.session_id)
+                            run.session_id != null &&
+                            run.session_id !== "" &&
+                            onOpenSession(run.session_id)
                           }
                         >
                           {spinningRuns.has(run.status) ? (
@@ -933,13 +943,20 @@ export const AutomationsPage = ({
               </div>
             )}
           </ScrollArea>
+        ) : (
+          <div className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center px-6 text-center">
+            <div>
+              <CalendarClock className="mx-auto mb-3 size-4" />
+              <p>{t("automations.select")}</p>
+            </div>
+          </div>
         )}
       </div>
     </section>
   );
-};
+}
 
-const AutomationEditor = ({
+function AutomationEditor({
   draft,
   projects,
   providers,
@@ -955,7 +972,7 @@ const AutomationEditor = ({
   readonly onChange: (draft: Draft) => void;
   readonly onCancel: () => void;
   readonly onSave: () => void;
-}) => {
+}) {
   const t = useT();
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     onChange({ ...draft, [key]: value });
@@ -993,7 +1010,9 @@ const AutomationEditor = ({
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-page font-semibold">
-            {draft.id ? draft.name : t("automations.createTitle")}
+            {draft.id != null && draft.id !== ""
+              ? draft.name
+              : t("automations.createTitle")}
           </h1>
           <p className="text-prose text-muted-foreground mt-2 max-w-2xl">
             {t("automations.formHint")}
@@ -1043,7 +1062,9 @@ const AutomationEditor = ({
             <Label>{t("automations.project")}</Label>
             <Select
               value={draft.projectPath}
-              onValueChange={(value) => value && update("projectPath", value)}
+              onValueChange={(value) =>
+                value != null && value !== "" && update("projectPath", value)
+              }
             >
               <SelectTrigger className="w-full">
                 <SelectValue>{selectedProject}</SelectValue>
@@ -1063,7 +1084,9 @@ const AutomationEditor = ({
             <Label>{t("automations.agent")}</Label>
             <Select
               value={draft.provider}
-              onValueChange={(value) => value && update("provider", value)}
+              onValueChange={(value) =>
+                value != null && value !== "" && update("provider", value)
+              }
             >
               <SelectTrigger className="w-full">
                 <SelectValue>{selectedProvider}</SelectValue>
@@ -1248,4 +1271,4 @@ const AutomationEditor = ({
       </form>
     </section>
   );
-};
+}

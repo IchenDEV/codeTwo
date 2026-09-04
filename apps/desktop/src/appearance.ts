@@ -1,12 +1,14 @@
 import { useSyncExternalStore } from "react";
 
+import { resolveThemeColorProperties } from "./design/theme";
+import type { ColorScheme, ThemePalette } from "./design/theme";
 import {
   defaultCodeFontSize,
   defaultUiFontSize,
   resolveTypographyProperties,
 } from "./design/typography";
-import { resolveThemeColorProperties } from "./design/theme";
-import type { ColorScheme, ThemePalette } from "./design/theme";
+import { asJsonObject } from "./lib/jsonValue";
+import type { JsonObject } from "./lib/jsonValue";
 
 export type { ColorScheme, ThemePalette } from "./design/theme";
 export type ThemePreference = ColorScheme | "system";
@@ -247,10 +249,10 @@ function safeName(value: unknown, fallback: string): string {
 }
 
 function safePalette(value: unknown): ThemePalette | null {
-  if (value == null || typeof value !== "object") {
+  const candidate = asJsonObject(value);
+  if (candidate == null) {
     return null;
   }
-  const candidate = value as Partial<ThemePalette>;
   if (
     !isHexColor(candidate.accent) ||
     !isHexColor(candidate.background) ||
@@ -269,10 +271,10 @@ function safeCustomTheme(
   value: unknown,
   fallbackId: string
 ): AppearanceTheme | null {
-  if (value == null || typeof value !== "object") {
+  const candidate = asJsonObject(value);
+  if (candidate == null) {
     return null;
   }
-  const candidate = value as Partial<AppearanceTheme>;
   const light = safePalette(candidate.light);
   const dark = safePalette(candidate.dark);
   if (!light || !dark) {
@@ -295,10 +297,7 @@ function safeSchemeProfile(
   value: unknown,
   fallback: SchemeAppearanceProfile
 ): SchemeAppearanceProfile {
-  const candidate =
-    Boolean(value) && typeof value === "object"
-      ? (value as Partial<SchemeAppearanceProfile>)
-      : {};
+  const candidate = asJsonObject(value) ?? {};
   return {
     codeFont: hasId(codeFonts, candidate.codeFont)
       ? candidate.codeFont
@@ -325,21 +324,7 @@ function safeSchemeProfile(
 export function normalizeAppearanceSettings(
   value: unknown
 ): AppearanceSettings {
-  const candidate =
-    Boolean(value) && typeof value === "object"
-      ? (value as Omit<
-          Partial<AppearanceSettings>,
-          "version" | "light" | "dark"
-        > & {
-          version?: number;
-          light?: unknown;
-          dark?: unknown;
-          uiFont?: unknown;
-          codeFont?: unknown;
-          sidebarOpacity?: unknown;
-          contrast?: unknown;
-        })
-      : {};
+  const candidate: JsonObject = asJsonObject(value) ?? {};
   const uiFontSize =
     candidate.version !== 2 &&
     candidate.version !== 3 &&
@@ -564,7 +549,15 @@ export function materializeTheme(theme: AppearanceTheme): AppearanceTheme {
   };
   const light = resolvePalette(theme.light);
   const dark = resolvePalette(theme.dark);
-  if (![...Object.values(light), ...Object.values(dark)].every(isHexColor)) {
+  const colors = [
+    light.accent,
+    light.background,
+    light.foreground,
+    dark.accent,
+    dark.background,
+    dark.foreground,
+  ];
+  if (!colors.every(isHexColor)) {
     throw new Error("Theme colors are not available yet.");
   }
   return { ...theme, dark, light };

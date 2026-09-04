@@ -1,3 +1,6 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, extname, join } from "node:path";
+
 import Electrobun, {
   ApplicationMenu,
   BrowserView,
@@ -7,9 +10,15 @@ import Electrobun, {
   Screen,
   Utils,
 } from "electrobun/bun";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, extname, join } from "node:path";
 
+import { asJsonObject, numberField } from "../lib/jsonValue";
+import { macOSApplicationMenu } from "./applicationMenu";
+import { AppshotManager } from "./appshots";
+import {
+  nativeContextMenuAction,
+  nativeContextMenuConfig,
+} from "./contextMenuHost";
+import { NativeHost } from "./nativeHost";
 import type {
   CodeTwoRPC,
   DesktopPetState,
@@ -19,21 +28,14 @@ import type {
   SaveDialogOptions,
   WorkspaceOpenTarget,
 } from "./rpc";
-import {
-  nativeContextMenuAction,
-  nativeContextMenuConfig,
-} from "./contextMenuHost";
-import { NativeHost } from "./nativeHost";
+import { readSystemProfileAvatar } from "./systemProfile";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
-import { AppshotManager } from "./appshots";
-import { macOSApplicationMenu } from "./applicationMenu";
 import {
   configureMacOSWindowEffects,
   performMacOSTitlebarDoubleClick,
   setMacOSSystemBadgeCount,
 } from "./windowEffects";
 import { workspaceOpenCommand } from "./workspaceOpen";
-import { readSystemProfileAvatar } from "./systemProfile";
 
 function filterExtensions(filters: DialogFilter[] | undefined): string {
   const extensions = filters?.flatMap((filter) => filter.extensions) ?? [];
@@ -199,14 +201,14 @@ function desktopPetFrame() {
     y: display.y + display.height - height - 24,
   };
   try {
-    const saved = JSON.parse(readFileSync(desktopPetPositionPath, "utf8")) as {
-      x?: unknown;
-      y?: unknown;
-    };
-    if (typeof saved.x !== "number" || typeof saved.y !== "number") {
+    const saved = asJsonObject(
+      JSON.parse(readFileSync(desktopPetPositionPath, "utf8")) as unknown
+    );
+    const x = numberField(saved, "x", Number.NaN);
+    const y = numberField(saved, "y", Number.NaN);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
       throw new Error("invalid");
     }
-    const { x, y } = saved as { x: number; y: number };
     const workArea = Screen.getAllDisplays()
       .map((item) => item.workArea)
       .find((area) => {
@@ -455,18 +457,21 @@ desktopPetWindow.webview.on("dom-ready", () => {
   applyDesktopPetState();
 });
 desktopPetWindow.on("move", (event) => {
-  const position = (event as { data?: { x?: unknown; y?: unknown } }).data;
-  if (typeof position?.x === "number" && typeof position.y === "number") {
+  const payload = asJsonObject(event);
+  const position = asJsonObject(payload?.data);
+  const x = numberField(position, "x", Number.NaN);
+  const y = numberField(position, "y", Number.NaN);
+  if (Number.isFinite(x) && Number.isFinite(y)) {
     if (
       desktopPetProgrammaticPosition &&
-      position.x === desktopPetProgrammaticPosition.x &&
-      position.y === desktopPetProgrammaticPosition.y
+      x === desktopPetProgrammaticPosition.x &&
+      y === desktopPetProgrammaticPosition.y
     ) {
       desktopPetProgrammaticPosition = null;
       return;
     }
     desktopPetProgrammaticPosition = null;
-    persistDesktopPetPosition(position.x, position.y);
+    persistDesktopPetPosition(x, y);
   }
 });
 mainWindow.on("close", () => desktopPetWindow?.close());
@@ -506,14 +511,14 @@ mainWindow.webview.on("dom-ready", () => {
 });
 
 Electrobun.events.on(`new-window-open-${mainWindow.webview.id}`, (event) => {
-  const detail = (event as { data?: { detail?: unknown } }).data?.detail;
+  const payload = asJsonObject(event);
+  const detailValue = asJsonObject(payload?.data)?.detail;
+  const detailObject = asJsonObject(detailValue);
   const url =
-    typeof detail === "string"
-      ? detail
-      : typeof detail === "object" &&
-          detail !== null &&
-          typeof (detail as { url?: unknown }).url === "string"
-        ? (detail as { url: string }).url
+    typeof detailValue === "string"
+      ? detailValue
+      : typeof detailObject?.url === "string"
+        ? detailObject.url
         : null;
   if (url != null && url !== "") {
     Utils.openExternal(url);
@@ -521,7 +526,7 @@ Electrobun.events.on(`new-window-open-${mainWindow.webview.id}`, (event) => {
 });
 
 let isShuttingDown = false;
-Electrobun.events.on("before-quit", (event) => {
+Electrobun.events.on("before-quit", (event: { response?: unknown }) => {
   if (isShuttingDown) {
     return;
   }

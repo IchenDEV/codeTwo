@@ -16,7 +16,7 @@ interface MasterDetailRowProps {
   readonly onSelect: () => void;
 }
 
-const MasterDetailRow = ({
+function MasterDetailRow({
   label,
   description,
   leading,
@@ -26,11 +26,11 @@ const MasterDetailRow = ({
   className,
   descriptionClassName,
   onSelect,
-}: MasterDetailRowProps) => {
+}: MasterDetailRowProps) {
   const descriptionId = useId();
   const metaId = useId();
   const describedBy =
-    [description ? descriptionId : null, meta ? metaId : null]
+    [description == null ? null : descriptionId, meta == null ? null : metaId]
       .filter(Boolean)
       .join(" ") || undefined;
 
@@ -47,9 +47,12 @@ const MasterDetailRow = ({
       aria-describedby={describedBy}
       disabled={disabled}
       onClick={onSelect}
-      className={cn(description ? "items-start" : "items-center", className)}
+      className={cn(
+        description == null ? "items-center" : "items-start",
+        className
+      )}
     >
-      {leading ? (
+      {leading == null ? null : (
         <span
           data-slot="master-detail-row-leading"
           className="flex shrink-0 items-center"
@@ -57,12 +60,12 @@ const MasterDetailRow = ({
         >
           {leading}
         </span>
-      ) : null}
+      )}
       <span data-slot="master-detail-row-content" className="min-w-0 flex-1">
         <span data-slot="master-detail-row-label" className="block truncate">
           {label}
         </span>
-        {description ? (
+        {description == null ? null : (
           <span
             id={descriptionId}
             data-slot="master-detail-row-description"
@@ -73,9 +76,9 @@ const MasterDetailRow = ({
           >
             {description}
           </span>
-        ) : null}
+        )}
       </span>
-      {meta ? (
+      {meta == null ? null : (
         <span
           id={metaId}
           data-slot="master-detail-row-meta"
@@ -83,9 +86,9 @@ const MasterDetailRow = ({
         >
           {meta}
         </span>
-      ) : null}
+      )}
     </Button>
   );
-};
+}
 
 export { MasterDetailRow, type MasterDetailRowProps };

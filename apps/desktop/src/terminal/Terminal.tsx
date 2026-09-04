@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { Terminal } from "@xterm/xterm";
-import type { ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
+import { Terminal } from "@xterm/xterm";
+import type { ITheme } from "@xterm/xterm";
+import { useEffect, useRef, useState } from "react";
+
 import "@xterm/xterm/css/xterm.css";
 import { ArrowDown, ArrowUp, X } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { TooltipButton } from "@/components/ui/tooltip";
+
 import {
   onPtyExit,
   onPtyOutput,
@@ -14,9 +19,6 @@ import {
 } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
-import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { TooltipButton } from "@/components/ui/tooltip";
 import { useTerminalSettings } from "./settings";
 
 const fallbackMono =
@@ -56,16 +58,7 @@ function terminalTheme(): ITheme {
   };
 }
 
-/**
- * The embedded terminal's renderer.
- *
- * The terminal itself lives in the core, as a real emulator with its own scrollback — this is only
- * a view onto it. That split is why `id` matters more than it looks: it's a stable key, so
- * remounting (a dock tab switch, a session change, an app restart) re-attaches to the running
- * terminal and replays its state instead of spawning a second shell over the top of the first.
- * Unmounting therefore does *not* kill anything; only closing the tab does.
- */
-export const TerminalPanel = ({
+export function TerminalPanel({
   id,
   cwd,
   projectPath,
@@ -81,7 +74,7 @@ export const TerminalPanel = ({
   */
   readonly projectPath: string | null;
   readonly tmux?: boolean;
-}) => {
+}) {
   const t = useT();
   const scheme = useColorScheme();
   const settings = useTerminalSettings();
@@ -177,7 +170,7 @@ export const TerminalPanel = ({
       });
       stopExit = await onPtyExit((exited) => {
         if (exited.id === id && exited.project_path === projectPath) {
-          term.write(`\r\n\x1b[2m${t("terminal.exited")}\x1b[0m\r\n`);
+          term.write(`\r\n\x1B[2m${t("terminal.exited")}\x1B[0m\r\n`);
         }
       });
       if (isDisposed) {
@@ -338,9 +331,9 @@ export const TerminalPanel = ({
       <div className="terminal" ref={boxRef} />
     </div>
   );
-};
+}
 
-const FindButton = ({
+function FindButton({
   title,
   onClick,
   children,
@@ -348,14 +341,16 @@ const FindButton = ({
   readonly title: string;
   readonly onClick: () => void;
   readonly children: React.ReactNode;
-}) => (
-  <TooltipButton
-    label={title}
-    variant="ghost"
-    size="icon-xs"
-    onClick={onClick}
-    className="text-muted-foreground"
-  >
-    {children}
-  </TooltipButton>
-);
+}) {
+  return (
+    <TooltipButton
+      label={title}
+      variant="ghost"
+      size="icon-xs"
+      onClick={onClick}
+      className="text-muted-foreground"
+    >
+      {children}
+    </TooltipButton>
+  );
+}

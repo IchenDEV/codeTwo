@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import { Check, Lock, Pencil, Share2, UserRound } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 
 import { usageHistory, usageReport, systemProfileAvatar } from "../bridge";
 import type { SourceUsage, UsageHistoryReport, UsageReport } from "../bridge";
@@ -7,11 +13,6 @@ import { useLanguage } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { fmtTokens, stackHistory } from "../usage/usageMath";
 import type { StackedBucket } from "../usage/usageMath";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 
 const storageKey = "codetwo.profile";
 const activityDays = 90;
@@ -30,7 +31,7 @@ export function summarizeProfileActivity(
   report: UsageReport,
   history: UsageHistoryReport
 ): ProfileActivitySummary {
-  const buckets = stackHistory(history.history).buckets;
+  const { buckets } = stackHistory(history.history);
   const totals = buckets.map((bucket) => bucket.total);
   let currentStreak = 0;
   for (
@@ -82,27 +83,22 @@ function profileInitials(name: string): string {
   if (words.length > 1) {
     return words
       .slice(0, 2)
-      .map((word) => Array.from(word)[0])
+      .map((word) => [...word][0])
       .join("")
       .toUpperCase();
   }
-  return Array.from(words[0] ?? "C2")
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  return [...(words[0] ?? "C2")].slice(0, 2).join("").toUpperCase();
 }
 
 async function shareProfile(
   title: string,
   text: string
 ): Promise<"shared" | "copied" | "cancelled"> {
-  const share = (
-    navigator as Navigator & {
-      share?: (data: { title: string; text: string }) => Promise<void>;
-    }
-  ).share;
+  const { share } = navigator as Navigator & {
+    share?: (data: { title: string; text: string }) => Promise<void>;
+  };
 
-  if (share) {
+  if (share != null) {
     try {
       await share.call(navigator, { text, title });
       return "shared";
@@ -113,14 +109,14 @@ async function shareProfile(
     }
   }
 
-  if (!navigator.clipboard?.writeText) {
+  if (navigator.clipboard?.writeText == null) {
     throw new Error("clipboard unavailable");
   }
   await navigator.clipboard.writeText(text);
   return "copied";
 }
 
-export const ProfileSettings = ({
+export function ProfileSettings({
   providerNames = {},
   reportLoader = usageReport,
   historyLoader = usageHistory,
@@ -135,7 +131,7 @@ export const ProfileSettings = ({
     title: string,
     text: string
   ) => Promise<"shared" | "copied" | "cancelled">;
-}) => {
+}) {
   const { t, locale } = useLanguage();
   const [profile, setProfile] = useState(loadProfile);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -183,9 +179,10 @@ export const ProfileSettings = ({
     month: "short",
   });
   const numberFormatter = new Intl.NumberFormat(locale);
-  const leadingCells = summary?.buckets.length
-    ? new Date(summary.buckets[0].startMs).getDay()
-    : 0;
+  const leadingCells =
+    summary?.buckets.length == null
+      ? 0
+      : new Date(summary.buckets[0].startMs).getDay();
   const activityCellCount = summary?.buckets.length || activityDays;
 
   const save = () => {
@@ -243,7 +240,7 @@ export const ProfileSettings = ({
       <header className="profile-header">
         <section className="profile-identity" aria-labelledby="profile-name">
           <div className="profile-avatar" aria-hidden="true">
-            {avatarUrl ? (
+            {avatarUrl != null && avatarUrl !== "" ? (
               <img src={avatarUrl} alt="" onError={() => setAvatarUrl(null)} />
             ) : profile.name ? (
               profileInitials(displayName)
@@ -490,9 +487,9 @@ export const ProfileSettings = ({
                       key={bucket?.startMs ?? `empty-${index}`}
                       aria-hidden
                       title={
-                        bucket
-                          ? `${dateFormatter.format(bucket.startMs)} · ${fmtTokens(bucket.total)}`
-                          : undefined
+                        bucket == null
+                          ? undefined
+                          : `${dateFormatter.format(bucket.startMs)} · ${fmtTokens(bucket.total)}`
                       }
                       className={
                         bucket?.total
@@ -568,4 +565,4 @@ export const ProfileSettings = ({
       ) : null}
     </div>
   );
-};
+}

@@ -1,5 +1,4 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { isTranscriptNearEnd, scrollTopAfterPrepend } from "./transcriptScroll";
 import type {
   KeyboardEventHandler,
   MutableRefObject,
@@ -7,6 +6,7 @@ import type {
   UIEventHandler,
 } from "react";
 
+import { isTranscriptNearEnd, scrollTopAfterPrepend } from "./transcriptScroll";
 import type { TranscriptScrollAnchor } from "./transcriptScroll";
 import type { Turn } from "./turns";
 

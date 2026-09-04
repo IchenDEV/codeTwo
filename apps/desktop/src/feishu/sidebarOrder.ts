@@ -1,3 +1,5 @@
+import { asJsonObject } from "../lib/jsonValue";
+
 export type FeishuResourceTab = "messages" | "documents" | "bases";
 
 export const feishuSidebarOrderKey = "codetwo.feishu.sidebarOrder.v1";
@@ -29,8 +31,7 @@ function cloneEmptyOrder(): FeishuSidebarOrder {
 
 function isResourceTab(value: unknown): value is FeishuResourceTab {
   return (
-    typeof value === "string" &&
-    feishuResourceTabs.includes(value as FeishuResourceTab)
+    typeof value === "string" && feishuResourceTabs.some((tab) => tab === value)
   );
 }
 
@@ -63,8 +64,8 @@ export function loadFeishuSidebarOrder(
     if (raw == null || raw === "") {
       return cloneEmptyOrder();
     }
-    const value = JSON.parse(raw) as Record<string, unknown>;
-    if (value.version !== 1) {
+    const value = asJsonObject(JSON.parse(raw) as unknown);
+    if (value == null || value.version !== 1) {
       return cloneEmptyOrder();
     }
     const supplied = Array.isArray(value.sectionOrder)
@@ -77,11 +78,8 @@ export function loadFeishuSidebarOrder(
     for (const tab of feishuResourceTabs) {
       sectionOrderSet.add(tab);
     }
-    const sectionOrder = [...sectionOrderSet] as FeishuResourceTab[];
-    const resourceOrder =
-      Boolean(value.resourceOrder) && typeof value.resourceOrder === "object"
-        ? (value.resourceOrder as Record<string, unknown>)
-        : {};
+    const sectionOrder = [...sectionOrderSet];
+    const resourceOrder = asJsonObject(value.resourceOrder) ?? {};
     return {
       resourceOrder: {
         bases: cleanIds(resourceOrder.bases),
@@ -127,9 +125,11 @@ export function sortFeishuResources<T extends { id: string }>(
       unordered.push(resource);
     }
   }
-  ordered.sort(
-    (left, right) => positions.get(left.id)! - positions.get(right.id)!
-  );
+  ordered.sort((left, right) => {
+    const leftPosition = positions.get(left.id) ?? 0;
+    const rightPosition = positions.get(right.id) ?? 0;
+    return leftPosition - rightPosition;
+  });
   return [...unordered, ...ordered];
 }
 

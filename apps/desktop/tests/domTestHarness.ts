@@ -1,10 +1,10 @@
 // @ts-nocheck
-import { act as reactAct } from "react";
-import { createRoot } from "react-dom/client";
-import { flushSync } from "react-dom";
 import { GlobalWindow } from "happy-dom";
-import type { Root } from "react-dom/client";
+import { act as reactAct } from "react";
 import type { ReactElement } from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 /**
  * The repository's CanvasEditor tests install their own happy-dom window at

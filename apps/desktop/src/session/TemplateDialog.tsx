@@ -1,14 +1,6 @@
-import { Plus, Trash2 } from "@/components/ui/icons";
 import { useEffect, useState } from "react";
 
-import type { SceneSlotDefinition } from "./scene";
-import {
-  proposeMacroSlots as bridgePropose,
-  saveSkill as bridgeSave,
-} from "../bridge";
-import type { Skill } from "../bridge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -17,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Plus, Trash2 } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,8 +19,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+
+import {
+  proposeMacroSlots as bridgePropose,
+  saveSkill as bridgeSave,
+} from "../bridge";
+import type { Skill } from "../bridge";
 import { useT } from "../i18n";
+import type { SceneSlotDefinition } from "./scene";
 
 /**
  * R2 "Save as template…" dialog: a past prompt becomes a Macro skill. The heuristic proposal is
@@ -160,7 +161,7 @@ function toRow(slot: SceneSlotDefinition): SlotRow {
   };
 }
 
-export const TemplateDialog = ({
+export function TemplateDialog({
   source,
   onClose,
   onSaved,
@@ -175,7 +176,7 @@ export const TemplateDialog = ({
   */
   readonly propose?: typeof bridgePropose;
   readonly save?: (skill: Skill) => Promise<void>;
-}) => {
+}) {
   const t = useT();
   const [proposing, setProposing] = useState(true);
   const [manual, setManual] = useState(false);
@@ -466,4 +467,4 @@ export const TemplateDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

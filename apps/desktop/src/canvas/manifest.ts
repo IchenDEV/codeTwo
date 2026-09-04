@@ -1,7 +1,7 @@
-import { sanitizeElements } from "./serialize";
-import { allowedElementTypes } from "./types";
-import type { AllowedElementType } from "./types";
 import type { ExcalidrawElement } from "./excalidrawAdapter";
+import { sanitizeElements } from "./serialize";
+import { isAllowedElementType } from "./types";
+import type { AllowedElementType } from "./types";
 
 export interface CanvasManifestGeometry {
   x: number;
@@ -41,12 +41,12 @@ function elementBounds(element: ExcalidrawElement): CanvasManifestGeometry {
       element.type === "freedraw") &&
     element.points.length > 0
   ) {
-    const points = element.points.map(([x, y]) => [
-      element.x + x,
-      element.y + y,
+    const points: [number, number][] = element.points.map((point) => [
+      element.x + Number(point[0]),
+      element.y + Number(point[1]),
     ]);
-    const xs = points.map(([x]) => x);
-    const ys = points.map(([, y]) => y);
+    const xs: number[] = points.map(([x]) => x);
+    const ys: number[] = points.map(([, y]) => y);
     const minX = Math.min(...xs);
     const minY = Math.min(...ys);
     return {
@@ -87,7 +87,7 @@ export function deriveCanvasManifest(
     .filter((element) => !element.isDeleted && element.opacity > 0)
     .filter(
       (element): element is ExcalidrawElement & { type: AllowedElementType } =>
-        allowedElementTypes.includes(element.type as AllowedElementType)
+        isAllowedElementType(element.type)
     );
   const allBounds = visible.map(elementBounds);
   const originX =

@@ -1,7 +1,7 @@
-import { contextWindowPercentage } from "../session/contextWindow";
-import { sessionActivity } from "../session/sessionEvents";
-import type { ContextWindowBySession } from "../session/contextWindow";
 import type { SessionInfo } from "../bridge";
+import { contextWindowPercentage } from "../session/contextWindow";
+import type { ContextWindowBySession } from "../session/contextWindow";
+import { sessionActivity } from "../session/sessionEvents";
 
 /**
 The four glanceable states a session can be in, mirroring the rail's row derivation.

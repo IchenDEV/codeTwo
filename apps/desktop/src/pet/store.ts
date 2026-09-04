@@ -1,4 +1,5 @@
 import type { PetSource } from "../appearance";
+import { asJsonObject } from "../lib/jsonValue";
 
 export interface PetCatalogItem {
   id: string;
@@ -17,6 +18,10 @@ interface PetShareCatalogEntry {
   spritesheetPath?: unknown;
   manifestPath?: unknown;
   downloadPath?: unknown;
+}
+
+function asPetShareCatalogEntry(value: unknown): PetShareCatalogEntry | null {
+  return asJsonObject(value);
 }
 
 export const petshareOrigin = "https://petshare.idevlab.dev";
@@ -68,10 +73,10 @@ export function parsePetShareCatalog(value: unknown): PetCatalogItem[] {
 
   const seen = new Set<string>();
   return value.map((raw) => {
-    if (raw == null || typeof raw !== "object") {
+    const item = asPetShareCatalogEntry(raw);
+    if (item == null) {
       throw new Error("Invalid pet catalog item");
     }
-    const item = raw as PetShareCatalogEntry;
     const id =
       typeof item.id === "string" && petIdPattern.test(item.id)
         ? item.id

@@ -1,5 +1,3 @@
-import type { CompiledPreview } from "../bridge";
-import { canvasExportDataUrl } from "../session/promptPreview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,15 +9,18 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+import type { CompiledPreview } from "../bridge";
+import { canvasExportDataUrl } from "../session/promptPreview";
+
 // Compiled-prompt preview: exactly what will be sent — rules prepended, skills expanded,
 // macros substituted, @-files inlined.
-export const PreviewModal = ({
+export function PreviewModal({
   preview,
   onClose,
 }: {
   readonly preview: CompiledPreview;
   readonly onClose: () => void;
-}) => {
+}) {
   // Tolerate a partial shape rather than white-screening if a field is ever absent.
   const files = preview.files ?? [];
   const mcp = preview.mcp_servers ?? [];
@@ -131,4 +132,4 @@ export const PreviewModal = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

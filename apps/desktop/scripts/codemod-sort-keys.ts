@@ -84,7 +84,7 @@ for (const sourceFile of project.getSourceFiles()) {
       if (segment.kind === "barrier") return segment;
       const before = segment.items.map((item) => item.key).join("\0");
       const items = [...segment.items].sort((a, b) =>
-        a.key < b.key ? -1 : a.key > b.key ? 1 : 0,
+        a.key < b.key ? -1 : a.key > b.key ? 1 : 0
       );
       const after = items.map((item) => item.key).join("\0");
       if (before !== after) needs = true;

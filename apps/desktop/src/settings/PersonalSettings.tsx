@@ -1,5 +1,19 @@
 import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import { Download, RotateCcw } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   checkForAppUpdates,
@@ -11,25 +25,12 @@ import type {
   KeymapEntry,
   SessionImportResult,
 } from "../bridge";
-import { formatCombo, modifierLabel } from "../keys";
 import { useLanguage, useT } from "../i18n";
 import type { LanguagePreference } from "../i18n";
 import { en as EN_STRINGS, LOCALES } from "../i18n/strings";
 import type { StringKey } from "../i18n/strings";
+import { formatCombo, modifierLabel } from "../keys";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
 const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
@@ -70,13 +71,13 @@ const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
   { actions: ["cycle_permission_mode"], labelKey: "settings.groupModes" },
 ];
 
-export const GeneralSettingsPage = ({
+export function GeneralSettingsPage({
   statusLoader = getAppUpdateStatus,
   checkStarter = checkForAppUpdates,
 }: {
   readonly statusLoader?: () => Promise<AppUpdateStatus>;
   readonly checkStarter?: () => Promise<AppUpdateStatus>;
-}) => {
+}) {
   const t = useT();
   const { preference: language, setPreference: setLanguage } = useLanguage();
   const terminal = useTerminalSettings();
@@ -232,7 +233,7 @@ export const GeneralSettingsPage = ({
           size="compact"
           type="number"
           min={100}
-          max={200000}
+          max={200_000}
           step={1000}
           value={terminal.scrollback}
           onChange={(event) =>
@@ -243,9 +244,9 @@ export const GeneralSettingsPage = ({
       </Row>
     </Page>
   );
-};
+}
 
-export const ImportSettingsPage = ({
+export function ImportSettingsPage({
   projectPath,
   importer = importSessionFiles,
   onImported = async () => {},
@@ -257,7 +258,7 @@ export const ImportSettingsPage = ({
   ) => Promise<SessionImportResult | null>;
   readonly onImported?: () => void | Promise<unknown>;
   readonly onOpenSession?: (sessionId: string) => void;
-}) => {
+}) {
   const t = useT();
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<SessionImportResult | null>(null);
@@ -275,8 +276,8 @@ export const ImportSettingsPage = ({
       if (next.imported > 0) {
         await onImported();
       }
-    } catch (cause) {
-      setError(t("settings.importFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.importFailed", { error: String(error) }));
     } finally {
       setImporting(false);
     }
@@ -306,7 +307,7 @@ export const ImportSettingsPage = ({
             : t("settings.chooseSessionFiles")}
         </Button>
       </Row>
-      {error ? (
+      {error != null && error !== "" ? (
         <p role="alert" className="text-metadata text-destructive mt-3">
           {error}
         </p>
@@ -338,7 +339,7 @@ export const ImportSettingsPage = ({
               </p>
             ))}
           </div>
-          {result.sessions[0] ? (
+          {result.sessions[0] == null ? null : (
             <Button
               variant="secondary"
               size="sm"
@@ -347,14 +348,14 @@ export const ImportSettingsPage = ({
             >
               {t("settings.openImportedSession")}
             </Button>
-          ) : null}
+          )}
         </div>
       ) : null}
     </Page>
   );
-};
+}
 
-export const KeybindingsSettingsPage = ({
+export function KeybindingsSettingsPage({
   bindings,
   capturing,
   onCapture,
@@ -364,7 +365,7 @@ export const KeybindingsSettingsPage = ({
   readonly capturing: string | null;
   readonly onCapture: (action: string) => void;
   readonly onReset?: (action: string) => void;
-}) => {
+}) {
   const t = useT();
   const byAction = new Map(bindings.map((binding) => [binding[0], binding]));
   const conflicts = (() => {
@@ -448,4 +449,4 @@ export const KeybindingsSettingsPage = ({
       ))}
     </Page>
   );
-};
+}

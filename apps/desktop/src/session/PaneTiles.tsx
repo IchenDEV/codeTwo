@@ -2,9 +2,10 @@ import { useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+
+import { PaneDivider } from "./PaneDivider";
 import { computeDividers, computePaneRects, listPanes } from "./paneLayout";
 import type { PaneLayout } from "./paneLayout";
-import { PaneDivider } from "./PaneDivider";
 
 const percent = (value: number): string => `${value * 100}%`;
 
@@ -19,19 +20,13 @@ export interface PaneTilesProps {
   readonly className?: string;
 }
 
-/**
- * Renders a tiling workspace from a {@link PaneLayout}. Every pane is absolutely positioned from
- * its normalized rectangle and keyed by paneId, so splitting, closing, focusing or resizing never
- * moves a pane within the React tree — its composer/editor instance (and unsaved draft) survives a
- * relayout. Dragging a divider reports a new ratio; the parent owns the layout state.
- */
-export const PaneTiles = ({
+export function PaneTiles({
   layout,
   renderPane,
   onFocusPane,
   onResizeSplit,
   className,
-}: PaneTilesProps) => {
+}: PaneTilesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const paneIds = listPanes(layout.root);
   const rects = computePaneRects(layout.root);
@@ -90,4 +85,4 @@ export const PaneTiles = ({
       ))}
     </div>
   );
-};
+}

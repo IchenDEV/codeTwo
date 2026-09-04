@@ -18,39 +18,39 @@ function rustFiles(directory: string): string[] {
 
 describe("plugin bridge contract", () => {
   test("keeps one typed renderer request and one versioned Plugin Kernel process boundary", () => {
-    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
+    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf-8");
     const client = readFileSync(
       resolve(desktop, "src/electrobun/client.ts"),
-      "utf8"
+      "utf-8"
     );
     const main = readFileSync(
       resolve(desktop, "src/electrobun/index.ts"),
-      "utf8"
+      "utf-8"
     );
     const adapter = readFileSync(
       resolve(desktop, "src/electrobun/nativeHost.ts"),
-      "utf8"
+      "utf-8"
     );
-    const host = readFileSync(resolve(desktop, "src-host/src/lib.rs"), "utf8");
+    const host = readFileSync(resolve(desktop, "src-host/src/lib.rs"), "utf-8");
     const enginePlugin = readFileSync(
       resolve(repository, "crates/plugins/src/app/plugins/engine.rs"),
-      "utf8"
+      "utf-8"
     );
     const config = readFileSync(
       resolve(desktop, "electrobun.config.ts"),
-      "utf8"
+      "utf-8"
     );
     const prepare = readFileSync(
       resolve(desktop, "scripts/prepare-electrobun.ts"),
-      "utf8"
+      "utf-8"
     );
     const macBundlePatch = readFileSync(
       resolve(desktop, "scripts/patch-macos-info.ts"),
-      "utf8"
+      "utf-8"
     );
     const macPackageSigning = readFileSync(
       resolve(desktop, "scripts/sign-macos-package.ts"),
-      "utf8"
+      "utf-8"
     );
 
     expect(bridge).toContain(
@@ -107,12 +107,12 @@ describe("plugin bridge contract", () => {
   });
 
   test("registers every static command used by the renderer bridge", () => {
-    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
+    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf-8");
     const pluginSources = [
       ...rustFiles(resolve(repository, "crates/plugins/src/app/plugins")),
       ...rustFiles(resolve(desktop, "src-host/src")),
     ]
-      .map((path) => readFileSync(path, "utf8"))
+      .map((path) => readFileSync(path, "utf-8"))
       .join("\n");
 
     const used = new Set(
@@ -133,10 +133,10 @@ describe("plugin bridge contract", () => {
   });
 
   test("forwards plugin changes and exposes the developer commands through the typed bridge", () => {
-    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
+    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf-8");
     const hostEvents = readFileSync(
       resolve(desktop, "src-host/src/host_events.rs"),
-      "utf8"
+      "utf-8"
     );
 
     expect(bridge).toContain(

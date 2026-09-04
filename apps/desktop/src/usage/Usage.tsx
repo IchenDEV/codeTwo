@@ -1,5 +1,27 @@
 import { useEffect, useRef, useState } from "react";
+
+import { QuotaProgress } from "@/components/business/quota-progress";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { CircleAlert, RefreshCw } from "@/components/ui/icons";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
 import { providerQuota, usageHistory, usageReport } from "../bridge";
 import type {
   ProviderQuotaReason,
@@ -12,27 +34,8 @@ import type {
 } from "../bridge";
 import { useLanguage } from "../i18n";
 import type { Translate } from "../i18n";
+import { useLatestRef } from "../lib/useLatestRef";
 import { ProviderIcon } from "../providers/ProviderIcon";
-import { QuotaProgress } from "@/components/business/quota-progress";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import {
   fmtCost,
   fmtReset,
@@ -136,16 +139,13 @@ function quotaReasonLabel(
   }
 }
 
-/**
-Provider-reported capacity. The filled segment is deliberately the amount remaining.
-*/
-export const ProviderQuotaMeter = ({
+export function ProviderQuotaMeter({
   window,
   now,
 }: {
   readonly window: ProviderQuotaWindow;
   readonly now: number;
-}) => {
+}) {
   const { t, locale } = useLanguage();
   const used = Math.min(100, Math.max(0, window.used_percent));
   const remaining = Math.max(0, 100 - used);
@@ -173,9 +173,9 @@ export const ProviderQuotaMeter = ({
       </div>
     </div>
   );
-};
+}
 
-const LocalUsageWindow = ({ window }: { readonly window: UsageWindow }) => {
+function LocalUsageWindow({ window }: { readonly window: UsageWindow }) {
   const { t } = useLanguage();
   const label = t(
     windowLabelKeys[window.label as keyof typeof windowLabelKeys] ??
@@ -236,15 +236,15 @@ const LocalUsageWindow = ({ window }: { readonly window: UsageWindow }) => {
       </div>
     </div>
   );
-};
+}
 
-const TrendChart = ({
+function TrendChart({
   report,
   days,
 }: {
   readonly report: UsageHistoryReport;
   readonly days: number;
-}) => {
+}) {
   const { t, locale } = useLanguage();
   const [hover, setHover] = useState<number | null>(null);
   const { buckets, max } = stackHistory(report.history);
@@ -369,15 +369,15 @@ const TrendChart = ({
       ) : null}
     </div>
   );
-};
+}
 
-const ProviderRow = ({
+function ProviderRow({
   usage,
   t,
 }: {
   readonly usage: SourceUsage;
   readonly t: ReturnType<typeof useLanguage>["t"];
-}) => {
+}) {
   const cost = fmtCost(usage.estimated_cost_usd);
   return (
     <div>
@@ -395,7 +395,7 @@ const ProviderRow = ({
         <span
           className={cn(
             "text-metadata w-20 text-right font-mono",
-            cost ? "" : "text-muted-foreground"
+            cost != null && cost !== "" ? "" : "text-muted-foreground"
           )}
         >
           {cost ?? t("usage.costUnknown")}
@@ -419,9 +419,9 @@ const ProviderRow = ({
       </div>
     </div>
   );
-};
+}
 
-const ProviderQuotaSection = ({
+function ProviderQuotaSection({
   provider,
   providerName,
   providers,
@@ -437,7 +437,7 @@ const ProviderQuotaSection = ({
   readonly report: ProviderQuotaReport | null;
   readonly loading: boolean;
   readonly requestFailed: boolean;
-}) => {
+}) {
   const { t, locale } = useLanguage();
   const isUnavailable =
     requestFailed ||
@@ -469,7 +469,7 @@ const ProviderQuotaSection = ({
           >
             {t("quota.title")}
           </h2>
-          {report?.plan ? (
+          {report?.plan != null && report?.plan !== "" ? (
             <p className="text-callout text-muted-foreground truncate">
               {t("quota.plan", { plan: report.plan.replaceAll("_", " ") })}
             </p>
@@ -479,7 +479,7 @@ const ProviderQuotaSection = ({
           <Select
             value={provider}
             onValueChange={(value) => {
-              if (value) {
+              if (value != null && value !== "") {
                 onProvider(value);
               }
             }}
@@ -552,7 +552,7 @@ const ProviderQuotaSection = ({
             </p>
           )}
 
-          {isShowCredits && credits ? (
+          {isShowCredits && credits != null ? (
             <div className="mt-3 flex items-center gap-3 pt-3">
               <span className="text-body font-medium">
                 {t("quota.credits")}
@@ -568,7 +568,7 @@ const ProviderQuotaSection = ({
           ) : null}
 
           <p className="text-callout text-muted-foreground mt-3 pt-3">
-            {source ? <>{source} · </> : null}
+            {source != null && source !== "" ? <>{source} · </> : null}
             {t("quota.updated", {
               time: new Intl.DateTimeFormat(locale, {
                 hour: "numeric",
@@ -581,7 +581,7 @@ const ProviderQuotaSection = ({
       ) : null}
     </section>
   );
-};
+}
 
 export interface QuotaProviderOption {
   id: string;
@@ -617,10 +617,7 @@ export function quotaProviderOptions(
   return options;
 }
 
-/**
-Rolling windows, provider trend, and local cost estimates shared by the settings page and modal.
-*/
-const UsageView = ({
+function UsageView({
   variant,
   provider,
   providerName,
@@ -630,7 +627,7 @@ const UsageView = ({
   readonly provider: string;
   readonly providerName: string;
   readonly providerNames: Record<string, string>;
-}) => {
+}) {
   const { t } = useLanguage();
   const [report, setReport] = useState<UsageReport | null>(null);
   const [history, setHistory] = useState<UsageHistoryReport | null>(null);
@@ -684,15 +681,19 @@ const UsageView = ({
       }
     }
   };
+  const loadLocalRef = useLatestRef(loadLocal);
+  const loadQuotaRef = useLatestRef(loadQuota);
 
-  useEffect(() => loadLocal(days), [days, loadLocal]);
+  useEffect(() => {
+    loadLocalRef.current(days);
+  }, [days, loadLocalRef]);
   useEffect(() => {
     setQuota(null);
-    void loadQuota();
+    void loadQuotaRef.current();
     return () => {
       quotaRequestRef.current += 1;
     };
-  }, [loadQuota]);
+  }, [quotaProvider, loadQuotaRef]);
 
   const bySource = history?.by_source ?? [];
   const isRefreshing = loading || quotaLoading;
@@ -831,12 +832,9 @@ const UsageView = ({
       ) : null}
     </>
   );
-};
+}
 
-/**
-Usage as a first-class settings page.
-*/
-export const UsagePanel = ({
+export function UsagePanel({
   provider,
   providerName,
   providerNames = {},
@@ -844,19 +842,18 @@ export const UsagePanel = ({
   readonly provider: string;
   readonly providerName: string;
   readonly providerNames?: Record<string, string>;
-}) => (
-  <UsageView
-    variant="panel"
-    provider={provider}
-    providerName={providerName}
-    providerNames={providerNames}
-  />
-);
+}) {
+  return (
+    <UsageView
+      variant="panel"
+      provider={provider}
+      providerName={providerName}
+      providerNames={providerNames}
+    />
+  );
+}
 
-/**
-Usage as a quick-access modal from the environment menu and command palette.
-*/
-export const UsageModal = ({
+export function UsageModal({
   provider,
   providerName,
   providerNames = {},
@@ -866,7 +863,7 @@ export const UsageModal = ({
   readonly providerName: string;
   readonly providerNames?: Record<string, string>;
   readonly onClose: () => void;
-}) => {
+}) {
   const { t } = useLanguage();
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -885,4 +882,4 @@ export const UsageModal = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

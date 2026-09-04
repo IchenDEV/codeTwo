@@ -88,7 +88,7 @@ describe("fmtCost", () => {
 describe("token and countdown labels", () => {
   test("fmtTokens compacts to k/M", () => {
     expect(fmtTokens(999)).toBe("999");
-    expect(fmtTokens(1_500)).toBe("1.5k");
+    expect(fmtTokens(1500)).toBe("1.5k");
     expect(fmtTokens(2_400_000)).toBe("2.4M");
   });
 

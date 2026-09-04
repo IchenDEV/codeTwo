@@ -1,6 +1,24 @@
-import { MessageCircleQuestion } from "@/components/ui/icons";
 import { useState } from "react";
 
+import { ChoiceRow } from "@/components/business/choice-row";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { MessageCircleQuestion } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { RadioGroup } from "@/components/ui/radio-group";
+
+import type {
+  ElicitationAnswer,
+  ElicitationField,
+  ElicitationForm,
+} from "../bridge";
+import { useT } from "../i18n";
 import {
   acceptAnswer,
   canSubmit,
@@ -11,27 +29,10 @@ import {
   toggleOption,
 } from "./elicitation";
 import type { ElicitationValues } from "./elicitation";
-import type {
-  ElicitationAnswer,
-  ElicitationField,
-  ElicitationForm,
-} from "../bridge";
-import { Button } from "@/components/ui/button";
-import { ChoiceRow } from "@/components/business/choice-row";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { RadioGroup } from "@/components/ui/radio-group";
-import { useT } from "../i18n";
 
 function noopChange() {}
 
-const Question = ({
+function Question({
   form,
   field,
   values,
@@ -41,7 +42,7 @@ const Question = ({
   readonly field: ElicitationField;
   readonly values: ElicitationValues;
   readonly onChange: (next: ElicitationValues) => void;
-}) => {
+}) {
   const t = useT();
   const custom = customFieldFor(form, field.key);
   const value = values[field.key];
@@ -55,12 +56,12 @@ const Question = ({
 
   return (
     <section className="flex min-w-0 flex-col gap-2">
-      {field.title ? (
+      {field.title != null && field.title !== "" ? (
         <h3 className="text-metadata text-muted-foreground font-medium uppercase">
           {field.title}
         </h3>
       ) : null}
-      {field.description ? (
+      {field.description != null && field.description !== "" ? (
         <p className="text-body text-foreground/90">{field.description}</p>
       ) : null}
 
@@ -88,7 +89,9 @@ const Question = ({
                     }
                   }}
                   details={
-                    option.preview && isOptionSelected ? (
+                    option.preview != null &&
+                    option.preview !== "" &&
+                    isOptionSelected ? (
                       <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
                         {option.preview}
                       </pre>
@@ -117,7 +120,9 @@ const Question = ({
                   description={option.description}
                   selected={isOptionSelected}
                   details={
-                    option.preview && isOptionSelected ? (
+                    option.preview != null &&
+                    option.preview !== "" &&
+                    isOptionSelected ? (
                       <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
                         {option.preview}
                       </pre>
@@ -183,23 +188,15 @@ const Question = ({
       ) : null}
     </section>
   );
-};
+}
 
-/**
- * The agent asking the user something (ACP `elicitation/create`): Claude Code's `AskUserQuestion`,
- * or an MCP form elicitation. Distinct from the permission dialog on purpose — this is a question,
- * not an approval, so it offers the agent's own options rather than allow/deny, and "Skip" answers
- * honestly (the agent is told nothing was chosen) instead of pretending the user rejected a tool.
- *
- * Mount with `key={requestId}` so a second question never inherits the first one's draft answers.
- */
-export const QuestionDialog = ({
+export function QuestionDialog({
   form,
   onAnswer,
 }: {
   readonly form: ElicitationForm;
   readonly onAnswer: (answer: ElicitationAnswer) => void;
-}) => {
+}) {
   const t = useT();
   const [values, setValues] = useState<ElicitationValues>({});
   const questions = questionFields(form);
@@ -260,4 +257,4 @@ export const QuestionDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

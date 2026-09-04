@@ -13,16 +13,19 @@ interface SettingToggleProps {
   readonly onCheckedChange: (isChecked: boolean) => void;
 }
 
-const SettingToggle = ({
+function SettingToggle({
   label,
   description,
   checked,
   disabled = false,
   surface = "plain",
   onCheckedChange,
-}: SettingToggleProps) => {
+}: SettingToggleProps) {
   const controlId = useId();
-  const descriptionId = description ? `${controlId}-description` : undefined;
+  const descriptionId =
+    description != null && description !== ""
+      ? `${controlId}-description`
+      : undefined;
 
   return (
     <div
@@ -49,6 +52,6 @@ const SettingToggle = ({
       </SettingRow>
     </div>
   );
-};
+}
 
 export { SettingToggle, type SettingToggleProps };

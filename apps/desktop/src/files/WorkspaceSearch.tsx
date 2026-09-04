@@ -1,15 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import {
-  cancelWorkspaceContentSearch,
-  searchWorkspaceContents,
-} from "../bridge";
-import type {
-  WorkspaceContentMatch,
-  WorkspaceSearchOptions,
-  WorkspaceSearchResult,
-} from "../bridge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +12,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+import {
+  cancelWorkspaceContentSearch,
+  searchWorkspaceContents,
+} from "../bridge";
+import type {
+  WorkspaceContentMatch,
+  WorkspaceSearchOptions,
+  WorkspaceSearchResult,
+} from "../bridge";
+
 const defaultOptions: WorkspaceSearchOptions = {
   case_sensitive: false,
   regex: false,
@@ -30,7 +31,7 @@ const defaultOptions: WorkspaceSearchOptions = {
 let nextSearchRequest = 0;
 
 export function workspaceSearchTruncationLabel(reason: string | null): string {
-  if (!reason) {
+  if (reason == null || reason === "") {
     return "a resource limit";
   }
   const labels: Record<string, string> = {
@@ -50,7 +51,7 @@ export function workspaceSearchTruncationLabel(reason: string | null): string {
     .join(", ");
 }
 
-export const WorkspaceSearchModal = ({
+export function WorkspaceSearchModal({
   cwd,
   onOpen,
   onClose,
@@ -58,7 +59,7 @@ export const WorkspaceSearchModal = ({
   readonly cwd: string;
   readonly onOpen: (match: WorkspaceContentMatch) => void;
   readonly onClose: () => void;
-}) => {
+}) {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [options, setOptions] = useState(defaultOptions);
@@ -147,7 +148,7 @@ export const WorkspaceSearchModal = ({
     } else if (
       event.key === "Enter" &&
       activeIndex >= 0 &&
-      matches[activeIndex]
+      matches[activeIndex] != null
     ) {
       event.preventDefault();
       openResult(matches[activeIndex]);
@@ -248,7 +249,10 @@ export const WorkspaceSearchModal = ({
         >
           {!hasQuery && "Enter text to search file contents."}
           {hasQuery && isVisibleLoading ? "Searching…" : null}
-          {hasQuery && !isVisibleLoading && !error && result ? (
+          {hasQuery &&
+          !isVisibleLoading &&
+          (error == null || error === "") &&
+          result != null ? (
             <>
               {matches.length} {matches.length === 1 ? "result" : "results"}.
               {result.truncated
@@ -316,4 +320,4 @@ export const WorkspaceSearchModal = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

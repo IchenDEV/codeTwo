@@ -1,4 +1,5 @@
 import type { BinaryFileData } from "./excalidrawAdapter";
+import { toDataURL, toFileId } from "./excalidrawAdapter";
 
 export const mediaLimits = {
   maxInputBytes: 20 * 1024 * 1024,
@@ -168,11 +169,8 @@ export async function intakeCanvasMedia(
       options.createFileId?.(normalized, index) ?? defaultFileId(index);
     const file: BinaryFileData = {
       created: 0,
-      dataURL: asDataUrl(
-        bytes,
-        normalized.mimeType
-      ) as BinaryFileData["dataURL"],
-      id: fileId as BinaryFileData["id"],
+      dataURL: toDataURL(asDataUrl(bytes, normalized.mimeType)),
+      id: toFileId(fileId),
       mimeType: normalized.mimeType,
       version: 1,
     };

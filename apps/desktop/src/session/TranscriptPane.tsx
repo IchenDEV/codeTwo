@@ -1,17 +1,18 @@
 import { useRef } from "react";
 import type { ReactNode } from "react";
-import { ArrowDown } from "@/components/ui/icons";
-import { ActivityOrb } from "@/components/ui/activity-orb";
 
-import { TurnCard } from "./TurnCard";
-import type { BuiltinLinkActions } from "./MarkdownContent";
-import { SelectionActions } from "./SelectionActions";
-import type { Turn } from "./turns";
-import type { TranscriptScrollController } from "./useTranscriptScroll";
+import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
+import { ArrowDown } from "@/components/ui/icons";
 import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
+
+import type { BuiltinLinkActions } from "./MarkdownContent";
+import { SelectionActions } from "./SelectionActions";
+import { TurnCard } from "./TurnCard";
+import type { Turn } from "./turns";
+import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { useTranscriptScroll } from "./useTranscriptScroll";
 
 interface TranscriptPaneProps {
@@ -40,10 +41,7 @@ interface TranscriptPaneProps {
   readonly before?: ReactNode;
 }
 
-/**
-One transcript renderer shared by the main column and document-mode side panel.
-*/
-export const TranscriptPane = ({
+export function TranscriptPane({
   sessionId,
   variant,
   turns,
@@ -58,7 +56,7 @@ export const TranscriptPane = ({
   onExplainSelection,
   onAskSelectionInSideChat,
   before,
-}: TranscriptPaneProps) => {
+}: TranscriptPaneProps) {
   const t = useT();
   const scroll = useTranscriptScroll(sessionId ?? null, turns);
   const Root = variant === "side" ? "aside" : "section";
@@ -158,4 +156,4 @@ export const TranscriptPane = ({
       ) : null}
     </Root>
   );
-};
+}

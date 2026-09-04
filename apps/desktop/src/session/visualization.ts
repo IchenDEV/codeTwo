@@ -1,3 +1,5 @@
+import { asJsonObject } from "../lib/jsonValue";
+
 export interface VisualizationReference {
   path: string;
   mode?: "wide";
@@ -12,10 +14,10 @@ const visualizeStart = "visualize";
 const visualizeEnd = "";
 
 function visualizationReference(value: unknown): VisualizationReference | null {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+  const candidate = asJsonObject(value);
+  if (candidate == null) {
     return null;
   }
-  const candidate = value as Record<string, unknown>;
   if (
     typeof candidate.path !== "string" ||
     candidate.path.length === 0 ||

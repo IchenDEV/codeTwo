@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Bug, Download, Globe, RefreshCw, Trash2 } from "@/components/ui/icons";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   browserPermissions,
@@ -27,24 +43,9 @@ import type {
   PluginDeveloperStatus,
 } from "../bridge";
 import { useT } from "../i18n";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
-import { SettingToggle } from "@/components/business/setting-toggle";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
-type BackendCopy = {
+interface BackendCopy {
   title: string;
   description: string;
   scope: string;
@@ -59,9 +60,9 @@ type BackendCopy = {
   unavailable: string;
   loadFailed: (error: unknown) => string;
   testId: string;
-};
+}
 
-const BackendSettingsPage = ({
+function BackendSettingsPage({
   copy,
   loader,
   saver,
@@ -71,7 +72,7 @@ const BackendSettingsPage = ({
   readonly loader: () => Promise<ComputerUseSettings>;
   readonly saver: (backend: string) => Promise<ComputerUseSettings>;
   readonly accessSaver?: (isEnabled: boolean) => Promise<BrowserUseSettings>;
-}) => {
+}) {
   const [settings, setSettings] = useState<ComputerUseSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,9 +88,9 @@ const BackendSettingsPage = ({
           setSettings(next);
         }
       })
-      .catch((cause) => {
+      .catch((error) => {
         if (isActive) {
-          setError(copyRef.current.loadFailed(cause));
+          setError(copyRef.current.loadFailed(error));
         }
       });
     return () => {
@@ -111,8 +112,8 @@ const BackendSettingsPage = ({
     setError(null);
     try {
       setSettings(await saver(backend));
-    } catch (cause) {
-      setError(copy.loadFailed(cause));
+    } catch (error) {
+      setError(copy.loadFailed(error));
     } finally {
       setSaving(false);
     }
@@ -126,8 +127,8 @@ const BackendSettingsPage = ({
     setError(null);
     try {
       setSettings(await accessSaver(isEnabled));
-    } catch (cause) {
-      setError(copy.loadFailed(cause));
+    } catch (error) {
+      setError(copy.loadFailed(error));
     } finally {
       setSaving(false);
     }
@@ -139,7 +140,7 @@ const BackendSettingsPage = ({
   return (
     <Page title={copy.title} description={copy.description}>
       <p className="text-metadata text-muted-foreground pb-2">{copy.scope}</p>
-      {error ? (
+      {error != null && error !== "" ? (
         <p className="text-metadata text-destructive pb-2">{error}</p>
       ) : null}
       {settings?.errors.map((message) => (
@@ -147,11 +148,7 @@ const BackendSettingsPage = ({
           {message}
         </p>
       ))}
-      {!settings ? (
-        <p className="py-section text-body text-muted-foreground">
-          {copy.loading}
-        </p>
-      ) : (
+      {settings ? (
         <>
           {accessSaver ? (
             <Row label={copy.access ?? ""} hint={copy.accessHint}>
@@ -171,7 +168,7 @@ const BackendSettingsPage = ({
                 saving || (accessSaver !== undefined && !isAccessEnabled)
               }
               onValueChange={(backend) => {
-                if (backend) {
+                if (backend != null && backend !== "") {
                   void save(backend);
                 }
               }}
@@ -231,18 +228,22 @@ const BackendSettingsPage = ({
             </Row>
           ))}
         </>
+      ) : (
+        <p className="py-section text-body text-muted-foreground">
+          {copy.loading}
+        </p>
       )}
     </Page>
   );
-};
+}
 
-export const ComputerUseSettingsPage = ({
+export function ComputerUseSettingsPage({
   loader = getComputerUseSettings,
   saver = selectComputerUseBackend,
 }: {
   readonly loader?: () => Promise<ComputerUseSettings>;
   readonly saver?: (backend: string) => Promise<ComputerUseSettings>;
-}) => {
+}) {
   const t = useT();
   return (
     <BackendSettingsPage
@@ -265,9 +266,9 @@ export const ComputerUseSettingsPage = ({
       }}
     />
   );
-};
+}
 
-export const BrowserUseSettingsPage = ({
+export function BrowserUseSettingsPage({
   loader = getBrowserUseSettings,
   saver = selectBrowserUseBackend,
   accessSaver = setAgentBrowserAccess,
@@ -275,7 +276,7 @@ export const BrowserUseSettingsPage = ({
   readonly loader?: () => Promise<BrowserUseSettings>;
   readonly saver?: (backend: string) => Promise<BrowserUseSettings>;
   readonly accessSaver?: (isEnabled: boolean) => Promise<BrowserUseSettings>;
-}) => {
+}) {
   const t = useT();
   return (
     <BackendSettingsPage
@@ -301,7 +302,7 @@ export const BrowserUseSettingsPage = ({
       }}
     />
   );
-};
+}
 
 function syncHint(
   t: ReturnType<typeof useT>,
@@ -314,14 +315,14 @@ function syncHint(
         : t("settings.syncUnavailable");
     }
     case "ready": {
-      return status.last_success_at
-        ? t("settings.syncLastSuccess", {
+      return status.last_success_at == null
+        ? t("settings.syncReady")
+        : t("settings.syncLastSuccess", {
             time: new Intl.DateTimeFormat(undefined, {
               dateStyle: "medium",
               timeStyle: "short",
             }).format(status.last_success_at),
-          })
-        : t("settings.syncReady");
+          });
     }
     case "syncing": {
       return t("settings.syncing");
@@ -342,14 +343,14 @@ function syncHint(
       return status.message || t("settings.syncUnavailable");
     }
     default: {
-      return status?.available
+      return status?.available === true
         ? t("settings.syncReady")
         : t("settings.syncLoading");
     }
   }
 }
 
-export const DeviceSyncSettingsPage = ({
+export function DeviceSyncSettingsPage({
   loader = getDeviceSyncStatus,
   enabledSaver = setDeviceSyncEnabled,
   syncStarter = syncDeviceDataNow,
@@ -357,7 +358,7 @@ export const DeviceSyncSettingsPage = ({
   readonly loader?: () => Promise<DeviceSyncStatus>;
   readonly enabledSaver?: (isEnabled: boolean) => Promise<DeviceSyncStatus>;
   readonly syncStarter?: () => Promise<DeviceSyncStatus>;
-}) => {
+}) {
   const t = useT();
   const [status, setStatus] = useState<DeviceSyncStatus | null>(null);
   const [saving, setSaving] = useState(false);
@@ -459,9 +460,9 @@ export const DeviceSyncSettingsPage = ({
       </p>
     </Page>
   );
-};
+}
 
-export const DeveloperSettingsPage = ({
+export function DeveloperSettingsPage({
   loader = getPluginDeveloperStatus,
   modeSaver = setPluginDeveloperMode,
   reloader = reloadDevelopmentPlugins,
@@ -473,7 +474,7 @@ export const DeveloperSettingsPage = ({
   readonly reloader?: () => Promise<PluginDeveloperStatus>;
   readonly devtoolsOpener?: () => Promise<void>;
   readonly diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
-}) => {
+}) {
   const t = useT();
   const [status, setStatus] = useState<PluginDeveloperStatus | null>(null);
   const [saving, setSaving] = useState(false);
@@ -495,10 +496,10 @@ export const DeveloperSettingsPage = ({
             setError(null);
           }
         })
-        .catch((cause) => {
+        .catch((error) => {
           if (isActive) {
             setError(
-              t("settings.developerLoadFailed", { error: String(cause) })
+              t("settings.developerLoadFailed", { error: String(error) })
             );
           }
         });
@@ -522,8 +523,8 @@ export const DeveloperSettingsPage = ({
     setError(null);
     try {
       setStatus(await modeSaver(isEnabled));
-    } catch (cause) {
-      setError(t("settings.developerSaveFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerSaveFailed", { error: String(error) }));
     } finally {
       setSaving(false);
     }
@@ -534,8 +535,8 @@ export const DeveloperSettingsPage = ({
     setError(null);
     try {
       setStatus(await reloader());
-    } catch (cause) {
-      setError(t("settings.developerReloadFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerReloadFailed", { error: String(error) }));
     } finally {
       setReloading(false);
     }
@@ -545,8 +546,8 @@ export const DeveloperSettingsPage = ({
     setError(null);
     try {
       await devtoolsOpener();
-    } catch (cause) {
-      setError(t("settings.developerDevtoolsFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerDevtoolsFailed", { error: String(error) }));
     }
   }
 
@@ -561,34 +562,35 @@ export const DeveloperSettingsPage = ({
       } else if (result === "unsupported") {
         setError(t("settings.diagnosticsUnsupported"));
       }
-    } catch (cause) {
-      setError(t("settings.diagnosticsExportFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.diagnosticsExportFailed", { error: String(error) }));
     } finally {
       setDiagnosticsExporting(false);
     }
   }
 
-  const statusText = !status
-    ? t("settings.pluginHotReloadLoading")
-    : !status.enabled
+  const statusText = status
+    ? !status.enabled
       ? t("settings.pluginHotReloadOff")
       : !status.watching
         ? t("settings.pluginHotReloadUnavailable")
-        : t("settings.pluginHotReloadWatching", { path: status.plugins_dir });
+        : t("settings.pluginHotReloadWatching", { path: status.plugins_dir })
+    : t("settings.pluginHotReloadLoading");
   const reloadRecord = status?.last_reload;
-  const reloadDetail = reloadRecord?.success
-    ? t("settings.pluginHotReloadLastSuccess", {
-        plugins: reloadRecord.plugins.length
-          ? reloadRecord.plugins.join(", ")
-          : t("settings.allInstalledPlugins"),
-        time: new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(reloadRecord.at),
-      })
-    : reloadRecord?.error
-      ? t("settings.pluginHotReloadLastError", { error: reloadRecord.error })
-      : null;
+  const reloadDetail =
+    reloadRecord?.success === true
+      ? t("settings.pluginHotReloadLastSuccess", {
+          plugins: reloadRecord.plugins.length
+            ? reloadRecord.plugins.join(", ")
+            : t("settings.allInstalledPlugins"),
+          time: new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(reloadRecord.at),
+        })
+      : reloadRecord?.error
+        ? t("settings.pluginHotReloadLastError", { error: reloadRecord.error })
+        : null;
 
   return (
     <Page
@@ -612,10 +614,10 @@ export const DeveloperSettingsPage = ({
         hint={
           <span aria-live="polite">
             <span className="block">{statusText}</span>
-            {reloadDetail ? (
+            {reloadDetail != null && reloadDetail !== "" ? (
               <span
                 className="mt-0.5 block"
-                role={reloadRecord?.success ? undefined : "alert"}
+                role={reloadRecord?.success === true ? undefined : "alert"}
               >
                 {reloadDetail}
               </span>
@@ -674,16 +676,16 @@ export const DeveloperSettingsPage = ({
             : t("settings.exportDiagnosticsAction")}
         </Button>
       </Row>
-      {error ? (
+      {error != null && error !== "" ? (
         <p className="text-metadata text-destructive pt-2" role="alert">
           {error}
         </p>
       ) : null}
     </Page>
   );
-};
+}
 
-export const BrowserPermissionsSettingsPage = () => {
+export function BrowserPermissionsSettingsPage() {
   const [origins, setOrigins] = useState<string[]>([]);
 
   useEffect(() => {
@@ -743,4 +745,4 @@ export const BrowserPermissionsSettingsPage = () => {
       )}
     </Page>
   );
-};
+}

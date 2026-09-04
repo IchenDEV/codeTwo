@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import {
-  AlertTriangle,
-  Check,
-  CircleHelp,
-  Monitor,
-  Moon,
-  RefreshCw,
-  Search,
-  Sun,
-} from "@/components/ui/icons";
+
 import { applyAppearanceSettings, useAppearanceSettings } from "@/appearance";
+import { ChoiceRow } from "@/components/business/choice-row";
+import { LoadFeedback } from "@/components/business/load-feedback";
+import { QuotaProgress } from "@/components/business/quota-progress";
+import { SelectableRow } from "@/components/business/selectable-row";
+import { SettingRow } from "@/components/business/setting-row";
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { StatusBadge } from "@/components/business/status-badge";
+import { StatusIndicator } from "@/components/business/status-indicator";
+import { ViewSwitcher } from "@/components/business/view-switcher";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import {
   AlertDialog,
@@ -27,17 +27,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { RadioGroup } from "@/components/ui/radio-group";
-import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuGroup,
@@ -45,6 +34,14 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +52,18 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import {
+  AlertTriangle,
+  Check,
+  CircleHelp,
+  Monitor,
+  Moon,
+  RefreshCw,
+  Search,
+  Sun,
+} from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -63,6 +72,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { RadioGroup } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -81,16 +91,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChoiceRow } from "@/components/business/choice-row";
-import { LoadFeedback } from "@/components/business/load-feedback";
-import { QuotaProgress } from "@/components/business/quota-progress";
-import { SelectableRow } from "@/components/business/selectable-row";
-import { SettingRow } from "@/components/business/setting-row";
-import { SettingToggle } from "@/components/business/setting-toggle";
-import { StatusBadge } from "@/components/business/status-badge";
-import { StatusIndicator } from "@/components/business/status-indicator";
-import { ViewSwitcher } from "@/components/business/view-switcher";
 import { useToast } from "@/ui/toast";
+
 import "./preview.css";
 
 type ThemeMode = "system" | "light" | "dark";
@@ -152,7 +154,7 @@ function useSystemDark(): boolean {
   return dark;
 }
 
-const ThemeChoice = ({
+function ThemeChoice({
   active,
   children,
   label,
@@ -162,35 +164,39 @@ const ThemeChoice = ({
   readonly children: ReactNode;
   readonly label: string;
   readonly onClick: () => void;
-}) => (
-  <Button
-    aria-label={label}
-    aria-pressed={active}
-    variant="ghost"
-    size="icon-sm"
-    focusStyle="inset"
-    className="ds-theme-choice"
-    onClick={onClick}
-    type="button"
-  >
-    {children}
-  </Button>
-);
+}) {
+  return (
+    <Button
+      aria-label={label}
+      aria-pressed={active}
+      variant="ghost"
+      size="icon-sm"
+      focusStyle="inset"
+      className="ds-theme-choice"
+      onClick={onClick}
+      type="button"
+    >
+      {children}
+    </Button>
+  );
+}
 
-const SectionHeading = ({
+function SectionHeading({
   eyebrow,
   title,
 }: {
   readonly eyebrow: string;
   readonly title: string;
-}) => (
-  <header className="ds-section-heading">
-    <span>{eyebrow}</span>
-    <h2>{title}</h2>
-  </header>
-);
+}) {
+  return (
+    <header className="ds-section-heading">
+      <span>{eyebrow}</span>
+      <h2>{title}</h2>
+    </header>
+  );
+}
 
-export const DesignSystemPreview = () => {
+export function DesignSystemPreview() {
   const toast = useToast();
   const isSystemDark = useSystemDark();
   const appearance = useAppearanceSettings();
@@ -207,14 +213,14 @@ export const DesignSystemPreview = () => {
 
   useEffect(() => {
     const root = document.documentElement;
-    const previousTheme = root.getAttribute("data-ds-theme");
+    const previousTheme = root.dataset.dsTheme;
     const wasDark = root.classList.contains("dark");
     const previousColorScheme = root.style.colorScheme;
     const previewStyle = document.createElement("div");
 
     applyAppearanceSettings(previewStyle, appearance, resolvedTheme);
     const previousAppearance = new Map(
-      Array.from(previewStyle.style).map((name) => [
+      [...previewStyle.style].map((name) => [
         name,
         {
           priority: root.style.getPropertyPriority(name),
@@ -223,7 +229,7 @@ export const DesignSystemPreview = () => {
       ])
     );
 
-    root.setAttribute("data-ds-theme", resolvedTheme);
+    root.dataset.dsTheme = resolvedTheme;
     root.classList.toggle("dark", resolvedTheme === "dark");
     root.style.colorScheme = resolvedTheme;
     for (const name of previewStyle.style) {
@@ -244,9 +250,9 @@ export const DesignSystemPreview = () => {
       }
       root.style.colorScheme = previousColorScheme;
       if (previousTheme === null) {
-        root.removeAttribute("data-ds-theme");
+        delete root.dataset.dsTheme;
       } else {
-        root.setAttribute("data-ds-theme", previousTheme);
+        root.dataset.dsTheme = previousTheme;
       }
       root.classList.toggle("dark", wasDark);
     };
@@ -556,7 +562,9 @@ export const DesignSystemPreview = () => {
                 <span className="ds-specimen-label">Rows & status</span>
                 <Select
                   value={selectedProvider}
-                  onValueChange={(value) => value && setSelectedProvider(value)}
+                  onValueChange={(value) =>
+                    value != null && value !== "" && setSelectedProvider(value)
+                  }
                 >
                   <SelectTrigger
                     aria-label="Current provider"
@@ -989,4 +997,4 @@ export const DesignSystemPreview = () => {
       </main>
     </div>
   );
-};
+}

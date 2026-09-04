@@ -21,7 +21,9 @@ for (const sourceFile of project.getSourceFiles()) {
     .sort((a, b) => b.getStart() - a.getStart());
 
   for (const arrow of arrows) {
-    if (arrow.wasForgotten()) continue;
+    if (arrow.wasForgotten()) {
+      continue;
+    }
     const body = arrow.getBody();
     // Already a block.
     if (Node.isBlock(body)) {
@@ -32,7 +34,9 @@ for (const sourceFile of project.getSourceFiles()) {
     }
     // Expression body: only wrap when the expression spans multiple lines.
     const text = body.getText();
-    if (!text.includes("\n")) continue;
+    if (!text.includes("\n")) {
+      continue;
+    }
     body.replaceWithText(`{\nreturn ${text};\n}`);
     converted += 1;
     touched = true;

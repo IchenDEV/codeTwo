@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { CheckCircle2, CircleAlert, Info, X } from "@/components/ui/icons";
+
 import { Button } from "@/components/ui/button";
+import { CheckCircle2, CircleAlert, Info, X } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 export type Tone = "info" | "success" | "error";
@@ -31,11 +32,7 @@ export function useToast() {
 
 let nextId = 1;
 
-export const ToastProvider = ({
-  children,
-}: {
-  readonly children: ReactNode;
-}) => {
+export function ToastProvider({ children }: { readonly children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const push = (text: string, tone: Tone = "info", action?: ToastAction) => {
@@ -57,17 +54,17 @@ export const ToastProvider = ({
       </div>
     </ToastContext.Provider>
   );
-};
+}
 
 const ICONS = { error: CircleAlert, info: Info, success: CheckCircle2 };
 
-const ToastRow = ({
+function ToastRow({
   toast,
   onDismiss,
 }: {
   readonly toast: Toast;
   readonly onDismiss: () => void;
-}) => {
+}) {
   useEffect(() => {
     // Errors linger — they usually carry something worth reading. So does an undo: the offer is
     // only real if it outlives the moment you notice you needed it.
@@ -117,4 +114,4 @@ const ToastRow = ({
       </Button>
     </div>
   );
-};
+}

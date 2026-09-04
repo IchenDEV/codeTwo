@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import type { MemoryRecord } from "../bridge";
 import { filterMemories, memoryProfile } from "./memory-model";
 import type { MemoryFilter } from "./memory-model";
-import type { MemoryRecord } from "../bridge";
 
 const NOW = 2_000_000_000_000;
 

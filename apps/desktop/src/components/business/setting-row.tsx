@@ -21,7 +21,7 @@ interface SettingRowProps {
   readonly controlClassName?: string;
 }
 
-const SettingRow = ({
+function SettingRow({
   label,
   description,
   leading,
@@ -33,13 +33,14 @@ const SettingRow = ({
   controlId,
   className,
   controlClassName,
-}: SettingRowProps) => {
+}: SettingRowProps) {
   const generatedId = useId();
   const accessibleId = controlId ?? generatedId;
   const labelId = `${accessibleId}-label`;
-  const descriptionId = description ? `${accessibleId}-description` : undefined;
+  const descriptionId =
+    description == null ? undefined : `${accessibleId}-description`;
   const labelClassName = cn(
-    "block truncate text-body font-medium text-content",
+    "text-body text-content block truncate font-medium",
     disabled && "text-content-muted"
   );
 
@@ -65,7 +66,7 @@ const SettingRow = ({
         data-slot="setting-row-main"
         className="gap-surface-inset flex min-w-48 flex-1 items-center"
       >
-        {leading ? (
+        {leading == null ? null : (
           <span
             data-slot="setting-row-leading"
             className="text-content-muted flex shrink-0 items-center"
@@ -73,9 +74,9 @@ const SettingRow = ({
           >
             {leading}
           </span>
-        ) : null}
+        )}
         <div data-slot="setting-row-content" className="max-w-md min-w-0">
-          {controlId ? (
+          {controlId != null && controlId !== "" ? (
             <label
               id={labelId}
               data-slot="setting-row-label"
@@ -93,7 +94,7 @@ const SettingRow = ({
               {label}
             </div>
           )}
-          {description ? (
+          {description == null ? null : (
             <div
               id={descriptionId}
               data-slot="setting-row-description"
@@ -101,7 +102,7 @@ const SettingRow = ({
             >
               {description}
             </div>
-          ) : null}
+          )}
         </div>
       </div>
       <div
@@ -121,7 +122,7 @@ const SettingRow = ({
       </div>
     </div>
   );
-};
+}
 
 export {
   SettingRow,

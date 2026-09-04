@@ -1,3 +1,23 @@
+import { Fragment, useDeferredValue, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+
+import { DetailMetric } from "@/components/business/detail-metric";
+import { MasterDetailRow } from "@/components/business/master-detail-row";
+import { ActivityOrb } from "@/components/ui/activity-orb";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import {
   ArrowLeft,
   Check,
@@ -18,8 +38,16 @@ import {
   UserRound,
   X,
 } from "@/components/ui/icons";
-import { Fragment, useDeferredValue, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   getGitHubPullRequest,
@@ -30,34 +58,9 @@ import type {
   GitHubPullRequestDetail,
   GitHubPullRequestSummary,
 } from "../bridge";
-import { ActivityOrb } from "@/components/ui/activity-orb";
-import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { DetailMetric } from "@/components/business/detail-metric";
-import { MasterDetailRow } from "@/components/business/master-detail-row";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
+import { taskForPullRequest } from "../taskboard/taskBoard";
+import type { BoardTask } from "../taskboard/taskBoard";
 import {
   filterPullRequests,
   githubPullRequestReference,
@@ -66,8 +69,7 @@ import {
   shortPullRequestAge,
 } from "./pullRequests";
 import type { PullRequestReadiness, PullRequestView } from "./pullRequests";
-import { taskForPullRequest } from "../taskboard/taskBoard";
-import type { BoardTask } from "../taskboard/taskBoard";
+
 import "./pull-requests.css";
 
 type DetailState =
@@ -140,9 +142,9 @@ function inlineMarkdown(value: string): ReactNode[] {
   });
 }
 
-const PullRequestBody = ({ body }: { readonly body: string }) => {
+function PullRequestBody({ body }: { readonly body: string }) {
   const blocks: ReactNode[] = [];
-  const lines = body.replace(/\r\n/gu, "\n").split("\n");
+  const lines = body.replaceAll("\r\n", "\n").split("\n");
   for (let index = 0; index < lines.length;) {
     const line = lines[index] ?? "";
     if (!line.trim()) {
@@ -216,9 +218,9 @@ const PullRequestBody = ({ body }: { readonly body: string }) => {
     );
   }
   return <div className="pull-request-body text-foreground/90">{blocks}</div>;
-};
+}
 
-const PullRequestRow = ({
+function PullRequestRow({
   item,
   selected,
   onSelect,
@@ -226,7 +228,7 @@ const PullRequestRow = ({
   readonly item: GitHubPullRequestSummary;
   readonly selected: boolean;
   readonly onSelect: () => void;
-}) => {
+}) {
   const stateColor = item.reviewRequested
     ? "bg-warning"
     : item.isDraft
@@ -268,9 +270,9 @@ const PullRequestRow = ({
       }
     />
   );
-};
+}
 
-export const PullRequestsPage = ({
+export function PullRequestsPage({
   headerLeadingAction,
   onChat,
   tasks = [],
@@ -298,7 +300,7 @@ export const PullRequestsPage = ({
   readonly loadPullRequest?: (
     summary: GitHubPullRequestSummary
   ) => Promise<GitHubPullRequestDetail>;
-}) => {
+}) {
   const t = useT();
   const [items, setItems] = useState<GitHubPullRequestSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -324,17 +326,19 @@ export const PullRequestsPage = ({
       }
       setItems(next);
       setSelectedId((current) =>
-        current && next.some((item) => item.id === current)
+        current != null &&
+        current !== "" &&
+        next.some((item) => item.id === current)
           ? current
           : (next[0]?.id ?? null)
       );
-    } catch (reason) {
+    } catch (error) {
       if (request !== requestRef.current) {
         return;
       }
       setItems([]);
       setSelectedId(null);
-      setError(String(reason));
+      setError(String(error));
     } finally {
       if (request === requestRef.current) {
         setLoading(false);
@@ -369,10 +373,10 @@ export const PullRequestsPage = ({
           setDetailState({ error: null, id: item.id, loading: false, value });
         }
       })
-      .catch((reason) => {
+      .catch((error) => {
         if (!isDisposed) {
           setDetailState({
-            error: String(reason),
+            error: String(error),
             id: item.id,
             loading: false,
             value: null,
@@ -386,7 +390,11 @@ export const PullRequestsPage = ({
 
   const visible = filterPullRequests(items, view, readiness, deferredQuery);
   useEffect(() => {
-    if (selectedId && visible.some((item) => item.id === selectedId)) {
+    if (
+      selectedId != null &&
+      selectedId !== "" &&
+      visible.some((item) => item.id === selectedId)
+    ) {
       return;
     }
     setSelectedId(visible[0]?.id ?? null);
@@ -398,9 +406,10 @@ export const PullRequestsPage = ({
   const linkedTask = detailReference
     ? taskForPullRequest(tasks, detailReference)
     : null;
-  const activeTask = activeTaskId
-    ? (tasks.find((task) => task.id === activeTaskId) ?? null)
-    : null;
+  const activeTask =
+    activeTaskId != null && activeTaskId !== ""
+      ? (tasks.find((task) => task.id === activeTaskId) ?? null)
+      : null;
   const linkTarget =
     !linkedTask && activeTask?.pullRequest === null ? activeTask : null;
   const checkState = detail ? pullRequestCheckState(detail) : "none";
@@ -419,16 +428,16 @@ export const PullRequestsPage = ({
           data-pull-requests-list-header
           className={cn(
             "electrobun-webkit-app-region-drag h-layout-titlebar flex shrink-0 items-center gap-2 pr-3",
-            headerLeadingAction
-              ? "window-controls-safe-main"
-              : "pl-page-section"
+            headerLeadingAction == null
+              ? "pl-page-section"
+              : "window-controls-safe-main"
           )}
         >
-          {headerLeadingAction ? (
+          {headerLeadingAction == null ? null : (
             <div data-pull-requests-leading-action className="shrink-0">
               {headerLeadingAction}
             </div>
-          ) : null}
+          )}
           <h1 className="text-dialog shrink-0 font-semibold">
             {t("pullRequests.title")}
           </h1>
@@ -587,18 +596,20 @@ export const PullRequestsPage = ({
           data-pull-request-detail-header
           className={cn(
             "electrobun-webkit-app-region-drag h-layout-titlebar flex shrink-0 items-center gap-2 pr-4",
-            headerLeadingAction ? "window-controls-safe-compact-main" : "pl-4"
+            headerLeadingAction == null
+              ? "pl-4"
+              : "window-controls-safe-compact-main"
           )}
         >
-          {headerLeadingAction ? (
+          {headerLeadingAction == null ? null : (
             <div
               data-pull-request-detail-leading-action
               className="window-controls-compact-leading-action shrink-0"
             >
               {headerLeadingAction}
             </div>
-          ) : null}
-          {selectedId ? (
+          )}
+          {selectedId != null && selectedId !== "" ? (
             <Button
               variant="ghost"
               size="icon-xs"
@@ -714,198 +725,200 @@ export const PullRequestsPage = ({
             </>
           ) : null}
         </header>
-        {!selected ? (
+        {selected ? (
+          detailState?.loading && !detail ? (
+            <output className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center gap-2">
+              <ActivityOrb state="searching" visualSize={14} />
+              {t("pullRequests.loadingDetail")}
+            </output>
+          ) : detailState?.error ? (
+            <div
+              role="alert"
+              className="text-body text-muted-foreground flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
+            >
+              <CircleAlert className="text-destructive size-4" />
+              <p>{detailState.error}</p>
+              <Button
+                variant="secondary"
+                size="compact"
+                onClick={() => {
+                  const current = selected;
+                  setSelectedId(null);
+                  setTimeout(() => setSelectedId(current.id), 0);
+                }}
+              >
+                {t("pullRequests.retry")}
+              </Button>
+            </div>
+          ) : detail ? (
+            <ScrollArea className="min-h-0 flex-1">
+              {detailTab === "summary" ? (
+                <article className="mx-auto w-full max-w-5xl px-8 pt-5 pb-12">
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h1 className="text-page text-foreground font-semibold">
+                        {detail.title}
+                      </h1>
+                      <div className="text-body text-muted-foreground mt-2 flex items-center gap-2">
+                        {avatar(detail.author.login)}
+                        <span>{detail.author.login}</span>
+                        <span>·</span>
+                        <span>{shortPullRequestAge(detail.createdAt)}</span>
+                        <span>·</span>
+                        <span>
+                          {detail.repository.nameWithOwner} #{detail.number}
+                        </span>
+                      </div>
+                    </div>
+                    {detailState?.loading === true ? (
+                      <ActivityOrb state="searching" visualSize={14} />
+                    ) : null}
+                  </div>
+                  <div className="mt-8 grid gap-4">
+                    <DetailMetric
+                      icon={<GitBranch className="size-3.5" />}
+                      label={t("pullRequests.branch")}
+                    >
+                      <span className="text-callout font-mono">
+                        {detail.headRefName}
+                      </span>
+                      <ChevronDown className="text-muted-foreground mx-2 inline size-3 -rotate-90" />
+                      <span className="text-callout font-mono">
+                        {detail.baseRefName}
+                      </span>
+                      <span className="text-success ml-3">
+                        +{detail.additions.toLocaleString()}
+                      </span>
+                      <span className="text-destructive ml-2">
+                        −{detail.deletions.toLocaleString()}
+                      </span>
+                    </DetailMetric>
+                    <DetailMetric
+                      icon={<UserRound className="size-3.5" />}
+                      label={t("pullRequests.reviewers")}
+                    >
+                      {detail.reviewers.length
+                        ? detail.reviewers
+                            .map(
+                              (reviewer) =>
+                                `${reviewer.login} · ${reviewer.state.toLocaleLowerCase().replaceAll("_", " ")}`
+                            )
+                            .join(", ")
+                        : t("pullRequests.noReviewers")}
+                    </DetailMetric>
+                    <DetailMetric
+                      icon={<MessageCircle className="size-3.5" />}
+                      label={t("pullRequests.comments")}
+                    >
+                      {detail.commentsCount === 0
+                        ? t("pullRequests.noComments")
+                        : t("pullRequests.commentCount", {
+                            count: detail.commentsCount,
+                          })}
+                    </DetailMetric>
+                    <DetailMetric
+                      icon={
+                        checkState === "passed" ? (
+                          <Check className="text-success size-3.5" />
+                        ) : checkState === "failed" ? (
+                          <CircleAlert className="text-destructive size-3.5" />
+                        ) : (
+                          <Clock3 className="size-3.5" />
+                        )
+                      }
+                      label={t("pullRequests.checks")}
+                    >
+                      {checkState === "none"
+                        ? t("pullRequests.noChecks")
+                        : checkState === "passed"
+                          ? t("pullRequests.checksPassed", {
+                              count: detail.checks.length,
+                            })
+                          : checkState === "failed"
+                            ? t("pullRequests.checksFailed", {
+                                count:
+                                  detail.checks.filter(
+                                    (check) => check.conclusion === "FAILURE"
+                                  ).length || 1,
+                              })
+                            : t("pullRequests.checksPending", {
+                                count: detail.checks.length,
+                              })}
+                    </DetailMetric>
+                    <DetailMetric
+                      icon={<GitPullRequest className="size-3.5" />}
+                      label={t("pullRequests.status")}
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <CircleDot
+                          className={cn(
+                            "size-3.5",
+                            detail.isDraft
+                              ? "text-muted-foreground"
+                              : "text-success"
+                          )}
+                        />
+                        {detail.isDraft
+                          ? t("pullRequests.draft")
+                          : detail.state.toLocaleLowerCase()}
+                      </span>
+                    </DetailMetric>
+                  </div>
+                  <section className="mt-8">
+                    <h2 className="text-dialog mb-5 flex items-center gap-1.5 font-semibold">
+                      <span>{t("pullRequests.description")}</span>
+                      <ChevronDown className="text-muted-foreground size-3.5" />
+                    </h2>
+                    {detail.body.trim() ? (
+                      <PullRequestBody body={detail.body} />
+                    ) : (
+                      <p className="text-body text-muted-foreground">
+                        {t("pullRequests.noDescription")}
+                      </p>
+                    )}
+                  </section>
+                </article>
+              ) : (
+                <div className="mx-auto w-full max-w-5xl px-6 pt-5 pb-10">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Code2 className="text-muted-foreground size-4" />
+                    <h1 className="text-section font-semibold">
+                      {t("pullRequests.changedFiles", {
+                        count: detail.changedFiles,
+                      })}
+                    </h1>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {detail.files.map((file) => (
+                      <div
+                        key={file.path}
+                        className="min-h-control-field rounded-control bg-fill-quiet text-body grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <FileCode2 className="text-muted-foreground size-3.5 shrink-0" />
+                          <span className="text-callout truncate font-mono">
+                            {file.path}
+                          </span>
+                        </span>
+                        <span className="text-success tabular-nums">
+                          +{file.additions}
+                        </span>
+                        <span className="text-destructive tabular-nums">
+                          −{file.deletions}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </ScrollArea>
+          ) : null
+        ) : (
           <div className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center">
             {t("pullRequests.select")}
           </div>
-        ) : detailState?.loading && !detail ? (
-          <output className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center gap-2">
-            <ActivityOrb state="searching" visualSize={14} />
-            {t("pullRequests.loadingDetail")}
-          </output>
-        ) : detailState?.error ? (
-          <div
-            role="alert"
-            className="text-body text-muted-foreground flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
-          >
-            <CircleAlert className="text-destructive size-4" />
-            <p>{detailState.error}</p>
-            <Button
-              variant="secondary"
-              size="compact"
-              onClick={() => {
-                const current = selected;
-                setSelectedId(null);
-                setTimeout(() => setSelectedId(current.id), 0);
-              }}
-            >
-              {t("pullRequests.retry")}
-            </Button>
-          </div>
-        ) : detail ? (
-          <ScrollArea className="min-h-0 flex-1">
-            {detailTab === "summary" ? (
-              <article className="mx-auto w-full max-w-5xl px-8 pt-5 pb-12">
-                <div className="flex items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    <h1 className="text-page text-foreground font-semibold">
-                      {detail.title}
-                    </h1>
-                    <div className="text-body text-muted-foreground mt-2 flex items-center gap-2">
-                      {avatar(detail.author.login)}
-                      <span>{detail.author.login}</span>
-                      <span>·</span>
-                      <span>{shortPullRequestAge(detail.createdAt)}</span>
-                      <span>·</span>
-                      <span>
-                        {detail.repository.nameWithOwner} #{detail.number}
-                      </span>
-                    </div>
-                  </div>
-                  {detailState?.loading ? (
-                    <ActivityOrb state="searching" visualSize={14} />
-                  ) : null}
-                </div>
-                <div className="mt-8 grid gap-4">
-                  <DetailMetric
-                    icon={<GitBranch className="size-3.5" />}
-                    label={t("pullRequests.branch")}
-                  >
-                    <span className="text-callout font-mono">
-                      {detail.headRefName}
-                    </span>
-                    <ChevronDown className="text-muted-foreground mx-2 inline size-3 -rotate-90" />
-                    <span className="text-callout font-mono">
-                      {detail.baseRefName}
-                    </span>
-                    <span className="text-success ml-3">
-                      +{detail.additions.toLocaleString()}
-                    </span>
-                    <span className="text-destructive ml-2">
-                      −{detail.deletions.toLocaleString()}
-                    </span>
-                  </DetailMetric>
-                  <DetailMetric
-                    icon={<UserRound className="size-3.5" />}
-                    label={t("pullRequests.reviewers")}
-                  >
-                    {detail.reviewers.length
-                      ? detail.reviewers
-                          .map(
-                            (reviewer) =>
-                              `${reviewer.login} · ${reviewer.state.toLocaleLowerCase().replaceAll("_", " ")}`
-                          )
-                          .join(", ")
-                      : t("pullRequests.noReviewers")}
-                  </DetailMetric>
-                  <DetailMetric
-                    icon={<MessageCircle className="size-3.5" />}
-                    label={t("pullRequests.comments")}
-                  >
-                    {detail.commentsCount === 0
-                      ? t("pullRequests.noComments")
-                      : t("pullRequests.commentCount", {
-                          count: detail.commentsCount,
-                        })}
-                  </DetailMetric>
-                  <DetailMetric
-                    icon={
-                      checkState === "passed" ? (
-                        <Check className="text-success size-3.5" />
-                      ) : checkState === "failed" ? (
-                        <CircleAlert className="text-destructive size-3.5" />
-                      ) : (
-                        <Clock3 className="size-3.5" />
-                      )
-                    }
-                    label={t("pullRequests.checks")}
-                  >
-                    {checkState === "none"
-                      ? t("pullRequests.noChecks")
-                      : checkState === "passed"
-                        ? t("pullRequests.checksPassed", {
-                            count: detail.checks.length,
-                          })
-                        : checkState === "failed"
-                          ? t("pullRequests.checksFailed", {
-                              count:
-                                detail.checks.filter(
-                                  (check) => check.conclusion === "FAILURE"
-                                ).length || 1,
-                            })
-                          : t("pullRequests.checksPending", {
-                              count: detail.checks.length,
-                            })}
-                  </DetailMetric>
-                  <DetailMetric
-                    icon={<GitPullRequest className="size-3.5" />}
-                    label={t("pullRequests.status")}
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      <CircleDot
-                        className={cn(
-                          "size-3.5",
-                          detail.isDraft
-                            ? "text-muted-foreground"
-                            : "text-success"
-                        )}
-                      />
-                      {detail.isDraft
-                        ? t("pullRequests.draft")
-                        : detail.state.toLocaleLowerCase()}
-                    </span>
-                  </DetailMetric>
-                </div>
-                <section className="mt-8">
-                  <h2 className="text-dialog mb-5 flex items-center gap-1.5 font-semibold">
-                    <span>{t("pullRequests.description")}</span>
-                    <ChevronDown className="text-muted-foreground size-3.5" />
-                  </h2>
-                  {detail.body.trim() ? (
-                    <PullRequestBody body={detail.body} />
-                  ) : (
-                    <p className="text-body text-muted-foreground">
-                      {t("pullRequests.noDescription")}
-                    </p>
-                  )}
-                </section>
-              </article>
-            ) : (
-              <div className="mx-auto w-full max-w-5xl px-6 pt-5 pb-10">
-                <div className="mb-4 flex items-center gap-2">
-                  <Code2 className="text-muted-foreground size-4" />
-                  <h1 className="text-section font-semibold">
-                    {t("pullRequests.changedFiles", {
-                      count: detail.changedFiles,
-                    })}
-                  </h1>
-                </div>
-                <div className="flex flex-col gap-1">
-                  {detail.files.map((file) => (
-                    <div
-                      key={file.path}
-                      className="min-h-control-field rounded-control bg-fill-quiet text-body grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <FileCode2 className="text-muted-foreground size-3.5 shrink-0" />
-                        <span className="text-callout truncate font-mono">
-                          {file.path}
-                        </span>
-                      </span>
-                      <span className="text-success tabular-nums">
-                        +{file.additions}
-                      </span>
-                      <span className="text-destructive tabular-nums">
-                        −{file.deletions}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </ScrollArea>
-        ) : null}
+        )}
       </div>
     </section>
   );
-};
+}

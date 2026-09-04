@@ -31,7 +31,9 @@ describe("Appshots desktop contract", () => {
     const manager = source("src/electrobun/appshots.ts");
     const compiler = source("../../crates/core/src/skill.rs");
 
-    expect(manager).toContain('this.capturesDir = join(dataDirectory, "appshots")');
+    expect(manager).toContain(
+      'this.capturesDir = join(dataDirectory, "appshots")'
+    );
     expect(manager).not.toContain('join(cwd, "appshots")');
     expect(manager).toContain("chmodSync(imagePath, 0o600)");
     expect(manager).toContain("chmodSync(this.capturesDir, 0o700)");

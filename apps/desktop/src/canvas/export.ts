@@ -1,5 +1,9 @@
-import { sanitizeElements } from "./serialize";
 import { exportToCanvas } from "./excalidrawAdapter";
+import type {
+  AppState,
+  BinaryFiles,
+  ExcalidrawElement,
+} from "./excalidrawAdapter";
 import {
   defaultExportBudget,
   CanvasExportBudgetError,
@@ -10,11 +14,7 @@ import type {
   CanvasExportBudget,
   CanvasExportTile,
 } from "./exportPlan";
-import type {
-  AppState,
-  BinaryFiles,
-  ExcalidrawElement,
-} from "./excalidrawAdapter";
+import { sanitizeElements } from "./serialize";
 
 export {
   defaultExportBudget,
@@ -34,12 +34,12 @@ function elementBounds(element: ExcalidrawElement): CanvasExportBounds {
       element.type === "freedraw") &&
     element.points.length > 0
   ) {
-    const points = element.points.map(([x, y]) => [
-      element.x + x,
-      element.y + y,
+    const points: [number, number][] = element.points.map((point) => [
+      element.x + Number(point[0]),
+      element.y + Number(point[1]),
     ]);
-    const xs = points.map(([x]) => x);
-    const ys = points.map(([, y]) => y);
+    const xs: number[] = points.map(([x]) => x);
+    const ys: number[] = points.map(([, y]) => y);
     return {
       maxX: Math.max(...xs),
       maxY: Math.max(...ys),
@@ -131,7 +131,7 @@ export async function exportCanvasPng(
       gridSize: 0,
       viewBackgroundColor: "transparent",
     },
-    elements: elements as ExcalidrawElement[],
+    elements,
     exportPadding: limits.margin,
     files,
   });

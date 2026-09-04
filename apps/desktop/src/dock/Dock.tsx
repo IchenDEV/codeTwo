@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+
+import { Button } from "@/components/ui/button";
 import {
   Activity,
   FolderTree,
@@ -9,15 +11,20 @@ import {
   TerminalIcon,
   X,
 } from "@/components/ui/icons";
-import type { StringKey } from "../i18n/strings";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
-import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
+import { useT } from "../i18n";
+import type { StringKey } from "../i18n/strings";
+
 export type DockSurface =
-  "trajectory" | "terminal" | "browser" | "side-chat" | "files" | "git";
+  | "trajectory"
+  | "terminal"
+  | "browser"
+  | "side-chat"
+  | "files"
+  | "git";
 /**
 "home" is the dock open with nothing chosen yet — the surface picker.
 */
@@ -27,14 +34,14 @@ export type DockContentMap = Partial<Record<DockSurface, ReactNode>>;
 /**
 The picker's cards, in the order a coding session tends to want them.
 */
-type DockSurfaceDefinition = {
+interface DockSurfaceDefinition {
   id: DockSurface;
   icon: typeof Globe;
   titleKey: StringKey;
   descKey: StringKey;
-};
+}
 
-type DockProps = {
+interface DockProps {
   /**
   Whether the dock is expanded. It stays mounted while closed so shells survive.
   */
@@ -60,7 +67,7 @@ type DockProps = {
   Content is inert until its matching surface is enabled and mounted by the container.
   */
   readonly content?: DockContentMap;
-};
+}
 
 const SURFACES: DockSurfaceDefinition[] = [
   {
@@ -120,10 +127,7 @@ export function shouldOverlayRailForDock(
   return viewportWidth < railWidth + dockMinWidth + dockMainMinWidth;
 }
 
-/**
-Right-side container for navigation, sizing, animation, and caller-supplied surface content.
-*/
-export const Dock = ({
+export function Dock({
   open,
   tab,
   onTab,
@@ -134,7 +138,7 @@ export const Dock = ({
   autoTab,
   availableSurfaces = ["trajectory", "browser", "terminal", "files", "git"],
   content = {},
-}: DockProps) => {
+}: DockProps) {
   const t = useT();
 
   // What the panel shows: the live tab, or — while collapsing — whatever was open last, so the
@@ -356,4 +360,4 @@ export const Dock = ({
       </div>
     </aside>
   );
-};
+}

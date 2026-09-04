@@ -10,7 +10,7 @@ import {
 const t = (key: StringKey, vars?: Record<string, string | number>) => {
   const template = zhCN[key];
   return vars
-    ? template.replace(/\{(\w+)\}/gu, (whole, name) =>
+    ? template.replaceAll(/\{(\w+)\}/gu, (whole, name) =>
         name in vars ? String(vars[name]) : whole
       )
     : template;

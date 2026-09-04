@@ -1,6 +1,9 @@
 /**
  * C2's only direct integration seam with Excalidraw. Other canvas modules consume the
  * narrow re-exports and policy helpers here instead of reaching into the renderer package.
+ *
+ * Brand constructors live here so Excalidraw's opaque FileId / DataURL / lineHeight brands
+ * are minted in one place (external type boundary).
  */
 export { Excalidraw, exportToCanvas } from "@excalidraw/excalidraw";
 export type {
@@ -20,7 +23,68 @@ export type {
   OrderedExcalidrawElement,
   Theme,
 } from "@excalidraw/excalidraw/element/types";
+export type { DataURL } from "@excalidraw/excalidraw/types";
+export type { FileId } from "@excalidraw/excalidraw/element/types";
+
+import type {
+  ExcalidrawElement,
+  ExcalidrawImageElement,
+  ExcalidrawTextElement,
+  FileId,
+} from "@excalidraw/excalidraw/element/types";
+import type { AppState, DataURL } from "@excalidraw/excalidraw/types";
+import type { Radians } from "@excalidraw/math";
+
 export const excalidrawCss = "@excalidraw/excalidraw/index.css";
+
+/** Mint an Excalidraw FileId brand from a validated opaque reference string. */
+export function toFileId(fileId: string): FileId {
+  // Excalidraw brands FileId as `string & { _brand: "FileId" }`; the brand is a
+  // type-system only marker and cannot be constructed without an assertion.
+  return fileId as FileId;
+}
+
+/** Mint an Excalidraw DataURL brand from a `data:` URL we generated. */
+export function toDataURL(dataURL: string): DataURL {
+  return dataURL as DataURL;
+}
+
+/** Mint Excalidraw's branded radians angle. */
+export function toRadians(value: number): Radians {
+  return value as Radians;
+}
+
+/** Mint Excalidraw's branded unitless lineHeight. */
+export function toLineHeight(
+  value: number
+): ExcalidrawTextElement["lineHeight"] {
+  return value as ExcalidrawTextElement["lineHeight"];
+}
+
+/**
+ * Assert a fully sanitized scene element into Excalidraw's branded element union.
+ * Call only after field-level sanitizers have produced a complete shape.
+ */
+export function toExcalidrawElement(element: object): ExcalidrawElement {
+  return element as ExcalidrawElement;
+}
+
+export function toExcalidrawTextElement(
+  element: object
+): ExcalidrawTextElement {
+  return element as ExcalidrawTextElement;
+}
+
+export function toExcalidrawImageElement(
+  element: object
+): ExcalidrawImageElement {
+  return element as ExcalidrawImageElement;
+}
+
+/** Rehydrate a sanitized app-state subset into Excalidraw's AppState brand. */
+export function toAppState(value: object): AppState {
+  return value as AppState;
+}
 
 export function newImageElement(options: {
   type: "image";
@@ -41,7 +105,7 @@ export function newImageElement(options: {
   locked: boolean;
   frameId: null;
   scale: readonly [number, number];
-}): import("@excalidraw/excalidraw/element/types").ExcalidrawImageElement {
+}): ExcalidrawImageElement {
   const now = Date.now();
   const runtimeCrypto = typeof crypto === "object" ? crypto : null;
   const randomId =
@@ -49,12 +113,11 @@ export function newImageElement(options: {
       ? runtimeCrypto.randomUUID()
       : `canvas-image-${now}-${Math.random().toString(36).slice(2)}`;
   return {
-    angle: 0,
+    angle: toRadians(0),
     backgroundColor: options.backgroundColor,
     boundElements: null,
     crop: null,
-    fileId:
-      options.fileId as import("@excalidraw/excalidraw/element/types").FileId,
+    fileId: toFileId(options.fileId),
     fillStyle: options.fillStyle,
     frameId: options.frameId,
     groupIds: [],

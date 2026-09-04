@@ -104,9 +104,7 @@ describe("GitHubPullRequestPanel", () => {
     expect(text(view.container, "feat: review from the dock")).not.toBeNull();
     expect(text(view.container, "All passed")).not.toBeNull();
     expect(
-      view.container
-        .querySelector('[data-slot="status-badge"]')
-        ?.getAttribute("data-tone")
+      view.container.querySelector('[data-slot="status-badge"]')?.dataset.tone
     ).toBe("success");
 
     click(button(view.container, "Open PR #42 on GitHub"));
@@ -205,9 +203,7 @@ describe("GitHubPullRequestPanel", () => {
       ).not.toBeNull();
     });
     expect(
-      view.container
-        .querySelector('[data-slot="status-badge"]')
-        ?.getAttribute("data-tone")
+      view.container.querySelector('[data-slot="status-badge"]')?.dataset.tone
     ).toBe("neutral");
     view.unmount();
   });

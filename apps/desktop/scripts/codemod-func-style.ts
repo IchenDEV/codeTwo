@@ -58,10 +58,9 @@ for (const sourceFile of project.getSourceFiles()) {
     const returnType = initializer.getReturnTypeNode()?.getText();
     const body = initializer.getBody()?.getText() ?? "{}";
     const asyncText = initializer.isAsync() ? "async " : "";
-    const typeParamText = typeParams.length
-      ? `<${typeParams.join(", ")}>`
-      : "";
-    const returnText = returnType ? `: ${returnType}` : "";
+    const typeParamText = typeParams.length ? `<${typeParams.join(", ")}>` : "";
+    const returnText =
+      returnType != null && returnType !== "" ? `: ${returnType}` : "";
     const exportText = statement.hasExportKeyword() ? "export " : "";
 
     const replacement = `${exportText}${asyncText}function ${bindingName}${typeParamText}(${params})${returnText} ${body}`;

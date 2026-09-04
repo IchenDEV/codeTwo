@@ -1,4 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+
+import { CompositeActionRow } from "@/components/business/composite-action-row";
+import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
   ArrowRight,
@@ -16,6 +19,14 @@ import {
   Trash2,
   X,
 } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   browserAnnotate,
@@ -44,18 +55,9 @@ import {
   openExternal,
 } from "../bridge";
 import type { Annotation } from "../bridge";
-import { Button } from "@/components/ui/button";
-import { CompositeActionRow } from "@/components/business/composite-action-row";
-import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { TooltipButton } from "@/components/ui/tooltip";
+import { embeddedBrowserRenderer, registerBrowserWebview } from "../container";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
-import { cn } from "@/lib/utils";
 import {
   loadBrowserHistory,
   recentSitesForProject,
@@ -65,7 +67,6 @@ import {
   updateBrowserVisitTitle,
 } from "./history";
 import type { BrowserHistoryState, StorageLike } from "./history";
-import { embeddedBrowserRenderer, registerBrowserWebview } from "../container";
 
 const BLANK = "about:blank";
 
@@ -148,10 +149,7 @@ function useDragging(): boolean {
   return dragging;
 }
 
-/**
-A menu row. The popover-of-buttons shape, styled like a native context menu.
-*/
-const MenuItem = ({
+function MenuItem({
   icon: Icon,
   label,
   onClick,
@@ -161,22 +159,26 @@ const MenuItem = ({
   readonly label: string;
   readonly onClick: () => void;
   readonly checked?: boolean;
-}) => (
-  <Button
-    type="button"
-    variant="ghost"
-    size="row"
-    focusStyle="inset"
-    onClick={onClick}
-    className="gap-module-inset px-module-inset text-metadata w-full py-1.5"
-  >
-    <Icon className="text-muted-foreground size-3.5 shrink-0" />
-    <span className="flex-1">{label}</span>
-    {checked ? <Check className="text-primary size-3.5 shrink-0" /> : null}
-  </Button>
-);
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="row"
+      focusStyle="inset"
+      onClick={onClick}
+      className="gap-module-inset px-module-inset text-metadata w-full py-1.5"
+    >
+      <Icon className="text-muted-foreground size-3.5 shrink-0" />
+      <span className="flex-1">{label}</span>
+      {checked === true ? (
+        <Check className="text-primary size-3.5 shrink-0" />
+      ) : null}
+    </Button>
+  );
+}
 
-const BrowserWebview = ({
+function BrowserWebview({
   label,
   url,
   visible,
@@ -184,7 +186,7 @@ const BrowserWebview = ({
   readonly label: string;
   readonly url: string;
   readonly visible: boolean;
-}) => {
+}) {
   const connect = (element: HTMLElement | null) =>
     registerBrowserWebview(label, element);
   return (
@@ -200,21 +202,9 @@ const BrowserWebview = ({
       )}
     />
   );
-};
+}
 
-/**
- * The built-in browser as browser, not just an iframe with an address bar: tabs along the top,
- * back/forward/reload, an overflow menu with the inspector, zoom and device widths — and the
- * annotate bar at the bottom, which is the part that makes it C2's browser rather than a
- * worse Safari: what you see feeds the prompt.
- *
- * The page itself is a native webview floating over `hostRef`, because an iframe cannot browse:
- * `X-Frame-Options: DENY` and `frame-ancestors` are honoured, and most of the web — github.com and
- * google.com included — comes back blank. Two consequences the code below spends its time on: the
- * page area's geometry has to be pushed to the native side whenever it changes, and the page is
- * *above* the DOM, so anything we want to draw over it means hiding it first.
- */
-export const BrowserPanel = ({
+export function BrowserPanel({
   url,
   projectPath,
   visible,
@@ -234,7 +224,7 @@ export const BrowserPanel = ({
   Everything the user marked up on the page, one entry per annotated element.
   */
   readonly onAnnotate: (notes: Annotation[]) => void;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const [tabs, setTabs] = useState<Tab[]>([{ id: 1, title: "", url }]);
@@ -464,7 +454,7 @@ export const BrowserPanel = ({
           void browserAnnotate(label, true);
         }
         const project = projectPathRef.current;
-        if (!project) {
+        if (project == null || project === "") {
           return;
         }
         const title =
@@ -812,7 +802,7 @@ export const BrowserPanel = ({
               {d.label}
             </Button>
           ))}
-          {device ? (
+          {device != null ? (
             <span className="text-metadata text-muted-foreground ml-auto font-mono">
               {device}px
             </span>
@@ -823,14 +813,19 @@ export const BrowserPanel = ({
       {/* ---- the page --------------------------------------------------------------------- */}
       {/* Electrobun keeps each sandboxed child webview aligned to its custom element. A device
           width narrows this container and the native page follows without accepting iframe CSP. */}
-      <div className={cn("relative min-h-0 flex-1", device && "bg-muted/40")}>
+      <div
+        className={cn(
+          "relative min-h-0 flex-1",
+          device != null && "bg-muted/40"
+        )}
+      >
         <div
           ref={hostRef}
           className={cn(
             "relative h-full",
-            device && "ring-foreground/15 mx-auto shadow-lg ring-1"
+            device != null && "ring-foreground/15 mx-auto shadow-lg ring-1"
           )}
-          style={device ? { width: device } : undefined}
+          style={device != null ? { width: device } : undefined}
         >
           {isDesktop
             ? tabs
@@ -874,7 +869,7 @@ export const BrowserPanel = ({
                           label={t("browser.removeRecent")}
                           onClick={() => {
                             const project = projectPathRef.current;
-                            if (!project) {
+                            if (project == null || project === "") {
                               return;
                             }
                             updateHistory((current) =>
@@ -915,15 +910,16 @@ export const BrowserPanel = ({
             )}
           </div>
         ) : null}
-        {!isBlank && !isDesktop && (
-          // The standalone Vite renderer has no native side. Say so rather than showing a void.
-          <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-            <p className="text-metadata text-muted-foreground">
-              {t("browser.desktopOnly")}
-            </p>
-          </div>
-        )}
+        {!isBlank &&
+          !isDesktop && (
+            // The standalone Vite renderer has no native side. Say so rather than showing a void.
+            <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
+              <p className="text-metadata text-muted-foreground">
+                {t("browser.desktopOnly")}
+              </p>
+            </div>
+          )}
       </div>
     </div>
   );
-};
+}

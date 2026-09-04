@@ -1,6 +1,23 @@
 import { useDeferredValue, useState } from "react";
 import type { ReactNode } from "react";
 
+import { SearchField } from "@/components/business/search-field";
+import { StatusBadge } from "@/components/business/status-badge";
+import type { StatusTone } from "@/components/business/status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   ArrowLeft,
   BookOpen,
@@ -18,26 +35,6 @@ import {
   Webhook,
   X,
 } from "@/components/ui/icons";
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { StatusBadge } from "@/components/business/status-badge";
-import type { StatusTone } from "@/components/business/status-badge";
-import { SearchField } from "@/components/business/search-field";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Spinner } from "@/components/ui/spinner";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -49,7 +46,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import { BundleAdministration } from "./BundleAdministration";
@@ -79,7 +78,7 @@ const defaultLabels: PluginManagerLabels = {
   bundleEnabled: (name, enabled) =>
     `${name} ${enabled ? "enabled" : "disabled"}.`,
   bundleInstalled: (result) =>
-    `${result.name}${result.version ? ` ${result.version}` : ""} installed. Review its source and trust requirements before enabling code.`,
+    `${result.name}${result.version != null && result.version !== "" ? ` ${result.version}` : ""} installed. Review its source and trust requirements before enabling code.`,
   bundleManagement: "Bundle management",
   bundleManagementUserOnly:
     "Installation, trust, and removal are managed in User scope.",
@@ -250,24 +249,26 @@ function statusDotClass(status: PluginManagerStatus): string {
   return "bg-muted-foreground/50";
 }
 
-const CompactStatus = ({
+function CompactStatus({
   status,
   labels,
 }: {
   readonly status: PluginManagerStatus;
   readonly labels: PluginManagerLabels;
-}) => (
-  <span
-    data-plugin-status={status}
-    className="text-callout text-muted-foreground flex shrink-0 items-center gap-1.5"
-  >
+}) {
+  return (
     <span
-      className={cn("size-1.5 rounded-full", statusDotClass(status))}
-      aria-hidden="true"
-    />
-    {labels.status[status]}
-  </span>
-);
+      data-plugin-status={status}
+      className="text-callout text-muted-foreground flex shrink-0 items-center gap-1.5"
+    >
+      <span
+        className={cn("size-1.5 rounded-full", statusDotClass(status))}
+        aria-hidden="true"
+      />
+      {labels.status[status]}
+    </span>
+  );
+}
 
 function statusTone(status: PluginManagerStatus): StatusTone {
   if (status === "active") {
@@ -286,28 +287,30 @@ function statusTone(status: PluginManagerStatus): StatusTone {
   return "neutral";
 }
 
-const StatusSummary = ({
+function StatusSummary({
   state,
   labels,
 }: {
   readonly state: PluginManagerScopedState;
   readonly labels: PluginManagerLabels;
-}) => (
-  <div className="flex flex-wrap items-center gap-2">
-    <StatusBadge tone={statusTone(state.status)}>
-      {labels.status[state.status]}
-    </StatusBadge>
-    {state.missingDependencies?.length ? (
-      <StatusBadge tone="destructive">
-        <CircleAlert />
-        {labels.missingCount(state.missingDependencies.length)}
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <StatusBadge tone={statusTone(state.status)}>
+        {labels.status[state.status]}
       </StatusBadge>
-    ) : null}
-  </div>
-);
+      {state.missingDependencies?.length ? (
+        <StatusBadge tone="destructive">
+          <CircleAlert />
+          {labels.missingCount(state.missingDependencies.length)}
+        </StatusBadge>
+      ) : null}
+    </div>
+  );
+}
 
 function scopeSupportsProject(
-  supportedScopes: Array<"user" | "project">
+  supportedScopes: ("user" | "project")[]
 ): boolean {
   return supportedScopes.includes("project");
 }
@@ -360,10 +363,10 @@ function scopeValue(
   const index = projects.findIndex(
     (project) => project.path === scope.projectPath
   );
-  return index >= 0 ? `project:${index}` : "project:current";
+  return index !== -1 ? `project:${index}` : "project:current";
 }
 
-const ScopeSelector = ({
+function ScopeSelector({
   scope,
   projects,
   labels,
@@ -373,7 +376,7 @@ const ScopeSelector = ({
   readonly projects: PluginManagerProject[];
   readonly labels: PluginManagerLabels;
   readonly onChange: (scope: PluginManagerScope) => void;
-}) => {
+}) {
   const currentProject =
     scope.kind === "project" &&
     !projects.some((project) => project.path === scope.projectPath)
@@ -414,7 +417,7 @@ const ScopeSelector = ({
           }
           const index = Number(value?.replace("project:", ""));
           const project = projects[index];
-          if (project) {
+          if (project != null) {
             onChange({ kind: "project", projectPath: project.path });
           }
         }}
@@ -434,9 +437,9 @@ const ScopeSelector = ({
       </Select>
     </Field>
   );
-};
+}
 
-const GithubInstaller = ({
+function GithubInstaller({
   repository,
   labels,
   busy,
@@ -452,78 +455,85 @@ const GithubInstaller = ({
   readonly onRepositoryChange: (repository: string) => void;
   readonly onClose: () => void;
   readonly onSubmit: () => void;
-}) => (
-  <form
-    data-plugin-github-installer
-    className="rounded-module bg-fill-quiet flex flex-col gap-3 p-3"
-    aria-busy={busy}
-    onSubmit={(event) => {
-      event.preventDefault();
-      onSubmit();
-    }}
-  >
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex min-w-0 flex-col gap-1">
-        <h2 className="text-dialog font-medium">{labels.installFromGithub}</h2>
-        <p
-          id="plugin-github-hint"
-          className="text-callout text-muted-foreground max-w-2xl"
+}) {
+  return (
+    <form
+      data-plugin-github-installer
+      className="rounded-module bg-fill-quiet flex flex-col gap-3 p-3"
+      aria-busy={busy}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 className="text-dialog font-medium">
+            {labels.installFromGithub}
+          </h2>
+          <p
+            id="plugin-github-hint"
+            className="text-callout text-muted-foreground max-w-2xl"
+          >
+            {labels.githubHint}
+          </p>
+        </div>
+        <TooltipButton
+          label={labels.closeInstaller}
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={onClose}
         >
-          {labels.githubHint}
-        </p>
+          <X />
+        </TooltipButton>
       </div>
-      <TooltipButton
-        label={labels.closeInstaller}
-        type="button"
-        size="icon-sm"
-        variant="ghost"
-        disabled={busy}
-        onClick={onClose}
-      >
-        <X />
-      </TooltipButton>
-    </div>
-    <Field>
-      <FieldLabel htmlFor="plugin-github-repository">
-        {labels.githubRepository}
-      </FieldLabel>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <Input
-          id="plugin-github-repository"
-          value={repository}
-          placeholder="owner/repository"
-          aria-describedby={
-            error
-              ? "plugin-github-hint plugin-github-error"
-              : "plugin-github-hint"
-          }
-          aria-invalid={error ? true : undefined}
-          onChange={(event) => onRepositoryChange(event.currentTarget.value)}
-        />
-        <Button type="submit" className="shrink-0" disabled={busy}>
-          {busy ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
-            <Download data-icon="inline-start" />
-          )}
-          {busy ? labels.installingPlugin : labels.install}
-        </Button>
-      </div>
-      {error ? (
-        <p
-          id="plugin-github-error"
-          role="alert"
-          className="text-body text-destructive flex items-start gap-2"
-        >
-          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>{error}</span>
-        </p>
-      ) : null}
-    </Field>
-  </form>
-);
+      <Field>
+        <FieldLabel htmlFor="plugin-github-repository">
+          {labels.githubRepository}
+        </FieldLabel>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            id="plugin-github-repository"
+            value={repository}
+            placeholder="owner/repository"
+            aria-describedby={
+              error != null && error !== ""
+                ? "plugin-github-hint plugin-github-error"
+                : "plugin-github-hint"
+            }
+            aria-invalid={error != null && error !== "" ? true : undefined}
+            onChange={(event) => onRepositoryChange(event.currentTarget.value)}
+          />
+          <Button type="submit" className="shrink-0" disabled={busy}>
+            {busy ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <Download data-icon="inline-start" />
+            )}
+            {busy ? labels.installingPlugin : labels.install}
+          </Button>
+        </div>
+        {error ? (
+          <p
+            id="plugin-github-error"
+            role="alert"
+            className="text-body text-destructive flex items-start gap-2"
+          >
+            <CircleAlert
+              className="mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
+            <span>{error}</span>
+          </p>
+        ) : null}
+      </Field>
+    </form>
+  );
+}
 
-const StateControl = ({
+function StateControl({
   id,
   name,
   kind,
@@ -539,14 +549,14 @@ const StateControl = ({
   readonly name: string;
   readonly kind: "plugin" | "component";
   readonly required?: boolean;
-  readonly supportedScopes: Array<"user" | "project">;
+  readonly supportedScopes: ("user" | "project")[];
   readonly state: PluginManagerScopedState;
   readonly scope: PluginManagerScope;
   readonly labels: PluginManagerLabels;
   readonly disabled: boolean;
   readonly onChange: (request: PluginManagerChangeRequest) => void;
-}) => {
-  if (required) {
+}) {
+  if (required === true) {
     return <Badge variant="secondary">{labels.required}</Badge>;
   }
 
@@ -567,10 +577,10 @@ const StateControl = ({
       );
     }
     const value = state.override ?? "inherit";
-    const projectStates: Array<{
+    const projectStates: {
       value: PluginManagerDesiredState;
       label: string;
-    }> = [
+    }[] = [
       { label: labels.inherit, value: "inherit" },
       { label: labels.enabled, value: "enabled" },
       { label: labels.disabled, value: "disabled" },
@@ -628,15 +638,15 @@ const StateControl = ({
       </FieldLabel>
     </Field>
   );
-};
+}
 
-const DetailList = ({
+function DetailList({
   title,
   values,
 }: {
   readonly title: string;
   readonly values?: string[];
-}) => {
+}) {
   if (!values?.length) {
     return null;
   }
@@ -654,9 +664,9 @@ const DetailList = ({
       </div>
     </div>
   );
-};
+}
 
-const ScaffoldList = ({
+function ScaffoldList({
   pluginId,
   scaffolds,
   labels,
@@ -668,7 +678,7 @@ const ScaffoldList = ({
   readonly labels: PluginManagerLabels;
   readonly busyAction: string | null;
   readonly onApply?: (pluginId: string, scaffoldId: string) => Promise<void>;
-}) => {
+}) {
   if (!scaffolds.length || !onApply) {
     return null;
   }
@@ -716,9 +726,9 @@ const ScaffoldList = ({
       </div>
     </section>
   );
-};
+}
 
-const PluginList = ({
+function PluginList({
   plugins,
   selectedId,
   labels,
@@ -728,52 +738,55 @@ const PluginList = ({
   readonly selectedId: string | null;
   readonly labels: PluginManagerLabels;
   readonly onSelect: (id: string) => void;
-}) => (
-  <div className="flex flex-col gap-0.5" aria-label={labels.pluginList}>
-    {plugins.map((plugin) => {
-      const isSelected = plugin.id === selectedId;
-      return (
-        <Button
-          key={plugin.id}
-          type="button"
-          variant={isSelected ? "secondary" : "ghost"}
-          data-selected={isSelected ? "true" : undefined}
-          className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
-          aria-pressed={isSelected}
-          onClick={() => onSelect(plugin.id)}
-        >
-          <span
-            className={cn(
-              "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
-              isSelected ? "text-foreground" : "text-muted-foreground"
-            )}
+}) {
+  return (
+    <div className="flex flex-col gap-0.5" aria-label={labels.pluginList}>
+      {plugins.map((plugin) => {
+        const isSelected = plugin.id === selectedId;
+        return (
+          <Button
+            key={plugin.id}
+            type="button"
+            variant={isSelected ? "secondary" : "ghost"}
+            data-selected={isSelected ? "true" : undefined}
+            className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
+            aria-pressed={isSelected}
+            onClick={() => onSelect(plugin.id)}
           >
-            {sourceIcon(plugin.source)}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {plugin.name}
-              </span>
-              {plugin.bundle?.requiresTrust && !plugin.bundle.trusted ? (
-                <StatusBadge tone="destructive">
-                  {labels.notTrusted}
-                </StatusBadge>
-              ) : (
-                <CompactStatus status={plugin.state.status} labels={labels} />
+            <span
+              className={cn(
+                "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
+                isSelected ? "text-foreground" : "text-muted-foreground"
               )}
+            >
+              {sourceIcon(plugin.source)}
             </span>
-            <span className="text-callout text-muted-foreground truncate">
-              {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {plugin.name}
+                </span>
+                {plugin.bundle?.requiresTrust === true &&
+                !plugin.bundle.trusted ? (
+                  <StatusBadge tone="destructive">
+                    {labels.notTrusted}
+                  </StatusBadge>
+                ) : (
+                  <CompactStatus status={plugin.state.status} labels={labels} />
+                )}
+              </span>
+              <span className="text-callout text-muted-foreground truncate">
+                {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
+              </span>
             </span>
-          </span>
-        </Button>
-      );
-    })}
-  </div>
-);
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
 
-const ResourceList = ({
+function ResourceList({
   resources,
   tab,
   selectedId,
@@ -785,46 +798,51 @@ const ResourceList = ({
   readonly selectedId: string | null;
   readonly labels: PluginManagerLabels;
   readonly onSelect: (id: string) => void;
-}) => (
-  <div className="flex flex-col gap-0.5" aria-label={labels.resourceList(tab)}>
-    {resources.map((resource) => {
-      const isSelected = resource.id === selectedId;
-      return (
-        <Button
-          key={resource.id}
-          type="button"
-          variant={isSelected ? "secondary" : "ghost"}
-          data-selected={isSelected ? "true" : undefined}
-          className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
-          aria-pressed={isSelected}
-          onClick={() => onSelect(resource.id)}
-        >
-          <span
-            className={cn(
-              "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
-              isSelected ? "text-foreground" : "text-muted-foreground"
-            )}
+}) {
+  return (
+    <div
+      className="flex flex-col gap-0.5"
+      aria-label={labels.resourceList(tab)}
+    >
+      {resources.map((resource) => {
+        const isSelected = resource.id === selectedId;
+        return (
+          <Button
+            key={resource.id}
+            type="button"
+            variant={isSelected ? "secondary" : "ghost"}
+            data-selected={isSelected ? "true" : undefined}
+            className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
+            aria-pressed={isSelected}
+            onClick={() => onSelect(resource.id)}
           >
-            {resourceIcon(tab)}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {resource.name}
+            <span
+              className={cn(
+                "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
+                isSelected ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {resourceIcon(tab)}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {resource.name}
+                </span>
+                <CompactStatus status={resource.state.status} labels={labels} />
               </span>
-              <CompactStatus status={resource.state.status} labels={labels} />
+              <span className="text-callout text-muted-foreground truncate">
+                {resource.pluginName}
+              </span>
             </span>
-            <span className="text-callout text-muted-foreground truncate">
-              {resource.pluginName}
-            </span>
-          </span>
-        </Button>
-      );
-    })}
-  </div>
-);
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
 
-const ResourceDetails = ({
+function ResourceDetails({
   resource,
   scope,
   labels,
@@ -840,11 +858,15 @@ const ResourceDetails = ({
   readonly canManagePlugin: boolean;
   readonly onRequestChange: (request: PluginManagerChangeRequest) => void;
   readonly onManagePlugin: (pluginId: string) => void;
-}) => {
+}) {
   const isIndividuallyManageable =
     resource.manageable !== false && resource.state.status !== "unsupported";
   const definition =
-    resource.slot && resource.slot !== "composer.skills" ? resource.slot : null;
+    resource.slot != null &&
+    resource.slot !== "" &&
+    resource.slot !== "composer.skills"
+      ? resource.slot
+      : null;
 
   return (
     <article
@@ -916,7 +938,7 @@ const ResourceDetails = ({
           <dd className="text-callout min-w-0 font-mono break-all">
             {resource.id}
           </dd>
-          {definition ? (
+          {definition != null && definition !== "" ? (
             <>
               <dt className="text-muted-foreground">{labels.definition}</dt>
               <dd className="text-callout min-w-0 font-mono break-all">
@@ -926,7 +948,7 @@ const ResourceDetails = ({
           ) : null}
         </dl>
 
-        {!isIndividuallyManageable ? (
+        {isIndividuallyManageable ? null : (
           <section className="rounded-module bg-fill-quiet flex flex-wrap items-center justify-between gap-3 p-3">
             <p className="text-callout text-muted-foreground max-w-2xl">
               {labels.managedByPlugin}
@@ -942,13 +964,13 @@ const ResourceDetails = ({
               </Button>
             ) : null}
           </section>
-        ) : null}
+        )}
       </div>
     </article>
   );
-};
+}
 
-const PluginDetails = ({
+function PluginDetails({
   plugin,
   detailsExtension,
   scope,
@@ -988,12 +1010,12 @@ const PluginDetails = ({
   ) => Promise<void>;
   readonly onSaveConfig: PluginManagerPageProps["onSaveConfig"];
   readonly onReset?: (pluginId: string, scope: PluginManagerScope) => void;
-}) => {
+}) {
   const isConfigurable =
     plugin.configurable ??
     (plugin.configSchema !== undefined || plugin.state.config !== undefined);
   const isTrustRequired = Boolean(
-    plugin.bundle?.requiresTrust && !plugin.bundle.trusted
+    plugin.bundle?.requiresTrust === true && !plugin.bundle.trusted
   );
   return (
     <article
@@ -1162,7 +1184,9 @@ const PluginDetails = ({
       <Separator className="mt-8" />
       <footer className="text-callout text-muted-foreground flex items-center justify-between gap-3 pt-4">
         <span>
-          {plugin.author ? `${plugin.author} · ` : ""}
+          {plugin.author != null && plugin.author !== ""
+            ? `${plugin.author} · `
+            : ""}
           {plugin.category || plugin.id}
         </span>
         {onReset && plugin.source !== "bundle" ? (
@@ -1179,15 +1203,15 @@ const PluginDetails = ({
       </footer>
     </article>
   );
-};
+}
 
-const MarketplaceSources = ({
+function MarketplaceSources({
   sources,
   labels,
 }: {
   readonly sources: NonNullable<PluginManagerPageProps["marketplaceSources"]>;
   readonly labels: PluginManagerLabels;
-}) => {
+}) {
   if (!sources.length) {
     return null;
   }
@@ -1229,9 +1253,9 @@ const MarketplaceSources = ({
       ))}
     </section>
   );
-};
+}
 
-const MarketplaceList = ({
+function MarketplaceList({
   items,
   selectedId,
   labels,
@@ -1241,45 +1265,47 @@ const MarketplaceList = ({
   readonly selectedId: string | null;
   readonly labels: PluginManagerLabels;
   readonly onSelect: (id: string) => void;
-}) => (
-  <div className="flex flex-col gap-0.5" aria-label={labels.marketplace}>
-    {items.map((item) => (
-      <Button
-        key={item.id}
-        type="button"
-        variant="selectable"
-        size="row"
-        focusStyle="inset"
-        data-selected={item.id === selectedId ? "true" : undefined}
-        aria-pressed={item.id === selectedId}
-        onClick={() => onSelect(item.id)}
-        className={cn(
-          "group px-module-inset grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 py-2",
-          item.id === selectedId && "bg-accent text-foreground"
-        )}
-      >
-        <span className="rounded-control bg-fill-quiet text-muted-foreground row-span-2 flex size-8 items-center justify-center">
-          <Store className="size-4" aria-hidden="true" />
-        </span>
-        <span className="text-body min-w-0 truncate font-medium">
-          {item.name}
-        </span>
-        <span className="text-callout text-muted-foreground">
-          {item.installed
-            ? labels.installed
-            : item.version
-              ? `v${item.version}`
-              : ""}
-        </span>
-        <span className="text-callout text-muted-foreground col-start-2 col-end-4 min-w-0 truncate">
-          {[item.kind, item.sourceLabel].filter(Boolean).join(" · ")}
-        </span>
-      </Button>
-    ))}
-  </div>
-);
+}) {
+  return (
+    <div className="flex flex-col gap-0.5" aria-label={labels.marketplace}>
+      {items.map((item) => (
+        <Button
+          key={item.id}
+          type="button"
+          variant="selectable"
+          size="row"
+          focusStyle="inset"
+          data-selected={item.id === selectedId ? "true" : undefined}
+          aria-pressed={item.id === selectedId}
+          onClick={() => onSelect(item.id)}
+          className={cn(
+            "group px-module-inset grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 py-2",
+            item.id === selectedId && "bg-accent text-foreground"
+          )}
+        >
+          <span className="rounded-control bg-fill-quiet text-muted-foreground row-span-2 flex size-8 items-center justify-center">
+            <Store className="size-4" aria-hidden="true" />
+          </span>
+          <span className="text-body min-w-0 truncate font-medium">
+            {item.name}
+          </span>
+          <span className="text-callout text-muted-foreground">
+            {item.installed
+              ? labels.installed
+              : item.version
+                ? `v${item.version}`
+                : ""}
+          </span>
+          <span className="text-callout text-muted-foreground col-start-2 col-end-4 min-w-0 truncate">
+            {[item.kind, item.sourceLabel].filter(Boolean).join(" · ")}
+          </span>
+        </Button>
+      ))}
+    </div>
+  );
+}
 
-const MarketplaceDetails = ({
+function MarketplaceDetails({
   item,
   scope,
   labels,
@@ -1293,7 +1319,7 @@ const MarketplaceDetails = ({
   readonly sources: NonNullable<PluginManagerPageProps["marketplaceSources"]>;
   readonly busyId: string | null;
   readonly onInstall: PluginManagerPageProps["onInstallMarketplaceItem"];
-}) => {
+}) {
   const isScopeSupported = item.supportedScopes.includes(scope.kind);
   const isDisabled =
     item.installed ||
@@ -1309,7 +1335,7 @@ const MarketplaceDetails = ({
         <div className="min-w-0">
           <h1 className="text-page flex min-w-0 flex-wrap items-center gap-2 font-semibold">
             <span className="truncate">{item.name}</span>
-            {item.version ? (
+            {item.version != null && item.version !== "" ? (
               <Badge variant="secondary">v{item.version}</Badge>
             ) : null}
             <Badge variant="secondary">{item.kind}</Badge>
@@ -1365,9 +1391,9 @@ const MarketplaceDetails = ({
       </div>
     </article>
   );
-};
+}
 
-const ChangeConfirmation = ({
+function ChangeConfirmation({
   plan,
   labels,
   busy,
@@ -1381,87 +1407,85 @@ const ChangeConfirmation = ({
   readonly error: string | null;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
-}) => (
-  <AlertDialog
-    open={Boolean(plan)}
-    onOpenChange={(open) => !open && !busy && onCancel()}
-  >
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>{labels.confirmTitle}</AlertDialogTitle>
-        <AlertDialogDescription>{plan?.summary}</AlertDialogDescription>
-      </AlertDialogHeader>
-      {plan?.affectedPlugins?.length ? (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-metadata text-muted-foreground font-medium">
-            {labels.affectedPlugins}
-          </h3>
-          <ul className="text-body flex flex-col gap-1">
-            {plan.affectedPlugins.map((plugin) => (
-              <li key={plugin.id}>
-                {plugin.name}
-                {plugin.desiredState ? (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    ·{" "}
-                    {plugin.desiredState === "enabled"
-                      ? labels.enabled
-                      : plugin.desiredState === "disabled"
-                        ? labels.disabled
-                        : labels.inherit}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {plan?.activeResources?.length ? (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-metadata text-muted-foreground font-medium">
-            {labels.activeResources}
-          </h3>
-          <ul className="text-body flex flex-col gap-1">
-            {plan.activeResources.map((resource) => (
-              <li key={resource.id}>{resource.label}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {plan?.warnings?.map((warning) => (
-        <p key={warning} className="text-body text-destructive">
-          {warning}
-        </p>
-      ))}
-      {error ? (
-        <p role="alert" className="text-body text-destructive">
-          {error}
-        </p>
-      ) : null}
-      <AlertDialogFooter>
-        <AlertDialogCancel disabled={busy}>{labels.cancel}</AlertDialogCancel>
-        <AlertDialogAction
-          variant={
-            plan?.request.desiredState === "disabled"
-              ? "destructive"
-              : "default"
-          }
-          disabled={busy}
-          onClick={() => onConfirm()}
-        >
-          {busy ? <Spinner data-icon="inline-start" /> : null}
-          {labels.confirm}
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
-);
+}) {
+  return (
+    <AlertDialog
+      open={Boolean(plan)}
+      onOpenChange={(open) => !open && !busy && onCancel()}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{labels.confirmTitle}</AlertDialogTitle>
+          <AlertDialogDescription>{plan?.summary}</AlertDialogDescription>
+        </AlertDialogHeader>
+        {plan?.affectedPlugins?.length ? (
+          <div className="flex flex-col gap-2">
+            <h3 className="text-metadata text-muted-foreground font-medium">
+              {labels.affectedPlugins}
+            </h3>
+            <ul className="text-body flex flex-col gap-1">
+              {plan.affectedPlugins.map((plugin) => (
+                <li key={plugin.id}>
+                  {plugin.name}
+                  {plugin.desiredState ? (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      ·{" "}
+                      {plugin.desiredState === "enabled"
+                        ? labels.enabled
+                        : plugin.desiredState === "disabled"
+                          ? labels.disabled
+                          : labels.inherit}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {plan?.activeResources?.length ? (
+          <div className="flex flex-col gap-2">
+            <h3 className="text-metadata text-muted-foreground font-medium">
+              {labels.activeResources}
+            </h3>
+            <ul className="text-body flex flex-col gap-1">
+              {plan.activeResources.map((resource) => (
+                <li key={resource.id}>{resource.label}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {plan?.warnings?.map((warning) => (
+          <p key={warning} className="text-body text-destructive">
+            {warning}
+          </p>
+        ))}
+        {error != null && error !== "" ? (
+          <p role="alert" className="text-body text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>{labels.cancel}</AlertDialogCancel>
+          <AlertDialogAction
+            variant={
+              plan?.request.desiredState === "disabled"
+                ? "destructive"
+                : "default"
+            }
+            disabled={busy}
+            onClick={() => onConfirm()}
+          >
+            {busy ? <Spinner data-icon="inline-start" /> : null}
+            {labels.confirm}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
-/**
- * Data-only plugin management surface. It never imports or renders code supplied by a bundle;
- * plugin detail extensions are host-owned React content supplied by the desktop app.
- */
-export const PluginManagerPage = ({
+export function PluginManagerPage({
   plugins,
   components = [],
   marketplaceItems,
@@ -1487,7 +1511,7 @@ export const PluginManagerPage = ({
   onUninstallBundle,
   onApplyScaffold,
   onResetPlugin,
-}: PluginManagerPageProps) => {
+}: PluginManagerPageProps) {
   const labels = { ...defaultLabels, ...labelOverrides };
   const [tab, setTab] = useState(initialTab);
   const [query, setQuery] = useState("");
@@ -1694,7 +1718,7 @@ export const PluginManagerPage = ({
     setActionNotice(null);
     try {
       await action();
-      if (success) {
+      if (success != null && success !== "") {
         setActionNotice(success);
       }
       return true;
@@ -1784,7 +1808,7 @@ export const PluginManagerPage = ({
         <header
           className={cn(
             "plugin-manager-list-header electrobun-webkit-app-region-drag h-layout-titlebar pr-surface-inset flex shrink-0 items-center gap-1",
-            headerLeadingAction ? "pl-surface-inset" : "pl-page-section"
+            headerLeadingAction == null ? "pl-page-section" : "pl-surface-inset"
           )}
         >
           {headerLeadingAction ? (
@@ -2015,7 +2039,7 @@ export const PluginManagerPage = ({
                     {recovery.kind === "safe_mode"
                       ? labels.safeMode
                       : labels.restoredLastGood}
-                    {recovery.error ? (
+                    {recovery.error != null && recovery.error !== "" ? (
                       <span className="text-callout text-muted-foreground mt-0.5 block">
                         {recovery.error}
                       </span>
@@ -2035,7 +2059,7 @@ export const PluginManagerPage = ({
                   <span>{actionError}</span>
                 </p>
               ) : null}
-              {actionNotice ? (
+              {actionNotice != null && actionNotice !== "" ? (
                 <output
                   aria-live="polite"
                   className="text-body text-success mb-4 flex items-start gap-2"
@@ -2174,4 +2198,4 @@ export const PluginManagerPage = ({
       />
     </main>
   );
-};
+}

@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { useState } from "react";
+
 import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
@@ -49,9 +51,11 @@ describe("Appearance settings", () => {
     const view = mount(<Harness />);
     await flush();
 
-    const radios = Array.from(
-      view.container.querySelectorAll('input[name="appearance-color-scheme"]')
-    );
+    const radios = [
+      ...view.container.querySelectorAll(
+        'input[name="appearance-color-scheme"]'
+      ),
+    ];
     expect(radios.map((radio) => radio.getAttribute("value"))).toEqual([
       "system",
       "light",

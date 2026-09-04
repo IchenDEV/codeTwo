@@ -8,6 +8,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+
 import type { PlanEntry } from "../bridge";
 import { useT } from "../i18n";
 import type { Turn } from "./turns";
@@ -59,7 +60,7 @@ export function currentTaskPlan(turns: readonly Turn[]): readonly PlanEntry[] {
   return turns[turns.length - 1]?.plan ?? [];
 }
 
-const StatusIcon = ({ status }: { readonly status: TaskPlanStatus }) => {
+function StatusIcon({ status }: { readonly status: TaskPlanStatus }) {
   const t = useT();
   if (status === "completed") {
     return (
@@ -83,9 +84,9 @@ const StatusIcon = ({ status }: { readonly status: TaskPlanStatus }) => {
       aria-label={t("taskPlan.status.pending")}
     />
   );
-};
+}
 
-export const TaskPlanPanel = ({
+export function TaskPlanPanel({
   turns,
   onOpenPlanAsDocument,
   onPinPlanArtifact,
@@ -95,14 +96,14 @@ export const TaskPlanPanel = ({
   readonly onOpenPlanAsDocument?: (entries: PlanEntry[]) => void;
   readonly onPinPlanArtifact?: (markdown: string) => void;
   readonly canPinPlan?: boolean;
-}) => {
+}) {
   const t = useT();
   const entries = currentTaskPlan(turns);
   const statuses = entries.map(taskPlanStatus);
   const completed = statuses.filter((status) => status === "completed").length;
   const currentIndex = statuses.indexOf("in_progress");
   const currentStep =
-    currentIndex >= 0
+    currentIndex !== -1
       ? currentIndex + 1
       : entries.length > 0
         ? Math.min(completed + 1, entries.length)
@@ -201,4 +202,4 @@ export const TaskPlanPanel = ({
       ) : null}
     </section>
   );
-};
+}

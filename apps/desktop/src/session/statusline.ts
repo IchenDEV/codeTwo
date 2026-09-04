@@ -51,7 +51,7 @@ export function deriveBurnRate(samples: UsageSample[]): number | null {
     return null;
   }
   const ordered = [...samples].sort((a, b) => a.at - b.at);
-  const newest = ordered[ordered.length - 1]!!;
+  const newest = ordered[ordered.length - 1]!;
   const inWindow = ordered.filter((s) => newest.at - s.at <= burnWindowMs);
   if (inWindow.length < 2) {
     return null;

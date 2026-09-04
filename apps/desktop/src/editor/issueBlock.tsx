@@ -1,8 +1,10 @@
 import { createReactBlockSpec } from "@blocknote/react";
+
 import { Badge } from "@/components/ui/badge";
 import { TooltipButton } from "@/components/ui/tooltip";
-import { useT } from "../i18n";
+
 import type { DocumentBlock } from "../bridge";
+import { useT } from "../i18n";
 
 // An issue-tracker reference as a first-class document block (R12), replacing the plain-text
 // paste of `issueContext()`. Same shape as browserNote: the exact compiled markdown rides along
@@ -30,7 +32,7 @@ export interface IssueRefProps {
 
 export function issueContextBody(context: string): string {
   const cut = context.indexOf("\n\n");
-  return cut < 0 ? "" : context.slice(cut + 2);
+  return cut === -1 ? "" : context.slice(cut + 2);
 }
 
 export function issueContextMarkdown(
@@ -62,13 +64,13 @@ export function issueRefToDocBlock(props: IssueRefProps): DocumentBlock | null {
   };
 }
 
-const IssueRefCard = ({
+function IssueRefCard({
   props,
   onRemove,
 }: {
   readonly props: IssueRefProps;
   readonly onRemove: () => void;
-}) => {
+}) {
   const t = useT();
   return (
     <div
@@ -108,7 +110,7 @@ const IssueRefCard = ({
       </TooltipButton>
     </div>
   );
-};
+}
 
 export const IssueRefBlock = createReactBlockSpec(
   {

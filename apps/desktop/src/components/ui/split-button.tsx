@@ -1,13 +1,13 @@
-import { ChevronDown } from "./icons";
-
 import { cn } from "@/lib/utils";
+
+import { Button } from "./button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { Button } from "./button";
+import { ChevronDown } from "./icons";
 
 interface SplitButtonAction {
   label: string;
@@ -16,7 +16,11 @@ interface SplitButtonAction {
 }
 
 type SplitButtonVariant =
-  "default" | "destructive" | "outline" | "secondary" | "ghost";
+  | "default"
+  | "destructive"
+  | "outline"
+  | "secondary"
+  | "ghost";
 type SplitButtonSize = "default" | "sm" | "compact" | "field";
 
 interface SplitButtonProps {
@@ -51,11 +55,7 @@ const separatorClass: Record<SplitButtonVariant, string> = {
   secondary: "before:bg-secondary-foreground/20",
 };
 
-/**
- * A two-segment button: the left half fires the primary action, the right half opens a dropdown
- * of alternatives. Mirrors the pattern Cursor uses for "Commit & Push ▾".
- */
-const SplitButton = ({
+function SplitButton({
   label,
   onClick,
   actions,
@@ -65,7 +65,7 @@ const SplitButton = ({
   className,
   menuAlign = "end",
   menuSide = "top",
-}: SplitButtonProps) => {
+}: SplitButtonProps) {
   if (actions.length === 0) {
     return (
       <Button
@@ -132,6 +132,6 @@ const SplitButton = ({
       </DropdownMenu>
     </span>
   );
-};
+}
 
 export { SplitButton, type SplitButtonAction, type SplitButtonProps };

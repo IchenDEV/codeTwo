@@ -89,11 +89,11 @@ export function formatContextTokens(tokens: number): string {
   if (!Number.isSafeInteger(tokens) || tokens < 0) {
     return "—";
   }
-  if (tokens < 1_000) {
+  if (tokens < 1000) {
     return String(tokens);
   }
   if (tokens < 1_000_000) {
-    return `${trimDecimal(tokens / 1_000)}k`;
+    return `${trimDecimal(tokens / 1000)}k`;
   }
   if (tokens < 1_000_000_000) {
     return `${trimDecimal(tokens / 1_000_000)}m`;

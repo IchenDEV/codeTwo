@@ -15,8 +15,8 @@ import {
   onLspRuntimeEnabled,
   pathToUri,
 } from "./client";
-import { applyDiagnostics, registerProviders } from "./providers";
 import type { LspClient } from "./client";
+import { applyDiagnostics, registerProviders } from "./providers";
 
 const synced = new Set<string>();
 const mountedModels = new Map<monaco.editor.ITextModel, string>();

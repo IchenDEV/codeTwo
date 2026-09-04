@@ -1,4 +1,17 @@
 import { useEffect, useRef, useState } from "react";
+
+import { StatusBadge } from "@/components/business/status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
   CircleAlert,
@@ -10,6 +23,17 @@ import {
   RefreshCw,
   XCircle,
 } from "@/components/ui/icons";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   gitSourceControlInfo,
@@ -27,30 +51,7 @@ import type {
   GitHubReviewAction,
   SourceControlInfo,
 } from "../bridge";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { StatusBadge } from "@/components/business/status-badge";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
 import { diffLinePresentation, diffPreviewLines } from "./state";
 
 type PullRequestLoadState =
@@ -69,7 +70,12 @@ type DiffLoadState =
   | { kind: "ready"; result: GitHubPullRequestDiff; error: null };
 
 type ActionPhase =
-  "idle" | "opening" | "comment" | "approve" | "request_changes" | "merge";
+  | "idle"
+  | "opening"
+  | "comment"
+  | "approve"
+  | "request_changes"
+  | "merge";
 
 export interface GitHubPullRequestPanelApi {
   sourceControl: (cwd: string) => Promise<SourceControlInfo | null>;
@@ -149,11 +155,7 @@ export function pullRequestMergeBlock(
   return null;
 }
 
-const DiffPreview = ({
-  result,
-}: {
-  readonly result: GitHubPullRequestDiff;
-}) => {
+function DiffPreview({ result }: { readonly result: GitHubPullRequestDiff }) {
   const t = useT();
   const preview = diffPreviewLines(result.text);
   if (!result.text.trim()) {
@@ -198,9 +200,9 @@ const DiffPreview = ({
       </pre>
     </div>
   );
-};
+}
 
-const CheckStatusIcon = ({ tone }: { readonly tone: GitHubCheckTone }) => {
+function CheckStatusIcon({ tone }: { readonly tone: GitHubCheckTone }) {
   if (tone === "success") {
     return (
       <CheckCircle2 className="text-success size-3.5" aria-hidden="true" />
@@ -210,9 +212,9 @@ const CheckStatusIcon = ({ tone }: { readonly tone: GitHubCheckTone }) => {
     return <XCircle className="text-destructive size-3.5" aria-hidden="true" />;
   }
   return <CircleDot className="text-warning size-3.5" aria-hidden="true" />;
-};
+}
 
-export const GitHubPullRequestPanel = ({
+export function GitHubPullRequestPanel({
   cwd,
   branch,
   onRefreshGit,
@@ -222,7 +224,7 @@ export const GitHubPullRequestPanel = ({
   readonly branch: string;
   readonly onRefreshGit?: () => void;
   readonly api?: GitHubPullRequestPanelApi;
-}) => {
+}) {
   const t = useT();
   const apiRef = useRef(api);
   apiRef.current = api;
@@ -316,7 +318,7 @@ export const GitHubPullRequestPanel = ({
       return;
     }
     const targetCwd = cwd;
-    const number = loadState.pullRequest.number;
+    const { number } = loadState.pullRequest;
     const request = ++diffRequestRef.current;
     setDiffState({ error: null, kind: "loading", result: null });
     try {
@@ -352,7 +354,7 @@ export const GitHubPullRequestPanel = ({
       setActionError(t("githubPr.reviewBodyRequired"));
       return;
     }
-    const pullRequest = loadState.pullRequest;
+    const { pullRequest } = loadState;
     const targetCwd = cwd;
     setPhase(action);
     setActionError(null);
@@ -378,7 +380,7 @@ export const GitHubPullRequestPanel = ({
     if (loadState.kind !== "ready" || phase !== "idle") {
       return;
     }
-    const pullRequest = loadState.pullRequest;
+    const { pullRequest } = loadState;
     if (pullRequestMergeBlock(pullRequest)) {
       return;
     }
@@ -798,4 +800,4 @@ export const GitHubPullRequestPanel = ({
       </AlertDialog>
     </section>
   );
-};
+}

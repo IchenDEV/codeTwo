@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   CommandDialog,
   CommandEmpty,
@@ -10,7 +11,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { Button } from "@/components/ui/button";
+
 import { useT } from "../i18n";
 import { mergeCommandResults } from "./merge";
 
@@ -31,7 +32,7 @@ export interface Command {
 }
 
 // Command palette (Mod+K): immediate fuzzy search plus a debounced durable transcript search.
-export const CommandPalette = ({
+export function CommandPalette({
   commands,
   search,
   onClose,
@@ -39,7 +40,7 @@ export const CommandPalette = ({
   readonly commands: Command[];
   readonly search?: (query: string) => Promise<Command[]>;
   readonly onClose: () => void;
-}) => {
+}) {
   const t = useT();
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<Command[]>([]);
@@ -167,7 +168,11 @@ export const CommandPalette = ({
         ))}
       </div>
       <CommandList className="max-h-none min-h-0 flex-1">
-        <CommandEmpty>{searchStatus ? null : t("palette.empty")}</CommandEmpty>
+        <CommandEmpty>
+          {searchStatus != null && searchStatus !== ""
+            ? null
+            : t("palette.empty")}
+        </CommandEmpty>
         {groups.map((group) => (
           <CommandGroup
             key={group.category}
@@ -185,20 +190,22 @@ export const CommandPalette = ({
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{command.label}</span>
-                  {command.detail ? (
+                  {command.detail != null && command.detail !== "" ? (
                     <span className="text-callout text-muted-foreground block truncate">
                       {command.detail}
                     </span>
                   ) : null}
                 </span>
-                {command.hint ? (
+                {command.hint != null && command.hint !== "" ? (
                   <CommandShortcut>{command.hint}</CommandShortcut>
                 ) : null}
               </CommandItem>
             ))}
           </CommandGroup>
         ))}
-        {searchStatus && (filter === "all" || filter === "session") ? (
+        {searchStatus != null &&
+        searchStatus !== "" &&
+        (filter === "all" || filter === "session") ? (
           <output className="text-callout text-muted-foreground px-3 py-2">
             {searchStatus}
           </output>
@@ -220,4 +227,4 @@ export const CommandPalette = ({
       </div>
     </CommandDialog>
   );
-};
+}

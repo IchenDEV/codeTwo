@@ -1,5 +1,27 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+
+import { SearchField } from "@/components/business/search-field";
+import { StatusIndicator } from "@/components/business/status-indicator";
+import { ActivityOrb } from "@/components/ui/activity-orb";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   CircleAlert,
   Info,
@@ -11,36 +33,15 @@ import {
   Square,
   Trash2,
 } from "@/components/ui/icons";
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { ActivityOrb } from "@/components/ui/activity-orb";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { StatusIndicator } from "@/components/business/status-indicator";
-import { SearchField } from "@/components/business/search-field";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
-import { cn } from "@/lib/utils";
 
 export type DockerCommandCaller = <T = unknown>(
   name: string,
@@ -87,7 +88,7 @@ interface DetailState {
 }
 
 function display(value: string | null | undefined): string {
-  return value && value !== "<none>" ? value : "—";
+  return value != null && value !== "" && value !== "<none>" ? value : "—";
 }
 
 function shortId(value: string | null): string {
@@ -95,15 +96,19 @@ function shortId(value: string | null): string {
 }
 
 function imageReference(image: DockerImage): string {
-  if (image.repository && image.repository !== "<none>") {
-    return image.tag && image.tag !== "<none>"
+  if (
+    image.repository != null &&
+    image.repository !== "" &&
+    image.repository !== "<none>"
+  ) {
+    return image.tag != null && image.tag !== "" && image.tag !== "<none>"
       ? `${image.repository}:${image.tag}`
       : image.repository;
   }
   return image.id ?? "";
 }
 
-const ActionButton = ({
+function ActionButton({
   label,
   busy,
   onClick,
@@ -113,23 +118,25 @@ const ActionButton = ({
   readonly busy?: boolean;
   readonly onClick: () => void;
   readonly children: ReactNode;
-}) => (
-  <TooltipButton
-    label={label}
-    variant="ghost"
-    size="icon-sm"
-    disabled={busy}
-    onClick={onClick}
-  >
-    {busy ? (
-      <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
-    ) : (
-      children
-    )}
-  </TooltipButton>
-);
+}) {
+  return (
+    <TooltipButton
+      label={label}
+      variant="ghost"
+      size="icon-sm"
+      disabled={busy}
+      onClick={onClick}
+    >
+      {busy === true ? (
+        <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
+      ) : (
+        children
+      )}
+    </TooltipButton>
+  );
+}
 
-export const DockerPage = ({
+export function DockerPage({
   enabled,
   callCommand,
   onOpenPluginManager,
@@ -139,7 +146,7 @@ export const DockerPage = ({
   readonly callCommand: DockerCommandCaller;
   readonly onOpenPluginManager: () => void;
   readonly headerLeadingAction?: ReactNode;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const [status, setStatus] = useState<DockerStatus | null>(null);
@@ -206,7 +213,7 @@ export const DockerPage = ({
     container: DockerContainer
   ) => {
     const name = container.name ?? container.id;
-    if (!name) {
+    if (name == null || name === "") {
       return;
     }
     const key = `${action}:${name}`;
@@ -230,7 +237,7 @@ export const DockerPage = ({
 
   const showInspect = async (container: DockerContainer) => {
     const name = container.name ?? container.id;
-    if (!name) {
+    if (name == null || name === "") {
       return;
     }
     setDetail({
@@ -261,7 +268,7 @@ export const DockerPage = ({
 
   const showLogs = async (container: DockerContainer) => {
     const name = container.name ?? container.id;
-    if (!name) {
+    if (name == null || name === "") {
       return;
     }
     setDetail({
@@ -787,4 +794,4 @@ export const DockerPage = ({
       </AlertDialog>
     </section>
   );
-};
+}

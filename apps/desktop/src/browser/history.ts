@@ -1,3 +1,5 @@
+import { asJsonObject } from "../lib/jsonValue";
+
 export const browserHistoryStorageKey = "codetwo.browser-history:v1";
 
 const historyVersion = 1 as const;
@@ -81,13 +83,14 @@ function cleanTimestamp(value: unknown): number | null {
 }
 
 export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
-  if (value == null || typeof value !== "object") {
+  const root = asJsonObject(value);
+  if (root == null) {
     return emptyBrowserHistory;
   }
-  if ((value as { version?: unknown }).version !== historyVersion) {
+  if (root.version !== historyVersion) {
     return emptyBrowserHistory;
   }
-  const rawProjects = (value as { projects?: unknown }).projects;
+  const rawProjects = root.projects;
   if (!Array.isArray(rawProjects)) {
     return emptyBrowserHistory;
   }
@@ -95,11 +98,12 @@ export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
   const projects: ProjectHistory[] = [];
   const seenProjects = new Set<string>();
   for (const rawProject of rawProjects) {
-    if (rawProject == null || typeof rawProject !== "object") {
+    const projectRecord = asJsonObject(rawProject);
+    if (projectRecord == null) {
       continue;
     }
-    const project = cleanProject((rawProject as { project?: unknown }).project);
-    const rawSites = (rawProject as { sites?: unknown }).sites;
+    const project = cleanProject(projectRecord.project);
+    const rawSites = projectRecord.sites;
     if (
       project == null ||
       project === "" ||
@@ -112,14 +116,10 @@ export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
     const sites: RecentSite[] = [];
     const seenUrls = new Set<string>();
     for (const rawSite of rawSites) {
-      if (rawSite == null || typeof rawSite !== "object") {
+      const record = asJsonObject(rawSite);
+      if (record == null) {
         continue;
       }
-      const record = rawSite as {
-        url?: unknown;
-        title?: unknown;
-        last_visited_at?: unknown;
-      };
       const url = normalizeHistoryUrl(record.url);
       const lastVisitedAt = cleanTimestamp(record.last_visited_at);
       if (

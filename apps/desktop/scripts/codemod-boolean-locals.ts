@@ -7,18 +7,22 @@
  * and name clashes.
  */
 import { readFileSync } from "node:fs";
+
 import { Node, Project, SyntaxKind } from "ts-morph";
 
-type Msg = {
+interface Msg {
   ruleId: string | null;
   message: string;
   line: number;
   column: number;
-};
-type FileResult = { filePath: string; messages: Msg[] };
+}
+interface FileResult {
+  filePath: string;
+  messages: Msg[];
+}
 
 const report = JSON.parse(
-  readFileSync(process.argv[2] ?? "/tmp/eslint-bool.json", "utf8")
+  readFileSync(process.argv[2] ?? "/tmp/eslint-bool.json", "utf-8")
 ) as FileResult[];
 
 const toIsName = (name: string): string | null => {
@@ -29,9 +33,13 @@ const toIsName = (name: string): string | null => {
   ) {
     return null;
   }
-  if (name.length <= 1) return null;
+  if (name.length <= 1) {
+    return null;
+  }
   // Skip ambiguous/non-descriptive short names the rule still flags.
-  if (name === "on" || name === "ok" || name === "no") return null;
+  if (name === "on" || name === "ok" || name === "no") {
+    return null;
+  }
   return `is${name[0]!.toUpperCase()}${name.slice(1)}`;
 };
 
@@ -45,16 +53,24 @@ let skipped = 0;
 
 function isLocalVariableDeclaration(node: Node): boolean {
   const declaration = node.getParent();
-  if (!declaration || !Node.isVariableDeclaration(declaration)) return false;
-  if (declaration.getNameNode() !== node) return false;
+  if (!declaration || !Node.isVariableDeclaration(declaration)) {
+    return false;
+  }
+  if (declaration.getNameNode() !== node) {
+    return false;
+  }
   const statement = declaration.getVariableStatement();
-  if (!statement || statement.hasExportKeyword()) return false;
+  if (!statement || statement.hasExportKeyword()) {
+    return false;
+  }
   return true;
 }
 
 function isParameterName(node: Node): boolean {
   const parent = node.getParent();
-  if (!parent) return false;
+  if (!parent) {
+    return false;
+  }
   if (Node.isParameterDeclaration(parent) && parent.getNameNode() === node) {
     return true;
   }
@@ -62,7 +78,9 @@ function isParameterName(node: Node): boolean {
   if (Node.isBindingElement(parent) && parent.getNameNode() === node) {
     let current: Node | undefined = parent.getParent();
     while (current) {
-      if (Node.isParameterDeclaration(current)) return true;
+      if (Node.isParameterDeclaration(current)) {
+        return true;
+      }
       if (
         Node.isVariableDeclaration(current) ||
         Node.isFunctionDeclaration(current)
@@ -80,7 +98,7 @@ function expandShorthandReferences(node: Node): void {
   for (const reference of references) {
     const parent = reference.getParent();
     if (
-      parent &&
+      parent != null &&
       Node.isShorthandPropertyAssignment(parent) &&
       parent.getNameNode() === reference
     ) {
@@ -94,12 +112,12 @@ for (const file of report) {
     .filter((m) => m.ruleId === "unicorn/consistent-boolean-name")
     .map((m) => {
       const match = /Boolean name `([^`]+)`/.exec(m.message);
-      return match
-        ? { name: match[1]!, line: m.line, column: m.column }
-        : null;
+      return match ? { name: match[1]!, line: m.line, column: m.column } : null;
     })
     .filter(Boolean) as { name: string; line: number; column: number }[];
-  if (targets.length === 0) continue;
+  if (targets.length === 0) {
+    continue;
+  }
 
   const sourceFile = project.getSourceFile(file.filePath);
   if (!sourceFile) {
@@ -114,12 +132,14 @@ for (const file of report) {
     (a, b) => b.line - a.line || b.column - a.column
   )) {
     const next = toIsName(target.name);
-    if (!next) {
+    if (next == null || next === "") {
       skipped += 1;
       continue;
     }
     const key = `${file.filePath}:${target.name}:${target.line}:${target.column}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      continue;
+    }
     seen.add(key);
 
     let pos: number;
@@ -155,7 +175,9 @@ for (const file of report) {
     }
   }
 
-  if (touched) filesChanged += 1;
+  if (touched) {
+    filesChanged += 1;
+  }
 }
 
 project.saveSync();

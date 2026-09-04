@@ -1,11 +1,8 @@
-import { CodeTwoPet } from "./CodeTwoPet";
 import { useAppearanceSettings } from "../appearance";
 import type { PetSize } from "../appearance";
+import { CodeTwoPet } from "./CodeTwoPet";
 
-/**
-Development-only visual fixture for checking the pet at the real app scale.
-*/
-export const PetPreview = () => {
+export function PetPreview() {
   const appearance = useAppearanceSettings();
   const search = new URLSearchParams(window.location.search);
   const bubble = search.get("pet-bubble");
@@ -24,10 +21,10 @@ export const PetPreview = () => {
         aria-hidden="true"
       />
       <CodeTwoPet
-        animation={bubble ? "running" : "review"}
+        animation={bubble != null && bubble !== "" ? "running" : "review"}
         bubble={bubble}
         appearance={{ ...appearance, petSize }}
       />
     </main>
   );
-};
+}

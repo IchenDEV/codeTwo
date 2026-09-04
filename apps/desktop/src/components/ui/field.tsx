@@ -1,51 +1,54 @@
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 
-import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
-const FieldSet = ({
-  className,
-  ...props
-}: React.ComponentProps<"fieldset">) => (
-  <fieldset
-    data-slot="field-set"
-    className={cn("flex flex-col gap-4", className)}
-    {...props}
-  />
-);
+function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
+  return (
+    <fieldset
+      data-slot="field-set"
+      className={cn("flex flex-col gap-4", className)}
+      {...props}
+    />
+  );
+}
 
-const FieldLegend = ({
+function FieldLegend({
   className,
   variant = "legend",
   ...props
 }: React.ComponentProps<"legend"> & {
   readonly variant?: "legend" | "label";
-}) => (
-  <legend
-    data-slot="field-legend"
-    data-variant={variant}
-    className={cn(
-      "data-[variant=label]:text-body data-[variant=legend]:text-dialog mb-1.5 font-medium",
-      className
-    )}
-    {...props}
-  />
-);
+}) {
+  return (
+    <legend
+      data-slot="field-legend"
+      data-variant={variant}
+      className={cn(
+        "data-[variant=label]:text-body data-[variant=legend]:text-dialog mb-1.5 font-medium",
+        className
+      )}
+      {...props}
+    />
+  );
+}
 
-const FieldGroup = ({ className, ...props }: React.ComponentProps<"div">) => (
-  <div
-    data-slot="field-group"
-    className={cn(
-      "group/field-group gap-section @container/field-group flex w-full flex-col",
-      className
-    )}
-    {...props}
-  />
-);
+function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="field-group"
+      className={cn(
+        "group/field-group gap-section @container/field-group flex w-full flex-col",
+        className
+      )}
+      {...props}
+    />
+  );
+}
 
 const fieldVariants = cva(
-  "group/field flex w-full gap-2 data-[invalid=true]:text-destructive",
+  "group/field data-[invalid=true]:text-destructive flex w-full gap-2",
   {
     defaultVariants: { orientation: "vertical" },
     variants: {
@@ -60,77 +63,84 @@ const fieldVariants = cva(
   }
 );
 
-const Field = ({
+function Field({
   className,
   orientation = "vertical",
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) => (
-  <div
-    role="group"
-    data-slot="field"
-    data-orientation={orientation}
-    className={cn(fieldVariants({ orientation }), className)}
-    {...props}
-  />
-);
+}: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+  return (
+    <div
+      role="group"
+      data-slot="field"
+      data-orientation={orientation}
+      className={cn(fieldVariants({ orientation }), className)}
+      {...props}
+    />
+  );
+}
 
-const FieldContent = ({ className, ...props }: React.ComponentProps<"div">) => (
-  <div
-    data-slot="field-content"
-    className={cn(
-      "group/field-content flex flex-1 flex-col gap-0.5",
-      className
-    )}
-    {...props}
-  />
-);
+function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="field-content"
+      className={cn(
+        "group/field-content flex flex-1 flex-col gap-0.5",
+        className
+      )}
+      {...props}
+    />
+  );
+}
 
-const FieldLabel = ({
+function FieldLabel({
   className,
   ...props
-}: React.ComponentProps<typeof Label>) => (
-  <Label
-    data-slot="field-label"
-    className={cn(
-      "group/field-label peer/field-label flex w-fit gap-2 group-data-[disabled=true]/field:opacity-50",
-      className
-    )}
-    {...props}
-  />
-);
+}: React.ComponentProps<typeof Label>) {
+  return (
+    <Label
+      data-slot="field-label"
+      className={cn(
+        "group/field-label peer/field-label flex w-fit gap-2 group-data-[disabled=true]/field:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  );
+}
 
-const FieldTitle = ({ className, ...props }: React.ComponentProps<"div">) => (
-  <div
-    data-slot="field-label"
-    className={cn(
-      "text-body flex w-fit items-center gap-2 font-medium",
-      className
-    )}
-    {...props}
-  />
-);
+function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="field-label"
+      className={cn(
+        "text-body flex w-fit items-center gap-2 font-medium",
+        className
+      )}
+      {...props}
+    />
+  );
+}
 
-const FieldDescription = ({
-  className,
-  ...props
-}: React.ComponentProps<"p">) => (
-  <p
-    data-slot="field-description"
-    className={cn("text-callout text-muted-foreground text-start", className)}
-    {...props}
-  />
-);
+function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
+  return (
+    <p
+      data-slot="field-description"
+      className={cn("text-callout text-muted-foreground text-start", className)}
+      {...props}
+    />
+  );
+}
 
-const FieldError = ({
+function FieldError({
   className,
   children,
   errors,
   ...props
 }: React.ComponentProps<"div"> & {
-  readonly errors?: Array<{ message?: string } | undefined>;
-}) => {
+  readonly errors?: ({ message?: string } | undefined)[];
+}) {
   const content = (() => {
-    if (children) {
+    if (children != null) {
       return children;
     }
     const unique = [
@@ -155,7 +165,7 @@ const FieldError = ({
     );
   })();
 
-  if (!content) {
+  if (content == null) {
     return null;
   }
   return (
@@ -168,7 +178,7 @@ const FieldError = ({
       {content}
     </div>
   );
-};
+}
 
 export {
   Field,

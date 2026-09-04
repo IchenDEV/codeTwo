@@ -48,14 +48,13 @@ import type {
   AppUpdateStatus,
   WorkspaceOpenTarget,
 } from "./container";
+import { assertIpcResult } from "./lib/ipcResult";
 import type {
   PluginConnectorContribution,
   PluginRuntimeCommandContribution,
   PluginUiContribution,
 } from "./pluginModel";
-
 // ---- scenes (Agent Scenes 1.0.0; see docs/reference/scenes.md) ---------------------------------------
-
 import type {
   SceneDocument,
   SceneInfo,
@@ -529,7 +528,12 @@ export type PendingInputKind = "permission" | "elicitation";
 What a client renders for one elicitation field (core: `ElicitationFieldKind`).
 */
 export type ElicitationFieldKind =
-  "text" | "number" | "integer" | "boolean" | "select" | "multi_select";
+  | "text"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "select"
+  | "multi_select";
 
 export interface ElicitationOption {
   /**
@@ -1303,13 +1307,19 @@ const browserDockerImages = [
   },
 ];
 
-function browserDockerCall<T>(name: string, rawArguments: unknown): T {
-  const argumentsValue =
-    Boolean(rawArguments) &&
+function browserDockerCall(name: string, rawArguments: unknown): unknown {
+  const argumentsObject =
+    rawArguments != null &&
     typeof rawArguments === "object" &&
     !Array.isArray(rawArguments)
-      ? (rawArguments as Record<string, unknown>)
-      : {};
+      ? rawArguments
+      : null;
+  const argumentsValue: Record<string, unknown> = {};
+  if (argumentsObject !== null) {
+    for (const [key, value] of Object.entries(argumentsObject)) {
+      argumentsValue[key] = value;
+    }
+  }
   const container =
     typeof argumentsValue.container === "string"
       ? argumentsValue.container
@@ -1335,7 +1345,7 @@ function browserDockerCall<T>(name: string, rawArguments: unknown): T {
         message:
           "Docker 29.7.2 is running · 1 running · 20 stopped · 12 images",
         serverVersion: "29.7.2",
-      } as T;
+      };
     }
     case "docker.containers": {
       return {
@@ -1343,7 +1353,7 @@ function browserDockerCall<T>(name: string, rawArguments: unknown): T {
         count: browserDockerContainers.length,
         message: `${browserDockerContainers.length} Docker containers.`,
         truncated: false,
-      } as T;
+      };
     }
     case "docker.images": {
       return {
@@ -1351,7 +1361,7 @@ function browserDockerCall<T>(name: string, rawArguments: unknown): T {
         images: browserDockerImages,
         message: `${browserDockerImages.length} Docker images.`,
         truncated: false,
-      } as T;
+      };
     }
     case "docker.inspect": {
       return {
@@ -1369,7 +1379,7 @@ function browserDockerCall<T>(name: string, rawArguments: unknown): T {
           State: { Status: container === "api" ? "running" : "exited" },
         },
         message: `Inspected ${container}.`,
-      } as T;
+      };
     }
     case "docker.logs": {
       return {
@@ -1377,7 +1387,7 @@ function browserDockerCall<T>(name: string, rawArguments: unknown): T {
         message: `Read logs from ${container}.`,
         stderr: "",
         stdout: `[2026-08-26T10:31:04Z] ${container} ready\n[2026-08-26T10:31:08Z] GET /health 200`,
-      } as T;
+      };
     }
     case "docker.start":
     case "docker.stop":
@@ -1387,21 +1397,21 @@ function browserDockerCall<T>(name: string, rawArguments: unknown): T {
         container,
         message: `${name} ${container}`,
         output: container,
-      } as T;
+      };
     }
     case "docker.pull": {
       return {
         image,
         message: `Pulled ${image}.`,
         output: `Downloaded newer image for ${image}`,
-      } as T;
+      };
     }
     case "docker.remove_image": {
       return {
         image,
         message: `Removed ${image}.`,
         output: `Untagged: ${image}`,
-      } as T;
+      };
     }
     default: {
       throw new Error(
@@ -1418,17 +1428,21 @@ export async function call<T = unknown>(
   argumentsValue?: unknown,
   projectPath: string | null = callProjectPath
 ): Promise<T> {
-  if (!isInDesktop) {
-    return browserDockerCall<T>(name, argumentsValue);
-  }
-  return await desktopCall<T>(name, argumentsValue ?? null, projectPath);
+  const result: unknown = isInDesktop
+    ? await desktopCall(name, argumentsValue ?? null, projectPath)
+    : browserDockerCall(name, argumentsValue);
+  return assertIpcResult<T>(result);
 }
 
 /**
 Lifecycle state of one plugin instance, as the kernel reports it.
 */
 export type PluginStatus =
-  "pending" | "loading" | "active" | "failed" | "disposed";
+  | "pending"
+  | "loading"
+  | "active"
+  | "failed"
+  | "disposed";
 
 /**
 One plugin instance in the running graph.
@@ -1491,7 +1505,8 @@ export async function listCorePlugins(): Promise<PluginEntry[]> {
 Configuration scope exposed to renderer code. Rust receives the same tagged enum in snake_case.
 */
 export type ManagedPluginScope =
-  { kind: "user" } | { kind: "project"; projectPath: string };
+  | { kind: "user" }
+  | { kind: "project"; projectPath: string };
 
 export type ManagedPluginOverride = "inherit" | "enabled" | "disabled";
 export type ManagedPluginOrigin = "built_in" | "host" | "third_party";
@@ -1586,7 +1601,8 @@ export interface ManagedPluginChangeResult {
 }
 
 type ManagedPluginScopeWire =
-  { kind: "user" } | { kind: "project"; project_path: string };
+  | { kind: "user" }
+  | { kind: "project"; project_path: string };
 
 type ManagedPluginChangePlanWire = Omit<ManagedPluginChangePlan, "request"> & {
   request: Omit<ManagedPluginChangeRequest, "scope"> & {
@@ -3394,7 +3410,11 @@ export interface GitStatus {
 }
 
 export type SourceControlProviderKind =
-  "github" | "gitlab" | "azure-devops" | "bitbucket" | "unknown";
+  | "github"
+  | "gitlab"
+  | "azure-devops"
+  | "bitbucket"
+  | "unknown";
 
 export interface SourceControlInfo {
   remote_name: string;
@@ -4526,7 +4546,13 @@ export async function issueContext(issue: Issue): Promise<string> {
 export type CanvasPixelPolicy = "required" | "structure_only";
 export type CanvasTheme = "light" | "dark";
 export type CanvasObjectKind =
-  "pen" | "text" | "rectangle" | "ellipse" | "line" | "arrow" | "image";
+  | "pen"
+  | "text"
+  | "rectangle"
+  | "ellipse"
+  | "line"
+  | "arrow"
+  | "image";
 
 export interface CanvasFeatureState {
   feature: string;
@@ -4969,7 +4995,9 @@ export async function transcribeAudio(
 
 export type ProviderQuotaStatus = "available" | "unavailable" | "unsupported";
 export type ProviderQuotaReason =
-  "cli_not_found" | "query_failed" | "unsupported_provider";
+  | "cli_not_found"
+  | "query_failed"
+  | "unsupported_provider";
 
 export interface ProviderQuotaWindow {
   used_percent: number;
@@ -5483,7 +5511,7 @@ const fallbackScenes: SceneInfo[] = (
   return {
     artifacts: [],
     description,
-    execution: { session_mode: mode } as SceneInfo["execution"],
+    execution: { session_mode: mode },
     has_brief: true,
     icon,
     keywords: [],

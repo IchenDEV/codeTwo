@@ -1,4 +1,22 @@
 import { useEffect, useRef, useState } from "react";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   GitBranch,
   Minus,
@@ -6,6 +24,13 @@ import {
   RefreshCw,
   Sparkles,
 } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { SplitButton } from "@/components/ui/split-button";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
 import {
   gitCreatePr,
   gitDiff,
@@ -23,29 +48,6 @@ import type {
   GitFile,
   GitStatus,
 } from "../bridge";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { SplitButton } from "@/components/ui/split-button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
 import {
   changeRequestPresentation,
   diffLinePresentation,
@@ -82,7 +84,7 @@ const defaultDiffSelection: DiffSelection = {
   scope: "all",
 };
 
-const DiffView = ({ state }: { readonly state: DiffState }) => {
+function DiffView({ state }: { readonly state: DiffState }) {
   const preview = diffPreviewLines(state.result?.text ?? "");
 
   if (state.loading) {
@@ -92,7 +94,7 @@ const DiffView = ({ state }: { readonly state: DiffState }) => {
       </output>
     );
   }
-  if (state.error) {
+  if (state.error != null && state.error !== "") {
     return (
       <p role="alert" className="p-surface-inset text-body text-destructive">
         Diff failed: {state.error}
@@ -147,9 +149,9 @@ const DiffView = ({ state }: { readonly state: DiffState }) => {
       </pre>
     </div>
   );
-};
+}
 
-const GitFileRow = ({
+function GitFileRow({
   file,
   scope,
   selected,
@@ -163,7 +165,7 @@ const GitFileRow = ({
   readonly disabled: boolean;
   readonly onSelect: () => void;
   readonly onToggleIndex: () => void;
-}) => {
+}) {
   const isStaged = scope === "staged";
   const displayState = gitFileDisplayState(file, scope);
   const indexAction = isStaged ? `Unstage ${file.path}` : `Stage ${file.path}`;
@@ -222,10 +224,10 @@ const GitFileRow = ({
       </Button>
     </div>
   );
-};
+}
 
 // Source Control: explicit index ownership, bounded diff viewer, commit/push/PR, and checkpoints.
-export const SourceControlModal = ({
+export function SourceControlModal({
   cwd,
   status,
   statusLoading,
@@ -249,7 +251,7 @@ export const SourceControlModal = ({
   readonly onRevert: (commit: string) => Promise<void>;
   readonly onRefresh: () => void;
   readonly onClose: () => void;
-}) => {
+}) {
   const [selection, setSelection] =
     useState<DiffSelection>(defaultDiffSelection);
   const [diffState, setDiffState] = useState<DiffState>(emptyDiffState);
@@ -654,7 +656,7 @@ export const SourceControlModal = ({
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-3">
             Source Control
-            {status?.is_repo ? (
+            {status?.is_repo === true ? (
               <span className="text-metadata text-primary flex items-center gap-1 font-semibold">
                 <GitBranch className="size-3.5" aria-hidden="true" />
                 {status.branch}
@@ -991,14 +993,18 @@ export const SourceControlModal = ({
               value={message}
               disabled={isRepositoryBusy}
               aria-describedby={
-                messageError ? "source-control-message-error" : undefined
+                messageError != null && messageError !== ""
+                  ? "source-control-message-error"
+                  : undefined
               }
-              aria-invalid={messageError ? true : undefined}
+              aria-invalid={
+                messageError != null && messageError !== "" ? true : undefined
+              }
               onChange={(event) => {
                 suggestionRequestRef.current += 1;
                 setSuggesting(false);
                 setMessage(event.target.value);
-                if (messageError) {
+                if (messageError != null && messageError !== "") {
                   setMessageError(null);
                 }
               }}
@@ -1069,17 +1075,17 @@ export const SourceControlModal = ({
                 {gitPhaseLabel(phase, changeRequest.label)}
               </output>
             )}
-          {actionError ? (
+          {actionError != null && actionError !== "" ? (
             <p role="alert" className="text-metadata text-destructive">
               {actionError}
             </p>
           ) : null}
-          {actionStatus ? (
+          {actionStatus != null && actionStatus !== "" ? (
             <output className="text-metadata text-muted-foreground">
               {actionStatus}
             </output>
           ) : null}
-          {prUrl ? (
+          {prUrl != null && prUrl !== "" ? (
             <Button
               type="button"
               variant="link"
@@ -1095,4 +1101,4 @@ export const SourceControlModal = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

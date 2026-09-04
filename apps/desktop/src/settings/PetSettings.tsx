@@ -1,20 +1,10 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Check, RefreshCw } from "@/components/ui/icons";
 
-import { setAppearanceSettings, useAppearanceSettings } from "../appearance";
-import type { PetSize } from "../appearance";
-import { CodeTwoPetSprite } from "../pet/CodeTwoPet";
-import type { CodeTwoPetAnimation } from "../pet/state";
-import {
-  builtinPet,
-  fetchPetShareCatalog,
-  petSpritesheetUrl,
-} from "../pet/store";
-import type { PetCatalogItem } from "../pet/store";
 import { SettingRow } from "@/components/business/setting-row";
-import { SettingsSection } from "@/components/business/settings-section";
 import { SettingToggle } from "@/components/business/setting-toggle";
+import { SettingsSection } from "@/components/business/settings-section";
 import { Button } from "@/components/ui/button";
+import { AlertCircle, Check, RefreshCw } from "@/components/ui/icons";
 import {
   Select,
   SelectContent,
@@ -26,6 +16,17 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n";
 import type { StringKey } from "@/i18n/strings";
+
+import { setAppearanceSettings, useAppearanceSettings } from "../appearance";
+import type { PetSize } from "../appearance";
+import { CodeTwoPetSprite } from "../pet/CodeTwoPet";
+import type { CodeTwoPetAnimation } from "../pet/state";
+import {
+  builtinPet,
+  fetchPetShareCatalog,
+  petSpritesheetUrl,
+} from "../pet/store";
+import type { PetCatalogItem } from "../pet/store";
 
 import "./pet-settings.css";
 
@@ -44,11 +45,11 @@ const SIZES: { size: PetSize; labelKey: StringKey }[] = [
   { labelKey: "settings.petSizeLarge", size: "large" },
 ];
 
-export const PetSettings = ({
+export function PetSettings({
   loadCatalog = fetchPetShareCatalog,
 }: {
   readonly loadCatalog?: () => Promise<PetCatalogItem[]>;
-} = {}) => {
+} = {}) {
   const t = useT();
   const settings = useAppearanceSettings();
   const [previewAnimation, setPreviewAnimation] =
@@ -283,4 +284,4 @@ export const PetSettings = ({
       </SettingsSection>
     </div>
   );
-};
+}

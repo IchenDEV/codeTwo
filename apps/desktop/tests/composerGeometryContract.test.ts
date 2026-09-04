@@ -1,26 +1,26 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 const composer = readFileSync(
   new URL("../src/session/Composer.tsx", import.meta.url),
-  "utf8"
+  "utf-8"
 );
-const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf-8");
 const bridge = readFileSync(
   new URL("../src/bridge.ts", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 const tokens = readFileSync(
   new URL("../src/design/tokens.css", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 const voiceButton = readFileSync(
   new URL("../src/voice/VoiceButton.tsx", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 const controlChip = readFileSync(
   new URL("../src/components/ui/control-chip.tsx", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 describe("composer geometry contract", () => {
   test("paints the compact composer on the same DOM card as its interactive content", () => {

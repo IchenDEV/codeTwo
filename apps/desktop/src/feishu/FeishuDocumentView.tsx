@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, RefreshCw } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
+import { ExternalLink, RefreshCw } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
+
 import { openExternal } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import { MarkdownContent } from "../session/MarkdownContent";
@@ -52,7 +53,7 @@ function readableFailure(cause: unknown): string {
     .trim();
 }
 
-export const FeishuDocumentView = ({
+export function FeishuDocumentView({
   callCommand,
   documentUrl,
   markdown,
@@ -62,7 +63,7 @@ export const FeishuDocumentView = ({
   readonly documentUrl: string;
   readonly markdown: string;
   readonly markdownLoading: boolean;
-}) => {
+}) {
   const t = useT();
   const { locale } = useLanguage();
   const theme = useColorScheme();
@@ -120,8 +121,8 @@ export const FeishuDocumentView = ({
           () => fail(t("feishu.documentComponentTimeout")),
           mountTimeoutMs
         );
-      } catch (cause) {
-        fail(readableFailure(cause));
+      } catch (error) {
+        fail(readableFailure(error));
       }
     };
 
@@ -235,4 +236,4 @@ export const FeishuDocumentView = ({
       ) : null}
     </div>
   );
-};
+}

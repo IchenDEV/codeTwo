@@ -1,12 +1,12 @@
+import { Button } from "@/components/ui/button";
 import { FileText, X } from "@/components/ui/icons";
+import { cn } from "@/lib/utils";
 
+import { useT } from "../i18n";
+import { dirtyKey, useDirtyPaths } from "./dirty";
 import { FilePanel } from "./FilePanel";
 import { FileViewer } from "./FileViewer";
 import type { FileRevealTarget } from "./FileViewer";
-import { dirtyKey, useDirtyPaths } from "./dirty";
-import { useT } from "../i18n";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 type FileDockContentProps = {
   readonly cwd: string | null;
@@ -21,10 +21,7 @@ type FileDockContentProps = {
   readonly onSendText: (text: string) => void;
 };
 
-/**
-File tabs, viewer, and tree composed as one content module for the generic Dock container.
-*/
-export const FileDockContent = ({
+export function FileDockContent({
   cwd,
   openFiles,
   activeFile,
@@ -35,7 +32,7 @@ export const FileDockContent = ({
   onInsertFile,
   onOpenFile,
   onSendText,
-}: FileDockContentProps) => {
+}: FileDockContentProps) {
   const t = useT();
   const dirtyPaths = useDirtyPaths();
 
@@ -65,7 +62,9 @@ export const FileDockContent = ({
               >
                 <FileText className="size-3.5 shrink-0" />
                 <span className="truncate">{name}</span>
-                {cwd && dirtyPaths.has(dirtyKey(cwd, path)) ? (
+                {cwd != null &&
+                cwd !== "" &&
+                dirtyPaths.has(dirtyKey(cwd, path)) ? (
                   <span className="bg-warning size-1.5 shrink-0 rounded-full" />
                 ) : null}
                 <X
@@ -83,7 +82,10 @@ export const FileDockContent = ({
           })}
         </div>
 
-        {activeFile && cwd ? (
+        {activeFile != null &&
+        activeFile !== "" &&
+        cwd != null &&
+        cwd !== "" ? (
           <FileViewer
             key={activeFile}
             cwd={cwd}
@@ -112,4 +114,4 @@ export const FileDockContent = ({
       </div>
     </div>
   );
-};
+}

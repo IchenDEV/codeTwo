@@ -22,7 +22,7 @@ interface NavigationRowProps {
   readonly onSelect: () => void;
 }
 
-const NavigationRow = ({
+function NavigationRow({
   label,
   leading,
   meta,
@@ -34,7 +34,7 @@ const NavigationRow = ({
   className,
   labelClassName,
   onSelect,
-}: NavigationRowProps) => {
+}: NavigationRowProps) {
   const row = (
     <Button
       type="button"
@@ -66,18 +66,18 @@ const NavigationRow = ({
       >
         {label}
       </span>
-      {meta ? (
+      {meta == null ? null : (
         <span
           data-slot="navigation-row-meta"
           className="gap-control-group flex shrink-0 items-center"
         >
           {meta}
         </span>
-      ) : null}
+      )}
     </Button>
   );
 
-  if (!tooltip) {
+  if (tooltip == null || tooltip === "") {
     return row;
   }
   return (
@@ -86,6 +86,6 @@ const NavigationRow = ({
       <TooltipContent side="right">{tooltip}</TooltipContent>
     </Tooltip>
   );
-};
+}
 
 export { NavigationRow, type NavigationRowProps };

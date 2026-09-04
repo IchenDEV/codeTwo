@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+
+import { NavigationRow } from "@/components/business/navigation-row";
+import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
   BrainCircuit,
@@ -20,7 +23,10 @@ import {
   UserRound,
   Wrench,
 } from "@/components/ui/icons";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
+import { resetVisualAppearanceSettings } from "../appearance";
 import {
   checkForAppUpdates,
   confirmNative,
@@ -49,23 +55,11 @@ import type {
 } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
-import { resetVisualAppearanceSettings } from "../appearance";
 import { useTheme } from "../theme";
 import { UsagePanel } from "../usage/Usage";
-import { MemorySettingsPage } from "./MemorySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AppshotsSettingsPage } from "./AppshotsSettings";
-import { PetSettings } from "./PetSettings";
-import {
-  GeneralSettingsPage,
-  ImportSettingsPage,
-  KeybindingsSettingsPage,
-} from "./PersonalSettings";
-import { ProfileSettings } from "./ProfileSettings";
-import { ProjectSettingsPage } from "./ProjectSettings";
-import { ProviderSettingsPage } from "./ProviderSettings";
-import { WorktreeSettingsPage } from "./WorktreeSettings";
-import { Page } from "./SettingsPrimitives";
+import { MemorySettingsPage } from "./MemorySettings";
 import {
   BrowserPermissionsSettingsPage,
   BrowserUseSettingsPage,
@@ -73,10 +67,17 @@ import {
   DeveloperSettingsPage,
   DeviceSyncSettingsPage,
 } from "./OperationalSettings";
-import { Button } from "@/components/ui/button";
-import { NavigationRow } from "@/components/business/navigation-row";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
+import {
+  GeneralSettingsPage,
+  ImportSettingsPage,
+  KeybindingsSettingsPage,
+} from "./PersonalSettings";
+import { PetSettings } from "./PetSettings";
+import { ProfileSettings } from "./ProfileSettings";
+import { ProjectSettingsPage } from "./ProjectSettings";
+import { ProviderSettingsPage } from "./ProviderSettings";
+import { Page } from "./SettingsPrimitives";
+import { WorktreeSettingsPage } from "./WorktreeSettings";
 
 import "./settings-page.css";
 
@@ -153,14 +154,7 @@ const navGroups: {
 
 const emptyProjects: Project[] = [];
 
-/**
- * Settings as a full-window page: its own nav rail on the left (General, Memory, Keybindings,
- * Providers, Usage)
- * with a Back row above the category menu, and one scrolling column of rows per category. The
- * window-wide takeover is deliberate — a settings surface with its own sidebar reads as a *place*
- * you went to, which is what earns the explicit way back.
- */
-export const SettingsPage = ({
+export function SettingsPage({
   sidebarWidth = 288,
   bindings,
   capturing,
@@ -321,7 +315,7 @@ export const SettingsPage = ({
   readonly pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
   readonly devtoolsOpener?: () => Promise<void>;
   readonly diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
-}) => {
+}) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const { setPreference: setLanguage } = useLanguage();
@@ -610,4 +604,4 @@ export const SettingsPage = ({
       </main>
     </div>
   );
-};
+}

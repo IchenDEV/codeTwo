@@ -1,5 +1,43 @@
 import { useEffect, useState } from "react";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
 import { Plus, Save, Trash2 } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { TooltipButton } from "@/components/ui/tooltip";
 
 import {
   deleteScene as bridgeDeleteScene,
@@ -9,7 +47,6 @@ import {
 import type { ProviderInfo, SceneSaveScope, SkillInfo } from "../bridge";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
-import { Spinner } from "@/components/ui/spinner";
 import type {
   SceneArtifactDefinition,
   SceneDocument,
@@ -29,42 +66,6 @@ import {
   splitSceneList,
   validateSceneDocument,
 } from "./sceneEditorModel";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 
 export type SceneEditorRequest =
   | { kind: "create" }
@@ -76,7 +77,7 @@ interface SelectOption {
   value: string;
 }
 
-const OptionalSelectField = ({
+function OptionalSelectField({
   id,
   label,
   description,
@@ -92,12 +93,14 @@ const OptionalSelectField = ({
   readonly options: SelectOption[];
   readonly inheritLabel: string;
   readonly onChange: (value: string | undefined) => void;
-}) => {
+}) {
   const items = [{ label: inheritLabel, value: null }, ...options];
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      {description ? <FieldDescription>{description}</FieldDescription> : null}
+      {description != null && description !== "" ? (
+        <FieldDescription>{description}</FieldDescription>
+      ) : null}
       <Select
         items={items}
         value={value ?? null}
@@ -120,9 +123,9 @@ const OptionalSelectField = ({
       </Select>
     </Field>
   );
-};
+}
 
-const ListField = ({
+function ListField({
   id,
   label,
   description,
@@ -136,7 +139,7 @@ const ListField = ({
   readonly value: string[] | undefined;
   readonly multiline?: boolean;
   readonly onChange: (value: string[]) => void;
-}) => {
+}) {
   const shared = {
     id,
     onChange: (
@@ -147,7 +150,9 @@ const ListField = ({
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      {description ? <FieldDescription>{description}</FieldDescription> : null}
+      {description != null && description !== "" ? (
+        <FieldDescription>{description}</FieldDescription>
+      ) : null}
       {multiline ? (
         <Textarea {...shared} className="min-h-24" />
       ) : (
@@ -155,32 +160,41 @@ const ListField = ({
       )}
     </Field>
   );
-};
+}
 
-const SectionIntro = ({
+function SectionIntro({
   title,
   description,
 }: {
   readonly title: string;
   readonly description: string;
-}) => (
-  <div className="flex flex-col gap-1">
-    <h3 className="text-body font-semibold">{title}</h3>
-    <p className="text-callout text-muted-foreground">{description}</p>
-  </div>
-);
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <h3 className="text-body font-semibold">{title}</h3>
+      <p className="text-callout text-muted-foreground">{description}</p>
+    </div>
+  );
+}
 
-const RemoveButton = ({
+function RemoveButton({
   label,
   onClick,
 }: {
   readonly label: string;
   readonly onClick: () => void;
-}) => (
-  <TooltipButton label={label} variant="ghost" size="icon-sm" onClick={onClick}>
-    <Trash2 />
-  </TooltipButton>
-);
+}) {
+  return (
+    <TooltipButton
+      label={label}
+      variant="ghost"
+      size="icon-sm"
+      onClick={onClick}
+    >
+      <Trash2 />
+    </TooltipButton>
+  );
+}
 
 function addAtEnd<T>(current: readonly T[] | undefined, item: T): T[] {
   return [...(current ?? []), item];
@@ -200,7 +214,7 @@ function removeAt<T>(current: readonly T[] | undefined, index: number): T[] {
   return (current ?? []).filter((_, at) => at !== index);
 }
 
-const InlineFragmentEditor = ({
+function InlineFragmentEditor({
   scene,
   onChange,
   labels,
@@ -214,7 +228,7 @@ const InlineFragmentEditor = ({
     text: string;
     empty: string;
   };
-}) => {
+}) {
   const inline = scene.skills?.inline ?? [];
   const setInline = (next: typeof inline) =>
     onChange({ ...scene, skills: { ...scene.skills, inline: next } });
@@ -278,9 +292,9 @@ const InlineFragmentEditor = ({
       )}
     </FieldSet>
   );
-};
+}
 
-const SlotEditor = ({
+function SlotEditor({
   scene,
   onChange,
   t,
@@ -288,7 +302,7 @@ const SlotEditor = ({
   readonly scene: SceneDocument;
   readonly onChange: (scene: SceneDocument) => void;
   readonly t: ReturnType<typeof useT>;
-}) => {
+}) {
   const slots = scene.brief?.slots ?? [];
   const setSlots = (next: SceneSlotDefinition[]) =>
     onChange({ ...scene, brief: { ...scene.brief!, slots: next } });
@@ -433,9 +447,9 @@ const SlotEditor = ({
       )}
     </FieldSet>
   );
-};
+}
 
-const ArtifactEditor = ({
+function ArtifactEditor({
   scene,
   onChange,
   t,
@@ -443,7 +457,7 @@ const ArtifactEditor = ({
   readonly scene: SceneDocument;
   readonly onChange: (scene: SceneDocument) => void;
   readonly t: ReturnType<typeof useT>;
-}) => {
+}) {
   const artifacts = scene.artifacts ?? [];
   const setArtifacts = (next: SceneArtifactDefinition[]) =>
     onChange({ ...scene, artifacts: next });
@@ -596,9 +610,9 @@ const ArtifactEditor = ({
       )}
     </FieldSet>
   );
-};
+}
 
-const CriterionEditor = ({
+function CriterionEditor({
   scene,
   onChange,
   t,
@@ -606,7 +620,7 @@ const CriterionEditor = ({
   readonly scene: SceneDocument;
   readonly onChange: (scene: SceneDocument) => void;
   readonly t: ReturnType<typeof useT>;
-}) => {
+}) {
   const criteria = scene.exit?.criteria ?? [];
   const setCriteria = (next: SceneExitCriterion[]) =>
     onChange({ ...scene, exit: { ...scene.exit, criteria: next } });
@@ -714,9 +728,9 @@ const CriterionEditor = ({
       )}
     </FieldSet>
   );
-};
+}
 
-const HookEditor = ({
+function HookEditor({
   scene,
   onChange,
   t,
@@ -724,7 +738,7 @@ const HookEditor = ({
   readonly scene: SceneDocument;
   readonly onChange: (scene: SceneDocument) => void;
   readonly t: ReturnType<typeof useT>;
-}) => {
+}) {
   const hooks = scene.hooks ?? [];
   const setHooks = (next: SceneHook[]) => onChange({ ...scene, hooks: next });
   const events = [
@@ -913,9 +927,9 @@ const HookEditor = ({
       )}
     </FieldSet>
   );
-};
+}
 
-export const SceneEditor = ({
+export function SceneEditor({
   request,
   scenes,
   providers,
@@ -939,7 +953,7 @@ export const SceneEditor = ({
   readonly getScene?: typeof bridgeGetScene;
   readonly saveScene?: typeof bridgeSaveScene;
   readonly deleteScene?: typeof bridgeDeleteScene;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const [loading, setLoading] = useState(request.kind !== "create");
@@ -1006,7 +1020,7 @@ export const SceneEditor = ({
   }, [getScene, request]);
 
   useEffect(() => {
-    if (!jsonError && !jsonDirty) {
+    if (jsonError == null || (jsonError === "" && !jsonDirty)) {
       setJson(formatSceneJson(draft));
     }
   }, [draft, jsonDirty, jsonError]);
@@ -1652,7 +1666,9 @@ export const SceneEditor = ({
                         setJsonDirty(true);
                       }}
                     />
-                    {jsonError ? <FieldError>{jsonError}</FieldError> : null}
+                    {jsonError != null && jsonError !== "" ? (
+                      <FieldError>{jsonError}</FieldError>
+                    ) : null}
                   </Field>
                   <Button type="button" variant="outline" onClick={applyJson}>
                     {t("sceneEditor.applyJson")}
@@ -1749,4 +1765,4 @@ export const SceneEditor = ({
       </footer>
     </section>
   );
-};
+}

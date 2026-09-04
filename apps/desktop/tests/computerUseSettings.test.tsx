@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { act as reactAct } from "react";
+
 import {
   activateDom,
   dom,
@@ -155,13 +157,13 @@ describe("Computer Use settings", () => {
     );
     expect(trigger?.textContent).toContain("Automatic");
     await openSelect(trigger);
-    const remote = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="select-item"]')
-    ).find((item) => item.textContent?.trim() === "Remote Lab");
-    expect(remote?.getAttribute("data-disabled")).not.toBeNull();
-    const cua = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="select-item"]')
-    ).find((item) => item.textContent?.trim() === "Cua Driver");
+    const remote = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ].find((item) => item.textContent?.trim() === "Remote Lab");
+    expect(remote?.dataset.disabled).not.toBeNull();
+    const cua = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ].find((item) => item.textContent?.trim() === "Cua Driver");
     await selectItem(cua);
 
     expect(saved).toEqual(["cua"]);
@@ -241,13 +243,13 @@ describe("Browser Use settings", () => {
     );
     await openSelect(trigger);
     expect(dom.document.body.textContent).toContain("No external backend");
-    const openAiBrowser = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="select-item"]')
-    ).find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
+    const openAiBrowser = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ].find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
     expect(openAiBrowser).toBeDefined();
-    const playwright = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="select-item"]')
-    ).find((item) => item.textContent?.trim() === "Playwright MCP");
+    const playwright = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ].find((item) => item.textContent?.trim() === "Playwright MCP");
     await selectItem(playwright);
 
     expect(saved).toEqual(["playwright"]);

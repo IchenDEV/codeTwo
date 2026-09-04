@@ -1,6 +1,8 @@
 // @ts-nocheck
-import { act as reactAct } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
+
+import { act as reactAct } from "react";
+
 import {
   activateDom,
   button,
@@ -14,11 +16,8 @@ activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { SessionHeaderActions } =
   await import("../src/session/SessionHeaderActions");
-const {
-  tooltipFirstOpenDelay,
-  tooltipInstantPhaseTimeout,
-  TooltipProvider,
-} = await import("../src/components/ui/tooltip");
+const { tooltipFirstOpenDelay, tooltipInstantPhaseTimeout, TooltipProvider } =
+  await import("../src/components/ui/tooltip");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -132,9 +131,7 @@ describe("SessionHeaderActions", () => {
       view.container.querySelector(".session-header-compact-action")
     ).toBeNull();
 
-    for (const action of Array.from(
-      view.container.querySelectorAll("button")
-    )) {
+    for (const action of [...view.container.querySelectorAll("button")]) {
       expect(
         action.classList.contains("h-control") ||
           action.classList.contains("h-control-mini") ||
@@ -158,9 +155,9 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("Finder");
     expect(dom.document.body.textContent).toContain("⌘O");
 
-    const finderItem = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("Finder"));
+    const finderItem = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Finder"));
     if (!finderItem) {
       throw new Error("Finder menu item not found");
     }
@@ -168,9 +165,9 @@ describe("SessionHeaderActions", () => {
     expect(calls).toEqual(["add", "finder"]);
 
     await press(button(view.container, "Open"));
-    const moveItem = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("Move task to device"));
+    const moveItem = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Move task to device"));
     if (!moveItem) {
       throw new Error("Move task menu item not found");
     }
@@ -181,9 +178,9 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("Source control");
     expect(dom.document.body.textContent).toContain("Checkpoint now");
     expect(dom.document.body.textContent).toContain("Push");
-    const sourceControlItem = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("Source control"));
+    const sourceControlItem = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Source control"));
     if (!sourceControlItem) {
       throw new Error("Source control menu item not found");
     }
@@ -222,9 +219,9 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("File manager");
     expect(dom.document.body.textContent).toContain("Ctrl+O");
 
-    const fileManagerItem = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("File manager"));
+    const fileManagerItem = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("File manager"));
     if (!fileManagerItem) {
       throw new Error("File manager menu item not found");
     }

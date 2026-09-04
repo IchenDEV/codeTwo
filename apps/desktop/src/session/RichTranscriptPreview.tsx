@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { EnvironmentPopover } from "../environment/EnvironmentPopover";
 
-import { TranscriptPane } from "./TranscriptPane";
+import { EnvironmentPopover } from "../environment/EnvironmentPopover";
 import { TrajectoryView } from "./TrajectoryView";
+import { TranscriptPane } from "./TranscriptPane";
 import type { Turn } from "./turns";
 
 const chart = `\`\`\`chart
@@ -17,7 +17,7 @@ const previewTurn: Turn = {
   accepted: true,
   content: [
     {
-      createdAt: previewStartedAt + 1_000,
+      createdAt: previewStartedAt + 1000,
       kind: "text",
       text: "我先核对转录事件和渲染入口，确认现有流式边界。\n\n",
     },
@@ -94,7 +94,7 @@ const previewTurn: Turn = {
           type: "text",
         },
       ],
-      startedAt: previewStartedAt + 4_000,
+      startedAt: previewStartedAt + 4000,
       status: "completed",
       title: "Inspect transcript pipeline",
     },
@@ -115,7 +115,7 @@ const previewTurn: Turn = {
       id: "agent-accessibility",
       kind: "agent",
       outputs: [],
-      startedAt: previewStartedAt + 8_000,
+      startedAt: previewStartedAt + 8000,
       status: "in_progress",
       title: "spawn_agent",
     },
@@ -129,7 +129,7 @@ const previewTurn: Turn = {
       id: "agent-layout",
       kind: "agent",
       outputs: [],
-      startedAt: previewStartedAt + 2_000,
+      startedAt: previewStartedAt + 2000,
       status: "completed",
       title: "spawn_agent",
     },
@@ -143,7 +143,7 @@ const previewTurn: Turn = {
       id: "agent-tests",
       kind: "agent",
       outputs: [],
-      startedAt: previewStartedAt + 3_000,
+      startedAt: previewStartedAt + 3000,
       status: "failed",
       title: "spawn_agent",
     },
@@ -152,7 +152,7 @@ const previewTurn: Turn = {
 };
 const previewTurns = [previewTurn] as const;
 
-export const RichTranscriptPreview = () => {
+export function RichTranscriptPreview() {
   const [trajectory, setTrajectory] = useState(false);
   return (
     <div className="bg-background text-foreground flex h-screen min-h-0 flex-col">
@@ -194,7 +194,7 @@ export const RichTranscriptPreview = () => {
         {trajectory ? (
           <TrajectoryView
             turns={previewTurns}
-            usage={{ input_tokens: 12_480, output_tokens: 3_206 }}
+            usage={{ input_tokens: 12_480, output_tokens: 3206 }}
             hasEarlier={false}
             loadingEarlier={false}
             onLoadEarlier={() => {}}
@@ -222,4 +222,4 @@ export const RichTranscriptPreview = () => {
       </footer>
     </div>
   );
-};
+}

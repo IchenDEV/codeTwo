@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 const source = (relativePath: string) => {
   return readFileSync(
     new URL(relativePath, import.meta.url),
-    "utf8"
+    "utf-8"
   ).replaceAll("\r\n", "\n");
 };
 

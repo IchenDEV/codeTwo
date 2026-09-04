@@ -11,18 +11,16 @@ import type { ReactNode, SVGProps } from "react";
 type IconProps = SVGProps<SVGSVGElement>;
 
 function mark(viewBox: string, body: ReactNode) {
-  return function Mark(props: IconProps) {
-    return (
-      <svg
-        viewBox={viewBox}
-        fill="currentColor"
-        xmlns="http://www.w3.org/2000/svg"
-        {...props}
-      >
-        {body}
-      </svg>
-    );
-  };
+  return (props: IconProps) => (
+    <svg
+      viewBox={viewBox}
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      {body}
+    </svg>
+  );
 }
 
 const ClaudeMark = mark(
@@ -108,16 +106,13 @@ export const providerMarks: Record<string, (p: IconProps) => ReactNode> = {
   zcode: ZCodeMark,
 };
 
-/**
-The mark for a provider id, or null when we don't ship one.
-*/
-export const ProviderIcon = ({
+export function ProviderIcon({
   provider,
   className,
 }: {
   readonly provider: string;
   readonly className?: string;
-}) => {
+}) {
   const Mark = providerMarks[provider];
-  return Mark ? <Mark className={className} aria-hidden /> : null;
-};
+  return Mark == null ? null : <Mark className={className} aria-hidden />;
+}

@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
-import { extendTailwindMerge } from "tailwind-merge";
 import type { ClassValue } from "clsx";
+import { extendTailwindMerge } from "tailwind-merge";
 
 /* styles.css adds semantic values beyond Tailwind's built-in scale, so the merger must know their
    namespaces too. Type roles need special care: an unknown `text-*` name falls through to the

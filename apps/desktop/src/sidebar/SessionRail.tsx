@@ -7,6 +7,33 @@ import {
   useState,
 } from "react";
 import type { HTMLAttributes, ReactElement, ReactNode } from "react";
+
+import { NavigationRow } from "@/components/business/navigation-row";
+import { ActivityOrb } from "@/components/ui/activity-orb";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Archive,
   ArchiveRestore,
@@ -41,40 +68,6 @@ import {
   Smartphone,
   Trash2,
 } from "@/components/ui/icons";
-
-import { githubCurrentPullRequest, openNativePath } from "../bridge";
-import type { GitHubPullRequest, Project, SessionInfo } from "../bridge";
-import {
-  isNativeContextMenusAvailable,
-  showNativeContextMenu,
-} from "../container";
-import type { NativeContextMenuItem } from "../container";
-import { NavigationRow } from "@/components/business/navigation-row";
-import { Button } from "@/components/ui/button";
-import { ActivityOrb } from "@/components/ui/activity-orb";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuGroup,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -84,12 +77,31 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
-import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
+
+import { githubCurrentPullRequest, openNativePath } from "../bridge";
+import type { GitHubPullRequest, Project, SessionInfo } from "../bridge";
+import {
+  isNativeContextMenusAvailable,
+  showNativeContextMenu,
+} from "../container";
+import type { NativeContextMenuItem } from "../container";
+import { useT } from "../i18n";
 import { sessionActivity } from "../session/sessionEvents";
-import type { QuickQuotaSummary } from "../usage/quickQuota";
 import { useToast } from "../ui/toast";
+import type { QuickQuotaSummary } from "../usage/quickQuota";
+import { loadSidebarPullRequests } from "./sidebarGitStatus";
+import type { SidebarPullRequestStatus } from "./sidebarGitStatus";
+import {
+  rootProjectOrderKey,
+  loadSidebarProjects,
+  moveSidebarProject,
+  releaseSidebarSectionProjects,
+  saveSidebarProjects,
+  setSidebarProjectCollapsed,
+  sortSidebarProjects,
+} from "./sidebarProjects";
 import {
   assignTaskSection,
   createSidebarTaskSection,
@@ -105,17 +117,6 @@ import {
   unsectionedTaskOrderKey,
 } from "./sidebarSections";
 import type { SidebarTaskSection } from "./sidebarSections";
-import {
-  rootProjectOrderKey,
-  loadSidebarProjects,
-  moveSidebarProject,
-  releaseSidebarSectionProjects,
-  saveSidebarProjects,
-  setSidebarProjectCollapsed,
-  sortSidebarProjects,
-} from "./sidebarProjects";
-import { loadSidebarPullRequests } from "./sidebarGitStatus";
-import type { SidebarPullRequestStatus } from "./sidebarGitStatus";
 
 const sidebarDragType = "application/x-codetwo-sidebar-item";
 
@@ -153,7 +154,7 @@ type ContextMenuTriggerElement = ReactElement<{
   render: ReactElement<HTMLAttributes<HTMLDivElement>>;
 }>;
 
-const RailUtilityButton = ({
+function RailUtilityButton({
   label,
   selected = false,
   busy = false,
@@ -165,35 +166,37 @@ const RailUtilityButton = ({
   readonly busy?: boolean;
   readonly onSelect: () => void;
   readonly children: ReactNode;
-}) => (
-  <Tooltip>
-    <TooltipTrigger
-      render={
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          data-slot="rail-utility-button"
-          data-selected={selected ? "true" : "false"}
-          aria-current={selected ? "page" : undefined}
-          aria-label={label}
-          aria-busy={busy || undefined}
-          onClick={onSelect}
-          className={cn(
-            "text-muted-foreground hover:text-foreground rounded-full",
-            selected &&
-              "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary"
-          )}
-        >
-          {children}
-        </Button>
-      }
-    />
-    <TooltipContent side="top">{label}</TooltipContent>
-  </Tooltip>
-);
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            data-slot="rail-utility-button"
+            data-selected={selected ? "true" : "false"}
+            aria-current={selected ? "page" : undefined}
+            aria-label={label}
+            aria-busy={busy || undefined}
+            onClick={onSelect}
+            className={cn(
+              "text-muted-foreground hover:text-foreground rounded-full",
+              selected &&
+                "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary"
+            )}
+          >
+            {children}
+          </Button>
+        }
+      />
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
-const SessionContextMenu = ({
+function SessionContextMenu({
   items,
   onAction,
   children,
@@ -201,7 +204,7 @@ const SessionContextMenu = ({
   readonly items: NativeContextMenuItem[];
   readonly onAction: (action: string) => void;
   readonly children: ReactNode;
-}) => {
+}) {
   if (!isNativeContextMenusAvailable) {
     return <ContextMenu>{children}</ContextMenu>;
   }
@@ -211,7 +214,7 @@ const SessionContextMenu = ({
     return null;
   }
   const row = (trigger as ContextMenuTriggerElement).props.render;
-  const onContextMenu = row.props.onContextMenu;
+  const { onContextMenu } = row.props;
 
   return cloneElement(row, {
     onContextMenu: (event) => {
@@ -221,18 +224,9 @@ const SessionContextMenu = ({
       void showNativeContextMenu(items, onAction);
     },
   });
-};
+}
 
-/**
- * The rail, four zones top to bottom:
- *
- * 1. Title — sidebar controls on the traffic-light line, with search directly below it.
- * 2. Features — the app's primary destinations as compact, labeled source-list rows.
- * 3. Tasks — user-created Sections contain ordered Projects, which contain ordered Tasks.
- * 4. Utilities — quota and settings stay reachable at the bottom while recent chats scroll.
- * The active model remains available in the composer, where it can also be changed.
- */
-export const SessionRail = ({
+export function SessionRail({
   projects,
   sessions,
   archivedSessions,
@@ -383,7 +377,7 @@ export const SessionRail = ({
   readonly loadPullRequest?: (
     path: string
   ) => Promise<GitHubPullRequest | null>;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const [renaming, setRenaming] = useState<{
@@ -722,7 +716,7 @@ export const SessionRail = ({
     destinationOrderKey: string,
     projectPath: string | null = null
   ) => {
-    if (projectPath) {
+    if (projectPath != null && projectPath !== "") {
       const source = recent.find((session) => session.id === taskId);
       if (!source || projectPathForSession(source) !== projectPath) {
         return;
@@ -745,15 +739,16 @@ export const SessionRail = ({
     const sectionId = assignedSection(session);
     const projectPath =
       sectionId === null ? projectPathForSession(session) : null;
-    const ids = projectPath
-      ? taskIdsForProject(projectPath)
-      : taskIdsForSection(sectionId);
+    const ids =
+      projectPath != null && projectPath !== ""
+        ? taskIdsForProject(projectPath)
+        : taskIdsForSection(sectionId);
     const currentIndex = ids.indexOf(session.id);
     const nextIndex = Math.min(
       ids.length - 1,
       Math.max(0, currentIndex + offset)
     );
-    if (currentIndex < 0 || nextIndex === currentIndex) {
+    if (currentIndex === -1 || nextIndex === currentIndex) {
       return;
     }
     const remaining = ids.filter((id) => id !== session.id);
@@ -763,7 +758,7 @@ export const SessionRail = ({
       sectionId,
       beforeTaskId,
       ids,
-      projectPath
+      projectPath != null && projectPath !== ""
         ? projectTaskOrderKey(projectPath)
         : (sectionId ?? unsectionedTaskOrderKey),
       projectPath
@@ -801,7 +796,7 @@ export const SessionRail = ({
       paths.length - 1,
       Math.max(0, currentIndex + offset)
     );
-    if (currentIndex < 0 || nextIndex === currentIndex) {
+    if (currentIndex === -1 || nextIndex === currentIndex) {
       return;
     }
     const remaining = paths.filter((candidate) => candidate !== path);
@@ -815,7 +810,7 @@ export const SessionRail = ({
       ids.length - 1,
       Math.max(0, currentIndex + offset)
     );
-    if (currentIndex < 0 || nextIndex === currentIndex) {
+    if (currentIndex === -1 || nextIndex === currentIndex) {
       return;
     }
     const remaining = ids.filter((id) => id !== section.id);
@@ -856,7 +851,9 @@ export const SessionRail = ({
     );
     const workspacePath = s.project_path ?? s.worktree_path ?? s.cwd;
     const workspaceName =
-      (s.project_path ? projectNames.get(s.project_path) : null) ??
+      (s.project_path != null && s.project_path !== ""
+        ? projectNames.get(s.project_path)
+        : null) ??
       workspacePath.split(/[\\/]/u).filter(Boolean).pop() ??
       workspacePath;
     const checkoutPath = s.worktree_path ?? s.cwd;
@@ -904,7 +901,7 @@ export const SessionRail = ({
     const canMoveUp = !isArchived && currentTaskIndex > 0;
     const canMoveDown =
       !isArchived &&
-      currentTaskIndex >= 0 &&
+      currentTaskIndex !== -1 &&
       currentTaskIndex < currentTaskIds.length - 1;
     const assignSection = (sectionId: string | null) => {
       setTaskSections((current) => assignTaskSection(current, s.id, sectionId));
@@ -997,18 +994,19 @@ export const SessionRail = ({
     };
 
     const nativeMenuItems: NativeContextMenuItem[] = [
-      ...(!isArchived
-        ? [
+      ...(isArchived
+        ? []
+        : [
             {
               action: "pin",
               label: s.pinned ? t("rail.unpin") : t("rail.pin"),
               type: "item",
             } as const,
-          ]
-        : []),
+          ]),
       { action: "rename", label: t("rail.rename"), type: "item" },
-      ...(!isArchived
-        ? [
+      ...(isArchived
+        ? []
+        : [
             {
               action: "move-up",
               enabled: canMoveUp,
@@ -1021,9 +1019,8 @@ export const SessionRail = ({
               label: t("rail.moveDown"),
               type: "item",
             } as const,
-          ]
-        : []),
-      ...(!isArchived ? [nativeSectionMenu] : []),
+          ]),
+      ...(isArchived ? [] : [nativeSectionMenu]),
       {
         action: "archive",
         label: isArchived ? t("rail.unarchive") : t("rail.archive"),
@@ -1069,16 +1066,17 @@ export const SessionRail = ({
       }
 
       if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        const rows = Array.from(
-          event.currentTarget
+        const rows = [
+          ...(event.currentTarget
             .closest("[data-session-list]")
-            ?.querySelectorAll<HTMLButtonElement>("[data-session-select]") ?? []
-        );
+            ?.querySelectorAll<HTMLButtonElement>("[data-session-select]") ??
+            []),
+        ];
         const current = rows.indexOf(event.currentTarget);
         const delta = event.key === "ArrowDown" ? 1 : -1;
         const next =
           rows[Math.min(rows.length - 1, Math.max(0, current + delta))];
-        if (next && next !== event.currentTarget) {
+        if (next != null && next !== event.currentTarget) {
           event.preventDefault();
           next.focus();
         }
@@ -1413,17 +1411,17 @@ export const SessionRail = ({
         />
         <ContextMenuContent className="min-w-56">
           <ContextMenuGroup>
-            {!isArchived ? (
+            {isArchived ? null : (
               <ContextMenuItem onClick={() => onPin(s.id, !s.pinned)}>
                 <Pin />
                 {s.pinned ? t("rail.unpin") : t("rail.pin")}
               </ContextMenuItem>
-            ) : null}
+            )}
             <ContextMenuItem onClick={startRename}>
               <Pencil />
               {t("rail.rename")}
             </ContextMenuItem>
-            {!isArchived ? (
+            {isArchived ? null : (
               <>
                 <ContextMenuItem
                   disabled={!canMoveUp}
@@ -1440,8 +1438,8 @@ export const SessionRail = ({
                   {t("rail.moveDown")}
                 </ContextMenuItem>
               </>
-            ) : null}
-            {!isArchived ? (
+            )}
+            {isArchived ? null : (
               <ContextMenuSub>
                 <ContextMenuSubTrigger>
                   <Hash />
@@ -1474,7 +1472,7 @@ export const SessionRail = ({
                   </ContextMenuItem>
                 </ContextMenuSubContent>
               </ContextMenuSub>
-            ) : null}
+            )}
             <ContextMenuItem onClick={() => requestArchive(s.id, !isArchived)}>
               {isArchived ? <ArchiveRestore /> : <Archive />}
               {isArchived ? t("rail.unarchive") : t("rail.archive")}
@@ -1537,7 +1535,7 @@ export const SessionRail = ({
     const paths = projectPathsForSection(sectionId);
     const projectIndex = paths.indexOf(project.path);
     const canMoveUp = projectIndex > 0;
-    const canMoveDown = projectIndex >= 0 && projectIndex < paths.length - 1;
+    const canMoveDown = projectIndex !== -1 && projectIndex < paths.length - 1;
     const isOpen = projectOrganization.collapsed[project.path] !== true;
     const taskIds = rows.map((row) => row.id);
     const moveToSection = (nextSectionId: string | null) =>
@@ -1742,7 +1740,7 @@ export const SessionRail = ({
     );
     const canMoveUp = sectionIndex > 0;
     const canMoveDown =
-      sectionIndex >= 0 && sectionIndex < taskSections.sections.length - 1;
+      sectionIndex !== -1 && sectionIndex < taskSections.sections.length - 1;
     const archiveSection = async () => {
       const tasks = [
         ...rows,
@@ -2236,7 +2234,7 @@ export const SessionRail = ({
                     {rootProjects.map(renderProject)}
                   </div>
                 ) : null}
-                {creatingSectionFor !== undefined ? (
+                {creatingSectionFor === undefined ? null : (
                   <div data-task-section-creation className="px-2 pt-2 pb-1">
                     <Input
                       autoFocus
@@ -2259,7 +2257,7 @@ export const SessionRail = ({
                       }}
                     />
                   </div>
-                ) : null}
+                )}
                 {unsectioned.length > 0 || dragItem?.kind === "task" ? (
                   <div
                     data-unsectioned-tasks
@@ -2395,4 +2393,4 @@ export const SessionRail = ({
       </div>
     </aside>
   );
-};
+}

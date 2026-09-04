@@ -13,6 +13,12 @@ export const pluginUiSlotIds = [
 
 export type PluginUiSlotId = (typeof pluginUiSlotIds)[number];
 
+export function isPluginUiSlotId(value: unknown): value is PluginUiSlotId {
+  return (
+    typeof value === "string" && pluginUiSlotIds.some((slot) => slot === value)
+  );
+}
+
 export const pluginConnectorCapabilities = [
   "connection",
   "conversations",
@@ -23,6 +29,15 @@ export const pluginConnectorCapabilities = [
 ] as const;
 export type PluginConnectorCapability =
   (typeof pluginConnectorCapabilities)[number];
+
+export function isPluginConnectorCapability(
+  value: unknown
+): value is PluginConnectorCapability {
+  return (
+    typeof value === "string" &&
+    pluginConnectorCapabilities.some((capability) => capability === value)
+  );
+}
 
 export interface PluginUiContribution {
   id: string;
@@ -51,7 +66,7 @@ export interface PluginRuntimeContribution {
   env: Record<string, string>;
   inject: string[];
   optionalInject: string[];
-  scopeSupport: Array<"user" | "project">;
+  scopeSupport: ("user" | "project")[];
 }
 
 export interface PluginRuntimeCommandContribution {
@@ -89,13 +104,18 @@ export const c2PluginStandardVersion = "1.2.0";
 export type C2PluginStandardVersion = typeof c2PluginStandardVersion;
 
 function asObject(value: unknown): Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const record: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    record[key] = entry;
+  }
+  return record;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
 function hasOnlyKeys(
@@ -282,10 +302,7 @@ export function parsePluginUiContribution(
   ) {
     return null;
   }
-  if (
-    !safeId(String(raw.id ?? "")) ||
-    !pluginUiSlotIds.includes(raw.slot as PluginUiSlotId)
-  ) {
+  if (!safeId(String(raw.id ?? "")) || !isPluginUiSlotId(raw.slot)) {
     return null;
   }
   if (
@@ -324,7 +341,7 @@ export function parsePluginUiContribution(
     input: raw.input ?? null,
     label: raw.label.trim(),
     order,
-    slot: raw.slot as PluginUiSlotId,
+    slot: raw.slot,
   };
 }
 
@@ -350,20 +367,12 @@ export function parsePluginConnectorContribution(
   if (!Array.isArray(raw.capabilities) || raw.capabilities.length === 0) {
     return null;
   }
-  if (
-    raw.capabilities.some((entry) => {
-      return (
-        typeof entry !== "string" ||
-        !pluginConnectorCapabilities.includes(
-          entry as PluginConnectorCapability
-        )
-      );
-    })
-  ) {
+  const capabilities = raw.capabilities.filter(isPluginConnectorCapability);
+  if (capabilities.length !== raw.capabilities.length) {
     return null;
   }
   return {
-    capabilities: [...new Set(raw.capabilities)] as PluginConnectorCapability[],
+    capabilities: [...new Set(capabilities)],
     command: raw.command,
     id: String(raw.id),
     provider: raw.provider,
@@ -434,14 +443,14 @@ export function parsePluginContributionArray<T>(
   }
   const parsed = value.map(parse);
   const invalid = parsed.findIndex((entry) => entry === null);
-  if (isStrict && invalid >= 0) {
+  if (isStrict && invalid !== -1) {
     throw new Error(`${label}[${invalid}] is invalid`);
   }
   return parsed.filter((entry): entry is T => entry !== null);
 }
 
 export function assertUniquePluginContributionIds(
-  contributions: Array<{ id: string }>,
+  contributions: { id: string }[],
   label: string
 ): void {
   if (
@@ -457,7 +466,7 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     throw new Error("plugin.json must contain an object");
   }
   const raw = asObject(value);
-  const rootFields = [
+  const rootFields = new Set([
     "$schema",
     "name",
     "version",
@@ -468,9 +477,9 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     "license",
     "keywords",
     "extensions",
-  ];
+  ]);
   const unknownRootFields = Object.keys(raw).filter(
-    (key) => !rootFields.includes(key)
+    (key) => !rootFields.has(key)
   );
   if (unknownRootFields.length > 0) {
     throw new Error(
@@ -672,7 +681,7 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     name: raw.name,
     repository: typeof raw.repository === "string" ? raw.repository : "",
     runtime,
-    standardVersion: standardVersion as C2PluginStandardVersion,
+    standardVersion: c2PluginStandardVersion,
     ui,
     version: raw.version,
   };

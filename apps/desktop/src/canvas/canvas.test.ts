@@ -1,16 +1,17 @@
 // Bun owns this focused test module; the desktop production tsconfig does not include Bun globals.
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
+
+import { planCanvasExportTiles } from "./exportPlan";
 import { deriveCanvasManifest } from "./manifest";
 import { intakeCanvasMedia } from "./media";
+import type { CanvasMediaError } from "./media";
 import {
   createEnvelope,
   deserializeEnvelope,
   serializeEnvelope,
   stripDataUrls,
 } from "./serialize";
-import { planCanvasExportTiles } from "./exportPlan";
-import type { CanvasMediaError } from "./media";
 
 const remoteSource = await Bun.file(
   new URL("remote-entry.tsx", import.meta.url)

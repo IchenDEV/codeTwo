@@ -1,3 +1,5 @@
+import { asJsonObject } from "../lib/jsonValue";
+
 export const sidebarProjectsStorageKey = "codetwo.rail.projects.v1";
 export const rootProjectOrderKey = "root";
 
@@ -49,31 +51,28 @@ export function loadSidebarProjects(
     if (raw == null || raw === "") {
       return emptyState();
     }
-    const value = JSON.parse(raw) as Record<string, unknown>;
-    if (value.version !== 1) {
+    const value = asJsonObject(JSON.parse(raw) as unknown);
+    if (value == null || value.version !== 1) {
       return emptyState();
     }
-    const assignments =
-      value.assignments != null &&
-      typeof value.assignments === "object" &&
-      !Array.isArray(value.assignments)
-        ? (Object.fromEntries(
-            Object.entries(value.assignments).filter(
-              ([path, sectionId]) =>
-                path !== "" && typeof sectionId === "string" && sectionId !== ""
-            )
-          ) as Record<string, string>)
-        : {};
-    const collapsed =
-      value.collapsed != null &&
-      typeof value.collapsed === "object" &&
-      !Array.isArray(value.collapsed)
-        ? (Object.fromEntries(
-            Object.entries(value.collapsed).filter(
-              ([path, isCollapsed]) => path !== "" && isCollapsed === true
-            )
-          ) as Record<string, boolean>)
-        : {};
+    const assignments: Record<string, string> = {};
+    const assignmentsObject = asJsonObject(value.assignments);
+    if (assignmentsObject != null) {
+      for (const [path, sectionId] of Object.entries(assignmentsObject)) {
+        if (path !== "" && typeof sectionId === "string" && sectionId !== "") {
+          assignments[path] = sectionId;
+        }
+      }
+    }
+    const collapsed: Record<string, boolean> = {};
+    const collapsedObject = asJsonObject(value.collapsed);
+    if (collapsedObject != null) {
+      for (const [path, isCollapsed] of Object.entries(collapsedObject)) {
+        if (path !== "" && isCollapsed === true) {
+          collapsed[path] = true;
+        }
+      }
+    }
     return {
       assignments,
       collapsed,

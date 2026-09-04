@@ -1,3 +1,12 @@
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Box,
   Folder,
@@ -13,20 +22,11 @@ import {
   Upload,
 } from "@/components/ui/icons";
 
+import type { ProjectScript } from "../bridge";
 import { useT } from "../i18n";
 import { formatCombo } from "../keys";
-import type { ProjectScript } from "../bridge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
-export const SessionHeaderActions = ({
+export function SessionHeaderActions({
   canCommit,
   onAddAction,
   onOpenCursor,
@@ -56,7 +56,7 @@ export const SessionHeaderActions = ({
   readonly onCheckpoint: () => void;
   readonly onPush: () => void;
   readonly onMoveTask: () => void;
-}) => {
+}) {
   const t = useT();
   const renderOpenMenu = () => (
     <DropdownMenuContent align="end">
@@ -245,4 +245,4 @@ export const SessionHeaderActions = ({
       </DropdownMenu>
     </div>
   );
-};
+}

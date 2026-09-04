@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { Save } from "@/components/ui/icons";
-
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
@@ -12,6 +9,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { Save } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -21,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -111,7 +110,7 @@ function updateProperty(
   return next;
 }
 
-const SchemaField = ({
+function SchemaField({
   name,
   schema,
   required,
@@ -123,11 +122,11 @@ const SchemaField = ({
   readonly required: boolean;
   readonly value: unknown;
   readonly onChange: (value: unknown) => void;
-}) => {
+}) {
   const id = `plugin-config-${name}`;
   const label = schema.title ?? name;
 
-  if (schema.enum?.length) {
+  if (schema.enum?.length != null) {
     const items = schema.enum.map((entry) => ({
       label: enumLabel(entry),
       value: enumKey(entry),
@@ -139,7 +138,7 @@ const SchemaField = ({
     return (
       <Field>
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        {schema.description ? (
+        {schema.description != null && schema.description !== "" ? (
           <FieldDescription>{schema.description}</FieldDescription>
         ) : null}
         <Select
@@ -179,7 +178,7 @@ const SchemaField = ({
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <FieldLabel htmlFor={id}>{label}</FieldLabel>
-          {schema.description ? (
+          {schema.description != null && schema.description !== "" ? (
             <FieldDescription>{schema.description}</FieldDescription>
           ) : null}
         </div>
@@ -193,7 +192,7 @@ const SchemaField = ({
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      {schema.description ? (
+      {schema.description != null && schema.description !== "" ? (
         <FieldDescription>{schema.description}</FieldDescription>
       ) : null}
       <Input
@@ -213,9 +212,9 @@ const SchemaField = ({
       />
     </Field>
   );
-};
+}
 
-export const SchemaConfigEditor = ({
+export function SchemaConfigEditor({
   config,
   schema,
   labels,
@@ -225,7 +224,7 @@ export const SchemaConfigEditor = ({
   readonly schema: unknown;
   readonly labels: PluginManagerLabels;
   readonly onSave: (config: unknown) => Promise<void>;
-}) => {
+}) {
   const simpleSchema = asSimpleObjectSchema(schema);
   const incomingJson = formatJson(config);
   const [draft, setDraft] = useState<Record<string, unknown>>(() =>
@@ -292,7 +291,7 @@ export const SchemaConfigEditor = ({
 
   const actions = (
     <>
-      {saveError ? (
+      {saveError != null && saveError !== "" ? (
         <p role="alert" className="text-callout text-destructive">
           {saveError}
         </p>
@@ -328,7 +327,9 @@ export const SchemaConfigEditor = ({
           setJsonError(null);
         }}
       />
-      {jsonError ? <FieldError>{jsonError}</FieldError> : null}
+      {jsonError != null && jsonError !== "" ? (
+        <FieldError>{jsonError}</FieldError>
+      ) : null}
     </Field>
   );
 
@@ -392,4 +393,4 @@ export const SchemaConfigEditor = ({
       </TabsContent>
     </Tabs>
   );
-};
+}

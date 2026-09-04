@@ -1,5 +1,5 @@
+import type { DocumentBlock } from "../bridge";
 import { isAgentImagePath } from "../files/imageTypes";
-import type { DocumentBlock as DocumentBlock } from "../bridge";
 
 export function workspaceReferenceBlock(path: string): DocumentBlock {
   return isAgentImagePath(path)

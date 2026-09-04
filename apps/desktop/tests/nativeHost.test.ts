@@ -168,7 +168,9 @@ describe("Electrobun Plugin Kernel adapter", () => {
   });
 
   test("fails closed when the packaged Kernel speaks a different protocol", async () => {
-    const dataDirectory = mkdtempSync(join(tmpdir(), "codetwo-native-host-version-"));
+    const dataDirectory = mkdtempSync(
+      join(tmpdir(), "codetwo-native-host-version-")
+    );
     const kernel = new FakeKernel(desktopHostProtocolVersion + 1);
     const host = new NativeHost({
       executable: "/fixture/codetwo-desktop-host",
@@ -187,7 +189,9 @@ describe("Electrobun Plugin Kernel adapter", () => {
   });
 
   test("rejects pending work if the Kernel output stream closes", async () => {
-    const dataDirectory = mkdtempSync(join(tmpdir(), "codetwo-native-host-output-"));
+    const dataDirectory = mkdtempSync(
+      join(tmpdir(), "codetwo-native-host-output-")
+    );
     const kernel = new FakeKernel();
     const host = new NativeHost({
       executable: "/fixture/codetwo-desktop-host",

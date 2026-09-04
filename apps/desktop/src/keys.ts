@@ -68,15 +68,14 @@ export function isModifierOnly(e: KeyboardEvent): boolean {
 }
 
 export function isTypingTarget(target: EventTarget | null): boolean {
-  const element = target as HTMLElement | null;
-  if (element?.tagName == null || element?.tagName === "") {
+  if (!(target instanceof HTMLElement)) {
     return false;
   }
   return (
-    element.isContentEditable ||
-    element.tagName === "INPUT" ||
-    element.tagName === "TEXTAREA" ||
-    element.tagName === "SELECT"
+    target.isContentEditable ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
   );
 }
 

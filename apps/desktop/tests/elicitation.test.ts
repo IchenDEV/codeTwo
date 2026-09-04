@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+
+import type { ElicitationForm } from "../src/bridge";
 import {
   acceptAnswer,
   answerContent,
@@ -10,7 +12,6 @@ import {
   setValue,
   toggleOption,
 } from "../src/session/elicitation";
-import type { ElicitationForm } from "../src/bridge";
 
 /**
 The form the Claude adapter builds for a one-question AskUserQuestion call.

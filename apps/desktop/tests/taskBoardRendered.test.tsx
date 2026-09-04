@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { act as reactAct } from "react";
 
 import {
@@ -145,9 +146,9 @@ async function openSelect(trigger) {
 }
 
 function menuItem(label) {
-  return Array.from(
-    dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]')
-  ).find((item) => item.textContent?.replace(/\s+/gu, " ").trim() === label);
+  return [
+    ...dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'),
+  ].find((item) => item.textContent?.replaceAll(/\s+/gu, " ").trim() === label);
 }
 
 describe("TaskBoardPage rendered", () => {
@@ -191,12 +192,13 @@ describe("TaskBoardPage rendered", () => {
     expect(
       view.container.querySelector('button[aria-label="返回"]')
     ).toBeNull();
-    const columns = Array.from(
-      view.container.querySelectorAll("[data-task-column]")
-    );
-    expect(
-      columns.map((column) => column.getAttribute("data-task-column"))
-    ).toEqual(["queue", "running", "needs_you", "done"]);
+    const columns = [...view.container.querySelectorAll("[data-task-column]")];
+    expect(columns.map((column) => column.dataset.taskColumn)).toEqual([
+      "queue",
+      "running",
+      "needs_you",
+      "done",
+    ]);
     expect(
       columns.every((column) => column.className.includes("min-w-72"))
     ).toBe(true);
@@ -236,9 +238,7 @@ describe("TaskBoardPage rendered", () => {
     );
 
     const view = await renderBoard();
-    const columns = Array.from(
-      view.container.querySelectorAll("[data-task-column]")
-    );
+    const columns = [...view.container.querySelectorAll("[data-task-column]")];
     const renderedCounts = columns.map(
       (column) => column.querySelectorAll("[data-task-card]").length
     );
@@ -432,9 +432,9 @@ describe("TaskBoardPage rendered", () => {
   test("filters rendered tasks by priority and clears the active facet", async () => {
     const view = await renderBoard();
     await click(button(view.container, "筛选"));
-    const urgentLabel = Array.from(
-      dom.document.body.querySelectorAll("label")
-    ).find((label) => label.textContent?.trim() === "紧急");
+    const urgentLabel = [...dom.document.body.querySelectorAll("label")].find(
+      (label) => label.textContent?.trim() === "紧急"
+    );
     const urgentCheckbox = urgentLabel?.querySelector('[role="checkbox"]');
     await reactAct(async () => {
       Simulate.click(urgentCheckbox);
@@ -462,9 +462,9 @@ describe("TaskBoardPage rendered", () => {
     await click(button(dom.document.body, "创建任务"));
 
     expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(0);
-    const toast = Array.from(
-      dom.document.body.querySelectorAll('[role="status"]')
-    ).find((status) => status.textContent?.includes("但它被当前筛选隐藏"));
+    const toast = [
+      ...dom.document.body.querySelectorAll('[role="status"]'),
+    ].find((status) => status.textContent?.includes("但它被当前筛选隐藏"));
     expect(toast).toBeTruthy();
     await click(button(toast, "清除筛选"));
     expect(view.container.textContent).toContain("隐藏后可找回的任务");

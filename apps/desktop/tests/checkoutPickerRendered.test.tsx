@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { act as reactAct } from "react";
+
 import {
   activateDom,
   button,
@@ -147,7 +149,7 @@ describe("CheckoutBar", () => {
       expect(sourceControlOpens).toBe(1);
 
       const popup = await openPicker(rendered.container);
-      expect(popup?.getAttribute("data-side")).toBe("bottom");
+      expect(popup?.dataset.side).toBe("bottom");
       expect(popup?.textContent).toContain("codeTwo");
       expect(popup?.textContent).toContain("main");
       expect(popup?.textContent).toContain("origin/main");

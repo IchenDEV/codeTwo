@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
+
 import { activateDom, dom, restoreDom } from "../../tests/domTestHarness";
 
 const normalizeLineEndings = (value: string) => value.replaceAll("\r\n", "\n");
@@ -84,7 +85,7 @@ async function mountRemoteShell(isFeatureEnabled = true) {
     },
     prepareDraft() {
       const value = mountedCanvasOptions?.value;
-      if (Boolean(value)) {
+      if (value) {
         return {
           envelope: {
             ...value,
@@ -128,7 +129,7 @@ async function mountRemoteShell(isFeatureEnabled = true) {
       };
     },
     reset(_root: HTMLElement, value: any) {
-      if (Boolean(mountedCanvasOptions)) {
+      if (mountedCanvasOptions) {
         mountedCanvasOptions.value = value;
       }
     },
@@ -300,9 +301,7 @@ describe("Remote Canvas island draft seam", () => {
     ]);
     expect(api.getPromptBlocks()[1].id).toBe("draft-1");
     expect(
-      dom.document
-        .querySelector(".canvas-mount")
-        ?.getAttribute("data-canvas-mounted")
+      dom.document.querySelector(".canvas-mount")?.dataset.canvasMounted
     ).toBe("true");
     expect(remote.mountedCanvasOptions?.theme).toBe("dark");
     cleanupRemoteShell();
@@ -449,7 +448,7 @@ describe("Remote Canvas island draft seam", () => {
     expect(
       api.submitPrompt("session-1", accepted.doc, true, sourceBlocks, accepted)
     ).toBe(true);
-    const requestId = socket.sent.at(-1).request_id;
+    const requestId = socket.sent[socket.sent.length - 1].request_id;
     expect(api.providerRecoverySize()).toBe(1);
     api.handleMessage({
       event: {
@@ -480,7 +479,7 @@ describe("Remote Canvas island draft seam", () => {
     expect(
       api.submitPrompt("session-1", sourceBlocks, true, sourceBlocks)
     ).toBe(true);
-    const requestId = socket.sent.at(-1).request_id;
+    const requestId = socket.sent[socket.sent.length - 1].request_id;
     api.setPromptBlocks([{ text: "newer text", type: "text" }]);
     api.handleMessage({
       event: {

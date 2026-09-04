@@ -1,5 +1,8 @@
+import type { SuggestionMenuProps } from "@blocknote/react";
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+
+import { Button } from "@/components/ui/button";
 import {
   FileCode,
   FileImage,
@@ -10,11 +13,9 @@ import {
   Package,
 } from "@/components/ui/icons";
 import type { HugeIcon } from "@/components/ui/icons";
-import type { SuggestionMenuProps } from "@blocknote/react";
+import { cn } from "@/lib/utils";
 
 import { useT } from "../i18n";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 /**
 One workspace file, split for display. The core ranks these; this only draws them.
@@ -125,34 +126,20 @@ function itemKey(item: AtItem): string {
   return item.path;
 }
 
-/**
-Muted group label — only drawn when the list actually mixes chats and files.
-*/
-const GroupLabel = ({ children }: { readonly children: ReactNode }) => (
-  <p className="text-metadata text-muted-foreground px-2 pt-1.5 pb-0.5 first:pt-1">
-    {children}
-  </p>
-);
+function GroupLabel({ children }: { readonly children: ReactNode }) {
+  return (
+    <p className="text-metadata text-muted-foreground px-2 pt-1.5 pb-0.5 first:pt-1">
+      {children}
+    </p>
+  );
+}
 
-/**
- * The `@` picker.
- *
- * BlockNote's stock menu renders one generic page glyph and one full path per row, at a row height
- * built for a handful of block types. Pointed at a workspace it becomes a wall: a dozen files on
- * screen, every row identically iconed, and the part that distinguishes them — the file's own name —
- * buried at the end of a path. This trades the glyph for the file's kind, puts the name first with
- * its directory trailing in muted text, marks what the query matched, and packs the rows tight
- * enough to show a useful number of them at once.
- *
- * Past chats sit above the files under their own label: mentioning one inlines its transcript, the
- * way mentioning a file inlines its contents.
- */
-export const FileMenu = ({
+export function FileMenu({
   items,
   loadingState,
   selectedIndex,
   onItemClick,
-}: SuggestionMenuProps<AtItem>) => {
+}: SuggestionMenuProps<AtItem>) {
   const t = useT();
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -303,4 +290,4 @@ export const FileMenu = ({
       })}
     </div>
   );
-};
+}

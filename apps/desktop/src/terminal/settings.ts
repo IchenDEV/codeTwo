@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 
+import { asJsonObject } from "../lib/jsonValue";
+
 /**
  * Terminal appearance, kept next to the theme and language preferences in `localStorage` rather
  * than in the core: these only describe how the renderer draws, and the core's emulator is
@@ -28,7 +30,7 @@ function read(): TerminalSettings {
     if (raw == null || raw === "") {
       return defaultTerminalSettings;
     }
-    const parsed = JSON.parse(raw) as Partial<TerminalSettings>;
+    const parsed = asJsonObject(JSON.parse(raw) as unknown) ?? {};
     return {
       fontFamily:
         typeof parsed.fontFamily === "string" ? parsed.fontFamily : "",

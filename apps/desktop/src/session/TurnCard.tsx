@@ -1,3 +1,19 @@
+import { memo, useEffect, useState } from "react";
+
+import { StatusBadge } from "@/components/business/status-badge";
+import { ActivityOrb } from "@/components/ui/activity-orb";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Bot,
   BookOpen,
@@ -20,23 +36,11 @@ import {
   Terminal,
   Wrench,
 } from "@/components/ui/icons";
-import { memo, useEffect, useState } from "react";
-import { ActivityOrb } from "@/components/ui/activity-orb";
-import {
-  agentActivityState,
-  deriveAgentRoster,
-  isAgentActivityTool,
-} from "./agentActivity";
-import type { AgentActivity, AgentActivityState } from "./agentActivity";
-import {
-  canvasExportDataUrl,
-  collapsedPrompt,
-  isLongPrompt,
-  parseCanvasHistoryPrompt,
-} from "./promptPreview";
-import type { CanvasHistoryMarker } from "./promptPreview";
-import { isRunning } from "./turns";
-import type { PromptImage, ToolEntry, Turn } from "./turns";
+import { Spinner } from "@/components/ui/spinner";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/ui/toast";
+
 import {
   canvasGetSnapshot,
   getArtifact,
@@ -46,26 +50,24 @@ import {
   saveArtifactAs,
 } from "../bridge";
 import type { ArtifactReference, CanvasSnapshot } from "../bridge";
-import { StatusBadge } from "@/components/business/status-badge";
-import { Spinner } from "@/components/ui/spinner";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
-import { cn } from "@/lib/utils";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { useToast } from "@/ui/toast";
+import {
+  agentActivityState,
+  deriveAgentRoster,
+  isAgentActivityTool,
+} from "./agentActivity";
+import type { AgentActivity, AgentActivityState } from "./agentActivity";
 import { MarkdownContent } from "./MarkdownContent";
 import type { BuiltinLinkActions } from "./MarkdownContent";
+import {
+  canvasExportDataUrl,
+  collapsedPrompt,
+  isLongPrompt,
+  parseCanvasHistoryPrompt,
+} from "./promptPreview";
+import type { CanvasHistoryMarker } from "./promptPreview";
+import { isRunning } from "./turns";
+import type { PromptImage, ToolEntry, Turn } from "./turns";
 
 const emptyPromptImages: PromptImage[] = [];
 const searchToolPattern = /\b(?:search|searched|find|found|grep|rg)\b/iu;
@@ -74,7 +76,7 @@ const commandToolPattern =
   /\b(?:command|exec|execute|run|shell|terminal|test)\b/iu;
 
 function duration(t: Turn): string | null {
-  if (!t.endedAt) {
+  if (t.endedAt == null) {
     return null;
   }
   const s = Math.max(0, Math.round((t.endedAt - t.startedAt) / 1000));
@@ -83,7 +85,7 @@ function duration(t: Turn): string | null {
 
 type CopyTarget = "prompt" | "response";
 
-const TurnActionButton = ({
+function TurnActionButton({
   label,
   onClick,
   children,
@@ -91,17 +93,19 @@ const TurnActionButton = ({
   readonly label: string;
   readonly onClick: () => void;
   readonly children: React.ReactNode;
-}) => (
-  <TooltipButton
-    label={label}
-    variant="ghost"
-    size="icon-xs"
-    className="text-muted-foreground"
-    onClick={onClick}
-  >
-    {children}
-  </TooltipButton>
-);
+}) {
+  return (
+    <TooltipButton
+      label={label}
+      variant="ghost"
+      size="icon-xs"
+      className="text-muted-foreground"
+      onClick={onClick}
+    >
+      {children}
+    </TooltipButton>
+  );
+}
 
 function toolStatusDot(status: string): string {
   if (status === "completed") {
@@ -149,23 +153,23 @@ function promptTextWithoutImageMarkers(
   const markers = new Set<string>();
   for (const image of images) {
     markers.add(`[attachment:${image.id}]`);
-    if (image.name) {
+    if (image.name != null && image.name !== "") {
       markers.add(`[image:${image.name}]`);
     }
   }
   for (const marker of markers) {
     visible = visible.split(marker).join("");
   }
-  return visible.replace(/\n(?:[ \t]*\n){2,}/gu, "\n\n").trim();
+  return visible.replaceAll(/\n(?:[ \t]*\n){2,}/gu, "\n\n").trim();
 }
 
-const PromptImageThumbnail = ({ image }: { readonly image: PromptImage }) => {
+function PromptImageThumbnail({ image }: { readonly image: PromptImage }) {
   const [loaded, setLoaded] = useState<Awaited<
     ReturnType<typeof getPromptImage>
   > | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (image.previewDataUrl) {
+    if (image.previewDataUrl != null && image.previewDataUrl !== "") {
       return;
     }
     let isAlive = true;
@@ -195,7 +199,7 @@ const PromptImageThumbnail = ({ image }: { readonly image: PromptImage }) => {
       data-prompt-image={image.id}
       className="rounded-module bg-background/25 ring-foreground/10 flex min-h-24 max-w-80 min-w-0 items-center justify-center overflow-hidden ring-[0.5px]"
     >
-      {src && !failed ? (
+      {src != null && src !== "" && !failed ? (
         <img
           src={src}
           alt={name}
@@ -224,7 +228,7 @@ const PromptImageThumbnail = ({ image }: { readonly image: PromptImage }) => {
       )}
     </figure>
   );
-};
+}
 
 export function safeResourceLink(
   uri: string
@@ -244,11 +248,7 @@ export function safeResourceLink(
   }
 }
 
-const ArtifactImage = ({
-  artifact,
-}: {
-  readonly artifact: ArtifactReference;
-}) => {
+function ArtifactImage({ artifact }: { readonly artifact: ArtifactReference }) {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -270,7 +270,7 @@ const ArtifactImage = ({
       .catch(() => isAlive && setError(true));
     return () => {
       isAlive = false;
-      if (objectUrl) {
+      if (objectUrl != null && objectUrl !== "") {
         URL.revokeObjectURL(objectUrl);
       }
     };
@@ -279,7 +279,7 @@ const ArtifactImage = ({
   return (
     <figure className="rounded-module bg-fill-quiet min-w-0 overflow-hidden border">
       <div className="image-checker flex min-h-32 items-center justify-center">
-        {url ? (
+        {url != null && url !== "" ? (
           <img
             src={url}
             alt={artifact.display_name}
@@ -333,21 +333,21 @@ const ArtifactImage = ({
         >
           <FolderOpen className="size-3.5" />
         </TooltipButton>
-        {actionError ? (
+        {actionError != null && actionError !== "" ? (
           <span className="text-destructive basis-full">{actionError}</span>
         ) : null}
       </figcaption>
     </figure>
   );
-};
+}
 
-const ToolCallBlock = ({
+function ToolCallBlock({
   tool,
   compact = false,
 }: {
   readonly tool: ToolEntry;
   readonly compact?: boolean;
-}) => {
+}) {
   const textOutputs = (tool.outputs ?? []).flatMap((output) =>
     output.type === "text" ? [output.text] : []
   );
@@ -377,7 +377,7 @@ const ToolCallBlock = ({
       >
         {tool.title}
       </span>
-      {!compact && tool.kind ? (
+      {!compact && tool.kind != null && tool.kind !== "" ? (
         <span className="text-metadata text-muted-foreground shrink-0 font-mono">
           {tool.kind}
         </span>
@@ -489,9 +489,9 @@ const ToolCallBlock = ({
       </CollapsibleContent>
     </Collapsible>
   );
-};
+}
 
-const ToolCallGroup = ({ tools }: { readonly tools: ToolEntry[] }) => {
+function ToolCallGroup({ tools }: { readonly tools: ToolEntry[] }) {
   const t = useT();
   let status = "completed";
   for (const tool of tools) {
@@ -576,10 +576,11 @@ const ToolCallGroup = ({ tools }: { readonly tools: ToolEntry[] }) => {
       </CollapsibleContent>
     </Collapsible>
   );
-};
+}
 
 type RenderBlock =
-  { kind: "text"; text: string } | { kind: "tools"; tools: ToolEntry[] };
+  | { kind: "text"; text: string }
+  | { kind: "tools"; tools: ToolEntry[] };
 
 function orderedBlocks(turn: Turn): RenderBlock[] {
   const tools = new Map(
@@ -657,10 +658,7 @@ function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
   );
 }
 
-/**
-A collapsible group of secondary detail (agents / thinking / plan / memory).
-*/
-const Detail = ({
+function Detail({
   icon: Icon,
   label,
   count,
@@ -674,7 +672,7 @@ const Detail = ({
   readonly children: React.ReactNode;
   readonly wide?: boolean;
   readonly defaultOpen?: boolean;
-}) => {
+}) {
   if (count === 0) {
     return null;
   }
@@ -696,7 +694,7 @@ const Detail = ({
       <CollapsibleContent className="py-1 ps-4">{children}</CollapsibleContent>
     </Collapsible>
   );
-};
+}
 
 function agentStatusLabel(
   state: AgentActivityState,
@@ -725,7 +723,7 @@ function agentElapsed(agent: AgentActivity, now: number): string | null {
   return `${seconds}s`;
 }
 
-const AgentStateIcon = ({ state }: { readonly state: AgentActivityState }) => {
+function AgentStateIcon({ state }: { readonly state: AgentActivityState }) {
   if (state === "active") {
     return <ActivityOrb state="working" visualSize={20} aria-hidden="true" />;
   }
@@ -736,9 +734,9 @@ const AgentStateIcon = ({ state }: { readonly state: AgentActivityState }) => {
     return <CircleAlert className="text-destructive size-4" aria-hidden />;
   }
   return <Clock3 className="text-warning size-4" aria-hidden />;
-};
+}
 
-const AgentRosterSection = ({
+function AgentRosterSection({
   agents,
   label,
   now,
@@ -746,7 +744,7 @@ const AgentRosterSection = ({
   readonly agents: readonly AgentActivity[];
   readonly label: string;
   readonly now: number;
-}) => {
+}) {
   const t = useT();
   if (agents.length === 0) {
     return null;
@@ -780,7 +778,7 @@ const AgentRosterSection = ({
                     {agent.role}
                   </span>
                 </div>
-                {agent.task ? (
+                {agent.task != null && agent.task !== "" ? (
                   <p className="text-callout text-muted-foreground mt-0.5 line-clamp-2">
                     {agent.task}
                   </p>
@@ -790,7 +788,7 @@ const AgentRosterSection = ({
                 <span className="block" aria-live="polite" aria-atomic="true">
                   {agentStatusLabel(state, t)}
                 </span>
-                {elapsed ? (
+                {elapsed != null && elapsed !== "" ? (
                   <time className="block tabular-nums">{elapsed}</time>
                 ) : null}
               </div>
@@ -800,13 +798,13 @@ const AgentRosterSection = ({
       </ul>
     </div>
   );
-};
+}
 
-const AgentRoster = ({
+function AgentRoster({
   agents,
 }: {
   readonly agents: readonly AgentActivity[];
-}) => {
+}) {
   const t = useT();
   const active = agents.filter((agent) => {
     const state = agentActivityState(agent.status);
@@ -839,7 +837,7 @@ const AgentRoster = ({
       />
     </div>
   );
-};
+}
 
 /**
  * One prompt → response cycle.
@@ -849,7 +847,7 @@ const AgentRoster = ({
  * their streamed position, with adjacent calls sharing one disclosure; thinking and memory
  * metadata stay collapsed underneath. The current task plan lives in the right information panel.
  */
-export const TurnCard = memo(function TurnCard({
+export function TurnCardComponent({
   turn,
   canvasSnapshotLoader = canvasGetSnapshot,
   onSaveTemplate,
@@ -899,7 +897,7 @@ export const TurnCard = memo(function TurnCard({
     if (!copied) {
       return;
     }
-    const timeout = window.setTimeout(() => setCopied(null), 1_500);
+    const timeout = window.setTimeout(() => setCopied(null), 1500);
     return () => window.clearTimeout(timeout);
   }, [copied]);
   const copyText = (target: CopyTarget, text: string) => {
@@ -1081,7 +1079,9 @@ export const TurnCard = memo(function TurnCard({
                     </h3>
                     <p className="text-muted-foreground">
                       rev {canvas.revision}
-                      {snapshot ? ` · ${snapshot.objectCount} objects` : ""}
+                      {snapshot == null
+                        ? ""
+                        : ` · ${snapshot.objectCount} objects`}
                       {snapshot?.frozenAt
                         ? ` · ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(snapshot.frozenAt)}`
                         : ""}
@@ -1155,7 +1155,7 @@ export const TurnCard = memo(function TurnCard({
         </output>
       ) : null}
 
-      {turn.error ? (
+      {turn.error != null && turn.error !== "" ? (
         <p className="rounded-control bg-destructive/10 text-body text-destructive mt-3.5 flex items-start gap-1.5 px-3 py-2">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
@@ -1253,7 +1253,7 @@ export const TurnCard = memo(function TurnCard({
                 <StatusBadge tone="neutral">{turn.stopReason}</StatusBadge>
               )
             )}
-            {dur ? (
+            {dur != null && dur !== "" ? (
               <span className="text-metadata text-muted-foreground font-mono">
                 {dur}
               </span>
@@ -1298,4 +1298,6 @@ export const TurnCard = memo(function TurnCard({
       ) : null}
     </article>
   );
-});
+}
+
+export const TurnCard = memo(TurnCardComponent);

@@ -1,6 +1,8 @@
 import type { WebviewEventTypes, WebviewTagElement } from "electrobun/view";
 
 import { desktopSetBrowserZoom, isElectrobun } from "../electrobun/client";
+import { assertIpcResult } from "../lib/ipcResult";
+import { asJsonObject, isJsonObject } from "../lib/jsonValue";
 import annotateSource from "./annotate.js?raw";
 
 export interface EmbeddedBrowserNav {
@@ -38,7 +40,11 @@ interface PageAnnotation {
   styles?: EmbeddedStyleChange[];
 }
 
-type BrowserEventMap = {
+function isPageAnnotation(value: unknown): value is PageAnnotation {
+  return isJsonObject(value);
+}
+
+interface BrowserEventMap {
   "browser-registry": EmbeddedBrowserTab[];
   "browser-agent-activity": { tabId: string };
   "browser-download-blocked": { label: string };
@@ -46,7 +52,7 @@ type BrowserEventMap = {
   "browser-nav": EmbeddedBrowserNav;
   "browser-title": { label: string; title: string };
   "browser-popup": EmbeddedBrowserNav;
-};
+}
 
 type BrowserEventName = keyof BrowserEventMap;
 type BrowserListener<K extends BrowserEventName> = (
@@ -57,13 +63,13 @@ const registryKey = "codetwo.browser.tabs.v1";
 const views = new Map<string, WebviewTagElement>();
 const viewHandlers = new Map<
   string,
-  Array<{ name: WebviewEventTypes; listener: (event: CustomEvent) => void }>
+  { name: WebviewEventTypes; listener: (event: CustomEvent) => void }[]
 >();
 const desired = new Map<
   string,
   { url?: string; visible?: boolean; zoom?: number }
 >();
-const listeners = new Map<BrowserEventName, Set<(payload: never) => void>>();
+const listeners = new Map<BrowserEventName, Set<(payload: unknown) => void>>();
 const pendingQueries = new Map<
   string,
   {
@@ -73,6 +79,23 @@ const pendingQueries = new Map<
     timeout: ReturnType<typeof setTimeout>;
   }
 >();
+
+function isEmbeddedBrowserTab(value: unknown): value is EmbeddedBrowserTab {
+  if (!isJsonObject(value)) {
+    return false;
+  }
+  return (
+    typeof value.id === "string" &&
+    /^browser-\d+$/u.test(value.id) &&
+    typeof value.url === "string"
+  );
+}
+
+function isWebviewTagElement(
+  element: HTMLElement | null
+): element is WebviewTagElement {
+  return element != null && "loadURL" in element;
+}
 
 function defaultRegistry(): EmbeddedBrowserTab[] {
   return [
@@ -98,15 +121,7 @@ function loadRegistry(): EmbeddedBrowserTab[] {
     if (!Array.isArray(parsed)) {
       return defaultRegistry();
     }
-    const tabs = parsed.filter((tab): tab is EmbeddedBrowserTab => {
-      return (
-        typeof tab === "object" &&
-        tab !== null &&
-        typeof (tab as EmbeddedBrowserTab).id === "string" &&
-        /^browser-\d+$/u.test((tab as EmbeddedBrowserTab).id) &&
-        typeof (tab as EmbeddedBrowserTab).url === "string"
-      );
-    });
+    const tabs = parsed.filter(isEmbeddedBrowserTab);
     if (tabs.length === 0) {
       return defaultRegistry();
     }
@@ -114,7 +129,7 @@ function loadRegistry(): EmbeddedBrowserTab[] {
     return tabs.map((tab, index) => {
       return {
         ...tab,
-        active: active >= 0 ? index === active : index === 0,
+        active: active !== -1 ? index === active : index === 0,
         agent_active: false,
         lease_session: null,
         title: typeof tab.title === "string" ? tab.title : "",
@@ -140,7 +155,7 @@ function emit<K extends BrowserEventName>(
   payload: BrowserEventMap[K]
 ): void {
   for (const listener of listeners.get(name) ?? []) {
-    listener(payload as never);
+    listener(payload);
   }
 }
 
@@ -170,28 +185,23 @@ function eventUrl(event: CustomEvent, fallback: string): string {
   if (typeof event.detail === "string" && event.detail) {
     return event.detail;
   }
-  if (
-    typeof event.detail === "object" &&
-    event.detail !== null &&
-    typeof (event.detail as { url?: unknown }).url === "string"
-  ) {
-    return (event.detail as { url: string }).url;
+  const detail = asJsonObject(event.detail);
+  if (detail != null && typeof detail.url === "string") {
+    return detail.url;
   }
   return fallback;
 }
 
 function eventObject(event: CustomEvent): Record<string, unknown> | null {
-  if (typeof event.detail === "object" && event.detail !== null) {
-    return event.detail as Record<string, unknown>;
+  const direct = asJsonObject(event.detail);
+  if (direct != null) {
+    return direct;
   }
   if (typeof event.detail !== "string") {
     return null;
   }
   try {
-    const parsed = JSON.parse(event.detail) as unknown;
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : null;
+    return asJsonObject(JSON.parse(event.detail) as unknown);
   } catch {
     return null;
   }
@@ -263,10 +273,10 @@ function handleHostMessage(label: string, event: CustomEvent): void {
 }
 
 function attach(label: string, view: WebviewTagElement): void {
-  const handlers: Array<{
+  const handlers: {
     name: WebviewEventTypes;
     listener: (event: CustomEvent) => void;
-  }> = [];
+  }[] = [];
   const on = (
     name: WebviewEventTypes,
     listener: (event: CustomEvent) => void
@@ -308,7 +318,7 @@ export function registerBrowserWebview(
   label: string,
   element: HTMLElement | null
 ): void {
-  const view = element as WebviewTagElement | null;
+  const view = isWebviewTagElement(element) ? element : null;
   const previous = views.get(label);
   if (previous && previous !== view) {
     detach(label, previous);
@@ -343,11 +353,14 @@ export function browserSubscribe<K extends BrowserEventName>(
   name: K,
   listener: BrowserListener<K>
 ): () => void {
-  const group = listeners.get(name) ?? new Set<(payload: never) => void>();
-  group.add(listener as (payload: never) => void);
+  const group = listeners.get(name) ?? new Set<(payload: unknown) => void>();
+  const wrapped = (payload: unknown): void => {
+    listener(assertIpcResult<BrowserEventMap[K]>(payload));
+  };
+  group.add(wrapped);
   listeners.set(name, group);
   return () => {
-    group.delete(listener as (payload: never) => void);
+    group.delete(wrapped);
     if (group.size === 0) {
       listeners.delete(name);
     }
@@ -416,7 +429,7 @@ export function browserCloseLocal(label: string): void {
   views.get(label)?.toggleHidden(true);
   desired.delete(label);
   const closing = registry.findIndex((tab) => tab.id === label);
-  if (closing < 0) {
+  if (closing === -1) {
     return;
   }
   const wasActive = registry[closing].active;
@@ -505,7 +518,7 @@ async function queryPage(label: string, expression: string): Promise<unknown> {
     const timeout = setTimeout(() => {
       pendingQueries.delete(id);
       reject(new Error("browser page query timed out"));
-    }, 3_000);
+    }, 3000);
     pendingQueries.set(id, { label, reject, resolve, timeout });
   });
   view.executeJavascript(`void (async () => {
@@ -532,7 +545,7 @@ export async function browserAnnotationsLocal(
     if (!Array.isArray(result)) {
       return [];
     }
-    return (result as PageAnnotation[]).map((annotation) => {
+    return result.filter(isPageAnnotation).map((annotation) => {
       return {
         note: annotation.note ?? "",
         selected_text:

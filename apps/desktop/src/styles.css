@@ -635,9 +635,8 @@ html[data-appearance-pointer-cursors="false"]
     background-color: var(--ds-material-raised-background);
   }
 
-  @supports not (
-    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
-  ) {
+  @supports not
+  ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .raised-material {
       background-color: var(--ds-color-raised);
     }

@@ -7,7 +7,7 @@ export function usePersistedNumber(
   const [value, setValue] = useState(() => {
     const raw =
       typeof localStorage === "undefined" ? null : localStorage.getItem(key);
-    const n = raw === null ? NaN : Number(raw);
+    const n = raw === null ? Number.NaN : Number(raw);
     return Number.isFinite(n) ? n : fallback;
   });
 

@@ -47,7 +47,11 @@ export interface NativeContextMenuAction {
 export type WorkspaceOpenTarget = "cursor" | "antigravity" | "finder";
 
 export type AppUpdateState =
-  "unsupported" | "unavailable" | "not-configured" | "ready" | "checking";
+  | "unsupported"
+  | "unavailable"
+  | "not-configured"
+  | "ready"
+  | "checking";
 
 export interface AppUpdateStatus {
   state: AppUpdateState;
@@ -56,11 +60,17 @@ export interface AppUpdateStatus {
 }
 
 export type AppshotHotkey =
-  "both-command" | "command-shift-2" | "command-option-2";
+  | "both-command"
+  | "command-shift-2"
+  | "command-option-2";
 export type AppshotDestination = "automatic" | "current" | "new";
 
 export type DesktopPetAnimation =
-  "idle" | "running" | "waiting" | "failed" | "review";
+  | "idle"
+  | "running"
+  | "waiting"
+  | "failed"
+  | "review";
 
 export interface DesktopPetState {
   visible: boolean;

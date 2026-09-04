@@ -1,4 +1,18 @@
 import { useState } from "react";
+
+import { SelectableRow } from "@/components/business/selectable-row";
+import { StatusBadge } from "@/components/business/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ControlChip as Chip } from "@/components/ui/control-chip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   ChevronDown,
   Clapperboard,
@@ -10,39 +24,23 @@ import {
   Route,
   Settings2,
 } from "@/components/ui/icons";
-
-import type { SessionConfig } from "./config";
-import { sceneTitle } from "./scene";
-import type { SceneInfo, SceneSource } from "./scene";
-import { exportSceneSkillMd } from "../bridge";
-import { useToast } from "../ui/toast";
-import { ControlChip as Chip } from "@/components/ui/control-chip";
-import { SelectableRow } from "@/components/business/selectable-row";
-import { StatusBadge } from "@/components/business/status-badge";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { useLanguage, useT } from "../i18n";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-/**
-Source pill naming where the scene came from (builtin / user / project / plugin).
-*/
-export const SourceBadge = ({ source }: { readonly source: SceneSource }) => {
+import { exportSceneSkillMd } from "../bridge";
+import { useLanguage, useT } from "../i18n";
+import { useToast } from "../ui/toast";
+import type { SessionConfig } from "./config";
+import { sceneTitle } from "./scene";
+import type { SceneInfo, SceneSource } from "./scene";
+
+export function SourceBadge({ source }: { readonly source: SceneSource }) {
   const t = useT();
   return (
     <Badge
@@ -52,13 +50,9 @@ export const SourceBadge = ({ source }: { readonly source: SceneSource }) => {
       {t(`scene.source.${source}` as "scene.source.builtin")}
     </Badge>
   );
-};
+}
 
-/**
- * Scene selection stays distinct from the session configuration row. Manual overrides still mark
- * the chip "customized" without mutating the scene definition.
- */
-export const SceneChip = ({ config }: { readonly config: SessionConfig }) => {
+export function SceneChip({ config }: { readonly config: SessionConfig }) {
   const t = useT();
   const { locale } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -207,12 +201,9 @@ export const SceneChip = ({ config }: { readonly config: SessionConfig }) => {
       </PopoverContent>
     </Popover>
   );
-};
+}
 
-/**
-Full scene picker dialog: every resolved scene with description and source badge.
-*/
-export const ScenePicker = ({
+export function ScenePicker({
   scenes,
   active,
   auto,
@@ -232,7 +223,7 @@ export const ScenePicker = ({
   readonly onEdit: (scene: SceneInfo) => void;
   readonly onDuplicate: (scene: SceneInfo) => void;
   readonly onClose: () => void;
-}) => {
+}) {
   const t = useT();
   const { locale } = useLanguage();
   const toast = useToast();
@@ -350,13 +341,9 @@ export const ScenePicker = ({
       </DialogContent>
     </Dialog>
   );
-};
+}
 
-/**
- * The escalation confirmation (docs/reference/scenes.md §Security): a scene may never loosen permissions
- * silently — this dialog names both modes and the user decides.
- */
-export const SceneEscalationDialog = ({
+export function SceneEscalationDialog({
   sceneLabel,
   from,
   to,
@@ -368,7 +355,7 @@ export const SceneEscalationDialog = ({
   readonly to: string;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
-}) => {
+}) {
   const t = useT();
   const modeName = (m: string) => t(`mode.${m}` as "mode.ask");
   return (
@@ -393,4 +380,4 @@ export const SceneEscalationDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

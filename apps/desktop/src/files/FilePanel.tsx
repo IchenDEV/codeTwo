@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+
+import { CompositeActionRow } from "@/components/business/composite-action-row";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   AtSign,
   ChevronRight,
@@ -14,6 +24,11 @@ import {
   RefreshCw,
   Trash2,
 } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   confirmNative,
@@ -25,22 +40,8 @@ import {
   renamePath,
 } from "../bridge";
 import type { DirectoryEntry } from "../bridge";
-import { useToast } from "../ui/toast";
 import { useT } from "../i18n";
-import { CompositeActionRow } from "@/components/business/composite-action-row";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { TooltipButton } from "@/components/ui/tooltip";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuGroup,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { cn } from "@/lib/utils";
+import { useToast } from "../ui/toast";
 
 /**
 A directory's children, once loaded. Absent means "not expanded, or still loading".
@@ -68,27 +69,13 @@ function copyName(path: string): string {
   return dir ? `${dir}/${dup}` : dup;
 }
 
-/**
- * A folder's children, opened and closed with a height transition.
- *
- * The height is measured rather than expressed as `grid-template-rows: 0fr → 1fr`, which is the
- * tidier trick but leans on interpolating a track size — support this app can't check for itself,
- * since it ships on whatever WKWebView the user's macOS has. Measuring works on every engine, and
- * an animation that silently does nothing is worse than a few lines of arithmetic.
- *
- * Once open the height goes back to `auto`, so a nested folder expanding inside this one isn't
- * clipped by a pixel value measured before it existed. Closing has to pin that auto height for a
- * frame first: a browser cannot transition *from* a value it was never given.
- *
- * Children stay mounted while closed — something has to still be there to animate on the way out.
- */
-const Branch = ({
+function Branch({
   open,
   children,
 }: {
   readonly open: boolean;
   readonly children: ReactNode;
-}) => {
+}) {
   const inner = useRef<HTMLDivElement | null>(null);
   /**
   `null` is "no explicit height" — the subtree sizes itself.
@@ -129,9 +116,9 @@ const Branch = ({
       <div ref={inner}>{children}</div>
     </div>
   );
-};
+}
 
-export const FilePanel = ({
+export function FilePanel({
   cwd,
   onInsert,
   onOpen,
@@ -150,7 +137,7 @@ export const FilePanel = ({
   Which file the viewer is showing, so the tree can mark it.
   */
   readonly openPath: string | null;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const [loaded, setLoaded] = useState<Loaded>({});
@@ -535,7 +522,7 @@ export const FilePanel = ({
           variant="ghost"
           size="icon"
           className="size-7 shrink-0"
-          disabled={!cwd}
+          disabled={cwd == null || cwd === ""}
           onClick={() => setDraft({ kind: "new-file", parent: "", value: "" })}
         >
           <FilePlus className="size-3.5" />
@@ -545,7 +532,7 @@ export const FilePanel = ({
           variant="ghost"
           size="icon"
           className="size-7 shrink-0"
-          disabled={!cwd}
+          disabled={cwd == null || cwd === ""}
           onClick={() =>
             setDraft({ kind: "new-folder", parent: "", value: "" })
           }
@@ -570,11 +557,13 @@ export const FilePanel = ({
             ? draftRow(0)
             : null}
 
-          {error ? (
+          {error != null && error !== "" ? (
             <p className="text-callout text-destructive px-2 py-3">{error}</p>
           ) : roots.length === 0 && !draft ? (
             <p className="text-callout text-muted-foreground px-2 py-3">
-              {cwd ? t("files.empty") : t("files.noProject")}
+              {cwd != null && cwd !== ""
+                ? t("files.empty")
+                : t("files.noProject")}
             </p>
           ) : (
             level("", 0)
@@ -583,4 +572,4 @@ export const FilePanel = ({
       </ScrollArea>
     </div>
   );
-};
+}

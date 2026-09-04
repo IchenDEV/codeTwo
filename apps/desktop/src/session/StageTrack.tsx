@@ -1,20 +1,21 @@
 import { useState } from "react";
-import { Check, Lock } from "@/components/ui/icons";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Check, Lock } from "@/components/ui/icons";
 import {
   Popover,
   PopoverContent,
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useT } from "../i18n";
+import { cn } from "@/lib/utils";
+
 import type {
   PipelineInstanceDetail,
   PipelineStageStatus,
   SceneArtifactRecord,
 } from "../bridge";
+import { useT } from "../i18n";
 
 function newestPerKey(artifacts: SceneArtifactRecord[]): SceneArtifactRecord[] {
   const seen = new Set<string>();
@@ -29,13 +30,13 @@ function newestPerKey(artifacts: SceneArtifactRecord[]): SceneArtifactRecord[] {
   return out;
 }
 
-const StagePopover = ({
+function StagePopover({
   stage,
   onSelectSession,
 }: {
   readonly stage: PipelineStageStatus;
   readonly onSelectSession: (sessionId: string) => void;
-}) => {
+}) {
   const t = useT();
   const artifacts = newestPerKey(stage.artifacts);
   return (
@@ -91,15 +92,15 @@ const StagePopover = ({
       )}
     </PopoverContent>
   );
-};
+}
 
-export const StageTrack = ({
+export function StageTrack({
   detail,
   onSelectSession,
 }: {
   readonly detail: PipelineInstanceDetail;
   readonly onSelectSession: (sessionId: string) => void;
-}) => {
+}) {
   const t = useT();
   const [openStage, setOpenStage] = useState<string | null>(null);
   return (
@@ -174,4 +175,4 @@ export const StageTrack = ({
       </div>
     </div>
   );
-};
+}

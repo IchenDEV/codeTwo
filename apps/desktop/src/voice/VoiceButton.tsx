@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic } from "@/components/ui/icons";
-import { isDesktop, transcribeAudio, voiceAvailable } from "../bridge";
-import { preferredRecordingType, toWav16kMono } from "./wav";
-import { shouldUseWebSpeech } from "./platform";
-import { Button } from "@/components/ui/button";
+
 import { ActivityOrb } from "@/components/ui/activity-orb";
+import { Button } from "@/components/ui/button";
+import { Mic } from "@/components/ui/icons";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useToast } from "../ui/toast";
+
+import { isDesktop, transcribeAudio, voiceAvailable } from "../bridge";
 import { useT } from "../i18n";
 import type { SceneInfo, SceneSlotDefinition } from "../session/scene";
+import { useToast } from "../ui/toast";
+import { shouldUseWebSpeech } from "./platform";
+import { preferredRecordingType, toWav16kMono } from "./wav";
 
 type Mode = "idle" | "listening" | "transcribing" | "structuring";
 
@@ -84,19 +86,7 @@ export function makeTranscriptHandler(
   };
 }
 
-/**
- * Voice input. Prefers the webview's built-in speech recognition (live, no setup); otherwise records
- * audio and hands it to the core's configured local transcriber.
- *
- * Two capture gestures share one button: press-and-hold (≥300ms) records for exactly the duration
- * of the press, while a short press falls through to the original click-to-toggle — which is also
- * what keyboard Enter/Space always do, so the accessibility path is unchanged.
- *
- * With `onTranscript` set, finals are buffered and delivered once on stop (the R11 structured-brief
- * path, with a "structuring" spinner while the handler runs); without it, behavior is identical to
- * the original per-chunk `onText` dictation.
- */
-export const VoiceButton = ({
+export function VoiceButton({
   onText,
   onTranscript,
   hint,
@@ -104,7 +94,7 @@ export const VoiceButton = ({
   readonly onText: (text: string) => void;
   readonly onTranscript?: (full: string) => Promise<void>;
   readonly hint?: string;
-}) => {
+}) {
   const [mode, setMode] = useState<Mode>("idle");
   const [hasLocal, setHasLocal] = useState(false);
   const toast = useToast();
@@ -222,7 +212,7 @@ export const VoiceButton = ({
   };
 
   const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
+    if (navigator.mediaDevices?.getUserMedia == null) {
       toast(t("voice.noMicApi"), "error");
       return;
     }
@@ -233,7 +223,10 @@ export const VoiceButton = ({
     }
     streamRef.current = stream;
     const mimeType = preferredRecordingType();
-    const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const mr = new MediaRecorder(
+      stream,
+      mimeType != null && mimeType !== "" ? { mimeType } : undefined
+    );
     chunksRef.current = [];
     mr.ondataavailable = (e) => {
       if (e.data.size > 0) {
@@ -273,8 +266,8 @@ export const VoiceButton = ({
         } else {
           toast(t("voice.noSpeech"), "error");
         }
-      } catch (e) {
-        toast(t("voice.transcribeFailed", { error: String(e) }), "error");
+      } catch (error) {
+        toast(t("voice.transcribeFailed", { error: String(error) }), "error");
       }
       setMode("idle");
     };
@@ -311,8 +304,8 @@ export const VoiceButton = ({
         // Say so out loud, and name the fix — the button used to look simply broken here.
         toast(t("voice.unavailable"), "error");
       }
-    } catch (e) {
-      toast(t("voice.micUnavailable", { error: String(e) }), "error");
+    } catch (error) {
+      toast(t("voice.micUnavailable", { error: String(error) }), "error");
       setMode("idle");
     }
   };
@@ -399,8 +392,10 @@ export const VoiceButton = ({
       />
       <TooltipContent>
         {label}
-        {hint ? <span className="ml-1.5 opacity-60">{hint}</span> : null}
+        {hint != null && hint !== "" ? (
+          <span className="ml-1.5 opacity-60">{hint}</span>
+        ) : null}
       </TooltipContent>
     </Tooltip>
   );
-};
+}

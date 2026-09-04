@@ -207,12 +207,12 @@ export class LspClient {
       }
       this.pending.delete(id);
       const error = asJsonObject(msg.error);
-      if (error != null) {
+      if (error == null) {
+        pending.resolve(msg.result ?? null);
+      } else {
         pending.reject(
           new Error(String(stringField(error, "message") ?? "LSP error"))
         );
-      } else {
-        pending.resolve(msg.result ?? null);
       }
     } else if (msg.method === "textDocument/publishDiagnostics") {
       const params = objectField(msg, "params");

@@ -1,5 +1,5 @@
-import * as React from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
+import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -7,22 +7,24 @@ import { cn } from "@/lib/utils";
 const tooltipFirstOpenDelay = 600;
 const tooltipInstantPhaseTimeout = 400;
 
-const TooltipProvider = ({
+function TooltipProvider({
   delay = tooltipFirstOpenDelay,
   timeout = tooltipInstantPhaseTimeout,
   ...props
-}: TooltipPrimitive.Provider.Props) => (
-  <TooltipPrimitive.Provider
-    data-slot="tooltip-provider"
-    delay={delay}
-    timeout={timeout}
-    {...props}
-  />
-);
+}: TooltipPrimitive.Provider.Props) {
+  return (
+    <TooltipPrimitive.Provider
+      data-slot="tooltip-provider"
+      delay={delay}
+      timeout={timeout}
+      {...props}
+    />
+  );
+}
 
-const Tooltip = ({ ...props }: TooltipPrimitive.Root.Props) => (
-  <TooltipPrimitive.Root data-slot="tooltip" {...props} />
-);
+function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
+}
 
 const TooltipTrigger = React.forwardRef<
   HTMLButtonElement,
@@ -32,7 +34,7 @@ const TooltipTrigger = React.forwardRef<
 ));
 TooltipTrigger.displayName = "TooltipTrigger";
 
-const TooltipContent = ({
+function TooltipContent({
   className,
   side = "top",
   sideOffset = 4,
@@ -44,29 +46,31 @@ const TooltipContent = ({
   Pick<
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) => (
-  <TooltipPrimitive.Portal>
-    <TooltipPrimitive.Positioner
-      align={align}
-      alignOffset={alignOffset}
-      side={side}
-      sideOffset={sideOffset}
-      className="isolate z-50"
-    >
-      <TooltipPrimitive.Popup
-        data-slot="tooltip-content"
-        className={cn(
-          "pop-layer rounded-control bg-raised text-metadata text-content shadow-raised z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 px-2 py-1 text-balance",
-          className
-        )}
-        {...props}
+  >) {
+  return (
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
+        side={side}
+        sideOffset={sideOffset}
+        className="isolate z-50"
       >
-        {children}
-        <TooltipPrimitive.Arrow className="bg-raised fill-raised z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
-      </TooltipPrimitive.Popup>
-    </TooltipPrimitive.Positioner>
-  </TooltipPrimitive.Portal>
-);
+        <TooltipPrimitive.Popup
+          data-slot="tooltip-content"
+          className={cn(
+            "pop-layer rounded-control bg-raised text-metadata text-content shadow-raised z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 px-2 py-1 text-balance",
+            className
+          )}
+          {...props}
+        >
+          {children}
+          <TooltipPrimitive.Arrow className="bg-raised fill-raised z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+        </TooltipPrimitive.Popup>
+      </TooltipPrimitive.Positioner>
+    </TooltipPrimitive.Portal>
+  );
+}
 
 interface TooltipButtonProps extends React.ComponentProps<typeof Button> {
   readonly label: string;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { workspaceOpenCommand } from "../src/electrobun/workspaceOpen";
 import type { WorkspaceOpenTarget } from "../src/electrobun/rpc";
+import { workspaceOpenCommand } from "../src/electrobun/workspaceOpen";
 
 describe("workspaceOpenCommand", () => {
   test("builds argv-safe macOS editor launcher commands", () => {

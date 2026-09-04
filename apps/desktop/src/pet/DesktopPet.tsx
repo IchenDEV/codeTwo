@@ -26,13 +26,13 @@ export function desktopPetContextMenu(
   return [{ action: desktopPetCloseAction, label: closeLabel, type: "item" }];
 }
 
-export const DesktopPetBridge = ({
+export function DesktopPetBridge({
   animation,
   bubble,
 }: {
   readonly animation: CodeTwoPetAnimation;
   readonly bubble: string | null;
-}) => {
+}) {
   const appearance = useAppearanceSettings();
   const pendingState = useRef<DesktopPetState | null>(null);
   const updateTimer = useRef<number>();
@@ -96,9 +96,9 @@ export const DesktopPetBridge = ({
   }, []);
 
   return null;
-};
+}
 
-export const DesktopPetWindow = () => {
+export function DesktopPetWindow() {
   const t = useT();
   const [state, setState] = useState<DesktopPetState | null>(null);
 
@@ -154,4 +154,4 @@ export const DesktopPetWindow = () => {
       />
     </main>
   );
-};
+}

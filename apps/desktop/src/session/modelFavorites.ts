@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+import { fromDomAny } from "../lib/ipcResult";
+import { asJsonObject } from "../lib/jsonValue";
+
 export const modelFavoritesStorageKey = "codetwo.modelFavorites";
 
 const modelFavoritesVersion = 1;
@@ -137,8 +140,15 @@ export function useProviderModelFavorites(provider: string) {
       setFavorites(favoritesForProvider(provider));
     };
     const syncFromPicker = (event: Event) => {
-      const { detail } = event as CustomEvent<ModelFavoritesChangeDetail>;
-      if (detail?.provider === provider) {
+      const detail = asJsonObject(
+        fromDomAny(event instanceof CustomEvent ? event.detail : undefined)
+      );
+      if (
+        detail != null &&
+        detail.provider === provider &&
+        Array.isArray(detail.favorites) &&
+        detail.favorites.every((entry) => typeof entry === "string")
+      ) {
         setFavorites(detail.favorites);
       }
     };

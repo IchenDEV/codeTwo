@@ -243,12 +243,21 @@ const categoryKeys: Record<string, StringKey> = {
 };
 
 export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
-  const status = Object.fromEntries(
-    Object.entries(statusKeys).map(([key, value]) => [key, t(value)])
-  ) as Record<PluginManagerStatus, string>;
-  const sourceNames = Object.fromEntries(
-    Object.entries(sourceKeys).map(([key, value]) => [key, t(value)])
-  ) as Record<PluginManagerSource, string>;
+  const status: Record<PluginManagerStatus, string> = {
+    active: t(statusKeys.active),
+    disabled: t(statusKeys.disabled),
+    disposed: t(statusKeys.disposed),
+    failed: t(statusKeys.failed),
+    loading: t(statusKeys.loading),
+    pending: t(statusKeys.pending),
+    requires_auth: t(statusKeys.requires_auth),
+    unsupported: t(statusKeys.unsupported),
+  };
+  const sourceNames: Record<PluginManagerSource, string> = {
+    builtin: t(sourceKeys.builtin),
+    bundle: t(sourceKeys.bundle),
+    host: t(sourceKeys.host),
+  };
   return {
     activeResources: t("pluginManager.activeResources"),
     advancedJson: t("pluginManager.advancedJson"),
@@ -429,7 +438,7 @@ export function localizePluginManagerCatalog(
   t: Translate
 ): PluginManagerCatalogModel {
   const pluginName = (id: string, fallback: string) =>
-    Boolean(pluginKeys[id]) ? t(pluginKeys[id].name) : fallback;
+    pluginKeys[id] ? t(pluginKeys[id].name) : fallback;
   return {
     ...model,
     components: model.components.map((component) => {

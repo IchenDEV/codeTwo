@@ -1,11 +1,11 @@
-import { Minimize2, X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
+import { Minimize2, X } from "@/components/ui/icons";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
+import { useT } from "../i18n";
 import type { ContextCategory, ContextWindow } from "./contextWindow";
 import { formatContextTokens, contextWindowPercentage } from "./contextWindow";
-import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
 
 /**
  * Fixed palette for context categories. Color follows the category identity,
@@ -25,7 +25,7 @@ function categoryColor(id: string): string {
   return categoryColors[id] ?? "var(--ds-color-text-muted)";
 }
 
-const CategoryRow = ({ category }: { readonly category: ContextCategory }) => {
+function CategoryRow({ category }: { readonly category: ContextCategory }) {
   const t = useT();
   const key =
     `context.category.${category.id}` as "context.category.system_prompt";
@@ -45,19 +45,15 @@ const CategoryRow = ({ category }: { readonly category: ContextCategory }) => {
       </span>
     </div>
   );
-};
+}
 
-/**
- * A segmented bar that shows how each context category fills the total window.
- * Each segment's width is proportional to its token count relative to the total capacity.
- */
-const SegmentedBar = ({
+function SegmentedBar({
   categories,
   capacity,
 }: {
   readonly categories: ContextCategory[];
   readonly capacity: number;
-}) => {
+}) {
   if (capacity <= 0) {
     return null;
   }
@@ -81,9 +77,9 @@ const SegmentedBar = ({
       })}
     </div>
   );
-};
+}
 
-export const ContextBreakdown = ({
+export function ContextBreakdown({
   contextWindow,
   onClose,
   onCompact,
@@ -95,11 +91,11 @@ export const ContextBreakdown = ({
   readonly onCompact?: () => void;
   readonly compactDisabled?: boolean;
   readonly compactDisabledReason?: string | null;
-}) => {
+}) {
   const t = useT();
   const percentage = contextWindowPercentage(contextWindow);
-  const percentLabel = percentage !== null ? Math.round(percentage) : 0;
-  const breakdown = contextWindow.breakdown;
+  const percentLabel = percentage === null ? 0 : Math.round(percentage);
+  const { breakdown } = contextWindow;
 
   return (
     <div className="w-80">
@@ -184,7 +180,9 @@ export const ContextBreakdown = ({
             <Minimize2 className="size-3.5" />
             {t("context.compact")}
           </Button>
-          {compactDisabled && compactDisabledReason ? (
+          {compactDisabled &&
+          compactDisabledReason != null &&
+          compactDisabledReason !== "" ? (
             <p className="text-callout text-muted-foreground mt-1.5">
               {compactDisabledReason}
             </p>
@@ -193,4 +191,4 @@ export const ContextBreakdown = ({
       ) : null}
     </div>
   );
-};
+}

@@ -14,8 +14,8 @@ import { useT } from "../i18n";
 import type { Translate } from "../i18n";
 import { currentDesktopPlatform } from "../platform";
 import { ChartBlock, parseChartSpec } from "./ChartBlock";
-import { VisualizationFrame } from "./VisualizationFrame";
 import { splitRichText } from "./visualization";
+import { VisualizationFrame } from "./VisualizationFrame";
 
 export type BuiltinLinkTarget =
   | { kind: "web"; url: string }
@@ -50,7 +50,7 @@ function fileTarget(
   hash = ""
 ): Extract<BuiltinLinkTarget, { kind: "file" }> | null {
   let path = decodePath(rawPath);
-  if (!path) {
+  if (path == null || path === "") {
     return null;
   }
 
@@ -121,8 +121,8 @@ export function parseBuiltinLink(
     return null;
   }
   const hashIndex = raw.lastIndexOf("#");
-  const hash = hashIndex >= 0 ? raw.slice(hashIndex) : "";
-  const path = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
+  const hash = hashIndex !== -1 ? raw.slice(hashIndex) : "";
+  const path = hashIndex !== -1 ? raw.slice(0, hashIndex) : raw;
   return fileTarget(path, hash);
 }
 
@@ -169,7 +169,9 @@ function nativeFilePath(path: string, workspaceRoot?: string | null): string {
   }
   const relative = workspaceRelativeLinkPath(path, workspaceRoot);
   const root = workspaceRoot?.replace(/[\\/]+$/u, "");
-  return relative && root ? `${root}/${relative}` : path;
+  return relative != null && relative !== "" && root != null && root !== ""
+    ? `${root}/${relative}`
+    : path;
 }
 
 export function builtinLinkMenuItems(
@@ -248,13 +250,13 @@ export function builtinLinkMenuItems(
 
 const LinkActionsContext = createContext<BuiltinLinkActions>({});
 
-const BuiltinLink = ({
+function BuiltinLink({
   href,
   children,
 }: {
   readonly href?: string;
   readonly children?: ReactNode;
-}) => {
+}) {
   const t = useT();
   const actions = useContext(LinkActionsContext);
   const target = parseBuiltinLink(href);
@@ -292,7 +294,11 @@ const BuiltinLink = ({
         break;
       }
       case "open-file-in-app": {
-        if (target.kind === "file" && workspacePath) {
+        if (
+          target.kind === "file" &&
+          workspacePath != null &&
+          workspacePath !== ""
+        ) {
           actions.openFileLink?.(target);
         }
         break;
@@ -348,7 +354,11 @@ const BuiltinLink = ({
         event.preventDefault();
         if (target.kind === "web") {
           void openExternal(target.url);
-        } else if (workspacePath && actions.openFileLink) {
+        } else if (
+          workspacePath != null &&
+          workspacePath !== "" &&
+          actions.openFileLink
+        ) {
           actions.openFileLink(target);
         } else {
           void openNativePath(
@@ -361,7 +371,7 @@ const BuiltinLink = ({
       {children}
     </a>
   );
-};
+}
 
 const components: Components = {
   a: ({ href, children }) => <BuiltinLink href={href}>{children}</BuiltinLink>,
@@ -373,7 +383,7 @@ const components: Components = {
   code: ({ className, children }) => (
     <code
       className={
-        className
+        className != null && className !== ""
           ? `${className} text-code font-mono`
           : "rounded-control bg-fill-quiet text-code text-foreground px-1 py-0.5 font-mono"
       }
@@ -445,7 +455,7 @@ const components: Components = {
   ),
 };
 
-export const MarkdownContent = ({
+export function MarkdownContent({
   text,
   streaming = false,
   linkActions,
@@ -453,7 +463,7 @@ export const MarkdownContent = ({
   readonly text: string;
   readonly streaming?: boolean;
   readonly linkActions?: BuiltinLinkActions;
-}) => {
+}) {
   const segments = splitRichText(text, streaming);
   return (
     <LinkActionsContext.Provider value={linkActions ?? {}}>
@@ -484,4 +494,4 @@ export const MarkdownContent = ({
       </div>
     </LinkActionsContext.Provider>
   );
-};
+}

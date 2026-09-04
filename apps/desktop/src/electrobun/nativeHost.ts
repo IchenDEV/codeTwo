@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 
+import { assertIpcResult } from "../lib/ipcResult";
 import type { DesktopEvent } from "./rpc";
 
 export const desktopHostProtocolVersion = 1;
@@ -316,7 +317,7 @@ export class NativeHost {
   private handleLine(line: string): void {
     let message: HostResponse;
     try {
-      message = JSON.parse(line) as HostResponse;
+      message = assertIpcResult<HostResponse>(JSON.parse(line) as unknown);
     } catch (_error) {
       throw new Error(
         `C2 Plugin Kernel emitted invalid protocol data: ${error(_error).message}`

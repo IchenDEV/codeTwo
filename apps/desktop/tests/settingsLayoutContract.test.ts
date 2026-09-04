@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 const source = readFileSync(
   new URL("../src/settings/SettingsPage.tsx", import.meta.url),

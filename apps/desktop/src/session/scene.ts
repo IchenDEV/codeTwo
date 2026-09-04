@@ -1,6 +1,6 @@
+import type { MemoryAccess } from "../bridge";
 import { sessionModes } from "./mode";
 import type { SessionMode } from "./mode";
-import type { MemoryAccess } from "../bridge";
 
 /**
  * Agent Scenes 1.0.0 wire shapes and pure helpers (see docs/reference/scenes.md).
@@ -106,7 +106,10 @@ export type SceneHookEvent =
   | "schedule";
 
 export type SceneHookActionKind =
-  "suggest_scene" | "suggest_next" | "run_macro" | "notify";
+  | "suggest_scene"
+  | "suggest_next"
+  | "run_macro"
+  | "notify";
 
 export interface SceneHook {
   on: SceneHookEvent;
@@ -186,7 +189,10 @@ export interface SceneNextSuggestion {
 }
 
 export type MemoryPresetId =
-  "standard" | "read_only" | "private" | "learn_only";
+  | "standard"
+  | "read_only"
+  | "private"
+  | "learn_only";
 
 /**
 Mirrors core `memory_preset_policy`, in the frontend's (read, write) vocabulary.
@@ -218,7 +224,7 @@ export function sceneTitle(scene: SceneInfo, locale: string): string {
 }
 
 export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
-  const execution = scene.execution;
+  const { execution } = scene;
   if (!execution) {
     return false;
   }
@@ -261,7 +267,7 @@ export function softApplyPending(
   scene: SceneInfo,
   live: LivePosture | null
 ): string[] {
-  const execution = scene.execution;
+  const { execution } = scene;
   if (!execution) {
     return [];
   }

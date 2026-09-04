@@ -29,7 +29,7 @@ describe("context window projection", () => {
   test("keeps background sessions isolated from the active projection", () => {
     let state: ContextWindowBySession = {};
     state = updateContextWindow(state, usage("active", 53_000, 200_000));
-    state = updateContextWindow(state, usage("background", 2_000, 16_000));
+    state = updateContextWindow(state, usage("background", 2000, 16_000));
 
     expect(activeContextWindow(state, "active")).toEqual({
       usedTokens: 53_000,
@@ -37,7 +37,7 @@ describe("context window projection", () => {
       breakdown: null,
     });
     expect(activeContextWindow(state, "background")).toEqual({
-      usedTokens: 2_000,
+      usedTokens: 2000,
       contextWindow: 16_000,
       breakdown: null,
     });
@@ -47,12 +47,12 @@ describe("context window projection", () => {
   test("clears only the selected session after a model change", () => {
     let state: ContextWindowBySession = {
       active: { usedTokens: 53_000, contextWindow: 200_000, breakdown: null },
-      background: { usedTokens: 2_000, contextWindow: 16_000, breakdown: null },
+      background: { usedTokens: 2000, contextWindow: 16_000, breakdown: null },
     };
     state = clearContextWindow(state, "active");
     expect(state.active).toBeNull();
     expect(state.background).toEqual({
-      usedTokens: 2_000,
+      usedTokens: 2000,
       contextWindow: 16_000,
       breakdown: null,
     });
@@ -97,12 +97,12 @@ describe("context window projection", () => {
       used_tokens: 42_300,
       context_window: 1_000_000,
       breakdown: [
-        { id: "system_prompt", tokens: 3_500 },
+        { id: "system_prompt", tokens: 3500 },
         { id: "tool_definitions", tokens: 16_000 },
         { id: "rules", tokens: 158 },
-        { id: "skills", tokens: 4_500 },
+        { id: "skills", tokens: 4500 },
         { id: "mcp_dynamic_tools", tokens: 16_100 },
-        { id: "subagent_definitions", tokens: 1_100 },
+        { id: "subagent_definitions", tokens: 1100 },
         { id: "conversation", tokens: 925 },
       ],
     };
@@ -110,7 +110,7 @@ describe("context window projection", () => {
     expect(value?.breakdown).toHaveLength(7);
     expect(value?.breakdown?.[0]).toEqual({
       id: "system_prompt",
-      tokens: 3_500,
+      tokens: 3500,
     });
   });
 
@@ -121,13 +121,13 @@ describe("context window projection", () => {
       used_tokens: 10_000,
       context_window: 200_000,
       breakdown: [
-        { id: "valid", tokens: 5_000 },
+        { id: "valid", tokens: 5000 },
         { id: "", tokens: -1 },
         { tokens: 100 } as any,
         null as any,
       ],
     };
     const value = contextWindowFromEvent(event);
-    expect(value?.breakdown).toEqual([{ id: "valid", tokens: 5_000 }]);
+    expect(value?.breakdown).toEqual([{ id: "valid", tokens: 5000 }]);
   });
 });

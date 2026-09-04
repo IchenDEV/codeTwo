@@ -1,10 +1,12 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+
 import React, { useEffect, useState } from "react";
+
 import { activateDom, dom, restoreDom } from "../../tests/domTestHarness";
 
 const canvasStyles = await Bun.file(
-  new URL("./styles.css", import.meta.url)
+  new URL("styles.css", import.meta.url)
 ).text();
 
 let act: any;
@@ -108,7 +110,7 @@ function fakeRectangleElement(id = "theme-rectangle") {
   };
 }
 
-const FakeExcalidraw = (props: any) => {
+function FakeExcalidraw(props: any) {
   latestProps = props;
   const [rectangleSelected, setRectangleSelected] = useState(false);
   useEffect(() => {
@@ -122,18 +124,18 @@ const FakeExcalidraw = (props: any) => {
       getAppState: () => fakeState.appState,
       getFiles: () => fakeState.files,
       getSceneElements: () => fakeState.elements,
-      refresh: () => undefined,
+      refresh: () => {},
       resetScene: ({ elements, appState, files }: any) => {
         fakeState.elements = elements ?? [];
-        fakeState.appState = { ...fakeState.appState, ...(appState ?? {}) };
+        fakeState.appState = { ...fakeState.appState, ...appState };
         fakeState.files = files ?? {};
       },
-      setActiveTool: () => undefined,
+      setActiveTool: () => {},
       updateScene: ({ elements, appState }: any) => {
-        if (elements) {
+        if (elements != null) {
           fakeState.elements = elements;
         }
-        if (appState) {
+        if (appState != null) {
           fakeState.appState = { ...fakeState.appState, ...appState };
         }
         latestProps?.onChange?.(
@@ -199,7 +201,7 @@ const FakeExcalidraw = (props: any) => {
       ) : null}
     </div>
   );
-};
+}
 
 mock.module("./styles.css", () => ({}));
 mock.module("./excalidrawAdapter", () => ({
@@ -362,7 +364,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
         initiallyExpanded
       />
     );
-    await act(async () => undefined);
+    await act(async () => {});
     expect(latestProps.theme).toBe("dark");
     expect(
       (container.firstElementChild as HTMLElement).dataset.canvasTheme
@@ -380,7 +382,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
         initiallyExpanded
       />
     );
-    await act(async () => undefined);
+    await act(async () => {});
     expect(latestProps.theme).toBe("light");
     expect(
       (historical.container.firstElementChild as HTMLElement).dataset
@@ -414,7 +416,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
   });
 
   test("debounces autosave without incrementing the core-owned revision", async () => {
-    const onChange = mock(() => undefined);
+    const onChange = mock(() => {});
     const value = {
       appState: {
         gridSize: 20,
@@ -441,7 +443,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
         onChange={onChange}
       />
     );
-    await act(async () => undefined);
+    await act(async () => {});
     await act(async () => {
       latestProps.onChange([], fakeState.appState, {});
     });
@@ -459,7 +461,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
       ref: "trusted-image-1",
       width: 80,
     }));
-    const onChange = mock(() => undefined);
+    const onChange = mock(() => {});
     render(
       <CanvasEditor
         initiallyExpanded
@@ -508,7 +510,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
   });
 
   test("exposes only bounded C2 style presets and focuses the editor root", () => {
-    const onFocusChange = mock(() => undefined);
+    const onFocusChange = mock(() => {});
     const { container } = render(
       <CanvasEditor initiallyExpanded onFocusChange={onFocusChange} />
     );
@@ -536,7 +538,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
 
   test("prunes third-party chrome while keeping approved tools, presets, Image, and Done", async () => {
     const { container } = render(<CanvasEditor initiallyExpanded />);
-    await act(async () => undefined);
+    await act(async () => {});
     const root = container.firstElementChild as HTMLElement;
     expect(root.querySelector(".main-menu-trigger")?.hidden).toBe(true);
     expect(root.querySelector('[aria-label="Library"]')?.hidden).toBe(true);
@@ -564,7 +566,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
     fireEvent.click(
       root.querySelector('[aria-label="Rectangle"]') as HTMLElement
     );
-    await act(async () => undefined);
+    await act(async () => {});
     expect(root.querySelector(".selected-shape-actions")?.hidden).toBe(true);
     expect(
       screen.getByRole("button", { name: "Fill color blue" })

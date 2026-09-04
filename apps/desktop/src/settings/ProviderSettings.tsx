@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
+
+import { SearchField } from "@/components/business/search-field";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { ChevronDown, Download, RefreshCw } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 import {
   configureProvider,
@@ -12,19 +22,10 @@ import type {
   ProviderRuntimeConfig,
   ProviderRuntimeOverride,
 } from "../bridge";
-import { ProviderIcon } from "../providers/ProviderIcon";
 import { useT } from "../i18n";
-import { groupModels } from "../session/models";
+import { ProviderIcon } from "../providers/ProviderIcon";
 import { useProviderModelPreferences } from "../session/modelPreferences";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { SearchField } from "@/components/business/search-field";
-import { cn } from "@/lib/utils";
+import { groupModels } from "../session/models";
 import { GroupHeading, Page } from "./SettingsPrimitives";
 
 const capabilityLabels = {
@@ -35,10 +36,10 @@ const capabilityLabels = {
   sites: "Sites",
 } as const;
 
-type ProviderOperation = {
+interface ProviderOperation {
   id: string;
   action: "install" | "upgrade" | "enable" | "configure" | "refresh";
-};
+}
 
 function runtimeConfiguration(provider: ProviderInfo): ProviderRuntimeConfig {
   return (
@@ -85,7 +86,7 @@ export function providerRuntimeOverrideFromDraft(draft: {
   };
 }
 
-const ProviderRuntimeEditor = ({
+function ProviderRuntimeEditor({
   provider,
   disabled,
   saving,
@@ -95,7 +96,7 @@ const ProviderRuntimeEditor = ({
   readonly disabled: boolean;
   readonly saving: boolean;
   readonly onSave: (configuration: ProviderRuntimeOverride) => Promise<void>;
-}) => {
+}) {
   const t = useT();
   const configuration = runtimeConfiguration(provider);
   const [displayName, setDisplayName] = useState(
@@ -192,7 +193,8 @@ const ProviderRuntimeEditor = ({
             {t("settings.providerRuntimeCommandHint")}
           </FieldDescription>
         </Field>
-        {configuration.home_environment ? (
+        {configuration.home_environment != null &&
+        configuration.home_environment !== "" ? (
           <Field>
             <FieldLabel htmlFor={`provider-home-${provider.id}`}>
               {t("settings.providerConfigDirectory")}
@@ -291,9 +293,9 @@ const ProviderRuntimeEditor = ({
       </div>
     </div>
   );
-};
+}
 
-const ProviderModels = ({ provider }: { readonly provider: ProviderInfo }) => {
+function ProviderModels({ provider }: { readonly provider: ProviderInfo }) {
   const t = useT();
   const [search, setSearch] = useState("");
   const { hidden, setVisible, showAll } = useProviderModelPreferences(
@@ -375,9 +377,9 @@ const ProviderModels = ({ provider }: { readonly provider: ProviderInfo }) => {
       </p>
     </div>
   );
-};
+}
 
-export const ProviderSettingsPage = ({
+export function ProviderSettingsPage({
   providers,
   reload,
   installer = installProvider,
@@ -397,7 +399,7 @@ export const ProviderSettingsPage = ({
     provider: string,
     configuration: ProviderRuntimeOverride
   ) => Promise<ProviderInfo[]>;
-}) => {
+}) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [operation, setOperation] = useState<ProviderOperation | null>(null);
@@ -419,11 +421,11 @@ export const ProviderSettingsPage = ({
         if (isActive) {
           setMessage({ id: "*", text: t("settings.providerChecked") });
         }
-      } catch (cause) {
+      } catch (error) {
         if (isActive) {
           setError({
             id: "*",
-            text: t("settings.providerRefreshFailed", { error: String(cause) }),
+            text: t("settings.providerRefreshFailed", { error: String(error) }),
           });
         }
       } finally {
@@ -446,10 +448,10 @@ export const ProviderSettingsPage = ({
     try {
       await reload();
       setMessage({ id: "*", text: t("settings.providerChecked") });
-    } catch (cause) {
+    } catch (error) {
       setError({
         id: "*",
-        text: t("settings.providerRefreshFailed", { error: String(cause) }),
+        text: t("settings.providerRefreshFailed", { error: String(error) }),
       });
     } finally {
       setOperation(null);
@@ -485,10 +487,10 @@ export const ProviderSettingsPage = ({
               }),
       });
       await reload?.();
-    } catch (cause) {
+    } catch (error) {
       setError({
         id: providerId,
-        text: t("settings.providerActionFailed", { error: String(cause) }),
+        text: t("settings.providerActionFailed", { error: String(error) }),
       });
     } finally {
       setOperation(null);
@@ -519,10 +521,10 @@ export const ProviderSettingsPage = ({
             }),
       });
       await reload?.();
-    } catch (cause) {
+    } catch (error) {
       setError({
         id: providerId,
-        text: t("settings.providerActionFailed", { error: String(cause) }),
+        text: t("settings.providerActionFailed", { error: String(error) }),
       });
     } finally {
       setOperation(null);
@@ -552,10 +554,10 @@ export const ProviderSettingsPage = ({
         }),
       });
       await reload?.();
-    } catch (cause) {
+    } catch (error) {
       setError({
         id: providerId,
-        text: t("settings.providerActionFailed", { error: String(cause) }),
+        text: t("settings.providerActionFailed", { error: String(error) }),
       });
     } finally {
       setOperation(null);
@@ -620,17 +622,17 @@ export const ProviderSettingsPage = ({
           const isExpanded = expanded.has(provider.id);
           const activeOperation =
             operation?.id === provider.id ? operation.action : null;
-          const status = !isEnabled
-            ? t("settings.providerDisabled")
-            : management.installed
-              ? management.version
+          const status = isEnabled
+            ? management.installed
+              ? management.version != null && management.version !== ""
                 ? t("settings.providerInstalledVersion", {
                     version: management.version,
                   })
                 : t("settings.installed")
               : management.launch_mode === "on_demand"
                 ? t("settings.providerReadyOnDemand")
-                : t("settings.notInstalled");
+                : t("settings.notInstalled")
+            : t("settings.providerDisabled");
           return (
             <div
               key={provider.id}
@@ -673,7 +675,8 @@ export const ProviderSettingsPage = ({
                       <span className="text-body truncate font-medium">
                         {provider.display_name}
                       </span>
-                      {management.version ? (
+                      {management.version != null &&
+                      management.version !== "" ? (
                         <span className="text-metadata text-muted-foreground shrink-0 font-mono">
                           v{management.version}
                         </span>
@@ -806,18 +809,20 @@ export const ProviderSettingsPage = ({
                             {capability.experimental ? (
                               <Badge variant="outline">Experimental</Badge>
                             ) : null}
-                            {capability.version ? (
+                            {capability.version != null &&
+                            capability.version !== "" ? (
                               <span className="text-metadata text-muted-foreground font-mono">
                                 {capability.version}
                               </span>
                             ) : null}
                           </div>
-                          {capability.reason ? (
+                          {capability.reason != null &&
+                          capability.reason !== "" ? (
                             <p className="text-callout text-muted-foreground mt-0.5">
                               {capability.reason}
                             </p>
                           ) : null}
-                          {capability.fix ? (
+                          {capability.fix != null && capability.fix !== "" ? (
                             <p className="text-callout text-foreground/75 mt-0.5">
                               {capability.fix}
                             </p>
@@ -843,4 +848,4 @@ export const ProviderSettingsPage = ({
       </div>
     </Page>
   );
-};
+}

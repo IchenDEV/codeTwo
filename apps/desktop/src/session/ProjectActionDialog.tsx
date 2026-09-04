@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { MessageSquareText, Play } from "@/components/ui/icons";
 
-import type { KeymapEntry, ProjectScript } from "../bridge";
-import { comboFromEvent, formatCombo, isModifierOnly } from "../keys";
-import { useT } from "../i18n";
 import { SettingToggle } from "@/components/business/setting-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,9 +18,14 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { MessageSquareText, Play } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+
+import type { KeymapEntry, ProjectScript } from "../bridge";
+import { useT } from "../i18n";
+import { comboFromEvent, formatCombo, isModifierOnly } from "../keys";
 import { projectActionId, projectActionIssue } from "./projectActions";
 import type { ProjectActionDraft } from "./projectActions";
 
@@ -39,7 +40,7 @@ const emptyAction: ProjectActionDraft = {
   run_on_worktree_create: false,
 };
 
-export const ProjectActionDialog = ({
+export function ProjectActionDialog({
   open,
   actions,
   bindings,
@@ -51,7 +52,7 @@ export const ProjectActionDialog = ({
   readonly bindings: KeymapEntry[];
   readonly onOpenChange: (isOpen: boolean) => void;
   readonly onSave: (action: ProjectScript) => Promise<void>;
-}) => {
+}) {
   const t = useT();
   const [draft, setDraft] = useState<ProjectActionDraft>(emptyAction);
   const [submitted, setSubmitted] = useState(false);
@@ -335,7 +336,10 @@ export const ProjectActionDialog = ({
             )}
           </FieldGroup>
 
-          {saveError || (submitted && validationMessage) ? (
+          {saveError ||
+          (submitted &&
+            validationMessage != null &&
+            validationMessage !== "") ? (
             <FieldError>{saveError ?? validationMessage}</FieldError>
           ) : null}
 
@@ -355,4 +359,4 @@ export const ProjectActionDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

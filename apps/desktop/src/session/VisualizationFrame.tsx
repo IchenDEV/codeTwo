@@ -1,10 +1,11 @@
-import { TriangleAlert } from "@/components/ui/icons";
 import { useEffect, useRef, useState } from "react";
+
+import { TriangleAlert } from "@/components/ui/icons";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
 import { confirmNative, openExternal, readVisualization } from "../bridge";
 import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
-import { Spinner } from "@/components/ui/spinner";
 import {
   visualizationThemeVariables,
   visualizationDocument,
@@ -70,13 +71,13 @@ function subscribeVisualizationMessages(
   };
 }
 
-export const VisualizationFrame = ({
+export function VisualizationFrame({
   reference,
   loader = readVisualization,
 }: {
   readonly reference: VisualizationReference;
   readonly loader?: (path: string) => Promise<string>;
-}) => {
+}) {
   const t = useT();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const confirmingLinkRef = useRef(false);
@@ -164,7 +165,7 @@ export const VisualizationFrame = ({
         typeof message.url === "string"
       ) {
         const link = safeWebLink(message.url);
-        if (link && !confirmingLinkRef.current) {
+        if (link != null && link !== "" && !confirmingLinkRef.current) {
           confirmingLinkRef.current = true;
           void confirmNative(
             t("visualization.openLink", { url: link }),
@@ -198,7 +199,7 @@ export const VisualizationFrame = ({
       </p>
     );
   }
-  if (!source) {
+  if (source == null || source === "") {
     return (
       <output className="text-callout text-muted-foreground my-3 flex items-center gap-2">
         <Spinner className="size-3.5" />
@@ -227,4 +228,4 @@ export const VisualizationFrame = ({
       />
     </div>
   );
-};
+}

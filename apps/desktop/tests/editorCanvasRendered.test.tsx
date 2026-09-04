@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, mock, test } from "bun:test";
+
 import React from "react";
+
 import {
   activateDom,
   button,
@@ -29,7 +31,7 @@ function newFakeEditor() {
     insertBlocks(blocks: any[], reference: any) {
       const index = editor.document.indexOf(reference);
       editor.document.splice(
-        index < 0 ? editor.document.length : index + 1,
+        index === -1 ? editor.document.length : index + 1,
         0,
         ...blocks
       );
@@ -38,7 +40,7 @@ function newFakeEditor() {
     replaceBlocks(blocks: any[], replacement: any[]) {
       const first = editor.document.indexOf(blocks[0]);
       editor.document.splice(
-        first < 0 ? 0 : first,
+        first === -1 ? 0 : first,
         blocks.length,
         ...replacement
       );
@@ -105,7 +107,7 @@ mock.module("@blocknote/react", () => {
     SuggestionMenuController: () => null,
     getDefaultReactSlashMenuItems: () => [],
     useCreateBlockNote: () => {
-      if (!fakeEditor) {
+      if (fakeEditor == null) {
         fakeEditor = newFakeEditor();
       }
       createCount += 1;
@@ -169,12 +171,12 @@ mock.module("../src/skillInline", () => ({
                 .map((inline: any) => inline.text ?? "")
                 .join("")
             : "";
-      if (text) {
+      if (text != null) {
         return [{ type: "text", text }];
       }
       if (Array.isArray(block.content)) {
         const inline = block.content.find(
-          (item: any) => item?.type && item.type !== "text"
+          (item: any) => item?.type != null && item.type !== "text"
         );
         if (inline?.type === "skill") {
           return [

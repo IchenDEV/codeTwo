@@ -1,5 +1,9 @@
 export type CodeTwoPetAnimation =
-  "idle" | "running" | "waiting" | "failed" | "review";
+  | "idle"
+  | "running"
+  | "waiting"
+  | "failed"
+  | "review";
 
 export interface CodeTwoPetActivity {
   loading: boolean;

@@ -1,8 +1,8 @@
 import { useId } from "react";
 import type { ReactNode } from "react";
-import { Check } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
+import { Check } from "@/components/ui/icons";
 
 interface SelectableRowProps {
   readonly label: string;
@@ -15,7 +15,7 @@ interface SelectableRowProps {
   readonly onSelect: () => void;
 }
 
-const SelectableRow = ({
+function SelectableRow({
   label,
   accessibilityContext,
   description,
@@ -24,20 +24,22 @@ const SelectableRow = ({
   selected,
   disabled = false,
   onSelect,
-}: SelectableRowProps) => {
+}: SelectableRowProps) {
   const descriptionId = useId();
   const leadingId = useId();
   const metaId = useId();
   const describedBy =
     [
-      leading ? leadingId : null,
-      description ? descriptionId : null,
-      meta ? metaId : null,
+      leading == null ? null : leadingId,
+      description != null && description !== "" ? descriptionId : null,
+      meta == null ? null : metaId,
     ]
       .filter(Boolean)
       .join(" ") || undefined;
   const accessibleName =
-    accessibilityContext && accessibilityContext !== label
+    accessibilityContext != null &&
+    accessibilityContext !== "" &&
+    accessibilityContext !== label
       ? `${label}, ${accessibilityContext}`
       : label;
 
@@ -53,7 +55,11 @@ const SelectableRow = ({
       aria-pressed={selected}
       disabled={disabled}
       onClick={onSelect}
-      className={description ? "items-start" : "items-center"}
+      className={
+        description != null && description !== ""
+          ? "items-start"
+          : "items-center"
+      }
     >
       <span
         data-slot="selectable-row-indicator"
@@ -62,7 +68,7 @@ const SelectableRow = ({
       >
         {selected ? <Check className="size-3.5" /> : null}
       </span>
-      {leading ? (
+      {leading == null ? null : (
         <span
           id={leadingId}
           data-slot="selectable-row-leading"
@@ -70,12 +76,12 @@ const SelectableRow = ({
         >
           {leading}
         </span>
-      ) : null}
+      )}
       <span data-slot="selectable-row-content" className="min-w-0 flex-1">
         <span data-slot="selectable-row-label" className="block truncate">
           {label}
         </span>
-        {description ? (
+        {description != null && description !== "" ? (
           <span
             id={descriptionId}
             data-slot="selectable-row-description"
@@ -85,7 +91,7 @@ const SelectableRow = ({
           </span>
         ) : null}
       </span>
-      {meta ? (
+      {meta == null ? null : (
         <span
           id={metaId}
           data-slot="selectable-row-meta"
@@ -93,9 +99,9 @@ const SelectableRow = ({
         >
           {meta}
         </span>
-      ) : null}
+      )}
     </Button>
   );
-};
+}
 
 export { SelectableRow, type SelectableRowProps };

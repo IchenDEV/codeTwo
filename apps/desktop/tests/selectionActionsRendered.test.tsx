@@ -1,6 +1,8 @@
 // @ts-nocheck
-import { useRef } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
+
+import { useRef } from "react";
+
 import {
   activateDom,
   click,

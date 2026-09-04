@@ -1,3 +1,4 @@
+import { shikiToMonaco } from "@shikijs/monaco";
 /**
  * Monaco bootstrap for the file editor.
  *
@@ -12,19 +13,18 @@
  */
 import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
-import jsonWorker from "monaco-editor/languages/features/json/json.worker.js?worker";
 import cssWorker from "monaco-editor/languages/features/css/css.worker.js?worker";
 import htmlWorker from "monaco-editor/languages/features/html/html.worker.js?worker";
+import jsonWorker from "monaco-editor/languages/features/json/json.worker.js?worker";
 import tsWorker from "monaco-editor/languages/features/typescript/ts.worker.js?worker";
 import { createHighlighter, bundledLanguages, bundledThemes } from "shiki";
-import { shikiToMonaco } from "@shikijs/monaco";
-
-import { dirtyKey, markDirty } from "./dirty";
 import type {
   HighlighterGeneric,
   LanguageRegistration,
   ThemeRegistration,
 } from "shiki";
+
+import { dirtyKey, markDirty } from "./dirty";
 
 export {
   attachLsp,
@@ -176,9 +176,11 @@ async function grammarFor(
   if (langId === "javascript") {
     return await renamed("jsx", "javascript");
   }
-  if (langId in bundledLanguages) {
-    return (await bundledLanguages[langId as keyof typeof bundledLanguages]())
-      .default;
+  const bundled = Object.entries(bundledLanguages).find(
+    ([id]) => id === langId
+  )?.[1];
+  if (bundled) {
+    return (await bundled()).default;
   }
   return null;
 }

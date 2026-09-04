@@ -12,7 +12,7 @@ if (
 }
 
 const buildDirectory = process.env.ELECTROBUN_BUILD_DIR;
-if (!buildDirectory)
+if (buildDirectory == null || buildDirectory === "")
   throw new Error("ELECTROBUN_BUILD_DIR is required for final package signing");
 
 const bundles = readdirSync(buildDirectory)

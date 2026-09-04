@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, mock, test } from "bun:test";
+
 import { act as reactAct } from "react";
+
 import {
   activateDom,
   button,
@@ -125,9 +127,9 @@ async function openDelegateMenu() {
 }
 
 function menuItems() {
-  return Array.from(
-    dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]')
-  );
+  return [
+    ...dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'),
+  ];
 }
 
 describe("IssuesModal delegation", () => {
@@ -169,6 +171,6 @@ describe("IssuesModal delegation", () => {
     expect(items[0].textContent).toMatch(
       /No scenes available|issueDeleg\.noScenes/u
     );
-    expect(items[0].getAttribute("data-disabled")).not.toBeNull();
+    expect(items[0].dataset.disabled).not.toBeNull();
   });
 });

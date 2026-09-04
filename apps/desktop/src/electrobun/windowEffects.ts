@@ -1,6 +1,6 @@
-import { join } from "node:path";
 import { dlopen, FFIType } from "bun:ffi";
 import type { Pointer } from "bun:ffi";
+import { join } from "node:path";
 
 const libraryName = "libCodeTwoWindowEffects.dylib";
 

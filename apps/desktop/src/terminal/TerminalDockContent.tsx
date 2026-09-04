@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CornerUpLeft, Plus, X } from "@/components/ui/icons";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import { onPtyTitle, ptyDump, ptyKill } from "../bridge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
 import { TerminalPanel } from "./Terminal";
 
 function terminalId(sessionKey: string, slot: number, isTmux: boolean): string {
@@ -14,28 +15,25 @@ function terminalId(sessionKey: string, slot: number, isTmux: boolean): string {
 }
 
 function terminalLabel(title: string | undefined, slot: number): string {
-  if (!title) {
+  if (title == null || title === "") {
     return String(slot);
   }
   return title.split("/").filter(Boolean).pop() ?? title;
 }
 
-type TerminalDockContentProps = {
+interface TerminalDockContentProps {
   readonly cwd: string | null;
   readonly projectPath: string | null;
   readonly sessionKey: string;
   readonly onSendText: (text: string) => void;
-};
+}
 
-/**
-Terminal-specific tabs and lifecycle, rendered inside the generic Dock container.
-*/
-export const TerminalDockContent = ({
+export function TerminalDockContent({
   cwd,
   projectPath,
   sessionKey,
   onSendText,
-}: TerminalDockContentProps) => {
+}: TerminalDockContentProps) {
   const t = useT();
   const [slots, setSlots] = useState<number[]>([1]);
   const [activeSlot, setActiveSlot] = useState(1);
@@ -165,4 +163,4 @@ export const TerminalDockContent = ({
       ))}
     </div>
   );
-};
+}

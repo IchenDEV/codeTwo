@@ -1,6 +1,8 @@
 // @ts-nocheck
-import { act as reactAct } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
+
+import { act as reactAct } from "react";
+
 import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();

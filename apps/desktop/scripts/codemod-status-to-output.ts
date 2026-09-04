@@ -19,7 +19,7 @@ for (const sourceFile of project.getSourceFiles()) {
   const jsxes = sourceFile
     .getDescendantsOfKind(SyntaxKind.JsxElement)
     .concat(
-      sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement) as never,
+      sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement) as never
     )
     .sort((a, b) => b.getStart() - a.getStart());
 
@@ -27,12 +27,18 @@ for (const sourceFile of project.getSourceFiles()) {
   for (const el of sourceFile
     .getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement)
     .sort((a, b) => b.getStart() - a.getStart())) {
-    if (el.wasForgotten()) continue;
+    if (el.wasForgotten()) {
+      continue;
+    }
     const role = el.getAttribute("role");
-    if (!role || !Node.isJsxAttribute(role)) continue;
+    if (!role || !Node.isJsxAttribute(role)) {
+      continue;
+    }
     const init = role.getInitializer();
     const value = init?.getText().replaceAll(/['"]/g, "");
-    if (value !== "status") continue;
+    if (value !== "status") {
+      continue;
+    }
     const tag = el.getTagNameNode().getText();
     if (tag === "output") {
       role.remove();
@@ -41,7 +47,9 @@ for (const sourceFile of project.getSourceFiles()) {
       continue;
     }
     // Only convert semantic-neutral hosts
-    if (!["div", "span", "p", "section", "li"].includes(tag)) continue;
+    if (!["div", "span", "p", "section", "li"].includes(tag)) {
+      continue;
+    }
     el.getTagNameNode().replaceWithText("output");
     role.remove();
     touched = true;
@@ -51,13 +59,19 @@ for (const sourceFile of project.getSourceFiles()) {
   for (const el of sourceFile
     .getDescendantsOfKind(SyntaxKind.JsxElement)
     .sort((a, b) => b.getStart() - a.getStart())) {
-    if (el.wasForgotten()) continue;
+    if (el.wasForgotten()) {
+      continue;
+    }
     const opening = el.getOpeningElement();
     const role = opening.getAttribute("role");
-    if (!role || !Node.isJsxAttribute(role)) continue;
+    if (!role || !Node.isJsxAttribute(role)) {
+      continue;
+    }
     const init = role.getInitializer();
     const value = init?.getText().replaceAll(/['"]/g, "");
-    if (value !== "status") continue;
+    if (value !== "status") {
+      continue;
+    }
     const tag = opening.getTagNameNode().getText();
     if (tag === "output") {
       role.remove();
@@ -65,7 +79,9 @@ for (const sourceFile of project.getSourceFiles()) {
       replaced += 1;
       continue;
     }
-    if (!["div", "span", "p", "section", "li"].includes(tag)) continue;
+    if (!["div", "span", "p", "section", "li"].includes(tag)) {
+      continue;
+    }
     opening.getTagNameNode().replaceWithText("output");
     el.getClosingElement().getTagNameNode().replaceWithText("output");
     role.remove();

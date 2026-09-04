@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
-const source = (path: string) => readFileSync(resolve(root, path), "utf8");
+const source = (path: string) => readFileSync(resolve(root, path), "utf-8");
 
 const appSource = source("src/App.tsx");
 const styleSource = source("src/styles.css");
@@ -53,7 +53,7 @@ describe("desktop interaction performance contracts", () => {
       "./plugins/PluginManagerPage",
       "./docker/DockerPage",
     ]) {
-      expect(appSource).toContain(`import(\"${modulePath}\")`);
+      expect(appSource).toContain(`import("${modulePath}")`);
     }
 
     expect(appSource).not.toContain(

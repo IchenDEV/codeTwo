@@ -14,7 +14,10 @@ let filesChanged = 0;
 let unwrapped = 0;
 
 const isMemoCallee = (text: string) =>
-  text === "useMemo" || text === "useCallback" || text.endsWith(".useMemo") || text.endsWith(".useCallback");
+  text === "useMemo" ||
+  text === "useCallback" ||
+  text.endsWith(".useMemo") ||
+  text.endsWith(".useCallback");
 
 for (const sourceFile of project.getSourceFiles()) {
   let touched = false;
@@ -40,7 +43,10 @@ for (const sourceFile of project.getSourceFiles()) {
     ) {
       // useMemo(fn, deps) evaluates fn(); do not leave the bare function reference.
       replacement = `${factory.getText()}()`;
-    } else if (Node.isArrowFunction(factory) || Node.isFunctionExpression(factory)) {
+    } else if (
+      Node.isArrowFunction(factory) ||
+      Node.isFunctionExpression(factory)
+    ) {
       const body = factory.getBody();
       if (Node.isBlock(body)) {
         const statements = body.getStatements();

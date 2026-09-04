@@ -1,3 +1,4 @@
+import { assertIpcResult } from "../lib/ipcResult";
 import type {
   AppUpdateStatus,
   AppshotCapture,
@@ -15,11 +16,18 @@ type EventListener = (payload: unknown) => void;
 
 const listeners = new Map<string, Set<EventListener>>();
 
+function readGlobalUnknown(name: string): unknown {
+  if (typeof globalThis === "undefined") {
+    return undefined;
+  }
+  if (!Object.prototype.hasOwnProperty.call(globalThis, name)) {
+    return undefined;
+  }
+  return Object.getOwnPropertyDescriptor(globalThis, name)?.value;
+}
+
 export const isElectrobun =
-  typeof window !== "undefined" &&
-  typeof (window as unknown as Record<string, unknown>)[
-    "__electrobunWebviewId"
-  ] === "number";
+  typeof readGlobalUnknown("__electrobunWebviewId") === "number";
 
 let rpcPromise: Promise<Awaited<ReturnType<typeof createClient>>> | null = null;
 
@@ -70,11 +78,12 @@ export async function desktopCall<T>(
   // `request` is itself a function. Property access for a command named `call` resolves to
   // Function.prototype.call instead of Electrobun's proxy method, which sends an undefined RPC
   // method. Use the explicit function form for this one intentionally generic command.
-  return (await rpc.request("call", {
+  const result: unknown = await rpc.request("call", {
     args: argumentsValue,
     name,
     projectPath,
-  })) as T;
+  });
+  return assertIpcResult<T>(result);
 }
 
 export function listenDesktop<T>(
@@ -82,7 +91,7 @@ export function listenDesktop<T>(
   listener: (payload: T) => void
 ): () => void {
   const wrapped: EventListener = (payload) => {
-    listener(payload as T);
+    listener(assertIpcResult<T>(payload));
   };
   const group = listeners.get(name) ?? new Set<EventListener>();
   group.add(wrapped);

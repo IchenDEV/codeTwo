@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+import { fromDomAny } from "../lib/ipcResult";
+import { asJsonObject } from "../lib/jsonValue";
+
 export const modelPreferencesStorageKey = "codetwo.providerModelPreferences";
 
 const modelPreferencesVersion = 1;
@@ -82,14 +85,11 @@ export function loadModelPreferences(
     for (const [provider, preference] of Object.entries(
       candidate.providers
     ).slice(0, maxProviders)) {
-      if (
-        !isSafeProviderKey(provider) ||
-        preference == null ||
-        typeof preference !== "object"
-      ) {
+      const preferenceRecord = asJsonObject(preference);
+      if (!isSafeProviderKey(provider) || preferenceRecord == null) {
         continue;
       }
-      const { hidden } = preference as { hidden?: unknown };
+      const { hidden } = preferenceRecord;
       if (!Array.isArray(hidden)) {
         continue;
       }
@@ -171,8 +171,15 @@ export function useProviderModelPreferences(provider: string) {
       setHidden(hiddenModelsForProvider(provider));
     };
     const syncFromPreference = (event: Event) => {
-      const { detail } = event as CustomEvent<ModelPreferencesChangeDetail>;
-      if (detail?.provider === provider) {
+      const detail = asJsonObject(
+        fromDomAny(event instanceof CustomEvent ? event.detail : undefined)
+      );
+      if (
+        detail != null &&
+        detail.provider === provider &&
+        Array.isArray(detail.hidden) &&
+        detail.hidden.every((entry) => typeof entry === "string")
+      ) {
         setHidden(detail.hidden);
       }
     };

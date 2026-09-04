@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
+import type { SessionInfo } from "../src/bridge";
 import {
   missionRows,
   missionState,
   needsMeCount,
 } from "../src/sidebar/missionControl.ts";
-import type { SessionInfo } from "../src/bridge";
 
 let counter = 0;
 

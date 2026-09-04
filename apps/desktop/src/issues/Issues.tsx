@@ -1,9 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Clapperboard } from "@/components/ui/icons";
-import { listGithubIssues, listIssueDelegations } from "../bridge";
-import type { Issue, IssueDelegation } from "../bridge";
-import type { SceneInfo } from "../session/scene";
-import { useT } from "../i18n";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,21 +15,24 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ChevronDown, ChevronRight, Clapperboard } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+import { listGithubIssues, listIssueDelegations } from "../bridge";
+import type { Issue, IssueDelegation } from "../bridge";
+import { useT } from "../i18n";
+import type { SceneInfo } from "../session/scene";
 
 // GitHub Issues: list open issues for the working dir's repo (via gh) and insert one as context.
 // R12 adds per-row delegation: pick a scene and the issue opens as a provenance-carrying block
 // in a fresh draft fully applied to that scene — you stay assignee.
-/**
-Lazily loaded delegation history for one issue: scene, when, session jump, tracker comment.
-*/
-const DelegationTrail = ({
+function DelegationTrail({
   issue,
   onOpenSession,
 }: {
   readonly issue: Issue;
   readonly onOpenSession?: (session: string) => void;
-}) => {
+}) {
   const t = useT();
   const [rows, setRows] = useState<IssueDelegation[] | null>(null);
 
@@ -72,7 +71,7 @@ const DelegationTrail = ({
           <span className="shrink-0">
             {new Date(row.created_at).toLocaleString()}
           </span>
-          {row.session_id && onOpenSession ? (
+          {row.session_id != null && row.session_id !== "" && onOpenSession ? (
             <Button
               type="button"
               variant="link"
@@ -83,7 +82,7 @@ const DelegationTrail = ({
               {t("issueDeleg.openSession")}
             </Button>
           ) : null}
-          {row.comment_url ? (
+          {row.comment_url != null && row.comment_url !== "" ? (
             <a
               href={row.comment_url}
               target="_blank"
@@ -97,9 +96,9 @@ const DelegationTrail = ({
       ))}
     </div>
   );
-};
+}
 
-export const IssuesModal = ({
+export function IssuesModal({
   cwd,
   scenes,
   onInsert,
@@ -113,7 +112,7 @@ export const IssuesModal = ({
   readonly onDelegate: (issue: Issue, sceneReference: string) => void;
   readonly onOpenSession?: (session: string) => void;
   readonly onClose: () => void;
-}) => {
+}) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const t = useT();
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -144,7 +143,9 @@ export const IssuesModal = ({
         {loading ? (
           <p className="text-metadata text-muted-foreground">Loading via gh…</p>
         ) : null}
-        {err ? <p className="text-metadata text-destructive">{err}</p> : null}
+        {err != null && err !== "" ? (
+          <p className="text-metadata text-destructive">{err}</p>
+        ) : null}
 
         <ScrollArea className="max-h-dialog-content pe-3">
           <div className="space-y-1.5">
@@ -221,7 +222,7 @@ export const IssuesModal = ({
                 )}
               </div>
             ))}
-            {!loading && !err && issues.length === 0 && (
+            {!loading && (err == null || err === "") && issues.length === 0 && (
               <p className="text-body text-muted-foreground p-2">
                 No open issues (or this dir isn’t a GitHub repo).
               </p>
@@ -237,4 +238,4 @@ export const IssuesModal = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

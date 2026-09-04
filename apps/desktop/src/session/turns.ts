@@ -15,7 +15,7 @@ export function canvasIdsToPurgeAfterTurnStart(
   isEditorUnchanged = true
 ): string[] {
   return isAccepted && isEditorUnchanged
-    ? Array.from(new Set(canvasIds.filter((id) => id.length > 0)))
+    ? [...new Set(canvasIds.filter((id) => id.length > 0))]
     : [];
 }
 
@@ -346,7 +346,7 @@ export function isRunning(t: Turn | undefined): boolean {
   return !!t && t.endedAt === undefined;
 }
 
-type ToolUpdate = {
+interface ToolUpdate {
   id: string;
   title: string;
   status: string;
@@ -356,7 +356,7 @@ type ToolUpdate = {
   transcriptSeq?: number | null;
   startedAt?: number;
   endedAt?: number;
-};
+}
 
 function terminalToolStatus(status: string): boolean {
   return [
@@ -380,7 +380,7 @@ function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
     return tools;
   }
   const entry: ToolEntry = {
-    ...(existing ?? {}),
+    ...existing,
     activityTitle:
       existing?.activityTitle != null && existing.activityTitle !== ""
         ? existing.activityTitle
@@ -878,7 +878,7 @@ export function mergeLoadedTurns(
   const liveIndex = live.findIndex(
     (turn) => turn.requestId === loadedTail.requestId
   );
-  if (liveIndex < 0) {
+  if (liveIndex === -1) {
     return [...loaded, ...live];
   }
   const liveTurn = live[liveIndex];

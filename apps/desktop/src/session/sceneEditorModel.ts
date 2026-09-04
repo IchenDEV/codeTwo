@@ -1,3 +1,4 @@
+import { assertIpcResult } from "../lib/ipcResult";
 import type {
   SceneDocument,
   SceneExitCriterion,
@@ -246,7 +247,7 @@ export function parseSceneJson(value: string): {
   error: string | null;
 } {
   try {
-    const scene = JSON.parse(value) as SceneDocument;
+    const scene = assertIpcResult<SceneDocument>(JSON.parse(value) as unknown);
     return { error: null, scene };
   } catch (error) {
     return {

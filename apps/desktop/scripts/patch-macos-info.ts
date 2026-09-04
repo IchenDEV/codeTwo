@@ -22,7 +22,7 @@ const wrapperBundle = process.env.ELECTROBUN_WRAPPER_BUNDLE_PATH;
 const buildDirectory = process.env.ELECTROBUN_BUILD_DIR;
 
 if (process.platform === "win32" && process.env.ELECTROBUN_OS === "win") {
-  if (!buildDirectory) {
+  if (buildDirectory == null || buildDirectory === "") {
     throw new Error(
       "ELECTROBUN_BUILD_DIR is required for Windows icon patching"
     );
@@ -37,25 +37,27 @@ if (process.platform === "win32" && process.env.ELECTROBUN_OS === "win") {
     "rcedit-x64.exe"
   );
   const appName = process.env.ELECTROBUN_APP_NAME;
-  if (!appName)
+  if (appName == null || appName === "") {
     throw new Error(
       "ELECTROBUN_APP_NAME is required for Windows icon patching"
     );
+  }
 
-  const executables = wrapperBundle
-    ? [
-        join(
-          desktopRoot,
-          "node_modules",
-          "electrobun",
-          "dist-win-x64",
-          "extractor.exe"
-        ),
-      ]
-    : [
-        join(buildDirectory, appName, "bin", "launcher.exe"),
-        join(buildDirectory, appName, "bin", "bun.exe"),
-      ];
+  const executables =
+    wrapperBundle != null && wrapperBundle !== ""
+      ? [
+          join(
+            desktopRoot,
+            "node_modules",
+            "electrobun",
+            "dist-win-x64",
+            "extractor.exe"
+          ),
+        ]
+      : [
+          join(buildDirectory, appName, "bin", "launcher.exe"),
+          join(buildDirectory, appName, "bin", "bun.exe"),
+        ];
 
   for (const executable of [icon, rcedit, ...executables]) {
     if (!existsSync(executable)) {
@@ -70,27 +72,31 @@ if (process.platform === "win32" && process.env.ELECTROBUN_OS === "win") {
       stdout: "inherit",
       stderr: "inherit",
     });
-    if (result.exitCode !== 0)
+    if (result.exitCode !== 0) {
       throw new Error(`Could not embed the C2 icon in ${executable}`);
+    }
     console.log(`Embedded the C2 icon in ${executable}`);
   }
 
   process.exit(0);
 }
 
-if (process.platform !== "darwin") process.exit(0);
+if (process.platform !== "darwin") {
+  process.exit(0);
+}
 
 const channelName =
   desktopChannelForIdentifier(process.env.ELECTROBUN_APP_IDENTIFIER) ??
   resolveDesktopChannel(process.env.CODETWO_CHANNEL);
 const channel = DESKTOP_CHANNELS[channelName];
-const bundles = wrapperBundle
-  ? [wrapperBundle]
-  : buildDirectory
-    ? readdirSync(buildDirectory)
-        .filter((name) => name.endsWith(".app"))
-        .map((name) => join(buildDirectory, name))
-    : [];
+const bundles =
+  wrapperBundle != null && wrapperBundle !== ""
+    ? [wrapperBundle]
+    : buildDirectory
+      ? readdirSync(buildDirectory)
+          .filter((name) => name.endsWith(".app"))
+          .map((name) => join(buildDirectory, name))
+      : [];
 
 const descriptions = {
   NSMicrophoneUsageDescription:
@@ -140,7 +146,9 @@ function setPlistString(plist: string, key: string, value: string): void {
     value,
     plist,
   ]);
-  if (replace.exitCode === 0) return;
+  if (replace.exitCode === 0) {
+    return;
+  }
 
   const insert = Bun.spawnSync(
     ["/usr/bin/plutil", "-insert", key, "-string", value, plist],
@@ -149,7 +157,9 @@ function setPlistString(plist: string, key: string, value: string): void {
       stderr: "inherit",
     }
   );
-  if (insert.exitCode !== 0) process.exit(insert.exitCode);
+  if (insert.exitCode !== 0) {
+    process.exit(insert.exitCode);
+  }
 }
 
 function setPlistBoolean(plist: string, key: string, value: boolean): void {
@@ -161,7 +171,9 @@ function setPlistBoolean(plist: string, key: string, value: boolean): void {
     String(value),
     plist,
   ]);
-  if (replace.exitCode === 0) return;
+  if (replace.exitCode === 0) {
+    return;
+  }
 
   const insert = Bun.spawnSync(
     ["/usr/bin/plutil", "-insert", key, "-bool", String(value), plist],
@@ -170,7 +182,9 @@ function setPlistBoolean(plist: string, key: string, value: boolean): void {
       stderr: "inherit",
     }
   );
-  if (insert.exitCode !== 0) process.exit(insert.exitCode);
+  if (insert.exitCode !== 0) {
+    process.exit(insert.exitCode);
+  }
 }
 
 function removePlistKey(plist: string, key: string): void {
@@ -285,7 +299,9 @@ function embedCloudSyncHelper(bundle: string): void {
     cloudSyncInfo(`${channel.identifier}.cloud-sync`, version)
   );
 
-  if (!identity) return;
+  if (identity == null || identity === "") {
+    return;
+  }
   // Without a provisioning profile the helper cannot hold iCloud entitlements, but it still
   // needs a real ad-hoc bundle signature: the linker-signed executable alone seals no
   // resources and fails `codesign --verify --deep --strict`.
@@ -301,13 +317,16 @@ function embedCloudSyncHelper(bundle: string): void {
       ],
       { stdout: "inherit", stderr: "inherit" }
     );
-    if (adHoc.exitCode !== 0) process.exit(adHoc.exitCode);
+    if (adHoc.exitCode !== 0) {
+      process.exit(adHoc.exitCode);
+    }
     return;
   }
-  if (!existsSync(profile))
+  if (!existsSync(profile)) {
     throw new Error(
       `iCloud helper provisioning profile is missing: ${profile}`
     );
+  }
   copyFileSync(profile, join(contents, "embedded.provisionprofile"));
   const environment =
     process.env.CODETWO_ICLOUD_ENVIRONMENT === "Development"
@@ -337,15 +356,18 @@ function embedCloudSyncHelper(bundle: string): void {
     stdout: "inherit",
     stderr: "inherit",
   });
-  if (result.exitCode !== 0) process.exit(result.exitCode);
+  if (result.exitCode !== 0) {
+    process.exit(result.exitCode);
+  }
 }
 
 function prepareEmbeddedRuntime(bundle: string): void {
   const runtimeDirectory = join(bundle, "Contents", "Resources", "app", "bin");
   for (const executable of embeddedRuntimeExecutables) {
     const path = join(runtimeDirectory, executable);
-    if (!existsSync(path))
+    if (!existsSync(path)) {
       throw new Error(`Required desktop runtime is missing: ${path}`);
+    }
     chmodSync(path, 0o755);
   }
 }
@@ -357,17 +379,23 @@ function modernizeWindowChrome(bundle: string): void {
   // window renders the legacy compact titlebar with flat undersized buttons instead. Bump the
   // declared SDK so the chrome matches every other current app.
   const runtime = join(bundle, "Contents", "MacOS", "bun");
-  if (!existsSync(runtime)) return;
+  if (!existsSync(runtime)) {
+    return;
+  }
 
   const show = Bun.spawnSync(["/usr/bin/vtool", "-show-build", runtime], {
     stdout: "pipe",
     stderr: "inherit",
   });
-  if (show.exitCode !== 0) process.exit(show.exitCode);
+  if (show.exitCode !== 0) {
+    process.exit(show.exitCode);
+  }
   const buildInfo = show.stdout.toString();
   const minos = buildInfo.match(/minos\s+(\d+(?:\.\d+)*)/)?.[1] ?? "13.0";
   const sdk = Number(buildInfo.match(/sdk\s+(\d+(?:\.\d+)*)/)?.[1] ?? "0");
-  if (sdk >= 26) return;
+  if (sdk >= 26) {
+    return;
+  }
 
   const patched = `${runtime}.patched`;
   const bump = Bun.spawnSync(
@@ -383,7 +411,9 @@ function modernizeWindowChrome(bundle: string): void {
     ],
     { stdout: "inherit", stderr: "inherit" }
   );
-  if (bump.exitCode !== 0) process.exit(bump.exitCode);
+  if (bump.exitCode !== 0) {
+    process.exit(bump.exitCode);
+  }
   renameSync(patched, runtime);
   chmodSync(runtime, 0o755);
 
@@ -391,19 +421,23 @@ function modernizeWindowChrome(bundle: string): void {
   // how the embedded runtime executables are signed.
   const identity = process.env.ELECTROBUN_DEVELOPER_ID;
   const command = ["/usr/bin/codesign", "--force", "--sign", identity ?? "-"];
-  if (identity && identity !== "-") {
+  if (identity != null && identity !== "" && identity !== "-") {
     command.push("--options", "runtime", "--timestamp");
   } else {
     command.push("--timestamp=none");
   }
   command.push(runtime);
   const sign = Bun.spawnSync(command, { stdout: "inherit", stderr: "inherit" });
-  if (sign.exitCode !== 0) process.exit(sign.exitCode);
+  if (sign.exitCode !== 0) {
+    process.exit(sign.exitCode);
+  }
 }
 
 function signEmbeddedRuntime(bundle: string): void {
   const identity = process.env.ELECTROBUN_DEVELOPER_ID;
-  if (!identity) return;
+  if (identity == null || identity === "") {
+    return;
+  }
 
   const runtimeDirectory = join(bundle, "Contents", "Resources", "app", "bin");
   for (const executable of embeddedRuntimeExecutables) {
@@ -415,19 +449,25 @@ function signEmbeddedRuntime(bundle: string): void {
       identity,
       identity === "-" ? "--timestamp=none" : "--timestamp",
     ];
-    if (identity !== "-") command.push("--options", "runtime");
+    if (identity !== "-") {
+      command.push("--options", "runtime");
+    }
     command.push(path);
     const result = Bun.spawnSync(command, {
       stdout: "inherit",
       stderr: "inherit",
     });
-    if (result.exitCode !== 0) process.exit(result.exitCode);
+    if (result.exitCode !== 0) {
+      process.exit(result.exitCode);
+    }
   }
 }
 
 function signUpdateComponents(bundle: string): void {
   const identity = process.env.ELECTROBUN_DEVELOPER_ID;
-  if (!identity) return;
+  if (identity == null || identity === "") {
+    return;
+  }
 
   const frameworkVersion = join(
     bundle,
@@ -475,17 +515,21 @@ function signUpdateComponents(bundle: string): void {
     // Ad-hoc signatures have no shared Team ID, so Library Validation would
     // reject Sparkle.framework in the standalone helper. Distribution builds
     // retain Hardened Runtime because every component uses one Developer ID.
-    if (identity !== "-" || target.path !== updateHelper)
+    if (identity !== "-" || target.path !== updateHelper) {
       command.push("--options", "runtime");
-    if (target.preserveEntitlements)
+    }
+    if (target.preserveEntitlements) {
       command.push("--preserve-metadata=entitlements");
+    }
     command.push(target.path);
 
     const result = Bun.spawnSync(command, {
       stdout: "inherit",
       stderr: "inherit",
     });
-    if (result.exitCode !== 0) process.exit(result.exitCode);
+    if (result.exitCode !== 0) {
+      process.exit(result.exitCode);
+    }
   }
 }
 
@@ -510,7 +554,7 @@ function configureUpdater(plist: string): void {
 
   const feedURL = process.env.CODETWO_SPARKLE_FEED_URL;
   const publicKey = process.env.CODETWO_SPARKLE_PUBLIC_KEY;
-  if (!feedURL && !publicKey) {
+  if (feedURL == null || (feedURL === "" && !publicKey)) {
     removePlistKey(plist, "SUFeedURL");
     removePlistKey(plist, "SUPublicEDKey");
     return;
@@ -569,7 +613,10 @@ for (const bundle of bundles) {
   for (const [key, value] of Object.entries(descriptions)) {
     setPlistString(plist, key, value);
   }
-  if (!wrapperBundle && channel.updatesEnabled) {
+  if (
+    wrapperBundle == null ||
+    (wrapperBundle === "" && channel.updatesEnabled)
+  ) {
     configureUpdater(plist);
     embedUpdateHelper(bundle);
     signUpdateComponents(bundle);

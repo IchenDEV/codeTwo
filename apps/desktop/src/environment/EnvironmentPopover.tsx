@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Check,
   ChevronDown,
@@ -16,6 +23,13 @@ import {
   SquarePlus,
 } from "@/components/ui/icons";
 import type { HugeIcon } from "@/components/ui/icons";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
 import { getArtifact } from "../bridge";
 import type { GitStatus, PlanEntry, Project } from "../bridge";
@@ -23,21 +37,8 @@ import { useT } from "../i18n";
 import { TaskPlanPanel } from "../session/TaskPlanPanel";
 import type { InteractiveToolPreview } from "../session/toolActivity";
 import type { Turn } from "../session/turns";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 
-const EnvironmentRow = ({
+function EnvironmentRow({
   icon: Icon,
   label,
   description,
@@ -53,18 +54,18 @@ const EnvironmentRow = ({
   readonly onClick?: () => void;
   readonly active?: boolean;
   readonly disabled?: boolean;
-}) => {
+}) {
   const content = (
     <>
       <Icon
         className={cn(
           "text-muted-foreground size-4 shrink-0",
-          description && "mt-0.5 self-start"
+          description != null && description !== "" && "mt-0.5 self-start"
         )}
       />
       <span className="min-w-0 flex-1">
         <span className="text-body block truncate">{label}</span>
-        {description ? (
+        {description != null && description !== "" ? (
           <span className="text-callout text-muted-foreground block truncate">
             {description}
           </span>
@@ -99,18 +100,20 @@ const EnvironmentRow = ({
       aria-pressed={active || undefined}
       disabled={disabled}
       onClick={onClick}
-      className={description ? "items-start" : undefined}
+      className={
+        description != null && description !== "" ? "items-start" : undefined
+      }
     >
       {content}
     </Button>
   );
-};
+}
 
-const ToolPreview = ({
+function ToolPreview({
   preview,
 }: {
   readonly preview: InteractiveToolPreview;
-}) => {
+}) {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -143,7 +146,7 @@ const ToolPreview = ({
       });
     return () => {
       isAlive = false;
-      if (objectUrl) {
+      if (objectUrl != null && objectUrl !== "") {
         URL.revokeObjectURL(objectUrl);
       }
     };
@@ -167,7 +170,7 @@ const ToolPreview = ({
         </span>
       </figcaption>
       <div className="image-checker flex min-h-32 items-center justify-center">
-        {url && !failed ? (
+        {url != null && url !== "" && !failed ? (
           <img
             src={url}
             alt={t("environment.livePreview", { tool: label })}
@@ -194,13 +197,9 @@ const ToolPreview = ({
       </div>
     </figure>
   );
-};
+}
 
-/**
- * The project environment at a glance. It keeps the compact, frequently checked Git facts in a
- * header-anchored popover. The neighboring panel control owns the dock independently.
- */
-export const EnvironmentPopover = ({
+export function EnvironmentPopover({
   project,
   projectPath,
   projects,
@@ -237,7 +236,7 @@ export const EnvironmentPopover = ({
   Keeps the mounted session workspace from leaking this portal over another full-page surface.
   */
   readonly suppressed?: boolean;
-}) => {
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -438,4 +437,4 @@ export const EnvironmentPopover = ({
       </PopoverContent>
     </Popover>
   );
-};
+}

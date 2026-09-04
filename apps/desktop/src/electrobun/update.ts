@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 
+import { assertIpcResult } from "../lib/ipcResult";
 import type { AppUpdateStatus } from "./rpc";
 
 interface HelperEvent {
@@ -54,7 +55,7 @@ function parseHelperEvent(output: string): HelperEvent | null {
     return null;
   }
   try {
-    return JSON.parse(line) as HelperEvent;
+    return assertIpcResult<HelperEvent>(JSON.parse(line) as unknown);
   } catch {
     return null;
   }

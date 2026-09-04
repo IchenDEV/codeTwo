@@ -28,7 +28,7 @@ describe("desktop container boundary", () => {
     const violations = sourceFiles(sourceRoot)
       .filter((path) => !isDesktopImplementation(path))
       .flatMap((path) => {
-        const source = readFileSync(path, "utf8");
+        const source = readFileSync(path, "utf-8");
         return [
           ...source.matchAll(
             /\b(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/gu
@@ -49,8 +49,11 @@ describe("desktop container boundary", () => {
   });
 
   test("routes the product bridge through the container port", () => {
-    const bridge = readFileSync(resolve(sourceRoot, "bridge.ts"), "utf8");
-    const container = readFileSync(resolve(sourceRoot, "container.ts"), "utf8");
+    const bridge = readFileSync(resolve(sourceRoot, "bridge.ts"), "utf-8");
+    const container = readFileSync(
+      resolve(sourceRoot, "container.ts"),
+      "utf-8"
+    );
 
     expect(bridge).toContain('from "./container"');
     expect(bridge).not.toContain('from "./electrobun/');

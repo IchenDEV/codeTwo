@@ -8,6 +8,10 @@ import {
   createReactInlineContentSpec,
 } from "@blocknote/react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip";
+
 import type {
   CanvasDraft,
   CanvasExport,
@@ -23,21 +27,19 @@ import type {
   CanvasEnvelope,
   CanvasSceneSnapshot,
 } from "./canvas";
+import { exportCanvasPng } from "./canvas/export";
+import type { CanvasMediaInput, NormalizedCanvasMedia } from "./canvas/media";
+import { rehydrateEnvelope } from "./canvas/serialize";
 import type {
   CanvasAssetReference,
   CanvasTheme,
   NormalizedStaticAsset,
 } from "./canvas/types";
-import { exportCanvasPng } from "./canvas/export";
-import type { CanvasMediaInput, NormalizedCanvasMedia } from "./canvas/media";
-import { rehydrateEnvelope } from "./canvas/serialize";
-import { workspaceReferenceBlock } from "./editor/workspaceReference";
-import { SlotCardBlock, slotCardToDocBlocks } from "./editor/slotCard";
-import type { SlotCardProps } from "./editor/slotCard";
 import { IssueRefBlock, issueRefToDocBlock } from "./editor/issueBlock";
 import type { IssueRefProps } from "./editor/issueBlock";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
+import { SlotCardBlock, slotCardToDocBlocks } from "./editor/slotCard";
+import type { SlotCardProps } from "./editor/slotCard";
+import { workspaceReferenceBlock } from "./editor/workspaceReference";
 
 /** Props kept on the interactive BlockNote node. Scene JSON is intentionally not emitted by
  * `docToBlocks`; it is only an in-memory editing cache so an inline Canvas can reconnect without
@@ -216,7 +218,7 @@ export class CanvasDraftSaveQueue {
           this.options.onSaved(
             saved,
             authoritativeRequest,
-            requestGeneration === this.generation && !this.pending
+            requestGeneration === this.generation && this.pending == null
           );
         } catch (cause) {
           const error =
@@ -235,12 +237,14 @@ export class CanvasDraftSaveQueue {
 
 export function canvasDraftToEnvelope(draft: CanvasDraft): CanvasEnvelope {
   const scene =
-    draft.envelope.scene && typeof draft.envelope.scene === "object"
+    draft.envelope.scene != null && typeof draft.envelope.scene === "object"
       ? (draft.envelope.scene as Record<string, unknown>)
       : {};
   const elements = Array.isArray(scene.elements) ? scene.elements : [];
   const appState =
-    scene.appState && typeof scene.appState === "object" ? scene.appState : {};
+    scene.appState != null && typeof scene.appState === "object"
+      ? scene.appState
+      : {};
   return {
     appState: appState as CanvasEnvelope["appState"],
     assetReferences: draft.assets.map((asset) => ({
@@ -281,7 +285,7 @@ export function canvasBlockPropsFromDraft(
 function readCanvasEnvelope(value: string): CanvasEnvelope | null {
   try {
     const parsed = JSON.parse(value) as CanvasEnvelope;
-    return parsed && typeof parsed === "object" ? parsed : null;
+    return parsed != null && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
   }
@@ -528,7 +532,7 @@ export const BrowserNoteBlock = createReactBlockSpec(
   }
 );
 
-export const CanvasBlockView = ({
+export function CanvasBlockView({
   block,
   editor,
 }: {
@@ -536,7 +540,7 @@ export const CanvasBlockView = ({
   readonly editor: {
     updateBlock: (block: unknown, update: unknown) => unknown;
   };
-}) => {
+}) {
   const runtime = useContext(CanvasBlockRuntimeContext);
   const id = block.props.id;
   const editorHandle = useRef<CanvasEditorHandle>(null);
@@ -562,7 +566,7 @@ export const CanvasBlockView = ({
     block.props.pixelPolicy === "structure_only"
       ? "structure_only"
       : "required";
-  const canvasMode = runtime?.enabled ? "edit" : "readonly";
+  const canvasMode = runtime?.enabled === true ? "edit" : "readonly";
   const canvasTheme = canvasThemeForMode(
     canvasMode,
     runtime?.theme,
@@ -824,7 +828,7 @@ export const CanvasBlockView = ({
           Frozen revision {frozenRevision}
         </output>
       ) : null}
-      {error ? (
+      {error != null && error !== "" ? (
         <div
           className="text-callout text-warning mt-1 flex flex-wrap items-center gap-2 px-1"
           role="alert"
@@ -858,7 +862,7 @@ export const CanvasBlockView = ({
       ) : null}
     </div>
   );
-};
+}
 
 export const CanvasBlock = createReactBlockSpec(
   {

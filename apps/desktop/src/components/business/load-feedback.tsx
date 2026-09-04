@@ -1,7 +1,6 @@
-import { CircleAlert } from "@/components/ui/icons";
-
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
+import { CircleAlert } from "@/components/ui/icons";
 
 type LoadFeedbackProps =
   | { state: "loading"; message: string }
@@ -12,7 +11,7 @@ type LoadFeedbackProps =
       onRetry: () => void;
     };
 
-const LoadFeedback = (props: LoadFeedbackProps) => {
+function LoadFeedback(props: LoadFeedbackProps) {
   if (props.state === "loading") {
     return (
       <output
@@ -44,6 +43,6 @@ const LoadFeedback = (props: LoadFeedbackProps) => {
       </Button>
     </div>
   );
-};
+}
 
 export { LoadFeedback, type LoadFeedbackProps };

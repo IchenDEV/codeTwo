@@ -1,18 +1,8 @@
 import { useEffect, useState } from "react";
-import { Spinner } from "@/components/ui/spinner";
 
-import { providerLabel, sessionDiffStat } from "../bridge";
-import type { SessionDiffStat, SessionInfo } from "../bridge";
-// Explicit extension: Bun's directory cache is case-insensitive, and `missionControl` without an
-// extension resolves against `MissionControl.tsx` (this file) when both live in one directory.
-import { missionRows } from "./missionControl.ts";
-import type { MissionRow, MissionState } from "./missionControl.ts";
-import { describeContextWindow } from "../session/contextWindow";
-import type { ContextWindowBySession } from "../session/contextWindow";
-import { ProviderIcon } from "../providers/ProviderIcon";
+import { CompositeActionRow } from "@/components/business/composite-action-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CompositeActionRow } from "@/components/business/composite-action-row";
 import {
   Dialog,
   DialogContent,
@@ -20,8 +10,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useT } from "../i18n";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
+import { providerLabel, sessionDiffStat } from "../bridge";
+import type { SessionDiffStat, SessionInfo } from "../bridge";
+import { useT } from "../i18n";
+import { ProviderIcon } from "../providers/ProviderIcon";
+import { describeContextWindow } from "../session/contextWindow";
+import type { ContextWindowBySession } from "../session/contextWindow";
+// Explicit extension: Bun's directory cache is case-insensitive, and `missionControl` without an
+// extension resolves against `MissionControl.tsx` (this file) when both live in one directory.
+import { missionRows } from "./missionControl.ts";
+import type { MissionRow, MissionState } from "./missionControl.ts";
 
 /**
 The rail's color semantics, one dot per state: amber asks, red failed, primary at work.
@@ -44,10 +45,7 @@ function sceneLabel(reference: string): string {
  */
 const diffStatCache = new Map<string, SessionDiffStat | null>();
 
-/**
-Spinner → `+a −d · n files` → em dash when the checkout is gone or not a repo.
-*/
-export const DiffStatCell = ({
+export function DiffStatCell({
   session,
   fetchStat = sessionDiffStat,
 }: {
@@ -56,7 +54,7 @@ export const DiffStatCell = ({
   Injectable for tests; defaults to the bridge call.
   */
   readonly fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
-}) => {
+}) {
   const t = useT();
   const [stat, setStat] = useState<SessionDiffStat | null | undefined>(() =>
     diffStatCache.has(session) ? diffStatCache.get(session) : undefined
@@ -94,13 +92,9 @@ export const DiffStatCell = ({
       </span>
     </span>
   );
-};
+}
 
-/**
- * R6 (docs/roadmap.md): the cross-session overview answering "what needs me" — every session's
- * state, scene, working-tree diff, and context occupancy, with one click into review.
- */
-export const MissionControlDialog = ({
+export function MissionControlDialog({
   sessions,
   runningSessions,
   contextWindows,
@@ -121,7 +115,7 @@ export const MissionControlDialog = ({
   Injectable for tests; defaults to the bridge call.
   */
   readonly fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
-}) => {
+}) {
   const t = useT();
   const rows = missionRows(
     sessions,
@@ -197,7 +191,7 @@ export const MissionControlDialog = ({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => open == null && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("mission.title")}</DialogTitle>
@@ -215,4 +209,4 @@ export const MissionControlDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

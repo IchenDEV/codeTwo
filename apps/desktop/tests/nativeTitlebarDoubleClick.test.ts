@@ -1,8 +1,8 @@
+import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "bun:test";
 
 const macOSTest = test.skipIf(process.platform !== "darwin");
 
@@ -14,7 +14,7 @@ macOSTest(
     );
     const executable = join(buildDirectory, "titlebar-double-click-harness");
     const harness = fileURLToPath(
-      new URL("./native/titlebarDoubleClickHarness.m", import.meta.url)
+      new URL("native/titlebarDoubleClickHarness.m", import.meta.url)
     );
     const implementation = fileURLToPath(
       new URL(

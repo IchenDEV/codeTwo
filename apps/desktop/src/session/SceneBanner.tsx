@@ -1,7 +1,8 @@
-import { X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
-import { useLanguage, useT } from "../i18n";
+import { X } from "@/components/ui/icons";
+
 import type { CoreEvent } from "../bridge";
+import { useLanguage, useT } from "../i18n";
 import { sceneTitle } from "./scene";
 import type { SceneInfo, SceneNextSuggestion } from "./scene";
 
@@ -92,7 +93,7 @@ function bannerSuggestions(
   ];
 }
 
-export const SceneBanner = ({
+export function SceneBanner({
   banner,
   scenes,
   onApplyScene,
@@ -115,7 +116,7 @@ export const SceneBanner = ({
     toStage: string
   ) => void;
   readonly onDismiss: () => void;
-}) => {
+}) {
   const t = useT();
   const { locale } = useLanguage();
   const suggestions = bannerSuggestions(banner, scenes);
@@ -228,4 +229,4 @@ export const SceneBanner = ({
       </div>
     </div>
   );
-};
+}

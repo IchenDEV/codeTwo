@@ -2,14 +2,13 @@ const dragRegionSelector = ".electrobun-webkit-app-region-drag";
 const noDragRegionSelector = ".electrobun-webkit-app-region-no-drag";
 
 function isTitlebarDragTarget(target: EventTarget | null): boolean {
-  const element = target as Element | null;
-  if (!element || typeof element.closest !== "function") {
+  if (!(target instanceof Element)) {
     return false;
   }
-  if (element.closest(noDragRegionSelector)) {
+  if (target.closest(noDragRegionSelector)) {
     return false;
   }
-  return element.closest(dragRegionSelector) !== null;
+  return target.closest(dragRegionSelector) !== null;
 }
 
 export function installTitlebarDoubleClick(

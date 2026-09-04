@@ -13,9 +13,9 @@ const storageKey = "codetwo.language";
 
 export function resolveSystemLocale(): Locale {
   const tags =
-    typeof navigator !== "undefined"
-      ? (navigator.languages ?? [navigator.language])
-      : [];
+    typeof navigator === "undefined"
+      ? []
+      : (navigator.languages ?? [navigator.language]);
   for (const tag of tags) {
     if (!tag) {
       continue;
@@ -37,10 +37,10 @@ export function resolveSystemLocale(): Locale {
 
 function storedPreference(): LanguagePreference {
   const raw =
-    typeof localStorage !== "undefined"
-      ? localStorage.getItem(storageKey)
-      : null;
-  return raw === "system" || (raw && raw in LOCALES)
+    typeof localStorage === "undefined"
+      ? null
+      : localStorage.getItem(storageKey);
+  return raw === "system" || (raw != null && raw !== "" && raw in LOCALES)
     ? (raw as LanguagePreference)
     : "system";
 }
@@ -52,7 +52,7 @@ function interpolate(
   if (!vars) {
     return template;
   }
-  return template.replace(/\{(\w+)\}/gu, (whole, key) =>
+  return template.replaceAll(/\{(\w+)\}/gu, (whole, key) =>
     key in vars ? String(vars[key]) : whole
   );
 }
@@ -76,11 +76,7 @@ const I18nContext = createContext<I18nValue>({
   t: (k) => k,
 });
 
-export const I18nProvider = ({
-  children,
-}: {
-  readonly children: ReactNode;
-}) => {
+export function I18nProvider({ children }: { readonly children: ReactNode }) {
   const [preference, setPreferenceState] =
     useState<LanguagePreference>(storedPreference);
 
@@ -111,7 +107,7 @@ export const I18nProvider = ({
       {children}
     </I18nContext.Provider>
   );
-};
+}
 
 export function useT(): Translate {
   return useContext(I18nContext).t;

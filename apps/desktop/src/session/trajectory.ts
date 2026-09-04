@@ -2,7 +2,13 @@ import type { ToolOutput } from "../bridge";
 import type { ToolEntry, Turn, TurnContentEntry } from "./turns";
 
 export type TrajectoryKind =
-  "user" | "assistant" | "reasoning" | "tool" | "memory" | "plan" | "error";
+  | "user"
+  | "assistant"
+  | "reasoning"
+  | "tool"
+  | "memory"
+  | "plan"
+  | "error";
 
 export type TrajectoryLane = "context" | "assistant" | "tool";
 

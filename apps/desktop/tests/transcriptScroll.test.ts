@@ -11,14 +11,14 @@ describe("transcript scroll intent", () => {
     expect(
       isTranscriptNearEnd({
         clientHeight: 400,
-        scrollHeight: 1_000,
+        scrollHeight: 1000,
         scrollTop: 552,
       })
     ).toBe(true);
     expect(
       isTranscriptNearEnd({
         clientHeight: 400,
-        scrollHeight: 1_000,
+        scrollHeight: 1000,
         scrollTop: 551,
       })
     ).toBe(false);
@@ -28,7 +28,7 @@ describe("transcript scroll intent", () => {
     expect(
       transcriptDistanceFromEnd({
         clientHeight: 400,
-        scrollHeight: 1_000,
+        scrollHeight: 1000,
         scrollTop: 620,
       })
     ).toBe(0);
@@ -37,7 +37,7 @@ describe("transcript scroll intent", () => {
   test("keeps the same content in view when earlier turns are prepended", () => {
     const anchor = { scrollHeight: 800, scrollTop: 240 };
 
-    expect(scrollTopAfterPrepend(anchor, 1_120)).toBe(560);
+    expect(scrollTopAfterPrepend(anchor, 1120)).toBe(560);
     expect(scrollTopAfterPrepend(anchor, 200)).toBe(0);
   });
 });

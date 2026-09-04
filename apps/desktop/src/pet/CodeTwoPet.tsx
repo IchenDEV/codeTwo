@@ -1,7 +1,8 @@
 import { PetX } from "@petx/react";
+import { useEffect, useRef, useState } from "react";
+
 import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "@/i18n";
-import { useEffect, useRef, useState } from "react";
 
 import { useAppearanceSettings } from "../appearance";
 import type { AppearanceSettings, PetSize } from "../appearance";
@@ -24,7 +25,7 @@ export type CodeTwoPetAppearance = Pick<
   "petActivityEnabled" | "petSize" | "petSource" | "petId" | "petName"
 >;
 
-export const CodeTwoPetSprite = ({
+export function CodeTwoPetSprite({
   animation,
   size,
   title,
@@ -40,19 +41,21 @@ export const CodeTwoPetSprite = ({
   readonly spriteVersionNumber?: number;
   readonly playing?: boolean;
   readonly frame?: number;
-}) => (
-  <PetX
-    src={src}
-    spriteVersionNumber={spriteVersionNumber}
-    animation={animation}
-    size={size}
-    title={title}
-    playing={playing}
-    frame={frame}
-  />
-);
+}) {
+  return (
+    <PetX
+      src={src}
+      spriteVersionNumber={spriteVersionNumber}
+      animation={animation}
+      size={size}
+      title={title}
+      playing={playing}
+      frame={frame}
+    />
+  );
+}
 
-export const CodeTwoPet = ({
+export function CodeTwoPet({
   animation,
   bubble = null,
   appearance: providedAppearance,
@@ -60,7 +63,7 @@ export const CodeTwoPet = ({
   readonly animation: CodeTwoPetAnimation;
   readonly bubble?: string | null;
   readonly appearance?: CodeTwoPetAppearance;
-}) => {
+}) {
   const t = useT();
   const storedAppearance = useAppearanceSettings();
   const appearance = providedAppearance ?? storedAppearance;
@@ -96,7 +99,7 @@ export const CodeTwoPet = ({
 
   return (
     <section className="codetwo-pet-stage" aria-label={t("pet.label")}>
-      {bubble ? (
+      {bubble != null && bubble !== "" ? (
         <p className="codetwo-pet-bubble" dir="auto">
           <span>{bubble}</span>
         </p>
@@ -119,4 +122,4 @@ export const CodeTwoPet = ({
       </TooltipButton>
     </section>
   );
-};
+}

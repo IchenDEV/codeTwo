@@ -1,14 +1,17 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+
 import { TooltipProvider } from "@/components/ui/tooltip";
+
+import App from "./App";
+import { installDesktopTitlebarDoubleClick } from "./container";
+import { I18nProvider } from "./i18n";
+import { DesktopPetWindow } from "./pet/DesktopPet";
+import { currentDesktopPlatform } from "./platform";
+import { ThemeProvider } from "./theme";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { ToastProvider } from "./ui/toast";
-import { I18nProvider } from "./i18n";
-import { ThemeProvider } from "./theme";
-import { currentDesktopPlatform } from "./platform";
-import { DesktopPetWindow } from "./pet/DesktopPet";
-import { installDesktopTitlebarDoubleClick } from "./container";
+
 import "./styles.css";
 
 document.documentElement.dataset.platform = currentDesktopPlatform();

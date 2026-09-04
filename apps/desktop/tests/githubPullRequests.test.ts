@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
+import type {
+  GitHubPullRequestDetail,
+  GitHubPullRequestSummary,
+} from "../src/bridge";
 import {
   filterPullRequests,
   githubPullRequestReference,
@@ -7,10 +11,6 @@ import {
   pullRequestCheckState,
   shortPullRequestAge,
 } from "../src/github/pullRequests";
-import type {
-  GitHubPullRequestDetail,
-  GitHubPullRequestSummary,
-} from "../src/bridge";
 
 const NOW = Date.UTC(2026, 7, 24, 12);
 

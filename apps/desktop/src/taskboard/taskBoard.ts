@@ -17,7 +17,10 @@ export const taskBoardLanes = [
 export type TaskBoardLane = (typeof taskBoardLanes)[number];
 
 export type TaskSessionActivityKind =
-  "idle" | "running" | "awaiting_input" | "failed";
+  | "idle"
+  | "running"
+  | "awaiting_input"
+  | "failed";
 
 export const taskPriorities = [
   "none",
@@ -114,7 +117,8 @@ export interface BoardSnapshot {
 }
 
 export type BoardSaveResult =
-  { ok: true } | { ok: false; warning: typeof saveBoardWarning };
+  | { ok: true }
+  | { ok: false; warning: typeof saveBoardWarning };
 
 const statusIndex: Record<TaskStatus, number> = {
   done: 3,
@@ -454,7 +458,7 @@ export function associateTaskPullRequest(
   now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
-  if (index < 0) {
+  if (index === -1) {
     return null;
   }
   const identity = githubPullRequestIdentity(reference);
@@ -507,7 +511,7 @@ export function unlinkTaskPullRequest(
   const index = tasks.findIndex((task) => task.id === taskId);
   const task = tasks[index];
   if (
-    index < 0 ||
+    index === -1 ||
     !task?.pullRequest ||
     task.pullRequestLinkRevision !== expectedRevision ||
     githubPullRequestIdentity(task.pullRequest) !== expectedIdentity
@@ -533,7 +537,7 @@ export function associateTaskSession(
   now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
-  if (index < 0) {
+  if (index === -1) {
     return null;
   }
   const task = tasks[index]!;
@@ -854,7 +858,7 @@ export function parseBoardSnapshot(
     ) {
       return corruptBoardState(locale);
     }
-    const version = value.version;
+    const { version } = value;
     const tasks: BoardTask[] = [];
     const ids = new Set<string>();
     const claimedSessions = new Set<string>();

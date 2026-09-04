@@ -5,6 +5,7 @@ import type {
   Sandbox,
   WorktreeBaselineKind,
 } from "../bridge";
+import { asJsonObject, isJsonObject } from "../lib/jsonValue";
 
 export interface StorageLike {
   getItem: (key: string) => string | null;
@@ -83,10 +84,10 @@ function nullableStringWithin(
 }
 
 function parseScope(value: unknown): ComposerDraftScope | null {
-  if (value == null || typeof value !== "object") {
+  const scope = asJsonObject(value);
+  if (scope == null) {
     return null;
   }
-  const scope = value as Record<string, unknown>;
   if (
     scope.kind === "project" &&
     stringWithin(scope.projectPath, 4096) &&
@@ -110,21 +111,19 @@ function parseScope(value: unknown): ComposerDraftScope | null {
 }
 
 function stringRecord(value: unknown): value is Record<string, string> {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.entries(value as Record<string, unknown>).every(
-      ([key, item]) => stringWithin(key, 256) && stringWithin(item, 16_384)
-    )
+  if (!isJsonObject(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([key, item]) => stringWithin(key, 256) && stringWithin(item, 16_384)
   );
 }
 
 function parseDocumentBlock(value: unknown): DocumentBlock | null {
-  if (value == null || typeof value !== "object") {
+  const block = asJsonObject(value);
+  if (block == null) {
     return null;
   }
-  const block = value as Record<string, unknown>;
   switch (block.type) {
     case "text": {
       return stringWithin(block.text, 1_048_576)
@@ -223,10 +222,10 @@ function parseDocumentBlock(value: unknown): DocumentBlock | null {
 }
 
 function parseAttachment(value: unknown): ComposerDraftAttachment | null {
-  if (value == null || typeof value !== "object") {
+  const attachment = asJsonObject(value);
+  if (attachment == null) {
     return null;
   }
-  const attachment = value as Record<string, unknown>;
   return stringWithin(attachment.id, 256) &&
     attachment.id &&
     (attachment.kind === "appshot" || attachment.kind === "attachment") &&
@@ -235,27 +234,41 @@ function parseAttachment(value: unknown): ComposerDraftAttachment | null {
     : null;
 }
 
+function isPermissionMode(value: unknown): value is PermissionMode {
+  return value === "ask" || value === "accept_edits" || value === "yolo";
+}
+
+function isSandbox(value: unknown): value is Sandbox {
+  return (
+    value === "read_only" ||
+    value === "workspace_write" ||
+    value === "danger_full_access"
+  );
+}
+
+function isMemoryAccess(value: unknown): value is MemoryAccess {
+  return value === "inherit" || value === "allow" || value === "deny";
+}
+
+function isWorktreeBase(value: unknown): value is WorktreeBaselineKind | null {
+  return value === null || value === "current" || value === "origin_default";
+}
+
 function parsePosture(value: unknown): ComposerDraftPosture | null {
-  if (value == null || typeof value !== "object") {
+  const posture = asJsonObject(value);
+  if (posture == null) {
     return null;
   }
-  const posture = value as Record<string, unknown>;
   if (
     !stringWithin(posture.provider, 128) ||
     !posture.provider ||
     !nullableStringWithin(posture.model, 512) ||
-    !["ask", "accept_edits", "yolo"].includes(String(posture.mode)) ||
-    !["read_only", "workspace_write", "danger_full_access"].includes(
-      String(posture.sandbox)
-    ) ||
-    !(
-      posture.worktreeBase === null ||
-      posture.worktreeBase === "current" ||
-      posture.worktreeBase === "origin_default"
-    ) ||
+    !isPermissionMode(posture.mode) ||
+    !isSandbox(posture.sandbox) ||
+    !isWorktreeBase(posture.worktreeBase) ||
     typeof posture.planMode !== "boolean" ||
-    !["inherit", "allow", "deny"].includes(String(posture.memoryRead)) ||
-    !["inherit", "allow", "deny"].includes(String(posture.memoryWrite)) ||
+    !isMemoryAccess(posture.memoryRead) ||
+    !isMemoryAccess(posture.memoryWrite) ||
     !nullableStringWithin(posture.scene, 512) ||
     typeof posture.autoScene !== "boolean"
   ) {
@@ -263,23 +276,23 @@ function parsePosture(value: unknown): ComposerDraftPosture | null {
   }
   return {
     autoScene: posture.autoScene,
-    memoryRead: posture.memoryRead as MemoryAccess,
-    memoryWrite: posture.memoryWrite as MemoryAccess,
-    mode: posture.mode as PermissionMode,
+    memoryRead: posture.memoryRead,
+    memoryWrite: posture.memoryWrite,
+    mode: posture.mode,
     model: posture.model,
     planMode: posture.planMode,
     provider: posture.provider,
-    sandbox: posture.sandbox as Sandbox,
+    sandbox: posture.sandbox,
     scene: posture.scene,
     worktreeBase: posture.worktreeBase,
   };
 }
 
 function parseDraft(value: unknown): ComposerDraft | null {
-  if (value == null || typeof value !== "object") {
+  const draft = asJsonObject(value);
+  if (draft == null) {
     return null;
   }
-  const draft = value as Record<string, unknown>;
   const scope = parseScope(draft.scope);
   const posture = parsePosture(draft.posture);
   if (
@@ -297,14 +310,20 @@ function parseDraft(value: unknown): ComposerDraft | null {
   ) {
     return null;
   }
-  const documentValue = draft.doc.map(parseDocumentBlock);
-  const attachments = draft.attachments.map(parseAttachment);
+  const documentValue: Array<DocumentBlock | null> =
+    draft.doc.map(parseDocumentBlock);
+  const attachments: Array<ComposerDraftAttachment | null> =
+    draft.attachments.map(parseAttachment);
   if (documentValue.includes(null) || attachments.includes(null)) {
     return null;
   }
   return {
-    attachments: attachments as ComposerDraftAttachment[],
-    doc: documentValue as DocumentBlock[],
+    attachments: attachments.filter(
+      (entry): entry is ComposerDraftAttachment => entry !== null
+    ),
+    doc: documentValue.filter(
+      (entry): entry is DocumentBlock => entry !== null
+    ),
     id: draft.id,
     posture,
     scope,
@@ -417,11 +436,11 @@ export function loadComposerDrafts(
     return { drafts: new Map(), warning: "corrupt" };
   }
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed == null || typeof parsed !== "object") {
+    const parsed: unknown = JSON.parse(raw);
+    const snapshot = asJsonObject(parsed);
+    if (snapshot === null) {
       return { drafts: new Map(), warning: "corrupt" };
     }
-    const snapshot = parsed as Record<string, unknown>;
     if (
       snapshot.version !== composerDraftVersion ||
       !Array.isArray(snapshot.drafts) ||
@@ -435,7 +454,9 @@ export function loadComposerDrafts(
     }
     const drafts = new Map<string, ComposerDraft>();
     const ids = new Set<string>();
-    for (const draft of records as ComposerDraft[]) {
+    for (const draft of records.filter(
+      (entry): entry is ComposerDraft => entry !== null
+    )) {
       const key = composerDraftScopeKey(draft.scope);
       if (
         drafts.has(key) ||

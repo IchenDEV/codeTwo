@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import {
   Copy,
   FolderOpen,
@@ -7,6 +9,17 @@ import {
   RotateCcw,
   Trash2,
 } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { TooltipButton } from "@/components/ui/tooltip";
 
 import {
   confirmNative,
@@ -21,18 +34,6 @@ import type { StringKey } from "../i18n/strings";
 import { ProjectIcon } from "../projects/ProjectIcon";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { ModelPicker } from "../session/Composer";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { GroupHeading, Page, ProjectRow } from "./SettingsPrimitives";
 
 const reasoningEfforts = [
@@ -45,7 +46,7 @@ const reasoningEfforts = [
   "ultra",
 ] as const;
 
-export const ProjectSettingsPage = ({
+export function ProjectSettingsPage({
   project,
   providers,
   onWorktreeMode,
@@ -77,7 +78,7 @@ export const ProjectSettingsPage = ({
   readonly actionsCount?: number;
   readonly onAddAction?: () => void;
   readonly onModeSavingChange?: (isSaving: boolean) => void;
-}) => {
+}) {
   const t = useT();
   const providerNames = Object.fromEntries(
     providers.map((candidate) => [candidate.id, candidate.display_name])
@@ -133,9 +134,9 @@ export const ProjectSettingsPage = ({
     setError(null);
     try {
       await onRename(project.path, name);
-    } catch (cause) {
+    } catch (error) {
       setNameDraft(project.name);
-      setError(t("settings.projectSaveFailed", { error: String(cause) }));
+      setError(t("settings.projectSaveFailed", { error: String(error) }));
     } finally {
       setProfileSaving(false);
     }
@@ -146,15 +147,15 @@ export const ProjectSettingsPage = ({
       return;
     }
     const source = await iconPicker();
-    if (!source) {
+    if (source == null || source === "") {
       return;
     }
     setIconSaving(true);
     setError(null);
     try {
       await onIcon(project.path, source);
-    } catch (cause) {
-      setError(t("settings.projectIconFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.projectIconFailed", { error: String(error) }));
     } finally {
       setIconSaving(false);
     }
@@ -168,8 +169,8 @@ export const ProjectSettingsPage = ({
     setError(null);
     try {
       await onIcon(project.path, null);
-    } catch (cause) {
-      setError(t("settings.projectIconFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.projectIconFailed", { error: String(error) }));
     } finally {
       setIconSaving(false);
     }
@@ -187,8 +188,8 @@ export const ProjectSettingsPage = ({
     setError(null);
     try {
       await onAgentDefaults(project.path, providerId, modelId, reasoningEffort);
-    } catch (cause) {
-      setError(t("settings.projectSaveFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.projectSaveFailed", { error: String(error) }));
     } finally {
       setAgentSaving(false);
     }
@@ -209,18 +210,19 @@ export const ProjectSettingsPage = ({
     setError(null);
     try {
       await onRemove(project.path);
-    } catch (cause) {
-      setError(t("settings.projectSaveFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.projectSaveFailed", { error: String(error) }));
     } finally {
       setProfileSaving(false);
     }
   }
 
   const projectDefaultProvider = project?.default_provider ?? null;
-  const projectDefaultModels = projectDefaultProvider
-    ? (providers.find((candidate) => candidate.id === projectDefaultProvider)
-        ?.models ?? [])
-    : [];
+  const projectDefaultModels =
+    projectDefaultProvider != null && projectDefaultProvider !== ""
+      ? (providers.find((candidate) => candidate.id === projectDefaultProvider)
+          ?.models ?? [])
+      : [];
   return (
     <Page title={t("settings.project")} description={t("settings.projectHint")}>
       {project ? (
@@ -253,7 +255,7 @@ export const ProjectSettingsPage = ({
           <ProjectRow
             label={t("settings.projectIcon")}
             hint={
-              project.has_icon
+              project.has_icon === true
                 ? t("settings.projectIconCustom")
                 : t("settings.projectIconAutomatic")
             }
@@ -277,13 +279,13 @@ export const ProjectSettingsPage = ({
                   className="bg-background/70"
                 />
                 <span className="text-body min-w-0 flex-1 truncate font-medium">
-                  {project.has_icon
+                  {project.has_icon === true
                     ? t("settings.projectIconChange")
                     : t("settings.projectIconChoose")}
                 </span>
                 <ImagePlus className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
               </Button>
-              {project.has_icon ? (
+              {project.has_icon === true ? (
                 <>
                   <span
                     className="bg-foreground/10 my-2 w-px shrink-0"
@@ -303,7 +305,7 @@ export const ProjectSettingsPage = ({
               ) : null}
             </div>
           </ProjectRow>
-          {error ? (
+          {error != null && error !== "" ? (
             <p className="project-settings-error text-metadata text-destructive pt-1">
               {error}
             </p>
@@ -332,7 +334,8 @@ export const ProjectSettingsPage = ({
                 className="w-full justify-between"
               >
                 <SelectValue>
-                  {projectDefaultProvider ? (
+                  {projectDefaultProvider != null &&
+                  projectDefaultProvider !== "" ? (
                     <>
                       <ProviderIcon
                         provider={projectDefaultProvider}
@@ -373,7 +376,9 @@ export const ProjectSettingsPage = ({
             hint={t("settings.projectModelHint")}
           >
             <div className="grid w-full grid-cols-[minmax(0,1fr)_7.5rem] gap-2">
-              {projectDefaultProvider && projectDefaultModels.length > 0 ? (
+              {projectDefaultProvider != null &&
+              projectDefaultProvider !== "" &&
+              projectDefaultModels.length > 0 ? (
                 <div className="rounded-control bg-fill-rest flex min-w-0 items-center px-1">
                   <ModelPicker
                     models={projectDefaultModels}
@@ -391,7 +396,8 @@ export const ProjectSettingsPage = ({
                     onConfigOption={() => {}}
                     hasSession={false}
                   />
-                  {project.default_model ? (
+                  {project.default_model != null &&
+                  project.default_model !== "" ? (
                     <TooltipButton
                       label={t("settings.projectModelReset")}
                       variant="ghost"
@@ -415,7 +421,8 @@ export const ProjectSettingsPage = ({
                   {t("settings.projectModelDefault")}
                 </span>
               )}
-              {projectDefaultProvider ? (
+              {projectDefaultProvider != null &&
+              projectDefaultProvider !== "" ? (
                 <Select
                   disabled={agentSaving}
                   value={project.default_reasoning_effort ?? "automatic"}
@@ -433,7 +440,8 @@ export const ProjectSettingsPage = ({
                     className="w-full justify-between"
                   >
                     <SelectValue>
-                      {project.default_reasoning_effort
+                      {project.default_reasoning_effort != null &&
+                      project.default_reasoning_effort !== ""
                         ? t(
                             `effort.${project.default_reasoning_effort}` as StringKey
                           )
@@ -620,4 +628,4 @@ export const ProjectSettingsPage = ({
       )}
     </Page>
   );
-};
+}

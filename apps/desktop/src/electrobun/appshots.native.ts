@@ -1,5 +1,7 @@
-import { join } from "node:path";
 import { dlopen, FFIType, ptr } from "bun:ffi";
+import { join } from "node:path";
+
+import { assertIpcResult } from "../lib/ipcResult";
 
 const libraryName = "libCodeTwoWindowEffects.dylib";
 const resultBufferSize = 1024 * 1024;
@@ -140,9 +142,9 @@ export function captureMacOSAppshot(
   const length = buffer.indexOf(0);
   const json = Buffer.from(
     buffer.subarray(0, length === -1 ? buffer.length : length)
-  ).toString("utf8");
+  ).toString("utf-8");
   try {
-    return JSON.parse(json) as NativeCaptureResult;
+    return assertIpcResult<NativeCaptureResult>(JSON.parse(json) as unknown);
   } catch {
     return {
       code: "native_failure",

@@ -1,5 +1,20 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { MutableRefObject, ReactNode } from "react";
+
+import { SearchField } from "@/components/business/search-field";
+import { SelectableRow } from "@/components/business/selectable-row";
+import { ActivityOrb } from "@/components/ui/activity-orb";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ControlChip as Chip } from "@/components/ui/control-chip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   ArrowUp,
   BrainCircuit,
@@ -25,46 +40,7 @@ import {
   TriangleAlert,
   X,
 } from "@/components/ui/icons";
-
-import type { SessionConfig } from "./config";
-import type { SceneInfo } from "./scene";
-import { briefOfferVisible } from "../editor/slotCard";
-import { SceneChip } from "./SceneChip";
-import { sessionModes, sessionMode } from "./mode";
-import { worktreeGatingReason } from "./sessionEvents";
-import { familyOf, groupModels, pickVariant, variantOf } from "./models";
-import type { Effort } from "./models";
-import { useProviderModelFavorites } from "./modelFavorites";
-import { useProviderModelPreferences } from "./modelPreferences";
-import { ProviderIcon } from "../providers/ProviderIcon";
-import { VoiceButton } from "../voice/VoiceButton";
-import { fallbackProviders, providerDisplayName } from "../bridge";
-import type {
-  ConfigOptionInfo,
-  AppshotCapture,
-  GoalCapabilityInfo,
-  GoalSnapshot,
-  ModelChoice,
-} from "../bridge";
-import type { ContextWindow } from "./contextWindow";
-// Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
-import { Statusline } from "./Statusline.tsx";
-import type { StatuslineUsage } from "./Statusline.tsx";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ControlChip as Chip } from "@/components/ui/control-chip";
 import { Input } from "@/components/ui/input";
-import { ActivityOrb } from "@/components/ui/activity-orb";
-import { SelectableRow } from "@/components/business/selectable-row";
-import { SearchField } from "@/components/business/search-field";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -76,8 +52,33 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
-import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
+
+import { fallbackProviders, providerDisplayName } from "../bridge";
+import type {
+  ConfigOptionInfo,
+  AppshotCapture,
+  GoalCapabilityInfo,
+  GoalSnapshot,
+  ModelChoice,
+} from "../bridge";
+import { briefOfferVisible } from "../editor/slotCard";
+import { useT } from "../i18n";
+import { ProviderIcon } from "../providers/ProviderIcon";
+import { VoiceButton } from "../voice/VoiceButton";
+import type { SessionConfig } from "./config";
+import type { ContextWindow } from "./contextWindow";
+import { sessionModes, sessionMode } from "./mode";
+import { useProviderModelFavorites } from "./modelFavorites";
+import { useProviderModelPreferences } from "./modelPreferences";
+import { familyOf, groupModels, pickVariant, variantOf } from "./models";
+import type { Effort } from "./models";
+import type { SceneInfo } from "./scene";
+import { SceneChip } from "./SceneChip";
+import { worktreeGatingReason } from "./sessionEvents";
+// Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
+import { Statusline } from "./Statusline.tsx";
+import type { StatuslineUsage } from "./Statusline.tsx";
 
 interface ComposerProps {
   /**
@@ -204,17 +205,13 @@ function displayGitRef(reference: string | null | undefined): string | null {
     .replace(/^refs\/remotes\//u, "");
 }
 
-/**
- * The persistent checkout control. It keeps execution location separate from source control, and
- * only presents baselines the engine can actually materialize.
- */
-export const CheckoutBar = ({
+export function CheckoutBar({
   config,
   checkout,
 }: {
   readonly config: SessionConfig;
   readonly checkout: NonNullable<ComposerProps["checkout"]>;
-}) => {
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const gatingReason = worktreeGatingReason(
@@ -426,28 +423,24 @@ export const CheckoutBar = ({
       ) : null}
     </div>
   );
-};
+}
 
-/**
-Muted section header inside a picker menu — "Model", "Reasoning".
-*/
-const MenuSection = ({ children }: { readonly children: ReactNode }) => (
-  <p className="text-metadata text-muted-foreground shrink-0 px-2.5 pt-1.5 pb-1">
-    {children}
-  </p>
-);
+function MenuSection({ children }: { readonly children: ReactNode }) {
+  return (
+    <p className="text-metadata text-muted-foreground shrink-0 px-2.5 pt-1.5 pb-1">
+      {children}
+    </p>
+  );
+}
 
-/**
-The small "Default" pill on the adapter's own pick.
-*/
-const DefaultBadge = () => {
+function DefaultBadge() {
   const t = useT();
   return (
     <Badge variant="secondary" size="status">
       {t("composer.default")}
     </Badge>
   );
-};
+}
 
 /**
 One row of a picker menu, normalized so the two data sources below render identically.
@@ -461,7 +454,7 @@ interface PickerRow {
   select: () => void;
 }
 
-const ModelPickerRow = ({
+function ModelPickerRow({
   row,
   favorite,
   disabled,
@@ -473,7 +466,7 @@ const ModelPickerRow = ({
   readonly disabled: boolean;
   readonly onSelect: () => void;
   readonly onToggleFavorite: () => void;
-}) => {
+}) {
   const t = useT();
   const favoriteLabel = t(
     favorite ? "composer.unfavoriteModel" : "composer.favoriteModel",
@@ -515,16 +508,9 @@ const ModelPickerRow = ({
       </Button>
     </div>
   );
-};
+}
 
-/**
- * One chip, one question.
- *
- * These used to be a single popover holding provider, working directory, permissions and two
- * isolation toggles — a settings dashboard behind every chip in the row, so clicking "Auto-edit"
- * asked you about four other things first. Each control row chip now opens only its own list.
- */
-export const SessionModePicker = ({
+export function SessionModePicker({
   mode,
   sandbox,
   disabled = false,
@@ -534,7 +520,7 @@ export const SessionModePicker = ({
   readonly sandbox: SessionConfig["sandbox"];
   readonly disabled?: boolean;
   readonly onMode: SessionConfig["onSessionMode"];
-}) => {
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active = sessionMode(mode, sandbox);
@@ -587,16 +573,18 @@ export const SessionModePicker = ({
       </PopoverContent>
     </Popover>
   );
-};
+}
 
-export const ModePicker = ({ config }: { readonly config: SessionConfig }) => (
-  <SessionModePicker
-    mode={config.mode}
-    sandbox={config.sandbox}
-    disabled={config.modeChangeDisabled}
-    onMode={config.onSessionMode}
-  />
-);
+export function ModePicker({ config }: { readonly config: SessionConfig }) {
+  return (
+    <SessionModePicker
+      mode={config.mode}
+      sandbox={config.sandbox}
+      disabled={config.modeChangeDisabled}
+      onMode={config.onSessionMode}
+    />
+  );
+}
 
 const memoryPresets = [
   { id: "standard", read: "inherit", write: "inherit" },
@@ -605,11 +593,7 @@ const memoryPresets = [
   { id: "learn_only", read: "deny", write: "allow" },
 ] as const;
 
-export const MemoryPicker = ({
-  config,
-}: {
-  readonly config: SessionConfig;
-}) => {
+export function MemoryPicker({ config }: { readonly config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active =
@@ -654,18 +638,15 @@ export const MemoryPicker = ({
       </PopoverContent>
     </Popover>
   );
-};
+}
 
-/**
-A provider-reported collaboration selector. Plan is never synthesized into prompt text.
-*/
-export const CollaborationModePicker = ({
+export function CollaborationModePicker({
   options,
   onChange,
 }: {
   readonly options: ConfigOptionInfo[];
   readonly onChange: (configId: string, value: string) => void;
-}) => {
+}) {
   const [open, setOpen] = useState(false);
   const option = options.find(
     (candidate) =>
@@ -706,9 +687,9 @@ export const CollaborationModePicker = ({
       </PopoverContent>
     </Popover>
   );
-};
+}
 
-export const GoalPicker = ({
+export function GoalPicker({
   capability,
   goal,
   onGoal,
@@ -719,7 +700,7 @@ export const GoalPicker = ({
     action: "set" | "pause" | "resume" | "clear",
     objective?: string
   ) => Promise<void>;
-}) => {
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [objective, setObjective] = useState("");
@@ -827,18 +808,11 @@ export const GoalPicker = ({
       </PopoverContent>
     </Popover>
   );
-};
+}
 
 const worktreeBaselines = ["current", "origin_default"] as const;
 
-/**
-Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit.
-*/
-export const WorktreePicker = ({
-  config,
-}: {
-  readonly config: SessionConfig;
-}) => {
+export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   // No git repository, no picker: every baseline is unavailable, so the trigger greys out with
@@ -981,13 +955,9 @@ export const WorktreePicker = ({
       </PopoverContent>
     </Popover>
   );
-};
+}
 
-export const ProviderPicker = ({
-  config,
-}: {
-  readonly config: SessionConfig;
-}) => {
+export function ProviderPicker({ config }: { readonly config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -1111,31 +1081,9 @@ export const ProviderPicker = ({
       </PopoverContent>
     </Popover>
   );
-};
+}
 
-/**
- * The model this turn will run on: a model chip, and an effort chip when the model comes in
- * reasoning variants.
- *
- * Agents describe this two different ways, so the picker reads both and renders one menu.
- *
- * Newer adapters (claude-agent-acp, codex-acp) report *selectors* as session config options — a
- * "model" one and a "thought_level" one — and those are taken at face value: no parsing, and
- * effort is independent of the model, which is the only way it works for Claude Code.
- *
- * Older adapters report a flat model list instead, and encode effort by minting one entry per
- * level ("gpt-5.1-codex low/medium/high"). `groupModels` folds those back into families: the first
- * chip picks the family, the second the effort, and together they resolve to one of the adapter's
- * own ids.
- *
- * Both APIs are optional and many adapters skip both, in which case the flat list is the core's
- * built-in one for that provider rather than the agent's own — same shape either way. Only a
- * provider we have no list for (a custom one) falls through to the note explaining that its CLI
- * config decides. Before a session exists, the main composer only shows providers with an
- * advertised model list; host surfaces may keep the explicit affordance visible while metadata is
- * loading. Provider-owned config options still arrive after session creation.
- */
-export const ModelPicker = ({
+export function ModelPicker({
   models,
   current,
   defaultModel,
@@ -1163,7 +1111,7 @@ export const ModelPicker = ({
   A live turn owns its provider runtime; model and effort changes wait until it ends.
   */
   readonly disabled?: boolean;
-}) => {
+}) {
   const t = useT();
   const [modelOpen, setModelOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -1409,12 +1357,9 @@ export const ModelPicker = ({
       )}
     </>
   );
-};
+}
 
-/**
-High-frequency, session-scoped configuration stays one click from the prompt.
-*/
-export const SessionControls = ({
+export function SessionControls({
   config,
   models,
   currentModel,
@@ -1437,7 +1382,7 @@ export const SessionControls = ({
   The checkout bar already owns this choice when it is rendered below the composer.
   */
   readonly showWorktreePicker?: boolean;
-}) => {
+}) {
   const t = useT();
   const optionsId = useId();
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -1520,18 +1465,9 @@ export const SessionControls = ({
       ) : null}
     </div>
   );
-};
+}
 
-/**
- * The prompt composer.
- *
- * Two shapes, one document. Compact, it's docked to the foot of the transcript and reads like a
- * chat box — that's the point, it's where you type. Expanded, it *becomes the page*: the card
- * chrome falls away and the document runs the full column on the app's own background, with a
- * centred measure and a real block gutter. It is the same BlockNote document in both — headings,
- * lists, code, `/` skills and `@` files work throughout.
- */
-export const Composer = ({
+export function Composer({
   children,
   config,
   checkout,
@@ -1581,7 +1517,7 @@ export const Composer = ({
   pluginActions,
   sessionId,
   insertBriefRef,
-}: ComposerProps) => {
+}: ComposerProps) {
   const t = useT();
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -1615,7 +1551,7 @@ export const Composer = ({
   const [unfilledRequired, setUnfilledRequired] = useState<string[]>([]);
   useEffect(() => {
     const onRequiredSlots = (event: Event) => {
-      const detail = (event as CustomEvent<string[]>).detail;
+      const { detail } = event as CustomEvent<string[]>;
       setUnfilledRequired(Array.isArray(detail) ? detail : []);
     };
     window.addEventListener("codetwo-required-slots", onRequiredSlots);
@@ -1655,7 +1591,7 @@ export const Composer = ({
         multiple
         hidden
         onChange={(event) => {
-          const files = Array.from(event.currentTarget.files ?? []);
+          const files = [...(event.currentTarget.files ?? [])];
           event.currentTarget.value = "";
           if (files.length > 0) {
             void onAttachImages(files);
@@ -1742,9 +1678,9 @@ export const Composer = ({
         compactDisabledReason={
           running || loading
             ? t("context.compactBusy")
-            : !isComposerEmpty
-              ? t("context.compactDraft")
-              : null
+            : isComposerEmpty
+              ? null
+              : t("context.compactDraft")
         }
       />
 
@@ -2115,4 +2051,4 @@ export const Composer = ({
       </div>
     </section>
   );
-};
+}

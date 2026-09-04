@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Puzzle } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
+import { Puzzle } from "@/components/ui/icons";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import type { PluginUiSlotId } from "../bridge";
 import type { ActivePluginUiContribution } from "./contributions";
 
-export const PluginUiSlot = ({
+export function PluginUiSlot({
   slot,
   contributions,
   onInvoke,
@@ -25,7 +25,7 @@ export const PluginUiSlot = ({
     contribution: ActivePluginUiContribution
   ) => Promise<void>;
   readonly activeCommand?: string;
-}) => {
+}) {
   const [busy, setBusy] = useState<string | null>(null);
   if (contributions.length === 0) {
     return null;
@@ -33,7 +33,7 @@ export const PluginUiSlot = ({
 
   const invoke = async (contribution: ActivePluginUiContribution) => {
     const key = `${contribution.pluginId}:${contribution.id}`;
-    if (busy) {
+    if (busy != null && busy !== "") {
       return;
     }
     setBusy(key);
@@ -259,4 +259,4 @@ export const PluginUiSlot = ({
 
   const unhandledSlot: never = slot;
   return unhandledSlot;
-};
+}

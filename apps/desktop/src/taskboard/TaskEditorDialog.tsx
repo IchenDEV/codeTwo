@@ -88,12 +88,12 @@ function normalizeLabels(value: string): string[] {
   return labels;
 }
 
-export const TaskEditorDialog = ({
+export function TaskEditorDialog({
   task = null,
   initialStatus = "todo",
   onCancel,
   onSave,
-}: TaskEditorDialogProps) => {
+}: TaskEditorDialogProps) {
   const t = useT();
   const formId = useId();
   const titleId = `${formId}-title`;
@@ -283,4 +283,4 @@ export const TaskEditorDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

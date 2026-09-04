@@ -1,8 +1,8 @@
 import { useId, useRef } from "react";
 import type { ChangeEventHandler, ComponentProps } from "react";
-import { Search, X } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
+import { Search, X } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,7 @@ type SearchFieldProps = SearchFieldBaseProps &
     | { clearLabel?: undefined; onClear?: undefined }
   );
 
-const SearchField = ({
+function SearchField({
   label,
   clearLabel,
   onClear,
@@ -32,7 +32,7 @@ const SearchField = ({
   inputClassName,
   onChange,
   ...inputProps
-}: SearchFieldProps) => {
+}: SearchFieldProps) {
   const generatedId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const id = generatedId;
@@ -82,6 +82,6 @@ const SearchField = ({
       ) : null}
     </div>
   );
-};
+}
 
 export { SearchField, type SearchFieldProps };

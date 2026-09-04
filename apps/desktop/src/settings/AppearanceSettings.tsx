@@ -1,6 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+
+import { SettingRow } from "@/components/business/setting-row";
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { ViewSwitcher } from "@/components/business/view-switcher";
+import { Button } from "@/components/ui/button";
 import { Copy, Download, Plus, Trash2, Upload } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TooltipButton } from "@/components/ui/tooltip";
 
 import {
   codeFonts,
@@ -35,20 +50,6 @@ import {
   saveAppearanceThemeDocument,
 } from "../bridge";
 import { useT } from "../i18n";
-import { SettingRow } from "@/components/business/setting-row";
-import { SettingToggle } from "@/components/business/setting-toggle";
-import { ViewSwitcher } from "@/components/business/view-switcher";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 import "./appearance-settings.css";
 
@@ -71,45 +72,47 @@ function paletteVariables(palette: ThemePalette): CSSProperties {
   } as CSSProperties;
 }
 
-const MiniApp = ({ palette }: { readonly palette: ThemePalette }) => (
-  <div className="appearance-mini-app" style={paletteVariables(palette)}>
-    <div className="appearance-mini-titlebar">
-      <span className="appearance-mini-mark" />
-      <span className="appearance-mini-title" />
-      <span className="appearance-mini-window-actions" />
-    </div>
-    <div className="appearance-mini-sidebar">
-      <span className="appearance-mini-line appearance-mini-line-short" />
-      <span className="appearance-mini-line appearance-mini-line-selected" />
-      <span className="appearance-mini-line" />
-      <span className="appearance-mini-line appearance-mini-line-medium" />
-    </div>
-    <div className="appearance-mini-content">
-      <div className="appearance-mini-message">
-        <span className="appearance-mini-line appearance-mini-line-medium" />
-        <span className="appearance-mini-line" />
+function MiniApp({ palette }: { readonly palette: ThemePalette }) {
+  return (
+    <div className="appearance-mini-app" style={paletteVariables(palette)}>
+      <div className="appearance-mini-titlebar">
+        <span className="appearance-mini-mark" />
+        <span className="appearance-mini-title" />
+        <span className="appearance-mini-window-actions" />
+      </div>
+      <div className="appearance-mini-sidebar">
         <span className="appearance-mini-line appearance-mini-line-short" />
-      </div>
-      <div className="appearance-mini-composer">
+        <span className="appearance-mini-line appearance-mini-line-selected" />
+        <span className="appearance-mini-line" />
         <span className="appearance-mini-line appearance-mini-line-medium" />
-        <span className="appearance-mini-send" />
+      </div>
+      <div className="appearance-mini-content">
+        <div className="appearance-mini-message">
+          <span className="appearance-mini-line appearance-mini-line-medium" />
+          <span className="appearance-mini-line" />
+          <span className="appearance-mini-line appearance-mini-line-short" />
+        </div>
+        <div className="appearance-mini-composer">
+          <span className="appearance-mini-line appearance-mini-line-medium" />
+          <span className="appearance-mini-send" />
+        </div>
+      </div>
+      <div className="appearance-mini-dock">
+        <span className="appearance-mini-tool appearance-mini-tool-active" />
+        <span className="appearance-mini-tool" />
+        <span className="appearance-mini-tool" />
       </div>
     </div>
-    <div className="appearance-mini-dock">
-      <span className="appearance-mini-tool appearance-mini-tool-active" />
-      <span className="appearance-mini-tool" />
-      <span className="appearance-mini-tool" />
-    </div>
-  </div>
-);
+  );
+}
 
-const SchemePreview = ({
+function SchemePreview({
   scheme,
   theme,
 }: {
   readonly scheme: ThemePreference;
   readonly theme: AppearanceTheme;
-}) => {
+}) {
   if (scheme !== "system") {
     return (
       <div className="appearance-scheme-preview" aria-hidden="true">
@@ -131,24 +134,26 @@ const SchemePreview = ({
       </div>
     </div>
   );
-};
+}
 
-const ThemeSwatch = ({
+function ThemeSwatch({
   palette,
   scheme,
 }: {
   readonly palette: ThemePalette;
   readonly scheme: ColorScheme;
-}) => (
-  <span
-    className="appearance-theme-swatch"
-    data-scheme={scheme}
-    style={paletteVariables(palette)}
-    aria-hidden="true"
-  />
-);
+}) {
+  return (
+    <span
+      className="appearance-theme-swatch"
+      data-scheme={scheme}
+      style={paletteVariables(palette)}
+      aria-hidden="true"
+    />
+  );
+}
 
-const ThemeCard = ({
+function ThemeCard({
   theme,
   selected,
   onSelect,
@@ -158,7 +163,7 @@ const ThemeCard = ({
   readonly selected: boolean;
   readonly onSelect: () => void;
   readonly onDuplicate: () => void;
-}) => {
+}) {
   const t = useT();
   return (
     <div
@@ -193,9 +198,9 @@ const ThemeCard = ({
       </TooltipButton>
     </div>
   );
-};
+}
 
-const ColorField = ({
+function ColorField({
   label,
   value,
   onCommit,
@@ -203,7 +208,7 @@ const ColorField = ({
   readonly label: string;
   readonly value: string;
   readonly onCommit: (value: string) => void;
-}) => {
+}) {
   const t = useT();
   const resolved = resolveThemeColor(value).toLowerCase();
   const [draft, setDraft] = useState(resolved);
@@ -249,9 +254,9 @@ const ColorField = ({
       </span>
     </SettingRow>
   );
-};
+}
 
-const PaletteEditor = ({
+function PaletteEditor({
   scheme,
   palette,
   onChange,
@@ -259,7 +264,7 @@ const PaletteEditor = ({
   readonly scheme: ColorScheme;
   readonly palette: ThemePalette;
   readonly onChange: (key: AppearanceColorKey, value: string) => void;
-}) => {
+}) {
   const t = useT();
   return (
     <section
@@ -293,9 +298,9 @@ const PaletteEditor = ({
       />
     </section>
   );
-};
+}
 
-const RangeSetting = ({
+function RangeSetting({
   label,
   hint,
   value,
@@ -311,25 +316,27 @@ const RangeSetting = ({
   readonly max: number;
   readonly suffix: string;
   readonly onChange: (value: number) => void;
-}) => (
-  <SettingRow label={label} description={hint}>
-    <span className="gap-module-inset flex max-w-full shrink-0 items-center">
-      <output className="text-metadata text-content-muted min-w-14 text-right font-mono tabular-nums">
-        {value}
-        {suffix}
-      </output>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        aria-label={label}
-        className="accent-primary w-32 max-w-full"
-      />
-    </span>
-  </SettingRow>
-);
+}) {
+  return (
+    <SettingRow label={label} description={hint}>
+      <span className="gap-module-inset flex max-w-full shrink-0 items-center">
+        <output className="text-metadata text-content-muted min-w-14 text-right font-mono tabular-nums">
+          {value}
+          {suffix}
+        </output>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          aria-label={label}
+          className="accent-primary w-32 max-w-full"
+        />
+      </span>
+    </SettingRow>
+  );
+}
 
 const fontWeightLabels = {
   medium: "settings.fontWeightMedium",
@@ -337,13 +344,13 @@ const fontWeightLabels = {
   semibold: "settings.fontWeightSemibold",
 } as const;
 
-const ProfileHeading = ({
+function ProfileHeading({
   scheme,
   palette,
 }: {
   readonly scheme: ColorScheme;
   readonly palette: ThemePalette;
-}) => {
+}) {
   const t = useT();
   return (
     <div className="appearance-profile-heading">
@@ -355,9 +362,9 @@ const ProfileHeading = ({
       </h3>
     </div>
   );
-};
+}
 
-const TypographyProfileEditor = ({
+function TypographyProfileEditor({
   scheme,
   palette,
   profile,
@@ -367,7 +374,7 @@ const TypographyProfileEditor = ({
   readonly palette: ThemePalette;
   readonly profile: SchemeAppearanceProfile;
   readonly onChange: (patch: Partial<SchemeAppearanceProfile>) => void;
-}) => {
+}) {
   const t = useT();
   const label =
     scheme === "light" ? t("settings.lightTheme") : t("settings.darkTheme");
@@ -481,9 +488,9 @@ const TypographyProfileEditor = ({
       </SettingRow>
     </section>
   );
-};
+}
 
-const SurfaceProfileEditor = ({
+function SurfaceProfileEditor({
   scheme,
   palette,
   profile,
@@ -493,7 +500,7 @@ const SurfaceProfileEditor = ({
   readonly palette: ThemePalette;
   readonly profile: SchemeAppearanceProfile;
   readonly onChange: (patch: Partial<SchemeAppearanceProfile>) => void;
-}) => {
+}) {
   const t = useT();
   const label =
     scheme === "light" ? t("settings.lightTheme") : t("settings.darkTheme");
@@ -523,15 +530,15 @@ const SurfaceProfileEditor = ({
       />
     </section>
   );
-};
+}
 
-export const AppearanceSettings = ({
+export function AppearanceSettings({
   value,
   onChange,
 }: {
   readonly value: ThemePreference;
   readonly onChange: (preference: ThemePreference) => void;
-}) => {
+}) {
   const t = useT();
   const settings = useAppearanceSettings();
   const catalog = themeCatalog(settings);
@@ -585,8 +592,8 @@ export const AppearanceSettings = ({
       const filename = `${
         activeTheme.name
           .toLowerCase()
-          .replace(/[^a-z0-9]+/gu, "-")
-          .replace(/^-|-$/gu, "") || "codetwo-theme"
+          .replaceAll(/[^a-z0-9]+/gu, "-")
+          .replaceAll(/^-|-$/gu, "") || "codetwo-theme"
       }.json`;
       const nativeResult = await saveAppearanceThemeDocument(filename, json);
       if (nativeResult === "cancelled") {
@@ -926,4 +933,4 @@ export const AppearanceSettings = ({
       {status ? <output className="appearance-status">{status}</output> : null}
     </div>
   );
-};
+}

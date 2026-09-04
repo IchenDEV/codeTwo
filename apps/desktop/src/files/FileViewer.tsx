@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import {
   AtSign,
   ChevronRight,
   MessageSquarePlus,
   Save,
 } from "@/components/ui/icons";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
+import { TooltipButton } from "@/components/ui/tooltip";
 
 import { codeFonts, fontWeights, useAppearanceSettings } from "../appearance";
 import { readText, writeText } from "../bridge";
@@ -13,10 +18,6 @@ import { useColorScheme } from "../theme";
 import { useToast } from "../ui/toast";
 import { ImagePreview } from "./ImagePreview";
 import { imageTypeOf } from "./imageTypes";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
-import { TooltipButton } from "@/components/ui/tooltip";
 
 type MonacoModule = typeof import("./monaco");
 type Editor = import("monaco-editor").editor.IStandaloneCodeEditor;
@@ -57,19 +58,7 @@ function revealTarget(
   editor.focus();
 }
 
-/**
- * The built-in file editor — a pane inside the right panel, under the file tabs.
- *
- * A real editor, not a viewer with an edit mode: Monaco (VS Code's editor component) with shiki's
- * TextMate highlighting and, where a language server is installed, full LSP — completions, hover,
- * diagnostics, go-to-definition (see ../lsp). Typing edits the buffer directly; ⌘S writes it to
- * disk, and the tab/breadcrumb dot carries the unsaved state, exactly like an IDE.
- *
- * The one thing kept from the viewer days: select lines and leave a comment, and the comment lands
- * in the prompt document as a context block — "look at these lines and do X" is still the whole
- * reason a coding agent's app has a file pane.
- */
-export const FileViewer = ({
+export function FileViewer({
   cwd,
   path,
   onInsert,
@@ -92,7 +81,7 @@ export const FileViewer = ({
   A token makes repeated jumps to the same path and position observable.
   */
   readonly reveal: FileRevealTarget | null;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const scheme = useColorScheme();
@@ -421,7 +410,7 @@ export const FileViewer = ({
           {/* Monaco owns this node. It stays mounted through loading so create() has real bounds. */}
           <div ref={container} className="absolute inset-0" />
 
-          {error ? (
+          {error != null && error !== "" ? (
             <p className="text-body text-destructive absolute inset-x-0 top-0 px-6 py-4">
               {error}
             </p>
@@ -487,4 +476,4 @@ export const FileViewer = ({
       )}
     </div>
   );
-};
+}

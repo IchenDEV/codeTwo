@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { MessageSquare, RefreshCw, Trash2 } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 
 import {
   confirmNative,
@@ -18,11 +24,6 @@ import type {
 import { useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
 import { ProjectIcon } from "../projects/ProjectIcon";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { Page, Row } from "./SettingsPrimitives";
 import {
   worktreeBranchDisplay,
@@ -31,10 +32,10 @@ import {
 } from "./worktrees";
 import type { WorktreeStatusBadge } from "./worktrees";
 
-type ProjectWorktreeState = {
+interface ProjectWorktreeState {
   entries: WorktreeStatusEntry[];
   error: string | null;
-};
+}
 
 const worktreeKindLabels: Record<WorktreeEntryKind, StringKey> = {
   orphan: "worktree.kindOrphan",
@@ -48,7 +49,7 @@ const worktreeBadgeLabels: Record<WorktreeStatusBadge, StringKey> = {
   discarded: "worktree.badgeDiscarded",
 };
 
-export const WorktreeSettingsPage = ({
+export function WorktreeSettingsPage({
   projects,
   onOpenSession = () => {},
   lister = listProjectWorktrees,
@@ -68,7 +69,7 @@ export const WorktreeSettingsPage = ({
   readonly sessionDiscarder?: typeof discardSessionWorktree;
   readonly orphanDiscarder?: typeof discardOrphanWorktree;
   readonly confirmer?: typeof confirmNative;
-}) => {
+}) {
   const t = useT();
   const [worktreesByProject, setWorktreesByProject] = useState<
     Record<string, ProjectWorktreeState>
@@ -97,12 +98,12 @@ export const WorktreeSettingsPage = ({
             candidate.path,
             { entries: await lister(candidate.path), error: null },
           ] as const;
-        } catch (cause) {
+        } catch (error) {
           return [
             candidate.path,
             {
               entries: [],
-              error: t("worktree.manageFailed", { error: String(cause) }),
+              error: t("worktree.manageFailed", { error: String(error) }),
             },
           ] as const;
         }
@@ -134,10 +135,10 @@ export const WorktreeSettingsPage = ({
         setWorktreeRootDraft(settings.root ?? "");
         setWorktreeLimitDraft(String(settings.auto_delete_limit));
       })
-      .catch((cause) => {
+      .catch((error) => {
         if (isActive) {
           setWorktreeSettingsError(
-            t("worktree.settingsLoadFailed", { error: String(cause) })
+            t("worktree.settingsLoadFailed", { error: String(error) })
           );
         }
       });
@@ -153,12 +154,12 @@ export const WorktreeSettingsPage = ({
         ...current,
         [path]: { entries, error: null },
       }));
-    } catch (cause) {
+    } catch (error) {
       setWorktreesByProject((current) => ({
         ...current,
         [path]: {
           entries: [],
-          error: t("worktree.manageFailed", { error: String(cause) }),
+          error: t("worktree.manageFailed", { error: String(error) }),
         },
       }));
     }
@@ -182,9 +183,9 @@ export const WorktreeSettingsPage = ({
         await loadWorktrees(projects);
       }
       return true;
-    } catch (cause) {
+    } catch (error) {
       setWorktreeSettingsError(
-        t("worktree.settingsSaveFailed", { error: String(cause) })
+        t("worktree.settingsSaveFailed", { error: String(error) })
       );
       setWorktreeRootDraft(worktreeSettings.root ?? "");
       setWorktreeLimitDraft(String(worktreeSettings.auto_delete_limit));
@@ -237,12 +238,12 @@ export const WorktreeSettingsPage = ({
         await orphanDiscarder(projectPath, route.worktreePath);
       }
       await loadProjectWorktrees(projectPath);
-    } catch (cause) {
+    } catch (error) {
       setWorktreesByProject((current) => ({
         ...current,
         [projectPath]: {
           entries: current[projectPath]?.entries ?? [],
-          error: t("worktree.discardFailed", { error: String(cause) }),
+          error: t("worktree.discardFailed", { error: String(error) }),
         },
       }));
     } finally {
@@ -341,7 +342,7 @@ export const WorktreeSettingsPage = ({
           </p>
         )}
       </section>
-      {worktreeSettingsError ? (
+      {worktreeSettingsError != null && worktreeSettingsError !== "" ? (
         <p className="text-metadata text-destructive mt-2" role="alert">
           {worktreeSettingsError}
         </p>
@@ -402,7 +403,7 @@ export const WorktreeSettingsPage = ({
               </div>
 
               <div className="worktree-project-card">
-                {state.error ? (
+                {state.error != null && state.error !== "" ? (
                   <p
                     className="text-metadata text-destructive px-3 py-3"
                     role="alert"
@@ -434,7 +435,7 @@ export const WorktreeSettingsPage = ({
                                   {t(worktreeBadgeLabels[badge])}
                                 </Badge>
                               ))}
-                              {branch ? (
+                              {branch != null && branch !== "" ? (
                                 <span className="shrink-0 font-mono">
                                   {branch}
                                 </span>
@@ -449,7 +450,7 @@ export const WorktreeSettingsPage = ({
                           </span>
                         }
                       >
-                        {entry.session_id ? (
+                        {entry.session_id != null && entry.session_id !== "" ? (
                           <Button
                             variant="secondary"
                             size="xs"
@@ -486,4 +487,4 @@ export const WorktreeSettingsPage = ({
       )}
     </Page>
   );
-};
+}

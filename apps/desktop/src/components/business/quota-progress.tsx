@@ -19,11 +19,11 @@ function quotaTone(remainingPercent: number): QuotaProgressTone {
   return "success";
 }
 
-const QuotaProgress = ({
+function QuotaProgress({
   label,
   remainingPercent,
   density = "detail",
-}: QuotaProgressProps) => {
+}: QuotaProgressProps) {
   const clampedPercent = Number.isFinite(remainingPercent)
     ? Math.min(100, Math.max(0, remainingPercent))
     : 0;
@@ -55,7 +55,7 @@ const QuotaProgress = ({
       className="block gap-0"
     />
   );
-};
+}
 
 export {
   QuotaProgress,

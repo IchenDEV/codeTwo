@@ -1,11 +1,25 @@
+import type {
+  AppState,
+  BinaryFileData,
+  BinaryFiles,
+  ExcalidrawElement,
+} from "./excalidrawAdapter";
 import {
-  allowedElementTypes,
+  toAppState,
+  toDataURL,
+  toExcalidrawElement,
+  toExcalidrawImageElement,
+  toExcalidrawTextElement,
+  toFileId,
+  toLineHeight,
+} from "./excalidrawAdapter";
+import {
   canvasEngine,
   canvasEngineVersion,
   canvasSchemaVersion,
+  isAllowedElementType,
 } from "./types";
 import type {
-  AllowedElementType,
   CanvasAppStateSubset,
   CanvasAssetReference,
   CanvasEnvelope,
@@ -13,14 +27,6 @@ import type {
   CanvasTheme,
   NormalizedStaticAsset,
 } from "./types";
-import type {
-  AppState,
-  BinaryFileData,
-  BinaryFiles,
-  ExcalidrawElement,
-  ExcalidrawImageElement,
-  ExcalidrawTextElement,
-} from "./excalidrawAdapter";
 
 const dataUrlRe = /^data:[^;,]+(?:;[^;,]+)*;base64,[a-z0-9+/=\s]+$/iu;
 const inlineDataUrlRe = /data:[^;,\s]+(?:;[^;,\s]+)*;base64,[a-z0-9+/=\s]+/giu;
@@ -37,6 +43,14 @@ const colorPresets = new Set([
 ]);
 
 type ElementRecord = Record<string, unknown> & { type?: unknown; id?: unknown };
+
+function toElementRecord(element: object): ElementRecord {
+  const record: ElementRecord = {};
+  for (const [key, value] of Object.entries(element)) {
+    record[key] = value;
+  }
+  return record;
+}
 
 export class CanvasEnvelopeError extends Error {
   readonly code:
@@ -58,6 +72,13 @@ export function isDataUrl(value: unknown): value is string {
 
 export function isExternalUrl(value: unknown): value is string {
   return typeof value === "string" && httpUrlRe.test(value);
+}
+
+function readUnknownField(object: object, key: string): unknown {
+  if (!Object.prototype.hasOwnProperty.call(object, key)) {
+    return undefined;
+  }
+  return Object.getOwnPropertyDescriptor(object, key)?.value;
 }
 
 function finiteNumber(value: unknown, fallback = 0): number {
@@ -109,7 +130,7 @@ function safeText(value: unknown, fallback = ""): string {
 }
 
 function safeElementBase(element: ElementRecord, index: number): ElementRecord {
-  const type = element.type;
+  const { type } = element;
   return {
     angle: finiteNumber(element.angle),
     backgroundColor: safeColor(element.backgroundColor, "transparent"),
@@ -150,9 +171,9 @@ function sanitizeElement(
   if (element == null || typeof element !== "object") {
     return null;
   }
-  const source = element as ElementRecord;
-  const type = source.type;
-  if (!allowedElementTypes.includes(type as AllowedElementType)) {
+  const source = toElementRecord(element);
+  const { type } = source;
+  if (typeof type !== "string" || !isAllowedElementType(type)) {
     return null;
   }
   const base = safeElementBase(source, index);
@@ -160,12 +181,12 @@ function sanitizeElement(
   switch (type) {
     case "rectangle":
     case "ellipse": {
-      return base as ExcalidrawElement;
+      return toExcalidrawElement({ ...base, type });
     }
     case "line":
     case "arrow": {
       const points = safePoints(source.points);
-      return {
+      return toExcalidrawElement({
         ...base,
         endArrowhead: type === "arrow" ? "arrow" : null,
         endBinding: null,
@@ -175,10 +196,10 @@ function sanitizeElement(
         startBinding: null,
         type,
         ...(type === "arrow" ? { elbowed: false } : {}),
-      } as unknown as ExcalidrawElement;
+      });
     }
     case "freedraw": {
-      return {
+      return toExcalidrawElement({
         ...base,
         lastCommittedPoint: null,
         points: safePoints(source.points),
@@ -189,21 +210,18 @@ function sanitizeElement(
           : [],
         simulatePressure: Boolean(source.simulatePressure),
         type,
-      } as unknown as ExcalidrawElement;
+      });
     }
     case "text": {
       const text = safeText(source.text);
       const originalText = safeText(source.originalText, text);
-      return {
+      return toExcalidrawTextElement({
         ...base,
         autoResize: source.autoResize !== false,
         containerId: null,
         fontFamily: source.fontFamily === 3 ? 3 : 2,
         fontSize: Math.min(96, Math.max(8, finiteNumber(source.fontSize, 16))),
-        lineHeight: finiteNumber(
-          source.lineHeight,
-          1.25
-        ) as ExcalidrawTextElement["lineHeight"],
+        lineHeight: toLineHeight(finiteNumber(source.lineHeight, 1.25)),
         originalText,
         text,
         textAlign:
@@ -215,17 +233,17 @@ function sanitizeElement(
           source.verticalAlign === "middle" || source.verticalAlign === "bottom"
             ? source.verticalAlign
             : "top",
-      } as ExcalidrawTextElement;
+      });
     }
     case "image": {
       const fileId = safeId(source.fileId, "");
       if (!fileId || isDataUrl(source.fileId) || isExternalUrl(source.fileId)) {
         return null;
       }
-      return {
+      return toExcalidrawImageElement({
         ...base,
         crop: null,
-        fileId,
+        fileId: toFileId(fileId),
         scale:
           Array.isArray(source.scale) && source.scale.length >= 2
             ? [
@@ -235,7 +253,7 @@ function sanitizeElement(
             : [1, 1],
         status: "saved",
         type,
-      } as ExcalidrawImageElement;
+      });
     }
     default: {
       return null;
@@ -260,14 +278,15 @@ export function sanitizeElements(
 }
 
 export function sanitizeAppState(
-  appState: Partial<AppState> | null | undefined
+  appState: Partial<AppState> | CanvasAppStateSubset | null | undefined
 ): CanvasAppStateSubset {
   const source = appState ?? {};
+  const zoomSource = source.zoom;
   const zoomValue =
-    typeof source.zoom === "number"
-      ? finiteNumber(source.zoom, 1)
-      : source.zoom && typeof source.zoom === "object" && "value" in source.zoom
-        ? finiteNumber((source.zoom as { value?: unknown }).value, 1)
+    typeof zoomSource === "number"
+      ? finiteNumber(zoomSource, 1)
+      : zoomSource != null && typeof zoomSource === "object"
+        ? finiteNumber(readUnknownField(zoomSource, "value"), 1)
         : 1;
   return {
     gridSize:
@@ -329,13 +348,14 @@ function normalizeAssetReferences(
     }
   }
   const unique = new Map(refs.map((asset) => [asset.fileId, asset]));
-  return Array.from(unique.values()).sort((a, b) =>
-    a.fileId.localeCompare(b.fileId)
-  );
+  return [...unique.values()].sort((a, b) => a.fileId.localeCompare(b.fileId));
 }
 
 export function createEnvelope(
-  snapshot: Pick<CanvasSceneSnapshot, "elements" | "appState">,
+  snapshot: {
+    elements: readonly unknown[];
+    appState: Partial<AppState> | CanvasAppStateSubset;
+  },
   revision: number,
   theme: CanvasTheme,
   existingAssetReferences: readonly CanvasAssetReference[] = []
@@ -391,7 +411,7 @@ function stableValue(value: unknown): unknown {
 export function serializeEnvelope(envelope: CanvasEnvelope): string {
   const sanitized = createEnvelope(
     {
-      appState: envelope.appState as unknown as AppState,
+      appState: envelope.appState,
       elements: envelope.elements,
     },
     envelope.revision,
@@ -408,7 +428,7 @@ function assertEnvelope(value: unknown): asserts value is CanvasEnvelope {
       "Canvas envelope must be an object"
     );
   }
-  const envelope = value as Partial<CanvasEnvelope>;
+  const envelope = toElementRecord(value);
   if (
     envelope.engine !== canvasEngine ||
     envelope.engineVersion !== canvasEngineVersion
@@ -449,7 +469,7 @@ export function deserializeEnvelope(
     );
   }
   assertEnvelope(parsed);
-  const envelope = parsed as CanvasEnvelope;
+  const envelope = parsed;
   const sanitizedElements = sanitizeElements(envelope.elements);
   if (
     sanitizedElements.some((element) =>
@@ -483,9 +503,7 @@ export function deserializeEnvelope(
   }
   const elements = sanitizedElements;
   return {
-    appState: sanitizeAppState(
-      envelope.appState as unknown as Partial<AppState>
-    ),
+    appState: sanitizeAppState(envelope.appState),
     assetReferences: refs,
     elements,
     engine: canvasEngine,
@@ -535,22 +553,19 @@ export async function rehydrateEnvelope(
     const bytes = await readBytes(supplied.bytes);
     const binaryFile: BinaryFileData = {
       created: 0,
-      dataURL: bytesToDataUrl(
-        bytes,
-        supplied.mimeType
-      ) as BinaryFileData["dataURL"],
-      id: supplied.fileId as BinaryFileData["id"],
+      dataURL: toDataURL(bytesToDataUrl(bytes, supplied.mimeType)),
+      id: toFileId(supplied.fileId),
       mimeType: supplied.mimeType,
       version: 1,
     };
     files[supplied.fileId] = binaryFile;
   }
   return {
-    appState: {
+    appState: toAppState({
       ...envelope.appState,
       theme: envelope.theme,
       zoom: { value: envelope.appState.zoom },
-    } as AppState,
+    }),
     elements: envelope.elements,
     files,
   };

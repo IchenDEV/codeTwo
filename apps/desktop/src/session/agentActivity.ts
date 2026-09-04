@@ -1,3 +1,4 @@
+import { asJsonObject } from "../lib/jsonValue";
 import type { ToolEntry } from "./turns";
 
 export interface AgentActivity {
@@ -63,8 +64,9 @@ function normalizeIdentifier(value: string | null | undefined): string {
 }
 
 function parsedRecord(value: unknown): JsonRecord | null {
-  if (Boolean(value) && typeof value === "object" && !Array.isArray(value)) {
-    return value as JsonRecord;
+  const direct = asJsonObject(value);
+  if (direct != null) {
+    return direct;
   }
   if (typeof value !== "string") {
     return null;
@@ -74,12 +76,7 @@ function parsedRecord(value: unknown): JsonRecord | null {
     return null;
   }
   try {
-    const parsed: unknown = JSON.parse(text);
-    return Boolean(parsed) &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed)
-      ? (parsed as JsonRecord)
-      : null;
+    return asJsonObject(JSON.parse(text) as unknown);
   } catch {
     return null;
   }

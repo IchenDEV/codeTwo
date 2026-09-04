@@ -1,4 +1,21 @@
 import { useDeferredValue, useEffect, useState } from "react";
+
+import { PageHeader } from "@/components/business/page-header";
+import { SearchField } from "@/components/business/search-field";
+import { SettingRow } from "@/components/business/setting-row";
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { ViewSwitcher } from "@/components/business/view-switcher";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertTriangle,
   ArchiveRestore,
@@ -16,6 +33,17 @@ import {
   ShieldCheck,
   Trash2,
 } from "@/components/ui/icons";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   addMemory,
@@ -48,34 +76,8 @@ import type {
 import { useLanguage, useT } from "../i18n";
 import { en as EN_STRINGS } from "../i18n/strings";
 import type { StringKey } from "../i18n/strings";
+import { useLatestRef } from "../lib/useLatestRef";
 import { useToast } from "../ui/toast";
-import { PageHeader } from "@/components/business/page-header";
-import { SearchField } from "@/components/business/search-field";
-import { SettingRow } from "@/components/business/setting-row";
-import { SettingToggle } from "@/components/business/setting-toggle";
-import { ViewSwitcher } from "@/components/business/view-switcher";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import {
   filterMemories,
   memoryActivityAt,
@@ -179,7 +181,7 @@ function formatDate(
   ).format(new Date(value));
 }
 
-const PolicySelect = ({
+function PolicySelect({
   label,
   value,
   disabled,
@@ -189,7 +191,7 @@ const PolicySelect = ({
   readonly value: MemoryPolicyValue;
   readonly disabled: boolean;
   readonly onChange: (value: MemoryPolicyValue) => void;
-}) => {
+}) {
   const t = useT();
   return (
     <SettingRow label={label} density="compact" disabled={disabled}>
@@ -221,9 +223,9 @@ const PolicySelect = ({
       </Select>
     </SettingRow>
   );
-};
+}
 
-const StatButton = ({
+function StatButton({
   value,
   label,
   active,
@@ -235,26 +237,28 @@ const StatButton = ({
   readonly active: boolean;
   readonly warning?: boolean;
   readonly onClick: () => void;
-}) => (
-  <Button
-    type="button"
-    variant="selectable"
-    size="row"
-    focusStyle="inset"
-    data-selected={active ? "true" : "false"}
-    className={cn(
-      "memory-stat",
-      active && "is-active",
-      warning && value > 0 && "is-warning"
-    )}
-    onClick={onClick}
-  >
-    <strong className="text-body font-mono tabular-nums">{value}</strong>
-    <span>{label}</span>
-  </Button>
-);
+}) {
+  return (
+    <Button
+      type="button"
+      variant="selectable"
+      size="row"
+      focusStyle="inset"
+      data-selected={active ? "true" : "false"}
+      className={cn(
+        "memory-stat",
+        active && "is-active",
+        warning === true && value > 0 && "is-warning"
+      )}
+      onClick={onClick}
+    >
+      <strong className="text-body font-mono tabular-nums">{value}</strong>
+      <span>{label}</span>
+    </Button>
+  );
+}
 
-const MemoryRow = ({
+function MemoryRow({
   memory,
   selected,
   checked,
@@ -268,7 +272,7 @@ const MemoryRow = ({
   readonly onCheck: (isChecked: boolean) => void;
   readonly onOpen: () => void;
   readonly onPin: () => void;
-}) => {
+}) {
   const t = useT();
   const { locale } = useLanguage();
   return (
@@ -338,11 +342,11 @@ const MemoryRow = ({
       </div>
     </article>
   );
-};
+}
 
 type EditorMode = "new" | "edit" | "correct";
 
-const MemoryEditor = ({
+function MemoryEditor({
   open,
   mode,
   record,
@@ -355,8 +359,12 @@ const MemoryEditor = ({
   readonly record: MemoryRecord | null;
   readonly saving: boolean;
   readonly onOpenChange: (isOpen: boolean) => void;
-  readonly onSave: (category: string, content: string, isPinned: boolean) => void;
-}) => {
+  readonly onSave: (
+    category: string,
+    content: string,
+    isPinned: boolean
+  ) => void;
+}) {
   const t = useT();
   const [category, setCategory] = useState("fact");
   const [content, setContent] = useState("");
@@ -448,9 +456,9 @@ const MemoryEditor = ({
       </DialogContent>
     </Dialog>
   );
-};
+}
 
-const DetailPanel = ({
+function DetailPanel({
   memory,
   evidence,
   usages,
@@ -478,7 +486,7 @@ const DetailPanel = ({
   readonly onDelete: () => void;
   readonly onCategory: (category: string) => void;
   readonly onOpenSession: (sessionId: string) => void;
-}) => {
+}) {
   const t = useT();
   const { locale } = useLanguage();
   if (!memory) {
@@ -498,7 +506,13 @@ const DetailPanel = ({
     <div className="memory-detail-content">
       <header className="memory-detail-header">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <Badge variant={memory.conflict_with_id ? "destructive" : "outline"}>
+          <Badge
+            variant={
+              memory.conflict_with_id != null && memory.conflict_with_id !== ""
+                ? "destructive"
+                : "outline"
+            }
+          >
             {memory.conflict_with_id
               ? t("memory.needsAttention")
               : t(originLabelKey(memory.origin))}
@@ -534,12 +548,13 @@ const DetailPanel = ({
               </TooltipButton>
             </>
           ) : (
-            !memory.conflict_with_id && (
+            memory.conflict_with_id == null ||
+            (memory.conflict_with_id === "" && (
               <Button variant="ghost" size="xs" onClick={onRestore}>
                 <ArchiveRestore />
                 {t("memory.restore")}
               </Button>
-            )
+            ))
           )}
         </div>
       </header>
@@ -697,12 +712,9 @@ const DetailPanel = ({
       </section>
     </div>
   );
-};
+}
 
-/**
-An auditable, project-scoped memory console inside Settings.
-*/
-export const MemorySettingsPage = ({
+export function MemorySettingsPage({
   projectPath,
   projects,
   onOpenSession,
@@ -710,7 +722,7 @@ export const MemorySettingsPage = ({
   readonly projectPath: string;
   readonly projects: Project[];
   readonly onOpenSession: (sessionId: string) => void;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const isNarrow = useNarrowMemoryLayout();
@@ -735,11 +747,9 @@ export const MemorySettingsPage = ({
   const [editorMode, setEditorMode] = useState<EditorMode>("new");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (projectPath) {
-      setSelectedProject(projectPath);
-    }
-  }, [projectPath]);
+  if (projectPath && projectPath !== selectedProject) {
+    setSelectedProject(projectPath);
+  }
 
   const refresh = async () => {
     if (!selectedProject) {
@@ -759,7 +769,9 @@ export const MemorySettingsPage = ({
       setStats(nextStats);
       setPolicy(nextPolicy);
       setSelectedId((current) =>
-        current && nextRecords.some((record) => record.id === current)
+        current != null &&
+        current !== "" &&
+        nextRecords.some((record) => record.id === current)
           ? current
           : (nextRecords.find((record) => record.layer !== "L3")?.id ?? null)
       );
@@ -769,6 +781,7 @@ export const MemorySettingsPage = ({
       setLoading(false);
     }
   };
+  const refreshRef = useLatestRef(refresh);
 
   useEffect(() => {
     void getMemorySettings()
@@ -779,8 +792,8 @@ export const MemorySettingsPage = ({
     setCheckedIds(new Set());
     setSelectedId(null);
     setRevealed(false);
-    void refresh();
-  }, [refresh]);
+    void refreshRef.current();
+  }, [selectedProject, refreshRef]);
 
   const selected = records.find((record) => record.id === selectedId) ?? null;
   const profile = memoryProfile(records);
@@ -806,11 +819,12 @@ export const MemorySettingsPage = ({
       setDetailLoading(false);
     }
   };
+  const loadDetailRef = useLatestRef(loadDetail);
 
   useEffect(() => {
     setRevealed(false);
-    void loadDetail(selected, false);
-  }, [loadDetail, selected]);
+    void loadDetailRef.current(selected, false);
+  }, [selected?.id, loadDetailRef, selected]);
 
   const updateSettings = (patch: Partial<MemorySettings>) => {
     const previous = settings;
@@ -959,9 +973,8 @@ export const MemorySettingsPage = ({
     }
   };
 
-  const policySummary = !settings.enabled
-    ? t("memory.behavior.off")
-    : t("memory.behavior.summary", {
+  const policySummary = settings.enabled
+    ? t("memory.behavior.summary", {
         capture: effectivePolicy(
           settings.capture,
           policy.capture,
@@ -976,7 +989,8 @@ export const MemorySettingsPage = ({
         )
           ? t("memory.behavior.on")
           : t("memory.behavior.offShort"),
-      });
+      })
+    : t("memory.behavior.off");
   const detail = (
     <DetailPanel
       memory={selected}
@@ -1006,7 +1020,9 @@ export const MemorySettingsPage = ({
           );
         }
       }}
-      onEdit={() => openEditor(selected?.editable ? "edit" : "correct")}
+      onEdit={() =>
+        openEditor(selected?.editable === true ? "edit" : "correct")
+      }
       onDelete={() => {
         if (selected) {
           void removePermanently(selected).catch((error) =>
@@ -1161,9 +1177,7 @@ export const MemorySettingsPage = ({
         </details>
       ) : null}
 
-      {!selectedProject ? (
-        <p className="memory-empty-state">{t("memory.noProject")}</p>
-      ) : (
+      {selectedProject ? (
         <div className="memory-workbench">
           <div className="memory-stats" aria-label={t("memory.stats")}>
             <StatButton
@@ -1437,6 +1451,8 @@ export const MemorySettingsPage = ({
             </aside>
           </div>
         </div>
+      ) : (
+        <p className="memory-empty-state">{t("memory.noProject")}</p>
       )}
 
       <Dialog
@@ -1462,4 +1478,4 @@ export const MemorySettingsPage = ({
       />
     </div>
   );
-};
+}

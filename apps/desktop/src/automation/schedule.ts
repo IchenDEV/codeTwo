@@ -1,5 +1,9 @@
 export type AutomationCadence =
-  "hourly" | "daily" | "weekdays" | "weekly" | "custom";
+  | "hourly"
+  | "daily"
+  | "weekdays"
+  | "weekly"
+  | "custom";
 
 export interface ScheduleDraft {
   cadence: AutomationCadence;

@@ -25,7 +25,7 @@ export interface ActivityOrbProps extends Omit<
  * thinking-orbs has separately tuned 20px and 64px drawings. C2's compact controls need a 14px
  * loading mark, so that case keeps the detailed 20px preset and only changes its CSS footprint.
  */
-export const ActivityOrb = memo(function ActivityOrb({
+function ActivityOrbComponent({
   state,
   visualSize = 20,
   className,
@@ -45,4 +45,6 @@ export const ActivityOrb = memo(function ActivityOrb({
       style={{ height: visualSize, width: visualSize, ...style }}
     />
   );
-});
+}
+
+export const ActivityOrb = memo(ActivityOrbComponent);

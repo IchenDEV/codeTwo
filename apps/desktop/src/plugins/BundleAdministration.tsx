@@ -1,14 +1,6 @@
 import { useState } from "react";
 
-import {
-  CircleAlert,
-  ExternalLink,
-  PackageCheck,
-  ShieldAlert,
-  ShieldCheck,
-  Trash2,
-} from "@/components/ui/icons";
-
+import { StatusBadge } from "@/components/business/status-badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,19 +13,26 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { StatusBadge } from "@/components/business/status-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { openExternal } from "../bridge";
+import {
+  CircleAlert,
+  ExternalLink,
+  PackageCheck,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+} from "@/components/ui/icons";
+import { Spinner } from "@/components/ui/spinner";
 
+import { openExternal } from "../bridge";
 import type {
   PluginManagerBundle,
   PluginManagerLabels,
   PluginManagerScope,
 } from "./types";
 
-export const BundleAdministration = ({
+export function BundleAdministration({
   pluginName,
   bundle,
   scope,
@@ -55,7 +54,7 @@ export const BundleAdministration = ({
     pluginId: string,
     isKeepData: boolean
   ) => Promise<void>;
-}) => {
+}) {
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const [keepData, setKeepData] = useState(true);
   const isUserScope = scope.kind === "user";
@@ -65,7 +64,7 @@ export const BundleAdministration = ({
   const isUninstallBusy = busyAction === uninstallKey;
   const repositoryUrl = (() => {
     const repository = bundle.repository?.trim();
-    if (!repository) {
+    if (repository == null || repository === "") {
       return null;
     }
     try {
@@ -128,19 +127,21 @@ export const BundleAdministration = ({
           )}
         </div>
 
-        {!isUserScope ? (
+        {isUserScope ? (
+          bundle.requiresTrust && !bundle.trusted ? (
+            <p className="text-metadata text-muted-foreground flex items-start gap-2">
+              <ShieldAlert
+                className="text-warning mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <span>{labels.trustRequired}</span>
+            </p>
+          ) : null
+        ) : (
           <p className="text-metadata text-muted-foreground">
             {labels.bundleManagementUserOnly}
           </p>
-        ) : bundle.requiresTrust && !bundle.trusted ? (
-          <p className="text-metadata text-muted-foreground flex items-start gap-2">
-            <ShieldAlert
-              className="text-warning mt-0.5 size-4 shrink-0"
-              aria-hidden="true"
-            />
-            <span>{labels.trustRequired}</span>
-          </p>
-        ) : null}
+        )}
 
         {bundle.contributions.length ? (
           <div className="flex flex-col gap-2">
@@ -179,7 +180,8 @@ export const BundleAdministration = ({
                   />
                   <span>
                     {diagnostic.message}
-                    {diagnostic.component ? (
+                    {diagnostic.component != null &&
+                    diagnostic.component !== "" ? (
                       <span className="text-callout block">
                         {diagnostic.component}
                       </span>
@@ -194,7 +196,7 @@ export const BundleAdministration = ({
         {isUserScope ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              {repositoryUrl ? (
+              {repositoryUrl != null && repositoryUrl !== "" ? (
                 <Button
                   type="button"
                   size="compact"
@@ -284,4 +286,4 @@ export const BundleAdministration = ({
       </AlertDialog>
     </>
   );
-};
+}

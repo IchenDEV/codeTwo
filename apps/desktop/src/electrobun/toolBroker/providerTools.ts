@@ -72,9 +72,14 @@ interface PluginBundle {
 }
 
 function table(value: unknown): Table {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-    ? (value as Table)
-    : {};
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const record: Table = {};
+  for (const [key, entry] of Object.entries(value)) {
+    record[key] = entry;
+  }
+  return record;
 }
 
 function string(value: unknown): string | null {
@@ -212,9 +217,11 @@ function bundledPlugin(codexHome: string, name: string): PluginBundle | null {
       .flatMap((entry): PluginBundle[] => {
         const root = join(directory, entry);
         try {
-          const manifest = JSON.parse(
-            readFileSync(join(root, ".codex-plugin", "plugin.json"), "utf8")
-          ) as Table;
+          const manifest = table(
+            JSON.parse(
+              readFileSync(join(root, ".codex-plugin", "plugin.json"), "utf-8")
+            ) as unknown
+          );
           const version = string(manifest.version);
           return manifest.name === name && version != null && version !== ""
             ? [{ root, version }]
@@ -372,7 +379,7 @@ export function loadConfiguredComputerUse(dataDirectory: string): {
   }
   let document: Table;
   try {
-    document = table(JSON.parse(readFileSync(path, "utf8")));
+    document = table(JSON.parse(readFileSync(path, "utf-8")));
   } catch (error) {
     return {
       backends: [cuaDriverOption()],
@@ -545,7 +552,7 @@ export function loadConfiguredBrowserUse(dataDirectory: string): {
 
   let document: Table;
   try {
-    document = table(JSON.parse(readFileSync(path, "utf8")));
+    document = table(JSON.parse(readFileSync(path, "utf-8")));
   } catch (error) {
     return {
       accessEnabled: false,
@@ -830,7 +837,7 @@ export function detectHostToolEvidence(
   } else {
     try {
       config = table(
-        Bun.TOML.parse(readFileSync(join(codexHome, "config.toml"), "utf8"))
+        Bun.TOML.parse(readFileSync(join(codexHome, "config.toml"), "utf-8"))
       );
     } catch (error) {
       configError = error instanceof Error ? error.message : String(error);

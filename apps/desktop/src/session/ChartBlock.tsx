@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
-import { useLanguage, useT } from "../i18n";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+import { useLanguage, useT } from "../i18n";
 
 export interface ChartSeries {
   name: string;
@@ -48,11 +49,17 @@ export function parseChartSpec(source: string): ChartSpec | null {
     return null;
   }
   const input = value as Record<string, unknown>;
-  const type = input.type;
+  const { type } = input;
   const title = text(input.title, 120);
   const xLabel = text(input.xLabel, 80);
   const yLabel = text(input.yLabel, 80);
-  if ((type !== "line" && type !== "bar") || !title || !xLabel || !yLabel) {
+  if (
+    (type !== "line" && type !== "bar") ||
+    !title ||
+    !xLabel ||
+    yLabel == null ||
+    yLabel === ""
+  ) {
     return null;
   }
   if (
@@ -128,7 +135,7 @@ function paddedDomain(
   return [minimum - pad, maximum + pad];
 }
 
-export const ChartBlock = ({ spec }: { readonly spec: ChartSpec }) => {
+export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
   const t = useT();
   const { locale } = useLanguage();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -346,7 +353,7 @@ export const ChartBlock = ({ spec }: { readonly spec: ChartSpec }) => {
             })
           : spec.series.map((series, seriesIndex) => {
               const visiblePosition = visibleIndexes.indexOf(seriesIndex);
-              if (visiblePosition < 0) {
+              if (visiblePosition === -1) {
                 return null;
               }
               return (
@@ -381,4 +388,4 @@ export const ChartBlock = ({ spec }: { readonly spec: ChartSpec }) => {
       </svg>
     </figure>
   );
-};
+}

@@ -1,9 +1,9 @@
-import { toManagedPluginScope } from "./catalog";
 import type {
   ManagedPluginChangePlan,
   ManagedPluginChangeRequest,
   ManagedPluginChangeResult,
 } from "../bridge";
+import { toManagedPluginScope } from "./catalog";
 import type {
   PluginManagerChangePlan,
   PluginManagerChangeRequest,

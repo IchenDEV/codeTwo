@@ -68,46 +68,46 @@
   // ---- selectors ------------------------------------------------------------------------------
 
   function selectorFor(element) {
-        if (element.id) {
-          return `#${CSS.escape(element.id)}`;
+    if (element.id) {
+      return `#${CSS.escape(element.id)}`;
+    }
+    const parts = [];
+    let node = element;
+    while (node && node.nodeType === 1 && parts.length < 4) {
+      let part = node.tagName.toLowerCase();
+      const cls = (node.getAttribute("class") || "")
+        .trim()
+        .split(/\s+/)
+        .filter((c) => c && !c.startsWith("__codetwo"))
+        .slice(0, 2)
+        .map((c) => `.${CSS.escape(c)}`)
+        .join("");
+      part += cls;
+      const parent = node.parentElement;
+      if (parent) {
+        const same = [...parent.children].filter(
+          (c) => c.tagName === node.tagName
+        );
+        if (same.length > 1) {
+          part += `:nth-of-type(${same.indexOf(node) + 1})`;
         }
-        const parts = [];
-        let node = element;
-        while (node && node.nodeType === 1 && parts.length < 4) {
-          let part = node.tagName.toLowerCase();
-          const cls = (node.getAttribute("class") || "")
-            .trim()
-            .split(/\s+/)
-            .filter((c) => c && !c.startsWith("__codetwo"))
-            .slice(0, 2)
-            .map((c) => `.${CSS.escape(c)}`)
-            .join("");
-          part += cls;
-          const parent = node.parentElement;
-          if (parent) {
-            const same = [...parent.children].filter(
-              (c) => c.tagName === node.tagName
-            );
-            if (same.length > 1) {
-              part += `:nth-of-type(${same.indexOf(node) + 1})`;
-            }
-          }
-          parts.unshift(part);
-          if (node.id) {
-            parts[0] = `#${CSS.escape(node.id)}`;
-            break;
-          }
-          node = parent;
-        }
-        return parts.join(" > ");
       }
+      parts.unshift(part);
+      if (node.id) {
+        parts[0] = `#${CSS.escape(node.id)}`;
+        break;
+      }
+      node = parent;
+    }
+    return parts.join(" > ");
+  }
 
   function textOf(element) {
-        const t = (element.textContent || element.textContent || "")
-          .trim()
-          .replaceAll(/\s+/g, " ");
-        return t.length > 160 ? `${t.slice(0, 160)}…` : t;
-      }
+    const t = (element.textContent || element.textContent || "")
+      .trim()
+      .replaceAll(/\s+/g, " ");
+    return t.length > 160 ? `${t.slice(0, 160)}…` : t;
+  }
 
   // ---- overlay --------------------------------------------------------------------------------
 
@@ -157,318 +157,318 @@
   `;
 
   function ensureUI() {
-        if (host) {
-          return;
-        }
-        host = document.createElement("div");
-        host.className = "__codetwo-annotator";
-        host.style.cssText =
-          "all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647";
-        root = host.attachShadow({ mode: "open" });
-        const style = document.createElement("style");
-        style.textContent = CSS_TEXT;
-        hover = document.createElement("div");
-        hover.className = "box";
-        hover.style.display = "none";
-        tag = document.createElement("div");
-        tag.className = "tag";
-        tag.style.display = "none";
-        layer = document.createElement("div");
-        root.append(style, hover, tag, layer);
-        document.documentElement.append(host);
-      }
+    if (host) {
+      return;
+    }
+    host = document.createElement("div");
+    host.className = "__codetwo-annotator";
+    host.style.cssText =
+      "all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647";
+    root = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = CSS_TEXT;
+    hover = document.createElement("div");
+    hover.className = "box";
+    hover.style.display = "none";
+    tag = document.createElement("div");
+    tag.className = "tag";
+    tag.style.display = "none";
+    layer = document.createElement("div");
+    root.append(style, hover, tag, layer);
+    document.documentElement.append(host);
+  }
 
   function place(element, box, label) {
-        const r = element.getBoundingClientRect();
-        box.style.display = "block";
-        box.style.left = `${r.left}px`;
-        box.style.top = `${r.top}px`;
-        box.style.width = `${r.width}px`;
-        box.style.height = `${r.height}px`;
-        if (label) {
-          label.style.display = "block";
-          label.style.left = `${r.left}px`;
-          label.style.top = `${Math.max(0, r.top - 18)}px`;
-        }
-      }
+    const r = element.getBoundingClientRect();
+    box.style.display = "block";
+    box.style.left = `${r.left}px`;
+    box.style.top = `${r.top}px`;
+    box.style.width = `${r.width}px`;
+    box.style.height = `${r.height}px`;
+    if (label) {
+      label.style.display = "block";
+      label.style.left = `${r.left}px`;
+      label.style.top = `${Math.max(0, r.top - 18)}px`;
+    }
+  }
 
   function drawPins() {
-        layer.textContent = "";
-        for (const [index, n] of notes.entries()) {
-          if (!n.el || !n.el.isConnected) {
-            continue;
-          }
-          const r = n.el.getBoundingClientRect();
-          const pin = document.createElement("div");
-          pin.className = "pin";
-          pin.textContent = String(index + 1);
-          pin.style.left = `${r.right - 10}px`;
-          pin.style.top = `${r.top - 10}px`;
-          pin.title = n.note || "(no note)";
-          layer.append(pin);
-        }
+    layer.textContent = "";
+    for (const [index, n] of notes.entries()) {
+      if (!n.el || !n.el.isConnected) {
+        continue;
       }
+      const r = n.el.getBoundingClientRect();
+      const pin = document.createElement("div");
+      pin.className = "pin";
+      pin.textContent = String(index + 1);
+      pin.style.left = `${r.right - 10}px`;
+      pin.style.top = `${r.top - 10}px`;
+      pin.title = n.note || "(no note)";
+      layer.append(pin);
+    }
+  }
 
   // ---- the editor -----------------------------------------------------------------------------
 
   function toHex(value) {
-        const m = String(value).match(/rgba?\(([^)]+)\)/);
-        if (!m) {
-          return "#000000";
-        }
-        const [r, g, b] = m[1].split(",").map((v) => Number.parseFloat(v));
-        const hex = (n) =>
-          Math.max(0, Math.min(255, Math.round(n || 0)))
-            .toString(16)
-            .padStart(2, "0");
-        return `#${hex(r)}${hex(g)}${hex(b)}`;
-      }
+    const m = String(value).match(/rgba?\(([^)]+)\)/);
+    if (!m) {
+      return "#000000";
+    }
+    const [r, g, b] = m[1].split(",").map((v) => Number.parseFloat(v));
+    const hex = (n) =>
+      Math.max(0, Math.min(255, Math.round(n || 0)))
+        .toString(16)
+        .padStart(2, "0");
+    return `#${hex(r)}${hex(g)}${hex(b)}`;
+  }
 
   function record(property, from, to) {
-        const seen = draft.styles.get(property);
-        draft.styles.set(property, { from: seen ? seen.from : from, to });
-        target.style.setProperty(property, to);
-      }
+    const seen = draft.styles.get(property);
+    draft.styles.set(property, { from: seen ? seen.from : from, to });
+    target.style.setProperty(property, to);
+  }
 
   function field(f, computed) {
-        const row = document.createElement("div");
-        row.className = "row";
-        const name = document.createElement("span");
-        name.textContent = f.label;
-        row.append(name);
-        const from = computed.getPropertyValue(f.prop).trim();
+    const row = document.createElement("div");
+    row.className = "row";
+    const name = document.createElement("span");
+    name.textContent = f.label;
+    row.append(name);
+    const from = computed.getPropertyValue(f.prop).trim();
 
-        switch (f.kind) {
-          case "color": {
-            const wrap = document.createElement("div");
-            wrap.className = "swatch";
-            const dot = document.createElement("input");
-            dot.type = "color";
-            dot.value = toHex(from);
-            const text = document.createElement("input");
-            text.type = "text";
-            text.value = from;
-            dot.addEventListener("input", () => {
-              text.value = dot.value;
-              record(f.prop, from, dot.value);
-            });
-            text.addEventListener("change", () =>
-              record(f.prop, from, text.value.trim())
-            );
-            wrap.append(dot, text);
-            row.append(wrap);
+    switch (f.kind) {
+      case "color": {
+        const wrap = document.createElement("div");
+        wrap.className = "swatch";
+        const dot = document.createElement("input");
+        dot.type = "color";
+        dot.value = toHex(from);
+        const text = document.createElement("input");
+        text.type = "text";
+        text.value = from;
+        dot.addEventListener("input", () => {
+          text.value = dot.value;
+          record(f.prop, from, dot.value);
+        });
+        text.addEventListener("change", () =>
+          record(f.prop, from, text.value.trim())
+        );
+        wrap.append(dot, text);
+        row.append(wrap);
 
-            break;
-          }
-          case "weight": {
-            const sel = document.createElement("select");
-            for (const w of WEIGHTS) {
-              const o = document.createElement("option");
-              o.value = w;
-              o.textContent = w;
-              sel.append(o);
-            }
-            sel.value = WEIGHTS.has(from) ? from : "400";
-            sel.addEventListener("change", () => record(f.prop, from, sel.value));
-            row.append(sel);
-
-            break;
-          }
-          case "px":
-          case "number": {
-            const input = document.createElement("input");
-            input.type = "number";
-            if (f.step) {
-              input.step = f.step;
-            }
-            if (f.min !== undefined) {
-              input.min = f.min;
-            }
-            if (f.max !== undefined) {
-              input.max = f.max;
-            }
-            input.value = Number.parseFloat(from) || 0;
-            input.addEventListener("input", () =>
-              record(
-                f.prop,
-                from,
-                f.kind === "px" ? `${input.value}px` : input.value
-              )
-            );
-            row.append(input);
-
-            break;
-          }
-          default: {
-            const input = document.createElement("input");
-            input.type = "text";
-            input.value = from;
-            input.addEventListener("change", () =>
-              record(f.prop, from, input.value.trim())
-            );
-            row.append(input);
-          }
-        }
-        return row;
+        break;
       }
+      case "weight": {
+        const sel = document.createElement("select");
+        for (const w of WEIGHTS) {
+          const o = document.createElement("option");
+          o.value = w;
+          o.textContent = w;
+          sel.append(o);
+        }
+        sel.value = WEIGHTS.has(from) ? from : "400";
+        sel.addEventListener("change", () => record(f.prop, from, sel.value));
+        row.append(sel);
+
+        break;
+      }
+      case "px":
+      case "number": {
+        const input = document.createElement("input");
+        input.type = "number";
+        if (f.step) {
+          input.step = f.step;
+        }
+        if (f.min !== undefined) {
+          input.min = f.min;
+        }
+        if (f.max !== undefined) {
+          input.max = f.max;
+        }
+        input.value = Number.parseFloat(from) || 0;
+        input.addEventListener("input", () =>
+          record(
+            f.prop,
+            from,
+            f.kind === "px" ? `${input.value}px` : input.value
+          )
+        );
+        row.append(input);
+
+        break;
+      }
+      default: {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = from;
+        input.addEventListener("change", () =>
+          record(f.prop, from, input.value.trim())
+        );
+        row.append(input);
+      }
+    }
+    return row;
+  }
 
   function closePanel() {
-        if (panel) {
-          panel.remove();
-        }
-        panel = null;
-        target = null;
-        draft = null;
-        before = null;
-      }
+    if (panel) {
+      panel.remove();
+    }
+    panel = null;
+    target = null;
+    draft = null;
+    before = null;
+  }
 
   function select(element) {
-        closePanel();
-        target = element;
-        before = element.getAttribute("style");
-        draft = { note: "", styles: new Map() };
-        const computed = getComputedStyle(element);
+    closePanel();
+    target = element;
+    before = element.getAttribute("style");
+    draft = { note: "", styles: new Map() };
+    const computed = getComputedStyle(element);
 
-        panel = document.createElement("div");
-        panel.className = "card";
+    panel = document.createElement("div");
+    panel.className = "card";
 
-        const note = document.createElement("textarea");
-        note.rows = 2;
-        note.placeholder = "Describe these changes…";
-        note.addEventListener("input", () => (draft.note = note.value));
+    const note = document.createElement("textarea");
+    note.rows = 2;
+    note.placeholder = "Describe these changes…";
+    note.addEventListener("input", () => (draft.note = note.value));
 
-        const who = document.createElement("div");
-        who.className = "who";
-        who.textContent = element.tagName.toLowerCase();
+    const who = document.createElement("div");
+    who.className = "who";
+    who.textContent = element.tagName.toLowerCase();
 
-        panel.append(note, who);
-        for (const f of FIELDS) {
-          panel.append(field(f, computed));
-        }
+    panel.append(note, who);
+    for (const f of FIELDS) {
+      panel.append(field(f, computed));
+    }
 
-        const acts = document.createElement("div");
-        acts.className = "acts";
-        const cancel = document.createElement("button");
-        cancel.className = "cancel";
-        cancel.textContent = "Cancel";
-        cancel.addEventListener("click", () => {
-          if (before === null) {
-            target.removeAttribute("style");
-          } else {
-            target.setAttribute("style", before);
-          }
-          closePanel();
-        });
-        const ok = document.createElement("button");
-        ok.className = "ok";
-        ok.textContent = "Add note";
-        ok.addEventListener("click", commit);
-        acts.append(cancel, ok);
-        panel.append(acts);
-
-        root.append(panel);
-
-        // Anchored below the element, pulled back inside the viewport — the dock is narrow and the
-        // panel must never hang off the edge where it can't be reached.
-        const r = element.getBoundingClientRect();
-        const w = 300;
-        panel.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left))}px`;
-        panel.style.top = `${Math.max(8, Math.min(window.innerHeight - 120, r.bottom + 8))}px`;
-        note.focus();
+    const acts = document.createElement("div");
+    acts.className = "acts";
+    const cancel = document.createElement("button");
+    cancel.className = "cancel";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => {
+      if (before === null) {
+        target.removeAttribute("style");
+      } else {
+        target.setAttribute("style", before);
       }
+      closePanel();
+    });
+    const ok = document.createElement("button");
+    ok.className = "ok";
+    ok.textContent = "Add note";
+    ok.addEventListener("click", commit);
+    acts.append(cancel, ok);
+    panel.append(acts);
+
+    root.append(panel);
+
+    // Anchored below the element, pulled back inside the viewport — the dock is narrow and the
+    // panel must never hang off the edge where it can't be reached.
+    const r = element.getBoundingClientRect();
+    const w = 300;
+    panel.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left))}px`;
+    panel.style.top = `${Math.max(8, Math.min(window.innerHeight - 120, r.bottom + 8))}px`;
+    note.focus();
+  }
 
   function commit() {
-        if (!target) {
-          return;
-        }
-        const styles = [...draft.styles.entries()]
-          .filter(([, v]) => v.from !== v.to)
-          .map(([property, v]) => ({ from: v.from, property, to: v.to }));
-        if (draft.note.trim() || styles.length) {
-          notes.push({
-            before,
-            el: target,
-            note: draft.note.trim(),
-            selector: selectorFor(target),
-            styles,
-            tag: target.tagName.toLowerCase(),
-            text: textOf(target),
-          });
-        }
-        closePanel();
-        drawPins();
-      }
+    if (!target) {
+      return;
+    }
+    const styles = [...draft.styles.entries()]
+      .filter(([, v]) => v.from !== v.to)
+      .map(([property, v]) => ({ from: v.from, property, to: v.to }));
+    if (draft.note.trim() || styles.length) {
+      notes.push({
+        before,
+        el: target,
+        note: draft.note.trim(),
+        selector: selectorFor(target),
+        styles,
+        tag: target.tagName.toLowerCase(),
+        text: textOf(target),
+      });
+    }
+    closePanel();
+    drawPins();
+  }
 
   // ---- mode -----------------------------------------------------------------------------------
 
   function inUI(node) {
-        return !!(
-          node &&
-          (node === host || node.closest?.(".__codetwo-annotator"))
-        );
-      }
+    return !!(
+      node &&
+      (node === host || node.closest?.(".__codetwo-annotator"))
+    );
+  }
 
   function onMove(e) {
-        if (!isOn || panel) {
-          return;
-        }
-        const element = e.target;
-        if (!element || element.nodeType !== 1 || inUI(element)) {
-          return;
-        }
-        place(element, hover, tag);
-        tag.textContent = element.tagName.toLowerCase();
-      }
+    if (!isOn || panel) {
+      return;
+    }
+    const element = e.target;
+    if (!element || element.nodeType !== 1 || inUI(element)) {
+      return;
+    }
+    place(element, hover, tag);
+    tag.textContent = element.tagName.toLowerCase();
+  }
 
   function onClick(e) {
-        if (!isOn || inUI(e.target)) {
-          return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        hover.style.display = "none";
-        tag.style.display = "none";
-        select(e.target);
-      }
+    if (!isOn || inUI(e.target)) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    hover.style.display = "none";
+    tag.style.display = "none";
+    select(e.target);
+  }
 
   function onKey(e) {
-        if (!(isOn && e.key === "Escape" && panel)) {
-          return;
-        }
+    if (!(isOn && e.key === "Escape" && panel)) {
+      return;
+    }
 
-        e.preventDefault();
-        closePanel();
-      }
+    e.preventDefault();
+    closePanel();
+  }
 
   function reflow() {
-        if (isOn) {
-          drawPins();
-        }
-      }
+    if (isOn) {
+      drawPins();
+    }
+  }
 
   function setMode(next) {
-        isOn = !!next;
-        ensureUI();
-        if (isOn) {
-          document.addEventListener("mousemove", onMove, { capture: true });
-          document.addEventListener("click", onClick, { capture: true });
-          document.addEventListener("keydown", onKey, { capture: true });
-          window.addEventListener("scroll", reflow, { capture: true });
-          window.addEventListener("resize", reflow, { capture: true });
-          drawPins();
-        } else {
-          document.removeEventListener("mousemove", onMove, true);
-          document.removeEventListener("click", onClick, true);
-          document.removeEventListener("keydown", onKey, true);
-          window.removeEventListener("scroll", reflow, true);
-          window.removeEventListener("resize", reflow, true);
-          closePanel();
-          hover.style.display = "none";
-          tag.style.display = "none";
-          layer.textContent = "";
-        }
-        return isOn;
-      }
+    isOn = !!next;
+    ensureUI();
+    if (isOn) {
+      document.addEventListener("mousemove", onMove, { capture: true });
+      document.addEventListener("click", onClick, { capture: true });
+      document.addEventListener("keydown", onKey, { capture: true });
+      window.addEventListener("scroll", reflow, { capture: true });
+      window.addEventListener("resize", reflow, { capture: true });
+      drawPins();
+    } else {
+      document.removeEventListener("mousemove", onMove, true);
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("scroll", reflow, true);
+      window.removeEventListener("resize", reflow, true);
+      closePanel();
+      hover.style.display = "none";
+      tag.style.display = "none";
+      layer.textContent = "";
+    }
+    return isOn;
+  }
 
   window.__codetwoAnnotate = {
     clear: () => {

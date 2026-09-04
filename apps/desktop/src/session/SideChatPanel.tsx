@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+
 import { ArrowUp, MessageSquare, Plus, Square, X } from "@/components/ui/icons";
 
 import {
@@ -31,10 +32,10 @@ import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { VoiceButton } from "../voice/VoiceButton";
 import { ModelPicker, SessionModePicker } from "./Composer";
+import type { BuiltinLinkActions } from "./MarkdownContent";
 import { sessionModes } from "./mode";
 import type { SessionMode } from "./mode";
 import { TurnCard } from "./TurnCard";
-import type { BuiltinLinkActions } from "./MarkdownContent";
 import { applyEvent, newTurn } from "./turns";
 import type { Turn } from "./turns";
 
@@ -169,15 +170,15 @@ interface TransientChatPanelProps {
   readonly voiceEnabled?: boolean;
 }
 
-export const QuickChatPanel = (props: TransientChatPanelProps) => (
-  <TransientChatPanel {...props} surface="quick" />
-);
+export function QuickChatPanel(props: TransientChatPanelProps) {
+  return <TransientChatPanel {...props} surface="quick" />;
+}
 
-export const SideChatPanel = (props: TransientChatPanelProps) => (
-  <TransientChatPanel {...props} surface="side" />
-);
+export function SideChatPanel(props: TransientChatPanelProps) {
+  return <TransientChatPanel {...props} surface="side" />;
+}
 
-const TransientChatPanel = ({
+function TransientChatPanel({
   open,
   onClose,
   provider,
@@ -191,7 +192,7 @@ const TransientChatPanel = ({
   linkActions,
   voiceEnabled = true,
   surface,
-}: TransientChatPanelProps & { readonly surface: "quick" | "side" }) => {
+}: TransientChatPanelProps & { readonly surface: "quick" | "side" }) {
   const t = useT();
   const isFloating = surface === "quick";
   const labels =
@@ -362,7 +363,12 @@ const TransientChatPanel = ({
   const providerModels = (providerId: string) => {
     const advertised =
       providers.find((candidate) => candidate.id === providerId)?.models ?? [];
-    if (advertised.length > 0 || providerId !== provider || !model) {
+    if (
+      advertised.length > 0 ||
+      providerId !== provider ||
+      model == null ||
+      model === ""
+    ) {
       return advertised;
     }
     return [{ description: null, id: model, name: model }];
@@ -386,7 +392,7 @@ const TransientChatPanel = ({
     setActiveTabId(tab.localId);
     if (isReplaceExisting) {
       for (const existing of previous) {
-        if (existing.sessionId) {
+        if (existing.sessionId != null && existing.sessionId !== "") {
           void closeTransientSession(existing.sessionId);
         }
       }
@@ -477,7 +483,11 @@ const TransientChatPanel = ({
   useEffect(() => {
     let isDisposed = false;
     const subscription = onEngineEvent((event) => {
-      if (event.event === "session_created" && event.request_id) {
+      if (
+        event.event === "session_created" &&
+        event.request_id != null &&
+        event.request_id !== ""
+      ) {
         const pending = pendingCreationsRef.current.get(event.request_id);
         if (!pending) {
           return;
@@ -527,7 +537,8 @@ const TransientChatPanel = ({
       if (
         event.event === "error" &&
         event.session === null &&
-        event.request_id
+        event.request_id != null &&
+        event.request_id !== ""
       ) {
         const pending = pendingCreationsRef.current.get(event.request_id);
         if (!pending) {
@@ -608,7 +619,7 @@ const TransientChatPanel = ({
     tabs.find((tab) => tab.localId === activeTabId) ?? tabs[0] ?? null;
 
   useEffect(() => {
-    if (!open || !activeTab) {
+    if (!open || activeTab == null) {
       return;
     }
     const frame = window.requestAnimationFrame(() => {
@@ -692,7 +703,7 @@ const TransientChatPanel = ({
       mode: preset.mode,
       sandbox: preset.sandbox,
     }));
-    if (!tab.sessionId) {
+    if (tab.sessionId == null || tab.sessionId === "") {
       return;
     }
     const requestId = globalThis.crypto.randomUUID();
@@ -740,7 +751,7 @@ const TransientChatPanel = ({
       turns: [...current.turns, newTurn(summary, promptRequestId)],
     }));
 
-    if (tab.sessionId) {
+    if (tab.sessionId != null && tab.sessionId !== "") {
       try {
         await submitPrompt(tab.sessionId, doc, promptRequestId);
       } catch (error) {
@@ -798,7 +809,7 @@ const TransientChatPanel = ({
     const remaining = current.filter((tab) => tab.localId !== tabId);
     tabsRef.current = remaining;
     setTabs(remaining);
-    if (closing.sessionId) {
+    if (closing.sessionId != null && closing.sessionId !== "") {
       void closeTransientSession(closing.sessionId);
     }
     if (activeTabId === tabId) {
@@ -923,7 +934,7 @@ const TransientChatPanel = ({
         ref={viewportRef}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
-        {activeTab && activeTab.turns.length > 0 ? (
+        {activeTab != null && activeTab.turns.length > 0 ? (
           <ol className="m-0 mx-auto w-full max-w-2xl list-none px-5 pt-5 pb-8">
             {activeTab.turns.map((turn) => (
               <li key={turn.transcriptStartSeq ?? turn.id}>
@@ -947,7 +958,7 @@ const TransientChatPanel = ({
         )}
       </div>
 
-      {activeTab ? (
+      {activeTab != null ? (
         <form
           className="shrink-0 p-4 pt-2"
           onSubmit={(event) => {
@@ -955,7 +966,7 @@ const TransientChatPanel = ({
             void send();
           }}
         >
-          {activeTab.controlError ? (
+          {activeTab.controlError != null && activeTab.controlError !== "" ? (
             <p role="alert" className="text-fine text-destructive mb-2 px-1">
               {activeTab.controlError}
             </p>
@@ -1081,7 +1092,10 @@ const TransientChatPanel = ({
                       controlError: null,
                       currentModel: nextModel,
                     }));
-                    if (activeTab.sessionId) {
+                    if (
+                      activeTab.sessionId != null &&
+                      activeTab.sessionId !== ""
+                    ) {
                       void setModel(activeTab.sessionId, nextModel).catch(
                         (error) =>
                           updateTab(activeTab.localId, (tab) => ({
@@ -1095,7 +1109,10 @@ const TransientChatPanel = ({
                     }
                   }}
                   onConfigOption={(configId, value) => {
-                    if (!activeTab.sessionId) {
+                    if (
+                      activeTab.sessionId == null ||
+                      activeTab.sessionId === ""
+                    ) {
                       return;
                     }
                     const previousOptions = activeTab.configOptions;
@@ -1136,7 +1153,7 @@ const TransientChatPanel = ({
                 />
               ) : null}
               {activeTab.running ? (
-                activeTab.sessionId ? (
+                activeTab.sessionId != null && activeTab.sessionId !== "" ? (
                   <Button
                     type="button"
                     variant="destructive"
@@ -1181,4 +1198,4 @@ const TransientChatPanel = ({
       ) : null}
     </section>
   );
-};
+}

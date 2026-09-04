@@ -1,10 +1,11 @@
-import { CircleAlert } from "@/components/ui/icons";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CircleAlert } from "@/components/ui/icons";
+
+import type { PermissionContext, PermissionContextKind } from "../bridge";
 import { useT } from "../i18n";
 import type { Translate } from "../i18n";
-import type { PermissionContext, PermissionContextKind } from "../bridge";
 import type { PermissionQueueItem } from "./sessionEvents";
 
 function contextLabel(kind: PermissionContextKind, t: Translate): string {
@@ -33,11 +34,11 @@ function contextLabel(kind: PermissionContextKind, t: Translate): string {
   }
 }
 
-const PermissionDetails = ({
+function PermissionDetails({
   context,
 }: {
   readonly context: PermissionContext;
-}) => {
+}) {
   const t = useT();
   const details = [
     [t("permission.server"), context.server],
@@ -63,12 +64,9 @@ const PermissionDetails = ({
       <p>{t("permission.requiredEvenFullAccess")}</p>
     </div>
   );
-};
+}
 
-/**
-A non-modal approval surface anchored to the chat that owns the request.
-*/
-export const PermissionCard = ({
+export function PermissionCard({
   request,
   pendingCount,
   onAnswer,
@@ -76,7 +74,7 @@ export const PermissionCard = ({
   readonly request: PermissionQueueItem;
   readonly pendingCount: number;
   readonly onAnswer: (optionId: string | null) => Promise<void> | void;
-}) => {
+}) {
   const t = useT();
   const [answering, setAnswering] = useState(false);
 
@@ -159,4 +157,4 @@ export const PermissionCard = ({
       </section>
     </div>
   );
-};
+}

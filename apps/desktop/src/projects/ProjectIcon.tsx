@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+
 import { Folder } from "@/components/ui/icons";
+import { cn } from "@/lib/utils";
 
 import { getProjectIcon } from "../bridge";
 import type { Project, ProjectIconData } from "../bridge";
-import { cn } from "@/lib/utils";
 
 const iconRequests = new Map<string, Promise<ProjectIconData | null>>();
 
@@ -20,10 +21,7 @@ function loadIcon(project: Project): Promise<ProjectIconData | null> {
   return request;
 }
 
-/**
-Project identity used in settings and the sidebar; custom pixels fall back to the folder mark.
-*/
-export const ProjectIcon = ({
+export function ProjectIcon({
   project,
   size = 20,
   className,
@@ -31,14 +29,14 @@ export const ProjectIcon = ({
   readonly project: Project;
   readonly size?: number;
   readonly className?: string;
-}) => {
+}) {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
     let objectUrl: string | null = null;
     setUrl(null);
-    if (!project.has_icon) {
+    if (project.has_icon !== true) {
       return () => {};
     }
 
@@ -55,7 +53,7 @@ export const ProjectIcon = ({
     });
     return () => {
       isActive = false;
-      if (objectUrl) {
+      if (objectUrl != null && objectUrl !== "") {
         URL.revokeObjectURL(objectUrl);
       }
     };
@@ -71,7 +69,7 @@ export const ProjectIcon = ({
       )}
       style={{ height: size, width: size }}
     >
-      {url ? (
+      {url != null && url !== "" ? (
         <img src={url} alt="" className="size-full object-cover" />
       ) : (
         <Folder
@@ -81,4 +79,4 @@ export const ProjectIcon = ({
       )}
     </span>
   );
-};
+}

@@ -1,6 +1,7 @@
 import type { CSSProperties, RefObject } from "react";
 
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
+
 import { minRatio } from "./paneLayout";
 import type { DividerRect } from "./paneLayout";
 
@@ -16,15 +17,12 @@ interface PaneDividerProps {
   readonly className?: string;
 }
 
-/**
-Shared pointer-and-keyboard boundary for every tiled-pane host.
-*/
-export const PaneDivider = ({
+export function PaneDivider({
   divider,
   containerRef,
   onResize,
   className = "group z-20",
-}: PaneDividerProps) => {
+}: PaneDividerProps) {
   const isVertical = divider.direction === "row";
   const boundary = isVertical
     ? divider.rect.x + divider.rect.w * divider.ratio
@@ -108,4 +106,4 @@ export const PaneDivider = ({
       />
     </div>
   );
-};
+}

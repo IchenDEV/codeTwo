@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import { Spinner } from "@/components/ui/spinner";
 
 import { readBinary } from "../bridge";
@@ -15,24 +16,13 @@ function prettySize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/**
- * An image file, shown as the image.
- *
- * The text path can't serve these: `read_text` refuses anything with a NUL byte in the first block,
- * which is every PNG ever written, so a picture used to open as the word "binary file". The bytes
- * come over the sidecar JSON protocol and become a blob URL — a `data:` URI would mean base64'ing
- * the same bytes again for no benefit.
- *
- * Checkerboard behind the image, because transparent PNGs are most of what a UI project contains
- * and "white logo on white pane" looks like a failed load.
- */
-export const ImagePreview = ({
+export function ImagePreview({
   cwd,
   path,
 }: {
   readonly cwd: string;
   readonly path: string;
-}) => {
+}) {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [size, setSize] = useState(0);
@@ -59,22 +49,22 @@ export const ImagePreview = ({
         setSize(bytes.byteLength);
         setUrl(objectUrl);
       })
-      .catch((e) => isAlive && setError(String(e)));
+      .catch((error) => isAlive && setError(String(error)));
 
     return () => {
       isAlive = false;
       // Revoking is what actually frees the bytes; without it every tab switch leaks the file.
-      if (objectUrl) {
+      if (objectUrl != null && objectUrl !== "") {
         URL.revokeObjectURL(objectUrl);
       }
     };
   }, [cwd, path]);
 
-  if (error) {
+  if (error != null && error !== "") {
     return <p className="text-body text-destructive px-6 py-4">{error}</p>;
   }
 
-  if (!url) {
+  if (url == null || url === "") {
     return (
       <p className="text-body text-muted-foreground flex items-center gap-2 px-6 py-4">
         <Spinner className="size-3.5" />
@@ -109,4 +99,4 @@ export const ImagePreview = ({
       </div>
     </div>
   );
-};
+}

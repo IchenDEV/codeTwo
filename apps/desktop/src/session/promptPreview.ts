@@ -1,4 +1,5 @@
 import type { CanvasExport } from "../bridge";
+import { asJsonObject } from "../lib/jsonValue";
 
 export const longPromptMaxLines = 8;
 export const longPromptMaxChars = 600;
@@ -30,14 +31,10 @@ function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
   } catch {
     return null;
   }
-  if (
-    decoded == null ||
-    typeof decoded !== "object" ||
-    Array.isArray(decoded)
-  ) {
+  const value = asJsonObject(decoded);
+  if (value == null) {
     return null;
   }
-  const value = decoded as Record<string, unknown>;
   if (value.version !== 1) {
     return null;
   }
@@ -45,8 +42,9 @@ function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
     return null;
   }
   if (
+    typeof value.revision !== "number" ||
     !Number.isSafeInteger(value.revision) ||
-    (value.revision as number) <= 0
+    value.revision <= 0
   ) {
     return null;
   }
@@ -64,8 +62,10 @@ function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
   }
   return {
     id: value.id,
-    revision: value.revision as number,
-    textOriginals: [...(value.text_originals as string[])],
+    revision: value.revision,
+    textOriginals: value.text_originals.filter(
+      (text): text is string => typeof text === "string"
+    ),
     title: value.title,
   };
 }

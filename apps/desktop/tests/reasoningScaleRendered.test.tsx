@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import {
   activateDom,
   click,
@@ -25,7 +26,7 @@ afterEach(() => {
 describe("ModelPicker", () => {
   test("uses separate model and reasoning menus and forwards the provider-owned choice", async () => {
     activateDom();
-    const selected: Array<[string, string]> = [];
+    const selected: [string, string][] = [];
     const rendered = mount(
       <I18nProvider>
         <ModelPicker
@@ -69,12 +70,12 @@ describe("ModelPicker", () => {
     }
     click(effortTrigger);
     await flush();
-    const low = Array.from(
-      dom.document.body.querySelectorAll<HTMLButtonElement>(
+    const low = [
+      ...dom.document.body.querySelectorAll<HTMLButtonElement>(
         '[data-slot="popover-content"] button'
-      )
-    ).find((button) => button.textContent?.includes("Low Effort"));
-    if (!low) {
+      ),
+    ].find((button) => button.textContent?.includes("Low Effort"));
+    if (low == null) {
       throw new Error("low effort option did not render");
     }
     click(low);
@@ -244,7 +245,7 @@ describe("ModelPicker", () => {
     const add = dom.document.body.querySelector<HTMLButtonElement>(
       'button[aria-label="Add Beta to favorites"]'
     );
-    if (!add) {
+    if (add == null) {
       throw new Error("favorite action did not render");
     }
     click(add);
@@ -260,18 +261,18 @@ describe("ModelPicker", () => {
         ?.getAttribute("aria-pressed")
     ).toBe("true");
     expect(
-      Array.from(
-        dom.document.body.querySelectorAll(
+      [
+        ...dom.document.body.querySelectorAll(
           '[data-model-picker-row] [data-slot="selectable-row-label"]'
-        )
-      ).map((label) => label.textContent)
+        ),
+      ].map((label) => label.textContent)
     ).toEqual(["Beta", "Alpha"]);
     expect(
-      Array.from(
-        dom.document.body.querySelectorAll(
+      [
+        ...dom.document.body.querySelectorAll(
           '[data-model-picker-row] [data-slot="selectable-row-label"]'
-        )
-      ).filter((label) => label.textContent === "Beta")
+        ),
+      ].filter((label) => label.textContent === "Beta")
     ).toHaveLength(1);
 
     rendered.unmount();
@@ -316,7 +317,7 @@ describe("ModelPicker", () => {
   test("favorites provider-owned model options and preserves their selection path", async () => {
     activateDom();
     dom.localStorage.clear();
-    const selected: Array<[string, string]> = [];
+    const selected: [string, string][] = [];
     const rendered = mount(
       <I18nProvider>
         <ModelPicker
@@ -354,19 +355,19 @@ describe("ModelPicker", () => {
     const favorite = dom.document.body.querySelector<HTMLButtonElement>(
       'button[aria-label="Add Beta to favorites"]'
     );
-    if (!favorite) {
+    if (favorite == null) {
       throw new Error("config-option favorite action did not render");
     }
     click(favorite);
     await flush();
     expect(selected).toEqual([]);
 
-    const beta = Array.from(
-      dom.document.body.querySelectorAll<HTMLButtonElement>(
+    const beta = [
+      ...dom.document.body.querySelectorAll<HTMLButtonElement>(
         '[data-model-picker-row] [data-slot="selectable-row"]'
-      )
-    ).find((button) => button.getAttribute("aria-label") === "Beta");
-    if (!beta) {
+      ),
+    ].find((button) => button.getAttribute("aria-label") === "Beta");
+    if (beta == null) {
       throw new Error("favorite model row did not render");
     }
     click(beta);
@@ -393,10 +394,9 @@ describe("ModelPicker", () => {
         />
       </I18nProvider>
     );
-    const trigger =
-      rendered.container.querySelector<HTMLButtonElement>(
-        'button[title="模型"]'
-      );
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="模型"]'
+    );
     if (!trigger) {
       throw new Error("localized model trigger did not render");
     }
@@ -442,18 +442,18 @@ describe("ModelPicker", () => {
     await flush();
 
     const labels = () => {
-      return Array.from(
-        dom.document.body.querySelectorAll(
+      return [
+        ...dom.document.body.querySelectorAll(
           '[data-model-picker-row] [data-slot="selectable-row-label"]'
-        )
-      ).map((label) => label.textContent);
+        ),
+      ].map((label) => label.textContent);
     };
     expect(labels()).toEqual(["Alpha", "Gamma"]);
 
     const search = dom.document.body.querySelector<HTMLInputElement>(
       'input[aria-label="Search models"]'
     );
-    if (!search) {
+    if (search == null) {
       throw new Error("model search did not render");
     }
     expect(search.getAttribute("placeholder")).toBe("Search models");

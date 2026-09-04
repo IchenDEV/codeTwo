@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+
 import {
   applyAppearanceSettings,
   setAppearanceSettings,
@@ -34,25 +35,14 @@ const ThemeContext = createContext<ThemeValue>({
   setPreference: () => {},
 });
 
-/**
- * Theme, as a preference rather than a reading.
- *
- * The distinction matters: `system` has to keep listening after the fact, because the OS can flip
- * at sunset while the app is open. An explicit light/dark must *stop* listening, or the user's
- * choice would be silently overridden the next time the OS changed its mind.
- */
-export const ThemeProvider = ({
-  children,
-}: {
-  readonly children: ReactNode;
-}) => {
+export function ThemeProvider({ children }: { readonly children: ReactNode }) {
   const appearance = useAppearanceSettings();
-  const preference = appearance.preference;
+  const { preference } = appearance;
   const [system, setSystem] = useState<ColorScheme>(systemScheme);
 
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!mq) {
+    if (mq == null) {
       return;
     }
     const onChange = (e: MediaQueryListEvent) =>
@@ -91,7 +81,7 @@ export const ThemeProvider = ({
       {children}
     </ThemeContext.Provider>
   );
-};
+}
 
 export function useTheme(): ThemeValue {
   return useContext(ThemeContext);

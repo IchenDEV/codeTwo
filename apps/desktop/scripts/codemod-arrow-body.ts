@@ -3,6 +3,7 @@
  * Uses parenthesized object literals so `() => ({ ... })` stays valid.
  */
 import { readFileSync } from "node:fs";
+
 import { Node, Project, SyntaxKind } from "ts-morph";
 
 type Msg = { ruleId: string | null; line: number };

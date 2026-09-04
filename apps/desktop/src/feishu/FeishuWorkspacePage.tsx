@@ -1,25 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import {
-  Bot,
-  ChevronDown,
-  CircleAlert,
-  CircleCheck,
-  Eye,
-  EyeOff,
-  ExternalLink,
-  FileText,
-  GripVertical,
-  Lock,
-  MessageSquare,
-  Pin,
-  RefreshCw,
-  Send,
-  ShieldCheck,
-  SquareKanban,
-  UserRound,
-} from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -50,6 +31,25 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/field";
+import {
+  Bot,
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  FileText,
+  GripVertical,
+  Lock,
+  MessageSquare,
+  Pin,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+  SquareKanban,
+  UserRound,
+} from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -61,8 +61,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
 import { openExternal } from "../bridge";
 import { useT } from "../i18n";
+import { useMapRef, useSetRef } from "../lib/useCollectionRef";
+import { useLatestRef } from "../lib/useLatestRef";
 import { MarkdownContent } from "../session/MarkdownContent";
 import { useToast } from "../ui/toast";
 import { FeishuDocumentView } from "./FeishuDocumentView";
@@ -75,6 +78,7 @@ import {
   sortFeishuResources,
 } from "./sidebarOrder";
 import type { FeishuResourceTab } from "./sidebarOrder";
+
 import "./feishu-workspace.css";
 
 export type CollaborationConnectorCaller = <T = unknown>(
@@ -284,7 +288,7 @@ function writePinnedResources(value: PinnedResourceMap) {
 function readAssociations(): AssociationMap {
   try {
     const raw = localStorage.getItem(associationsKey);
-    if (!raw) {
+    if (raw == null || raw === "") {
       return {};
     }
     const parsed = JSON.parse(raw) as unknown;
@@ -466,7 +470,7 @@ function resourceName(resource: ChatSummary | CloudResourceSummary): string {
   return resource.name || resource.id;
 }
 
-const ResourceIcon = ({ tab }: { readonly tab: ResourceTab }) => {
+function ResourceIcon({ tab }: { readonly tab: ResourceTab }) {
   if (tab === "messages") {
     return <MessageSquare />;
   }
@@ -474,13 +478,16 @@ const ResourceIcon = ({ tab }: { readonly tab: ResourceTab }) => {
     return <FileText />;
   }
   return <SquareKanban />;
-};
+}
 
-const ChatAvatar = ({ chat }: { readonly chat: ChatSummary }) => {
+function ChatAvatar({ chat }: { readonly chat: ChatSummary }) {
   const [failed, setFailed] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(chat.avatarUrl);
+  if (chat.avatarUrl !== avatarUrl) {
+    setAvatarUrl(chat.avatarUrl);
+    setFailed(false);
+  }
   const isDirectMessage = chat.mode === "p2p" || chat.type === "p2p";
-
-  useEffect(() => setFailed(false), [chat.avatarUrl]);
 
   if (chat.avatarUrl && !failed) {
     return (
@@ -508,24 +515,27 @@ const ChatAvatar = ({ chat }: { readonly chat: ChatSummary }) => {
       aria-hidden
     >
       {isDirectMessage ? (
-        Array.from(chat.name.trim())[0]?.toLocaleUpperCase() || "?"
+        [...chat.name.trim()][0]?.toLocaleUpperCase() || "?"
       ) : (
         <MessageSquare />
       )}
     </span>
   );
-};
+}
 
-const MessageAvatar = ({
+function MessageAvatar({
   label,
   src,
 }: {
   readonly label: string;
   readonly src: string;
-}) => {
+}) {
   const [failed, setFailed] = useState(false);
-
-  useEffect(() => setFailed(false), [src]);
+  const [avatarSrc, setAvatarSrc] = useState(src);
+  if (src !== avatarSrc) {
+    setAvatarSrc(src);
+    setFailed(false);
+  }
 
   return (
     <span
@@ -543,11 +553,11 @@ const MessageAvatar = ({
           onError={() => setFailed(true)}
         />
       ) : (
-        Array.from(label.trim())[0]?.toLocaleUpperCase() || "?"
+        [...label.trim()][0]?.toLocaleUpperCase() || "?"
       )}
     </span>
   );
-};
+}
 
 function messageSenderLabel(
   message: ChatMessageSummary,
@@ -563,7 +573,7 @@ function messageSenderLabel(
   return message.senderType || memberLabel;
 }
 
-export const FeishuWorkspacePage = ({
+export function FeishuWorkspacePage({
   enabled,
   sessionId,
   callCommand,
@@ -587,7 +597,7 @@ export const FeishuWorkspacePage = ({
   readonly detailVisible?: boolean;
   readonly onSelectResource?: () => void;
   readonly subscribeEvents?: CollaborationConnectorSubscriber;
-}) => {
+}) {
   const t = useT();
   const toast = useToast();
   const [authStatus, setAuthStatus] = useState<FeishuAuthStatus | null>(null);
@@ -648,10 +658,10 @@ export const FeishuWorkspacePage = ({
   const detailRequestRef = useRef(0);
   const continueAfterRegistrationRef = useRef(false);
   const automaticAuthorizationStartedRef = useRef(false);
-  const seenConnectorEventsRef = useRef(new Set<string>());
-  const subscriptionAttemptsRef = useRef(new Set<string>());
-  const subscriptionWarningsRef = useRef(new Set<string>());
-  const refreshTimersRef = useRef(new Map<string, number>());
+  const seenConnectorEventsRef = useSetRef<string>();
+  const subscriptionAttemptsRef = useSetRef<string>();
+  const subscriptionWarningsRef = useSetRef<string>();
+  const refreshTimersRef = useMapRef<string, number>();
 
   useEffect(() => {
     saveFeishuSidebarOrder(
@@ -687,16 +697,17 @@ export const FeishuWorkspacePage = ({
           ? current.messages
           : (next.chats[0]?.id ?? ""),
       }));
-    } catch (cause) {
-      setError(String(cause));
+    } catch (error) {
+      setError(String(error));
     } finally {
       setLoading(false);
     }
   };
+  const reloadRef = useLatestRef(reload);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    void reloadRef.current();
+  }, [enabled, reloadRef]);
 
   useEffect(() => {
     if (!authStatus?.waiting) {
@@ -716,7 +727,7 @@ export const FeishuWorkspacePage = ({
             automaticAuthorizationStartedRef.current = false;
             setAppSecret("");
             setActivationError("");
-            void reload();
+            void reloadRef.current();
           } else if (!next.waiting) {
             window.clearInterval(poll);
             if (next.problem) {
@@ -725,22 +736,21 @@ export const FeishuWorkspacePage = ({
           }
         })
         .catch(() => {});
-    }, 1_000);
+    }, 1000);
     return () => {
       isLive = false;
       window.clearInterval(poll);
     };
-  }, [authStatus?.waiting, callCommand, reload]);
+  }, [authStatus?.waiting, callCommand, reloadRef]);
 
-  useEffect(() => {
-    if (
-      authStatus?.configured &&
-      !authStatus.authorized &&
-      !authStatus.method
-    ) {
-      setManualSetupOpen(true);
-    }
-  }, [authStatus?.authorized, authStatus?.configured, authStatus?.method]);
+  if (
+    authStatus?.configured &&
+    !authStatus.authorized &&
+    !authStatus.method &&
+    !manualSetupOpen
+  ) {
+    setManualSetupOpen(true);
+  }
 
   const selectedChat =
     overview?.chats.find((item) => item.id === selection.messages) ?? null;
@@ -772,9 +782,9 @@ export const FeishuWorkspacePage = ({
       if (request === detailRequestRef.current) {
         setMessages(result.messages);
       }
-    } catch (cause) {
+    } catch (error) {
       if (request === detailRequestRef.current) {
-        setError(String(cause));
+        setError(String(error));
       }
     } finally {
       if (request === detailRequestRef.current) {
@@ -782,13 +792,14 @@ export const FeishuWorkspacePage = ({
       }
     }
   };
+  const loadMessagesRef = useLatestRef(loadMessages);
 
   useEffect(() => {
     if (!detailVisible || tab !== "messages") {
       return;
     }
-    void loadMessages();
-  }, [detailVisible, loadMessages, tab]);
+    void loadMessagesRef.current();
+  }, [detailVisible, loadMessagesRef, selectedChat?.id, tab]);
 
   const loadDocument = async () => {
     if (!selectedDocument) {
@@ -806,9 +817,9 @@ export const FeishuWorkspacePage = ({
       if (request === detailRequestRef.current) {
         setDocumentContent(result.content);
       }
-    } catch (cause) {
+    } catch (error) {
       if (request === detailRequestRef.current) {
-        setError(String(cause));
+        setError(String(error));
       }
     } finally {
       if (request === detailRequestRef.current) {
@@ -816,13 +827,14 @@ export const FeishuWorkspacePage = ({
       }
     }
   };
+  const loadDocumentRef = useLatestRef(loadDocument);
 
   useEffect(() => {
     if (!detailVisible || tab !== "documents") {
       return;
     }
-    void loadDocument();
-  }, [detailVisible, loadDocument, tab]);
+    void loadDocumentRef.current();
+  }, [detailVisible, loadDocumentRef, selectedDocument?.id, tab]);
 
   const loadBase = async (tableId = "") => {
     if (!selectedBase) {
@@ -831,6 +843,7 @@ export const FeishuWorkspacePage = ({
     const request = ++detailRequestRef.current;
     setDetailLoading(true);
     setError(null);
+    setBaseData(null);
     try {
       const result = await callCommand<BaseData>("table.read", {
         appToken: selectedBase.id,
@@ -839,9 +852,9 @@ export const FeishuWorkspacePage = ({
       if (request === detailRequestRef.current) {
         setBaseData(result);
       }
-    } catch (cause) {
+    } catch (error) {
       if (request === detailRequestRef.current) {
-        setError(String(cause));
+        setError(String(error));
       }
     } finally {
       if (request === detailRequestRef.current) {
@@ -849,14 +862,14 @@ export const FeishuWorkspacePage = ({
       }
     }
   };
+  const loadBaseRef = useLatestRef(loadBase);
 
   useEffect(() => {
     if (!detailVisible || tab !== "bases") {
       return;
     }
-    setBaseData(null);
-    void loadBase();
-  }, [detailVisible, loadBase, tab]);
+    void loadBaseRef.current();
+  }, [detailVisible, loadBaseRef, selectedBase?.id, tab]);
 
   const markResourceActivity = (
     resourceTab: ResourceTab,
@@ -900,6 +913,17 @@ export const FeishuWorkspacePage = ({
     refreshTimersRef.current.set(key, timer);
   };
 
+  const markResourceActivityRef = useLatestRef(markResourceActivity);
+  const clearResourceActivityRef = useLatestRef(clearResourceActivity);
+  const scheduleRefreshRef = useLatestRef(scheduleRefresh);
+  const detailVisibleRef = useLatestRef(detailVisible);
+  const tabRef = useLatestRef(tab);
+  const selectedChatRef = useLatestRef(selectedChat);
+  const selectedDocumentRef = useLatestRef(selectedDocument);
+  const selectedBaseRef = useLatestRef(selectedBase);
+  const overviewRef = useLatestRef(overview);
+  const baseDataRef = useLatestRef(baseData);
+
   useEffect(
     () => () => {
       for (const timer of refreshTimersRef.current.values()) {
@@ -907,7 +931,7 @@ export const FeishuWorkspacePage = ({
       }
       refreshTimersRef.current.clear();
     },
-    []
+    [refreshTimersRef]
   );
 
   useEffect(() => {
@@ -935,7 +959,9 @@ export const FeishuWorkspacePage = ({
 
       if (event.kind === "message.created" && event.chatId) {
         const isKnownChat =
-          overview?.chats.some((item) => item.id === event.chatId) === true;
+          overviewRef.current?.chats.some(
+            (item) => item.id === event.chatId
+          ) === true;
         setOverview((current) => {
           if (!current) {
             return current;
@@ -957,60 +983,77 @@ export const FeishuWorkspacePage = ({
           };
         });
         if (
-          detailVisible &&
-          tab === "messages" &&
-          selectedChat?.id === event.chatId
+          detailVisibleRef.current &&
+          tabRef.current === "messages" &&
+          selectedChatRef.current?.id === event.chatId
         ) {
-          scheduleRefresh(`messages:${event.chatId}`, () => {
-            void loadMessages();
+          scheduleRefreshRef.current(`messages:${event.chatId}`, () => {
+            void loadMessagesRef.current();
           });
-          clearResourceActivity("messages", event.chatId);
+          clearResourceActivityRef.current("messages", event.chatId);
         } else {
-          markResourceActivity("messages", event.chatId);
+          markResourceActivityRef.current("messages", event.chatId);
         }
         if (!isKnownChat) {
-          void reload();
+          void reloadRef.current();
         }
         return;
       }
 
       if (event.kind === "message.changed") {
-        if (detailVisible && tab === "messages" && selectedChat) {
-          scheduleRefresh(`messages:${selectedChat.id}`, () => {
-            void loadMessages();
-          });
+        if (
+          detailVisibleRef.current &&
+          tabRef.current === "messages" &&
+          selectedChatRef.current
+        ) {
+          scheduleRefreshRef.current(
+            `messages:${selectedChatRef.current.id}`,
+            () => {
+              void loadMessagesRef.current();
+            }
+          );
         }
         return;
       }
 
-      if (event.kind === "document.changed" && event.resourceId) {
+      if (
+        event.kind === "document.changed" &&
+        event.resourceId != null &&
+        event.resourceId !== ""
+      ) {
         if (
-          detailVisible &&
-          tab === "documents" &&
-          selectedDocument?.id === event.resourceId
+          detailVisibleRef.current &&
+          tabRef.current === "documents" &&
+          selectedDocumentRef.current?.id === event.resourceId
         ) {
-          scheduleRefresh(`documents:${event.resourceId}`, () => {
-            void loadDocument();
+          scheduleRefreshRef.current(`documents:${event.resourceId}`, () => {
+            void loadDocumentRef.current();
           });
-          clearResourceActivity("documents", event.resourceId);
+          clearResourceActivityRef.current("documents", event.resourceId);
         } else {
-          markResourceActivity("documents", event.resourceId);
+          markResourceActivityRef.current("documents", event.resourceId);
         }
         return;
       }
 
-      if (event.kind === "base.changed" && event.resourceId) {
+      if (
+        event.kind === "base.changed" &&
+        event.resourceId != null &&
+        event.resourceId !== ""
+      ) {
         if (
-          detailVisible &&
-          tab === "bases" &&
-          selectedBase?.id === event.resourceId
+          detailVisibleRef.current &&
+          tabRef.current === "bases" &&
+          selectedBaseRef.current?.id === event.resourceId
         ) {
-          scheduleRefresh(`bases:${event.resourceId}`, () => {
-            void loadBase(baseData?.selectedTableId || "");
+          scheduleRefreshRef.current(`bases:${event.resourceId}`, () => {
+            void loadBaseRef.current(
+              baseDataRef.current?.selectedTableId || ""
+            );
           });
-          clearResourceActivity("bases", event.resourceId);
+          clearResourceActivityRef.current("bases", event.resourceId);
         } else {
-          markResourceActivity("bases", event.resourceId);
+          markResourceActivityRef.current("bases", event.resourceId);
         }
       }
     })
@@ -1027,28 +1070,29 @@ export const FeishuWorkspacePage = ({
       unsubscribe?.();
     };
   }, [
-    baseData?.selectedTableId,
-    clearResourceActivity,
-    detailVisible,
-    loadBase,
-    loadDocument,
-    loadMessages,
-    markResourceActivity,
-    overview?.chats,
-    reload,
-    scheduleRefresh,
-    selectedBase,
-    selectedChat,
-    selectedDocument,
+    baseDataRef,
+    clearResourceActivityRef,
+    detailVisibleRef,
+    loadBaseRef,
+    loadDocumentRef,
+    loadMessagesRef,
+    markResourceActivityRef,
+    overviewRef,
+    reloadRef,
+    scheduleRefreshRef,
+    seenConnectorEventsRef,
+    selectedBaseRef,
+    selectedChatRef,
+    selectedDocumentRef,
     subscribeEvents,
-    tab,
+    tabRef,
   ]);
 
   useEffect(() => {
     if (!authStatus?.authorized || !overview) {
       return;
     }
-    const candidates: Array<{ id: string; type: string; name: string }> = [];
+    const candidates: { id: string; type: string; name: string }[] = [];
     const addCandidates = (
       resourceTab: "documents" | "bases",
       resources: CloudResourceSummary[]
@@ -1100,6 +1144,8 @@ export const FeishuWorkspacePage = ({
     overview,
     pinnedResources,
     selection,
+    subscriptionAttemptsRef,
+    subscriptionWarningsRef,
     t,
     toast,
   ]);
@@ -1143,8 +1189,8 @@ export const FeishuWorkspacePage = ({
       setReply("");
       await loadMessages();
       toast(t("feishu.replySent"), "success");
-    } catch (cause) {
-      toast(t("feishu.replyFailed", { error: String(cause) }), "error");
+    } catch (error) {
+      toast(t("feishu.replyFailed", { error: String(error) }), "error");
     } finally {
       setSending(false);
     }
@@ -1160,6 +1206,7 @@ export const FeishuWorkspacePage = ({
     setAuthStatus(next);
     await openExternal(ticket.url);
   };
+  const openAuthorizationRef = useLatestRef(openAuthorization);
 
   const createFeishuApp = async () => {
     setActivating(true);
@@ -1172,9 +1219,9 @@ export const FeishuWorkspacePage = ({
         {}
       );
       await openAuthorization(ticket);
-    } catch (cause) {
+    } catch (error) {
       continueAfterRegistrationRef.current = false;
-      setActivationError(String(cause));
+      setActivationError(String(error));
     } finally {
       setActivating(false);
     }
@@ -1192,17 +1239,17 @@ export const FeishuWorkspacePage = ({
     automaticAuthorizationStartedRef.current = true;
     setActivating(true);
     void callCommand<FeishuAuthTicket>("connection.begin", {})
-      .then(openAuthorization)
-      .catch((cause) => {
+      .then((ticket) => openAuthorizationRef.current(ticket))
+      .catch((error) => {
         continueAfterRegistrationRef.current = false;
-        setActivationError(String(cause));
+        setActivationError(String(error));
       })
       .finally(() => setActivating(false));
   }, [
     authStatus?.needsUserAuthorization,
     authStatus?.waiting,
     callCommand,
-    openAuthorization,
+    openAuthorizationRef,
   ]);
 
   const authorize = async () => {
@@ -1228,8 +1275,8 @@ export const FeishuWorkspacePage = ({
             })
           : await callCommand<FeishuAuthTicket>("connection.begin", {});
       await openAuthorization(ticket);
-    } catch (cause) {
-      setActivationError(String(cause));
+    } catch (error) {
+      setActivationError(String(error));
     } finally {
       setActivating(false);
     }
@@ -1239,8 +1286,8 @@ export const FeishuWorkspacePage = ({
     if (!authorizationUrl) {
       return;
     }
-    void openExternal(authorizationUrl).catch((cause) =>
-      setActivationError(String(cause))
+    void openExternal(authorizationUrl).catch((error) =>
+      setActivationError(String(error))
     );
   };
 
@@ -1254,8 +1301,8 @@ export const FeishuWorkspacePage = ({
       );
       await openAuthorization(ticket);
       toast(t("feishu.authorizationOpened"), "success");
-    } catch (cause) {
-      toast(t("feishu.authorizationFailed", { error: String(cause) }), "error");
+    } catch (error) {
+      toast(t("feishu.authorizationFailed", { error: String(error) }), "error");
     } finally {
       setActivating(false);
     }
@@ -1279,8 +1326,8 @@ export const FeishuWorkspacePage = ({
       setAuthorizationUrl("");
       setManualSetupOpen(false);
       toast(t("feishu.disconnected"), "success");
-    } catch (cause) {
-      toast(t("feishu.disconnectFailed", { error: String(cause) }), "error");
+    } catch (error) {
+      toast(t("feishu.disconnectFailed", { error: String(error) }), "error");
     } finally {
       setDisconnecting(false);
     }
@@ -1320,11 +1367,11 @@ export const FeishuWorkspacePage = ({
             })
           : t("feishu.taskHandedOff")
       );
-    } catch (cause) {
-      if (isArmed && sessionId) {
+    } catch (error) {
+      if (isArmed && sessionId != null && sessionId !== "") {
         await callCommand("notification.disarm", { sessionId }).catch(() => {});
       }
-      toast(t("feishu.handoffFailed", { error: String(cause) }), "error");
+      toast(t("feishu.handoffFailed", { error: String(error) }), "error");
     } finally {
       setHandingOff(false);
     }
@@ -1382,7 +1429,7 @@ export const FeishuWorkspacePage = ({
       visibleResourceIds.length - 1,
       Math.max(0, currentIndex + offset)
     );
-    if (currentIndex < 0 || currentIndex === nextIndex) {
+    if (currentIndex === -1 || currentIndex === nextIndex) {
       return;
     }
     const remaining = visibleResourceIds.filter((id) => id !== resourceId);
@@ -1400,7 +1447,7 @@ export const FeishuWorkspacePage = ({
       sidebarOrder.sectionOrder.length - 1,
       Math.max(0, currentIndex + offset)
     );
-    if (currentIndex < 0 || currentIndex === nextIndex) {
+    if (currentIndex === -1 || currentIndex === nextIndex) {
       return;
     }
     const remaining = sidebarOrder.sectionOrder.filter(
@@ -1576,7 +1623,7 @@ export const FeishuWorkspacePage = ({
 
   const renderResourceList = (
     resourceTab: ResourceTab,
-    resources: Array<ChatSummary | CloudResourceSummary>
+    resources: (ChatSummary | CloudResourceSummary)[]
   ) => {
     const resourcesById = new Map(
       resources.map((resource) => [resource.id, resource])
@@ -1836,7 +1883,7 @@ export const FeishuWorkspacePage = ({
                   </Tooltip>
                 </>
               )}
-              {!collapsedSections.messages ? (
+              {collapsedSections.messages ? null : (
                 <div className="flex flex-col gap-0.5 pb-1">
                   {loading && !overview ? (
                     <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
@@ -1854,7 +1901,7 @@ export const FeishuWorkspacePage = ({
                     <div className="gap-module-inset px-surface-inset py-section text-ui text-muted-foreground flex flex-col items-center text-center">
                       <MessageSquare />
                       <p className="text-foreground font-medium">
-                        {overview?.warnings.length
+                        {overview?.warnings.length != null
                           ? t("feishu.loadFailed")
                           : t("feishu.empty")}
                       </p>
@@ -1878,7 +1925,7 @@ export const FeishuWorkspacePage = ({
                     renderResourceList("messages", overview.chats)
                   ) : null}
                 </div>
-              ) : null}
+              )}
             </section>
           );
         }
@@ -1886,24 +1933,24 @@ export const FeishuWorkspacePage = ({
           return (
             <section key={resourceTab} data-feishu-section="documents">
               {sectionHeader("documents", t("feishu.tab.documents"))}
-              {!collapsedSections.documents ? (
+              {collapsedSections.documents ? null : (
                 <div className="flex flex-col gap-0.5 pb-1">
                   {overview
                     ? renderResourceList("documents", overview.documents)
                     : null}
                 </div>
-              ) : null}
+              )}
             </section>
           );
         }
         return (
           <section key={resourceTab} data-feishu-section="bases">
             {sectionHeader("bases", t("feishu.tab.bases"))}
-            {!collapsedSections.bases ? (
+            {collapsedSections.bases ? null : (
               <div className="flex flex-col gap-0.5">
                 {overview ? renderResourceList("bases", overview.bases) : null}
               </div>
-            ) : null}
+            )}
           </section>
         );
       })}
@@ -2427,7 +2474,228 @@ export const FeishuWorkspacePage = ({
             </header>
             <Separator />
 
-            {!selectedResource ? (
+            {selectedResource ? (
+              tab === "messages" && selectedChat ? (
+                <>
+                  {related.length > 0 ? (
+                    <div className="gap-inline px-section py-module-inset text-fine text-muted-foreground flex shrink-0 flex-wrap items-center">
+                      <span>{t("feishu.relatedResources")}</span>
+                      {related.map((resource) => (
+                        <Button
+                          key={`${resource.kind}:${resource.id}`}
+                          type="button"
+                          variant="secondary"
+                          size="compact"
+                          onClick={() => {
+                            setTab(
+                              resource.kind === "document"
+                                ? "documents"
+                                : "bases"
+                            );
+                            setSelection((current) => ({
+                              ...current,
+                              [resource.kind === "document"
+                                ? "documents"
+                                : "bases"]: resource.id,
+                            }));
+                          }}
+                        >
+                          {resource.name || resource.id}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <ScrollArea className="min-h-0 flex-1">
+                    <div className="px-page py-section mx-auto flex w-full max-w-4xl flex-col">
+                      {detailLoading ? (
+                        <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
+                          <Spinner />
+                          {t("feishu.loadingMessages")}
+                        </output>
+                      ) : null}
+                      {!detailLoading && messages.length === 0 ? (
+                        <p className="py-section text-ui text-muted-foreground text-center">
+                          {t("feishu.noMessages")}
+                        </p>
+                      ) : null}
+                      {messages.map((message) => (
+                        <article
+                          key={message.id}
+                          data-feishu-message
+                          className="gap-x-module-inset gap-y-inline border-border/70 py-section grid grid-cols-[auto_1fr_auto] border-b last:border-b-0"
+                        >
+                          <MessageAvatar
+                            label={messageSenderLabel(
+                              message,
+                              t("feishu.member")
+                            )}
+                            src={message.senderAvatarUrl || ""}
+                          />
+                          <p className="text-ui truncate font-medium">
+                            {messageSenderLabel(message, t("feishu.member"))}
+                          </p>
+                          <time className="text-fine text-muted-foreground tabular-nums">
+                            {displayTime(message.createdAt)}
+                          </time>
+                          <div
+                            dir="auto"
+                            className="text-body col-start-2 col-end-4 min-w-0 leading-relaxed"
+                          >
+                            <MarkdownContent
+                              text={visibleMessageText(message, t)}
+                            />
+                            {message.reactions?.length != null ? (
+                              <div
+                                data-feishu-reactions
+                                className="mt-inline gap-inline flex flex-wrap"
+                              >
+                                {message.reactions.map((reaction) => (
+                                  <span
+                                    key={reaction.emojiType}
+                                    className="gap-inline bg-fill-quiet px-module-inset py-inline text-fine text-muted-foreground inline-flex items-center rounded-full"
+                                    aria-label={t("feishu.reaction", {
+                                      count: reaction.count,
+                                      name: reaction.emojiType,
+                                    })}
+                                    title={reaction.emojiType}
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      className="text-body"
+                                    >
+                                      {reaction.emoji}
+                                    </span>
+                                    <span className="tabular-nums">
+                                      {reaction.count}
+                                    </span>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                  <div className="gap-module-inset bg-surface px-section py-surface-inset shadow-surface flex shrink-0 items-end">
+                    <label className="sr-only" htmlFor="feishu-reply">
+                      {t("feishu.reply")}
+                    </label>
+                    <Textarea
+                      id="feishu-reply"
+                      size="compact"
+                      rows={2}
+                      value={reply}
+                      onChange={(event) => setReply(event.currentTarget.value)}
+                      placeholder={t("feishu.replyPlaceholder")}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          void sendReply();
+                        }
+                      }}
+                    />
+                    <Button
+                      size="icon"
+                      aria-label={t("feishu.sendReply")}
+                      disabled={sending || !reply.trim()}
+                      onClick={() => void sendReply()}
+                    >
+                      {sending ? <Spinner /> : <Send />}
+                    </Button>
+                  </div>
+                </>
+              ) : tab === "documents" && selectedDocument ? (
+                <FeishuDocumentView
+                  callCommand={callCommand}
+                  documentUrl={selectedDocument.url}
+                  markdown={documentContent}
+                  markdownLoading={detailLoading}
+                />
+              ) : tab === "bases" && selectedBase ? (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  {baseData?.tables.length ? (
+                    <div
+                      className="gap-inline px-section py-module-inset flex shrink-0 overflow-x-auto"
+                      role="tablist"
+                      aria-label={t("feishu.baseTables")}
+                    >
+                      {baseData.tables.map((table) => (
+                        <Button
+                          key={table.id}
+                          role="tab"
+                          aria-selected={baseData.selectedTableId === table.id}
+                          data-selected={baseData.selectedTableId === table.id}
+                          variant="selectable"
+                          size="compact"
+                          onClick={() => void loadBase(table.id)}
+                        >
+                          {table.name || table.id}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <ScrollArea className="min-h-0 flex-1">
+                    <div className="p-section">
+                      {detailLoading ? (
+                        <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
+                          <Spinner />
+                          {t("feishu.loadingBase")}
+                        </output>
+                      ) : null}
+                      {!detailLoading &&
+                      (!baseData || baseData.records.length === 0) ? (
+                        <p className="py-section text-ui text-muted-foreground text-center">
+                          {t("feishu.emptyBase")}
+                        </p>
+                      ) : null}
+                      {baseData && baseData.records.length > 0 ? (
+                        <div className="rounded-module bg-surface shadow-surface overflow-auto">
+                          <table className="text-ui w-full min-w-max border-collapse">
+                            <thead>
+                              <tr>
+                                {baseData.fields.map((field) => (
+                                  <th
+                                    key={field}
+                                    scope="col"
+                                    className="border-border bg-fill-quiet px-surface-inset py-module-inset border-r border-b text-left font-medium last:border-r-0"
+                                  >
+                                    {field}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {baseData.records.map((record) => {
+                                const cells = new Map(
+                                  record.cells.map((cell) => [
+                                    cell.field,
+                                    cell.value,
+                                  ])
+                                );
+                                return (
+                                  <tr key={record.id}>
+                                    {baseData.fields.map((field) => (
+                                      <td
+                                        key={field}
+                                        dir="auto"
+                                        className="border-border px-surface-inset py-module-inset max-w-72 border-r border-b align-top last:border-r-0"
+                                      >
+                                        {cells.get(field) || "—"}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : null}
+                    </div>
+                  </ScrollArea>
+                </div>
+              ) : null
+            ) : (
               <Empty>
                 <EmptyMedia variant="icon">
                   <ResourceIcon tab={tab} />
@@ -2436,226 +2704,9 @@ export const FeishuWorkspacePage = ({
                   <EmptyTitle>{t("feishu.selectResource")}</EmptyTitle>
                 </EmptyHeader>
               </Empty>
-            ) : tab === "messages" && selectedChat ? (
-              <>
-                {related.length > 0 ? (
-                  <div className="gap-inline px-section py-module-inset text-fine text-muted-foreground flex shrink-0 flex-wrap items-center">
-                    <span>{t("feishu.relatedResources")}</span>
-                    {related.map((resource) => (
-                      <Button
-                        key={`${resource.kind}:${resource.id}`}
-                        type="button"
-                        variant="secondary"
-                        size="compact"
-                        onClick={() => {
-                          setTab(
-                            resource.kind === "document" ? "documents" : "bases"
-                          );
-                          setSelection((current) => ({
-                            ...current,
-                            [resource.kind === "document"
-                              ? "documents"
-                              : "bases"]: resource.id,
-                          }));
-                        }}
-                      >
-                        {resource.name || resource.id}
-                      </Button>
-                    ))}
-                  </div>
-                ) : null}
-                <ScrollArea className="min-h-0 flex-1">
-                  <div className="px-page py-section mx-auto flex w-full max-w-4xl flex-col">
-                    {detailLoading ? (
-                      <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
-                        <Spinner />
-                        {t("feishu.loadingMessages")}
-                      </output>
-                    ) : null}
-                    {!detailLoading && messages.length === 0 ? (
-                      <p className="py-section text-ui text-muted-foreground text-center">
-                        {t("feishu.noMessages")}
-                      </p>
-                    ) : null}
-                    {messages.map((message) => (
-                      <article
-                        key={message.id}
-                        data-feishu-message
-                        className="gap-x-module-inset gap-y-inline border-border/70 py-section grid grid-cols-[auto_1fr_auto] border-b last:border-b-0"
-                      >
-                        <MessageAvatar
-                          label={messageSenderLabel(
-                            message,
-                            t("feishu.member")
-                          )}
-                          src={message.senderAvatarUrl || ""}
-                        />
-                        <p className="text-ui truncate font-medium">
-                          {messageSenderLabel(message, t("feishu.member"))}
-                        </p>
-                        <time className="text-fine text-muted-foreground tabular-nums">
-                          {displayTime(message.createdAt)}
-                        </time>
-                        <div
-                          dir="auto"
-                          className="text-body col-start-2 col-end-4 min-w-0 leading-relaxed"
-                        >
-                          <MarkdownContent
-                            text={visibleMessageText(message, t)}
-                          />
-                          {message.reactions?.length ? (
-                            <div
-                              data-feishu-reactions
-                              className="mt-inline gap-inline flex flex-wrap"
-                            >
-                              {message.reactions.map((reaction) => (
-                                <span
-                                  key={reaction.emojiType}
-                                  className="gap-inline bg-fill-quiet px-module-inset py-inline text-fine text-muted-foreground inline-flex items-center rounded-full"
-                                  aria-label={t("feishu.reaction", {
-                                    count: reaction.count,
-                                    name: reaction.emojiType,
-                                  })}
-                                  title={reaction.emojiType}
-                                >
-                                  <span
-                                    aria-hidden="true"
-                                    className="text-body"
-                                  >
-                                    {reaction.emoji}
-                                  </span>
-                                  <span className="tabular-nums">
-                                    {reaction.count}
-                                  </span>
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </ScrollArea>
-                <div className="gap-module-inset bg-surface px-section py-surface-inset shadow-surface flex shrink-0 items-end">
-                  <label className="sr-only" htmlFor="feishu-reply">
-                    {t("feishu.reply")}
-                  </label>
-                  <Textarea
-                    id="feishu-reply"
-                    size="compact"
-                    rows={2}
-                    value={reply}
-                    onChange={(event) => setReply(event.currentTarget.value)}
-                    placeholder={t("feishu.replyPlaceholder")}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        void sendReply();
-                      }
-                    }}
-                  />
-                  <Button
-                    size="icon"
-                    aria-label={t("feishu.sendReply")}
-                    disabled={sending || !reply.trim()}
-                    onClick={() => void sendReply()}
-                  >
-                    {sending ? <Spinner /> : <Send />}
-                  </Button>
-                </div>
-              </>
-            ) : tab === "documents" && selectedDocument ? (
-              <FeishuDocumentView
-                callCommand={callCommand}
-                documentUrl={selectedDocument.url}
-                markdown={documentContent}
-                markdownLoading={detailLoading}
-              />
-            ) : tab === "bases" && selectedBase ? (
-              <div className="flex min-h-0 flex-1 flex-col">
-                {baseData?.tables.length ? (
-                  <div
-                    className="gap-inline px-section py-module-inset flex shrink-0 overflow-x-auto"
-                    role="tablist"
-                    aria-label={t("feishu.baseTables")}
-                  >
-                    {baseData.tables.map((table) => (
-                      <Button
-                        key={table.id}
-                        role="tab"
-                        aria-selected={baseData.selectedTableId === table.id}
-                        data-selected={baseData.selectedTableId === table.id}
-                        variant="selectable"
-                        size="compact"
-                        onClick={() => void loadBase(table.id)}
-                      >
-                        {table.name || table.id}
-                      </Button>
-                    ))}
-                  </div>
-                ) : null}
-                <ScrollArea className="min-h-0 flex-1">
-                  <div className="p-section">
-                    {detailLoading ? (
-                      <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
-                        <Spinner />
-                        {t("feishu.loadingBase")}
-                      </output>
-                    ) : null}
-                    {!detailLoading &&
-                    (!baseData || baseData.records.length === 0) ? (
-                      <p className="py-section text-ui text-muted-foreground text-center">
-                        {t("feishu.emptyBase")}
-                      </p>
-                    ) : null}
-                    {baseData && baseData.records.length > 0 ? (
-                      <div className="rounded-module bg-surface shadow-surface overflow-auto">
-                        <table className="text-ui w-full min-w-max border-collapse">
-                          <thead>
-                            <tr>
-                              {baseData.fields.map((field) => (
-                                <th
-                                  key={field}
-                                  scope="col"
-                                  className="border-border bg-fill-quiet px-surface-inset py-module-inset border-r border-b text-left font-medium last:border-r-0"
-                                >
-                                  {field}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {baseData.records.map((record) => {
-                              const cells = new Map(
-                                record.cells.map((cell) => [
-                                  cell.field,
-                                  cell.value,
-                                ])
-                              );
-                              return (
-                                <tr key={record.id}>
-                                  {baseData.fields.map((field) => (
-                                    <td
-                                      key={field}
-                                      dir="auto"
-                                      className="border-border px-surface-inset py-module-inset max-w-72 border-r border-b align-top last:border-r-0"
-                                    >
-                                      {cells.get(field) || "—"}
-                                    </td>
-                                  ))}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : null}
-                  </div>
-                </ScrollArea>
-              </div>
-            ) : null}
+            )}
 
-            {error ? (
+            {error != null && error !== "" ? (
               <div
                 role="alert"
                 className="bg-fill-quiet px-section py-module-inset text-ui text-destructive shrink-0"
@@ -2775,7 +2826,7 @@ export const FeishuWorkspacePage = ({
                       {t("feishu.notifyOnComplete")}
                     </span>
                     <span className="mt-inline text-fine text-muted-foreground block">
-                      {sessionId && selectedChat
+                      {sessionId != null && sessionId !== "" && selectedChat
                         ? t("feishu.notifyTarget", {
                             chat: resourceName(selectedChat),
                           })
@@ -2807,4 +2858,4 @@ export const FeishuWorkspacePage = ({
       ) : null}
     </>
   );
-};
+}

@@ -1,6 +1,6 @@
 import * as typescriptParser from "@typescript-eslint/parser";
-import unicorn from "eslint-plugin-unicorn";
 import importX from "eslint-plugin-import-x";
+import unicorn from "eslint-plugin-unicorn";
 
 export default [
   {

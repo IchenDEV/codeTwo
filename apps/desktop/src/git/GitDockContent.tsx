@@ -1,34 +1,31 @@
+import { Button } from "@/components/ui/button";
 import { GitBranch } from "@/components/ui/icons";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 import type { GitStatus } from "../bridge";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
 import { GitHubPullRequestPanel } from "./GitHubPullRequestPanel";
 
-type GitDockContentProps = {
+interface GitDockContentProps {
   readonly cwd: string | null;
   readonly status: GitStatus | null;
   readonly onRefresh: () => void;
   readonly onOpenSourceControl: () => void;
-};
+}
 
-/**
-Source-control summary rendered inside the generic Dock container.
-*/
-export const GitDockContent = ({
+export function GitDockContent({
   cwd,
   status,
   onRefresh,
   onOpenSourceControl,
-}: GitDockContentProps) => {
+}: GitDockContentProps) {
   const t = useT();
 
   return (
     <ScrollArea className="h-full min-h-0 flex-1">
       <div className="space-y-module-inset text-metadata p-4">
-        {status?.is_repo ? (
+        {status?.is_repo === true ? (
           <>
             <GitHubPullRequestPanel
               key={`${cwd ?? "."}:${status.branch}`}
@@ -97,4 +94,4 @@ export const GitDockContent = ({
       </div>
     </ScrollArea>
   );
-};
+}

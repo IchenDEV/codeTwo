@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { GlobalWindow } from "happy-dom";
+
 import { installTitlebarDoubleClick } from "../src/electrobun/titlebar";
 
 const dom = new GlobalWindow({ url: "http://localhost/" });

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { activateDom, dom, mount, flush, restoreDom } from "./domTestHarness";
 
 activateDom();
@@ -46,7 +47,7 @@ let restoreCanvasContext: (() => void) | null = null;
 function disableCanvasDrawing(): void {
   // The orb's DOM/state is under test, not its third-party painter. Some sibling canvas suites
   // leave partial contexts installed, so force the renderer's supported no-context path here.
-  const getContext = dom.HTMLCanvasElement.prototype.getContext;
+  const { getContext } = dom.HTMLCanvasElement.prototype;
   dom.HTMLCanvasElement.prototype.getContext = () => null;
   restoreCanvasContext = () => {
     dom.HTMLCanvasElement.prototype.getContext = getContext;
@@ -73,7 +74,7 @@ function micButton(container) {
   return container.querySelector("button");
 }
 function lastRec() {
-  return FakeRecognition.instances[FakeRecognition.instances.length - 1];
+  return FakeRecognition.instances.at(-1);
 }
 
 beforeEach(() => {
@@ -104,10 +105,10 @@ describe("VoiceButton hold-to-talk", () => {
     const recognition = lastRec();
     recognition.emitFinal("must not reach an unloaded plugin");
 
-    expect(btn.getAttribute("data-voice-mode")).toBe("listening");
-    expect(
-      btn.querySelector("canvas")?.getAttribute("data-activity-state")
-    ).toBe("listening");
+    expect(btn.dataset.voiceMode).toBe("listening");
+    expect(btn.querySelector("canvas")?.dataset.activityState).toBe(
+      "listening"
+    );
 
     rendered.unmount();
     await flush();
@@ -153,16 +154,14 @@ describe("VoiceButton hold-to-talk", () => {
     // While the handler runs the button shows the structuring spinner state.
     expect(btn.disabled).toBe(true);
     expect(btn.getAttribute("aria-label")).toBe("voice.structuring");
-    expect(btn.getAttribute("data-voice-mode")).toBe("structuring");
-    expect(
-      btn.querySelector("canvas")?.getAttribute("data-activity-state")
-    ).toBe("shaping");
+    expect(btn.dataset.voiceMode).toBe("structuring");
+    expect(btn.querySelector("canvas")?.dataset.activityState).toBe("shaping");
 
     release();
     await flush();
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute("aria-label")).toBe("voice.hold");
-    expect(btn.getAttribute("data-voice-mode")).toBe("idle");
+    expect(btn.dataset.voiceMode).toBe("idle");
   });
 
   test("a short press falls through to click-to-toggle", async () => {

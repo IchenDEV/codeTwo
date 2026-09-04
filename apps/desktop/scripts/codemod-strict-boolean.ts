@@ -8,18 +8,21 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 
-type Msg = {
+interface Msg {
   ruleId: string | null;
   message: string;
   line: number;
   column: number;
   endLine?: number;
   endColumn?: number;
-};
-type FileResult = { filePath: string; messages: Msg[] };
+}
+interface FileResult {
+  filePath: string;
+  messages: Msg[];
+}
 
 const reportPath = process.argv[2] ?? "/tmp/eslint-bool.json";
-const report = JSON.parse(readFileSync(reportPath, "utf8")) as FileResult[];
+const report = JSON.parse(readFileSync(reportPath, "utf-8")) as FileResult[];
 
 let filesChanged = 0;
 let fixes = 0;
@@ -88,11 +91,25 @@ function invertedCheck(message: string, expr: string): string | null {
 
 function isUnsafeExpr(expr: string): boolean {
   const trimmed = expr.trim();
-  if (!trimmed) return true;
-  if (trimmed.startsWith("Boolean(")) return true;
-  if (trimmed.includes("!=") || trimmed.includes("===")) return true;
-  if (/\w\s*\(/.test(trimmed) || trimmed.includes("await ")) return true;
-  if (trimmed.length > 80) return true;
+  if (trimmed == null || trimmed === "") {
+    return true;
+  }
+  if (trimmed.startsWith("Boolean(")) {
+    return true;
+  }
+  if (trimmed.includes("!=") || trimmed.includes("===")) {
+    return true;
+  }
+  // Member-span / UTF-8 column bugs can clip `a || b` mid-string; never rewrite those.
+  if (trimmed.includes("||") || trimmed.includes("&&")) {
+    return true;
+  }
+  if (/\w\s*\(/u.test(trimmed) || trimmed.includes("await ")) {
+    return true;
+  }
+  if (trimmed.length > 80) {
+    return true;
+  }
   return false;
 }
 
@@ -101,9 +118,11 @@ for (const file of report) {
     .filter((m) => m.ruleId === "@typescript-eslint/strict-boolean-expressions")
     .filter((m) => m.endLine != null && m.endColumn != null)
     .sort((a, b) => b.line - a.line || b.column - a.column);
-  if (targets.length === 0) continue;
+  if (targets.length === 0) {
+    continue;
+  }
 
-  const original = readFileSync(file.filePath, "utf8");
+  const original = readFileSync(file.filePath, "utf-8");
   const lines = original.split("\n");
   let changed = false;
 
@@ -149,16 +168,26 @@ for (const file of report) {
       startCol -= 1;
     }
 
-    const replacement = bang
+    let replacement = bang
       ? invertedCheck(message.message, expr)
       : positiveCheck(message.message, expr);
-    if (!replacement) {
+    if (replacement == null || replacement === "") {
       skipped += 1;
       continue;
     }
 
-    lines[startLine] =
-      row.slice(0, startCol) + replacement + row.slice(endCol);
+    // Bang expansions become `a == null || a === ""` and must be parenthesized
+    // when nested under && / || / ternary, or the || binds too loosely.
+    const prev = row.slice(0, startCol).trimEnd();
+    if (
+      replacement.includes("||") &&
+      !replacement.startsWith("(") &&
+      /(?:&&|\|\||[?:!(,=])$/.test(prev)
+    ) {
+      replacement = `(${replacement})`;
+    }
+
+    lines[startLine] = row.slice(0, startCol) + replacement + row.slice(endCol);
     changed = true;
     fixes += 1;
   }

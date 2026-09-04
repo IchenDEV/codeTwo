@@ -1,4 +1,3 @@
-import { pluginUiSlotIds } from "../bridge";
 import type {
   PluginConnectorContribution,
   PluginInfo,
@@ -48,9 +47,13 @@ export function activePluginUiContributions(
   plugins: PluginManagerPlugin[],
   components: PluginManagerComponent[] = []
 ): ActivePluginUiContributionsBySlot {
-  const bySlot = Object.fromEntries(
-    pluginUiSlotIds.map((slot) => [slot, []])
-  ) as unknown as ActivePluginUiContributionsBySlot;
+  const bySlot: ActivePluginUiContributionsBySlot = {
+    "composer.above": [],
+    "composer.toolbar": [],
+    "rail.features": [],
+    "session.header": [],
+    "transcript.before": [],
+  };
   const componentById = new Map(
     components.map((component) => [component.id, component])
   );

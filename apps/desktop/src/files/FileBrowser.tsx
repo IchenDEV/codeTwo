@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { AtSign } from "@/components/ui/icons";
-import { listFiles } from "../bridge";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,11 +8,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AtSign } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+import { listFiles } from "../bridge";
+
 // File browser: search the workspace and drop a file into the prompt as an `@` mention.
-export const FileBrowserModal = ({
+export function FileBrowserModal({
   cwd,
   onInsert,
   onClose,
@@ -21,7 +23,7 @@ export const FileBrowserModal = ({
   readonly cwd: string;
   readonly onInsert: (path: string) => void;
   readonly onClose: () => void;
-}) => {
+}) {
   const [all, setAll] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -94,4 +96,4 @@ export const FileBrowserModal = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

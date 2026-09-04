@@ -1,7 +1,5 @@
 import { useState } from "react";
 
-import { transferTaskToDevice } from "../bridge";
-import type { TaskHandoffResult } from "../bridge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +11,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export const TaskHandoffDialog = ({
+import { transferTaskToDevice } from "../bridge";
+import type { TaskHandoffResult } from "../bridge";
+
+export function TaskHandoffDialog({
   session,
   onClose,
   onTransferred,
@@ -21,7 +22,7 @@ export const TaskHandoffDialog = ({
   readonly session: string;
   readonly onClose: () => void;
   readonly onTransferred: (result: TaskHandoffResult) => void;
-}) => {
+}) {
   const [pairingUrl, setPairingUrl] = useState("");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,8 +42,8 @@ export const TaskHandoffDialog = ({
           destination.trim()
         )
       );
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -82,7 +83,7 @@ export const TaskHandoffDialog = ({
               Choose a new folder on the remote device.
             </p>
           </div>
-          {error ? (
+          {error != null && error !== "" ? (
             <p className="text-metadata text-destructive">{error}</p>
           ) : null}
         </div>
@@ -100,4 +101,4 @@ export const TaskHandoffDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

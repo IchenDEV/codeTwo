@@ -1,23 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  pairRemoteDevice,
-  remoteDevices,
-  remotePairingLink,
-  remoteRevokeDevice,
-  remoteStatus,
-  startRemote,
-  stopRemote,
-} from "../bridge";
-import type {
-  RemoteClientProtocol,
-  RemoteDevice,
-  RemoteEndpoint,
-  RemotePairingLink,
-  RemoteStatus,
-} from "../bridge";
+
+import { StatusIndicator } from "@/components/business/status-indicator";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { StatusIndicator } from "@/components/business/status-indicator";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +20,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import {
+  pairRemoteDevice,
+  remoteDevices,
+  remotePairingLink,
+  remoteRevokeDevice,
+  remoteStatus,
+  startRemote,
+  stopRemote,
+} from "../bridge";
+import type {
+  RemoteClientProtocol,
+  RemoteDevice,
+  RemoteEndpoint,
+  RemotePairingLink,
+  RemoteStatus,
+} from "../bridge";
+
 function defaultEndpointId(status: RemoteStatus | null): string | null {
   if (!status) {
     return null;
@@ -50,7 +52,7 @@ function defaultEndpointId(status: RemoteStatus | null): string | null {
 }
 
 function supportedProtocols(status: RemoteStatus): RemoteClientProtocol[] {
-  return status.protocols?.length ? status.protocols : ["t3", "legacy"];
+  return status.protocols?.length != null ? status.protocols : ["t3", "legacy"];
 }
 
 function protocolLabel(protocol: RemoteClientProtocol): string {
@@ -76,7 +78,7 @@ function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
   return "Devices on the same network can use this address.";
 }
 
-export const RemoteModal = ({ onClose }: { readonly onClose: () => void }) => {
+export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [link, setLink] = useState<RemotePairingLink | null>(null);
@@ -98,7 +100,8 @@ export const RemoteModal = ({ onClose }: { readonly onClose: () => void }) => {
     setStatus(next);
     setSelectedEndpointId((current) => {
       if (
-        current &&
+        current != null &&
+        current !== "" &&
         next?.endpoints.some((endpoint) => endpoint.id === current)
       ) {
         return current;
@@ -298,7 +301,7 @@ export const RemoteModal = ({ onClose }: { readonly onClose: () => void }) => {
               {pairBusy ? "Pairing…" : "Pair"}
             </Button>
           </div>
-          {pairedMessage ? (
+          {pairedMessage != null && pairedMessage !== "" ? (
             <p className="text-metadata text-foreground">{pairedMessage}</p>
           ) : null}
         </Card>
@@ -364,7 +367,9 @@ export const RemoteModal = ({ onClose }: { readonly onClose: () => void }) => {
                 value={selectedEndpointId ?? undefined}
                 disabled={status.endpoints.length === 0}
                 onValueChange={(endpointId) =>
-                  endpointId && selectEndpoint(endpointId)
+                  endpointId != null &&
+                  endpointId !== "" &&
+                  selectEndpoint(endpointId)
                 }
               >
                 <SelectTrigger
@@ -503,7 +508,9 @@ export const RemoteModal = ({ onClose }: { readonly onClose: () => void }) => {
           </div>
         )}
 
-        {err ? <p className="text-metadata text-destructive">{err}</p> : null}
+        {err != null && err !== "" ? (
+          <p className="text-metadata text-destructive">{err}</p>
+        ) : null}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -513,4 +520,4 @@ export const RemoteModal = ({ onClose }: { readonly onClose: () => void }) => {
       </DialogContent>
     </Dialog>
   );
-};
+}

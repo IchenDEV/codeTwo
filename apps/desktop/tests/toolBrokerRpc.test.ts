@@ -10,7 +10,9 @@ const entrypoint = fileURLToPath(
 
 describe("Tool Broker JSON-RPC adapter", () => {
   test("resolves configured MCP backends through the real subprocess boundary", () => {
-    const dataDirectory = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-rpc-"));
+    const dataDirectory = mkdtempSync(
+      join(tmpdir(), "codetwo-tool-broker-rpc-")
+    );
     try {
       writeFileSync(
         join(dataDirectory, "host-tools.json"),
@@ -163,7 +165,11 @@ describe("Tool Broker JSON-RPC adapter", () => {
         jsonrpc: "2.0",
         id: 11,
         method: "tool.resolve",
-        params: { data_dir: dataDirectory, provider_id: "codex", environment: {} },
+        params: {
+          data_dir: dataDirectory,
+          provider_id: "codex",
+          environment: {},
+        },
       };
       const resolveChild = Bun.spawnSync(["bun", entrypoint], {
         stdin: new TextEncoder().encode(JSON.stringify(resolveRequest)),

@@ -183,13 +183,13 @@ function componentState(
 
 function scopeSupport(
   entry: ManagedPluginCatalogEntry
-): Array<"user" | "project"> {
+): ("user" | "project")[] {
   return entry.metadata.scope_support.includes("project")
     ? ["user", "project"]
     : ["user"];
 }
 
-function bundleScope(_bundle: PluginInfo): Array<"user" | "project"> {
+function bundleScope(_bundle: PluginInfo): ("user" | "project")[] {
   // InstalledPlugin.scope records where a bundle came from; it has no concrete project identity
   // and the protocol runtime is currently hosted by the user graph. Do not present that provenance
   // as a project-local lifecycle switch until the backend has a real (project, bundle) policy.
@@ -215,11 +215,11 @@ function bundleState(bundle: PluginInfo): PluginManagerScopedState {
     missingDependencies: bundle.diagnostics
       .filter((diagnostic) => diagnostic.level === "warning")
       .map((diagnostic) => diagnostic.message),
-    status: !isEffectiveEnabled
-      ? "disabled"
-      : requiresTrust && !bundle.trusted
+    status: isEffectiveEnabled
+      ? requiresTrust && !bundle.trusted
         ? "pending"
-        : "active",
+        : "active"
+      : "disabled",
   };
 }
 
@@ -379,9 +379,9 @@ export function buildPluginManagerCatalog({
       },
       category: policyEntry?.metadata.category ?? "plugin",
       commands:
-        policyEntry?.commands?.length != null
-          ? policyEntry.commands
-          : bundle.runtime_commands.map((command) => command.id),
+        policyEntry?.commands?.length == null
+          ? bundle.runtime_commands.map((command) => command.id)
+          : policyEntry.commands,
       componentIds: [
         ...bundle.ui_contributions.map((contribution) =>
           pluginUiComponentId(bundle.id, contribution.id)

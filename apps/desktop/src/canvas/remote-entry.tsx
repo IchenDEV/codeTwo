@@ -2,10 +2,10 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
 import { CanvasEditor } from "./CanvasEditor";
-import { deriveCanvasManifest } from "./manifest";
-import type { CanvasManifest } from "./manifest";
 import { defaultExportBudget, exportCanvasPng } from "./export";
 import type { CanvasExportBudget, CanvasPngExport } from "./export";
+import { deriveCanvasManifest } from "./manifest";
+import type { CanvasManifest } from "./manifest";
 import { rehydrateEnvelope } from "./serialize";
 import type {
   CanvasEditorHandle,

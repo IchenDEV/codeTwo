@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { activateDom, click, dom, mount, restoreDom } from "./domTestHarness";
 
 activateDom();

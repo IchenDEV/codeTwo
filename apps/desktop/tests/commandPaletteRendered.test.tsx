@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+
 import {
   activateDom,
   click,
@@ -15,7 +16,7 @@ const { I18nProvider } = await import("../src/i18n");
 const { CommandPalette } = await import("../src/palette/CommandPalette");
 const styles = readFileSync(
   new URL("../src/styles.css", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 
 let previousResizeObserver;
@@ -55,7 +56,7 @@ describe("CommandPalette", () => {
       </I18nProvider>
     );
 
-    const body = dom.document.body;
+    const { body } = dom.document;
     expect(body.querySelector(".command-palette-surface")).toBeTruthy();
     expect(
       body.querySelector('[data-slot="command-list"]')?.className

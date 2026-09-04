@@ -1,14 +1,19 @@
 import type { ReactNode } from "react";
 
 export type PluginManagerTab =
-  "plugins" | "mcps" | "skills" | "hooks" | "marketplace";
+  | "plugins"
+  | "mcps"
+  | "skills"
+  | "hooks"
+  | "marketplace";
 
 export type PluginManagerSource = "builtin" | "host" | "bundle";
 
 export type PluginManagerScopeKind = "user" | "project";
 
 export type PluginManagerScope =
-  { kind: "user" } | { kind: "project"; projectPath: string };
+  | { kind: "user" }
+  | { kind: "project"; projectPath: string };
 
 export interface PluginManagerProject {
   path: string;

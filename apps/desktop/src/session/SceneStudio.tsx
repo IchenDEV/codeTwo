@@ -1,20 +1,6 @@
-import {
-  ArrowLeft,
-  Clapperboard,
-  Copy,
-  Download,
-  Pencil,
-  Plus,
-} from "@/components/ui/icons";
-
-import { exportSceneSkillMd } from "../bridge";
-import type { ProviderInfo, SkillInfo } from "../bridge";
-import { useLanguage, useT } from "../i18n";
-import { useToast } from "../ui/toast";
 import { PageHeader } from "@/components/business/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
 import {
   Card,
   CardAction,
@@ -24,15 +10,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  ArrowLeft,
+  Clapperboard,
+  Copy,
+  Download,
+  Pencil,
+  Plus,
+} from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { SceneEditor } from "./SceneEditor";
-import type { SceneEditorRequest } from "./SceneEditor";
-import { SourceBadge } from "./SceneChip";
+import { TooltipButton } from "@/components/ui/tooltip";
+
+import { exportSceneSkillMd } from "../bridge";
+import type { ProviderInfo, SkillInfo } from "../bridge";
+import { useLanguage, useT } from "../i18n";
+import { useToast } from "../ui/toast";
 import { sceneTitle } from "./scene";
 import type { SceneInfo } from "./scene";
+import { SourceBadge } from "./SceneChip";
+import { SceneEditor } from "./SceneEditor";
+import type { SceneEditorRequest } from "./SceneEditor";
 
-const SceneCard = ({
+function SceneCard({
   scene,
   active,
   onScene,
@@ -44,7 +44,7 @@ const SceneCard = ({
   readonly onScene: (reference: string) => void;
   readonly onEdit: (scene: SceneInfo) => void;
   readonly onDuplicate: (scene: SceneInfo) => void;
-}) => {
+}) {
   const t = useT();
   const { locale } = useLanguage();
   const toast = useToast();
@@ -142,9 +142,9 @@ const SceneCard = ({
       </CardFooter>
     </Card>
   );
-};
+}
 
-export const SceneStudio = ({
+export function SceneStudio({
   scenes,
   active,
   request,
@@ -168,7 +168,7 @@ export const SceneStudio = ({
   readonly onSaved: (scene: SceneInfo) => void;
   readonly onDeleted: (reference: string) => void;
   readonly onClose: () => void;
-}) => {
+}) {
   const t = useT();
   const customScenes = scenes.filter(
     (scene) => scene.source === "user" || scene.source === "project"
@@ -298,4 +298,4 @@ export const SceneStudio = ({
       )}
     </div>
   );
-};
+}

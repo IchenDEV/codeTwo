@@ -1,7 +1,9 @@
 // @ts-nocheck
-import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+
 import { StrictMode } from "react";
+
 import {
   activateDom,
   button,
@@ -19,11 +21,11 @@ const { QuickChatPanel, SideChatPanel } =
   await import("../src/session/SideChatPanel");
 const styles = readFileSync(
   new URL("../src/styles.css", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 const appSource = readFileSync(
   new URL("../src/App.tsx", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 
 afterEach(() => {
@@ -136,7 +138,7 @@ describe("SideChatPanel", () => {
     await flush();
 
     const side = view.container.querySelector('[data-chat-surface="side"]');
-    expect(side?.getAttribute("data-chat-count")).toBe("1");
+    expect(side?.dataset.chatCount).toBe("1");
     expect(side?.querySelectorAll("textarea")).toHaveLength(1);
     expect(side?.querySelectorAll('[role="tab"]')).toHaveLength(0);
 
@@ -229,17 +231,17 @@ describe("SideChatPanel", () => {
       const trigger = view.container.querySelector<HTMLButtonElement>(
         'button[title="Model"]'
       );
-      if (!trigger) {
+      if (trigger == null) {
         throw new Error("model trigger did not render");
       }
       click(trigger);
       await flush();
-      const nextModel = Array.from(
-        dom.document.body.querySelectorAll<HTMLButtonElement>(
+      const nextModel = [
+        ...dom.document.body.querySelectorAll<HTMLButtonElement>(
           '[data-slot="popover-content"] button'
-        )
-      ).find((candidate) => candidate.textContent?.includes("GPT Next"));
-      if (!nextModel) {
+        ),
+      ].find((candidate) => candidate.textContent?.includes("GPT Next"));
+      if (nextModel == null) {
         throw new Error("alternate model did not render");
       }
       click(nextModel);
@@ -320,12 +322,12 @@ describe("SideChatPanel", () => {
     const trigger = button(view.container, "Mode: Ask first");
     click(trigger);
     await flush();
-    const fullAccess = Array.from(
-      dom.document.body.querySelectorAll<HTMLButtonElement>(
+    const fullAccess = [
+      ...dom.document.body.querySelectorAll<HTMLButtonElement>(
         '[data-slot="popover-content"] button'
-      )
-    ).find((candidate) => candidate.textContent?.includes("Full access"));
-    if (!fullAccess) {
+      ),
+    ].find((candidate) => candidate.textContent?.includes("Full access"));
+    if (fullAccess == null) {
       throw new Error("full-access mode did not render");
     }
     click(fullAccess);
@@ -614,7 +616,7 @@ describe("SideChatPanel", () => {
     });
 
     const side = view.container.querySelector('[data-chat-surface="side"]');
-    expect(side?.getAttribute("data-chat-count")).toBe("1");
+    expect(side?.dataset.chatCount).toBe("1");
     expect(side?.querySelectorAll('[role="tab"]')).toHaveLength(0);
     expect(handled).toEqual(["selection-1", "selection-2"]);
 

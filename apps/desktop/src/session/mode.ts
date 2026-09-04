@@ -47,7 +47,9 @@ export function sessionMode(
 
 export function sessionExecutionPolicy(
   session:
-    Pick<SessionInfo, "permission_mode" | "sandbox_policy"> | null | undefined
+    | Pick<SessionInfo, "permission_mode" | "sandbox_policy">
+    | null
+    | undefined
 ): ExecutionPolicy | null {
   if (!session) {
     return null;

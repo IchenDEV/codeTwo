@@ -7,6 +7,8 @@ import type {
   AcpMcpServer,
   ToolPlan,
 } from "../../../../packages/tool-broker/src";
+import { asJsonObject } from "../lib/jsonValue";
+import type { JsonObject } from "../lib/jsonValue";
 import {
   detectHostToolEvidence,
   saveAgentBrowserAccess,
@@ -21,6 +23,35 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
+function parseJsonRpcRequest(value: unknown): JsonRpcRequest | null {
+  const object = asJsonObject(value);
+  if (object == null) {
+    return null;
+  }
+  if (object.jsonrpc !== "2.0") {
+    return null;
+  }
+  if (
+    !(
+      object.id === null ||
+      typeof object.id === "string" ||
+      typeof object.id === "number"
+    )
+  ) {
+    return null;
+  }
+  if (typeof object.method !== "string") {
+    return null;
+  }
+  const params = asJsonObject(object.params) ?? undefined;
+  return {
+    id: object.id,
+    jsonrpc: "2.0",
+    method: object.method,
+    ...(params ? { params } : {}),
+  };
+}
+
 function requiredString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${name} is required`);
@@ -30,7 +61,7 @@ function requiredString(value: unknown, name: string): string {
 
 function requiredBoolean(value: unknown, name: string): boolean {
   if (typeof value !== "boolean") {
-    throw new Error(`${name} must be a boolean`);
+    throw new TypeError(`${name} must be a boolean`);
   }
   return value;
 }
@@ -126,24 +157,28 @@ function handle(request: JsonRpcRequest): unknown {
     case "tool.snapshot": {
       if (
         !Array.isArray(params.provider_ids) ||
-        params.provider_ids.length === 0 ||
-        !params.provider_ids.every(
-          (providerId) =>
-            typeof providerId === "string" && providerId.length > 0
-        )
+        params.provider_ids.length === 0
       ) {
         throw new Error("params.provider_ids must be a non-empty string array");
       }
+      const providerIds = params.provider_ids.filter(
+        (entry): entry is string =>
+          typeof entry === "string" && entry.length > 0
+      );
+      if (providerIds.length !== params.provider_ids.length) {
+        throw new Error("params.provider_ids must be a non-empty string array");
+      }
+      const plans: Record<string, Record<string, unknown>> = {};
+      for (const providerId of providerIds) {
+        const plan: ToolPlan = broker.resolve({
+          context: { evidence },
+          providerId,
+        });
+        plans[providerId] = wirePlan(plan);
+      }
       return {
         catalog: wireSettings(broker.catalog({ evidence })),
-        plans: Object.fromEntries(
-          params.provider_ids.map((providerId) => {
-            return [
-              providerId,
-              wirePlan(broker.resolve({ context: { evidence }, providerId })),
-            ];
-          })
-        ),
+        plans,
       };
     }
     case "selection.set": {
@@ -185,22 +220,21 @@ async function runEmptyMcpServer(): Promise<void> {
     if (!line.trim()) {
       continue;
     }
-    let request: Record<string, unknown>;
+    let request: JsonRpcRequest;
     try {
-      request = JSON.parse(line) as Record<string, unknown>;
+      const parsed = parseJsonRpcRequest(JSON.parse(line) as unknown);
+      if (parsed == null) {
+        continue;
+      }
+      request = parsed;
     } catch {
       continue;
     }
     if (!("id" in request)) {
       continue;
     }
-    const method = request.method;
-    const params =
-      Boolean(request.params) &&
-      typeof request.params === "object" &&
-      !Array.isArray(request.params)
-        ? (request.params as Record<string, unknown>)
-        : {};
+    const { method } = request;
+    const params: JsonObject = request.params ?? {};
     let result: Record<string, unknown>;
     switch (method) {
       case "initialize": {
@@ -234,7 +268,7 @@ async function runEmptyMcpServer(): Promise<void> {
         process.stdout.write(
           `${JSON.stringify({
             error: {
-              code: -32601,
+              code: -32_601,
               message: `method not found: ${String(method)}`,
             },
             id: request.id,
@@ -253,8 +287,10 @@ async function runEmptyMcpServer(): Promise<void> {
 async function main(): Promise<void> {
   let request: JsonRpcRequest | null = null;
   try {
-    request = JSON.parse(await Bun.stdin.text()) as JsonRpcRequest;
-    if (request.jsonrpc !== "2.0") {
+    request = parseJsonRpcRequest(
+      JSON.parse(await Bun.stdin.text()) as unknown
+    );
+    if (request == null) {
       throw new Error("jsonrpc must be 2.0");
     }
     process.stdout.write(
@@ -264,7 +300,7 @@ async function main(): Promise<void> {
     process.stdout.write(
       `${JSON.stringify({
         error: {
-          code: -32000,
+          code: -32_000,
           message: error instanceof Error ? error.message : String(error),
         },
         id: request?.id ?? null,

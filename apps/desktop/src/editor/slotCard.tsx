@@ -1,13 +1,10 @@
 import { createReactBlockSpec } from "@blocknote/react";
 import { createContext, useContext, useRef } from "react";
-import { X } from "@/components/ui/icons";
 
-import type { DocumentBlock } from "../bridge";
-import type { SceneSlotDefinition } from "../session/scene";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { X } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -16,8 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useT } from "../i18n";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+
+import type { DocumentBlock } from "../bridge";
+import { useT } from "../i18n";
+import type { SceneSlotDefinition } from "../session/scene";
 
 /**
  * The one slot-card block behind both R1 (parameterized macros) and R5 (scene briefs).
@@ -57,7 +58,8 @@ export const SlotCardRuntimeContext = createContext<SlotCardRuntime | null>(
 const slotToken = /\{\{([a-z0-9-]+)\}\}/gu;
 
 export type TemplateSegment =
-  { kind: "text"; text: string } | { kind: "slot"; id: string };
+  | { kind: "text"; text: string }
+  | { kind: "slot"; id: string };
 
 export function templateSegments(template: string): TemplateSegment[] {
   const segments: TemplateSegment[] = [];
@@ -207,7 +209,10 @@ export function unfilledRequiredSlots(editor: {
     const slots = parseSlots(props?.slots ?? "[]");
     const values = parseValues(props?.values ?? "{}");
     for (const slot of slots) {
-      if (slot.required && effectiveSlotValue(slot, values).trim() === "") {
+      if (
+        slot.required === true &&
+        effectiveSlotValue(slot, values).trim() === ""
+      ) {
         out.push(slot.label || slot.id);
       }
     }
@@ -240,13 +245,13 @@ interface SlotCardEditor {
   focus: () => void;
 }
 
-export const SlotCardView = ({
+export function SlotCardView({
   block,
   editor,
 }: {
   readonly block: { id?: string; props: SlotCardProps };
   readonly editor: SlotCardEditor;
-}) => {
+}) {
   const t = useT();
   const runtime = useContext(SlotCardRuntimeContext);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -305,11 +310,9 @@ export const SlotCardView = ({
     if (!host) {
       return;
     }
-    const fields = Array.from(
-      host.querySelectorAll<HTMLElement>("[data-slot-field]")
-    );
+    const fields = [...host.querySelectorAll<HTMLElement>("[data-slot-field]")];
     const index = fields.indexOf(event.target as HTMLElement);
-    if (index < 0) {
+    if (index === -1) {
       return;
     }
     event.preventDefault();
@@ -563,7 +566,7 @@ export const SlotCardView = ({
       </div>
     </div>
   );
-};
+}
 
 export const SlotCardBlock = createReactBlockSpec(
   {

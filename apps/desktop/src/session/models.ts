@@ -32,14 +32,19 @@ export type Effort = (typeof EFFORTS)[number];
 const effortRe =
   /^(.*?)[\s(·:]+(extra[\s-]?high|x[\s-]?high|minimal|medium|low|high|max|ultra)\s*\)?\s*$/iu;
 
+function isEffort(value: string): value is Effort {
+  return EFFORTS.some((effort) => effort === value);
+}
+
 function normalizeEffort(token: string): Effort {
   const t = token
     .toLowerCase()
     .replaceAll(/[\s-]+/gu, " ")
     .trim();
-  return t === "extra high" || t === "x high" || t === "xhigh"
-    ? "xhigh"
-    : (t as Effort);
+  if (t === "extra high" || t === "x high" || t === "xhigh") {
+    return "xhigh";
+  }
+  return isEffort(t) ? t : "medium";
 }
 
 export function splitEffort(name: string): {

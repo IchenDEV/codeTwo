@@ -1,13 +1,33 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { MutableRefObject } from "react";
 import { flushSync } from "react-dom";
+
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Archive,
   Check,
@@ -17,19 +37,18 @@ import {
   PanelLeft,
   SquareKanban,
 } from "@/components/ui/icons";
-
-import { DocEditor } from "./editor/Editor";
-import type { CanvasInsertOptions } from "./editor/Editor";
-import type { CanvasBlockRuntime } from "./skillInline";
-import { deriveCanvasManifest } from "./canvas/manifest";
-import type { CanvasEnvelope as LocalCanvasEnvelope } from "./canvas/types";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  loadBrowserHistory,
-  removeBrowserProject,
-  saveBrowserHistory,
-} from "./browser/history";
-import { workspaceRelativeLinkPath } from "./session/MarkdownContent";
-import type { BuiltinLinkTarget } from "./session/MarkdownContent";
+  Tooltip,
+  TooltipButton,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { usePersistedNumber } from "@/lib/persist";
+import { cn } from "@/lib/utils";
+
 import {
   answerElicitation,
   answerPermission,
@@ -204,101 +223,91 @@ import type {
   PipelineInfo,
   PipelineInstanceDetail,
 } from "./bridge";
-import { loadProviderRegistry } from "./providers/registry";
-import { makeTranscriptHandler } from "./voice/VoiceButton";
+import { BrowserPanel } from "./browser/Browser";
 import {
-  PluginUiSlot,
-  activePluginConnectorContributions,
-  activePluginLanguageServers,
-  activePluginUiContributions,
-  buildPluginManagerCatalog,
-  createPluginManagerLabels,
-  localizePluginManagerCatalog,
-  normalizePluginProjectPath,
-  pluginManagerComponentEnabled,
-  toManagedPluginScope,
-} from "./plugins";
-import type {
-  ActivePluginUiContribution,
-  BuiltinUiComponentId,
-  PluginManagerChangePlan,
-  PluginManagerChangeRequest,
-  PluginManagerScope,
-} from "./plugins";
+  loadBrowserHistory,
+  removeBrowserProject,
+  saveBrowserHistory,
+} from "./browser/history";
+import { deriveCanvasManifest } from "./canvas/manifest";
+import type { CanvasEnvelope as LocalCanvasEnvelope } from "./canvas/types";
 import {
-  applyPluginManagerChange,
-  planPluginManagerChange,
-} from "./plugins/lifecycle";
+  Dock,
+  shouldOverlayRailForDock,
+  shouldOverlayRailForWorkspace,
+} from "./dock/Dock";
+import type { DockSurface, DockTab } from "./dock/Dock";
+import { DocEditor } from "./editor/Editor";
+import type { CanvasInsertOptions } from "./editor/Editor";
+import { PreviewModal } from "./editor/Preview";
+import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 import { FeishuWorkspacePage } from "./feishu/FeishuWorkspacePage";
 import type {
   CollaborationConnectorEvent,
   CollaborationConnectorSubscriber,
 } from "./feishu/FeishuWorkspacePage";
-import { SettingsPage } from "./settings/SettingsPage";
-import type { SettingsTab } from "./settings/SettingsPage";
-import { ProjectIcon } from "./projects/ProjectIcon";
+import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
+import { FileBrowserModal } from "./files/FileBrowser";
+import { FileDockContent } from "./files/FileDockContent";
+import type { FileRevealTarget } from "./files/FileViewer";
+import { WorkspaceSearchModal } from "./files/WorkspaceSearch";
+import { GitDockContent } from "./git/GitDockContent";
 import { SourceControlModal } from "./git/SourceControl";
 import { workspaceStateForCwd } from "./git/state";
 import type { WorkspaceLoadState } from "./git/state";
+import { githubPullRequestReference } from "./github/pullRequests";
+import type { PullRequestTaskLinkTarget } from "./github/PullRequestsPage";
+import { useLanguage, useT } from "./i18n";
+import { IssuesModal } from "./issues/Issues";
+import {
+  actionForEvent,
+  comboFromEvent,
+  isModifierOnly,
+  keyHint,
+} from "./keys";
+import { useMapRef, useSetRef } from "./lib/useCollectionRef";
+import { useLatestRef } from "./lib/useLatestRef";
+import { configurePluginLanguageServers } from "./lsp/client";
+import { synchronizeLspRuntimePolicy } from "./lsp/runtimePolicy";
 import { CommandPalette } from "./palette/CommandPalette";
 import type { Command } from "./palette/CommandPalette";
+import { DesktopPetBridge } from "./pet/DesktopPet";
+import {
+  petAnimationForActivity,
+  petConversationBubbleForActivity,
+} from "./pet/state";
+import { currentDesktopPlatform } from "./platform";
+import {
+  buildPluginManagerCatalog,
+  normalizePluginProjectPath,
+  pluginManagerComponentEnabled,
+  toManagedPluginScope,
+} from "./plugins/catalog";
+import type { BuiltinUiComponentId } from "./plugins/catalog";
+import {
+  activePluginConnectorContributions,
+  activePluginLanguageServers,
+  activePluginUiContributions,
+} from "./plugins/contributions";
+import type { ActivePluginUiContribution } from "./plugins/contributions";
+import {
+  applyPluginManagerChange,
+  planPluginManagerChange,
+} from "./plugins/lifecycle";
+import {
+  createPluginManagerLabels,
+  localizePluginManagerCatalog,
+} from "./plugins/localization";
+import { PluginUiSlot } from "./plugins/PluginUiSlot";
+import type {
+  PluginManagerChangePlan,
+  PluginManagerChangeRequest,
+  PluginManagerScope,
+} from "./plugins/types";
+import { ProjectIcon } from "./projects/ProjectIcon";
+import { loadProviderRegistry } from "./providers/registry";
 import { RemoteModal } from "./remote/Remote";
-import { IssuesModal } from "./issues/Issues";
-import { PreviewModal } from "./editor/Preview";
-import { FileBrowserModal } from "./files/FileBrowser";
-import { FileDockContent } from "./files/FileDockContent";
-import { WorkspaceSearchModal } from "./files/WorkspaceSearch";
-import type { FileRevealTarget } from "./files/FileViewer";
-import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
-import { synchronizeLspRuntimePolicy } from "./lsp/runtimePolicy";
-import { configurePluginLanguageServers } from "./lsp/client";
-import { quickQuotaProviderFor, quickQuotaSummary } from "./usage/quickQuota";
-import type { SessionConfig } from "./session/config";
-import {
-  sessionModes,
-  executionPolicyChangeDisabled,
-  nextSessionMode,
-  sessionExecutionPolicy,
-  sessionMode,
-  withSessionExecutionPolicy,
-} from "./session/mode";
-import type { SessionMode } from "./session/mode";
-import {
-  escalationNeeded,
-  nextSceneInRing,
-  sceneCustomized,
-  softApplyPending,
-  memoryPresetPolicy,
-  sceneCollaborationChoice,
-  sceneEffortChoice,
-} from "./session/scene";
-import type { SceneInfo } from "./session/scene";
-import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
-import type { SceneEditorRequest } from "./session/SceneEditor";
-import { SceneStudio } from "./session/SceneStudio";
-import { SceneBanner, sceneBannerFromEvent } from "./session/SceneBanner";
-import type { SceneBannerState } from "./session/SceneBanner";
-import { SessionHeaderActions } from "./session/SessionHeaderActions";
-import { TaskHandoffDialog } from "./session/TaskHandoffDialog";
-import { QuickChatPanel, SideChatPanel } from "./session/SideChatPanel";
-import type { TransientChatSeed } from "./session/SideChatPanel";
-import { ProjectActionDialog } from "./session/ProjectActionDialog";
-import { projectActionBindings } from "./session/projectActions";
-import { StageTrack } from "./session/StageTrack";
 import { Composer } from "./session/Composer";
-import {
-  activeContextWindow,
-  clearContextWindow,
-  updateContextWindow,
-} from "./session/contextWindow";
-import type { ContextWindowBySession } from "./session/contextWindow";
-// Explicit extension: `session/` holds both `statusline.ts` and `Statusline.tsx`, and bun's
-// resolver matches the pair case-insensitively without it.
-import { deriveBurnRate } from "./session/statusline.ts";
-import {
-  nextSessionWorktreeBaseline,
-  projectSwitchWorktreeBaseline,
-} from "./session/projectDefaults";
 import {
   composerDraftScopeKey,
   loadComposerDrafts,
@@ -312,38 +321,25 @@ import type {
   ComposerDraftPosture,
   ComposerDraftScope,
 } from "./session/composerDrafts";
-import { QuestionDialog } from "./session/QuestionDialog";
-import { PermissionCard } from "./session/PermissionCard";
-import { TemplateDialog } from "./session/TemplateDialog";
-import { TranscriptPane } from "./session/TranscriptPane";
-import { planChecklistMarkdown } from "./session/TaskPlanPanel";
-import type { TranscriptScrollController } from "./session/useTranscriptScroll";
-import { DesktopPetBridge } from "./pet/DesktopPet";
+import type { SessionConfig } from "./session/config";
+import {
+  activeContextWindow,
+  clearContextWindow,
+  updateContextWindow,
+} from "./session/contextWindow";
+import type { ContextWindowBySession } from "./session/contextWindow";
+import { workspaceRelativeLinkPath } from "./session/MarkdownContent";
+import type { BuiltinLinkTarget } from "./session/MarkdownContent";
+import {
+  sessionModes,
+  executionPolicyChangeDisabled,
+  nextSessionMode,
+  sessionExecutionPolicy,
+  sessionMode,
+  withSessionExecutionPolicy,
+} from "./session/mode";
+import type { SessionMode } from "./session/mode";
 import { PaneLayoutToolbar } from "./session/PaneChrome";
-import { PaneTiles } from "./session/PaneTiles";
-import {
-  petAnimationForActivity,
-  petConversationBubbleForActivity,
-} from "./pet/state";
-import {
-  applyEvent,
-  canvasAcceptedRequestKey,
-  canvasIdsToPurgeAfterTurnStart,
-  canvasRetryDocument,
-  canvasRetryTargetSession,
-  canvasUnmountPlan,
-  canvasRetryReferencesForTerminal,
-  isCanvasProviderImageError,
-  matchesSubmittedEditorRevision,
-  mergeLoadedTurns,
-  newTurn,
-  prependTranscriptTurns,
-  transcriptTailState,
-  turnsFromTranscript,
-  withRunningSession,
-  withoutUnacceptedTurn,
-} from "./session/turns";
-import type { PromptImage, Turn } from "./session/turns";
 import {
   singlePaneLayout,
   splitFocused,
@@ -353,6 +349,30 @@ import {
   listPanes,
 } from "./session/paneLayout";
 import type { PaneLayout, PaneEdge } from "./session/paneLayout";
+import { PaneTiles } from "./session/PaneTiles";
+import { PermissionCard } from "./session/PermissionCard";
+import { ProjectActionDialog } from "./session/ProjectActionDialog";
+import { projectActionBindings } from "./session/projectActions";
+import {
+  nextSessionWorktreeBaseline,
+  projectSwitchWorktreeBaseline,
+} from "./session/projectDefaults";
+import { QuestionDialog } from "./session/QuestionDialog";
+import {
+  escalationNeeded,
+  nextSceneInRing,
+  sceneCustomized,
+  softApplyPending,
+  memoryPresetPolicy,
+  sceneCollaborationChoice,
+  sceneEffortChoice,
+} from "./session/scene";
+import type { SceneInfo } from "./session/scene";
+import { SceneBanner, sceneBannerFromEvent } from "./session/SceneBanner";
+import type { SceneBannerState } from "./session/SceneBanner";
+import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
+import type { SceneEditorRequest } from "./session/SceneEditor";
+import { SceneStudio } from "./session/SceneStudio";
 import {
   activeSessionWorktreeState,
   enqueuePermission,
@@ -378,6 +398,16 @@ import type {
   PermissionQueueItem,
   SessionCreationShell,
 } from "./session/sessionEvents";
+import { SessionHeaderActions } from "./session/SessionHeaderActions";
+import { QuickChatPanel, SideChatPanel } from "./session/SideChatPanel";
+import type { TransientChatSeed } from "./session/SideChatPanel";
+import { StageTrack } from "./session/StageTrack";
+// Explicit extension: `session/` holds both `statusline.ts` and `Statusline.tsx`, and bun's
+// resolver matches the pair case-insensitively without it.
+import { deriveBurnRate } from "./session/statusline.ts";
+import { TaskHandoffDialog } from "./session/TaskHandoffDialog";
+import { planChecklistMarkdown } from "./session/TaskPlanPanel";
+import { TemplateDialog } from "./session/TemplateDialog";
 import {
   activeInteractivePreview,
   classifyToolSurface,
@@ -389,22 +419,34 @@ import type {
   FollowState,
   ToolSurfaceHint,
 } from "./session/toolActivity";
-import { needsMeCount } from "./sidebar/missionControl.ts";
-import {
-  Dock,
-  shouldOverlayRailForDock,
-  shouldOverlayRailForWorkspace,
-} from "./dock/Dock";
-import type { DockSurface, DockTab } from "./dock/Dock";
-import { BrowserPanel } from "./browser/Browser";
-import { GitDockContent } from "./git/GitDockContent";
-import { TerminalDockContent } from "./terminal/TerminalDockContent";
 import { TrajectoryView } from "./session/TrajectoryView";
-import { SessionRail } from "./sidebar/SessionRail";
-import { EnvironmentPopover } from "./environment/EnvironmentPopover";
+import { TranscriptPane } from "./session/TranscriptPane";
+import {
+  applyEvent,
+  canvasAcceptedRequestKey,
+  canvasIdsToPurgeAfterTurnStart,
+  canvasRetryDocument,
+  canvasRetryTargetSession,
+  canvasUnmountPlan,
+  canvasRetryReferencesForTerminal,
+  isCanvasProviderImageError,
+  matchesSubmittedEditorRevision,
+  mergeLoadedTurns,
+  newTurn,
+  prependTranscriptTurns,
+  transcriptTailState,
+  turnsFromTranscript,
+  withRunningSession,
+  withoutUnacceptedTurn,
+} from "./session/turns";
+import type { PromptImage, Turn } from "./session/turns";
+import type { TranscriptScrollController } from "./session/useTranscriptScroll";
+import { SettingsPage } from "./settings/SettingsPage";
+import type { SettingsTab } from "./settings/SettingsPage";
+import { needsMeCount } from "./sidebar/missionControl.ts";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
-import type { PullRequestTaskLinkTarget } from "./github/PullRequestsPage";
-import { githubPullRequestReference } from "./github/pullRequests";
+import { SessionRail } from "./sidebar/SessionRail";
+import type { CanvasBlockRuntime } from "./skillInline";
 import {
   associateTaskSession,
   associateTaskPullRequest,
@@ -417,45 +459,10 @@ import {
   unlinkTaskPullRequest,
 } from "./taskboard/taskBoard";
 import type { BoardTask } from "./taskboard/taskBoard";
-
-import {
-  actionForEvent,
-  comboFromEvent,
-  isModifierOnly,
-  keyHint,
-} from "./keys";
+import { TerminalDockContent } from "./terminal/TerminalDockContent";
 import { useToast } from "./ui/toast";
-import { useLanguage, useT } from "./i18n";
-import { currentDesktopPlatform } from "./platform";
-
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipButton,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { usePersistedNumber } from "@/lib/persist";
-import { cn } from "@/lib/utils";
+import { quickQuotaProviderFor, quickQuotaSummary } from "./usage/quickQuota";
+import { makeTranscriptHandler } from "./voice/VoiceButton";
 
 const TaskBoardPage = lazy(() =>
   import("./taskboard/TaskBoardPage").then((module) => ({
@@ -483,7 +490,7 @@ const DockerPage = lazy(() =>
   }))
 );
 
-const PageLoadingFallback = () => {
+function PageLoadingFallback() {
   const t = useT();
   return (
     <output className="bg-background text-body text-muted-foreground flex min-h-0 min-w-0 flex-1 items-center justify-center gap-2">
@@ -491,7 +498,7 @@ const PageLoadingFallback = () => {
       {t("session.loading")}
     </output>
   );
-};
+}
 
 function summarizeDoc(doc: DocumentBlock[]): string {
   return doc.map(describeBlock).join("\n\n");
@@ -693,10 +700,7 @@ function slug(name: string): string {
     .replace(/^-|-$/gu, "");
 }
 
-/**
-A header icon with a tooltip — the always-visible way into a dock surface.
-*/
-const IconAction = ({
+function IconAction({
   icon: Icon,
   label,
   hint,
@@ -711,27 +715,31 @@ const IconAction = ({
   readonly hint?: string;
   readonly onClick: () => void;
   readonly active?: boolean;
-}) => (
-  <Tooltip>
-    <TooltipTrigger
-      render={
-        <Button
-          variant={active ? "secondary" : "ghost"}
-          size="icon"
-          aria-label={label}
-          className={cn("size-7 shrink-0", active && "text-primary")}
-          onClick={onClick}
-        >
-          <Icon className="size-4" />
-        </Button>
-      }
-    />
-    <TooltipContent>
-      {label}
-      {hint ? <span className="ml-1.5 opacity-60">{hint}</span> : null}
-    </TooltipContent>
-  </Tooltip>
-);
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={active === true ? "secondary" : "ghost"}
+            size="icon"
+            aria-label={label}
+            className={cn("size-7 shrink-0", active === true && "text-primary")}
+            onClick={onClick}
+          >
+            <Icon className="size-4" />
+          </Button>
+        }
+      />
+      <TooltipContent>
+        {label}
+        {hint != null && hint !== "" ? (
+          <span className="ml-1.5 opacity-60">{hint}</span>
+        ) : null}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function selectedExcerptMarkdown(text: string): string {
   return text
@@ -847,6 +855,19 @@ const emptyPaneTranscriptState: PaneTranscriptState = {
   loadingEarlier: false,
   nextBefore: null,
 };
+
+function subscribeViewportWidth(onStoreChange: () => void): () => void {
+  window.addEventListener("resize", onStoreChange);
+  return () => window.removeEventListener("resize", onStoreChange);
+}
+
+function getViewportWidth(): number {
+  return window.innerWidth;
+}
+
+function getServerViewportWidth(): number {
+  return 1280;
+}
 
 export default function App() {
   const [providers, setProviders] = useState<ProviderInfo[]>(fallbackProviders);
@@ -975,7 +996,7 @@ export default function App() {
   const paneForSession = (session: string | null): string => {
     if (session !== null) {
       const bound = paneBoundToSession(paneContentsRef.current, session);
-      if (bound) {
+      if (bound != null && bound !== "") {
         return bound;
       }
     }
@@ -1229,19 +1250,19 @@ export default function App() {
   /**
   Per-session scene memory so switching sessions restores each one's scene.
   */
-  const sceneBySessionRef = useRef(new Map<string, string>());
-  const autoSceneBySessionRef = useRef(new Map<string, boolean>());
+  const sceneBySessionRef = useMapRef<string, string>();
+  const autoSceneBySessionRef = useMapRef<string, boolean>();
   const scenesRef = useRef<SceneInfo[]>([]);
   const activeSceneNameRef = useRef<string | null>(null);
   const autoSceneRef = useRef(false);
   /**
   Sessions whose scene reasoning_effort has been applied (once options arrived).
   */
-  const sceneEffortAppliedRef = useRef(new Set<string>());
+  const sceneEffortAppliedRef = useSetRef<string>();
   /**
   Last scene plan posture sent through each session's provider-owned collaboration option.
   */
-  const scenePlanAppliedRef = useRef(new Map<string, boolean>());
+  const scenePlanAppliedRef = useMapRef<string, boolean>();
   /**
   Stage binding for the next created session (advance-in-new-session handshake).
   */
@@ -1264,13 +1285,11 @@ export default function App() {
     feature: "CODETWO_CANVAS_INPUT_V1",
     status: "not production-enabled",
   });
-  const canvasDraftsRef = useRef(new Map<string, CanvasDraft>());
-  const canvasAssetsRef = useRef(
-    new Map<string, Map<string, CanvasStaticAsset>>()
-  );
-  const canvasTombstonesRef = useRef(new Set<string>());
-  const canvasPurgeRequestedRef = useRef(new Set<string>());
-  const canvasFrozenRef = useRef(new Set<string>());
+  const canvasDraftsRef = useMapRef<string, CanvasDraft>();
+  const canvasAssetsRef = useMapRef<string, Map<string, CanvasStaticAsset>>();
+  const canvasTombstonesRef = useSetRef<string>();
+  const canvasPurgeRequestedRef = useSetRef<string>();
+  const canvasFrozenRef = useSetRef<string>();
   const insertCanvasRef = useRef<(() => Promise<void>) | null>(null);
   const insertCanvasDraftRef = useRef<
     ((draft: CanvasDraft, options?: CanvasInsertOptions) => void) | null
@@ -1430,7 +1449,9 @@ export default function App() {
     useState(false);
   useEffect(() => {
     setCallProjectPath(
-      activeProject ? normalizePluginProjectPath(activeProject) : null
+      activeProject != null && activeProject !== ""
+        ? normalizePluginProjectPath(activeProject)
+        : null
     );
   }, [activeProject]);
   const workspaceCwd = cwd || ".";
@@ -1509,20 +1530,17 @@ export default function App() {
   const isRailCollapsed = railCollapsedRaw !== 0;
   const toggleRail = () => setRailCollapsedRaw(isRailCollapsed ? 0 : 1);
   const appliedRailWidth = Math.min(420, Math.max(220, railWidth));
-  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  const viewportWidth = useSyncExternalStore(
+    subscribeViewportWidth,
+    getViewportWidth,
+    getServerViewportWidth
+  );
   const isNarrowLayout = shouldOverlayRailForWorkspace(
     viewportWidth,
     appliedRailWidth
   );
   const [narrowRailOpen, setNarrowRailOpen] = useState(false);
   const wasNarrowLayoutRef = useRef(isNarrowLayout);
-  useEffect(() => {
-    const measure = () => {
-      setViewportWidth(window.innerWidth);
-    };
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
   useLayoutEffect(() => {
     if (isNarrowLayout && !wasNarrowLayoutRef.current) {
       setNarrowRailOpen(false);
@@ -1602,12 +1620,14 @@ export default function App() {
   const [editorKeyByPane, setEditorKeyByPane] = useState<
     Record<string, number>
   >(() => ({ [initialPaneId]: 0 }));
-  const editorRevisionByPaneRef = useRef(
-    new Map<string, number>([[initialPaneId, 0]])
-  );
-  const editorLocaleByPaneRef = useRef(
-    new Map<string, string>([[initialPaneId, locale]])
-  );
+  const editorRevisionByPaneRef = useMapRef<string, number>();
+  const editorLocaleByPaneRef = useMapRef<string, string>();
+  const editorMapsSeededRef = useRef(false);
+  if (!editorMapsSeededRef.current) {
+    editorRevisionByPaneRef.current.set(initialPaneId, 0);
+    editorLocaleByPaneRef.current.set(initialPaneId, locale);
+    editorMapsSeededRef.current = true;
+  }
   const isDocEmpty = editorEmptyByPane[paneLayout.focused] ?? true;
   const desktopPlatform = currentDesktopPlatform();
   const isEditorLaunchersAvailable = desktopPlatform === "macos";
@@ -1615,12 +1635,15 @@ export default function App() {
     ? t("header.finder")
     : t("header.fileManager");
 
-  const setTaskContext = (task: BoardTask | null, isTemporary: boolean) => {
-    activeBoardTaskRef.current = task;
-    temporarySessionRef.current = isTemporary;
-    setActiveBoardTask(task);
-    setTemporarySession(isTemporary);
-  };
+  const setTaskContext = useCallback(
+    (task: BoardTask | null, isTemporary: boolean) => {
+      activeBoardTaskRef.current = task;
+      temporarySessionRef.current = isTemporary;
+      setActiveBoardTask(task);
+      setTemporarySession(isTemporary);
+    },
+    []
+  );
 
   const getBlocksRef = useRef<(() => DocumentBlock[]) | null>(null);
   const editorRevisionRef = useRef(0);
@@ -1669,7 +1692,7 @@ export default function App() {
   const activeSessionRef = useRef<string | null>(null);
   // Every editor binds a stable pane-owned bundle. Shared App commands below are only live proxies
   // to the currently focused bundle, so an editor cleanup can never null another pane's handles.
-  const paneEditorRefsMap = useRef(new Map<string, PaneEditorRefs>());
+  const paneEditorRefsMap = useMapRef<string, PaneEditorRefs>();
   const paneEditorRefsFor = (paneId: string): PaneEditorRefs => {
     const existing = paneEditorRefsMap.current.get(paneId);
     if (existing) {
@@ -1788,7 +1811,7 @@ export default function App() {
   const projectMutationVersionRef = useRef(0);
   const memoryReadRef = useRef<MemoryAccess>("inherit");
   const memoryWriteRef = useRef<MemoryAccess>("inherit");
-  const memoryReceiptsBySessionRef = useRef(new Map<string, MemoryReceipt[]>());
+  const memoryReceiptsBySessionRef = useMapRef<string, MemoryReceipt[]>();
   const initializePluginSessionState = async (
     session: string,
     initial?: {
@@ -1847,11 +1870,11 @@ export default function App() {
   // Only session/new calls initiated by this window may take over its active conversation. A
   // remote client can create sessions on the same engine without stealing desktop focus.
   const awaitingSessionRef = useRef<string | null>(null);
-  const earlierLoadRunningByPaneRef = useRef(new Set<string>());
-  const earlierLoadSeqByPaneRef = useRef(new Map<string, number>());
+  const earlierLoadRunningByPaneRef = useSetRef<string>();
+  const earlierLoadSeqByPaneRef = useMapRef<string, number>();
   // Each pane owns its load generation: focus changes neither redirect nor cancel another pane's
   // in-flight transcript request.
-  const sessionLoadSeqByPaneRef = useRef(new Map<string, number>());
+  const sessionLoadSeqByPaneRef = useMapRef<string, number>();
   const runningSessionsRef = useRef(runningSessions);
   const sessionActivitiesRef = useRef<Map<string, SessionActivity>>(new Map());
   // A null value means an authoritative TurnStarted arrived without a correlation id. Presence in
@@ -1943,7 +1966,7 @@ export default function App() {
 
   const markSessionStarted = (session: string, requestId?: string | null) => {
     runningPromptRequestsRef.current.set(session, requestId ?? null);
-    if (requestId) {
+    if (requestId != null && requestId !== "") {
       latestTurnRequestIdsRef.current.set(session, requestId);
     } else {
       latestTurnRequestIdsRef.current.delete(session);
@@ -1961,7 +1984,8 @@ export default function App() {
   ): boolean => {
     const current = runningPromptRequestsRef.current.get(session);
     if (
-      requestId &&
+      requestId != null &&
+      requestId !== "" &&
       runningPromptRequestsRef.current.has(session) &&
       requestId !== current
     ) {
@@ -2110,7 +2134,7 @@ export default function App() {
     }
   };
 
-  const persistActiveComposerDraft = () => {
+  const persistActiveComposerDraft = useCallback(() => {
     const scope = activeDraftScopeRef.current;
     if (!scope) {
       return;
@@ -2125,7 +2149,7 @@ export default function App() {
         scope,
       })
     );
-  };
+  }, []);
 
   const flushActiveComposerDraft = () => {
     if (composerDraftSaveTimerRef.current !== null) {
@@ -2576,6 +2600,8 @@ export default function App() {
       })
       .catch(() => {});
   };
+  const refreshSessionsRef = useLatestRef(refreshSessions);
+  const refreshProjectsRef = useLatestRef(refreshProjects);
 
   const updateProjectWorktreeMode = async (
     path: string,
@@ -2673,7 +2699,7 @@ export default function App() {
         path === activeProjectRef.current &&
         activeSessionRef.current === null
       ) {
-        if (nextProvider) {
+        if (nextProvider != null && nextProvider !== "") {
           setProvider(nextProvider);
         }
         setCurrentModel(nextProvider ? nextModel : null);
@@ -2702,7 +2728,9 @@ export default function App() {
       setProvider(project.default_provider);
     }
     setCurrentModel(
-      project?.default_provider ? (project.default_model ?? null) : null
+      project?.default_provider != null && project?.default_provider !== ""
+        ? (project.default_model ?? null)
+        : null
     );
     setDefaultModel(null);
     setConfigOptions([]);
@@ -2962,7 +2990,7 @@ export default function App() {
       if (import.meta.env.DEV) {
         const query = new URLSearchParams(window.location.search);
         const fixtureProvider = query.get("mockProviderSettings");
-        if (fixtureProvider) {
+        if (fixtureProvider != null && fixtureProvider !== "") {
           const fixtureModels = [
             ...new Set(
               (
@@ -3075,13 +3103,13 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
-    refreshSessions();
+    void refreshSessionsRef.current();
 
     let unlisten: (() => void) | null = null;
     void (async () => {
       unlisten = await onEngineEvent((ev: CoreEvent) => {
         if (ev.event === "session_created") {
-          const refreshed = refreshSessions();
+          const refreshed = refreshSessionsRef.current();
           if (!matchesSessionCreation(ev, awaitingSessionRef.current)) {
             return;
           }
@@ -3118,11 +3146,12 @@ export default function App() {
           }
           {
             const stagedTaskId = pending.boardTaskId;
-            const stagedTask = stagedTaskId
-              ? (loadBoardSnapshot().tasks.find(
-                  (task) => task.id === stagedTaskId
-                ) ?? null)
-              : null;
+            const stagedTask =
+              stagedTaskId != null && stagedTaskId !== ""
+                ? (loadBoardSnapshot().tasks.find(
+                    (task) => task.id === stagedTaskId
+                  ) ?? null)
+                : null;
             if (stagedTask) {
               const board = loadBoardSnapshot();
               const associated = associateTaskSession(
@@ -3198,7 +3227,7 @@ export default function App() {
           {
             // Full-apply handshake: bind the staged scene to the session the moment it exists.
             const pendingScene = pendingSceneRef.current;
-            if (pendingScene) {
+            if (pendingScene != null && pendingScene !== "") {
               pendingSceneRef.current = null;
               if (!componentEnabledRef.current("scenes.surface")) {
                 if (isOriginFocused) {
@@ -3211,7 +3240,10 @@ export default function App() {
                 const scene = scenesRef.current.find(
                   (s) => s.reference === pendingScene
                 );
-                if (scene?.execution?.model) {
+                if (
+                  scene?.execution?.model != null &&
+                  scene?.execution?.model !== ""
+                ) {
                   void setSessionModel(ev.session, scene.execution.model);
                 }
                 if (isOriginFocused) {
@@ -3241,7 +3273,7 @@ export default function App() {
           // The creation event carries the cwd that was persisted before publication. File, Git,
           // terminal and hook surfaces switch with the active id even if a best-effort list/preview
           // refresh fails independently. Older event producers fall back to the list shell.
-          if (isOriginFocused && ev.cwd) {
+          if (isOriginFocused && ev.cwd != null && ev.cwd !== "") {
             setCwd(ev.cwd);
           }
           void refreshed.then((items) => {
@@ -3252,7 +3284,7 @@ export default function App() {
             if (!created) {
               return;
             }
-            if (!ev.cwd) {
+            if (ev.cwd == null || ev.cwd === "") {
               setCwd(created.cwd);
             }
             if (activeSessionProvenanceRef.current?.session !== ev.session) {
@@ -3288,7 +3320,7 @@ export default function App() {
                 submitPrompt(ev.session, pending.doc, pending.promptRequestId)
               )
               .then(() => {
-                refreshSessions();
+                void refreshSessionsRef.current();
               })
               .catch((error) => {
                 if (
@@ -3353,7 +3385,7 @@ export default function App() {
             );
           setSessions(markDiscarded);
           setArchivedSessions(markDiscarded);
-          refreshSessions();
+          void refreshSessionsRef.current();
           toast(t("toast.worktreeDiscarded"), "success");
           return;
         }
@@ -3497,7 +3529,7 @@ export default function App() {
             ...prev,
             [ev.session]: ev.options,
           }));
-          if (model?.current) {
+          if (model?.current != null && model?.current !== "") {
             const current = model.current;
             setCurrentModelBySession((prev) => ({
               ...prev,
@@ -3522,7 +3554,7 @@ export default function App() {
           if (collaboration) {
             setPlanMode(collaboration.current === "plan");
           }
-          if (model?.current) {
+          if (model?.current != null && model?.current !== "") {
             setCurrentModel(model.current);
             // Same rule as `models`: the first report after a reset is the adapter's own pick.
             setDefaultModel((prev) => prev ?? model.current);
@@ -3534,7 +3566,11 @@ export default function App() {
               (s) => s.reference === activeSceneNameRef.current
             );
             const wanted = scene?.execution?.reasoning_effort;
-            if (wanted && !sceneEffortAppliedRef.current.has(ev.session)) {
+            if (
+              wanted != null &&
+              wanted !== "" &&
+              !sceneEffortAppliedRef.current.has(ev.session)
+            ) {
               const choice = sceneEffortChoice(ev.options, wanted);
               if (choice) {
                 sceneEffortAppliedRef.current.add(ev.session);
@@ -3679,7 +3715,7 @@ export default function App() {
           markSessionStarted(ev.session, ev.request_id);
           const pendingRequest =
             pendingPromptRequestsRef.current.get(ev.session) ??
-            (ev.request_id
+            (ev.request_id != null && ev.request_id !== ""
               ? pendingDeferredPromptRequestsRef.current.get(ev.request_id)
               : undefined);
           if (pendingRequest && ev.request_id === pendingRequest.requestId) {
@@ -3735,7 +3771,8 @@ export default function App() {
           : undefined;
         if (
           ev.event === "error" &&
-          eventSession &&
+          eventSession != null &&
+          eventSession !== "" &&
           ev.request_id !== null &&
           ev.request_id !== undefined &&
           pendingPromptRequestsRef.current.get(eventSession)?.requestId ===
@@ -3744,12 +3781,16 @@ export default function App() {
           // No matching TurnStarted arrived, so the core did not durably accept this draft.
           pendingPromptRequestsRef.current.delete(eventSession);
         }
-        if (ev.event === "error" && ev.request_id) {
+        if (
+          ev.event === "error" &&
+          ev.request_id != null &&
+          ev.request_id !== ""
+        ) {
           pendingDeferredPromptRequestsRef.current.delete(ev.request_id);
         }
         const isEnded = isTerminalSessionEvent(ev);
         if (isEnded) {
-          if (eventSession) {
+          if (eventSession != null && eventSession !== "") {
             const terminalRequestId =
               ev.event === "error"
                 ? (ev.request_id ?? activeTurnRequestId)
@@ -3795,7 +3836,7 @@ export default function App() {
               awaitingCreationPane ?? focusedPaneRef.current
             );
           }
-          refreshSessions();
+          void refreshSessionsRef.current();
         }
         if (
           !shouldRenderSessionEvent(
@@ -3817,7 +3858,9 @@ export default function App() {
           handleDockFollow(ev);
         }
         setPaneTurns(
-          ev.session === null && awaitingCreationPane
+          ev.session === null &&
+            awaitingCreationPane != null &&
+            awaitingCreationPane !== ""
             ? awaitingCreationPane
             : paneForSession(ev.session),
           (prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined)
@@ -3840,7 +3883,6 @@ export default function App() {
     markSessionStarted,
     isMarkSessionStopped,
     promoteActiveComposerDraft,
-    refreshSessions,
     restoreAcceptedCanvasForProviderError,
     restoreRejectedExecutionPolicy,
     removePendingAppshots,
@@ -3874,7 +3916,7 @@ export default function App() {
         t("scene.autoSwitched", { reason: event.reason, scene: event.title }),
         "success"
       );
-      void refreshSessions();
+      void refreshSessionsRef.current();
     }).then((dispose) => {
       unlisten = dispose;
     });
@@ -3883,7 +3925,7 @@ export default function App() {
         unlisten();
       }
     };
-  }, [refreshSessions, setTaskContext, t, toast]);
+  }, [t, toast]);
 
   // Rendered QA has no desktop event bridge in the Vite shell. This query-controlled fixture is
   // development-only and is replaced at build time, so production never gets a fake default.
@@ -3920,7 +3962,7 @@ export default function App() {
         : [{ description: null, id: "dev-model", name: "Context QA" }];
     const mockModel = mockModels[0].id;
     const mockProvider = query.get("mockProviderSettings");
-    if (mockProvider) {
+    if (mockProvider != null && mockProvider !== "") {
       setProvider(mockProvider);
     }
     activeSessionRef.current = session;
@@ -4006,7 +4048,7 @@ export default function App() {
     const submittedMemoryWrite = memoryWriteRef.current;
     const worktreeBaseSha =
       newSessionTarget?.worktreeBaseSha ??
-      (targetSession
+      (targetSession != null && targetSession !== ""
         ? null
         : sessionCreationBaselineSha(
             creationWorktreeBase,
@@ -4050,7 +4092,7 @@ export default function App() {
     let boardTaskId = stagedTask?.id ?? null;
     if (!targetSession && !stagedTask && !isTemporary) {
       const board = loadBoardSnapshot();
-      if (board.warning) {
+      if (board.warning != null && board.warning !== "") {
         toast(board.warning, "error");
       }
       const summary = summarizeDoc(doc).replace(/\s+/gu, " ").trim();
@@ -4078,7 +4120,8 @@ export default function App() {
         }
       : null;
     const promptRequestId = globalThis.crypto.randomUUID();
-    const creationRequestId = targetSession ? null : promptRequestId;
+    const creationRequestId =
+      targetSession != null && targetSession !== "" ? null : promptRequestId;
     if (targetSession) {
       pendingPromptRequestsRef.current.set(targetSession, {
         appshotIds,
@@ -4126,7 +4169,7 @@ export default function App() {
       ),
     ]);
     try {
-      if (targetSession) {
+      if (targetSession != null && targetSession !== "") {
         if (componentEnabledRef.current("memory.settings")) {
           await setSessionMemoryPolicy(
             targetSession,
@@ -4152,7 +4195,7 @@ export default function App() {
       }
     } catch (e) {
       const message = String(e);
-      if (targetSession) {
+      if (targetSession != null && targetSession !== "") {
         if (
           pendingPromptRequestsRef.current.get(targetSession)?.requestId ===
           promptRequestId
@@ -4304,7 +4347,7 @@ export default function App() {
   // can drive its own session. Both are optimistic: the engine echoes an authoritative `models` /
   // `config_options` event (or an `error`) that reconciles this state.
   const changeSessionModel = (session: string | null, id: string) => {
-    if (!session) {
+    if (session == null || session === "") {
       setCurrentModel(id);
       return;
     }
@@ -4329,7 +4372,7 @@ export default function App() {
     configId: string,
     value: string
   ) => {
-    if (!session) {
+    if (session == null || session === "") {
       return;
     }
     const option = configOptions.find((item) => item.id === configId);
@@ -4514,7 +4557,7 @@ export default function App() {
       return;
     }
     const source = createSession();
-    if (!source) {
+    if (source == null || source === "") {
       return;
     }
 
@@ -4663,7 +4706,7 @@ export default function App() {
 
   const readPullRequestTasks = (): BoardTask[] | null => {
     const board = loadBoardSnapshot();
-    if (board.warning) {
+    if (board.warning != null && board.warning !== "") {
       setPullRequestTasks([]);
       toast(board.warning, "error");
       return null;
@@ -4786,7 +4829,7 @@ export default function App() {
       .filter(Boolean)
       .join("\n\n");
     const board = loadBoardSnapshot();
-    if (!board.warning) {
+    if (board.warning == null || board.warning === "") {
       const linkedTask = taskForPullRequest(
         board.tasks,
         githubPullRequestReference(detail)
@@ -4806,7 +4849,7 @@ export default function App() {
   };
 
   const answer = async (optionId: string | null) => {
-    if (!permission) {
+    if (permission == null) {
       return;
     }
     const isAccepted = await answerPermission(
@@ -4825,7 +4868,7 @@ export default function App() {
   };
 
   const answerQuestion = async (value: ElicitationAnswer) => {
-    if (!permission) {
+    if (permission == null) {
       return;
     }
     const isAccepted = await answerElicitation(
@@ -4866,7 +4909,7 @@ export default function App() {
       return false;
     }
 
-    if (session) {
+    if (session != null && session !== "") {
       const requestId = globalThis.crypto.randomUUID();
       const authoritative = authoritativePoliciesRef.current.get(session) ?? {
         mode,
@@ -4916,7 +4959,7 @@ export default function App() {
     setMemoryRead(read);
     setMemoryWrite(write);
     const session = activeSessionRef.current;
-    if (session) {
+    if (session != null && session !== "") {
       const update =
         (nextRead: MemoryAccess, nextWrite: MemoryAccess) =>
         (items: SessionInfo[]) =>
@@ -4983,12 +5026,16 @@ export default function App() {
       ? (projects.find((project) => project.path === storedProjectPath)?.path ??
         null)
       : null;
-    if (projectPath && projectPath !== activeProjectRef.current) {
+    if (
+      projectPath != null &&
+      projectPath !== "" &&
+      projectPath !== activeProjectRef.current
+    ) {
       activeProjectRef.current = projectPath;
       setCallProjectPath(normalizePluginProjectPath(projectPath));
       setActiveProject(projectPath);
       void openProject(projectPath).then(refreshProjects);
-    } else if (stored && !projectPath) {
+    } else if (stored && (projectPath == null || projectPath === "")) {
       activeProjectRef.current = null;
       setCallProjectPath(null);
       setActiveProject(null);
@@ -5013,7 +5060,7 @@ export default function App() {
     // R10: focus moved — release the dock-follow latch and drop the stale badge.
     followDockEvent({ kind: "session_switched" });
     activeSessionRef.current = id;
-    if (stored?.model) {
+    if (stored?.model != null && stored?.model !== "") {
       knownModelsRef.current.set(id, stored.model);
     } else {
       knownModelsRef.current.delete(id);
@@ -5159,10 +5206,11 @@ export default function App() {
       }
     }
   };
+  const selectSessionRef = useLatestRef(selectSession);
 
   const activatePaneById = (paneId: string) => {
     const session = paneContentsRef.current[paneId]?.sessionId ?? null;
-    if (session) {
+    if (session != null && session !== "") {
       void selectSession(session, paneId, false, true);
       return;
     }
@@ -5214,17 +5262,26 @@ export default function App() {
   useEffect(() => {
     let dispose: (() => void) | null = null;
     void onDeviceSyncChanged(() => {
-      void refreshSessions();
-      refreshProjects();
+      void refreshSessionsRef.current();
+      refreshProjectsRef.current();
       const session = activeSessionRef.current;
-      if (session && !runningSessionsRef.current.has(session)) {
-        void selectSession(session, focusedPaneRef.current, true, true);
+      if (
+        session != null &&
+        session !== "" &&
+        !runningSessionsRef.current.has(session)
+      ) {
+        void selectSessionRef.current(
+          session,
+          focusedPaneRef.current,
+          true,
+          true
+        );
       }
     }).then((unlisten) => {
       dispose = unlisten;
     });
     return () => dispose?.();
-  }, [refreshProjects, refreshSessions, selectSession]);
+  }, []);
 
   const loadEarlierTranscript = async (
     paneId: string,
@@ -5427,9 +5484,10 @@ export default function App() {
   const activeProjectCatalog = activeProject
     ? managedProjectCatalogs[normalizePluginProjectPath(activeProject)]
     : undefined;
-  const activeManagedCatalog = activeProject
-    ? (activeProjectCatalog ?? managedUserCatalog)
-    : managedUserCatalog;
+  const activeManagedCatalog =
+    activeProject != null && activeProject !== ""
+      ? (activeProjectCatalog ?? managedUserCatalog)
+      : managedUserCatalog;
   const isActiveComponentPolicyReady =
     projectBootstrapComplete &&
     managedUserCatalog !== null &&
@@ -6556,12 +6614,12 @@ export default function App() {
       return;
     }
     const path = workspaceRelativeLinkPath(target.path, cwd || ".");
-    if (!path) {
+    if (path == null || path === "") {
       return;
     }
     openFileTab(
       path,
-      target.line
+      target.line != null
         ? { column: target.column ?? 1, line: target.line }
         : undefined
     );
@@ -6601,7 +6659,7 @@ export default function App() {
     }
     const at = sessions.findIndex((s) => s.id === activeSession);
     const next = sessions[(at + delta + sessions.length) % sessions.length];
-    if (next) {
+    if (next != null) {
       void selectSession(next.id);
     }
   };
@@ -6707,7 +6765,7 @@ export default function App() {
     }
     setActiveSceneName(reference);
     setScenePendingFields(pending);
-    if (session) {
+    if (session != null && session !== "") {
       sceneBySessionRef.current.set(session, reference);
       void applySceneToSession(session, reference, isConfirmed).then(
         (outcome) => {
@@ -6753,7 +6811,7 @@ export default function App() {
       return;
     }
     const reference = activeSceneNameRef.current;
-    if (!reference) {
+    if (reference == null || reference === "") {
       return;
     }
     const plan = await sceneSessionPlan(reference, isConfirmed);
@@ -6844,7 +6902,7 @@ export default function App() {
       });
       return;
     }
-    if (session) {
+    if (session != null && session !== "") {
       await syncSessionScene(session);
     }
     if (!componentEnabledRef.current("scenes.surface")) {
@@ -6929,7 +6987,7 @@ export default function App() {
       return;
     }
     setPipelineDetail(outcome.detail);
-    if (session) {
+    if (session != null && session !== "") {
       await syncSessionScene(session);
     }
     if (!componentEnabledRef.current("scenes.surface")) {
@@ -7065,7 +7123,11 @@ export default function App() {
         break;
       }
       case "cancel": {
-        if (activeSessionRef.current && isRunning) {
+        if (
+          activeSessionRef.current != null &&
+          activeSessionRef.current !== "" &&
+          isRunning
+        ) {
           void cancelTurn(activeSessionRef.current);
         } else {
           toast(t("toast.nothingRunning"));
@@ -7198,7 +7260,7 @@ export default function App() {
           scenesRef.current,
           activeSceneNameRef.current
         );
-        if (next) {
+        if (next != null && next !== "") {
           applySceneChoice(next);
         }
         break;
@@ -7517,11 +7579,13 @@ export default function App() {
           setCallProjectPath(normalizePluginProjectPath(last.path));
           setActiveProject(last.path);
           setCwd(last.path);
-          if (last.default_provider) {
+          if (last.default_provider != null && last.default_provider !== "") {
             setProvider(last.default_provider);
           }
           setCurrentModel(
-            last.default_provider ? (last.default_model ?? null) : null
+            last.default_provider != null && last.default_provider !== ""
+              ? (last.default_model ?? null)
+              : null
           );
           setWorktreeBase(
             projectSwitchWorktreeBaseline(last.default_worktree_mode)
@@ -7591,7 +7655,7 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (capturing) {
+      if (capturing != null && capturing !== "") {
         if (isModifierOnly(e)) {
           return;
         }
@@ -7608,7 +7672,7 @@ export default function App() {
         return;
       }
       const action = actionForEvent(e, effectiveBindings);
-      if (!action) {
+      if (action == null || action === "") {
         return;
       }
       // Escape is also how dialogs and the suggestion menu close; let those win when one is open.
@@ -7774,13 +7838,14 @@ export default function App() {
         ? sceneEditorRequest.scene.reference
         : null;
     if (
-      previous &&
+      previous != null &&
+      previous !== "" &&
       previous === activeSceneNameRef.current &&
       previous !== saved.reference
     ) {
       activeSceneNameRef.current = saved.reference;
       setActiveSceneName(saved.reference);
-      if (activeSession) {
+      if (activeSession != null && activeSession !== "") {
         sceneBySessionRef.current.set(activeSession, saved.reference);
         void setSessionScene(activeSession, saved.reference, false);
       }
@@ -8424,12 +8489,14 @@ export default function App() {
                         persistComposerHeight(h);
                       }
                     };
-                    const activeInteractionCapabilities = activeSession
-                      ? (interactionCapabilities[activeSession] ?? null)
-                      : null;
-                    const activeGoal = activeSession
-                      ? (goals[activeSession] ?? null)
-                      : null;
+                    const activeInteractionCapabilities =
+                      activeSession != null && activeSession !== ""
+                        ? (interactionCapabilities[activeSession] ?? null)
+                        : null;
+                    const activeGoal =
+                      activeSession != null && activeSession !== ""
+                        ? (goals[activeSession] ?? null)
+                        : null;
                     const activeAppshotKey =
                       activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
                     const activeAppshots =
@@ -8463,7 +8530,8 @@ export default function App() {
                               <Folder className="text-muted-foreground size-3.5" />
                             )}
                           </span>
-                          {activeProjectName ? (
+                          {activeProjectName != null &&
+                          activeProjectName !== "" ? (
                             <>
                               <span className="session-header-project-context electrobun-webkit-app-region-drag text-ui text-muted-foreground max-w-40 truncate">
                                 {activeProjectName}
@@ -8560,7 +8628,10 @@ export default function App() {
                                 }
                                 project={activeProjectName}
                                 projectPath={
-                                  activeProjectName ? activeProject : null
+                                  activeProjectName != null &&
+                                  activeProjectName !== ""
+                                    ? activeProject
+                                    : null
                                 }
                                 projects={projects}
                                 git={git}
@@ -8608,7 +8679,9 @@ export default function App() {
                               onCheckpoint={() => void doCheckpoint()}
                               onPush={() => void doPush().catch(() => {})}
                               onMoveTask={() =>
-                                activeSession && setShowTaskHandoff(true)
+                                activeSession != null &&
+                                activeSession !== "" &&
+                                setShowTaskHandoff(true)
                               }
                             />
 
@@ -8649,7 +8722,8 @@ export default function App() {
                         {paneFocused &&
                         isScenesSurfaceEnabled &&
                         pipelineDetail &&
-                        activeSession ? (
+                        activeSession != null &&
+                        activeSession !== "" ? (
                           <StageTrack
                             detail={pipelineDetail}
                             onSelectSession={(id) => void selectSession(id)}
@@ -8854,7 +8928,7 @@ export default function App() {
                                 onInvoke={invokePluginAction}
                               />
                             )}
-                            {permission &&
+                            {permission != null &&
                             !permission.form &&
                             !isActiveArchived ? (
                               <PermissionCard
@@ -8962,7 +9036,7 @@ export default function App() {
                                 goal={activeGoal}
                                 onGoal={async (action, objective) => {
                                   const session = activeSession;
-                                  if (!session) {
+                                  if (session == null || session === "") {
                                     return;
                                   }
                                   try {
@@ -8982,7 +9056,8 @@ export default function App() {
                                   }
                                 }}
                                 onStop={() =>
-                                  activeSession &&
+                                  activeSession != null &&
+                                  activeSession !== "" &&
                                   void cancelTurn(activeSession)
                                 }
                                 onAttachFile={() => {
@@ -9279,7 +9354,7 @@ export default function App() {
       {showRemote && isComponentEnabled("remote.modal") ? (
         <RemoteModal onClose={() => setShowRemote(false)} />
       ) : null}
-      {showTaskHandoff && activeSession ? (
+      {showTaskHandoff && activeSession != null && activeSession !== "" ? (
         <TaskHandoffDialog
           session={activeSession}
           onClose={() => setShowTaskHandoff(false)}

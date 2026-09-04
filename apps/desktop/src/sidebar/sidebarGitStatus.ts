@@ -1,7 +1,12 @@
 import type { GitHubPullRequest } from "../bridge";
 
 export type SidebarPullRequestState =
-  "merged" | "conflicting" | "ci_failed" | "ci_running" | "open" | "closed";
+  | "merged"
+  | "conflicting"
+  | "ci_failed"
+  | "ci_running"
+  | "open"
+  | "closed";
 
 export interface SidebarPullRequestStatus {
   number: number;

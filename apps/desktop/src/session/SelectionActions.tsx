@@ -25,25 +25,22 @@ interface SelectionToolbarProps {
   readonly onAskInSideChat: (text: string) => void;
 }
 
-/**
-Presentational seam kept independent from Range positioning so its actions stay easy to test.
-*/
-export const SelectionToolbar = ({
+export function SelectionToolbar({
   text,
   onAdd,
   onDetails,
   onAskInSideChat,
-}: SelectionToolbarProps) => {
+}: SelectionToolbarProps) {
   const t = useT();
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const [tabStop, setTabStop] = useState(0);
 
   const onToolbarKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const buttons = Array.from(
-      toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
+    const buttons = [
+      ...(toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
         "button:not(:disabled)"
-      ) ?? []
-    );
+      ) ?? []),
+    ];
     if (buttons.length === 0) {
       return;
     }
@@ -117,7 +114,7 @@ export const SelectionToolbar = ({
       </Button>
     </div>
   );
-};
+}
 
 function readSelection(scope: HTMLElement): CapturedSelection | null {
   const selection = window.getSelection();
@@ -142,17 +139,12 @@ function readSelection(scope: HTMLElement): CapturedSelection | null {
   return { rect, text };
 }
 
-/**
- * A native-feeling text-selection toolbar anchored to the browser Range itself. Base UI owns the
- * popup lifecycle, collision handling, outside press and Escape behavior; this component only
- * captures the selected text and exposes the three product actions.
- */
-export const SelectionActions = ({
+export function SelectionActions({
   scopeRef,
   onAdd,
   onDetails,
   onAskInSideChat,
-}: SelectionActionsProps) => {
+}: SelectionActionsProps) {
   const [captured, setCaptured] = useState<CapturedSelection | null>(null);
 
   useEffect(() => {
@@ -178,7 +170,7 @@ export const SelectionActions = ({
     // accessibility actions through the document-level selectionchange event. Those paths do
     // not consistently dispatch an ending pointer or mouse event to the transcript element.
     document.addEventListener("selectionchange", capture);
-    scope.addEventListener("scroll", close, { passive: true });
+    scope.addEventListener("scroll", close);
     window.addEventListener("resize", close);
     return () => {
       window.clearTimeout(timer);
@@ -236,4 +228,4 @@ export const SelectionActions = ({
       ) : null}
     </Popover>
   );
-};
+}
