@@ -270,7 +270,6 @@ export default defineConfig({
     "src/browser/annotate.js",
     // One-shot codemods / build scripts — not product runtime.
     "scripts/**",
-    "eslint.*.mjs",
     // Test fixtures trip oxlint regex/type-aware noise; bun test owns behavior.
     "tests/**",
     "src/**/*.test.ts",
@@ -280,7 +279,6 @@ export default defineConfig({
     "stylelint.config.mjs",
     "tsconfig.json",
     "tsconfig.node.json",
-    "tsconfig.eslint.json",
     "vite.config.ts",
     "vite.canvas.config.ts",
     "electrobun.config.ts",

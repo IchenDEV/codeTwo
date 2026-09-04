@@ -13,7 +13,7 @@ source: current user request to migrate apps/desktop Ultracite provider from ESL
 inputs: Ultracite oxlint setup docs, existing apps/desktop house lint constraints
 outputs: Ultracite oxlint + oxfmt configs under apps/desktop, preserved product lint constraints where expressible, Stylelint retained for CSS radius allow-list
 scope: docs/sdlc/changes/2026-09-03-ultracite-init, apps/desktop
-next_trigger: human review of house-off surface; optional re-enable type-safety themes later; release Gate separate
+next_trigger: human merge Gate for PR; optional later re-enable type-safety themes
 verification_mode: owner
 verified_by: pending
 verified_at: pending
@@ -96,24 +96,26 @@ integration; runtime product behavior and user data are unaffected.
   - Reverted prefer-at / Object.hasOwn / `[...bytes].buffer` autofix damage; tsconfig `lib` → ES2022.
   - `oxfmt --write`; restored `// @ts-nocheck` above imports where oxfmt reordered.
   - Evidence: `evidence/oxlint-clean-2026-09-04.txt`.
+- 2026-09-04 migration close-out:
+  - Verified `better-tailwindcss/no-restricted-classes` radius ban under oxlint (`evidence/oxlint-constraints-2026-09-04.txt`).
+  - Removed dead ESLint-era helpers (`eslint.fix-*.mjs`, `tsconfig.eslint.json`).
 
 ## Verification
 
-Verdict: oxlint provider migration complete; **`bun run check` / oxlint / tsc / doctor / stylelint green**.
-Product Button/Textarea/radius constraints remain enforced. Large Ultracite pedantry surface is
-house-off rather than rewritten; type-safety themes can be re-enabled thematically later.
+Verdict: oxlint provider migration **implementation complete**; check/doctor/tsc/stylelint green;
+product Button/Textarea/inline-radius and Tailwind radius-class constraints enforced under oxlint.
+Large Ultracite pedantry surface remains house-off; type-safety themes optional follow-up.
 
 ### Acceptance evidence
 
 - AC-1: PASS — `ultracite@7.10.8`, `oxlint`, `oxfmt`, `oxlint.config.ts`, `oxfmt.config.ts` present; ESLint flat config / Prettier config removed (backed up under `evidence/oxlint-migration/`).
-- AC-2: PASS — probe hits `eslint-js/no-restricted-syntax` for raw `<button>` (`evidence/oxlint-migration/button-probe.txt`); Stylelint semantic `border-radius` allow-list restored; `bun run lint:styles` exits 0. Residual: former `better-tailwindcss/no-restricted-classes` radius-class ban is not yet re-homed under oxlint.
+- AC-2: PASS — probe hits `eslint-js/no-restricted-syntax` for raw `<button>` (`evidence/oxlint-migration/button-probe.txt`); `better-tailwindcss/no-restricted-classes` radius-class ban hits under oxlint (`evidence/oxlint-constraints-2026-09-04.txt`); Stylelint semantic `border-radius` allow-list restored; `bun run lint:styles` exits 0.
 - AC-3: PASS — `bunx ultracite doctor` → `6 passed, 0 warnings, 0 failed` (`evidence/oxlint-migration/doctor.txt`).
 - AC-4: PASS — `bun run check` / `ultracite check` exit 0; `bunx oxlint` quiet clean; `bunx tsc --noEmit` clean; doctor 6/6 (`evidence/oxlint-clean-2026-09-04.txt`).
 
-Residual risk: House offs disable much of Ultracite’s default pedantry and the remaining
-tsgolint type-safety noise (strict-boolean always-truthy objects, no-unsafe-* at IPC/Excalidraw
-boundaries). Product UI constraints and `func-style` / function components stay on. Re-enable
-type-safety themes deliberately later. Editor must use Oxc VS Code extension for format-on-save.
+Residual risk: House offs disable much of Ultracite’s default pedantry and remaining tsgolint
+type-safety noise at IPC/Excalidraw boundaries. Product UI constraints stay on. Editor must use the
+Oxc VS Code extension for format-on-save. Merge/release remain separate human Gates.
 
 ## Review and release
 
