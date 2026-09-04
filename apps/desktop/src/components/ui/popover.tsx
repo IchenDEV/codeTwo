@@ -21,7 +21,7 @@ function PopoverContent({
   side = "bottom",
   sideOffset = 4,
   ...props
-}: PopoverPrimitive.Popup.Props & { readonly size?: "default" | "wide" } & Pick<
+}: PopoverPrimitive.Popup.Props & { size?: "default" | "wide" } & Pick<
     PopoverPrimitive.Positioner.Props,
     | "align"
     | "alignOffset"

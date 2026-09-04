@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
@@ -64,20 +69,18 @@ import { cn } from "@/lib/utils";
 
 import { openExternal } from "../bridge";
 import { useT } from "../i18n";
-import { useMapRef, useSetRef } from "../lib/useCollectionRef";
-import { useLatestRef } from "../lib/useLatestRef";
 import { MarkdownContent } from "../session/MarkdownContent";
 import { useToast } from "../ui/toast";
 import { FeishuDocumentView } from "./FeishuDocumentView";
 import {
-  feishuResourceTabs,
+  FEISHU_RESOURCE_TABS,
   loadFeishuSidebarOrder,
   moveFeishuResource,
   moveFeishuSection,
   saveFeishuSidebarOrder,
   sortFeishuResources,
+  type FeishuResourceTab,
 } from "./sidebarOrder";
-import type { FeishuResourceTab } from "./sidebarOrder";
 
 import "./feishu-workspace.css";
 
@@ -188,16 +191,16 @@ type ResourceSectionState = Record<ResourceTab, boolean>;
 type PinnedResourceMap = Record<ResourceTab, string[]>;
 type ResourceActivityMap = Record<ResourceTab, string[]>;
 
-const associationsKey = "codetwo.feishu.associations.v1";
-const resourceSectionsKey = "codetwo.feishu.sections.v1";
-const resourcePinsKey = "codetwo.feishu.pins.v1";
-const resourceTabs: readonly ResourceTab[] = feishuResourceTabs;
-const resourceLimits: Record<ResourceTab, number> = {
-  bases: 2,
-  documents: 2,
+const ASSOCIATIONS_KEY = "codetwo.feishu.associations.v1";
+const RESOURCE_SECTIONS_KEY = "codetwo.feishu.sections.v1";
+const RESOURCE_PINS_KEY = "codetwo.feishu.pins.v1";
+const RESOURCE_TABS: readonly ResourceTab[] = FEISHU_RESOURCE_TABS;
+const RESOURCE_LIMITS: Record<ResourceTab, number> = {
   messages: 4,
+  documents: 2,
+  bases: 2,
 };
-const feishuDragType = "application/x-codetwo-feishu-sidebar-item";
+const FEISHU_DRAG_TYPE = "application/x-codetwo-feishu-sidebar-item";
 
 type FeishuDragItem =
   | { kind: "section"; tab: ResourceTab }
@@ -205,7 +208,7 @@ type FeishuDragItem =
 
 function writeFeishuDrag(event: React.DragEvent, item: FeishuDragItem): void {
   event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData(feishuDragType, JSON.stringify(item));
+  event.dataTransfer.setData(FEISHU_DRAG_TYPE, JSON.stringify(item));
   event.dataTransfer.setData(
     "text/plain",
     item.kind === "section" ? item.tab : item.id
@@ -215,18 +218,16 @@ function writeFeishuDrag(event: React.DragEvent, item: FeishuDragItem): void {
 function readFeishuDrag(event: React.DragEvent): FeishuDragItem | null {
   try {
     const value = JSON.parse(
-      event.dataTransfer.getData(feishuDragType)
+      event.dataTransfer.getData(FEISHU_DRAG_TYPE)
     ) as FeishuDragItem;
-    if (value.kind === "section" && resourceTabs.includes(value.tab)) {
+    if (value.kind === "section" && RESOURCE_TABS.includes(value.tab))
       return value;
-    }
     if (
       value.kind === "resource" &&
-      resourceTabs.includes(value.tab) &&
+      RESOURCE_TABS.includes(value.tab) &&
       value.id
-    ) {
+    )
       return value;
-    }
   } catch {
     // Ignore drags from other sidebar surfaces and other applications.
   }
@@ -236,37 +237,35 @@ function readFeishuDrag(event: React.DragEvent): FeishuDragItem | null {
 function readCollapsedSections(): ResourceSectionState {
   try {
     const parsed = JSON.parse(
-      localStorage.getItem(resourceSectionsKey) || "{}"
+      localStorage.getItem(RESOURCE_SECTIONS_KEY) || "{}"
     ) as Record<string, unknown>;
     return {
-      bases: parsed.bases === true,
-      documents: parsed.documents === true,
       messages: parsed.messages === true,
+      documents: parsed.documents === true,
+      bases: parsed.bases === true,
     };
   } catch {
-    return { bases: false, documents: false, messages: false };
+    return { messages: false, documents: false, bases: false };
   }
 }
 
 function writeCollapsedSections(value: ResourceSectionState) {
   try {
-    localStorage.setItem(resourceSectionsKey, JSON.stringify(value));
+    localStorage.setItem(RESOURCE_SECTIONS_KEY, JSON.stringify(value));
   } catch {
     // Private mode keeps the current in-memory state until this window closes.
   }
 }
 
 function readPinnedResources(): PinnedResourceMap {
-  const empty: PinnedResourceMap = { bases: [], documents: [], messages: [] };
+  const empty: PinnedResourceMap = { messages: [], documents: [], bases: [] };
   try {
     const parsed = JSON.parse(
-      localStorage.getItem(resourcePinsKey) || "{}"
+      localStorage.getItem(RESOURCE_PINS_KEY) || "{}"
     ) as Record<string, unknown>;
-    for (const resourceTab of resourceTabs) {
+    for (const resourceTab of RESOURCE_TABS) {
       const value = parsed[resourceTab];
-      if (!Array.isArray(value)) {
-        continue;
-      }
+      if (!Array.isArray(value)) continue;
       empty[resourceTab] = [
         ...new Set(value.filter((id): id is string => typeof id === "string")),
       ];
@@ -279,7 +278,7 @@ function readPinnedResources(): PinnedResourceMap {
 
 function writePinnedResources(value: PinnedResourceMap) {
   try {
-    localStorage.setItem(resourcePinsKey, JSON.stringify(value));
+    localStorage.setItem(RESOURCE_PINS_KEY, JSON.stringify(value));
   } catch {
     // Private mode keeps the current in-memory state until this window closes.
   }
@@ -287,23 +286,16 @@ function writePinnedResources(value: PinnedResourceMap) {
 
 function readAssociations(): AssociationMap {
   try {
-    const raw = localStorage.getItem(associationsKey);
-    if (raw == null || raw === "") {
-      return {};
-    }
+    const raw = localStorage.getItem(ASSOCIATIONS_KEY);
+    if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
       return {};
-    }
     const result: AssociationMap = {};
     for (const [chatId, value] of Object.entries(parsed)) {
-      if (!Array.isArray(value)) {
-        continue;
-      }
+      if (!Array.isArray(value)) continue;
       result[chatId] = value.filter((item): item is RelatedResource => {
-        if (!item || typeof item !== "object") {
-          return false;
-        }
+        if (!item || typeof item !== "object") return false;
         const row = item as Record<string, unknown>;
         return (
           typeof row.id === "string" &&
@@ -322,7 +314,7 @@ function readAssociations(): AssociationMap {
 
 function writeAssociations(value: AssociationMap) {
   try {
-    localStorage.setItem(associationsKey, JSON.stringify(value));
+    localStorage.setItem(ASSOCIATIONS_KEY, JSON.stringify(value));
   } catch {
     // Private mode keeps the current in-memory association until this window closes.
   }
@@ -336,9 +328,7 @@ function displayTime(value: string): string {
         ? numeric * 1000
         : numeric
       : Date.parse(value);
-  if (!Number.isFinite(millis)) {
-    return "";
-  }
+  if (!Number.isFinite(millis)) return "";
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit",
@@ -349,44 +339,30 @@ function visibleMessageText(
   message: ChatMessageSummary,
   t: ReturnType<typeof useT>
 ): string {
-  if (message.text.trim()) {
-    return message.text;
-  }
+  if (message.text.trim()) return message.text;
   switch (message.type.trim().toLowerCase()) {
-    case "image": {
+    case "image":
       return t("feishu.message.image");
-    }
-    case "file": {
+    case "file":
       return t("feishu.message.file");
-    }
-    case "audio": {
+    case "audio":
       return t("feishu.message.audio");
-    }
-    case "media": {
+    case "media":
       return t("feishu.message.video");
-    }
-    case "sticker": {
+    case "sticker":
       return t("feishu.message.sticker");
-    }
-    case "interactive": {
+    case "interactive":
       return t("feishu.message.card");
-    }
-    case "post": {
+    case "post":
       return t("feishu.message.richText");
-    }
-    default: {
+    default:
       return t("feishu.message.unsupported");
-    }
   }
 }
 
 function sourceLabel(tab: ResourceTab, name: string): string {
-  if (tab === "messages") {
-    return `飞书对话：${name}`;
-  }
-  if (tab === "documents") {
-    return `飞书云文档：${name}`;
-  }
+  if (tab === "messages") return `飞书对话：${name}`;
+  if (tab === "documents") return `飞书云文档：${name}`;
   return `飞书多维表格：${name}`;
 }
 
@@ -395,12 +371,8 @@ function localizedSourceLabel(
   name: string,
   t: ReturnType<typeof useT>
 ): string {
-  if (tab === "messages") {
-    return t("feishu.source.chat", { name });
-  }
-  if (tab === "documents") {
-    return t("feishu.source.document", { name });
-  }
+  if (tab === "messages") return t("feishu.source.chat", { name });
+  if (tab === "documents") return t("feishu.source.document", { name });
   return t("feishu.source.base", { name });
 }
 
@@ -470,24 +442,17 @@ function resourceName(resource: ChatSummary | CloudResourceSummary): string {
   return resource.name || resource.id;
 }
 
-function ResourceIcon({ tab }: { readonly tab: ResourceTab }) {
-  if (tab === "messages") {
-    return <MessageSquare />;
-  }
-  if (tab === "documents") {
-    return <FileText />;
-  }
+function ResourceIcon({ tab }: { tab: ResourceTab }) {
+  if (tab === "messages") return <MessageSquare />;
+  if (tab === "documents") return <FileText />;
   return <SquareKanban />;
 }
 
-function ChatAvatar({ chat }: { readonly chat: ChatSummary }) {
+function ChatAvatar({ chat }: { chat: ChatSummary }) {
   const [failed, setFailed] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState(chat.avatarUrl);
-  if (chat.avatarUrl !== avatarUrl) {
-    setAvatarUrl(chat.avatarUrl);
-    setFailed(false);
-  }
-  const isDirectMessage = chat.mode === "p2p" || chat.type === "p2p";
+  const directMessage = chat.mode === "p2p" || chat.type === "p2p";
+
+  useEffect(() => setFailed(false), [chat.avatarUrl]);
 
   if (chat.avatarUrl && !failed) {
     return (
@@ -498,7 +463,7 @@ function ChatAvatar({ chat }: { readonly chat: ChatSummary }) {
         referrerPolicy="no-referrer"
         className={cn(
           "size-control shrink-0 overflow-hidden object-cover",
-          isDirectMessage ? "rounded-full" : "rounded-control"
+          directMessage ? "rounded-full" : "rounded-control"
         )}
         onError={() => setFailed(true)}
       />
@@ -510,12 +475,12 @@ function ChatAvatar({ chat }: { readonly chat: ChatSummary }) {
       data-feishu-avatar-fallback
       className={cn(
         "size-control bg-fill-quiet text-cap text-muted-foreground flex shrink-0 items-center justify-center overflow-hidden font-semibold",
-        isDirectMessage ? "rounded-full" : "rounded-control"
+        directMessage ? "rounded-full" : "rounded-control"
       )}
       aria-hidden
     >
-      {isDirectMessage ? (
-        [...chat.name.trim()][0]?.toLocaleUpperCase() || "?"
+      {directMessage ? (
+        Array.from(chat.name.trim())[0]?.toLocaleUpperCase() || "?"
       ) : (
         <MessageSquare />
       )}
@@ -523,19 +488,10 @@ function ChatAvatar({ chat }: { readonly chat: ChatSummary }) {
   );
 }
 
-function MessageAvatar({
-  label,
-  src,
-}: {
-  readonly label: string;
-  readonly src: string;
-}) {
+function MessageAvatar({ label, src }: { label: string; src: string }) {
   const [failed, setFailed] = useState(false);
-  const [avatarSrc, setAvatarSrc] = useState(src);
-  if (src !== avatarSrc) {
-    setAvatarSrc(src);
-    setFailed(false);
-  }
+
+  useEffect(() => setFailed(false), [src]);
 
   return (
     <span
@@ -553,7 +509,7 @@ function MessageAvatar({
           onError={() => setFailed(true)}
         />
       ) : (
-        [...label.trim()][0]?.toLocaleUpperCase() || "?"
+        Array.from(label.trim())[0]?.toLocaleUpperCase() || "?"
       )}
     </span>
   );
@@ -564,12 +520,8 @@ function messageSenderLabel(
   memberLabel: string
 ): string {
   const name = message.senderName?.trim();
-  if (name) {
-    return name;
-  }
-  if (message.senderId) {
-    return `${memberLabel} · ${message.senderId.slice(-6)}`;
-  }
+  if (name) return name;
+  if (message.senderId) return `${memberLabel} · ${message.senderId.slice(-6)}`;
   return message.senderType || memberLabel;
 }
 
@@ -586,17 +538,17 @@ export function FeishuWorkspacePage({
   onSelectResource,
   subscribeEvents,
 }: {
-  readonly enabled: boolean;
-  readonly sessionId: string | null;
-  readonly callCommand: CollaborationConnectorCaller;
-  readonly onHandoff: (prompt: string) => Promise<void>;
-  readonly onOpenPluginManager: () => void;
-  readonly headerLeadingAction?: ReactNode;
-  readonly navigationHost: Element | null;
-  readonly settingsHost?: Element | null;
-  readonly detailVisible?: boolean;
-  readonly onSelectResource?: () => void;
-  readonly subscribeEvents?: CollaborationConnectorSubscriber;
+  enabled: boolean;
+  sessionId: string | null;
+  callCommand: CollaborationConnectorCaller;
+  onHandoff: (prompt: string) => Promise<void>;
+  onOpenPluginManager: () => void;
+  headerLeadingAction?: ReactNode;
+  navigationHost: Element | null;
+  settingsHost?: Element | null;
+  detailVisible?: boolean;
+  onSelectResource?: () => void;
+  subscribeEvents?: CollaborationConnectorSubscriber;
 }) {
   const t = useT();
   const toast = useToast();
@@ -606,9 +558,9 @@ export function FeishuWorkspacePage({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<ResourceTab>("messages");
   const [selection, setSelection] = useState<Record<ResourceTab, string>>({
-    bases: "",
-    documents: "",
     messages: "",
+    documents: "",
+    bases: "",
   });
   const [messages, setMessages] = useState<ChatMessageSummary[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -622,9 +574,9 @@ export function FeishuWorkspacePage({
     useState<ResourceSectionState>(readCollapsedSections);
   const [expandedSections, setExpandedSections] =
     useState<ResourceSectionState>({
-      bases: false,
-      documents: false,
       messages: false,
+      documents: false,
+      bases: false,
     });
   const [pinnedResources, setPinnedResources] =
     useState<PinnedResourceMap>(readPinnedResources);
@@ -636,9 +588,9 @@ export function FeishuWorkspacePage({
   const [dragItem, setDragItem] = useState<FeishuDragItem | null>(null);
   const [resourceActivity, setResourceActivity] = useState<ResourceActivityMap>(
     {
-      bases: [],
-      documents: [],
       messages: [],
+      documents: [],
+      bases: [],
     }
   );
   const [relationsOpen, setRelationsOpen] = useState(false);
@@ -658,10 +610,10 @@ export function FeishuWorkspacePage({
   const detailRequestRef = useRef(0);
   const continueAfterRegistrationRef = useRef(false);
   const automaticAuthorizationStartedRef = useRef(false);
-  const seenConnectorEventsRef = useSetRef<string>();
-  const subscriptionAttemptsRef = useSetRef<string>();
-  const subscriptionWarningsRef = useSetRef<string>();
-  const refreshTimersRef = useMapRef<string, number>();
+  const seenConnectorEventsRef = useRef(new Set<string>());
+  const subscriptionAttemptsRef = useRef(new Set<string>());
+  const subscriptionWarningsRef = useRef(new Set<string>());
+  const refreshTimersRef = useRef(new Map<string, number>());
 
   useEffect(() => {
     saveFeishuSidebarOrder(
@@ -670,10 +622,8 @@ export function FeishuWorkspacePage({
     );
   }, [sidebarOrder]);
 
-  const reload = async () => {
-    if (!enabled) {
-      return;
-    }
+  const reload = useCallback(async () => {
+    if (!enabled) return;
     setLoading(true);
     setError(null);
     try {
@@ -687,39 +637,34 @@ export function FeishuWorkspacePage({
       const next = await callCommand<WorkspaceOverview>("resources.list", {});
       setOverview(next);
       setSelection((current) => ({
-        bases: next.bases.some((item) => item.id === current.bases)
-          ? current.bases
-          : (next.bases[0]?.id ?? ""),
-        documents: next.documents.some((item) => item.id === current.documents)
-          ? current.documents
-          : (next.documents[0]?.id ?? ""),
         messages: next.chats.some((item) => item.id === current.messages)
           ? current.messages
           : (next.chats[0]?.id ?? ""),
+        documents: next.documents.some((item) => item.id === current.documents)
+          ? current.documents
+          : (next.documents[0]?.id ?? ""),
+        bases: next.bases.some((item) => item.id === current.bases)
+          ? current.bases
+          : (next.bases[0]?.id ?? ""),
       }));
-    } catch (error) {
-      setError(String(error));
+    } catch (cause) {
+      setError(String(cause));
     } finally {
       setLoading(false);
     }
-  };
-  const reloadRef = useLatestRef(reload);
+  }, [callCommand, enabled]);
 
   useEffect(() => {
-    void reloadRef.current();
-  }, [enabled, reloadRef]);
+    void reload();
+  }, [reload]);
 
   useEffect(() => {
-    if (!authStatus?.waiting) {
-      return;
-    }
-    let isLive = true;
+    if (!authStatus?.waiting) return;
+    let live = true;
     const poll = window.setInterval(() => {
       void callCommand<FeishuAuthStatus>("connection.status", {})
         .then((next) => {
-          if (!isLive) {
-            return;
-          }
+          if (!live) return;
           setAuthStatus(next);
           if (next.authorized) {
             window.clearInterval(poll);
@@ -727,30 +672,29 @@ export function FeishuWorkspacePage({
             automaticAuthorizationStartedRef.current = false;
             setAppSecret("");
             setActivationError("");
-            void reloadRef.current();
+            void reload();
           } else if (!next.waiting) {
             window.clearInterval(poll);
-            if (next.problem) {
-              setActivationError(next.problem);
-            }
+            if (next.problem) setActivationError(next.problem);
           }
         })
         .catch(() => {});
-    }, 1000);
+    }, 1_000);
     return () => {
-      isLive = false;
+      live = false;
       window.clearInterval(poll);
     };
-  }, [authStatus?.waiting, callCommand, reloadRef]);
+  }, [authStatus?.waiting, callCommand, reload]);
 
-  if (
-    authStatus?.configured &&
-    !authStatus.authorized &&
-    !authStatus.method &&
-    !manualSetupOpen
-  ) {
-    setManualSetupOpen(true);
-  }
+  useEffect(() => {
+    if (
+      authStatus?.configured &&
+      !authStatus.authorized &&
+      !authStatus.method
+    ) {
+      setManualSetupOpen(true);
+    }
+  }, [authStatus?.authorized, authStatus?.configured, authStatus?.method]);
 
   const selectedChat =
     overview?.chats.find((item) => item.id === selection.messages) ?? null;
@@ -766,7 +710,7 @@ export function FeishuWorkspacePage({
         : selectedBase;
   const related = selectedChat ? (associations[selectedChat.id] ?? []) : [];
 
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     if (!selectedChat) {
       setMessages([]);
       return;
@@ -779,29 +723,20 @@ export function FeishuWorkspacePage({
         "conversation.messages",
         { chatId: selectedChat.id }
       );
-      if (request === detailRequestRef.current) {
-        setMessages(result.messages);
-      }
-    } catch (error) {
-      if (request === detailRequestRef.current) {
-        setError(String(error));
-      }
+      if (request === detailRequestRef.current) setMessages(result.messages);
+    } catch (cause) {
+      if (request === detailRequestRef.current) setError(String(cause));
     } finally {
-      if (request === detailRequestRef.current) {
-        setDetailLoading(false);
-      }
+      if (request === detailRequestRef.current) setDetailLoading(false);
     }
-  };
-  const loadMessagesRef = useLatestRef(loadMessages);
+  }, [callCommand, selectedChat]);
 
   useEffect(() => {
-    if (!detailVisible || tab !== "messages") {
-      return;
-    }
-    void loadMessagesRef.current();
-  }, [detailVisible, loadMessagesRef, selectedChat?.id, tab]);
+    if (!detailVisible || tab !== "messages") return;
+    void loadMessages();
+  }, [detailVisible, loadMessages, tab]);
 
-  const loadDocument = async () => {
+  const loadDocument = useCallback(async () => {
     if (!selectedDocument) {
       setDocumentContent("");
       return;
@@ -814,140 +749,102 @@ export function FeishuWorkspacePage({
       const result = await callCommand<{ content: string }>("document.read", {
         documentId: selectedDocument.id,
       });
-      if (request === detailRequestRef.current) {
+      if (request === detailRequestRef.current)
         setDocumentContent(result.content);
-      }
-    } catch (error) {
-      if (request === detailRequestRef.current) {
-        setError(String(error));
-      }
+    } catch (cause) {
+      if (request === detailRequestRef.current) setError(String(cause));
     } finally {
-      if (request === detailRequestRef.current) {
-        setDetailLoading(false);
-      }
+      if (request === detailRequestRef.current) setDetailLoading(false);
     }
-  };
-  const loadDocumentRef = useLatestRef(loadDocument);
+  }, [callCommand, selectedDocument]);
 
   useEffect(() => {
-    if (!detailVisible || tab !== "documents") {
-      return;
-    }
-    void loadDocumentRef.current();
-  }, [detailVisible, loadDocumentRef, selectedDocument?.id, tab]);
+    if (!detailVisible || tab !== "documents") return;
+    void loadDocument();
+  }, [detailVisible, loadDocument, tab]);
 
-  const loadBase = async (tableId = "") => {
-    if (!selectedBase) {
-      return;
-    }
-    const request = ++detailRequestRef.current;
-    setDetailLoading(true);
-    setError(null);
+  const loadBase = useCallback(
+    async (tableId = "") => {
+      if (!selectedBase) return;
+      const request = ++detailRequestRef.current;
+      setDetailLoading(true);
+      setError(null);
+      try {
+        const result = await callCommand<BaseData>("table.read", {
+          appToken: selectedBase.id,
+          tableId,
+        });
+        if (request === detailRequestRef.current) setBaseData(result);
+      } catch (cause) {
+        if (request === detailRequestRef.current) setError(String(cause));
+      } finally {
+        if (request === detailRequestRef.current) setDetailLoading(false);
+      }
+    },
+    [callCommand, selectedBase]
+  );
+
+  useEffect(() => {
+    if (!detailVisible || tab !== "bases") return;
     setBaseData(null);
-    try {
-      const result = await callCommand<BaseData>("table.read", {
-        appToken: selectedBase.id,
-        tableId,
-      });
-      if (request === detailRequestRef.current) {
-        setBaseData(result);
-      }
-    } catch (error) {
-      if (request === detailRequestRef.current) {
-        setError(String(error));
-      }
-    } finally {
-      if (request === detailRequestRef.current) {
-        setDetailLoading(false);
-      }
-    }
-  };
-  const loadBaseRef = useLatestRef(loadBase);
+    void loadBase();
+  }, [detailVisible, loadBase, tab]);
 
-  useEffect(() => {
-    if (!detailVisible || tab !== "bases") {
-      return;
-    }
-    void loadBaseRef.current();
-  }, [detailVisible, loadBaseRef, selectedBase?.id, tab]);
+  const markResourceActivity = useCallback(
+    (resourceTab: ResourceTab, resourceId: string) => {
+      if (!resourceId) return;
+      setResourceActivity((current) =>
+        current[resourceTab].includes(resourceId)
+          ? current
+          : { ...current, [resourceTab]: [...current[resourceTab], resourceId] }
+      );
+    },
+    []
+  );
 
-  const markResourceActivity = (
-    resourceTab: ResourceTab,
-    resourceId: string
-  ) => {
-    if (!resourceId) {
-      return;
-    }
-    setResourceActivity((current) =>
-      current[resourceTab].includes(resourceId)
-        ? current
-        : { ...current, [resourceTab]: [...current[resourceTab], resourceId] }
-    );
-  };
+  const clearResourceActivity = useCallback(
+    (resourceTab: ResourceTab, resourceId: string) => {
+      setResourceActivity((current) =>
+        current[resourceTab].includes(resourceId)
+          ? {
+              ...current,
+              [resourceTab]: current[resourceTab].filter(
+                (id) => id !== resourceId
+              ),
+            }
+          : current
+      );
+    },
+    []
+  );
 
-  const clearResourceActivity = (
-    resourceTab: ResourceTab,
-    resourceId: string
-  ) => {
-    setResourceActivity((current) =>
-      current[resourceTab].includes(resourceId)
-        ? {
-            ...current,
-            [resourceTab]: current[resourceTab].filter(
-              (id) => id !== resourceId
-            ),
-          }
-        : current
-    );
-  };
-
-  const scheduleRefresh = (key: string, refresh: () => void) => {
+  const scheduleRefresh = useCallback((key: string, refresh: () => void) => {
     const existing = refreshTimersRef.current.get(key);
-    if (existing !== undefined) {
-      window.clearTimeout(existing);
-    }
+    if (existing !== undefined) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
       refreshTimersRef.current.delete(key);
       refresh();
     }, 120);
     refreshTimersRef.current.set(key, timer);
-  };
-
-  const markResourceActivityRef = useLatestRef(markResourceActivity);
-  const clearResourceActivityRef = useLatestRef(clearResourceActivity);
-  const scheduleRefreshRef = useLatestRef(scheduleRefresh);
-  const detailVisibleRef = useLatestRef(detailVisible);
-  const tabRef = useLatestRef(tab);
-  const selectedChatRef = useLatestRef(selectedChat);
-  const selectedDocumentRef = useLatestRef(selectedDocument);
-  const selectedBaseRef = useLatestRef(selectedBase);
-  const overviewRef = useLatestRef(overview);
-  const baseDataRef = useLatestRef(baseData);
+  }, []);
 
   useEffect(
     () => () => {
-      for (const timer of refreshTimersRef.current.values()) {
+      for (const timer of refreshTimersRef.current.values())
         window.clearTimeout(timer);
-      }
       refreshTimersRef.current.clear();
     },
-    [refreshTimersRef]
+    []
   );
 
   useEffect(() => {
-    if (!subscribeEvents) {
-      return;
-    }
-    let isLive = true;
+    if (!subscribeEvents) return;
+    let live = true;
     let unsubscribe: (() => void) | null = null;
     void subscribeEvents((event) => {
-      if (!isLive || event.connectorId !== "workspace") {
-        return;
-      }
+      if (!live || event.connectorId !== "workspace") return;
       const eventKey = `${event.kind}:${event.eventId}`;
-      if (event.eventId && seenConnectorEventsRef.current.has(eventKey)) {
-        return;
-      }
+      if (event.eventId && seenConnectorEventsRef.current.has(eventKey)) return;
       if (event.eventId) {
         seenConnectorEventsRef.current.add(eventKey);
         if (seenConnectorEventsRef.current.size > 512) {
@@ -958,18 +855,12 @@ export function FeishuWorkspacePage({
       }
 
       if (event.kind === "message.created" && event.chatId) {
-        const isKnownChat =
-          overviewRef.current?.chats.some(
-            (item) => item.id === event.chatId
-          ) === true;
+        const knownChat =
+          overview?.chats.some((item) => item.id === event.chatId) === true;
         setOverview((current) => {
-          if (!current) {
-            return current;
-          }
+          if (!current) return current;
           const chat = current.chats.find((item) => item.id === event.chatId);
-          if (!chat) {
-            return current;
-          }
+          if (!chat) return current;
           const updated = {
             ...chat,
             latestMessage: event.preview || chat.latestMessage,
@@ -983,151 +874,121 @@ export function FeishuWorkspacePage({
           };
         });
         if (
-          detailVisibleRef.current &&
-          tabRef.current === "messages" &&
-          selectedChatRef.current?.id === event.chatId
+          detailVisible &&
+          tab === "messages" &&
+          selectedChat?.id === event.chatId
         ) {
-          scheduleRefreshRef.current(`messages:${event.chatId}`, () => {
-            void loadMessagesRef.current();
+          scheduleRefresh(`messages:${event.chatId}`, () => {
+            void loadMessages();
           });
-          clearResourceActivityRef.current("messages", event.chatId);
+          clearResourceActivity("messages", event.chatId);
         } else {
-          markResourceActivityRef.current("messages", event.chatId);
+          markResourceActivity("messages", event.chatId);
         }
-        if (!isKnownChat) {
-          void reloadRef.current();
-        }
+        if (!knownChat) void reload();
         return;
       }
 
       if (event.kind === "message.changed") {
-        if (
-          detailVisibleRef.current &&
-          tabRef.current === "messages" &&
-          selectedChatRef.current
-        ) {
-          scheduleRefreshRef.current(
-            `messages:${selectedChatRef.current.id}`,
-            () => {
-              void loadMessagesRef.current();
-            }
-          );
+        if (detailVisible && tab === "messages" && selectedChat) {
+          scheduleRefresh(`messages:${selectedChat.id}`, () => {
+            void loadMessages();
+          });
         }
         return;
       }
 
-      if (
-        event.kind === "document.changed" &&
-        event.resourceId != null &&
-        event.resourceId !== ""
-      ) {
+      if (event.kind === "document.changed" && event.resourceId) {
         if (
-          detailVisibleRef.current &&
-          tabRef.current === "documents" &&
-          selectedDocumentRef.current?.id === event.resourceId
+          detailVisible &&
+          tab === "documents" &&
+          selectedDocument?.id === event.resourceId
         ) {
-          scheduleRefreshRef.current(`documents:${event.resourceId}`, () => {
-            void loadDocumentRef.current();
+          scheduleRefresh(`documents:${event.resourceId}`, () => {
+            void loadDocument();
           });
-          clearResourceActivityRef.current("documents", event.resourceId);
+          clearResourceActivity("documents", event.resourceId);
         } else {
-          markResourceActivityRef.current("documents", event.resourceId);
+          markResourceActivity("documents", event.resourceId);
         }
         return;
       }
 
-      if (
-        event.kind === "base.changed" &&
-        event.resourceId != null &&
-        event.resourceId !== ""
-      ) {
+      if (event.kind === "base.changed" && event.resourceId) {
         if (
-          detailVisibleRef.current &&
-          tabRef.current === "bases" &&
-          selectedBaseRef.current?.id === event.resourceId
+          detailVisible &&
+          tab === "bases" &&
+          selectedBase?.id === event.resourceId
         ) {
-          scheduleRefreshRef.current(`bases:${event.resourceId}`, () => {
-            void loadBaseRef.current(
-              baseDataRef.current?.selectedTableId || ""
-            );
+          scheduleRefresh(`bases:${event.resourceId}`, () => {
+            void loadBase(baseData?.selectedTableId || "");
           });
-          clearResourceActivityRef.current("bases", event.resourceId);
+          clearResourceActivity("bases", event.resourceId);
         } else {
-          markResourceActivityRef.current("bases", event.resourceId);
+          markResourceActivity("bases", event.resourceId);
         }
       }
     })
       .then((dispose) => {
-        if (isLive) {
-          unsubscribe = dispose;
-        } else {
-          dispose();
-        }
+        if (live) unsubscribe = dispose;
+        else dispose();
       })
       .catch(() => {});
     return () => {
-      isLive = false;
+      live = false;
       unsubscribe?.();
     };
   }, [
-    baseDataRef,
-    clearResourceActivityRef,
-    detailVisibleRef,
-    loadBaseRef,
-    loadDocumentRef,
-    loadMessagesRef,
-    markResourceActivityRef,
-    overviewRef,
-    reloadRef,
-    scheduleRefreshRef,
-    seenConnectorEventsRef,
-    selectedBaseRef,
-    selectedChatRef,
-    selectedDocumentRef,
+    baseData?.selectedTableId,
+    clearResourceActivity,
+    detailVisible,
+    loadBase,
+    loadDocument,
+    loadMessages,
+    markResourceActivity,
+    overview?.chats,
+    reload,
+    scheduleRefresh,
+    selectedBase,
+    selectedChat,
+    selectedDocument,
     subscribeEvents,
-    tabRef,
+    tab,
   ]);
 
   useEffect(() => {
-    if (!authStatus?.authorized || !overview) {
-      return;
-    }
-    const candidates: { id: string; type: string; name: string }[] = [];
+    if (!authStatus?.authorized || !overview) return;
+    const candidates: Array<{ id: string; type: string; name: string }> = [];
     const addCandidates = (
       resourceTab: "documents" | "bases",
       resources: CloudResourceSummary[]
     ) => {
       const visibleIds = new Set([
         ...resources
-          .slice(0, resourceLimits[resourceTab])
+          .slice(0, RESOURCE_LIMITS[resourceTab])
           .map((resource) => resource.id),
         ...pinnedResources[resourceTab],
         selection[resourceTab],
       ]);
       for (const resource of resources) {
-        if (visibleIds.has(resource.id)) {
-          candidates.push(resource);
-        }
+        if (visibleIds.has(resource.id)) candidates.push(resource);
       }
     };
     addCandidates("documents", overview.documents);
     addCandidates("bases", overview.bases);
     for (const resource of candidates) {
       const key = `${resource.type}:${resource.id}`;
-      if (subscriptionAttemptsRef.current.has(key)) {
-        continue;
-      }
+      if (subscriptionAttemptsRef.current.has(key)) continue;
       subscriptionAttemptsRef.current.add(key);
       const operation =
         resource.type === "bitable" ? "table.subscribe" : "document.subscribe";
       void callCommand<{ subscribed: boolean; problem: string }>(operation, {
-        fileType: resource.type,
         resourceId: resource.id,
+        fileType: resource.type,
       })
         .then((result) => {
-          if (result.subscribed || subscriptionWarningsRef.current.has(key)) {
+          if (result.subscribed || subscriptionWarningsRef.current.has(key))
             return;
-          }
           subscriptionWarningsRef.current.add(key);
           toast(
             t("feishu.realtimeUnavailable", {
@@ -1144,42 +1005,37 @@ export function FeishuWorkspacePage({
     overview,
     pinnedResources,
     selection,
-    subscriptionAttemptsRef,
-    subscriptionWarningsRef,
     t,
     toast,
   ]);
 
-  const toggleRelated = (resource: RelatedResource) => {
-    if (!selectedChat) {
-      return;
-    }
-    setAssociations((current) => {
-      const existing = current[selectedChat.id] ?? [];
-      const isPresent = existing.some(
-        (item) => item.kind === resource.kind && item.id === resource.id
-      );
-      const next = {
-        ...current,
-        [selectedChat.id]: isPresent
-          ? existing.filter(
-              (item) =>
-                !(item.kind === resource.kind && item.id === resource.id)
-            )
-          : [...existing, resource],
-      };
-      if (next[selectedChat.id]?.length === 0) {
-        delete next[selectedChat.id];
-      }
-      writeAssociations(next);
-      return next;
-    });
-  };
+  const toggleRelated = useCallback(
+    (resource: RelatedResource) => {
+      if (!selectedChat) return;
+      setAssociations((current) => {
+        const existing = current[selectedChat.id] ?? [];
+        const present = existing.some(
+          (item) => item.kind === resource.kind && item.id === resource.id
+        );
+        const next = {
+          ...current,
+          [selectedChat.id]: present
+            ? existing.filter(
+                (item) =>
+                  !(item.kind === resource.kind && item.id === resource.id)
+              )
+            : [...existing, resource],
+        };
+        if (next[selectedChat.id]?.length === 0) delete next[selectedChat.id];
+        writeAssociations(next);
+        return next;
+      });
+    },
+    [selectedChat]
+  );
 
-  const sendReply = async () => {
-    if (!selectedChat || !reply.trim()) {
-      return;
-    }
+  const sendReply = useCallback(async () => {
+    if (!selectedChat || !reply.trim()) return;
     setSending(true);
     try {
       await callCommand("message.send", {
@@ -1189,26 +1045,28 @@ export function FeishuWorkspacePage({
       setReply("");
       await loadMessages();
       toast(t("feishu.replySent"), "success");
-    } catch (error) {
-      toast(t("feishu.replyFailed", { error: String(error) }), "error");
+    } catch (cause) {
+      toast(t("feishu.replyFailed", { error: String(cause) }), "error");
     } finally {
       setSending(false);
     }
-  };
+  }, [callCommand, loadMessages, reply, selectedChat, t, toast]);
 
-  const openAuthorization = async (ticket: FeishuAuthTicket) => {
-    if (ticket.flow === "registration") {
-      continueAfterRegistrationRef.current = true;
-      automaticAuthorizationStartedRef.current = false;
-    }
-    setAuthorizationUrl(ticket.url);
-    const next = await callCommand<FeishuAuthStatus>("connection.status", {});
-    setAuthStatus(next);
-    await openExternal(ticket.url);
-  };
-  const openAuthorizationRef = useLatestRef(openAuthorization);
+  const openAuthorization = useCallback(
+    async (ticket: FeishuAuthTicket) => {
+      if (ticket.flow === "registration") {
+        continueAfterRegistrationRef.current = true;
+        automaticAuthorizationStartedRef.current = false;
+      }
+      setAuthorizationUrl(ticket.url);
+      const next = await callCommand<FeishuAuthStatus>("connection.status", {});
+      setAuthStatus(next);
+      await openExternal(ticket.url);
+    },
+    [callCommand]
+  );
 
-  const createFeishuApp = async () => {
+  const createFeishuApp = useCallback(async () => {
     setActivating(true);
     setActivationError("");
     continueAfterRegistrationRef.current = true;
@@ -1219,13 +1077,13 @@ export function FeishuWorkspacePage({
         {}
       );
       await openAuthorization(ticket);
-    } catch (error) {
+    } catch (cause) {
       continueAfterRegistrationRef.current = false;
-      setActivationError(String(error));
+      setActivationError(String(cause));
     } finally {
       setActivating(false);
     }
-  };
+  }, [callCommand, openAuthorization]);
 
   useEffect(() => {
     if (
@@ -1233,34 +1091,33 @@ export function FeishuWorkspacePage({
       authStatus.waiting ||
       !continueAfterRegistrationRef.current ||
       automaticAuthorizationStartedRef.current
-    ) {
+    )
       return;
-    }
     automaticAuthorizationStartedRef.current = true;
     setActivating(true);
     void callCommand<FeishuAuthTicket>("connection.begin", {})
-      .then((ticket) => openAuthorizationRef.current(ticket))
-      .catch((error) => {
+      .then(openAuthorization)
+      .catch((cause) => {
         continueAfterRegistrationRef.current = false;
-        setActivationError(String(error));
+        setActivationError(String(cause));
       })
       .finally(() => setActivating(false));
   }, [
     authStatus?.needsUserAuthorization,
     authStatus?.waiting,
     callCommand,
-    openAuthorizationRef,
+    openAuthorization,
   ]);
 
-  const authorize = async () => {
+  const authorize = useCallback(async () => {
     const normalizedAppId = appId.trim();
-    const isReplacingCredentials =
+    const replacingCredentials =
       Boolean(appSecret) || normalizedAppId !== authStatus?.appId;
     if (!normalizedAppId) {
       setActivationError(t("feishu.appIdRequired"));
       return;
     }
-    if ((!authStatus?.configured || isReplacingCredentials) && !appSecret) {
+    if ((!authStatus?.configured || replacingCredentials) && !appSecret) {
       setActivationError(t("feishu.appSecretRequired"));
       return;
     }
@@ -1268,30 +1125,28 @@ export function FeishuWorkspacePage({
     setActivationError("");
     try {
       const ticket =
-        isReplacingCredentials || !authStatus?.configured
+        replacingCredentials || !authStatus?.configured
           ? await callCommand<FeishuAuthTicket>("connection.activate", {
               appId: normalizedAppId,
               appSecret,
             })
           : await callCommand<FeishuAuthTicket>("connection.begin", {});
       await openAuthorization(ticket);
-    } catch (error) {
-      setActivationError(String(error));
+    } catch (cause) {
+      setActivationError(String(cause));
     } finally {
       setActivating(false);
     }
-  };
+  }, [appId, appSecret, authStatus, callCommand, openAuthorization, t]);
 
-  const reopenAuthorization = () => {
-    if (!authorizationUrl) {
-      return;
-    }
-    void openExternal(authorizationUrl).catch((error) =>
-      setActivationError(String(error))
+  const reopenAuthorization = useCallback(() => {
+    if (!authorizationUrl) return;
+    void openExternal(authorizationUrl).catch((cause) =>
+      setActivationError(String(cause))
     );
-  };
+  }, [authorizationUrl]);
 
-  const reauthorize = async () => {
+  const reauthorize = useCallback(async () => {
     setActivating(true);
     setActivationError("");
     try {
@@ -1301,14 +1156,14 @@ export function FeishuWorkspacePage({
       );
       await openAuthorization(ticket);
       toast(t("feishu.authorizationOpened"), "success");
-    } catch (error) {
-      toast(t("feishu.authorizationFailed", { error: String(error) }), "error");
+    } catch (cause) {
+      toast(t("feishu.authorizationFailed", { error: String(cause) }), "error");
     } finally {
       setActivating(false);
     }
-  };
+  }, [callCommand, openAuthorization, t, toast]);
 
-  const disconnect = async () => {
+  const disconnect = useCallback(async () => {
     setDisconnecting(true);
     try {
       const next = await callCommand<FeishuAuthStatus>(
@@ -1317,7 +1172,7 @@ export function FeishuWorkspacePage({
       );
       setAuthStatus(next);
       setOverview(null);
-      setResourceActivity({ bases: [], documents: [], messages: [] });
+      setResourceActivity({ messages: [], documents: [], bases: [] });
       seenConnectorEventsRef.current.clear();
       subscriptionAttemptsRef.current.clear();
       subscriptionWarningsRef.current.clear();
@@ -1326,56 +1181,69 @@ export function FeishuWorkspacePage({
       setAuthorizationUrl("");
       setManualSetupOpen(false);
       toast(t("feishu.disconnected"), "success");
-    } catch (error) {
-      toast(t("feishu.disconnectFailed", { error: String(error) }), "error");
+    } catch (cause) {
+      toast(t("feishu.disconnectFailed", { error: String(cause) }), "error");
     } finally {
       setDisconnecting(false);
     }
-  };
+  }, [callCommand, t, toast]);
 
-  const handoff = async () => {
-    if (!selectedResource || !objective.trim()) {
-      return;
-    }
+  const handoff = useCallback(async () => {
+    if (!selectedResource || !objective.trim()) return;
     const prompt = buildFeishuExecutionPrompt({
-      baseData,
-      documentContent,
-      messages,
       objective,
-      related,
+      tab,
       sourceName: resourceName(selectedResource),
       sourceUrl: "url" in selectedResource ? selectedResource.url : undefined,
-      tab,
+      messages,
+      documentContent,
+      baseData,
+      related,
     });
     setHandingOff(true);
-    let isArmed = false;
+    let armed = false;
     try {
       if (notifyOnComplete && sessionId && selectedChat) {
         await callCommand("notification.arm", {
           chatId: selectedChat.id,
           sessionId,
         });
-        isArmed = true;
+        armed = true;
       }
       await onHandoff(prompt);
       setHandoffOpen(false);
       setObjective("");
       setTaskStatus(
-        notifyOnComplete && isArmed
+        notifyOnComplete && armed
           ? t("feishu.taskHandedOffWithNotification", {
               chat: resourceName(selectedChat!),
             })
           : t("feishu.taskHandedOff")
       );
-    } catch (error) {
-      if (isArmed && sessionId != null && sessionId !== "") {
+    } catch (cause) {
+      if (armed && sessionId) {
         await callCommand("notification.disarm", { sessionId }).catch(() => {});
       }
-      toast(t("feishu.handoffFailed", { error: String(error) }), "error");
+      toast(t("feishu.handoffFailed", { error: String(cause) }), "error");
     } finally {
       setHandingOff(false);
     }
-  };
+  }, [
+    baseData,
+    callCommand,
+    documentContent,
+    messages,
+    notifyOnComplete,
+    objective,
+    onHandoff,
+    related,
+    selectedChat,
+    selectedResource,
+    sessionId,
+    t,
+    tab,
+    toast,
+  ]);
 
   const toggleSection = (resourceTab: ResourceTab) => {
     setCollapsedSections((current) => {
@@ -1429,9 +1297,7 @@ export function FeishuWorkspacePage({
       visibleResourceIds.length - 1,
       Math.max(0, currentIndex + offset)
     );
-    if (currentIndex === -1 || currentIndex === nextIndex) {
-      return;
-    }
+    if (currentIndex < 0 || currentIndex === nextIndex) return;
     const remaining = visibleResourceIds.filter((id) => id !== resourceId);
     commitResourceMove(
       resourceTab,
@@ -1447,9 +1313,7 @@ export function FeishuWorkspacePage({
       sidebarOrder.sectionOrder.length - 1,
       Math.max(0, currentIndex + offset)
     );
-    if (currentIndex === -1 || currentIndex === nextIndex) {
-      return;
-    }
+    if (currentIndex < 0 || currentIndex === nextIndex) return;
     const remaining = sidebarOrder.sectionOrder.filter(
       (tab) => tab !== resourceTab
     );
@@ -1463,7 +1327,7 @@ export function FeishuWorkspacePage({
     resource: ChatSummary | CloudResourceSummary,
     visibleResourceIds: readonly string[]
   ) => {
-    const isSelected =
+    const selected =
       detailVisible &&
       tab === resourceTab &&
       selection[resourceTab] === resource.id;
@@ -1478,7 +1342,7 @@ export function FeishuWorkspacePage({
         .localeCompare(name.trim(), undefined, { sensitivity: "base" }) === 0
         ? ""
         : rawMeta;
-    const isPinned = pinnedResources[resourceTab].includes(resource.id);
+    const pinned = pinnedResources[resourceTab].includes(resource.id);
     const hasActivity = resourceActivity[resourceTab].includes(resource.id);
     return (
       <div
@@ -1492,9 +1356,9 @@ export function FeishuWorkspacePage({
         draggable
         onDragStart={(event) => {
           const item = {
-            id: resource.id,
             kind: "resource",
             tab: resourceTab,
+            id: resource.id,
           } as const;
           writeFeishuDrag(event, item);
           setDragItem(item);
@@ -1502,17 +1366,13 @@ export function FeishuWorkspacePage({
         onDragEnd={() => setDragItem(null)}
         onDragOver={(event) => {
           const item = readFeishuDrag(event);
-          if (item?.kind !== "resource" || item.tab !== resourceTab) {
-            return;
-          }
+          if (item?.kind !== "resource" || item.tab !== resourceTab) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
         }}
         onDrop={(event) => {
           const item = readFeishuDrag(event);
-          if (item?.kind !== "resource" || item.tab !== resourceTab) {
-            return;
-          }
+          if (item?.kind !== "resource" || item.tab !== resourceTab) return;
           event.preventDefault();
           event.stopPropagation();
           commitResourceMove(
@@ -1529,16 +1389,15 @@ export function FeishuWorkspacePage({
           size="row"
           focusStyle="inset"
           className="rounded-control pr-control hover:bg-fill-quiet data-[selected=true]:bg-fill-hover min-h-0 gap-2 px-2 py-1.5"
-          data-selected={isSelected}
-          aria-current={isSelected ? "true" : undefined}
+          data-selected={selected}
+          aria-current={selected ? "true" : undefined}
           title={t("feishu.dragResource", { name })}
           onKeyDown={(event) => {
             if (
               !event.altKey ||
               (event.key !== "ArrowUp" && event.key !== "ArrowDown")
-            ) {
+            )
               return;
-            }
             event.preventDefault();
             moveResourceBy(
               resourceTab,
@@ -1565,7 +1424,7 @@ export function FeishuWorkspacePage({
               <span
                 className={cn(
                   "text-ui min-w-0 flex-1 truncate leading-4",
-                  isSelected && "font-medium"
+                  selected && "font-medium"
                 )}
               >
                 {name}
@@ -1596,14 +1455,14 @@ export function FeishuWorkspacePage({
                 size="icon-xs"
                 focusStyle="inset"
                 aria-label={
-                  isPinned
+                  pinned
                     ? t("feishu.unpinResource", { name })
                     : t("feishu.pinResource", { name })
                 }
-                aria-pressed={isPinned}
+                aria-pressed={pinned}
                 className={cn(
                   "right-inline text-muted-foreground absolute top-1/2 -translate-y-1/2 opacity-0 group-focus-within/resource:opacity-100 group-hover/resource:opacity-100 motion-safe:transition-opacity",
-                  isPinned && "text-primary opacity-100"
+                  pinned && "text-primary opacity-100"
                 )}
                 onClick={() => togglePinnedResource(resourceTab, resource.id)}
               >
@@ -1612,7 +1471,7 @@ export function FeishuWorkspacePage({
             }
           />
           <TooltipContent>
-            {isPinned
+            {pinned
               ? t("feishu.unpinResource", { name })
               : t("feishu.pinResource", { name })}
           </TooltipContent>
@@ -1623,7 +1482,7 @@ export function FeishuWorkspacePage({
 
   const renderResourceList = (
     resourceTab: ResourceTab,
-    resources: (ChatSummary | CloudResourceSummary)[]
+    resources: Array<ChatSummary | CloudResourceSummary>
   ) => {
     const resourcesById = new Map(
       resources.map((resource) => [resource.id, resource])
@@ -1647,13 +1506,13 @@ export function FeishuWorkspacePage({
     ];
     const orderedIds = ordered.map((resource) => resource.id);
     const visibleWhenLimited = Math.max(
-      resourceLimits[resourceTab],
+      RESOURCE_LIMITS[resourceTab],
       ordered.filter((resource) =>
         pinnedResources[resourceTab].includes(resource.id)
       ).length
     );
-    const isExpanded = expandedSections[resourceTab];
-    const visible = isExpanded ? ordered : ordered.slice(0, visibleWhenLimited);
+    const expanded = expandedSections[resourceTab];
+    const visible = expanded ? ordered : ordered.slice(0, visibleWhenLimited);
     const hiddenCount = Math.max(0, ordered.length - visibleWhenLimited);
 
     return (
@@ -1662,17 +1521,13 @@ export function FeishuWorkspacePage({
         className="flex flex-col gap-0.5"
         onDragOver={(event) => {
           const item = readFeishuDrag(event);
-          if (item?.kind !== "resource" || item.tab !== resourceTab) {
-            return;
-          }
+          if (item?.kind !== "resource" || item.tab !== resourceTab) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
         }}
         onDrop={(event) => {
           const item = readFeishuDrag(event);
-          if (item?.kind !== "resource" || item.tab !== resourceTab) {
-            return;
-          }
+          if (item?.kind !== "resource" || item.tab !== resourceTab) return;
           event.preventDefault();
           commitResourceMove(resourceTab, item.id, null, orderedIds);
         }}
@@ -1686,8 +1541,8 @@ export function FeishuWorkspacePage({
             size="xs"
             focusStyle="inset"
             className="text-muted-foreground w-full justify-start px-2 font-normal"
-            data-feishu-show-more={isExpanded ? undefined : resourceTab}
-            data-feishu-show-less={isExpanded ? resourceTab : undefined}
+            data-feishu-show-more={expanded ? undefined : resourceTab}
+            data-feishu-show-less={expanded ? resourceTab : undefined}
             onClick={() =>
               setExpandedSections((current) => ({
                 ...current,
@@ -1695,7 +1550,7 @@ export function FeishuWorkspacePage({
               }))
             }
           >
-            {isExpanded
+            {expanded
               ? t("feishu.showLess")
               : t("feishu.showMore", { count: hiddenCount })}
           </Button>
@@ -1731,17 +1586,13 @@ export function FeishuWorkspacePage({
       }}
       onDragEnd={() => setDragItem(null)}
       onDragOver={(event) => {
-        if (readFeishuDrag(event)?.kind !== "section") {
-          return;
-        }
+        if (readFeishuDrag(event)?.kind !== "section") return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
       }}
       onDrop={(event) => {
         const item = readFeishuDrag(event);
-        if (item?.kind !== "section") {
-          return;
-        }
+        if (item?.kind !== "section") return;
         event.preventDefault();
         event.stopPropagation();
         setSidebarOrder((current) =>
@@ -1775,9 +1626,8 @@ export function FeishuWorkspacePage({
           if (
             !event.altKey ||
             (event.key !== "ArrowUp" && event.key !== "ArrowDown")
-          ) {
+          )
             return;
-          }
           event.preventDefault();
           moveSectionBy(resourceTab, event.key === "ArrowUp" ? -1 : 1);
         }}
@@ -1810,7 +1660,7 @@ export function FeishuWorkspacePage({
     </div>
   );
 
-  const isAllResourcesEmpty =
+  const allResourcesEmpty =
     Boolean(overview) &&
     overview!.chats.length === 0 &&
     overview!.documents.length === 0 &&
@@ -1820,17 +1670,13 @@ export function FeishuWorkspacePage({
       className="feishu-rail-navigator pb-1"
       aria-label={t("feishu.resources")}
       onDragOver={(event) => {
-        if (readFeishuDrag(event)?.kind !== "section") {
-          return;
-        }
+        if (readFeishuDrag(event)?.kind !== "section") return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
       }}
       onDrop={(event) => {
         const item = readFeishuDrag(event);
-        if (item?.kind !== "section") {
-          return;
-        }
+        if (item?.kind !== "section") return;
         event.preventDefault();
         setSidebarOrder((current) =>
           moveFeishuSection(current, item.tab, null)
@@ -1883,13 +1729,16 @@ export function FeishuWorkspacePage({
                   </Tooltip>
                 </>
               )}
-              {collapsedSections.messages ? null : (
+              {!collapsedSections.messages ? (
                 <div className="flex flex-col gap-0.5 pb-1">
                   {loading && !overview ? (
-                    <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
+                    <div
+                      role="status"
+                      className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center"
+                    >
                       <Spinner />
                       {t("feishu.loading")}
-                    </output>
+                    </div>
                   ) : error && !overview ? (
                     <div
                       role="alert"
@@ -1897,11 +1746,11 @@ export function FeishuWorkspacePage({
                     >
                       <CircleAlert /> <span className="truncate">{error}</span>
                     </div>
-                  ) : isAllResourcesEmpty ? (
+                  ) : allResourcesEmpty ? (
                     <div className="gap-module-inset px-surface-inset py-section text-ui text-muted-foreground flex flex-col items-center text-center">
                       <MessageSquare />
                       <p className="text-foreground font-medium">
-                        {overview?.warnings.length != null
+                        {overview?.warnings.length
                           ? t("feishu.loadFailed")
                           : t("feishu.empty")}
                       </p>
@@ -1925,7 +1774,7 @@ export function FeishuWorkspacePage({
                     renderResourceList("messages", overview.chats)
                   ) : null}
                 </div>
-              )}
+              ) : null}
             </section>
           );
         }
@@ -1933,24 +1782,24 @@ export function FeishuWorkspacePage({
           return (
             <section key={resourceTab} data-feishu-section="documents">
               {sectionHeader("documents", t("feishu.tab.documents"))}
-              {collapsedSections.documents ? null : (
+              {!collapsedSections.documents ? (
                 <div className="flex flex-col gap-0.5 pb-1">
                   {overview
                     ? renderResourceList("documents", overview.documents)
                     : null}
                 </div>
-              )}
+              ) : null}
             </section>
           );
         }
         return (
           <section key={resourceTab} data-feishu-section="bases">
             {sectionHeader("bases", t("feishu.tab.bases"))}
-            {collapsedSections.bases ? null : (
+            {!collapsedSections.bases ? (
               <div className="flex flex-col gap-0.5">
                 {overview ? renderResourceList("bases", overview.bases) : null}
               </div>
-            )}
+            ) : null}
           </section>
         );
       })}
@@ -1962,10 +1811,13 @@ export function FeishuWorkspacePage({
       aria-label={t("feishu.resources")}
     >
       {!authStatus && loading ? (
-        <output className="text-ui text-muted-foreground flex items-center gap-2 px-2 py-2">
+        <div
+          role="status"
+          className="text-ui text-muted-foreground flex items-center gap-2 px-2 py-2"
+        >
           <Spinner />
           <span>{t("feishu.loadingConnection")}</span>
-        </output>
+        </div>
       ) : (
         <div className="rounded-control flex items-center gap-2 px-2 py-1.5">
           <p className="text-fine text-muted-foreground min-w-0 flex-1 leading-relaxed">
@@ -2114,11 +1966,10 @@ export function FeishuWorkspacePage({
   }
 
   if (!authStatus?.authorized) {
-    const isWaitingForAuthorization = authStatus?.waiting === true;
-    const isWaitingForAppCreation = authStatus?.flow === "registration";
-    const isNeedsUserAuthorization =
-      authStatus?.needsUserAuthorization === true;
-    const isCredentialsAlreadySaved =
+    const waitingForAuthorization = authStatus?.waiting === true;
+    const waitingForAppCreation = authStatus?.flow === "registration";
+    const needsUserAuthorization = authStatus?.needsUserAuthorization === true;
+    const credentialsAlreadySaved =
       authStatus?.configured === true &&
       appId.trim() === authStatus.appId &&
       !appSecret;
@@ -2140,15 +1991,18 @@ export function FeishuWorkspacePage({
           </p>
         </div>
         {!authStatus && loading ? (
-          <output className="gap-module-inset text-ui text-muted-foreground flex min-h-32 items-center justify-center">
+          <div
+            role="status"
+            className="gap-module-inset text-ui text-muted-foreground flex min-h-32 items-center justify-center"
+          >
             <Spinner />
             {t("feishu.loadingConnection")}
-          </output>
+          </div>
         ) : (
           <form
             className="gap-section rounded-module border-border bg-surface p-section flex max-w-2xl flex-col border"
             noValidate
-            aria-busy={activating || isWaitingForAuthorization}
+            aria-busy={activating || waitingForAuthorization}
             onSubmit={(event) => {
               event.preventDefault();
               void authorize();
@@ -2171,27 +2025,30 @@ export function FeishuWorkspacePage({
             <div className="gap-surface-inset rounded-module border-border bg-fill-quiet p-surface-inset flex flex-col border">
               <div>
                 <h4 className="text-ui font-semibold">
-                  {isNeedsUserAuthorization
+                  {needsUserAuthorization
                     ? t("feishu.finishConnectionTitle")
                     : t("feishu.oneClickTitle")}
                 </h4>
                 <p className="mt-inline text-fine text-muted-foreground leading-relaxed">
-                  {isNeedsUserAuthorization
+                  {needsUserAuthorization
                     ? t("feishu.finishConnectionHint")
                     : t("feishu.oneClickHint")}
                 </p>
               </div>
-              {isWaitingForAuthorization ? (
-                <output className="gap-module-inset rounded-control bg-background p-surface-inset text-ui flex items-start">
+              {waitingForAuthorization ? (
+                <div
+                  role="status"
+                  className="gap-module-inset rounded-control bg-background p-surface-inset text-ui flex items-start"
+                >
                   <Spinner className="mt-px shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">
-                      {isWaitingForAppCreation
+                      {waitingForAppCreation
                         ? t("feishu.waitingForCreation")
                         : t("feishu.waitingForAuthorization")}
                     </p>
                     <p className="mt-inline text-fine text-muted-foreground">
-                      {isWaitingForAppCreation
+                      {waitingForAppCreation
                         ? t("feishu.waitingForCreationHint")
                         : t("feishu.waitingForAuthorizationHint")}
                     </p>
@@ -2207,7 +2064,7 @@ export function FeishuWorkspacePage({
                       {t("feishu.reopenAuthorization")}
                     </Button>
                   ) : null}
-                </output>
+                </div>
               ) : (
                 <Button
                   type="button"
@@ -2215,13 +2072,13 @@ export function FeishuWorkspacePage({
                   size="compact"
                   disabled={activating}
                   onClick={() =>
-                    void (isNeedsUserAuthorization
+                    void (needsUserAuthorization
                       ? authorize()
                       : createFeishuApp())
                   }
                 >
                   {activating ? <Spinner /> : <ShieldCheck />}
-                  {isNeedsUserAuthorization
+                  {needsUserAuthorization
                     ? t("feishu.continueAuthorization")
                     : t("feishu.createAndConnect")}
                 </Button>
@@ -2287,14 +2144,14 @@ export function FeishuWorkspacePage({
                         spellCheck={false}
                         className="pr-control"
                         placeholder={
-                          isCredentialsAlreadySaved
+                          credentialsAlreadySaved
                             ? t("feishu.secretSaved")
                             : t("feishu.appSecretPlaceholder")
                         }
                         aria-invalid={
                           activationError &&
                           !appSecret &&
-                          !isCredentialsAlreadySaved
+                          !credentialsAlreadySaved
                             ? true
                             : undefined
                         }
@@ -2353,10 +2210,10 @@ export function FeishuWorkspacePage({
                   <Button
                     type="submit"
                     size="compact"
-                    disabled={activating || isWaitingForAuthorization}
+                    disabled={activating || waitingForAuthorization}
                   >
                     {activating ? <Spinner /> : <ShieldCheck />}
-                    {isCredentialsAlreadySaved
+                    {credentialsAlreadySaved
                       ? t("feishu.continueAuthorization")
                       : t("feishu.saveAndAuthorize")}
                   </Button>
@@ -2474,228 +2331,7 @@ export function FeishuWorkspacePage({
             </header>
             <Separator />
 
-            {selectedResource ? (
-              tab === "messages" && selectedChat ? (
-                <>
-                  {related.length > 0 ? (
-                    <div className="gap-inline px-section py-module-inset text-fine text-muted-foreground flex shrink-0 flex-wrap items-center">
-                      <span>{t("feishu.relatedResources")}</span>
-                      {related.map((resource) => (
-                        <Button
-                          key={`${resource.kind}:${resource.id}`}
-                          type="button"
-                          variant="secondary"
-                          size="compact"
-                          onClick={() => {
-                            setTab(
-                              resource.kind === "document"
-                                ? "documents"
-                                : "bases"
-                            );
-                            setSelection((current) => ({
-                              ...current,
-                              [resource.kind === "document"
-                                ? "documents"
-                                : "bases"]: resource.id,
-                            }));
-                          }}
-                        >
-                          {resource.name || resource.id}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : null}
-                  <ScrollArea className="min-h-0 flex-1">
-                    <div className="px-page py-section mx-auto flex w-full max-w-4xl flex-col">
-                      {detailLoading ? (
-                        <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
-                          <Spinner />
-                          {t("feishu.loadingMessages")}
-                        </output>
-                      ) : null}
-                      {!detailLoading && messages.length === 0 ? (
-                        <p className="py-section text-ui text-muted-foreground text-center">
-                          {t("feishu.noMessages")}
-                        </p>
-                      ) : null}
-                      {messages.map((message) => (
-                        <article
-                          key={message.id}
-                          data-feishu-message
-                          className="gap-x-module-inset gap-y-inline border-border/70 py-section grid grid-cols-[auto_1fr_auto] border-b last:border-b-0"
-                        >
-                          <MessageAvatar
-                            label={messageSenderLabel(
-                              message,
-                              t("feishu.member")
-                            )}
-                            src={message.senderAvatarUrl || ""}
-                          />
-                          <p className="text-ui truncate font-medium">
-                            {messageSenderLabel(message, t("feishu.member"))}
-                          </p>
-                          <time className="text-fine text-muted-foreground tabular-nums">
-                            {displayTime(message.createdAt)}
-                          </time>
-                          <div
-                            dir="auto"
-                            className="text-body col-start-2 col-end-4 min-w-0 leading-relaxed"
-                          >
-                            <MarkdownContent
-                              text={visibleMessageText(message, t)}
-                            />
-                            {message.reactions?.length != null ? (
-                              <div
-                                data-feishu-reactions
-                                className="mt-inline gap-inline flex flex-wrap"
-                              >
-                                {message.reactions.map((reaction) => (
-                                  <span
-                                    key={reaction.emojiType}
-                                    className="gap-inline bg-fill-quiet px-module-inset py-inline text-fine text-muted-foreground inline-flex items-center rounded-full"
-                                    aria-label={t("feishu.reaction", {
-                                      count: reaction.count,
-                                      name: reaction.emojiType,
-                                    })}
-                                    title={reaction.emojiType}
-                                  >
-                                    <span
-                                      aria-hidden="true"
-                                      className="text-body"
-                                    >
-                                      {reaction.emoji}
-                                    </span>
-                                    <span className="tabular-nums">
-                                      {reaction.count}
-                                    </span>
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                  <div className="gap-module-inset bg-surface px-section py-surface-inset shadow-surface flex shrink-0 items-end">
-                    <label className="sr-only" htmlFor="feishu-reply">
-                      {t("feishu.reply")}
-                    </label>
-                    <Textarea
-                      id="feishu-reply"
-                      size="compact"
-                      rows={2}
-                      value={reply}
-                      onChange={(event) => setReply(event.currentTarget.value)}
-                      placeholder={t("feishu.replyPlaceholder")}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          void sendReply();
-                        }
-                      }}
-                    />
-                    <Button
-                      size="icon"
-                      aria-label={t("feishu.sendReply")}
-                      disabled={sending || !reply.trim()}
-                      onClick={() => void sendReply()}
-                    >
-                      {sending ? <Spinner /> : <Send />}
-                    </Button>
-                  </div>
-                </>
-              ) : tab === "documents" && selectedDocument ? (
-                <FeishuDocumentView
-                  callCommand={callCommand}
-                  documentUrl={selectedDocument.url}
-                  markdown={documentContent}
-                  markdownLoading={detailLoading}
-                />
-              ) : tab === "bases" && selectedBase ? (
-                <div className="flex min-h-0 flex-1 flex-col">
-                  {baseData?.tables.length ? (
-                    <div
-                      className="gap-inline px-section py-module-inset flex shrink-0 overflow-x-auto"
-                      role="tablist"
-                      aria-label={t("feishu.baseTables")}
-                    >
-                      {baseData.tables.map((table) => (
-                        <Button
-                          key={table.id}
-                          role="tab"
-                          aria-selected={baseData.selectedTableId === table.id}
-                          data-selected={baseData.selectedTableId === table.id}
-                          variant="selectable"
-                          size="compact"
-                          onClick={() => void loadBase(table.id)}
-                        >
-                          {table.name || table.id}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : null}
-                  <ScrollArea className="min-h-0 flex-1">
-                    <div className="p-section">
-                      {detailLoading ? (
-                        <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
-                          <Spinner />
-                          {t("feishu.loadingBase")}
-                        </output>
-                      ) : null}
-                      {!detailLoading &&
-                      (!baseData || baseData.records.length === 0) ? (
-                        <p className="py-section text-ui text-muted-foreground text-center">
-                          {t("feishu.emptyBase")}
-                        </p>
-                      ) : null}
-                      {baseData && baseData.records.length > 0 ? (
-                        <div className="rounded-module bg-surface shadow-surface overflow-auto">
-                          <table className="text-ui w-full min-w-max border-collapse">
-                            <thead>
-                              <tr>
-                                {baseData.fields.map((field) => (
-                                  <th
-                                    key={field}
-                                    scope="col"
-                                    className="border-border bg-fill-quiet px-surface-inset py-module-inset border-r border-b text-left font-medium last:border-r-0"
-                                  >
-                                    {field}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {baseData.records.map((record) => {
-                                const cells = new Map(
-                                  record.cells.map((cell) => [
-                                    cell.field,
-                                    cell.value,
-                                  ])
-                                );
-                                return (
-                                  <tr key={record.id}>
-                                    {baseData.fields.map((field) => (
-                                      <td
-                                        key={field}
-                                        dir="auto"
-                                        className="border-border px-surface-inset py-module-inset max-w-72 border-r border-b align-top last:border-r-0"
-                                      >
-                                        {cells.get(field) || "—"}
-                                      </td>
-                                    ))}
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : null}
-                    </div>
-                  </ScrollArea>
-                </div>
-              ) : null
-            ) : (
+            {!selectedResource ? (
               <Empty>
                 <EmptyMedia variant="icon">
                   <ResourceIcon tab={tab} />
@@ -2704,9 +2340,232 @@ export function FeishuWorkspacePage({
                   <EmptyTitle>{t("feishu.selectResource")}</EmptyTitle>
                 </EmptyHeader>
               </Empty>
-            )}
+            ) : tab === "messages" && selectedChat ? (
+              <>
+                {related.length > 0 ? (
+                  <div className="gap-inline px-section py-module-inset text-fine text-muted-foreground flex shrink-0 flex-wrap items-center">
+                    <span>{t("feishu.relatedResources")}</span>
+                    {related.map((resource) => (
+                      <Button
+                        key={`${resource.kind}:${resource.id}`}
+                        type="button"
+                        variant="secondary"
+                        size="compact"
+                        onClick={() => {
+                          setTab(
+                            resource.kind === "document" ? "documents" : "bases"
+                          );
+                          setSelection((current) => ({
+                            ...current,
+                            [resource.kind === "document"
+                              ? "documents"
+                              : "bases"]: resource.id,
+                          }));
+                        }}
+                      >
+                        {resource.name || resource.id}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="px-page py-section mx-auto flex w-full max-w-4xl flex-col">
+                    {detailLoading ? (
+                      <div
+                        role="status"
+                        className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center"
+                      >
+                        <Spinner />
+                        {t("feishu.loadingMessages")}
+                      </div>
+                    ) : null}
+                    {!detailLoading && messages.length === 0 ? (
+                      <p className="py-section text-ui text-muted-foreground text-center">
+                        {t("feishu.noMessages")}
+                      </p>
+                    ) : null}
+                    {messages.map((message) => (
+                      <article
+                        key={message.id}
+                        data-feishu-message
+                        className="gap-x-module-inset gap-y-inline border-border/70 py-section grid grid-cols-[auto_1fr_auto] border-b last:border-b-0"
+                      >
+                        <MessageAvatar
+                          label={messageSenderLabel(
+                            message,
+                            t("feishu.member")
+                          )}
+                          src={message.senderAvatarUrl || ""}
+                        />
+                        <p className="text-ui truncate font-medium">
+                          {messageSenderLabel(message, t("feishu.member"))}
+                        </p>
+                        <time className="text-fine text-muted-foreground tabular-nums">
+                          {displayTime(message.createdAt)}
+                        </time>
+                        <div
+                          dir="auto"
+                          className="text-body col-start-2 col-end-4 min-w-0 leading-relaxed"
+                        >
+                          <MarkdownContent
+                            text={visibleMessageText(message, t)}
+                          />
+                          {message.reactions?.length ? (
+                            <div
+                              data-feishu-reactions
+                              className="mt-inline gap-inline flex flex-wrap"
+                            >
+                              {message.reactions.map((reaction) => (
+                                <span
+                                  key={reaction.emojiType}
+                                  className="gap-inline bg-fill-quiet px-module-inset py-inline text-fine text-muted-foreground inline-flex items-center rounded-full"
+                                  aria-label={t("feishu.reaction", {
+                                    name: reaction.emojiType,
+                                    count: reaction.count,
+                                  })}
+                                  title={reaction.emojiType}
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className="text-body"
+                                  >
+                                    {reaction.emoji}
+                                  </span>
+                                  <span className="tabular-nums">
+                                    {reaction.count}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </ScrollArea>
+                <div className="gap-module-inset bg-surface px-section py-surface-inset shadow-surface flex shrink-0 items-end">
+                  <label className="sr-only" htmlFor="feishu-reply">
+                    {t("feishu.reply")}
+                  </label>
+                  <Textarea
+                    id="feishu-reply"
+                    size="compact"
+                    rows={2}
+                    value={reply}
+                    onChange={(event) => setReply(event.currentTarget.value)}
+                    placeholder={t("feishu.replyPlaceholder")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void sendReply();
+                      }
+                    }}
+                  />
+                  <Button
+                    size="icon"
+                    aria-label={t("feishu.sendReply")}
+                    disabled={sending || !reply.trim()}
+                    onClick={() => void sendReply()}
+                  >
+                    {sending ? <Spinner /> : <Send />}
+                  </Button>
+                </div>
+              </>
+            ) : tab === "documents" && selectedDocument ? (
+              <FeishuDocumentView
+                callCommand={callCommand}
+                documentUrl={selectedDocument.url}
+                markdown={documentContent}
+                markdownLoading={detailLoading}
+              />
+            ) : tab === "bases" && selectedBase ? (
+              <div className="flex min-h-0 flex-1 flex-col">
+                {baseData?.tables.length ? (
+                  <div
+                    className="gap-inline px-section py-module-inset flex shrink-0 overflow-x-auto"
+                    role="tablist"
+                    aria-label={t("feishu.baseTables")}
+                  >
+                    {baseData.tables.map((table) => (
+                      <Button
+                        key={table.id}
+                        role="tab"
+                        aria-selected={baseData.selectedTableId === table.id}
+                        data-selected={baseData.selectedTableId === table.id}
+                        variant="selectable"
+                        size="compact"
+                        onClick={() => void loadBase(table.id)}
+                      >
+                        {table.name || table.id}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="p-section">
+                    {detailLoading ? (
+                      <div
+                        role="status"
+                        className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center"
+                      >
+                        <Spinner />
+                        {t("feishu.loadingBase")}
+                      </div>
+                    ) : null}
+                    {!detailLoading &&
+                    (!baseData || baseData.records.length === 0) ? (
+                      <p className="py-section text-ui text-muted-foreground text-center">
+                        {t("feishu.emptyBase")}
+                      </p>
+                    ) : null}
+                    {baseData && baseData.records.length > 0 ? (
+                      <div className="rounded-module bg-surface shadow-surface overflow-auto">
+                        <table className="text-ui w-full min-w-max border-collapse">
+                          <thead>
+                            <tr>
+                              {baseData.fields.map((field) => (
+                                <th
+                                  key={field}
+                                  scope="col"
+                                  className="border-border bg-fill-quiet px-surface-inset py-module-inset border-r border-b text-left font-medium last:border-r-0"
+                                >
+                                  {field}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {baseData.records.map((record) => {
+                              const cells = new Map(
+                                record.cells.map((cell) => [
+                                  cell.field,
+                                  cell.value,
+                                ])
+                              );
+                              return (
+                                <tr key={record.id}>
+                                  {baseData.fields.map((field) => (
+                                    <td
+                                      key={field}
+                                      dir="auto"
+                                      className="border-border px-surface-inset py-module-inset max-w-72 border-r border-b align-top last:border-r-0"
+                                    >
+                                      {cells.get(field) || "—"}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                  </div>
+                </ScrollArea>
+              </div>
+            ) : null}
 
-            {error != null && error !== "" ? (
+            {error ? (
               <div
                 role="alert"
                 className="bg-fill-quiet px-section py-module-inset text-ui text-destructive shrink-0"
@@ -2715,9 +2574,12 @@ export function FeishuWorkspacePage({
               </div>
             ) : null}
             {taskStatus ? (
-              <output className="bg-fill-quiet px-section py-module-inset text-ui text-muted-foreground shrink-0">
+              <div
+                role="status"
+                className="bg-fill-quiet px-section py-module-inset text-ui text-muted-foreground shrink-0"
+              >
                 {taskStatus}
-              </output>
+              </div>
             ) : null}
           </div>
 
@@ -2745,7 +2607,7 @@ export function FeishuWorkspacePage({
                       kind: "base" as const,
                     })),
                   ].map((resource) => {
-                    const isChecked = related.some(
+                    const checked = related.some(
                       (item) =>
                         item.kind === resource.kind && item.id === resource.id
                     );
@@ -2755,7 +2617,7 @@ export function FeishuWorkspacePage({
                         className="gap-module-inset rounded-control px-module-inset py-control-group hover:bg-fill-hover flex cursor-pointer items-center"
                       >
                         <Checkbox
-                          checked={isChecked}
+                          checked={checked}
                           onCheckedChange={() => toggleRelated(resource)}
                         />
                         <span className="min-w-0 flex-1">
@@ -2826,7 +2688,7 @@ export function FeishuWorkspacePage({
                       {t("feishu.notifyOnComplete")}
                     </span>
                     <span className="mt-inline text-fine text-muted-foreground block">
-                      {sessionId != null && sessionId !== "" && selectedChat
+                      {sessionId && selectedChat
                         ? t("feishu.notifyTarget", {
                             chat: resourceName(selectedChat),
                           })

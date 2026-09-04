@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { TooltipButton } from "@/components/ui/tooltip";
 
-import { codeFonts, fontWeights, useAppearanceSettings } from "../appearance";
+import { CODE_FONTS, FONT_WEIGHTS, useAppearanceSettings } from "../appearance";
 import { readText, writeText } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
@@ -23,18 +23,14 @@ type MonacoModule = typeof import("./monaco");
 type Editor = import("monaco-editor").editor.IStandaloneCodeEditor;
 type TextModel = import("monaco-editor").editor.ITextModel;
 
-/**
-A pending "comment on these lines" card: the range is frozen when the card opens.
-*/
+/** A pending "comment on these lines" card: the range is frozen when the card opens. */
 interface Draft {
   startLine: number;
   endLine: number;
   note: string;
 }
 
-/**
-A request to put the editor caret on an exact workspace-search/LSP position.
-*/
+/** A request to put the editor caret on an exact workspace-search/LSP position. */
 export interface FileRevealTarget {
   path: string;
   line: number;
@@ -52,12 +48,24 @@ function revealTarget(
     Math.max(target.column, 1),
     model.getLineMaxColumn(lineNumber)
   );
-  const position = { column, lineNumber };
+  const position = { lineNumber, column };
   editor.setPosition(position);
   editor.revealPositionInCenter(position);
   editor.focus();
 }
 
+/**
+ * The built-in file editor — a pane inside the right panel, under the file tabs.
+ *
+ * A real editor, not a viewer with an edit mode: Monaco (VS Code's editor component) with shiki's
+ * TextMate highlighting and, where a language server is installed, full LSP — completions, hover,
+ * diagnostics, go-to-definition (see ../lsp). Typing edits the buffer directly; ⌘S writes it to
+ * disk, and the tab/breadcrumb dot carries the unsaved state, exactly like an IDE.
+ *
+ * The one thing kept from the viewer days: select lines and leave a comment, and the comment lands
+ * in the prompt document as a context block — "look at these lines and do X" is still the whole
+ * reason a coding agent's app has a file pane.
+ */
 export function FileViewer({
   cwd,
   path,
@@ -66,21 +74,15 @@ export function FileViewer({
   onComment,
   reveal,
 }: {
-  readonly cwd: string;
-  readonly path: string;
-  readonly onInsert: (path: string) => void;
-  /**
-  Open another workspace file in the pane — cross-file go-to-definition lands here.
-  */
-  readonly onOpen: (path: string) => void;
-  /**
-  Receives a ready-made markdown context block for the prompt document.
-  */
-  readonly onComment: (text: string) => void;
-  /**
-  A token makes repeated jumps to the same path and position observable.
-  */
-  readonly reveal: FileRevealTarget | null;
+  cwd: string;
+  path: string;
+  onInsert: (path: string) => void;
+  /** Open another workspace file in the pane — cross-file go-to-definition lands here. */
+  onOpen: (path: string) => void;
+  /** Receives a ready-made markdown context block for the prompt document. */
+  onComment: (text: string) => void;
+  /** A token makes repeated jumps to the same path and position observable. */
+  reveal: FileRevealTarget | null;
 }) {
   const t = useT();
   const toast = useToast();
@@ -88,11 +90,11 @@ export function FileViewer({
   const appearance = useAppearanceSettings();
   const codeProfile = appearance[scheme];
   const codeFont =
-    codeFonts.find((font) => font.id === codeProfile.codeFont)?.stack ??
-    codeFonts[0].stack;
+    CODE_FONTS.find((font) => font.id === codeProfile.codeFont)?.stack ??
+    CODE_FONTS[0].stack;
   const codeFontWeight =
-    fontWeights.find((weight) => weight.id === codeProfile.codeFontWeight)
-      ?.value ?? fontWeights[0].value;
+    FONT_WEIGHTS.find((weight) => weight.id === codeProfile.codeFontWeight)
+      ?.value ?? FONT_WEIGHTS[0].value;
   // Pictures take the preview path instead of the editor — there's no text to put in a buffer.
   const isImage = imageTypeOf(path) !== null;
   const container = useRef<HTMLDivElement | null>(null);
@@ -109,12 +111,10 @@ export function FileViewer({
   const revealRef = useRef(reveal);
   revealRef.current = reveal;
 
-  const save = async () => {
+  const save = useCallback(async () => {
     const m = modRef.current;
     const model = modelRef.current;
-    if (!m || !model || !m.isDirtyModel(model)) {
-      return;
-    }
+    if (!m || !model || !m.isDirtyModel(model)) return;
     setSaving(true);
     try {
       await writeText(cwd, path, model.getValue());
@@ -126,36 +126,30 @@ export function FileViewer({
       toast(String(e), "error");
     }
     setSaving(false);
-  };
+  }, [cwd, path, toast, t]);
 
   // The ⌘S binding lives inside Monaco and outlives any one render; give it a stable door.
   const saveRef = useRef(save);
   saveRef.current = save;
 
-  /**
-  Freeze the current selection into a comment card. Whole lines — comments read that way.
-  */
-  const openDraft = () => {
+  /** Freeze the current selection into a comment card. Whole lines — comments read that way. */
+  const openDraft = useCallback(() => {
     const editor = editorRef.current;
     const sel = editor?.getSelection();
-    if (!editor || !sel || sel.isEmpty()) {
-      return;
-    }
+    if (!editor || !sel || sel.isEmpty()) return;
     // A selection ending at column 1 stops *before* that line (the drag-past-newline case).
     const endLine =
       sel.endColumn === 1 && sel.endLineNumber > sel.startLineNumber
         ? sel.endLineNumber - 1
         : sel.endLineNumber;
-    setDraft({ endLine, note: "", startLine: sel.startLineNumber });
-  };
+    setDraft({ startLine: sel.startLineNumber, endLine, note: "" });
+  }, []);
   const openDraftRef = useRef(openDraft);
   openDraftRef.current = openDraft;
 
   useEffect(() => {
-    if (isImage) {
-      return;
-    }
-    let isAlive = true;
+    if (isImage) return;
+    let alive = true;
     let editor: Editor | null = null;
     const disposables: { dispose(): void }[] = [];
     setError(null);
@@ -171,9 +165,7 @@ export function FileViewer({
       // which is how it undoes the theme reset shiki's Monaco bridge performs on every load.
       m.applyTheme(scheme);
       await m.ensureLanguage(m.languageOf(path));
-      if (!isAlive || !container.current) {
-        return;
-      }
+      if (!alive || !container.current) return;
 
       const model = m.getOrCreateModel(cwd, path, text);
       modRef.current = m;
@@ -181,25 +173,26 @@ export function FileViewer({
       setDirty(m.isDirtyModel(model));
 
       editor = m.monaco.editor.create(container.current, {
+        model,
         automaticLayout: true,
-        fixedOverflowWidgets: true,
         fontFamily: codeFont,
-        fontSize: appearance.codeFontSize,
         fontWeight: `${codeFontWeight}`,
+        fontSize: appearance.codeFontSize,
         lineHeight: Math.round(appearance.codeFontSize * 1.6),
         minimap: { enabled: false },
-        model,
-        padding: { bottom: 24, top: 10 },
-        renderLineHighlightOnlyWhenFocus: true,
+        wordWrap: "on",
         scrollBeyondLastLine: false,
+        padding: { top: 10, bottom: 24 },
+        // Hover cards and suggest widgets must escape this narrow pane, not clip against it.
+        fixedOverflowWidgets: true,
         scrollbar: {
+          verticalScrollbarSize: 10,
           horizontalScrollbarSize: 10,
           useShadows: false,
-          verticalScrollbarSize: 10,
         },
+        renderLineHighlightOnlyWhenFocus: true,
         smoothScrolling: true,
         stickyScroll: { enabled: false },
-        wordWrap: "on",
       });
       editorRef.current = editor;
 
@@ -220,23 +213,21 @@ export function FileViewer({
       // ⌘⇧C, not ⌘⇧M: the app keymap owns ⌘⇧M (Plugin Hub), and a binding the shell already
       // claims would be a coin-flip depending on focus.
       editor.addAction({
-        contextMenuGroupId: "navigation",
         id: "codetwo.commentSelection",
+        label: t("files.commentTitle"),
         keybindings: [
           m.monaco.KeyMod.CtrlCmd |
             m.monaco.KeyMod.Shift |
             m.monaco.KeyCode.KeyC,
         ],
-        label: t("files.commentTitle"),
+        contextMenuGroupId: "navigation",
         precondition: "editorHasSelection",
         run: () => openDraftRef.current(),
       });
 
       // Cross-file go-to-definition: Monaco asks, the app opens the tab, the new pane reveals.
       m.setFileOpener((abs) => {
-        if (!abs.startsWith(`${cwd}/`)) {
-          return false;
-        }
+        if (!abs.startsWith(`${cwd}/`)) return false;
         onOpen(abs.slice(cwd.length + 1));
         return true;
       });
@@ -253,16 +244,12 @@ export function FileViewer({
       setMod(m);
       void m.attachLsp(cwd, model);
     })().catch((e) => {
-      if (isAlive) {
-        setError(String(e));
-      }
+      if (alive) setError(String(e));
     });
 
     return () => {
-      isAlive = false;
-      for (const d of disposables) {
-        d.dispose();
-      }
+      alive = false;
+      for (const d of disposables) d.dispose();
       // Dispose the editor, never the model: the model is the tab's memory (undo, dirty text).
       editor?.dispose();
       editorRef.current = null;
@@ -278,8 +265,8 @@ export function FileViewer({
   useEffect(() => {
     editorRef.current?.updateOptions({
       fontFamily: codeFont,
-      fontSize: appearance.codeFontSize,
       fontWeight: `${codeFontWeight}`,
+      fontSize: appearance.codeFontSize,
       lineHeight: Math.round(appearance.codeFontSize * 1.6),
     });
   }, [appearance.codeFontSize, codeFont, codeFontWeight]);
@@ -287,18 +274,14 @@ export function FileViewer({
   useEffect(() => {
     const editor = editorRef.current;
     const model = modelRef.current;
-    if (!editor || !model || reveal?.path !== path) {
-      return;
-    }
+    if (!editor || !model || reveal?.path !== path) return;
     revealTarget(editor, model, reveal);
   }, [path, reveal]);
 
   const submitDraft = () => {
     const m = modRef.current;
     const model = modelRef.current;
-    if (!draft || !m || !model || !draft.note.trim()) {
-      return;
-    }
+    if (!draft || !m || !model || !draft.note.trim()) return;
     const range =
       draft.startLine === draft.endLine
         ? `L${draft.startLine}`
@@ -339,7 +322,7 @@ export function FileViewer({
             i === parts.length - 1 ? (
               <span key={i} className="truncate font-medium">
                 {p}
-                {dirty ? <span className="text-warning ml-1.5">•</span> : null}
+                {dirty && <span className="text-warning ml-1.5">•</span>}
               </span>
             ) : (
               <span
@@ -376,7 +359,7 @@ export function FileViewer({
           <AtSign className="size-3.5" />
         </TooltipButton>
 
-        {dirty || saving ? (
+        {(dirty || saving) && (
           <Button
             size="compact"
             className="text-metadata"
@@ -390,7 +373,7 @@ export function FileViewer({
             )}
             {t("files.save")}
           </Button>
-        ) : null}
+        )}
       </header>
 
       {isImage ? (
@@ -402,15 +385,13 @@ export function FileViewer({
           // has something to dismiss (suggest, find); the leftover Escapes must not vaporize the
           // pane out from under the cursor.
           onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.stopPropagation();
-            }
+            if (e.key === "Escape") e.stopPropagation();
           }}
         >
           {/* Monaco owns this node. It stays mounted through loading so create() has real bounds. */}
           <div ref={container} className="absolute inset-0" />
 
-          {error != null && error !== "" ? (
+          {error ? (
             <p className="text-body text-destructive absolute inset-x-0 top-0 px-6 py-4">
               {error}
             </p>
@@ -422,7 +403,7 @@ export function FileViewer({
           ) : null}
 
           {/* The comment card floats over the code, top-right — the GitHub-review gesture. */}
-          {draft ? (
+          {draft && (
             <div className="raised-material rounded-module shadow-raised absolute top-3 right-4 z-10 w-80 p-3 font-sans">
               <div className="text-metadata flex items-center gap-2 font-medium">
                 <MessageSquarePlus className="text-primary size-3.5" />
@@ -471,7 +452,7 @@ export function FileViewer({
                 </Button>
               </div>
             </div>
-          ) : null}
+          )}
         </div>
       )}
     </div>

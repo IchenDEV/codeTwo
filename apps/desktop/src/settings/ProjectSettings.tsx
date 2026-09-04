@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,8 +27,10 @@ import {
   openNativePath,
   pickProjectIcon,
   setProjectScheduling,
+  type Project,
+  type ProjectWorktreeMode,
+  type ProviderInfo,
 } from "../bridge";
-import type { Project, ProjectWorktreeMode, ProviderInfo } from "../bridge";
 import { useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
 import { ProjectIcon } from "../projects/ProjectIcon";
@@ -36,7 +38,7 @@ import { ProviderIcon } from "../providers/ProviderIcon";
 import { ModelPicker } from "../session/Composer";
 import { GroupHeading, Page, ProjectRow } from "./SettingsPrimitives";
 
-const reasoningEfforts = [
+const REASONING_EFFORTS = [
   "minimal",
   "low",
   "medium",
@@ -59,29 +61,33 @@ export function ProjectSettingsPage({
   onAddAction = () => {},
   onModeSavingChange = () => {},
 }: {
-  readonly project: Project | null;
-  readonly providers: ProviderInfo[];
-  readonly onWorktreeMode: (
+  project: Project | null;
+  providers: ProviderInfo[];
+  onWorktreeMode: (
     path: string,
     mode: ProjectWorktreeMode | null
   ) => Promise<void>;
-  readonly onRename?: (path: string, name: string) => Promise<void>;
-  readonly onIcon?: (path: string, source: string | null) => Promise<void>;
-  readonly onAgentDefaults?: (
+  onRename?: (path: string, name: string) => Promise<void>;
+  onIcon?: (path: string, source: string | null) => Promise<void>;
+  onAgentDefaults?: (
     path: string,
     provider: string | null,
     model: string | null,
     reasoningEffort: string | null
   ) => Promise<void>;
-  readonly onRemove?: (path: string) => Promise<void>;
-  readonly iconPicker?: () => Promise<string | null>;
-  readonly actionsCount?: number;
-  readonly onAddAction?: () => void;
-  readonly onModeSavingChange?: (isSaving: boolean) => void;
+  onRemove?: (path: string) => Promise<void>;
+  iconPicker?: () => Promise<string | null>;
+  actionsCount?: number;
+  onAddAction?: () => void;
+  onModeSavingChange?: (saving: boolean) => void;
 }) {
   const t = useT();
-  const providerNames = Object.fromEntries(
-    providers.map((candidate) => [candidate.id, candidate.display_name])
+  const providerNames = useMemo(
+    () =>
+      Object.fromEntries(
+        providers.map((candidate) => [candidate.id, candidate.display_name])
+      ),
+    [providers]
   );
   const [modeSaving, setModeSaving] = useState(false);
   const [nameDraft, setNameDraft] = useState(project?.name ?? "");
@@ -97,9 +103,7 @@ export function ProjectSettingsPage({
   }, [project?.path, project?.name]);
 
   useEffect(() => {
-    if (!project) {
-      return;
-    }
+    if (!project) return;
     void getProjectScheduling(project.path).then(setSchedulingEnabled);
   }, [project?.path]);
 
@@ -118,59 +122,49 @@ export function ProjectSettingsPage({
   }
 
   async function saveName() {
-    if (!project) {
-      return;
-    }
+    if (!project) return;
     const name = nameDraft.trim();
     if (!name) {
       setError(t("settings.projectNameRequired"));
       setNameDraft(project.name);
       return;
     }
-    if (name === project.name) {
-      return;
-    }
+    if (name === project.name) return;
     setProfileSaving(true);
     setError(null);
     try {
       await onRename(project.path, name);
-    } catch (error) {
+    } catch (cause) {
       setNameDraft(project.name);
-      setError(t("settings.projectSaveFailed", { error: String(error) }));
+      setError(t("settings.projectSaveFailed", { error: String(cause) }));
     } finally {
       setProfileSaving(false);
     }
   }
 
   async function chooseIcon() {
-    if (!project) {
-      return;
-    }
+    if (!project) return;
     const source = await iconPicker();
-    if (source == null || source === "") {
-      return;
-    }
+    if (!source) return;
     setIconSaving(true);
     setError(null);
     try {
       await onIcon(project.path, source);
-    } catch (error) {
-      setError(t("settings.projectIconFailed", { error: String(error) }));
+    } catch (cause) {
+      setError(t("settings.projectIconFailed", { error: String(cause) }));
     } finally {
       setIconSaving(false);
     }
   }
 
   async function clearIcon() {
-    if (!project) {
-      return;
-    }
+    if (!project) return;
     setIconSaving(true);
     setError(null);
     try {
       await onIcon(project.path, null);
-    } catch (error) {
-      setError(t("settings.projectIconFailed", { error: String(error) }));
+    } catch (cause) {
+      setError(t("settings.projectIconFailed", { error: String(cause) }));
     } finally {
       setIconSaving(false);
     }
@@ -181,48 +175,42 @@ export function ProjectSettingsPage({
     modelId: string | null,
     reasoningEffort: string | null
   ) {
-    if (!project) {
-      return;
-    }
+    if (!project) return;
     setAgentSaving(true);
     setError(null);
     try {
       await onAgentDefaults(project.path, providerId, modelId, reasoningEffort);
-    } catch (error) {
-      setError(t("settings.projectSaveFailed", { error: String(error) }));
+    } catch (cause) {
+      setError(t("settings.projectSaveFailed", { error: String(cause) }));
     } finally {
       setAgentSaving(false);
     }
   }
 
   async function removeProject() {
-    if (!project) {
-      return;
-    }
+    if (!project) return;
     if (
       !(await confirmNative(
         t("settings.removeProjectConfirm", { name: project.name })
       ))
-    ) {
+    )
       return;
-    }
     setProfileSaving(true);
     setError(null);
     try {
       await onRemove(project.path);
-    } catch (error) {
-      setError(t("settings.projectSaveFailed", { error: String(error) }));
+    } catch (cause) {
+      setError(t("settings.projectSaveFailed", { error: String(cause) }));
     } finally {
       setProfileSaving(false);
     }
   }
 
   const projectDefaultProvider = project?.default_provider ?? null;
-  const projectDefaultModels =
-    projectDefaultProvider != null && projectDefaultProvider !== ""
-      ? (providers.find((candidate) => candidate.id === projectDefaultProvider)
-          ?.models ?? [])
-      : [];
+  const projectDefaultModels = projectDefaultProvider
+    ? (providers.find((candidate) => candidate.id === projectDefaultProvider)
+        ?.models ?? [])
+    : [];
   return (
     <Page title={t("settings.project")} description={t("settings.projectHint")}>
       {project ? (
@@ -242,9 +230,7 @@ export function ProjectSettingsPage({
               onInput={(event) => setNameDraft(event.currentTarget.value)}
               onBlur={() => void saveName()}
               onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
+                if (event.key === "Enter") event.currentTarget.blur();
                 if (event.key === "Escape") {
                   setNameDraft(project.name);
                   event.currentTarget.blur();
@@ -255,7 +241,7 @@ export function ProjectSettingsPage({
           <ProjectRow
             label={t("settings.projectIcon")}
             hint={
-              project.has_icon === true
+              project.has_icon
                 ? t("settings.projectIconCustom")
                 : t("settings.projectIconAutomatic")
             }
@@ -279,13 +265,13 @@ export function ProjectSettingsPage({
                   className="bg-background/70"
                 />
                 <span className="text-body min-w-0 flex-1 truncate font-medium">
-                  {project.has_icon === true
+                  {project.has_icon
                     ? t("settings.projectIconChange")
                     : t("settings.projectIconChoose")}
                 </span>
                 <ImagePlus className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
               </Button>
-              {project.has_icon === true ? (
+              {project.has_icon ? (
                 <>
                   <span
                     className="bg-foreground/10 my-2 w-px shrink-0"
@@ -305,7 +291,7 @@ export function ProjectSettingsPage({
               ) : null}
             </div>
           </ProjectRow>
-          {error != null && error !== "" ? (
+          {error ? (
             <p className="project-settings-error text-metadata text-destructive pt-1">
               {error}
             </p>
@@ -334,8 +320,7 @@ export function ProjectSettingsPage({
                 className="w-full justify-between"
               >
                 <SelectValue>
-                  {projectDefaultProvider != null &&
-                  projectDefaultProvider !== "" ? (
+                  {projectDefaultProvider ? (
                     <>
                       <ProviderIcon
                         provider={projectDefaultProvider}
@@ -376,9 +361,7 @@ export function ProjectSettingsPage({
             hint={t("settings.projectModelHint")}
           >
             <div className="grid w-full grid-cols-[minmax(0,1fr)_7.5rem] gap-2">
-              {projectDefaultProvider != null &&
-              projectDefaultProvider !== "" &&
-              projectDefaultModels.length > 0 ? (
+              {projectDefaultProvider && projectDefaultModels.length > 0 ? (
                 <div className="rounded-control bg-fill-rest flex min-w-0 items-center px-1">
                   <ModelPicker
                     models={projectDefaultModels}
@@ -396,8 +379,7 @@ export function ProjectSettingsPage({
                     onConfigOption={() => {}}
                     hasSession={false}
                   />
-                  {project.default_model != null &&
-                  project.default_model !== "" ? (
+                  {project.default_model ? (
                     <TooltipButton
                       label={t("settings.projectModelReset")}
                       variant="ghost"
@@ -421,8 +403,7 @@ export function ProjectSettingsPage({
                   {t("settings.projectModelDefault")}
                 </span>
               )}
-              {projectDefaultProvider != null &&
-              projectDefaultProvider !== "" ? (
+              {projectDefaultProvider ? (
                 <Select
                   disabled={agentSaving}
                   value={project.default_reasoning_effort ?? "automatic"}
@@ -440,8 +421,7 @@ export function ProjectSettingsPage({
                     className="w-full justify-between"
                   >
                     <SelectValue>
-                      {project.default_reasoning_effort != null &&
-                      project.default_reasoning_effort !== ""
+                      {project.default_reasoning_effort
                         ? t(
                             `effort.${project.default_reasoning_effort}` as StringKey
                           )
@@ -453,7 +433,7 @@ export function ProjectSettingsPage({
                       <SelectItem value="automatic">
                         {t("settings.projectModelDefault")}
                       </SelectItem>
-                      {reasoningEfforts.map((effort) => (
+                      {REASONING_EFFORTS.map((effort) => (
                         <SelectItem key={effort} value={effort}>
                           {t(`effort.${effort}` as StringKey)}
                         </SelectItem>
@@ -515,12 +495,12 @@ export function ProjectSettingsPage({
               aria-label={t("settings.scheduling")}
               checked={schedulingEnabled}
               onCheckedChange={(checked) => {
-                const isEnabled = checked;
-                setSchedulingEnabled(isEnabled);
+                const enabled = checked;
+                setSchedulingEnabled(enabled);
                 setError(null);
-                void setProjectScheduling(project.path, isEnabled).catch(
+                void setProjectScheduling(project.path, enabled).catch(
                   (error) => {
-                    setSchedulingEnabled(!isEnabled);
+                    setSchedulingEnabled(!enabled);
                     setError(
                       t("settings.projectSaveFailed", { error: String(error) })
                     );
@@ -569,11 +549,10 @@ export function ProjectSettingsPage({
                 onClick={() => {
                   void openNativePath(project.path)
                     .then((opened) => {
-                      if (!opened) {
+                      if (!opened)
                         throw new Error(
                           t("settings.projectPathRevealUnavailable")
                         );
-                      }
                     })
                     .catch((error) => {
                       setError(

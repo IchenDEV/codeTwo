@@ -7,10 +7,8 @@ const sourceRoot = resolve(import.meta.dir, "../src");
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(directory, entry.name);
-    if (entry.isDirectory()) {
-      return sourceFiles(path);
-    }
-    return /\.(?:ts|tsx)$/u.test(entry.name) ? [path] : [];
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.(?:ts|tsx)$/.test(entry.name) ? [path] : [];
   });
 }
 
@@ -28,20 +26,19 @@ describe("desktop container boundary", () => {
     const violations = sourceFiles(sourceRoot)
       .filter((path) => !isDesktopImplementation(path))
       .flatMap((path) => {
-        const source = readFileSync(path, "utf-8");
+        const source = readFileSync(path, "utf8");
         return [
           ...source.matchAll(
-            /\b(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/gu
+            /\b(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g
           ),
         ]
           .map((match) => match[1])
-          .filter((specifier) => {
-            return (
+          .filter(
+            (specifier) =>
               specifier === "electrobun" ||
               specifier.startsWith("electrobun/") ||
-              /(?:^|\/)electrobun(?:\/|$)/u.test(specifier)
-            );
-          })
+              /(?:^|\/)electrobun(?:\/|$)/.test(specifier)
+          )
           .map((specifier) => `${relative(sourceRoot, path)} -> ${specifier}`);
       });
 
@@ -49,11 +46,8 @@ describe("desktop container boundary", () => {
   });
 
   test("routes the product bridge through the container port", () => {
-    const bridge = readFileSync(resolve(sourceRoot, "bridge.ts"), "utf-8");
-    const container = readFileSync(
-      resolve(sourceRoot, "container.ts"),
-      "utf-8"
-    );
+    const bridge = readFileSync(resolve(sourceRoot, "bridge.ts"), "utf8");
+    const container = readFileSync(resolve(sourceRoot, "container.ts"), "utf8");
 
     expect(bridge).toContain('from "./container"');
     expect(bridge).not.toContain('from "./electrobun/');

@@ -10,12 +10,10 @@ const entrypoint = fileURLToPath(
 
 describe("Tool Broker JSON-RPC adapter", () => {
   test("resolves configured MCP backends through the real subprocess boundary", () => {
-    const dataDirectory = mkdtempSync(
-      join(tmpdir(), "codetwo-tool-broker-rpc-")
-    );
+    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-rpc-"));
     try {
       writeFileSync(
-        join(dataDirectory, "host-tools.json"),
+        join(dataDir, "host-tools.json"),
         JSON.stringify({
           schema_version: 1,
           computer_use_selection: { "*": "cua" },
@@ -37,7 +35,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         id: 7,
         method: "tool.resolve",
         params: {
-          data_dir: dataDirectory,
+          data_dir: dataDir,
           provider_id: "claude_code",
           environment: {},
         },
@@ -62,12 +60,12 @@ describe("Tool Broker JSON-RPC adapter", () => {
         },
       ]);
     } finally {
-      rmSync(dataDirectory, { recursive: true, force: true });
+      rmSync(dataDir, { recursive: true, force: true });
     }
   });
 
   test("persists Computer Use as one global selection without a provider id", () => {
-    const dataDirectory = mkdtempSync(
+    const dataDir = mkdtempSync(
       join(tmpdir(), "codetwo-tool-broker-global-selection-")
     );
     try {
@@ -76,7 +74,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         id: 8,
         method: "selection.set",
         params: {
-          data_dir: dataDirectory,
+          data_dir: dataDir,
           kind: "computer_use",
           backend_id: "automatic",
           environment: {},
@@ -93,16 +91,16 @@ describe("Tool Broker JSON-RPC adapter", () => {
         JSON.parse(child.stdout.toString()).result.computer_use.selections
       ).toEqual({ "*": "automatic" });
       expect(
-        JSON.parse(readFileSync(join(dataDirectory, "host-tools.json"), "utf8"))
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
           .computer_use_selection
       ).toEqual({ "*": "automatic" });
     } finally {
-      rmSync(dataDirectory, { recursive: true, force: true });
+      rmSync(dataDir, { recursive: true, force: true });
     }
   }, 10_000);
 
   test("persists Browser Use as one global selection without a provider id", () => {
-    const dataDirectory = mkdtempSync(
+    const dataDir = mkdtempSync(
       join(tmpdir(), "codetwo-tool-broker-global-browser-selection-")
     );
     try {
@@ -111,7 +109,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         id: 9,
         method: "selection.set",
         params: {
-          data_dir: dataDirectory,
+          data_dir: dataDir,
           kind: "browser_use",
           backend_id: "automatic",
           environment: {},
@@ -128,16 +126,16 @@ describe("Tool Broker JSON-RPC adapter", () => {
         JSON.parse(child.stdout.toString()).result.browser_use.selections
       ).toEqual({ "*": "automatic" });
       expect(
-        JSON.parse(readFileSync(join(dataDirectory, "host-tools.json"), "utf8"))
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
           .browser_use_selection
       ).toEqual({ "*": "automatic" });
     } finally {
-      rmSync(dataDirectory, { recursive: true, force: true });
+      rmSync(dataDir, { recursive: true, force: true });
     }
   }, 10_000);
 
   test("persists the Agent browser access gate and projects a Codex blocker", () => {
-    const dataDirectory = mkdtempSync(
+    const dataDir = mkdtempSync(
       join(tmpdir(), "codetwo-tool-broker-browser-access-")
     );
     try {
@@ -145,7 +143,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         jsonrpc: "2.0",
         id: 10,
         method: "browser_access.set",
-        params: { data_dir: dataDirectory, enabled: false, environment: {} },
+        params: { data_dir: dataDir, enabled: false, environment: {} },
       };
       const setChild = Bun.spawnSync(["bun", entrypoint], {
         stdin: new TextEncoder().encode(JSON.stringify(setRequest)),
@@ -157,7 +155,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         JSON.parse(setChild.stdout.toString()).result.browser_use.access_enabled
       ).toBe(false);
       expect(
-        JSON.parse(readFileSync(join(dataDirectory, "host-tools.json"), "utf8"))
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
           .agent_browser_access
       ).toBe(false);
 
@@ -165,11 +163,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         jsonrpc: "2.0",
         id: 11,
         method: "tool.resolve",
-        params: {
-          data_dir: dataDirectory,
-          provider_id: "codex",
-          environment: {},
-        },
+        params: { data_dir: dataDir, provider_id: "codex", environment: {} },
       };
       const resolveChild = Bun.spawnSync(["bun", entrypoint], {
         stdin: new TextEncoder().encode(JSON.stringify(resolveRequest)),
@@ -183,7 +177,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
       ]);
       expect(plan.instructions).toEqual([]);
     } finally {
-      rmSync(dataDirectory, { recursive: true, force: true });
+      rmSync(dataDir, { recursive: true, force: true });
     }
   }, 10_000);
 

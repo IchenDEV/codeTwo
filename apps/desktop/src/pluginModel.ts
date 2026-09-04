@@ -3,23 +3,18 @@
  *
  * The host owns rendering and invocation; packages contribute descriptors, never executable UI.
  */
-export const pluginUiSlotIds = [
+export const PLUGIN_UI_SLOT_IDS = [
   "rail.features",
   "session.header",
   "transcript.before",
   "composer.above",
   "composer.toolbar",
+  "host.actions",
 ] as const;
 
-export type PluginUiSlotId = (typeof pluginUiSlotIds)[number];
+export type PluginUiSlotId = (typeof PLUGIN_UI_SLOT_IDS)[number];
 
-export function isPluginUiSlotId(value: unknown): value is PluginUiSlotId {
-  return (
-    typeof value === "string" && pluginUiSlotIds.some((slot) => slot === value)
-  );
-}
-
-export const pluginConnectorCapabilities = [
+export const PLUGIN_CONNECTOR_CAPABILITIES = [
   "connection",
   "conversations",
   "documents",
@@ -28,16 +23,7 @@ export const pluginConnectorCapabilities = [
   "turn_notifications",
 ] as const;
 export type PluginConnectorCapability =
-  (typeof pluginConnectorCapabilities)[number];
-
-export function isPluginConnectorCapability(
-  value: unknown
-): value is PluginConnectorCapability {
-  return (
-    typeof value === "string" &&
-    pluginConnectorCapabilities.some((capability) => capability === value)
-  );
-}
+  (typeof PLUGIN_CONNECTOR_CAPABILITIES)[number];
 
 export interface PluginUiContribution {
   id: string;
@@ -49,9 +35,7 @@ export interface PluginUiContribution {
   order: number;
 }
 
-/**
-A host-rendered external-system integration backed by one bundle-owned command.
-*/
+/** A host-rendered external-system integration backed by one bundle-owned command. */
 export interface PluginConnectorContribution {
   id: string;
   provider: string;
@@ -66,7 +50,7 @@ export interface PluginRuntimeContribution {
   env: Record<string, string>;
   inject: string[];
   optionalInject: string[];
-  scopeSupport: ("user" | "project")[];
+  scopeSupport: Array<"user" | "project">;
 }
 
 export interface PluginRuntimeCommandContribution {
@@ -98,24 +82,19 @@ export interface C2PluginManifest {
   languageServers: PluginLanguageServerContribution[];
 }
 
-export const agentPluginSchema =
+export const AGENT_PLUGIN_SCHEMA =
   "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-export const c2PluginStandardVersion = "1.2.0";
-export type C2PluginStandardVersion = typeof c2PluginStandardVersion;
+export const C2_PLUGIN_STANDARD_VERSION = "1.2.0";
+export type C2PluginStandardVersion = typeof C2_PLUGIN_STANDARD_VERSION;
 
 function asObject(value: unknown): Record<string, unknown> {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-  const record: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    record[key] = entry;
-  }
-  return record;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === "object" && !Array.isArray(value);
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function hasOnlyKeys(
@@ -141,7 +120,7 @@ function stringRecord(value: unknown): Record<string, string> {
 
 function safeId(value: string): boolean {
   return (
-    value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/u.test(value)
+    value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/.test(value)
   );
 }
 
@@ -149,7 +128,7 @@ function commandName(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.length <= 128 &&
-    /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/u.test(value)
+    /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/.test(value)
   );
 }
 
@@ -159,16 +138,14 @@ function safeCommand(value: string): boolean {
     !value.includes("${") &&
     !value.startsWith("/") &&
     !value.startsWith("\\") &&
-    !/^[A-Za-z]:[\\/]/u.test(value)
+    !/^[A-Za-z]:[\\/]/.test(value)
   );
 }
 
 export function parsePluginRuntimeContribution(
   value: unknown
 ): PluginRuntimeContribution | null {
-  if (!isObject(value)) {
-    return null;
-  }
+  if (!isObject(value)) return null;
   const raw = asObject(value);
   if (
     !hasOnlyKeys(raw, [
@@ -180,58 +157,48 @@ export function parsePluginRuntimeContribution(
       "optionalInject",
       "scopeSupport",
     ])
-  ) {
+  )
     return null;
-  }
   if (
     typeof raw.command !== "string" ||
     raw.command.trim().length === 0 ||
     !safeCommand(raw.command) ||
-    (raw.protocol !== null &&
-      raw.protocol !== undefined &&
+    (raw.protocol != null &&
       (typeof raw.protocol !== "string" ||
-        !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(raw.protocol))) ||
-    (raw.args !== null &&
-      raw.args !== undefined &&
+        !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.protocol))) ||
+    (raw.args != null &&
       (!Array.isArray(raw.args) ||
         raw.args.some((entry) => typeof entry !== "string"))) ||
-    (raw.env !== null &&
-      raw.env !== undefined &&
+    (raw.env != null &&
       (!isObject(raw.env) ||
         Object.values(raw.env).some((entry) => typeof entry !== "string"))) ||
-    (raw.inject !== null &&
-      raw.inject !== undefined &&
+    (raw.inject != null &&
       (!Array.isArray(raw.inject) ||
         raw.inject.some((entry) => typeof entry !== "string"))) ||
-    (raw.optionalInject !== null &&
-      raw.optionalInject !== undefined &&
+    (raw.optionalInject != null &&
       (!Array.isArray(raw.optionalInject) ||
         raw.optionalInject.some((entry) => typeof entry !== "string"))) ||
-    (raw.scopeSupport !== null &&
-      raw.scopeSupport !== undefined &&
+    (raw.scopeSupport != null &&
       (!Array.isArray(raw.scopeSupport) ||
         raw.scopeSupport.some(
           (entry) => entry !== "user" && entry !== "project"
         )))
-  ) {
+  )
     return null;
-  }
   const scopeSupport = strings(raw.scopeSupport).filter(
     (scope): scope is "user" | "project" =>
       scope === "user" || scope === "project"
   );
   const normalizedScopes =
     scopeSupport.length > 0 ? [...new Set(scopeSupport)] : ["user" as const];
-  if (!normalizedScopes.includes("user")) {
-    normalizedScopes.unshift("user");
-  }
+  if (!normalizedScopes.includes("user")) normalizedScopes.unshift("user");
   return {
-    args: strings(raw.args),
+    protocol: typeof raw.protocol === "string" ? raw.protocol : "1.0.0",
     command: raw.command.trim(),
+    args: strings(raw.args),
     env: stringRecord(raw.env),
     inject: strings(raw.inject),
     optionalInject: strings(raw.optionalInject),
-    protocol: typeof raw.protocol === "string" ? raw.protocol : "1.0.0",
     scopeSupport: normalizedScopes,
   };
 }
@@ -239,16 +206,11 @@ export function parsePluginRuntimeContribution(
 export function parsePluginRuntimeCommandContribution(
   value: unknown
 ): PluginRuntimeCommandContribution | null {
-  if (!isObject(value)) {
-    return null;
-  }
+  if (!isObject(value)) return null;
   const raw = asObject(value);
-  if (!hasOnlyKeys(raw, ["id", "title", "description", "argsSchema"])) {
+  if (!hasOnlyKeys(raw, ["id", "title", "description", "argsSchema"]))
     return null;
-  }
-  if (!commandName(raw.id)) {
-    return null;
-  }
+  if (!commandName(raw.id)) return null;
   if (
     typeof raw.title !== "string" ||
     raw.title.trim().length === 0 ||
@@ -257,37 +219,24 @@ export function parsePluginRuntimeCommandContribution(
     return null;
   }
   if (
-    raw.description !== null &&
-    raw.description !== undefined &&
+    raw.description != null &&
     (typeof raw.description !== "string" || raw.description.length > 300)
-  ) {
+  )
     return null;
-  }
-  if (
-    raw.argsSchema !== null &&
-    raw.argsSchema !== undefined &&
-    !isObject(raw.argsSchema)
-  ) {
-    return null;
-  }
+  if (raw.argsSchema != null && !isObject(raw.argsSchema)) return null;
   return {
-    argsSchema:
-      raw.argsSchema === null || raw.argsSchema === undefined
-        ? null
-        : raw.argsSchema,
-    description:
-      typeof raw.description === "string" ? raw.description.trim() : "",
     id: raw.id,
     title: raw.title.trim(),
+    description:
+      typeof raw.description === "string" ? raw.description.trim() : "",
+    argsSchema: raw.argsSchema == null ? null : raw.argsSchema,
   };
 }
 
 export function parsePluginUiContribution(
   value: unknown
 ): PluginUiContribution | null {
-  if (!isObject(value)) {
-    return null;
-  }
+  if (!isObject(value)) return null;
   const raw = asObject(value);
   if (
     !hasOnlyKeys(raw, [
@@ -302,7 +251,10 @@ export function parsePluginUiContribution(
   ) {
     return null;
   }
-  if (!safeId(String(raw.id ?? "")) || !isPluginUiSlotId(raw.slot)) {
+  if (
+    !safeId(String(raw.id ?? "")) ||
+    !PLUGIN_UI_SLOT_IDS.includes(raw.slot as PluginUiSlotId)
+  ) {
     return null;
   }
   if (
@@ -313,116 +265,97 @@ export function parsePluginUiContribution(
     return null;
   }
   if (
-    raw.description !== null &&
-    raw.description !== undefined &&
+    raw.description != null &&
     (typeof raw.description !== "string" || raw.description.length > 300)
   ) {
     return null;
   }
-  if (!commandName(raw.command)) {
-    return null;
-  }
+  if (!commandName(raw.command)) return null;
   if (
-    raw.order !== null &&
-    raw.order !== undefined &&
+    raw.order != null &&
     (typeof raw.order !== "number" ||
       !Number.isInteger(raw.order) ||
       raw.order < -100 ||
       raw.order > 100)
-  ) {
+  )
     return null;
-  }
   const order = typeof raw.order === "number" ? raw.order : 0;
   return {
-    command: raw.command,
+    id: String(raw.id),
+    slot: raw.slot as PluginUiSlotId,
+    label: raw.label.trim(),
     description:
       typeof raw.description === "string" ? raw.description.trim() : "",
-    id: String(raw.id),
+    command: raw.command,
     input: raw.input ?? null,
-    label: raw.label.trim(),
     order,
-    slot: raw.slot,
   };
 }
 
 export function parsePluginConnectorContribution(
   value: unknown
 ): PluginConnectorContribution | null {
-  if (!isObject(value)) {
-    return null;
-  }
+  if (!isObject(value)) return null;
   const raw = asObject(value);
-  if (!hasOnlyKeys(raw, ["id", "provider", "command", "capabilities"])) {
+  if (!hasOnlyKeys(raw, ["id", "provider", "command", "capabilities"]))
     return null;
-  }
-  if (!safeId(String(raw.id ?? ""))) {
+  if (!safeId(String(raw.id ?? ""))) return null;
+  if (typeof raw.provider !== "string" || !safeId(raw.provider)) return null;
+  if (!commandName(raw.command)) return null;
+  if (!Array.isArray(raw.capabilities) || raw.capabilities.length === 0)
     return null;
-  }
-  if (typeof raw.provider !== "string" || !safeId(raw.provider)) {
+  if (
+    raw.capabilities.some(
+      (entry) =>
+        typeof entry !== "string" ||
+        !PLUGIN_CONNECTOR_CAPABILITIES.includes(
+          entry as PluginConnectorCapability
+        )
+    )
+  )
     return null;
-  }
-  if (!commandName(raw.command)) {
-    return null;
-  }
-  if (!Array.isArray(raw.capabilities) || raw.capabilities.length === 0) {
-    return null;
-  }
-  const capabilities = raw.capabilities.filter(isPluginConnectorCapability);
-  if (capabilities.length !== raw.capabilities.length) {
-    return null;
-  }
   return {
-    capabilities: [...new Set(capabilities)],
-    command: raw.command,
     id: String(raw.id),
     provider: raw.provider,
+    command: raw.command,
+    capabilities: [...new Set(raw.capabilities)] as PluginConnectorCapability[],
   };
 }
 
 export function parsePluginLanguageServerContribution(
   value: unknown
 ): PluginLanguageServerContribution | null {
-  if (!isObject(value)) {
-    return null;
-  }
+  if (!isObject(value)) return null;
   const raw = asObject(value);
-  if (!hasOnlyKeys(raw, ["id", "languages", "command", "args", "env"])) {
+  if (!hasOnlyKeys(raw, ["id", "languages", "command", "args", "env"]))
     return null;
-  }
-  if (!safeId(String(raw.id ?? ""))) {
-    return null;
-  }
+  if (!safeId(String(raw.id ?? ""))) return null;
   if (
     typeof raw.command !== "string" ||
     raw.command.trim().length === 0 ||
     !safeCommand(raw.command) ||
     !Array.isArray(raw.languages) ||
     raw.languages.some((entry) => typeof entry !== "string") ||
-    (raw.args !== null &&
-      raw.args !== undefined &&
+    (raw.args != null &&
       (!Array.isArray(raw.args) ||
         raw.args.some((entry) => typeof entry !== "string"))) ||
-    (raw.env !== null &&
-      raw.env !== undefined &&
+    (raw.env != null &&
       (!isObject(raw.env) ||
         Object.values(raw.env).some((entry) => typeof entry !== "string")))
-  ) {
+  )
     return null;
-  }
   const languages = [
     ...new Set(
       strings(raw.languages).map((language) => language.toLocaleLowerCase())
     ),
-  ].filter((language) => /^[a-z0-9][a-z0-9+_.-]{0,63}$/u.test(language));
-  if (languages.length === 0 || languages.length > 16) {
-    return null;
-  }
+  ].filter((language) => /^[a-z0-9][a-z0-9+_.-]{0,63}$/.test(language));
+  if (languages.length === 0 || languages.length > 16) return null;
   return {
-    args: strings(raw.args),
-    command: raw.command.trim(),
-    env: stringRecord(raw.env),
     id: String(raw.id),
     languages,
+    command: raw.command.trim(),
+    args: strings(raw.args),
+    env: stringRecord(raw.env),
   };
 }
 
@@ -430,27 +363,22 @@ export function parsePluginContributionArray<T>(
   value: unknown,
   parse: (entry: unknown) => T | null,
   label: string,
-  isStrict: boolean
+  strict: boolean
 ): T[] {
-  if (value === null || value === undefined) {
-    return [];
-  }
+  if (value == null) return [];
   if (!Array.isArray(value)) {
-    if (isStrict) {
-      throw new Error(`${label} must be an array`);
-    }
+    if (strict) throw new Error(`${label} must be an array`);
     return [];
   }
   const parsed = value.map(parse);
   const invalid = parsed.findIndex((entry) => entry === null);
-  if (isStrict && invalid !== -1) {
+  if (strict && invalid >= 0)
     throw new Error(`${label}[${invalid}] is invalid`);
-  }
   return parsed.filter((entry): entry is T => entry !== null);
 }
 
 export function assertUniquePluginContributionIds(
-  contributions: { id: string }[],
+  contributions: Array<{ id: string }>,
   label: string
 ): void {
   if (
@@ -461,12 +389,11 @@ export function assertUniquePluginContributionIds(
   }
 }
 
+/** Validate and normalize the only manifest shape C2 installs. */
 export function parsePluginManifest(value: unknown): C2PluginManifest {
-  if (!isObject(value)) {
-    throw new Error("plugin.json must contain an object");
-  }
+  if (!isObject(value)) throw new Error("plugin.json must contain an object");
   const raw = asObject(value);
-  const rootFields = new Set([
+  const rootFields = [
     "$schema",
     "name",
     "version",
@@ -477,16 +404,16 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     "license",
     "keywords",
     "extensions",
-  ]);
+  ];
   const unknownRootFields = Object.keys(raw).filter(
-    (key) => !rootFields.has(key)
+    (key) => !rootFields.includes(key)
   );
   if (unknownRootFields.length > 0) {
     throw new Error(
       `Unknown Agent Plugins fields: ${unknownRootFields.join(", ")}`
     );
   }
-  if (raw.$schema !== agentPluginSchema) {
+  if (raw.$schema !== AGENT_PLUGIN_SCHEMA) {
     throw new Error(
       `Unsupported Agent Plugins schema: ${String(raw.$schema ?? "")}`
     );
@@ -494,29 +421,20 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   if (
     typeof raw.name !== "string" ||
     raw.name.length > 64 ||
-    !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(raw.name)
-  ) {
+    !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(raw.name)
+  )
     throw new Error("Agent Plugins name must match the 1.0.0 naming rules");
-  }
   if (
     typeof raw.version !== "string" ||
-    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(raw.version)
+    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.version)
   ) {
     throw new Error("C2 plugins require a semantic version");
   }
 
-  if (
-    raw.description !== null &&
-    raw.description !== undefined &&
-    typeof raw.description !== "string"
-  ) {
+  if (raw.description != null && typeof raw.description !== "string") {
     throw new Error("Agent Plugins description must be a string");
   }
-  if (
-    raw.repository !== null &&
-    raw.repository !== undefined &&
-    typeof raw.repository !== "string"
-  ) {
+  if (raw.repository != null && typeof raw.repository !== "string") {
     throw new Error("Agent Plugins repository must be a string");
   }
   for (const field of ["homepage", "license"] as const) {
@@ -525,27 +443,19 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     }
   }
   if (
-    raw.keywords !== null &&
-    raw.keywords !== undefined &&
+    raw.keywords != null &&
     (!Array.isArray(raw.keywords) ||
       raw.keywords.some((keyword) => typeof keyword !== "string"))
-  ) {
+  )
     throw new Error("Agent Plugins keywords must be an array of strings");
-  }
   if (
-    raw.author !== null &&
-    raw.author !== undefined &&
+    raw.author != null &&
     (!isObject(raw.author) ||
       !hasOnlyKeys(raw.author, ["name", "email", "url"]) ||
       Object.values(raw.author).some((entry) => typeof entry !== "string"))
-  ) {
+  )
     throw new Error("Agent Plugins author must match the 1.0.0 schema");
-  }
-  if (
-    raw.extensions !== null &&
-    raw.extensions !== undefined &&
-    !isObject(raw.extensions)
-  ) {
+  if (raw.extensions != null && !isObject(raw.extensions)) {
     throw new Error("Agent Plugins extensions must be an object");
   }
 
@@ -555,8 +465,7 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   }
   const c2Value = extensions["dev.codetwo"];
   if (
-    c2Value === null ||
-    c2Value === undefined ||
+    c2Value == null ||
     typeof c2Value !== "object" ||
     Array.isArray(c2Value)
   ) {
@@ -565,40 +474,37 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   const c2 = asObject(c2Value);
   const standardVersion =
     typeof c2.standardVersion === "string" ? c2.standardVersion : "";
-  if (standardVersion !== c2PluginStandardVersion) {
+  if (standardVersion !== C2_PLUGIN_STANDARD_VERSION) {
     throw new Error(
       `Unsupported C2 plugin standard: ${standardVersion || "missing"}`
     );
   }
-  const unknownFields = Object.keys(c2).filter((key) => {
-    return ![
-      "standardVersion",
-      "runtime",
-      "commands",
-      "ui",
-      "connectors",
-      "languageServers",
-    ].includes(key);
-  });
+  const unknownFields = Object.keys(c2).filter(
+    (key) =>
+      ![
+        "standardVersion",
+        "runtime",
+        "commands",
+        "ui",
+        "connectors",
+        "languageServers",
+      ].includes(key)
+  );
   if (unknownFields.length > 0) {
     throw new Error(`Unknown C2 plugin fields: ${unknownFields.join(", ")}`);
   }
   const runtime =
-    c2.runtime === null || c2.runtime === undefined
-      ? null
-      : parsePluginRuntimeContribution(c2.runtime);
-  if (c2.runtime !== null && c2.runtime !== undefined && !runtime) {
+    c2.runtime == null ? null : parsePluginRuntimeContribution(c2.runtime);
+  if (c2.runtime != null && !runtime)
     throw new Error("extensions.dev.codetwo.runtime is invalid");
-  }
   const commands = parsePluginContributionArray(
     c2.commands,
     parsePluginRuntimeCommandContribution,
     "extensions.dev.codetwo.commands",
     true
   );
-  if (commands.length > 100) {
+  if (commands.length > 100)
     throw new Error("extensions.dev.codetwo.commands has too many entries");
-  }
   const ui = parsePluginContributionArray(
     c2.ui,
     parsePluginUiContribution,
@@ -672,21 +578,22 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   }
   const author = asObject(raw.author);
   return {
-    author: typeof author.name === "string" ? author.name : "",
-    commands,
-    connectors,
+    name: raw.name,
+    version: raw.version,
     description:
       typeof raw.description === "string" ? raw.description.slice(0, 500) : "",
-    languageServers,
-    name: raw.name,
+    author: typeof author.name === "string" ? author.name : "",
     repository: typeof raw.repository === "string" ? raw.repository : "",
+    standardVersion: standardVersion as C2PluginStandardVersion,
     runtime,
-    standardVersion: c2PluginStandardVersion,
+    commands,
     ui,
-    version: raw.version,
+    connectors,
+    languageServers,
   };
 }
 
+/** Stable policy identity for one UI descriptor owned by an installed package. */
 export function pluginUiComponentId(
   pluginId: string,
   contributionId: string

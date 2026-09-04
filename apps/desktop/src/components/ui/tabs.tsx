@@ -1,8 +1,7 @@
 "use client";
 
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
-import { cva } from "class-variance-authority";
-import type { VariantProps } from "class-variance-authority";
+import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
@@ -28,9 +27,6 @@ function Tabs({
 const tabsListVariants = cva(
   "group/tabs-list rounded-control p-optical text-muted-foreground group-data-[orientation=horizontal]/tabs:h-control-field relative isolate inline-flex w-fit items-center justify-center group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
   {
-    defaultVariants: {
-      variant: "default",
-    },
     variants: {
       variant: {
         default: "bg-muted",
@@ -38,6 +34,9 @@ const tabsListVariants = cva(
         toolbar:
           "group-data-[orientation=horizontal]/tabs:data-[variant=toolbar]:h-control gap-1 bg-transparent p-0",
       },
+    },
+    defaultVariants: {
+      variant: "default",
     },
   }
 );

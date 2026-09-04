@@ -1,11 +1,12 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 
 interface DetailMetricProps {
-  readonly icon: ReactNode;
-  readonly label: string;
-  readonly children: ReactNode;
+  icon: ReactNode;
+  label: string;
+  children: ReactNode;
 }
 
+/** Consistent label/value row for master-detail metadata panels. */
 function DetailMetric({ icon, label, children }: DetailMetricProps) {
   return (
     <div

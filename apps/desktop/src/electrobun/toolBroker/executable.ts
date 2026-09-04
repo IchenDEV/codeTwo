@@ -11,23 +11,18 @@ function executable(path: string): boolean {
 }
 
 export function which(command: string): string | null {
-  if (command.includes("/") || command.includes("\\")) {
+  if (command.includes("/") || command.includes("\\"))
     return executable(command) ? command : null;
-  }
 
   const extensions =
     process.platform === "win32" && !extname(command)
       ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";")
       : [""];
   for (const directory of (process.env.PATH ?? "").split(delimiter)) {
-    if (!directory) {
-      continue;
-    }
+    if (!directory) continue;
     for (const extension of extensions) {
       const candidate = join(directory, `${command}${extension}`);
-      if (executable(candidate)) {
-        return candidate;
-      }
+      if (executable(candidate)) return candidate;
     }
   }
   return null;

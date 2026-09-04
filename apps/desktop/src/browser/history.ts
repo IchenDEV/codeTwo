@@ -1,13 +1,11 @@
-import { asJsonObject } from "../lib/jsonValue";
+export const BROWSER_HISTORY_STORAGE_KEY = "codetwo.browser-history:v1";
 
-export const browserHistoryStorageKey = "codetwo.browser-history:v1";
-
-const historyVersion = 1 as const;
-const maxProjects = 24;
-const maxSitesPerProject = 8;
-const maxProjectKeyLength = 4096;
-const maxUrlLength = 2048;
-const maxTitleLength = 120;
+const HISTORY_VERSION = 1 as const;
+const MAX_PROJECTS = 24;
+const MAX_SITES_PER_PROJECT = 8;
+const MAX_PROJECT_KEY_LENGTH = 4096;
+const MAX_URL_LENGTH = 2048;
+const MAX_TITLE_LENGTH = 120;
 
 export interface RecentSite {
   url: string;
@@ -21,48 +19,39 @@ interface ProjectHistory {
 }
 
 export interface BrowserHistoryState {
-  version: typeof historyVersion;
+  version: typeof HISTORY_VERSION;
   projects: ProjectHistory[];
 }
 
 export interface StorageLike {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
 }
 
-export const emptyBrowserHistory: BrowserHistoryState = {
+export const EMPTY_BROWSER_HISTORY: BrowserHistoryState = {
+  version: HISTORY_VERSION,
   projects: [],
-  version: historyVersion,
 };
 
 function cleanProject(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
+  if (typeof value !== "string") return null;
   const project = value.trim();
-  return project && project.length <= maxProjectKeyLength ? project : null;
+  return project && project.length <= MAX_PROJECT_KEY_LENGTH ? project : null;
 }
 
 function cleanTitle(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const title = value.replaceAll(/\s+/gu, " ").trim();
-  if (!title) {
-    return null;
-  }
-  return title.slice(0, maxTitleLength);
+  if (typeof value !== "string") return null;
+  const title = value.replace(/\s+/g, " ").trim();
+  if (!title) return null;
+  return title.slice(0, MAX_TITLE_LENGTH);
 }
 
+/** Keep persisted history navigable and never retain credentials or fragments. */
 export function normalizeHistoryUrl(value: unknown): string | null {
-  if (typeof value !== "string" || value.length > maxUrlLength) {
-    return null;
-  }
+  if (typeof value !== "string" || value.length > MAX_URL_LENGTH) return null;
   try {
     const url = new URL(value);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return null;
-    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     url.username = "";
     url.password = "";
     url.hash = "";
@@ -70,7 +59,7 @@ export function normalizeHistoryUrl(value: unknown): string | null {
       url.hostname = "localhost";
     }
     const normalized = url.toString();
-    return normalized.length <= maxUrlLength ? normalized : null;
+    return normalized.length <= MAX_URL_LENGTH ? normalized : null;
   } catch {
     return null;
   }
@@ -82,67 +71,47 @@ function cleanTimestamp(value: unknown): number | null {
     : null;
 }
 
+/** Re-validate every persisted value so malformed or older data never reaches the Browser UI. */
 export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
-  const root = asJsonObject(value);
-  if (root == null) {
-    return emptyBrowserHistory;
+  if (!value || typeof value !== "object") return EMPTY_BROWSER_HISTORY;
+  if ((value as { version?: unknown }).version !== HISTORY_VERSION) {
+    return EMPTY_BROWSER_HISTORY;
   }
-  if (root.version !== historyVersion) {
-    return emptyBrowserHistory;
-  }
-  const rawProjects = root.projects;
-  if (!Array.isArray(rawProjects)) {
-    return emptyBrowserHistory;
-  }
+  const rawProjects = (value as { projects?: unknown }).projects;
+  if (!Array.isArray(rawProjects)) return EMPTY_BROWSER_HISTORY;
 
   const projects: ProjectHistory[] = [];
   const seenProjects = new Set<string>();
   for (const rawProject of rawProjects) {
-    const projectRecord = asJsonObject(rawProject);
-    if (projectRecord == null) {
+    if (!rawProject || typeof rawProject !== "object") continue;
+    const project = cleanProject((rawProject as { project?: unknown }).project);
+    const rawSites = (rawProject as { sites?: unknown }).sites;
+    if (!project || seenProjects.has(project) || !Array.isArray(rawSites))
       continue;
-    }
-    const project = cleanProject(projectRecord.project);
-    const rawSites = projectRecord.sites;
-    if (
-      project == null ||
-      project === "" ||
-      seenProjects.has(project) ||
-      !Array.isArray(rawSites)
-    ) {
-      continue;
-    }
 
     const sites: RecentSite[] = [];
     const seenUrls = new Set<string>();
     for (const rawSite of rawSites) {
-      const record = asJsonObject(rawSite);
-      if (record == null) {
-        continue;
-      }
+      if (!rawSite || typeof rawSite !== "object") continue;
+      const record = rawSite as {
+        url?: unknown;
+        title?: unknown;
+        last_visited_at?: unknown;
+      };
       const url = normalizeHistoryUrl(record.url);
       const lastVisitedAt = cleanTimestamp(record.last_visited_at);
-      if (
-        url == null ||
-        url === "" ||
-        lastVisitedAt == null ||
-        seenUrls.has(url)
-      ) {
-        continue;
-      }
+      if (!url || !lastVisitedAt || seenUrls.has(url)) continue;
       seenUrls.add(url);
       sites.push({
-        last_visited_at: lastVisitedAt,
-        title: cleanTitle(record.title),
         url,
+        title: cleanTitle(record.title),
+        last_visited_at: lastVisitedAt,
       });
     }
     sites.sort((a, b) => b.last_visited_at - a.last_visited_at);
-    if (sites.length === 0) {
-      continue;
-    }
+    if (sites.length === 0) continue;
     seenProjects.add(project);
-    projects.push({ project, sites: sites.slice(0, maxSitesPerProject) });
+    projects.push({ project, sites: sites.slice(0, MAX_SITES_PER_PROJECT) });
   }
 
   projects.sort(
@@ -150,8 +119,8 @@ export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
       (b.sites[0]?.last_visited_at ?? 0) - (a.sites[0]?.last_visited_at ?? 0)
   );
   return {
-    projects: projects.slice(0, maxProjects),
-    version: historyVersion,
+    version: HISTORY_VERSION,
+    projects: projects.slice(0, MAX_PROJECTS),
   };
 }
 
@@ -160,9 +129,7 @@ export function recentSitesForProject(
   project: string | null | undefined
 ): RecentSite[] {
   const key = cleanProject(project);
-  if (key == null || key === "") {
-    return [];
-  }
+  if (!key) return [];
   return state.projects.find((entry) => entry.project === key)?.sites ?? [];
 }
 
@@ -176,32 +143,24 @@ export function recordBrowserVisit(
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
   const timestamp = cleanTimestamp(visitedAt);
-  if (
-    key == null ||
-    key === "" ||
-    url == null ||
-    url === "" ||
-    timestamp == null
-  ) {
-    return state;
-  }
+  if (!key || !url || !timestamp) return state;
 
   const current = recentSitesForProject(state, key);
   const previous = current.find((site) => site.url === url);
   const site: RecentSite = {
-    last_visited_at: timestamp,
-    title: cleanTitle(rawTitle) ?? previous?.title ?? null,
     url,
+    title: cleanTitle(rawTitle) ?? previous?.title ?? null,
+    last_visited_at: timestamp,
   };
   const sites = [site, ...current.filter((entry) => entry.url !== url)].slice(
     0,
-    maxSitesPerProject
+    MAX_SITES_PER_PROJECT
   );
   const projects = [
     { project: key, sites },
     ...state.projects.filter((entry) => entry.project !== key),
-  ].slice(0, maxProjects);
-  return { projects, version: historyVersion };
+  ].slice(0, MAX_PROJECTS);
+  return { version: HISTORY_VERSION, projects };
 }
 
 export function updateBrowserVisitTitle(
@@ -213,31 +172,18 @@ export function updateBrowserVisitTitle(
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
   const title = cleanTitle(rawTitle);
-  if (
-    key == null ||
-    key === "" ||
-    url == null ||
-    url === "" ||
-    title == null ||
-    title === ""
-  ) {
-    return state;
-  }
-  let isChanged = false;
+  if (!key || !url || !title) return state;
+  let changed = false;
   const projects = state.projects.map((entry) => {
-    if (entry.project !== key) {
-      return entry;
-    }
+    if (entry.project !== key) return entry;
     const sites = entry.sites.map((site) => {
-      if (site.url !== url || site.title === title) {
-        return site;
-      }
-      isChanged = true;
+      if (site.url !== url || site.title === title) return site;
+      changed = true;
       return { ...site, title };
     });
-    return isChanged ? { ...entry, sites } : entry;
+    return changed ? { ...entry, sites } : entry;
   });
-  return isChanged ? { ...state, projects } : state;
+  return changed ? { ...state, projects } : state;
 }
 
 export function removeBrowserVisit(
@@ -247,22 +193,16 @@ export function removeBrowserVisit(
 ): BrowserHistoryState {
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
-  if (key == null || key === "" || url == null || url === "") {
-    return state;
-  }
-  let isChanged = false;
+  if (!key || !url) return state;
+  let changed = false;
   const projects = state.projects.flatMap((entry) => {
-    if (entry.project !== key) {
-      return [entry];
-    }
+    if (entry.project !== key) return [entry];
     const sites = entry.sites.filter((site) => site.url !== url);
-    if (sites.length === entry.sites.length) {
-      return [entry];
-    }
-    isChanged = true;
+    if (sites.length === entry.sites.length) return [entry];
+    changed = true;
     return sites.length > 0 ? [{ ...entry, sites }] : [];
   });
-  return isChanged ? { ...state, projects } : state;
+  return changed ? { ...state, projects } : state;
 }
 
 export function removeBrowserProject(
@@ -270,9 +210,7 @@ export function removeBrowserProject(
   project: string
 ): BrowserHistoryState {
   const key = cleanProject(project);
-  if (key == null || key === "") {
-    return state;
-  }
+  if (!key) return state;
   const projects = state.projects.filter((entry) => entry.project !== key);
   return projects.length === state.projects.length
     ? state
@@ -282,16 +220,14 @@ export function removeBrowserProject(
 export function loadBrowserHistory(
   storage: StorageLike | null | undefined
 ): BrowserHistoryState {
-  if (!storage) {
-    return emptyBrowserHistory;
-  }
+  if (!storage) return EMPTY_BROWSER_HISTORY;
   try {
-    const raw = storage.getItem(browserHistoryStorageKey);
-    return raw != null && raw !== ""
+    const raw = storage.getItem(BROWSER_HISTORY_STORAGE_KEY);
+    return raw
       ? sanitizeBrowserHistory(JSON.parse(raw))
-      : emptyBrowserHistory;
+      : EMPTY_BROWSER_HISTORY;
   } catch {
-    return emptyBrowserHistory;
+    return EMPTY_BROWSER_HISTORY;
   }
 }
 
@@ -299,11 +235,9 @@ export function saveBrowserHistory(
   storage: StorageLike | null | undefined,
   state: BrowserHistoryState
 ): void {
-  if (!storage) {
-    return;
-  }
+  if (!storage) return;
   try {
-    storage.setItem(browserHistoryStorageKey, JSON.stringify(state));
+    storage.setItem(BROWSER_HISTORY_STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Private browsing, a disabled store, or quota pressure must not break navigation.
   }

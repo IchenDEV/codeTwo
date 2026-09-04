@@ -22,15 +22,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { TooltipButton } from "@/components/ui/tooltip";
 
-import { exportSceneSkillMd } from "../bridge";
-import type { ProviderInfo, SkillInfo } from "../bridge";
+import {
+  exportSceneSkillMd,
+  type ProviderInfo,
+  type SkillInfo,
+} from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import { useToast } from "../ui/toast";
-import { sceneTitle } from "./scene";
-import type { SceneInfo } from "./scene";
+import { sceneTitle, type SceneInfo } from "./scene";
 import { SourceBadge } from "./SceneChip";
-import { SceneEditor } from "./SceneEditor";
-import type { SceneEditorRequest } from "./SceneEditor";
+import { SceneEditor, type SceneEditorRequest } from "./SceneEditor";
 
 function SceneCard({
   scene,
@@ -39,24 +40,22 @@ function SceneCard({
   onEdit,
   onDuplicate,
 }: {
-  readonly scene: SceneInfo;
-  readonly active: boolean;
-  readonly onScene: (reference: string) => void;
-  readonly onEdit: (scene: SceneInfo) => void;
-  readonly onDuplicate: (scene: SceneInfo) => void;
+  scene: SceneInfo;
+  active: boolean;
+  onScene: (reference: string) => void;
+  onEdit: (scene: SceneInfo) => void;
+  onDuplicate: (scene: SceneInfo) => void;
 }) {
   const t = useT();
   const { locale } = useLanguage();
   const toast = useToast();
-  const isEditable = scene.source === "user" || scene.source === "project";
+  const editable = scene.source === "user" || scene.source === "project";
   const description =
     scene.localizations[locale]?.description ?? scene.description;
 
   const exportSkill = async () => {
     const markdown = await exportSceneSkillMd(scene.reference);
-    if (markdown === null) {
-      return;
-    }
+    if (markdown === null) return;
     const url = URL.createObjectURL(
       new Blob([markdown], { type: "text/markdown" })
     );
@@ -80,14 +79,14 @@ function SceneCard({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-1.5">
-        {scene.execution?.session_mode ? (
+        {scene.execution?.session_mode && (
           <Badge variant="secondary">
             {t(`mode.${scene.execution.session_mode}` as never)}
           </Badge>
-        ) : null}
-        {scene.has_brief ? (
+        )}
+        {scene.has_brief && (
           <Badge variant="outline">{t("sceneStudio.taskBrief")}</Badge>
-        ) : null}
+        )}
         {scene.artifacts.length > 0 && (
           <Badge variant="outline">
             {t("sceneStudio.outputs", { count: scene.artifacts.length })}
@@ -109,7 +108,7 @@ function SceneCard({
             {t("sceneStudio.use")}
           </Button>
         )}
-        {isEditable ? (
+        {editable && (
           <Button
             type="button"
             size="sm"
@@ -119,7 +118,7 @@ function SceneCard({
             <Pencil data-icon="inline-start" />
             {t("sceneEditor.edit")}
           </Button>
-        ) : null}
+        )}
         <Button
           type="button"
           size="sm"
@@ -157,17 +156,17 @@ export function SceneStudio({
   onDeleted,
   onClose,
 }: {
-  readonly scenes: SceneInfo[];
-  readonly active: SceneInfo | null;
-  readonly request: SceneEditorRequest | null;
-  readonly providers: ProviderInfo[];
-  readonly skills: SkillInfo[];
-  readonly cwd: string;
-  readonly onRequest: (request: SceneEditorRequest | null) => void;
-  readonly onScene: (reference: string) => void;
-  readonly onSaved: (scene: SceneInfo) => void;
-  readonly onDeleted: (reference: string) => void;
-  readonly onClose: () => void;
+  scenes: SceneInfo[];
+  active: SceneInfo | null;
+  request: SceneEditorRequest | null;
+  providers: ProviderInfo[];
+  skills: SkillInfo[];
+  cwd: string;
+  onRequest: (request: SceneEditorRequest | null) => void;
+  onScene: (reference: string) => void;
+  onSaved: (scene: SceneInfo) => void;
+  onDeleted: (reference: string) => void;
+  onClose: () => void;
 }) {
   const t = useT();
   const customScenes = scenes.filter(
@@ -183,9 +182,7 @@ export function SceneStudio({
     description: string,
     items: SceneInfo[]
   ) => {
-    if (items.length === 0) {
-      return null;
-    }
+    if (items.length === 0) return null;
     return (
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
@@ -231,7 +228,7 @@ export function SceneStudio({
         <span className="electrobun-webkit-app-region-drag text-body font-medium">
           {t("sceneStudio.title")}
         </span>
-        {request ? (
+        {request && (
           <>
             <span className="electrobun-webkit-app-region-drag text-muted-foreground/50">
               /
@@ -244,7 +241,7 @@ export function SceneStudio({
                   : t("sceneEditor.createTitle")}
             </span>
           </>
-        ) : null}
+        )}
         <div className="electrobun-webkit-app-region-drag flex-1" />
         {!request && (
           <Button

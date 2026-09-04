@@ -11,21 +11,21 @@ import { formatContextTokens, contextWindowPercentage } from "./contextWindow";
  * Fixed palette for context categories. Color follows the category identity,
  * never its position, so reordering cannot repaint them.
  */
-const categoryColors: Record<string, string> = {
-  conversation: "var(--ds-color-chart-6)",
-  mcp_dynamic_tools: "var(--ds-color-chart-4)",
-  rules: "var(--ds-color-chart-2)",
-  skills: "var(--ds-color-chart-3)",
-  subagent_definitions: "var(--ds-color-chart-5)",
+const CATEGORY_COLORS: Record<string, string> = {
   system_prompt: "var(--ds-color-text-muted)",
   tool_definitions: "var(--ds-color-chart-1)",
+  rules: "var(--ds-color-chart-2)",
+  skills: "var(--ds-color-chart-3)",
+  mcp_dynamic_tools: "var(--ds-color-chart-4)",
+  subagent_definitions: "var(--ds-color-chart-5)",
+  conversation: "var(--ds-color-chart-6)",
 };
 
 function categoryColor(id: string): string {
-  return categoryColors[id] ?? "var(--ds-color-text-muted)";
+  return CATEGORY_COLORS[id] ?? "var(--ds-color-text-muted)";
 }
 
-function CategoryRow({ category }: { readonly category: ContextCategory }) {
+function CategoryRow({ category }: { category: ContextCategory }) {
   const t = useT();
   const key =
     `context.category.${category.id}` as "context.category.system_prompt";
@@ -47,30 +47,30 @@ function CategoryRow({ category }: { readonly category: ContextCategory }) {
   );
 }
 
+/**
+ * A segmented bar that shows how each context category fills the total window.
+ * Each segment's width is proportional to its token count relative to the total capacity.
+ */
 function SegmentedBar({
   categories,
   capacity,
 }: {
-  readonly categories: ContextCategory[];
-  readonly capacity: number;
+  categories: ContextCategory[];
+  capacity: number;
 }) {
-  if (capacity <= 0) {
-    return null;
-  }
+  if (capacity <= 0) return null;
   return (
     <div className="bg-muted/60 flex h-2.5 w-full overflow-hidden rounded-full">
       {categories.map((cat) => {
         const pct = (cat.tokens / capacity) * 100;
-        if (pct < 0.2) {
-          return null;
-        }
+        if (pct < 0.2) return null;
         return (
           <div
             key={cat.id}
             className="h-full transition-[width] duration-(--ds-motion-page)"
             style={{
-              backgroundColor: categoryColor(cat.id),
               width: `${pct}%`,
+              backgroundColor: categoryColor(cat.id),
             }}
           />
         );
@@ -86,16 +86,16 @@ export function ContextBreakdown({
   compactDisabled = false,
   compactDisabledReason = null,
 }: {
-  readonly contextWindow: ContextWindow;
-  readonly onClose: () => void;
-  readonly onCompact?: () => void;
-  readonly compactDisabled?: boolean;
-  readonly compactDisabledReason?: string | null;
+  contextWindow: ContextWindow;
+  onClose: () => void;
+  onCompact?: () => void;
+  compactDisabled?: boolean;
+  compactDisabledReason?: string | null;
 }) {
   const t = useT();
   const percentage = contextWindowPercentage(contextWindow);
-  const percentLabel = percentage === null ? 0 : Math.round(percentage);
-  const { breakdown } = contextWindow;
+  const percentLabel = percentage !== null ? Math.round(percentage) : 0;
+  const breakdown = contextWindow.breakdown;
 
   return (
     <div className="w-80">
@@ -108,8 +108,8 @@ export function ContextBreakdown({
             {t("context.percentFull", { percent: String(percentLabel) })}
             <span className="ml-3">
               {t("context.tokenSummary", {
-                capacity: formatContextTokens(contextWindow.contextWindow),
                 used: formatContextTokens(contextWindow.usedTokens),
+                capacity: formatContextTokens(contextWindow.contextWindow),
               })}
             </span>
           </p>
@@ -180,9 +180,7 @@ export function ContextBreakdown({
             <Minimize2 className="size-3.5" />
             {t("context.compact")}
           </Button>
-          {compactDisabled &&
-          compactDisabledReason != null &&
-          compactDisabledReason !== "" ? (
+          {compactDisabled && compactDisabledReason ? (
             <p className="text-callout text-muted-foreground mt-1.5">
               {compactDisabledReason}
             </p>

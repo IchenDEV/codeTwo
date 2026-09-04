@@ -14,94 +14,91 @@ import {
   isLspLanguage,
   onLspRuntimeEnabled,
   pathToUri,
+  type LspClient,
 } from "./client";
-import type { LspClient } from "./client";
 import { applyDiagnostics, registerProviders } from "./providers";
 
 const synced = new Set<string>();
 const mountedModels = new Map<monaco.editor.ITextModel, string>();
-let isOpenerRegistered = false;
+let openerRegistered = false;
 
-/**
-Where cross-file navigation lands before the target editor exists — consumed on its mount.
-*/
+/** Where cross-file navigation lands before the target editor exists — consumed on its mount. */
 let pendingReveal: {
   absPath: string;
   lineNumber: number;
   column: number;
 } | null = null;
 
-/**
-The current pane's "open this project file" callback — App's tab opener, kept fresh on mount.
-*/
+/** The current pane's "open this project file" callback — App's tab opener, kept fresh on mount. */
 let fileOpener: ((absPath: string) => boolean) | null = null;
 
-export function setFileOpener(isCallback: (absPath: string) => boolean): void {
-  fileOpener = isCallback;
+export function setFileOpener(cb: (absPath: string) => boolean): void {
+  fileOpener = cb;
 }
 
 export function takePendingReveal(
   absPath: string
 ): { lineNumber: number; column: number } | null {
-  if (pendingReveal?.absPath !== absPath) {
-    return null;
-  }
+  if (pendingReveal?.absPath !== absPath) return null;
   const at = pendingReveal;
   pendingReveal = null;
-  return { column: at.column, lineNumber: at.lineNumber };
+  return { lineNumber: at.lineNumber, column: at.column };
 }
 
+/**
+ * Monaco asks this when navigation targets a model it doesn't have — a definition in another
+ * file. Handing the path to the app's tab opener turns "peek failed" into "the file opens, cursor
+ * on the symbol", which is the difference between a code viewer and an IDE.
+ */
 function ensureOpener(): void {
-  if (isOpenerRegistered) {
-    return;
-  }
-  isOpenerRegistered = true;
+  if (openerRegistered) return;
+  openerRegistered = true;
   monaco.editor.registerEditorOpener({
     openCodeEditor: (_source, resource, at) => {
-      if (resource.scheme !== "file" || !fileOpener) {
-        return false;
-      }
+      if (resource.scheme !== "file" || !fileOpener) return false;
       const pos =
         at && "startLineNumber" in at
-          ? { column: at.startColumn, lineNumber: at.startLineNumber }
+          ? { lineNumber: at.startLineNumber, column: at.startColumn }
           : at && "lineNumber" in at
-            ? { column: at.column, lineNumber: at.lineNumber }
-            : { column: 1, lineNumber: 1 };
+            ? { lineNumber: at.lineNumber, column: at.column }
+            : { lineNumber: 1, column: 1 };
       pendingReveal = { absPath: resource.path, ...pos };
-      const isOpened = fileOpener(resource.path);
-      if (!isOpened) {
-        pendingReveal = null;
-      }
-      return isOpened;
+      const opened = fileOpener(resource.path);
+      if (!opened) pendingReveal = null;
+      return opened;
     },
   });
 }
 
+/**
+ * With a real typescript-language-server attached, Monaco's single-file TS worker becomes the
+ * wrong voice in the room — same-named completions, half-informed hovers. Mute its providers and
+ * let the project-aware server speak. (Highlighting is shiki's and unaffected.)
+ */
 function muteBuiltinTs(lang: string): void {
-  if (lang !== "typescript" && lang !== "javascript") {
-    return;
-  }
+  if (lang !== "typescript" && lang !== "javascript") return;
   const defaults =
     lang === "typescript"
       ? monaco.typescript.typescriptDefaults
       : monaco.typescript.javascriptDefaults;
   defaults.setModeConfiguration({
-    codeActions: false,
     completionItems: false,
-    definitions: false,
-    diagnostics: false,
-    documentHighlights: false,
-    documentRangeFormattingEdits: false,
-    documentSymbols: false,
     hovers: false,
-    inlayHints: false,
-    onTypeFormattingEdits: false,
+    documentSymbols: false,
+    definitions: false,
     references: false,
+    documentHighlights: false,
     rename: false,
+    diagnostics: false,
+    documentRangeFormattingEdits: false,
     signatureHelp: false,
+    onTypeFormattingEdits: false,
+    codeActions: false,
+    inlayHints: false,
   });
 }
 
+/** Hook `model` up to its project's language server, if one exists for its language. */
 export async function attachLsp(
   cwd: string,
   model: monaco.editor.ITextModel
@@ -115,13 +112,9 @@ export async function attachLsp(
   }
   mountedModels.set(model, cwd);
   const lang = model.getLanguageId();
-  if (!isLspLanguage(lang)) {
-    return;
-  }
+  if (!isLspLanguage(lang)) return;
   const client = await getClient(cwd, lang);
-  if (!client || model.isDisposed()) {
-    return;
-  }
+  if (!client || model.isDisposed()) return;
 
   registerProviders(lang, client.capabilities);
   muteBuiltinTs(lang);
@@ -136,11 +129,9 @@ export async function attachLsp(
     model.onDidChangeContent(() => {
       const current = clientForPath(model.uri.path, model.getLanguageId());
       if (current) {
-        if (current.isOpen(uri)) {
-          current.scheduleChange(uri, model.getValue());
-        } else {
+        if (!current.isOpen(uri))
           current.didOpen(uri, model.getLanguageId(), model.getValue());
-        }
+        else current.scheduleChange(uri, model.getValue());
       }
     });
   }
@@ -158,14 +149,13 @@ function wireDiagnostics(client: LspClient): void {
   client.onDiagnostics ??= applyDiagnostics;
 }
 
+/** Tell the server the file hit disk — rust-analyzer runs its cargo-check pass on this signal. */
 export function notifySaved(
   cwd: string,
   model: monaco.editor.ITextModel
 ): void {
   const lang = model.getLanguageId();
-  if (!isLspLanguage(lang)) {
-    return;
-  }
+  if (!isLspLanguage(lang)) return;
   void getClient(cwd, lang).then((client) =>
     client?.didSave(pathToUri(model.uri.path))
   );

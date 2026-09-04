@@ -139,7 +139,7 @@ describe("design-system business components", () => {
 
     expect(selected.getAttribute("type")).toBe("button");
     expect(selected.getAttribute("aria-pressed")).toBe("true");
-    expect(selected.dataset.selected).toBe("true");
+    expect(selected.getAttribute("data-selected")).toBe("true");
     const indicator = selected.querySelector(
       '[data-slot="selectable-row-indicator"]'
     );
@@ -159,9 +159,9 @@ describe("design-system business components", () => {
       selected.querySelector('[data-slot="selectable-row-meta"]')?.textContent
     ).toBe("Current");
     expect(describedBy).toHaveLength(3);
-    expect(
-      describedBy.every((id) => dom.document.querySelector(`#${id}`))
-    ).toBe(true);
+    expect(describedBy.every((id) => dom.document.getElementById(id))).toBe(
+      true
+    );
 
     click(selected);
     click(disabled);
@@ -185,7 +185,7 @@ describe("design-system business components", () => {
     const badges = [
       ...view.container.querySelectorAll('[data-slot="status-badge"]'),
     ];
-    expect(badges.map((badge) => badge.dataset.tone)).toEqual([
+    expect(badges.map((badge) => badge.getAttribute("data-tone"))).toEqual([
       "neutral",
       "success",
       "warning",
@@ -289,7 +289,7 @@ describe("design-system business components", () => {
       "100",
       "0",
     ]);
-    expect(meters.map((meter) => meter.dataset.tone)).toEqual([
+    expect(meters.map((meter) => meter.getAttribute("data-tone"))).toEqual([
       "destructive",
       "destructive",
       "warning",
@@ -299,7 +299,7 @@ describe("design-system business components", () => {
       "success",
       "destructive",
     ]);
-    expect(meters[5]?.dataset.density).toBe("rail");
+    expect(meters[5]?.getAttribute("data-density")).toBe("rail");
     expect(meters[5]?.tagName).toBe("SPAN");
     expect(meters[5]?.getAttribute("aria-hidden")).toBe("true");
     expect(meters[5]?.getAttribute("role")).toBeNull();
@@ -316,11 +316,11 @@ describe("design-system business components", () => {
   test("removes the legacy picker row implementations", () => {
     const composer = readFileSync(
       new URL("../src/session/Composer.tsx", import.meta.url),
-      "utf-8"
+      "utf8"
     );
     const sceneChip = readFileSync(
       new URL("../src/session/SceneChip.tsx", import.meta.url),
-      "utf-8"
+      "utf8"
     );
 
     expect(composer).not.toContain("function CheckoutOptionRow");
@@ -332,11 +332,11 @@ describe("design-system business components", () => {
   test("removes the legacy setting-toggle rows", () => {
     const projectAction = readFileSync(
       new URL("../src/session/ProjectActionDialog.tsx", import.meta.url),
-      "utf-8"
+      "utf8"
     );
     const memorySettings = readFileSync(
       new URL("../src/settings/MemorySettings.tsx", import.meta.url),
-      "utf-8"
+      "utf8"
     );
 
     expect(projectAction).not.toContain("function SwitchRow");

@@ -26,7 +26,7 @@ afterEach(() => {
 function disableCanvasDrawing(): void {
   // The suite only verifies the rendered activity contract. Other Canvas tests install a partial
   // 2D context mock, so make the third-party renderer take its supported no-context path here.
-  const { getContext } = dom.HTMLCanvasElement.prototype;
+  const getContext = dom.HTMLCanvasElement.prototype.getContext;
   dom.HTMLCanvasElement.prototype.getContext = () => null;
   restoreCanvasContext = () => {
     dom.HTMLCanvasElement.prototype.getContext = getContext;
@@ -62,7 +62,7 @@ describe("TurnCard rendered activity", () => {
 
     expect(status?.getAttribute("aria-live")).toBe("polite");
     expect(orb?.getAttribute("aria-hidden")).toBe("true");
-    expect(orb?.dataset.activityState).toBe("working");
+    expect(orb?.getAttribute("data-activity-state")).toBe("working");
     expect(orb?.getAttribute("aria-label")).toBe("Working…");
     expect(orb?.style.width).toBe("20px");
     expect(status?.textContent?.trim().length).toBeGreaterThan(0);
@@ -77,7 +77,7 @@ describe("TurnCard rendered activity", () => {
     );
 
     const orb = rendered.container.querySelector('[role="status"] canvas');
-    expect(orb?.dataset.activityState).toBe("solving");
+    expect(orb?.getAttribute("data-activity-state")).toBe("solving");
     expect(orb?.getAttribute("aria-label")).toBe("Solving…");
     rendered.unmount();
   });
@@ -104,8 +104,9 @@ describe("TurnCard rendered activity", () => {
     expect(rendered.container.querySelector('[role="status"]')).toBeNull();
     expect(rendered.container.textContent).toContain("queued #2");
     expect(
-      rendered.container.querySelector('[data-slot="status-badge"]')?.dataset
-        .tone
+      rendered.container
+        .querySelector('[data-slot="status-badge"]')
+        ?.getAttribute("data-tone")
     ).toBe("neutral");
     rendered.unmount();
   });
@@ -124,7 +125,7 @@ describe("TurnCard rendered activity", () => {
     const badge = rendered.container.querySelector(
       '[data-slot="status-badge"]'
     );
-    expect(badge?.dataset.tone).toBe("destructive");
+    expect(badge?.getAttribute("data-tone")).toBe("destructive");
     expect(badge?.textContent).toContain("failed");
     rendered.unmount();
   });
@@ -146,7 +147,7 @@ describe("TurnCard rendered activity", () => {
             task_name: "accessibility_review",
             message: "Check the status announcements.",
           },
-          startedAt: Date.now() - 8000,
+          startedAt: Date.now() - 8_000,
         },
         {
           id: "agent-complete",
@@ -158,7 +159,7 @@ describe("TurnCard rendered activity", () => {
             task_name: "narrow_layout",
             message: "Verify the narrow transcript layout.",
           },
-          startedAt: 1000,
+          startedAt: 1_000,
           endedAt: 17_000,
         },
         {
@@ -171,7 +172,7 @@ describe("TurnCard rendered activity", () => {
             task_name: "renderer_tests",
             message: "Run renderer tests.",
           },
-          startedAt: 2000,
+          startedAt: 2_000,
           endedAt: 13_000,
         },
         {
@@ -318,12 +319,11 @@ describe("TurnCard rendered activity", () => {
     activateDom();
     disableCanvasDrawing();
     // A leaked key-echo i18n mock can render the trigger label as its raw key; accept both.
-    const menuLabels = new Set(["Turn actions", "templateFrom.menu"]);
-    const trigger = (rendered) => {
-      return [...rendered.container.querySelectorAll("button")].find((el) =>
-        menuLabels.has(el.getAttribute("aria-label"))
+    const MENU_LABELS = ["Turn actions", "templateFrom.menu"];
+    const trigger = (rendered) =>
+      [...rendered.container.querySelectorAll("button")].find((el) =>
+        MENU_LABELS.includes(el.getAttribute("aria-label"))
       );
-    };
 
     const without = mount(<TurnCard turn={runningTurn()} />);
     expect(trigger(without)).toBeUndefined();
@@ -361,7 +361,7 @@ describe("TurnCard rendered activity", () => {
     expect(ordered).toHaveLength(3);
     expect(ordered[0].textContent).toContain("Before");
     expect(ordered[0].querySelector("strong")?.textContent).toBe("Before");
-    expect(ordered[1].dataset.toolCall).toBe("tool-1");
+    expect(ordered[1].getAttribute("data-tool-call")).toBe("tool-1");
     expect(ordered[2].textContent).toContain("After");
     rendered.unmount();
   });
@@ -461,15 +461,13 @@ describe("TurnCard rendered activity", () => {
   test("keeps an active tool history open with a bounded Codex-style fade", () => {
     activateDom();
     disableCanvasDrawing();
-    const tools = Array.from({ length: 8 }, (_, index) => {
-      return {
-        id: `tool-${index}`,
-        title:
-          index === 7 ? "Searching current styles" : `Read file ${index + 1}`,
-        status: index === 7 ? "in_progress" : "completed",
-        kind: index === 7 ? "search" : "read",
-      };
-    });
+    const tools = Array.from({ length: 8 }, (_, index) => ({
+      id: `tool-${index}`,
+      title:
+        index === 7 ? "Searching current styles" : `Read file ${index + 1}`,
+      status: index === 7 ? "in_progress" : "completed",
+      kind: index === 7 ? "search" : "read",
+    }));
     const rendered = mount(
       <I18nProvider>
         <TurnCard
@@ -487,7 +485,7 @@ describe("TurnCard rendered activity", () => {
 
     expect(trigger?.getAttribute("aria-expanded")).toBe("true");
     expect(trigger?.textContent).toContain("Searching current styles");
-    expect(history?.dataset.faded).toBe("true");
+    expect(history?.getAttribute("data-faded")).toBe("true");
     expect(history?.classList.contains("tool-call-history--faded")).toBe(true);
     expect(history?.querySelectorAll("[data-tool-call]")).toHaveLength(7);
     rendered.unmount();

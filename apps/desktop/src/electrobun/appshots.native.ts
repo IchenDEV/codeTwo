@@ -1,12 +1,10 @@
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { join } from "node:path";
 
-import { assertIpcResult } from "../lib/ipcResult";
-
 const libraryName = "libCodeTwoWindowEffects.dylib";
 const resultBufferSize = 1024 * 1024;
 
-interface NativeCaptureResult {
+type NativeCaptureResult = {
   ok: boolean;
   code?: string;
   message?: string;
@@ -16,7 +14,7 @@ interface NativeCaptureResult {
   text_truncated?: boolean;
   width?: number;
   height?: number;
-}
+};
 
 let nativeAppshots:
   | ReturnType<
@@ -48,29 +46,25 @@ let nativeAppshots:
   | undefined;
 
 function library() {
-  if (process.platform !== "darwin") {
-    return null;
-  }
-  if (nativeAppshots !== undefined) {
-    return nativeAppshots;
-  }
+  if (process.platform !== "darwin") return null;
+  if (nativeAppshots !== undefined) return nativeAppshots;
   try {
     nativeAppshots = dlopen(join(process.cwd(), libraryName), {
       codetwoAppshotPermissionStatus: {
         args: [],
         returns: FFIType.u32,
       },
-      codetwoCaptureAppshot: {
-        args: [FFIType.cstring, FFIType.cstring, FFIType.ptr, FFIType.u32],
-        returns: FFIType.i32,
+      codetwoRequestAppshotPermissions: {
+        args: [FFIType.u32],
+        returns: FFIType.u32,
       },
       codetwoCommandKeyState: {
         args: [],
         returns: FFIType.u32,
       },
-      codetwoRequestAppshotPermissions: {
-        args: [FFIType.u32],
-        returns: FFIType.u32,
+      codetwoCaptureAppshot: {
+        args: [FFIType.cstring, FFIType.cstring, FFIType.ptr, FFIType.u32],
+        returns: FFIType.i32,
       },
     });
   } catch (error) {
@@ -80,17 +74,17 @@ function library() {
   return nativeAppshots;
 }
 
-export interface MacOSAppshotPermissions {
+export type MacOSAppshotPermissions = {
   available: boolean;
   screenRecording: boolean;
   accessibility: boolean;
-}
+};
 
 function permissionsFromBits(bits: number): MacOSAppshotPermissions {
   return {
+    screenRecording: (bits & 1) !== 0,
     accessibility: (bits & 2) !== 0,
     available: (bits & 4) !== 0,
-    screenRecording: (bits & 1) !== 0,
   };
 }
 
@@ -98,7 +92,7 @@ export function macOSAppshotPermissions(): MacOSAppshotPermissions {
   const loaded = library();
   return loaded
     ? permissionsFromBits(loaded.symbols.codetwoAppshotPermissionStatus())
-    : { accessibility: false, available: false, screenRecording: false };
+    : { available: false, screenRecording: false, accessibility: false };
 }
 
 export function requestMacOSAppshotPermissions(
@@ -110,7 +104,7 @@ export function requestMacOSAppshotPermissions(
     ? permissionsFromBits(
         loaded.symbols.codetwoRequestAppshotPermissions(requestedPermissions)
       )
-    : { accessibility: false, available: false, screenRecording: false };
+    : { available: false, screenRecording: false, accessibility: false };
 }
 
 export function macOSCommandKeyState(): number {
@@ -124,9 +118,9 @@ export function captureMacOSAppshot(
   const loaded = library();
   if (!loaded) {
     return {
+      ok: false,
       code: "unsupported",
       message: "Appshots are available on macOS only.",
-      ok: false,
     };
   }
 
@@ -141,18 +135,18 @@ export function captureMacOSAppshot(
   );
   const length = buffer.indexOf(0);
   const json = Buffer.from(
-    buffer.subarray(0, length === -1 ? buffer.length : length)
-  ).toString("utf-8");
+    buffer.subarray(0, length >= 0 ? length : buffer.length)
+  ).toString("utf8");
   try {
-    return assertIpcResult<NativeCaptureResult>(JSON.parse(json) as unknown);
+    return JSON.parse(json) as NativeCaptureResult;
   } catch {
     return {
+      ok: false,
       code: "native_failure",
       message:
         status === 0
           ? "The Appshot helper returned an unreadable result."
           : `Appshot capture failed (${status}).`,
-      ok: false,
     };
   }
 }

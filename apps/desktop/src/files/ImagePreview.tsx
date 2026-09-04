@@ -7,22 +7,23 @@ import { useT } from "../i18n";
 import { imageTypeOf } from "./imageTypes";
 
 function prettySize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function ImagePreview({
-  cwd,
-  path,
-}: {
-  readonly cwd: string;
-  readonly path: string;
-}) {
+/**
+ * An image file, shown as the image.
+ *
+ * The text path can't serve these: `read_text` refuses anything with a NUL byte in the first block,
+ * which is every PNG ever written, so a picture used to open as the word "binary file". The bytes
+ * come over the sidecar JSON protocol and become a blob URL — a `data:` URI would mean base64'ing
+ * the same bytes again for no benefit.
+ *
+ * Checkerboard behind the image, because transparent PNGs are most of what a UI project contains
+ * and "white logo on white pane" looks like a failed load.
+ */
+export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [size, setSize] = useState(0);
@@ -30,7 +31,7 @@ export function ImagePreview({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let isAlive = true;
+    let alive = true;
     let objectUrl: string | null = null;
     setUrl(null);
     setDims(null);
@@ -38,9 +39,7 @@ export function ImagePreview({
 
     readBinary(cwd, path)
       .then((bytes) => {
-        if (!isAlive) {
-          return;
-        }
+        if (!alive) return;
         const type = imageTypeOf(path) ?? "application/octet-stream";
         // Copy into a fresh ArrayBuffer: the IPC buffer may be a view into a larger one.
         objectUrl = URL.createObjectURL(
@@ -49,22 +48,19 @@ export function ImagePreview({
         setSize(bytes.byteLength);
         setUrl(objectUrl);
       })
-      .catch((error) => isAlive && setError(String(error)));
+      .catch((e) => alive && setError(String(e)));
 
     return () => {
-      isAlive = false;
+      alive = false;
       // Revoking is what actually frees the bytes; without it every tab switch leaks the file.
-      if (objectUrl != null && objectUrl !== "") {
-        URL.revokeObjectURL(objectUrl);
-      }
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [cwd, path]);
 
-  if (error != null && error !== "") {
+  if (error)
     return <p className="text-body text-destructive px-6 py-4">{error}</p>;
-  }
 
-  if (url == null || url === "") {
+  if (!url) {
     return (
       <p className="text-body text-muted-foreground flex items-center gap-2 px-6 py-4">
         <Spinner className="size-3.5" />
@@ -81,8 +77,8 @@ export function ImagePreview({
           alt={path}
           onLoad={(e) =>
             setDims({
-              h: e.currentTarget.naturalHeight,
               w: e.currentTarget.naturalWidth,
+              h: e.currentTarget.naturalHeight,
             })
           }
           onError={() => setError(t("files.imageFailed"))}
@@ -90,11 +86,11 @@ export function ImagePreview({
         />
       </div>
       <div className="text-callout text-muted-foreground flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5">
-        {dims ? (
+        {dims && (
           <span>
             {dims.w} × {dims.h}
           </span>
-        ) : null}
+        )}
         <span>{prettySize(size)}</span>
       </div>
     </div>

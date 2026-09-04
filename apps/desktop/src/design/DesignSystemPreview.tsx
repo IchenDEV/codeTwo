@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { applyAppearanceSettings, useAppearanceSettings } from "@/appearance";
 import { ChoiceRow } from "@/components/business/choice-row";
@@ -160,10 +165,10 @@ function ThemeChoice({
   label,
   onClick,
 }: {
-  readonly active: boolean;
-  readonly children: ReactNode;
-  readonly label: string;
-  readonly onClick: () => void;
+  active: boolean;
+  children: ReactNode;
+  label: string;
+  onClick: () => void;
 }) {
   return (
     <Button
@@ -185,8 +190,8 @@ function SectionHeading({
   eyebrow,
   title,
 }: {
-  readonly eyebrow: string;
-  readonly title: string;
+  eyebrow: string;
+  title: string;
 }) {
   return (
     <header className="ds-section-heading">
@@ -196,11 +201,17 @@ function SectionHeading({
   );
 }
 
-export function DesignSystemPreview() {
+export function DesignSystemPreview({
+  catalogHref = "?ui-lab=home",
+  initialThemeMode = "system",
+}: {
+  catalogHref?: string;
+  initialThemeMode?: ThemeMode;
+}) {
   const toast = useToast();
-  const isSystemDark = useSystemDark();
+  const systemDark = useSystemDark();
   const appearance = useAppearanceSettings();
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [themeMode, setThemeMode] = useState<ThemeMode>(initialThemeMode);
   const [boldText, setBoldText] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState("codex");
   const [selectedChoice, setSelectedChoice] = useState("automatic");
@@ -209,18 +220,18 @@ export function DesignSystemPreview() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [invalidValue, setInvalidValue] = useState("Missing token");
   const resolvedTheme =
-    themeMode === "system" ? (isSystemDark ? "dark" : "light") : themeMode;
+    themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
 
   useEffect(() => {
     const root = document.documentElement;
-    const previousTheme = root.dataset.dsTheme;
+    const previousTheme = root.getAttribute("data-ds-theme");
     const wasDark = root.classList.contains("dark");
     const previousColorScheme = root.style.colorScheme;
     const previewStyle = document.createElement("div");
 
     applyAppearanceSettings(previewStyle, appearance, resolvedTheme);
     const previousAppearance = new Map(
-      [...previewStyle.style].map((name) => [
+      Array.from(previewStyle.style).map((name) => [
         name,
         {
           priority: root.style.getPropertyPriority(name),
@@ -229,7 +240,7 @@ export function DesignSystemPreview() {
       ])
     );
 
-    root.dataset.dsTheme = resolvedTheme;
+    root.setAttribute("data-ds-theme", resolvedTheme);
     root.classList.toggle("dark", resolvedTheme === "dark");
     root.style.colorScheme = resolvedTheme;
     for (const name of previewStyle.style) {
@@ -242,27 +253,26 @@ export function DesignSystemPreview() {
 
     return () => {
       for (const [name, previous] of previousAppearance) {
-        if (previous.value) {
+        if (previous.value)
           root.style.setProperty(name, previous.value, previous.priority);
-        } else {
-          root.style.removeProperty(name);
-        }
+        else root.style.removeProperty(name);
       }
       root.style.colorScheme = previousColorScheme;
-      if (previousTheme === null) {
-        delete root.dataset.dsTheme;
-      } else {
-        root.dataset.dsTheme = previousTheme;
-      }
+      if (previousTheme === null) root.removeAttribute("data-ds-theme");
+      else root.setAttribute("data-ds-theme", previousTheme);
       root.classList.toggle("dark", wasDark);
     };
   }, [appearance, resolvedTheme]);
 
-  const swatches = colorTokens.map(([label, token]) => ({
-    label,
-    style: { "--ds-preview-swatch": `var(${token})` } as CSSProperties,
-    token,
-  }));
+  const swatches = useMemo(
+    () =>
+      colorTokens.map(([label, token]) => ({
+        label,
+        token,
+        style: { "--ds-preview-swatch": `var(${token})` } as CSSProperties,
+      })),
+    []
+  );
 
   return (
     <div
@@ -271,6 +281,9 @@ export function DesignSystemPreview() {
       data-ds-theme={resolvedTheme}
     >
       <aside className="ds-preview-sidebar">
+        <a className="ds-lab-link" href={catalogHref}>
+          ← UI Lab
+        </a>
         <div className="ds-brand-lockup">
           <span className="ds-brand-mark">C2</span>
           <div>
@@ -562,9 +575,7 @@ export function DesignSystemPreview() {
                 <span className="ds-specimen-label">Rows & status</span>
                 <Select
                   value={selectedProvider}
-                  onValueChange={(value) =>
-                    value != null && value !== "" && setSelectedProvider(value)
-                  }
+                  onValueChange={(value) => value && setSelectedProvider(value)}
                 >
                   <SelectTrigger
                     aria-label="Current provider"
@@ -651,13 +662,13 @@ export function DesignSystemPreview() {
                   label="Provider view"
                   value={selectedBusinessView}
                   options={[
-                    { count: 4, label: "All", value: "all" },
-                    { count: 2, label: "Ready", value: "ready" },
+                    { value: "all", label: "All", count: 4 },
+                    { value: "ready", label: "Ready", count: 2 },
                     {
+                      value: "blocked",
+                      label: "Blocked",
                       count: 1,
                       disabled: true,
-                      label: "Blocked",
-                      value: "blocked",
                     },
                   ]}
                   onValueChange={setSelectedBusinessView}

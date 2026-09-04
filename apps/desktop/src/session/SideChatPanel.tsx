@@ -1,5 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { ArrowUp, MessageSquare, Plus, Square, X } from "@/components/ui/icons";
 
@@ -14,16 +21,15 @@ import {
   setModel,
   setSessionMemoryPolicy,
   submitPrompt,
-} from "../bridge";
-import type {
-  AppshotCapture,
-  ConfigOptionInfo,
-  CoreEvent,
-  DocumentBlock,
-  ModelChoice,
-  PermissionMode,
-  ProviderInfo,
-  Sandbox,
+  type AppshotCapture,
+  type ConfigOptionInfo,
+  type CoreEvent,
+  type DocBlock,
+  type ModelChoice,
+  type MemoryAccess,
+  type PermissionMode,
+  type ProviderInfo,
+  type Sandbox,
 } from "../bridge";
 import { ActivityOrb } from "../components/ui/activity-orb";
 import { Button } from "../components/ui/button";
@@ -33,11 +39,9 @@ import { cn } from "../lib/utils";
 import { VoiceButton } from "../voice/VoiceButton";
 import { ModelPicker, SessionModePicker } from "./Composer";
 import type { BuiltinLinkActions } from "./MarkdownContent";
-import { sessionModes } from "./mode";
-import type { SessionMode } from "./mode";
+import { SESSION_MODES, type SessionMode } from "./mode";
 import { TurnCard } from "./TurnCard";
-import { applyEvent, newTurn } from "./turns";
-import type { Turn } from "./turns";
+import { applyEvent, newTurn, type Turn } from "./turns";
 
 export interface TransientChatSeed {
   id: string;
@@ -45,6 +49,12 @@ export interface TransientChatSeed {
 }
 
 export type SideChatSeed = TransientChatSeed;
+
+export function transientMemoryPolicy(
+  provider: string
+): [MemoryAccess, MemoryAccess] {
+  return provider === "codex" ? ["allow", "deny"] : ["inherit", "deny"];
+}
 
 interface TransientChatTab {
   localId: string;
@@ -69,7 +79,7 @@ interface TransientChatTab {
 
 interface PendingCreation {
   tabId: string;
-  doc: DocumentBlock[];
+  doc: DocBlock[];
   attachments: AppshotCapture[];
   promptRequestId: string;
 }
@@ -88,7 +98,7 @@ interface ActivePanelMove {
   height: number;
 }
 
-const quickChatViewportInset = 8;
+const QUICK_CHAT_VIEWPORT_INSET = 8;
 
 let localTabSequence = 0;
 
@@ -117,34 +127,34 @@ function makeTab({
   idPrefix: "quick-chat" | "side-chat";
 }): TransientChatTab {
   return {
-    attaching: false,
-    attachments: [],
-    configOptions: [],
-    controlError: null,
-    creationRequestId: null,
-    currentModel: model,
-    cwd,
-    defaultModel: model,
-    draft,
     localId: localId(idPrefix),
-    mode,
-    models,
-    provider,
-    running: false,
-    sandbox,
-    sessionId: null,
     title: null,
+    draft,
+    sessionId: null,
+    creationRequestId: null,
     turns: [],
+    running: false,
+    models,
+    currentModel: model,
+    defaultModel: model,
+    configOptions: [],
+    provider,
+    cwd,
+    mode,
+    sandbox,
+    controlError: null,
+    attachments: [],
+    attaching: false,
   };
 }
 
-function privateImageBlock(capture: AppshotCapture): DocumentBlock {
+function privateImageBlock(capture: AppshotCapture): DocBlock {
   return capture.kind === "attachment"
-    ? { id: capture.id, name: capture.window_title, type: "attachment" }
-    : { id: capture.id, title: capture.window_title, type: "appshot" };
+    ? { type: "attachment", id: capture.id, name: capture.window_title }
+    : { type: "appshot", id: capture.id, title: capture.window_title };
 }
 
-const turnEvents = new Set<CoreEvent["event"]>([
+const TURN_EVENTS = new Set<CoreEvent["event"]>([
   "memory_context",
   "turn_started",
   "agent_text",
@@ -156,18 +166,18 @@ const turnEvents = new Set<CoreEvent["event"]>([
 ]);
 
 interface TransientChatPanelProps {
-  readonly open: boolean;
-  readonly onClose: () => void;
-  readonly provider: string;
-  readonly providers: ProviderInfo[];
-  readonly cwd: string;
-  readonly model: string | null;
-  readonly mode: PermissionMode;
-  readonly sandbox: Sandbox;
-  readonly seed: TransientChatSeed | null;
-  readonly onSeedHandled: (id: string) => void;
-  readonly linkActions?: BuiltinLinkActions;
-  readonly voiceEnabled?: boolean;
+  open: boolean;
+  onClose: () => void;
+  provider: string;
+  providers: ProviderInfo[];
+  cwd: string;
+  model: string | null;
+  mode: PermissionMode;
+  sandbox: Sandbox;
+  seed: TransientChatSeed | null;
+  onSeedHandled: (id: string) => void;
+  linkActions?: BuiltinLinkActions;
+  voiceEnabled?: boolean;
 }
 
 export function QuickChatPanel(props: TransientChatPanelProps) {
@@ -192,28 +202,28 @@ function TransientChatPanel({
   linkActions,
   voiceEnabled = true,
   surface,
-}: TransientChatPanelProps & { readonly surface: "quick" | "side" }) {
+}: TransientChatPanelProps & { surface: "quick" | "side" }) {
   const t = useT();
-  const isFloating = surface === "quick";
+  const floating = surface === "quick";
   const labels =
     surface === "quick"
       ? {
+          title: "quickChat.title" as const,
+          new: "quickChat.new" as const,
           closeTab: "quickChat.closeTab" as const,
           hide: "quickChat.hide" as const,
-          new: "quickChat.new" as const,
+          temporary: "quickChat.temporary" as const,
           placeholder: "quickChat.placeholder" as const,
           send: "quickChat.send" as const,
-          temporary: "quickChat.temporary" as const,
-          title: "quickChat.title" as const,
         }
       : {
+          title: "sideChat.title" as const,
+          new: "sideChat.new" as const,
           closeTab: "sideChat.closeTab" as const,
           hide: "sideChat.hide" as const,
-          new: "sideChat.new" as const,
+          temporary: "sideChat.temporary" as const,
           placeholder: "sideChat.placeholder" as const,
           send: "sideChat.send" as const,
-          temporary: "sideChat.temporary" as const,
-          title: "sideChat.title" as const,
         };
   const [tabs, setTabs] = useState<TransientChatTab[]>([]);
   const tabsRef = useRef(tabs);
@@ -227,122 +237,118 @@ function TransientChatPanel({
   const panelOffsetRef = useRef<PanelOffset>({ x: 0, y: 0 });
   const activePanelMoveRef = useRef<ActivePanelMove | null>(null);
 
-  const clampPanelOffset = (
-    offset: PanelOffset,
-    width: number,
-    height: number
-  ): PanelOffset => {
-    const centeredLeft = (window.innerWidth - width) / 2;
-    const centeredTop = (window.innerHeight - height) / 2;
-    const minX = quickChatViewportInset - centeredLeft;
-    const maxX =
-      window.innerWidth - width - quickChatViewportInset - centeredLeft;
-    const minY = quickChatViewportInset - centeredTop;
-    const maxY =
-      window.innerHeight - height - quickChatViewportInset - centeredTop;
-    return {
-      x: Math.round(
-        Math.min(Math.max(minX, maxX), Math.max(Math.min(minX, maxX), offset.x))
-      ),
-      y: Math.round(
-        Math.min(Math.max(minY, maxY), Math.max(Math.min(minY, maxY), offset.y))
-      ),
-    };
-  };
+  const clampPanelOffset = useCallback(
+    (offset: PanelOffset, width: number, height: number): PanelOffset => {
+      const centeredLeft = (window.innerWidth - width) / 2;
+      const centeredTop = (window.innerHeight - height) / 2;
+      const minX = QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
+      const maxX =
+        window.innerWidth - width - QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
+      const minY = QUICK_CHAT_VIEWPORT_INSET - centeredTop;
+      const maxY =
+        window.innerHeight - height - QUICK_CHAT_VIEWPORT_INSET - centeredTop;
+      return {
+        x: Math.round(
+          Math.min(
+            Math.max(minX, maxX),
+            Math.max(Math.min(minX, maxX), offset.x)
+          )
+        ),
+        y: Math.round(
+          Math.min(
+            Math.max(minY, maxY),
+            Math.max(Math.min(minY, maxY), offset.y)
+          )
+        ),
+      };
+    },
+    []
+  );
 
-  const applyPanelOffset = (offset: PanelOffset) => {
+  const applyPanelOffset = useCallback((offset: PanelOffset) => {
     panelOffsetRef.current = offset;
     const panel = panelRef.current;
-    if (!panel) {
-      return;
-    }
+    if (!panel) return;
     panel.style.setProperty("--quick-chat-offset-x", `${offset.x}px`);
     panel.style.setProperty("--quick-chat-offset-y", `${offset.y}px`);
-  };
+  }, []);
 
-  const finishPanelMove = (header: HTMLElement, pointerId: number) => {
-    const active = activePanelMoveRef.current;
-    if (!active || active.pointerId !== pointerId) {
-      return;
-    }
-    activePanelMoveRef.current = null;
-    document.body.classList.remove("moving-quick-chat");
-    panelRef.current?.removeAttribute("data-moving");
-    if (header.hasPointerCapture(pointerId)) {
-      header.releasePointerCapture(pointerId);
-    }
-  };
+  const finishPanelMove = useCallback(
+    (header: HTMLElement, pointerId: number) => {
+      const active = activePanelMoveRef.current;
+      if (!active || active.pointerId !== pointerId) return;
+      activePanelMoveRef.current = null;
+      document.body.classList.remove("moving-quick-chat");
+      panelRef.current?.removeAttribute("data-moving");
+      if (header.hasPointerCapture(pointerId))
+        header.releasePointerCapture(pointerId);
+    },
+    []
+  );
 
-  const onPanelPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!isFloating || event.button !== 0 || activePanelMoveRef.current) {
-      return;
-    }
-    const target = event.target as Element;
-    if (target.closest("button, a, input, textarea, select, [role='tab']")) {
-      return;
-    }
-    const panel = panelRef.current;
-    if (!panel) {
-      return;
-    }
-    const rect = panel.getBoundingClientRect();
-    event.preventDefault();
-    activePanelMoveRef.current = {
-      height: rect.height,
-      pointerId: event.pointerId,
-      startOffset: panelOffsetRef.current,
-      startX: event.clientX,
-      startY: event.clientY,
-      width: rect.width,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    document.body.classList.add("moving-quick-chat");
-    panel.setAttribute("data-moving", "");
-  };
+  const onPanelPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      if (!floating || event.button !== 0 || activePanelMoveRef.current) return;
+      const target = event.target as Element;
+      if (target.closest("button, a, input, textarea, select, [role='tab']"))
+        return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const rect = panel.getBoundingClientRect();
+      event.preventDefault();
+      activePanelMoveRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startOffset: panelOffsetRef.current,
+        width: rect.width,
+        height: rect.height,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      document.body.classList.add("moving-quick-chat");
+      panel.setAttribute("data-moving", "");
+    },
+    [floating]
+  );
 
-  const onPanelPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    const active = activePanelMoveRef.current;
-    if (!active || active.pointerId !== event.pointerId) {
-      return;
-    }
-    applyPanelOffset(
-      clampPanelOffset(
-        {
-          x: active.startOffset.x + event.clientX - active.startX,
-          y: active.startOffset.y + event.clientY - active.startY,
-        },
-        active.width,
-        active.height
-      )
-    );
-  };
+  const onPanelPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const active = activePanelMoveRef.current;
+      if (!active || active.pointerId !== event.pointerId) return;
+      applyPanelOffset(
+        clampPanelOffset(
+          {
+            x: active.startOffset.x + event.clientX - active.startX,
+            y: active.startOffset.y + event.clientY - active.startY,
+          },
+          active.width,
+          active.height
+        )
+      );
+    },
+    [applyPanelOffset, clampPanelOffset]
+  );
 
   useEffect(() => {
-    if (!isFloating) {
-      return;
-    }
+    if (!floating) return;
     const keepPanelVisible = () => {
       const rect = panelRef.current?.getBoundingClientRect();
-      if (!rect) {
-        return;
-      }
+      if (!rect) return;
       applyPanelOffset(
         clampPanelOffset(panelOffsetRef.current, rect.width, rect.height)
       );
     };
     window.addEventListener("resize", keepPanelVisible);
     return () => window.removeEventListener("resize", keepPanelVisible);
-  }, [applyPanelOffset, clampPanelOffset, isFloating]);
+  }, [applyPanelOffset, clampPanelOffset, floating]);
 
   useEffect(() => {
-    if (!isFloating) {
-      return;
-    }
+    if (!floating) return;
     return () => {
       activePanelMoveRef.current = null;
       document.body.classList.remove("moving-quick-chat");
     };
-  }, [isFloating]);
+  }, [floating]);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -350,55 +356,50 @@ function TransientChatPanel({
 
   useEffect(() => {
     const panel = panelRef.current;
-    if (!panel) {
-      return;
-    }
-    if (open) {
-      panel.removeAttribute("inert");
-    } else {
-      panel.setAttribute("inert", "");
-    }
+    if (!panel) return;
+    if (open) panel.removeAttribute("inert");
+    else panel.setAttribute("inert", "");
   }, [open]);
 
-  const providerModels = (providerId: string) => {
-    const advertised =
-      providers.find((candidate) => candidate.id === providerId)?.models ?? [];
-    if (
-      advertised.length > 0 ||
-      providerId !== provider ||
-      model == null ||
-      model === ""
-    ) {
-      return advertised;
-    }
-    return [{ description: null, id: model, name: model }];
-  };
+  const providerModels = useCallback(
+    (providerId: string) => {
+      const advertised =
+        providers.find((candidate) => candidate.id === providerId)?.models ??
+        [];
+      if (advertised.length > 0 || providerId !== provider || !model)
+        return advertised;
+      return [{ id: model, name: model, description: null }];
+    },
+    [model, provider, providers]
+  );
 
-  const createLocalTab = (draft = "", isReplaceExisting = false) => {
-    const tab = makeTab({
-      cwd: cwd || ".",
-      draft,
-      idPrefix: surface === "quick" ? "quick-chat" : "side-chat",
-      mode,
-      model,
-      models: providerModels(provider),
-      provider,
-      sandbox,
-    });
-    const previous = tabsRef.current;
-    const next = isReplaceExisting ? [tab] : [...previous, tab];
-    tabsRef.current = next;
-    setTabs(next);
-    setActiveTabId(tab.localId);
-    if (isReplaceExisting) {
-      for (const existing of previous) {
-        if (existing.sessionId != null && existing.sessionId !== "") {
-          void closeTransientSession(existing.sessionId);
+  const createLocalTab = useCallback(
+    (draft = "", replaceExisting = false) => {
+      const tab = makeTab({
+        provider,
+        cwd: cwd || ".",
+        model,
+        mode,
+        sandbox,
+        models: providerModels(provider),
+        draft,
+        idPrefix: surface === "quick" ? "quick-chat" : "side-chat",
+      });
+      const previous = tabsRef.current;
+      const next = replaceExisting ? [tab] : [...previous, tab];
+      tabsRef.current = next;
+      setTabs(next);
+      setActiveTabId(tab.localId);
+      if (replaceExisting) {
+        for (const existing of previous) {
+          if (existing.sessionId)
+            void closeTransientSession(existing.sessionId);
         }
       }
-    }
-    return tab.localId;
-  };
+      return tab.localId;
+    },
+    [cwd, mode, model, provider, providerModels, sandbox, surface]
+  );
 
   useEffect(() => {
     if (!open) {
@@ -409,9 +410,7 @@ function TransientChatPanel({
       initialTabPendingRef.current = false;
       return;
     }
-    if (seed || initialTabPendingRef.current) {
-      return;
-    }
+    if (seed || initialTabPendingRef.current) return;
     initialTabPendingRef.current = true;
     createLocalTab();
   }, [createLocalTab, open, seed, tabs.length]);
@@ -427,9 +426,7 @@ function TransientChatPanel({
   }, [providerModels]);
 
   useEffect(() => {
-    if (!seed || handledSeedsRef.current.has(seed.id)) {
-      return;
-    }
+    if (!seed || handledSeedsRef.current.has(seed.id)) return;
     handledSeedsRef.current.add(seed.id);
     const active = tabsRef.current.find((tab) => tab.localId === activeTabId);
     if (
@@ -450,48 +447,45 @@ function TransientChatPanel({
     onSeedHandled(seed.id);
   }, [activeTabId, createLocalTab, onSeedHandled, seed, surface]);
 
-  const updateTab = (
-    tabId: string,
-    update: (tab: TransientChatTab) => TransientChatTab
-  ) => {
-    setTabs((current) =>
-      current.map((tab) => (tab.localId === tabId ? update(tab) : tab))
-    );
-  };
+  const updateTab = useCallback(
+    (tabId: string, update: (tab: TransientChatTab) => TransientChatTab) => {
+      setTabs((current) =>
+        current.map((tab) => (tab.localId === tabId ? update(tab) : tab))
+      );
+    },
+    []
+  );
 
-  const failPrompt = (
-    tabId: string,
-    requestId: string,
-    message: string,
-    attachments: AppshotCapture[] = []
-  ) => {
-    updateTab(tabId, (tab) => ({
-      ...tab,
-      attachments: tab.attachments.length > 0 ? tab.attachments : attachments,
-      creationRequestId: null,
-      running: false,
-      turns: applyEvent(tab.turns, {
-        event: "error",
-        message,
-        request_id: requestId,
-        session: tab.sessionId,
-        terminal: true,
-      }),
-    }));
-  };
+  const failPrompt = useCallback(
+    (
+      tabId: string,
+      requestId: string,
+      message: string,
+      attachments: AppshotCapture[] = []
+    ) => {
+      updateTab(tabId, (tab) => ({
+        ...tab,
+        running: false,
+        creationRequestId: null,
+        attachments: tab.attachments.length > 0 ? tab.attachments : attachments,
+        turns: applyEvent(tab.turns, {
+          event: "error",
+          session: tab.sessionId,
+          message,
+          terminal: true,
+          request_id: requestId,
+        }),
+      }));
+    },
+    [updateTab]
+  );
 
   useEffect(() => {
-    let isDisposed = false;
+    let disposed = false;
     const subscription = onEngineEvent((event) => {
-      if (
-        event.event === "session_created" &&
-        event.request_id != null &&
-        event.request_id !== ""
-      ) {
+      if (event.event === "session_created" && event.request_id) {
         const pending = pendingCreationsRef.current.get(event.request_id);
-        if (!pending) {
-          return;
-        }
+        if (!pending) return;
         pendingCreationsRef.current.delete(event.request_id);
         const tab = tabsRef.current.find(
           (candidate) => candidate.localId === pending.tabId
@@ -503,13 +497,14 @@ function TransientChatPanel({
 
         updateTab(pending.tabId, (current) => ({
           ...current,
-          creationRequestId: null,
           sessionId: event.session,
+          creationRequestId: null,
         }));
         void (async () => {
           // Transient chat can use project memory for context, but app-lifetime conversations never
           // write durable memories of their own.
-          await setSessionMemoryPolicy(event.session, "inherit", "deny");
+          const [memoryRead, memoryWrite] = transientMemoryPolicy(tab.provider);
+          await setSessionMemoryPolicy(event.session, memoryRead, memoryWrite);
           if (
             !tabsRef.current.some(
               (candidate) => candidate.localId === pending.tabId
@@ -537,13 +532,10 @@ function TransientChatPanel({
       if (
         event.event === "error" &&
         event.session === null &&
-        event.request_id != null &&
-        event.request_id !== ""
+        event.request_id
       ) {
         const pending = pendingCreationsRef.current.get(event.request_id);
-        if (!pending) {
-          return;
-        }
+        if (!pending) return;
         pendingCreationsRef.current.delete(event.request_id);
         failPrompt(
           pending.tabId,
@@ -554,15 +546,11 @@ function TransientChatPanel({
         return;
       }
 
-      if (event.session === null) {
-        return;
-      }
+      if (event.session === null) return;
       const tab = tabsRef.current.find(
         (candidate) => candidate.sessionId === event.session
       );
-      if (!tab) {
-        return;
-      }
+      if (!tab) return;
 
       if (event.event === "session_title_changed") {
         updateTab(tab.localId, (current) => ({
@@ -574,9 +562,9 @@ function TransientChatPanel({
       if (event.event === "models") {
         updateTab(tab.localId, (current) => ({
           ...current,
+          models: event.available.length > 0 ? event.available : current.models,
           currentModel: event.current || current.currentModel,
           defaultModel: current.defaultModel ?? event.current ?? null,
-          models: event.available.length > 0 ? event.available : current.models,
         }));
         return;
       }
@@ -591,9 +579,7 @@ function TransientChatPanel({
         updateTab(tab.localId, (current) => ({ ...current, ...event.policy }));
         return;
       }
-      if (!turnEvents.has(event.event)) {
-        return;
-      }
+      if (!TURN_EVENTS.has(event.event)) return;
 
       updateTab(tab.localId, (current) => ({
         ...current,
@@ -606,11 +592,9 @@ function TransientChatPanel({
       }));
     });
     return () => {
-      isDisposed = true;
+      disposed = true;
       void subscription.then((unlisten) => {
-        if (isDisposed) {
-          unlisten();
-        }
+        if (disposed) unlisten();
       });
     };
   }, [failPrompt, updateTab]);
@@ -619,9 +603,7 @@ function TransientChatPanel({
     tabs.find((tab) => tab.localId === activeTabId) ?? tabs[0] ?? null;
 
   useEffect(() => {
-    if (!open || activeTab == null) {
-      return;
-    }
+    if (!open || !activeTab) return;
     const frame = window.requestAnimationFrame(() => {
       panelRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
     });
@@ -629,111 +611,104 @@ function TransientChatPanel({
   }, [activeTab?.localId, open]);
 
   useEffect(() => {
-    if (!open || !isFloating) {
-      return;
-    }
+    if (!open || !floating) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) {
-        return;
-      }
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       event.preventDefault();
       onClose();
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [isFloating, onClose, open]);
+  }, [floating, onClose, open]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
-    if (viewport) {
-      viewport.scrollTop = viewport.scrollHeight;
-    }
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [activeTab?.turns]);
 
-  const attachImages = async (files: readonly File[]) => {
-    const tab = tabsRef.current.find(
-      (candidate) => candidate.localId === activeTabId
-    );
-    const images = files.filter((file) => file.type.startsWith("image/"));
-    if (!tab || tab.running || images.length === 0) {
-      return;
-    }
-    updateTab(tab.localId, (current) => ({
-      ...current,
-      attaching: true,
-      controlError: null,
-    }));
-    const results = await Promise.allSettled(
-      images.map(async (file) =>
-        importPromptImage(
-          new Uint8Array(await file.arrayBuffer()),
-          file.type || null,
-          file.name || "Image.png"
-        )
-      )
-    );
-    const attachments = results.flatMap((result) =>
-      result.status === "fulfilled" ? [result.value] : []
-    );
-    const failure = results.find(
-      (result): result is PromiseRejectedResult => result.status === "rejected"
-    );
-    updateTab(tab.localId, (current) => ({
-      ...current,
-      attaching: false,
-      attachments: [...current.attachments, ...attachments],
-      controlError: failure
-        ? t("toast.imageAttachFailed", { error: String(failure.reason) })
-        : null,
-    }));
-  };
-
-  const changeMode = (nextMode: SessionMode) => {
-    const tab = tabsRef.current.find(
-      (candidate) => candidate.localId === activeTabId
-    );
-    const preset = sessionModes.find((candidate) => candidate.id === nextMode);
-    if (!tab || !preset || tab.running) {
-      return;
-    }
-    const previous = { mode: tab.mode, sandbox: tab.sandbox };
-    updateTab(tab.localId, (current) => ({
-      ...current,
-      controlError: null,
-      mode: preset.mode,
-      sandbox: preset.sandbox,
-    }));
-    if (tab.sessionId == null || tab.sessionId === "") {
-      return;
-    }
-    const requestId = globalThis.crypto.randomUUID();
-    void setExecutionPolicy(
-      tab.sessionId,
-      preset.mode,
-      preset.sandbox,
-      requestId
-    ).catch((error) =>
+  const attachImages = useCallback(
+    async (files: readonly File[]) => {
+      const tab = tabsRef.current.find(
+        (candidate) => candidate.localId === activeTabId
+      );
+      const images = files.filter((file) => file.type.startsWith("image/"));
+      if (!tab || tab.running || images.length === 0) return;
       updateTab(tab.localId, (current) => ({
         ...current,
-        ...previous,
-        controlError: `Could not update execution policy: ${String(error)}`,
-      }))
-    );
-  };
+        attaching: true,
+        controlError: null,
+      }));
+      const results = await Promise.allSettled(
+        images.map(async (file) =>
+          importPromptImage(
+            new Uint8Array(await file.arrayBuffer()),
+            file.type || null,
+            file.name || "Image.png"
+          )
+        )
+      );
+      const attachments = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : []
+      );
+      const failure = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected"
+      );
+      updateTab(tab.localId, (current) => ({
+        ...current,
+        attaching: false,
+        attachments: [...current.attachments, ...attachments],
+        controlError: failure
+          ? t("toast.imageAttachFailed", { error: String(failure.reason) })
+          : null,
+      }));
+    },
+    [activeTabId, t, updateTab]
+  );
 
-  const send = async () => {
+  const changeMode = useCallback(
+    (nextMode: SessionMode) => {
+      const tab = tabsRef.current.find(
+        (candidate) => candidate.localId === activeTabId
+      );
+      const preset = SESSION_MODES.find(
+        (candidate) => candidate.id === nextMode
+      );
+      if (!tab || !preset || tab.running) return;
+      const previous = { mode: tab.mode, sandbox: tab.sandbox };
+      updateTab(tab.localId, (current) => ({
+        ...current,
+        mode: preset.mode,
+        sandbox: preset.sandbox,
+        controlError: null,
+      }));
+      if (!tab.sessionId) return;
+      const requestId = globalThis.crypto.randomUUID();
+      void setExecutionPolicy(
+        tab.sessionId,
+        preset.mode,
+        preset.sandbox,
+        requestId
+      ).catch((error) =>
+        updateTab(tab.localId, (current) => ({
+          ...current,
+          ...previous,
+          controlError: `Could not update execution policy: ${String(error)}`,
+        }))
+      );
+    },
+    [activeTabId, updateTab]
+  );
+
+  const send = useCallback(async () => {
     const tab = tabsRef.current.find(
       (candidate) => candidate.localId === activeTabId
     );
-    if (!tab || tab.running || tab.attaching) {
-      return;
-    }
+    if (!tab || tab.running || tab.attaching) return;
     const prompt = tab.draft.trim();
-    if (!prompt && tab.attachments.length === 0) {
-      return;
-    }
-    const doc: DocumentBlock[] = [
-      ...(prompt ? [{ text: prompt, type: "text" as const }] : []),
+    if (!prompt && tab.attachments.length === 0) return;
+    const doc: DocBlock[] = [
+      ...(prompt ? [{ type: "text" as const, text: prompt }] : []),
       ...tab.attachments.map(privateImageBlock),
     ];
     const summary =
@@ -745,13 +720,13 @@ function TransientChatPanel({
     );
     updateTab(tab.localId, (current) => ({
       ...current,
-      attachments: [],
       draft: "",
+      attachments: [],
       running: true,
       turns: [...current.turns, newTurn(summary, promptRequestId)],
     }));
 
-    if (tab.sessionId != null && tab.sessionId !== "") {
+    if (tab.sessionId) {
       try {
         await submitPrompt(tab.sessionId, doc, promptRequestId);
       } catch (error) {
@@ -767,10 +742,10 @@ function TransientChatPanel({
 
     const creationRequestId = promptRequestId;
     pendingCreationsRef.current.set(creationRequestId, {
-      attachments: sentAttachments,
-      doc,
-      promptRequestId,
       tabId: tab.localId,
+      doc,
+      attachments: sentAttachments,
+      promptRequestId,
     });
     updateTab(tab.localId, (current) => ({
       ...current,
@@ -797,36 +772,33 @@ function TransientChatPanel({
         );
       }
     }
-  };
+  }, [activeTabId, failPrompt, surface, updateTab]);
 
-  const closeTab = (tabId: string) => {
-    const current = tabsRef.current;
-    const index = current.findIndex((tab) => tab.localId === tabId);
-    if (index < 0) {
-      return;
-    }
-    const closing = current[index];
-    const remaining = current.filter((tab) => tab.localId !== tabId);
-    tabsRef.current = remaining;
-    setTabs(remaining);
-    if (closing.sessionId != null && closing.sessionId !== "") {
-      void closeTransientSession(closing.sessionId);
-    }
-    if (activeTabId === tabId) {
-      setActiveTabId(
-        remaining[Math.min(index, remaining.length - 1)]?.localId ?? null
-      );
-    }
-    if (remaining.length === 0) {
-      onClose();
-    }
-  };
+  const closeTab = useCallback(
+    (tabId: string) => {
+      const current = tabsRef.current;
+      const index = current.findIndex((tab) => tab.localId === tabId);
+      if (index < 0) return;
+      const closing = current[index];
+      const remaining = current.filter((tab) => tab.localId !== tabId);
+      tabsRef.current = remaining;
+      setTabs(remaining);
+      if (closing.sessionId) void closeTransientSession(closing.sessionId);
+      if (activeTabId === tabId) {
+        setActiveTabId(
+          remaining[Math.min(index, remaining.length - 1)]?.localId ?? null
+        );
+      }
+      if (remaining.length === 0) onClose();
+    },
+    [activeTabId, onClose]
+  );
 
   return (
     <section
       ref={panelRef}
-      role={isFloating ? "dialog" : undefined}
-      aria-modal={isFloating ? "false" : undefined}
+      role={floating ? "dialog" : undefined}
+      aria-modal={floating ? "false" : undefined}
       aria-label={t(labels.title)}
       aria-hidden={!open}
       data-open={open ? "" : undefined}
@@ -834,13 +806,13 @@ function TransientChatPanel({
       data-chat-count={tabs.length}
       className={cn(
         "bg-background flex min-h-0 flex-col overflow-hidden",
-        isFloating
+        floating
           ? "quick-chat-panel shadow-raised fixed z-50"
           : "side-chat-surface relative size-full",
         !open && "pointer-events-none"
       )}
       style={
-        isFloating
+        floating
           ? ({
               "--quick-chat-offset-x": `${panelOffsetRef.current.x}px`,
               "--quick-chat-offset-y": `${panelOffsetRef.current.y}px`,
@@ -848,13 +820,13 @@ function TransientChatPanel({
           : undefined
       }
     >
-      {isFloating ? (
+      {floating ? (
         <header
           data-quick-chat-drag-handle=""
           data-transient-chat-tabs=""
           className={cn(
             "transient-chat-header flex shrink-0 items-center gap-1",
-            isFloating && "cursor-move touch-none select-none"
+            floating && "cursor-move touch-none select-none"
           )}
           onPointerDown={onPanelPointerDown}
           onPointerMove={onPanelPointerMove}
@@ -934,7 +906,7 @@ function TransientChatPanel({
         ref={viewportRef}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
-        {activeTab != null && activeTab.turns.length > 0 ? (
+        {activeTab && activeTab.turns.length > 0 ? (
           <ol className="m-0 mx-auto w-full max-w-2xl list-none px-5 pt-5 pb-8">
             {activeTab.turns.map((turn) => (
               <li key={turn.transcriptStartSeq ?? turn.id}>
@@ -958,7 +930,7 @@ function TransientChatPanel({
         )}
       </div>
 
-      {activeTab != null ? (
+      {activeTab && (
         <form
           className="shrink-0 p-4 pt-2"
           onSubmit={(event) => {
@@ -966,14 +938,14 @@ function TransientChatPanel({
             void send();
           }}
         >
-          {activeTab.controlError != null && activeTab.controlError !== "" ? (
+          {activeTab.controlError ? (
             <p role="alert" className="text-fine text-destructive mb-2 px-1">
               {activeTab.controlError}
             </p>
           ) : null}
           <div
             data-transient-chat-composer=""
-            className="rounded-module bg-card shadow-control focus-within:focus-ring-inset"
+            className="rounded-module bg-card shadow-control duration-feedback ease-enter focus-within:bg-fill-hover transition-colors"
           >
             <input
               ref={imageInputRef}
@@ -984,9 +956,7 @@ function TransientChatPanel({
               onChange={(event) => {
                 const files = Array.from(event.currentTarget.files ?? []);
                 event.currentTarget.value = "";
-                if (files.length > 0) {
-                  void attachImages(files);
-                }
+                if (files.length > 0) void attachImages(files);
               }}
             />
             {activeTab.attachments.length > 0 ? (
@@ -1089,41 +1059,33 @@ function TransientChatPanel({
                     const previousModel = activeTab.currentModel;
                     updateTab(activeTab.localId, (tab) => ({
                       ...tab,
-                      controlError: null,
                       currentModel: nextModel,
+                      controlError: null,
                     }));
-                    if (
-                      activeTab.sessionId != null &&
-                      activeTab.sessionId !== ""
-                    ) {
+                    if (activeTab.sessionId) {
                       void setModel(activeTab.sessionId, nextModel).catch(
                         (error) =>
                           updateTab(activeTab.localId, (tab) => ({
                             ...tab,
+                            currentModel: previousModel,
                             controlError: t("toast.modelFailed", {
                               error: String(error),
                             }),
-                            currentModel: previousModel,
                           }))
                       );
                     }
                   }}
                   onConfigOption={(configId, value) => {
-                    if (
-                      activeTab.sessionId == null ||
-                      activeTab.sessionId === ""
-                    ) {
-                      return;
-                    }
+                    if (!activeTab.sessionId) return;
                     const previousOptions = activeTab.configOptions;
                     updateTab(activeTab.localId, (tab) => ({
                       ...tab,
+                      controlError: null,
                       configOptions: tab.configOptions.map((option) =>
                         option.id === configId
                           ? { ...option, current: value }
                           : option
                       ),
-                      controlError: null,
                     }));
                     void setConfigOption(
                       activeTab.sessionId,
@@ -1147,13 +1109,13 @@ function TransientChatPanel({
                   onText={(text) =>
                     updateTab(activeTab.localId, (tab) => ({
                       ...tab,
-                      draft: `${tab.draft}${tab.draft && !/\s$/u.test(tab.draft) ? " " : ""}${text}`,
+                      draft: `${tab.draft}${tab.draft && !/\s$/.test(tab.draft) ? " " : ""}${text}`,
                     }))
                   }
                 />
               ) : null}
               {activeTab.running ? (
-                activeTab.sessionId != null && activeTab.sessionId !== "" ? (
+                activeTab.sessionId ? (
                   <Button
                     type="button"
                     variant="destructive"
@@ -1195,7 +1157,7 @@ function TransientChatPanel({
             </div>
           </div>
         </form>
-      ) : null}
+      )}
     </section>
   );
 }

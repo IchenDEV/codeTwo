@@ -4,41 +4,29 @@ import { Button } from "@/components/ui/button";
 import { CircleAlert } from "@/components/ui/icons";
 
 import type { PermissionContext, PermissionContextKind } from "../bridge";
-import { useT } from "../i18n";
-import type { Translate } from "../i18n";
+import { useT, type Translate } from "../i18n";
 import type { PermissionQueueItem } from "./sessionEvents";
 
 function contextLabel(kind: PermissionContextKind, t: Translate): string {
   switch (kind) {
-    case "mcp_elicitation": {
+    case "mcp_elicitation":
       return t("permission.kind.externalTool");
-    }
-    case "website_access": {
+    case "website_access":
       return t("permission.kind.websiteAccess");
-    }
-    case "sensitive_web_action": {
+    case "sensitive_web_action":
       return t("permission.kind.sensitiveWebAction");
-    }
-    case "computer_use_application": {
+    case "computer_use_application":
       return t("permission.kind.appControl");
-    }
-    case "sites_mutation": {
+    case "sites_mutation":
       return t("permission.kind.siteChange");
-    }
-    case "sites_production": {
+    case "sites_production":
       return t("permission.kind.productionDeploy");
-    }
-    case "acp": {
+    case "acp":
       return t("permission.kind.command");
-    }
   }
 }
 
-function PermissionDetails({
-  context,
-}: {
-  readonly context: PermissionContext;
-}) {
+function PermissionDetails({ context }: { context: PermissionContext }) {
   const t = useT();
   const details = [
     [t("permission.server"), context.server],
@@ -48,9 +36,7 @@ function PermissionDetails({
     [t("permission.risk"), context.risk],
   ].filter((detail): detail is [string, string] => Boolean(detail[1]));
 
-  if (context.kind === "acp") {
-    return null;
-  }
+  if (context.kind === "acp") return null;
   return (
     <div className="text-metadata text-muted-foreground space-y-1">
       <p className="text-foreground font-medium">
@@ -66,22 +52,21 @@ function PermissionDetails({
   );
 }
 
+/** A non-modal approval surface anchored to the chat that owns the request. */
 export function PermissionCard({
   request,
   pendingCount,
   onAnswer,
 }: {
-  readonly request: PermissionQueueItem;
-  readonly pendingCount: number;
-  readonly onAnswer: (optionId: string | null) => Promise<void> | void;
+  request: PermissionQueueItem;
+  pendingCount: number;
+  onAnswer: (optionId: string | null) => Promise<void> | void;
 }) {
   const t = useT();
   const [answering, setAnswering] = useState(false);
 
   const answer = async (optionId: string | null) => {
-    if (answering) {
-      return;
-    }
+    if (answering) return;
     setAnswering(true);
     try {
       await onAnswer(optionId);
@@ -127,9 +112,7 @@ export function PermissionCard({
               {request.title}
             </pre>
 
-            {request.context ? (
-              <PermissionDetails context={request.context} />
-            ) : null}
+            {request.context && <PermissionDetails context={request.context} />}
 
             <div className="flex flex-wrap items-center gap-2">
               {request.options.map(([id, label]) => (

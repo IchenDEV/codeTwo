@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  rootProjectOrderKey,
-  sidebarProjectsStorageKey,
+  ROOT_PROJECT_ORDER_KEY,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
   loadSidebarProjects,
   moveSidebarProject,
   releaseSidebarSectionProjects,
@@ -27,7 +27,7 @@ describe("sidebar Project organization", () => {
       { setItem: (key, value) => values.set(key, value) },
       state
     );
-    expect(values.has(sidebarProjectsStorageKey)).toBe(true);
+    expect(values.has(SIDEBAR_PROJECTS_STORAGE_KEY)).toBe(true);
     expect(
       loadSidebarProjects({ getItem: (key) => values.get(key) ?? null })
     ).toEqual(state);
@@ -41,7 +41,11 @@ describe("sidebar Project organization", () => {
     state = releaseSidebarSectionProjects(state, "work");
 
     expect(state.assignments).toEqual({});
-    expect(state.order[rootProjectOrderKey]).toEqual(["/root", "/one", "/two"]);
+    expect(state.order[ROOT_PROJECT_ORDER_KEY]).toEqual([
+      "/root",
+      "/one",
+      "/two",
+    ]);
     expect(state.order.work).toBeUndefined();
     expect(
       sortSidebarProjects(
@@ -51,7 +55,7 @@ describe("sidebar Project organization", () => {
           { path: "/root" },
           { path: "/one" },
         ],
-        state.order[rootProjectOrderKey]
+        state.order[ROOT_PROJECT_ORDER_KEY]
       ).map((project) => project.path)
     ).toEqual(["/new", "/root", "/one", "/two"]);
   });

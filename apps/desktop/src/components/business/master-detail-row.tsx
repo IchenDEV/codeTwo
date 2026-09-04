@@ -1,19 +1,18 @@
-import { useId } from "react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface MasterDetailRowProps {
-  readonly label: string;
-  readonly description?: ReactNode;
-  readonly leading?: ReactNode;
-  readonly meta?: ReactNode;
-  readonly selected: boolean;
-  readonly disabled?: boolean;
-  readonly className?: string;
-  readonly descriptionClassName?: string;
-  readonly onSelect: () => void;
+  label: string;
+  description?: ReactNode;
+  leading?: ReactNode;
+  meta?: ReactNode;
+  selected: boolean;
+  disabled?: boolean;
+  className?: string;
+  descriptionClassName?: string;
+  onSelect: () => void;
 }
 
 function MasterDetailRow({
@@ -30,7 +29,7 @@ function MasterDetailRow({
   const descriptionId = useId();
   const metaId = useId();
   const describedBy =
-    [description == null ? null : descriptionId, meta == null ? null : metaId]
+    [description ? descriptionId : null, meta ? metaId : null]
       .filter(Boolean)
       .join(" ") || undefined;
 
@@ -47,12 +46,9 @@ function MasterDetailRow({
       aria-describedby={describedBy}
       disabled={disabled}
       onClick={onSelect}
-      className={cn(
-        description == null ? "items-center" : "items-start",
-        className
-      )}
+      className={cn(description ? "items-start" : "items-center", className)}
     >
-      {leading == null ? null : (
+      {leading ? (
         <span
           data-slot="master-detail-row-leading"
           className="flex shrink-0 items-center"
@@ -60,12 +56,12 @@ function MasterDetailRow({
         >
           {leading}
         </span>
-      )}
+      ) : null}
       <span data-slot="master-detail-row-content" className="min-w-0 flex-1">
         <span data-slot="master-detail-row-label" className="block truncate">
           {label}
         </span>
-        {description == null ? null : (
+        {description ? (
           <span
             id={descriptionId}
             data-slot="master-detail-row-description"
@@ -76,9 +72,9 @@ function MasterDetailRow({
           >
             {description}
           </span>
-        )}
+        ) : null}
       </span>
-      {meta == null ? null : (
+      {meta ? (
         <span
           id={metaId}
           data-slot="master-detail-row-meta"
@@ -86,7 +82,7 @@ function MasterDetailRow({
         >
           {meta}
         </span>
-      )}
+      ) : null}
     </Button>
   );
 }

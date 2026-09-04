@@ -4,17 +4,17 @@
 
 .pet-catalog {
   overflow: hidden;
-  padding: 0;
-  border-radius: var(--ds-radius-module);
   margin: 0;
-  background: var(--ds-color-surface);
+  padding: 0;
   list-style: none;
+  background: var(--ds-color-surface);
+  border-radius: var(--ds-radius-module);
 }
 
 .pet-catalog-row {
   flex-wrap: nowrap;
-  padding: var(--ds-space-surface-inset) var(--ds-space-section);
   gap: var(--ds-space-section);
+  padding: var(--ds-space-surface-inset) var(--ds-space-section);
 }
 
 .pet-catalog-row > [data-slot="setting-row-control"] {
@@ -29,31 +29,31 @@
 
 .pet-catalog-avatar {
   display: grid;
-  overflow: hidden;
   width: 3.5rem;
   height: 3.5rem;
-  border-radius: var(--ds-radius-control);
-  background: var(--ds-color-fill-rest);
-  contain: paint;
+  overflow: hidden;
   place-items: center;
+  contain: paint;
+  background: var(--ds-color-fill-rest);
+  border-radius: var(--ds-radius-control);
 }
 
 .pet-catalog-avatar .codex-pet {
-  overflow: hidden;
   max-width: 100%;
   max-height: 100%;
+  overflow: hidden;
 }
 
 .pet-selected-status {
   display: inline-flex;
   height: var(--ds-control-normal);
   align-items: center;
-  padding: 0 var(--ds-space-surface-inset);
-  border-radius: var(--ds-radius-control);
-  background: var(--ds-color-fill-rest);
-  color: var(--ds-color-text-muted);
-  font-size: var(--ds-type-metadata-size);
   gap: var(--ds-space-optical);
+  padding: 0 var(--ds-space-surface-inset);
+  color: var(--ds-color-text-muted);
+  background: var(--ds-color-fill-rest);
+  border-radius: var(--ds-radius-control);
+  font-size: var(--ds-type-metadata-size);
   line-height: var(--ds-type-metadata-leading);
   white-space: nowrap;
 }
@@ -66,10 +66,10 @@
   display: flex;
   min-height: var(--ds-control-field);
   align-items: center;
+  gap: var(--ds-space-inline);
   padding: var(--ds-space-surface-inset) var(--ds-space-section);
   color: var(--ds-color-text-muted);
   font-size: var(--ds-type-metadata-size);
-  gap: var(--ds-space-inline);
   line-height: var(--ds-type-metadata-leading);
 }
 
@@ -83,8 +83,8 @@
 
 .pet-setting-group {
   overflow: hidden;
-  border-radius: var(--ds-radius-module);
   background: var(--ds-color-surface);
+  border-radius: var(--ds-radius-module);
 }
 
 .pet-setting-group [data-slot="setting-row"] {

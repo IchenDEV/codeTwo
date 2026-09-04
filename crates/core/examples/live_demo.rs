@@ -129,6 +129,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Event::SessionTitleChanged { title, .. } => {
                     println!("session title: {title}")
                 }
+                Event::ProviderChanged {
+                    provider, model, ..
+                } => {
+                    println!("provider changed: {} ({model:?})", provider.as_str())
+                }
                 Event::SessionActivityChanged { activity, .. } => {
                     println!("activity r{}: {:?}", activity.revision, activity.state)
                 }
@@ -218,7 +223,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 // Scene hook/exit/cost projections (R8) and worktree lifecycle — not rendered
                 // by this demo.
-                Event::TestSignal { .. }
+                Event::TaskSnapshotChanged { .. }
+                | Event::TestSignal { .. }
                 | Event::ArtifactProduced { .. }
                 | Event::ExitCriteriaMet { .. }
                 | Event::HookSuggestion { .. }

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  modelFavoritesStorageKey,
+  MODEL_FAVORITES_STORAGE_KEY,
   favoritesForProvider,
   loadModelFavorites,
   toggleModelFavorite,
+  type ModelFavoritesStorage,
 } from "../src/session/modelFavorites";
-import type { ModelFavoritesStorage } from "../src/session/modelFavorites";
 
 class MemoryStorage implements ModelFavoritesStorage {
   values = new Map<string, string>();
@@ -41,7 +41,7 @@ describe("model favorites", () => {
     expect(favoritesForProvider("opencode", storage)).toEqual(["model-b"]);
     expect(favoritesForProvider("cursor", storage)).toEqual(["model-a"]);
     expect(
-      JSON.parse(storage.getItem(modelFavoritesStorageKey) ?? "null")
+      JSON.parse(storage.getItem(MODEL_FAVORITES_STORAGE_KEY) ?? "null")
     ).toEqual({
       version: 1,
       providers: {
@@ -53,17 +53,17 @@ describe("model favorites", () => {
 
   test("degrades corrupt, outdated, and partially invalid documents safely", () => {
     const storage = new MemoryStorage();
-    storage.setItem(modelFavoritesStorageKey, "not json");
+    storage.setItem(MODEL_FAVORITES_STORAGE_KEY, "not json");
     expect(loadModelFavorites(storage).providers).toEqual({});
 
     storage.setItem(
-      modelFavoritesStorageKey,
+      MODEL_FAVORITES_STORAGE_KEY,
       JSON.stringify({ version: 0, providers: {} })
     );
     expect(loadModelFavorites(storage).providers).toEqual({});
 
     storage.setItem(
-      modelFavoritesStorageKey,
+      MODEL_FAVORITES_STORAGE_KEY,
       '{"version":1,"providers":{"codex":["gpt-5","gpt-5",42,""],"broken":"not-an-array","__proto__":["unsafe"]}}'
     );
     expect(loadModelFavorites(storage).providers).toEqual({ codex: ["gpt-5"] });

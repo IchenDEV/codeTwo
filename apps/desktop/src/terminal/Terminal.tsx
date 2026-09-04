@@ -1,8 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
-import { Terminal } from "@xterm/xterm";
-import type { ITheme } from "@xterm/xterm";
-import { useEffect, useRef, useState } from "react";
+import { Terminal, type ITheme } from "@xterm/xterm";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { ArrowDown, ArrowUp, X } from "@/components/ui/icons";
@@ -21,7 +20,7 @@ import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
 import { useTerminalSettings } from "./settings";
 
-const fallbackMono =
+const FALLBACK_MONO =
   'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace';
 
 function cssVar(name: string, fallback = ""): string {
@@ -31,49 +30,60 @@ function cssVar(name: string, fallback = ""): string {
   return value || fallback;
 }
 
+/**
+ * The renderer's palette, read from the `--term-*` custom properties.
+ *
+ * Those are declared in hex precisely so this can hand them straight to xterm — it parses colour
+ * strings itself and has no browser to resolve the `oklch()` the rest of the app's tokens use.
+ */
 function terminalTheme(): ITheme {
   const ansi = (n: number) => cssVar(`--term-ansi-${n}`);
   return {
     background: cssVar("--term-bg", "#1d2026"),
-    black: ansi(0),
-    blue: ansi(4),
-    brightBlack: ansi(8),
-    brightBlue: ansi(12),
-    brightCyan: ansi(14),
-    brightGreen: ansi(10),
-    brightMagenta: ansi(13),
-    brightRed: ansi(9),
-    brightWhite: ansi(15),
-    brightYellow: ansi(11),
+    foreground: cssVar("--term-fg", "#c9cfd9"),
     cursor: cssVar("--term-cursor", "#79a9f0"),
     cursorAccent: cssVar("--term-bg", "#1d2026"),
-    cyan: ansi(6),
-    foreground: cssVar("--term-fg", "#c9cfd9"),
-    green: ansi(2),
-    magenta: ansi(5),
-    red: ansi(1),
     selectionBackground: cssVar("--term-selection", "#3b6ea566"),
-    white: ansi(7),
+    black: ansi(0),
+    red: ansi(1),
+    green: ansi(2),
     yellow: ansi(3),
+    blue: ansi(4),
+    magenta: ansi(5),
+    cyan: ansi(6),
+    white: ansi(7),
+    brightBlack: ansi(8),
+    brightRed: ansi(9),
+    brightGreen: ansi(10),
+    brightYellow: ansi(11),
+    brightBlue: ansi(12),
+    brightMagenta: ansi(13),
+    brightCyan: ansi(14),
+    brightWhite: ansi(15),
   };
 }
 
+/**
+ * The embedded terminal's renderer.
+ *
+ * The terminal itself lives in the core, as a real emulator with its own scrollback — this is only
+ * a view onto it. That split is why `id` matters more than it looks: it's a stable key, so
+ * remounting (a dock tab switch, a session change, an app restart) re-attaches to the running
+ * terminal and replays its state instead of spawning a second shell over the top of the first.
+ * Unmounting therefore does *not* kill anything; only closing the tab does.
+ */
 export function TerminalPanel({
   id,
   cwd,
   projectPath,
   tmux = false,
 }: {
-  /**
-  Stable across remounts — see above.
-  */
-  readonly id: string;
-  readonly cwd: string | null;
-  /**
-  Command realm owning this terminal; null denotes the global user graph.
-  */
-  readonly projectPath: string | null;
-  readonly tmux?: boolean;
+  /** Stable across remounts — see above. */
+  id: string;
+  cwd: string | null;
+  /** Command realm owning this terminal; null denotes the global user graph. */
+  projectPath: string | null;
+  tmux?: boolean;
 }) {
   const t = useT();
   const scheme = useColorScheme();
@@ -94,7 +104,7 @@ export function TerminalPanel({
   // Terminals stay mounted when they're not the visible tab, so they have no layout box — and
   // xterm's fit addon throws on those. The dock's resize event reaches every mounted instance, so
   // this guard is what keeps a panel resize from spraying errors from the hidden ones.
-  const refit = () => {
+  const refit = useCallback(() => {
     const el = boxRef.current;
     const term = termRef.current;
     if (
@@ -112,31 +122,38 @@ export function TerminalPanel({
     } catch {
       return false;
     }
-  };
+  }, []);
 
   useEffect(() => {
     const el = boxRef.current;
-    if (!el) {
-      return;
-    }
+    if (!el) return;
 
     const term = new Terminal({
-      allowProposedApi: true,
+      fontSize: initial.current.fontSize,
+      fontFamily:
+        initial.current.fontFamily || cssVar("--font-mono", FALLBACK_MONO),
+      scrollback: initial.current.scrollback,
+      theme: terminalTheme(),
+      // xterm's defaults date the terminal more than anything else about it. 1.0 line height is
+      // tighter than any editor in this app; a hard block cursor and instant scroll jumps read as
+      // an emulator from a decade ago.
+      lineHeight: 1.3,
       cursorBlink: true,
-      cursorInactiveStyle: "outline",
       cursorStyle: "bar",
       cursorWidth: 2,
-      drawBoldTextInBrightColors: false,
-      fontFamily:
-        initial.current.fontFamily || cssVar("--font-mono", fallbackMono),
-      fontSize: initial.current.fontSize,
+      // A filled block over the character you're not currently typing in is noise; an outline says
+      // "this terminal is here but not focused" without shouting.
+      cursorInactiveStyle: "outline",
+      smoothScrollDuration: 90,
+      // Font smoothing makes 400 look thin at these sizes on a dark background.
       fontWeight: 450,
       fontWeightBold: 650,
-      lineHeight: 1.3,
+      // Bold text should be bold, not a different colour — the bright ANSI slots are for programs
+      // that actually asked for them.
+      drawBoldTextInBrightColors: false,
+      // ⌥ as Meta is what every macOS terminal does, and readline is unusable without it.
       macOptionIsMeta: true,
-      scrollback: initial.current.scrollback,
-      smoothScrollDuration: 90,
-      theme: terminalTheme(),
+      allowProposedApi: true,
     });
     const fit = new FitAddon();
     const search = new SearchAddon();
@@ -149,7 +166,7 @@ export function TerminalPanel({
     searchRef.current = search;
     refit();
 
-    let isDisposed = false;
+    let disposed = false;
     let stopOutput: (() => void) | null = null;
     let stopExit: (() => void) | null = null;
 
@@ -159,49 +176,34 @@ export function TerminalPanel({
       let pending: string[] | null = [];
 
       stopOutput = await onPtyOutput((p) => {
-        if (p.id !== id || p.project_path !== projectPath) {
-          return;
-        }
-        if (pending) {
-          pending.push(p.data);
-        } else {
-          term.write(p.data);
-        }
+        if (p.id !== id || p.project_path !== projectPath) return;
+        if (pending) pending.push(p.data);
+        else term.write(p.data);
       });
       stopExit = await onPtyExit((exited) => {
         if (exited.id === id && exited.project_path === projectPath) {
-          term.write(`\r\n\x1B[2m${t("terminal.exited")}\x1B[0m\r\n`);
+          term.write(`\r\n\x1b[2m${t("terminal.exited")}\x1b[0m\r\n`);
         }
       });
-      if (isDisposed) {
-        return;
-      }
+      if (disposed) return;
 
       const { restore } = await ptySpawn(id, cwd, term.rows, term.cols, {
-        scrollback: initial.current.scrollback,
         tmuxSession: tmux ? id : null,
+        scrollback: initial.current.scrollback,
       });
-      if (isDisposed) {
-        return;
-      }
+      if (disposed) return;
 
-      if (restore) {
-        term.write(restore);
-      }
+      if (restore) term.write(restore);
       const queued = pending ?? [];
       pending = null;
-      for (const chunk of queued) {
-        term.write(chunk);
-      }
+      for (const chunk of queued) term.write(chunk);
     })();
 
     const dataSub = term.onData((d) => {
       void ptyWrite(id, d);
     });
     const onResize = () => {
-      if (refit()) {
-        void ptyResize(id, term.rows, term.cols);
-      }
+      if (refit()) void ptyResize(id, term.rows, term.cols);
     };
     window.addEventListener("resize", onResize);
 
@@ -212,7 +214,7 @@ export function TerminalPanel({
     observer.observe(el);
 
     return () => {
-      isDisposed = true;
+      disposed = true;
       observer.disconnect();
       window.removeEventListener("resize", onResize);
       dataSub.dispose();
@@ -230,15 +232,11 @@ export function TerminalPanel({
   // Appearance changes apply to the live terminal — no reason to lose the session over a font.
   useEffect(() => {
     const term = termRef.current;
-    if (!term) {
-      return;
-    }
+    if (!term) return;
     term.options.fontSize = settings.fontSize;
     term.options.fontFamily =
-      settings.fontFamily || cssVar("--font-mono", fallbackMono);
-    if (refit()) {
-      void ptyResize(id, term.rows, term.cols);
-    }
+      settings.fontFamily || cssVar("--font-mono", FALLBACK_MONO);
+    if (refit()) void ptyResize(id, term.rows, term.cols);
   }, [id, refit, settings.fontFamily, settings.fontSize]);
 
   useEffect(() => {
@@ -246,22 +244,18 @@ export function TerminalPanel({
     // custom properties now resolve to their other values.
     void scheme;
     const term = termRef.current;
-    if (term) {
-      term.options.theme = terminalTheme();
-    }
+    if (term) term.options.theme = terminalTheme();
   }, [scheme]);
 
-  const find = (isNext: boolean) => {
-    if (!query) {
-      return;
-    }
-    const search = searchRef.current;
-    if (isNext) {
-      search?.findNext(query);
-    } else {
-      search?.findPrevious(query);
-    }
-  };
+  const find = useCallback(
+    (next: boolean) => {
+      if (!query) return;
+      const search = searchRef.current;
+      if (next) search?.findNext(query);
+      else search?.findPrevious(query);
+    },
+    [query]
+  );
 
   return (
     <div
@@ -276,7 +270,7 @@ export function TerminalPanel({
         }
       }}
     >
-      {finding ? (
+      {finding && (
         <>
           <div className="bg-muted/40 flex items-center gap-1 px-2 py-1.5">
             <Input
@@ -291,9 +285,7 @@ export function TerminalPanel({
                 });
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  find(!e.shiftKey);
-                }
+                if (e.key === "Enter") find(!e.shiftKey);
                 if (e.key === "Escape") {
                   setFinding(false);
                   searchRef.current?.clearDecorations();
@@ -327,7 +319,7 @@ export function TerminalPanel({
           </div>
           <Separator />
         </>
-      ) : null}
+      )}
       <div className="terminal" ref={boxRef} />
     </div>
   );
@@ -338,9 +330,9 @@ function FindButton({
   onClick,
   children,
 }: {
-  readonly title: string;
-  readonly onClick: () => void;
-  readonly children: React.ReactNode;
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <TooltipButton

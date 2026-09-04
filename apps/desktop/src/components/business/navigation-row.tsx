@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,17 +9,17 @@ import {
 import { cn } from "@/lib/utils";
 
 interface NavigationRowProps {
-  readonly label: string;
-  readonly leading: ReactNode;
-  readonly meta?: ReactNode;
-  readonly current?: boolean;
-  readonly disabled?: boolean;
-  readonly busy?: boolean;
-  readonly accessibilityLabel?: string;
-  readonly tooltip?: string;
-  readonly className?: string;
-  readonly labelClassName?: string;
-  readonly onSelect: () => void;
+  label: string;
+  leading: ReactNode;
+  meta?: ReactNode;
+  current?: boolean;
+  disabled?: boolean;
+  busy?: boolean;
+  accessibilityLabel?: string;
+  tooltip?: string;
+  className?: string;
+  labelClassName?: string;
+  onSelect: () => void;
 }
 
 function NavigationRow({
@@ -66,20 +66,18 @@ function NavigationRow({
       >
         {label}
       </span>
-      {meta == null ? null : (
+      {meta ? (
         <span
           data-slot="navigation-row-meta"
           className="gap-control-group flex shrink-0 items-center"
         >
           {meta}
         </span>
-      )}
+      ) : null}
     </Button>
   );
 
-  if (tooltip == null || tooltip === "") {
-    return row;
-  }
+  if (!tooltip) return row;
   return (
     <Tooltip>
       <TooltipTrigger render={row} />

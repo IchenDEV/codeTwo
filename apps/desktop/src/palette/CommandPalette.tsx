@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,9 +19,7 @@ export type CommandCategory = "action" | "session" | "setting";
 
 export interface Command {
   id: string;
-  /**
-  Stable entity identity lets a richer async result replace its metadata-only row.
-  */
+  /** Stable entity identity lets a richer async result replace its metadata-only row. */
   identity?: string;
   category?: CommandCategory;
   label: string;
@@ -37,9 +35,9 @@ export function CommandPalette({
   search,
   onClose,
 }: {
-  readonly commands: Command[];
-  readonly search?: (query: string) => Promise<Command[]>;
-  readonly onClose: () => void;
+  commands: Command[];
+  search?: (query: string) => Promise<Command[]>;
+  onClose: () => void;
 }) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -58,32 +56,34 @@ export function CommandPalette({
     }
     setMatches([]);
     setSearchState("pending");
-    let isCurrent = true;
+    let current = true;
     const timeout = window.setTimeout(() => {
       setSearchState("loading");
       void search(value)
         .then((results) => {
-          if (isCurrent) {
+          if (current) {
             setMatches(results);
             setSearchState("success");
           }
         })
         .catch(() => {
-          if (isCurrent) {
+          if (current) {
             setMatches([]);
             setSearchState("error");
           }
         });
     }, 200);
     return () => {
-      isCurrent = false;
+      current = false;
       window.clearTimeout(timeout);
     };
   }, [query, search]);
 
-  const visible = mergeCommandResults(commands, matches);
+  const visible = useMemo(() => {
+    return mergeCommandResults(commands, matches);
+  }, [commands, matches]);
 
-  const groups = (() => {
+  const groups = useMemo(() => {
     const filtered =
       filter === "all"
         ? visible
@@ -98,7 +98,7 @@ export function CommandPalette({
         ),
       }))
       .filter((group) => group.commands.length > 0);
-  })();
+  }, [filter, visible]);
 
   const filters = [
     { id: "all" as const, label: t("palette.filterAll") },
@@ -111,12 +111,8 @@ export function CommandPalette({
     if (category === "session" && query.trim().length === 0) {
       return t("palette.recentSessions");
     }
-    if (category === "session") {
-      return t("palette.sessions");
-    }
-    if (category === "setting") {
-      return t("palette.settings");
-    }
+    if (category === "session") return t("palette.sessions");
+    if (category === "setting") return t("palette.settings");
     return t("palette.actions");
   };
 
@@ -168,11 +164,7 @@ export function CommandPalette({
         ))}
       </div>
       <CommandList className="max-h-none min-h-0 flex-1">
-        <CommandEmpty>
-          {searchStatus != null && searchStatus !== ""
-            ? null
-            : t("palette.empty")}
-        </CommandEmpty>
+        <CommandEmpty>{searchStatus ? null : t("palette.empty")}</CommandEmpty>
         {groups.map((group) => (
           <CommandGroup
             key={group.category}
@@ -190,26 +182,27 @@ export function CommandPalette({
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{command.label}</span>
-                  {command.detail != null && command.detail !== "" ? (
+                  {command.detail && (
                     <span className="text-callout text-muted-foreground block truncate">
                       {command.detail}
                     </span>
-                  ) : null}
+                  )}
                 </span>
-                {command.hint != null && command.hint !== "" ? (
+                {command.hint && (
                   <CommandShortcut>{command.hint}</CommandShortcut>
-                ) : null}
+                )}
               </CommandItem>
             ))}
           </CommandGroup>
         ))}
-        {searchStatus != null &&
-        searchStatus !== "" &&
-        (filter === "all" || filter === "session") ? (
-          <output className="text-callout text-muted-foreground px-3 py-2">
+        {searchStatus && (filter === "all" || filter === "session") && (
+          <p
+            role="status"
+            className="text-callout text-muted-foreground px-3 py-2"
+          >
             {searchStatus}
-          </output>
-        ) : null}
+          </p>
+        )}
       </CommandList>
       <CommandSeparator className="mx-0" />
       <div className="text-callout text-muted-foreground flex items-center gap-4 px-3 py-2">

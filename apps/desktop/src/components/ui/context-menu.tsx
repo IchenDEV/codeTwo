@@ -77,9 +77,7 @@ function ContextMenuItem({
   className,
   variant,
   ...props
-}: ContextMenuPrimitive.Item.Props & {
-  readonly variant?: "default" | "destructive";
-}) {
+}: ContextMenuPrimitive.Item.Props & { variant?: "default" | "destructive" }) {
   return (
     <ContextMenuPrimitive.Item
       data-slot="context-menu-item"

@@ -37,10 +37,10 @@ import { exportSceneSkillMd } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import { useToast } from "../ui/toast";
 import type { SessionConfig } from "./config";
-import { sceneTitle } from "./scene";
-import type { SceneInfo, SceneSource } from "./scene";
+import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
 
-export function SourceBadge({ source }: { readonly source: SceneSource }) {
+/** Source pill naming where the scene came from (builtin / user / project / plugin). */
+export function SourceBadge({ source }: { source: SceneSource }) {
   const t = useT();
   return (
     <Badge
@@ -52,7 +52,11 @@ export function SourceBadge({ source }: { readonly source: SceneSource }) {
   );
 }
 
-export function SceneChip({ config }: { readonly config: SessionConfig }) {
+/**
+ * Scene selection stays distinct from the session configuration row. Manual overrides still mark
+ * the chip "customized" without mutating the scene definition.
+ */
+export function SceneChip({ config }: { config: SessionConfig }) {
   const t = useT();
   const { locale } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -64,7 +68,7 @@ export function SceneChip({ config }: { readonly config: SessionConfig }) {
       : t("scene.auto")
     : sceneLabel;
   const surfaceLabel = t("scene.chip");
-  const isPartial = config.scenePendingFields.length > 0;
+  const partial = config.scenePendingFields.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -77,20 +81,20 @@ export function SceneChip({ config }: { readonly config: SessionConfig }) {
           >
             <Clapperboard className="size-3.5 shrink-0" />
             <span className="max-w-36 truncate">{label}</span>
-            {config.sceneCustomized ? (
+            {config.sceneCustomized && (
               <span
                 className="bg-warning size-1.5 shrink-0 rounded-full"
                 title={t("scene.customized")}
                 aria-label={t("scene.customized")}
               />
-            ) : null}
-            {isPartial ? (
+            )}
+            {partial && (
               <span
                 className="bg-primary size-1.5 shrink-0 rounded-full"
                 title={t("scene.partial")}
                 aria-label={t("scene.partial")}
               />
-            ) : null}
+            )}
             <ChevronDown className="size-3 shrink-0 opacity-50" />
           </Chip>
         }
@@ -105,15 +109,15 @@ export function SceneChip({ config }: { readonly config: SessionConfig }) {
             <span className="text-metadata text-muted-foreground min-w-0 flex-1 truncate">
               {surfaceLabel}
             </span>
-            {config.scenesEnabled && active ? (
+            {config.scenesEnabled && active && (
               <SourceBadge source={active.source} />
-            ) : null}
-            {config.autoScene ? (
+            )}
+            {config.autoScene && (
               <Badge variant="secondary">{t("scene.auto")}</Badge>
-            ) : null}
-            {config.sceneCustomized ? (
+            )}
+            {config.sceneCustomized && (
               <StatusBadge tone="warning">{t("scene.customized")}</StatusBadge>
-            ) : null}
+            )}
           </div>
 
           <SelectableRow
@@ -173,7 +177,7 @@ export function SceneChip({ config }: { readonly config: SessionConfig }) {
             {t("sceneEditor.manage")}
           </Button>
 
-          {isPartial ? (
+          {partial && (
             <>
               <Separator className="mx-2 my-1.5 w-auto" />
               <div className="flex items-center gap-1.5 px-2 pt-0.5 pb-1">
@@ -196,13 +200,14 @@ export function SceneChip({ config }: { readonly config: SessionConfig }) {
                 </Button>
               </div>
             </>
-          ) : null}
+          )}
         </div>
       </PopoverContent>
     </Popover>
   );
 }
 
+/** Full scene picker dialog: every resolved scene with description and source badge. */
 export function ScenePicker({
   scenes,
   active,
@@ -214,15 +219,15 @@ export function ScenePicker({
   onDuplicate,
   onClose,
 }: {
-  readonly scenes: SceneInfo[];
-  readonly active: SceneInfo | null;
-  readonly auto: boolean;
-  readonly onAuto: (isEnabled: boolean) => void;
-  readonly onScene: (reference: string | null) => void;
-  readonly onCreate: () => void;
-  readonly onEdit: (scene: SceneInfo) => void;
-  readonly onDuplicate: (scene: SceneInfo) => void;
-  readonly onClose: () => void;
+  scenes: SceneInfo[];
+  active: SceneInfo | null;
+  auto: boolean;
+  onAuto: (enabled: boolean) => void;
+  onScene: (reference: string | null) => void;
+  onCreate: () => void;
+  onEdit: (scene: SceneInfo) => void;
+  onDuplicate: (scene: SceneInfo) => void;
+  onClose: () => void;
 }) {
   const t = useT();
   const { locale } = useLanguage();
@@ -231,9 +236,7 @@ export function ScenePicker({
   // anchor — deliberately no native save-dialog plumbing for a plain text file.
   const exportSkill = async (scene: SceneInfo) => {
     const md = await exportSceneSkillMd(scene.reference);
-    if (md === null) {
-      return;
-    }
+    if (md === null) return;
     const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -343,6 +346,10 @@ export function ScenePicker({
   );
 }
 
+/**
+ * The escalation confirmation (docs/reference/scenes.md §Security): a scene may never loosen permissions
+ * silently — this dialog names both modes and the user decides.
+ */
 export function SceneEscalationDialog({
   sceneLabel,
   from,
@@ -350,11 +357,11 @@ export function SceneEscalationDialog({
   onConfirm,
   onCancel,
 }: {
-  readonly sceneLabel: string;
-  readonly from: string;
-  readonly to: string;
-  readonly onConfirm: () => void;
-  readonly onCancel: () => void;
+  sceneLabel: string;
+  from: string;
+  to: string;
+  onConfirm: () => void;
+  onCancel: () => void;
 }) {
   const t = useT();
   const modeName = (m: string) => t(`mode.${m}` as "mode.ask");
@@ -365,8 +372,8 @@ export function SceneEscalationDialog({
           <DialogTitle>{t("scene.escalationTitle")}</DialogTitle>
           <DialogDescription>
             {t("scene.escalationBody", {
-              from: modeName(from),
               scene: sceneLabel,
+              from: modeName(from),
               to: modeName(to),
             })}
           </DialogDescription>

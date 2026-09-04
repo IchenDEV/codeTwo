@@ -1,14 +1,15 @@
 import { useSyncExternalStore } from "react";
 
-import { resolveThemeColorProperties } from "./design/theme";
-import type { ColorScheme, ThemePalette } from "./design/theme";
 import {
-  defaultCodeFontSize,
-  defaultUiFontSize,
+  resolveThemeColorProperties,
+  type ColorScheme,
+  type ThemePalette,
+} from "./design/theme";
+import {
+  DEFAULT_CODE_FONT_SIZE,
+  DEFAULT_UI_FONT_SIZE,
   resolveTypographyProperties,
 } from "./design/typography";
-import { asJsonObject } from "./lib/jsonValue";
-import type { JsonObject } from "./lib/jsonValue";
 
 export type { ColorScheme, ThemePalette } from "./design/theme";
 export type ThemePreference = ColorScheme | "system";
@@ -56,7 +57,7 @@ export interface AppearanceSettings {
   diffMarkers: DiffMarkerPreference;
 }
 
-export const uiFonts = [
+export const UI_FONTS = [
   {
     id: "system",
     label: "System",
@@ -79,7 +80,7 @@ export const uiFonts = [
   },
 ] as const;
 
-export const codeFonts = [
+export const CODE_FONTS = [
   {
     id: "system-mono",
     label: "System Mono",
@@ -102,19 +103,19 @@ export const codeFonts = [
   },
 ] as const;
 
-export const fontWeights = [
+export const FONT_WEIGHTS = [
   { id: "regular", value: 400 },
   { id: "medium", value: 500 },
   { id: "semibold", value: 600 },
 ] as const;
 
-export type UiFontId = (typeof uiFonts)[number]["id"];
-export type CodeFontId = (typeof codeFonts)[number]["id"];
+export type UiFontId = (typeof UI_FONTS)[number]["id"];
+export type CodeFontId = (typeof CODE_FONTS)[number]["id"];
 
-const storageKey = "codetwo.appearance.v1";
-const legacyThemeKey = "codetwo.theme";
-const themeDocumentFormat = "codetwo-theme";
-const maxCustomThemes = 24;
+const STORAGE_KEY = "codetwo.appearance.v1";
+const LEGACY_THEME_KEY = "codetwo.theme";
+const THEME_DOCUMENT_FORMAT = "codetwo-theme";
+const MAX_CUSTOM_THEMES = 24;
 
 function palette(
   accent: string,
@@ -134,23 +135,23 @@ function themeToken(
 
 function builtInTheme(id: string, name: string): AppearanceTheme {
   return {
-    builtin: true,
-    dark: palette(
-      themeToken(id, "dark", "accent"),
-      themeToken(id, "dark", "background"),
-      themeToken(id, "dark", "foreground")
-    ),
     id,
+    name,
+    builtin: true,
     light: palette(
       themeToken(id, "light", "accent"),
       themeToken(id, "light", "background"),
       themeToken(id, "light", "foreground")
     ),
-    name,
+    dark: palette(
+      themeToken(id, "dark", "accent"),
+      themeToken(id, "dark", "background"),
+      themeToken(id, "dark", "foreground")
+    ),
   };
 }
 
-export const builtInThemes: AppearanceTheme[] = [
+export const BUILT_IN_THEMES: AppearanceTheme[] = [
   builtInTheme("code2", "C2"),
   builtInTheme("ocean", "Ocean"),
   builtInTheme("grove", "Grove"),
@@ -159,33 +160,33 @@ export const builtInThemes: AppearanceTheme[] = [
   builtInTheme("rose", "Rose"),
 ];
 
-const defaultSchemeProfile: SchemeAppearanceProfile = {
-  codeFont: "system-mono",
-  codeFontWeight: "regular",
-  contrast: 45,
-  sidebarOpacity: 80,
+const DEFAULT_SCHEME_PROFILE: SchemeAppearanceProfile = {
   uiFont: "system",
   uiFontWeight: "regular",
+  codeFont: "system-mono",
+  codeFontWeight: "regular",
+  sidebarOpacity: 80,
+  contrast: 45,
 };
 
-export const defaultAppearanceSettings: AppearanceSettings = {
+export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
+  version: 3,
+  preference: "system",
   activeThemeId: "code2",
-  codeFontSize: defaultCodeFontSize,
   customThemes: [],
-  dark: { ...defaultSchemeProfile },
-  diffMarkers: "color",
-  light: { ...defaultSchemeProfile },
-  petActivityEnabled: true,
   petEnabled: true,
-  petId: "naiwa",
-  petName: "Naiwa",
+  petActivityEnabled: true,
   petSize: "medium",
   petSource: "builtin",
+  petId: "naiwa",
+  petName: "Naiwa",
+  light: { ...DEFAULT_SCHEME_PROFILE },
+  dark: { ...DEFAULT_SCHEME_PROFILE },
+  uiFontSize: DEFAULT_UI_FONT_SIZE,
+  codeFontSize: DEFAULT_CODE_FONT_SIZE,
   pointerCursors: true,
-  preference: "system",
   reduceMotion: "system",
-  uiFontSize: defaultUiFontSize,
-  version: 3,
+  diffMarkers: "color",
 };
 
 function clamp(
@@ -197,13 +198,6 @@ function clamp(
   return typeof value === "number" && Number.isFinite(value)
     ? Math.min(max, Math.max(min, Math.round(value)))
     : fallback;
-}
-
-function hasId<T extends readonly { id: string }[]>(
-  items: T,
-  value: unknown
-): value is T[number]["id"] {
-  return typeof value === "string" && items.some((item) => item.id === value);
 }
 
 function isPreference(value: unknown): value is ThemePreference {
@@ -219,7 +213,7 @@ function isPetSource(value: unknown): value is PetSource {
 }
 
 function isFontWeight(value: unknown): value is FontWeightId {
-  return hasId(fontWeights, value);
+  return includesId(FONT_WEIGHTS, value);
 }
 
 function isReduceMotion(value: unknown): value is ReduceMotionPreference {
@@ -231,28 +225,24 @@ function isDiffMarkers(value: unknown): value is DiffMarkerPreference {
 }
 
 function safePetId(value: unknown): string | null {
-  return typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(value)
+  return typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/.test(value)
     ? value
     : null;
 }
 
 export function isHexColor(value: unknown): value is string {
-  return typeof value === "string" && /^#[\da-f]{6}$/iu.test(value);
+  return typeof value === "string" && /^#[\da-f]{6}$/i.test(value);
 }
 
 function safeName(value: unknown, fallback: string): string {
-  if (typeof value !== "string") {
-    return fallback;
-  }
-  const name = value.trim().replaceAll(/\s+/gu, " ").slice(0, 40);
+  if (typeof value !== "string") return fallback;
+  const name = value.trim().replace(/\s+/g, " ").slice(0, 40);
   return name || fallback;
 }
 
 function safePalette(value: unknown): ThemePalette | null {
-  const candidate = asJsonObject(value);
-  if (candidate == null) {
-    return null;
-  }
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<ThemePalette>;
   if (
     !isHexColor(candidate.accent) ||
     !isHexColor(candidate.background) ||
@@ -271,174 +261,190 @@ function safeCustomTheme(
   value: unknown,
   fallbackId: string
 ): AppearanceTheme | null {
-  const candidate = asJsonObject(value);
-  if (candidate == null) {
-    return null;
-  }
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<AppearanceTheme>;
   const light = safePalette(candidate.light);
   const dark = safePalette(candidate.dark);
-  if (!light || !dark) {
-    return null;
-  }
+  if (!light || !dark) return null;
   return {
-    builtin: false,
-    dark,
     id:
       typeof candidate.id === "string" &&
-      /^custom-[\w-]{1,80}$/u.test(candidate.id)
+      /^custom-[\w-]{1,80}$/.test(candidate.id)
         ? candidate.id
         : fallbackId,
-    light,
     name: safeName(candidate.name, "Imported theme"),
+    builtin: false,
+    light,
+    dark,
   };
+}
+
+function includesId<T extends readonly { id: string }[]>(
+  items: T,
+  value: unknown
+): value is T[number]["id"] {
+  return typeof value === "string" && items.some((item) => item.id === value);
 }
 
 function safeSchemeProfile(
   value: unknown,
   fallback: SchemeAppearanceProfile
 ): SchemeAppearanceProfile {
-  const candidate = asJsonObject(value) ?? {};
+  const candidate =
+    value && typeof value === "object"
+      ? (value as Partial<SchemeAppearanceProfile>)
+      : {};
   return {
-    codeFont: hasId(codeFonts, candidate.codeFont)
+    uiFont: includesId(UI_FONTS, candidate.uiFont)
+      ? candidate.uiFont
+      : fallback.uiFont,
+    uiFontWeight: isFontWeight(candidate.uiFontWeight)
+      ? candidate.uiFontWeight
+      : fallback.uiFontWeight,
+    codeFont: includesId(CODE_FONTS, candidate.codeFont)
       ? candidate.codeFont
       : fallback.codeFont,
     codeFontWeight: isFontWeight(candidate.codeFontWeight)
       ? candidate.codeFontWeight
       : fallback.codeFontWeight,
-    contrast: clamp(candidate.contrast, 0, 100, fallback.contrast),
     sidebarOpacity: clamp(
       candidate.sidebarOpacity,
       40,
       100,
       fallback.sidebarOpacity
     ),
-    uiFont: hasId(uiFonts, candidate.uiFont)
-      ? candidate.uiFont
-      : fallback.uiFont,
-    uiFontWeight: isFontWeight(candidate.uiFontWeight)
-      ? candidate.uiFontWeight
-      : fallback.uiFontWeight,
+    contrast: clamp(candidate.contrast, 0, 100, fallback.contrast),
   };
 }
 
 export function normalizeAppearanceSettings(
   value: unknown
 ): AppearanceSettings {
-  const candidate: JsonObject = asJsonObject(value) ?? {};
+  const candidate =
+    value && typeof value === "object"
+      ? (value as Omit<
+          Partial<AppearanceSettings>,
+          "version" | "light" | "dark"
+        > & {
+          version?: number;
+          light?: unknown;
+          dark?: unknown;
+          uiFont?: unknown;
+          codeFont?: unknown;
+          sidebarOpacity?: unknown;
+          contrast?: unknown;
+        })
+      : {};
   const uiFontSize =
     candidate.version !== 2 &&
     candidate.version !== 3 &&
     candidate.uiFontSize === 13
-      ? defaultUiFontSize
+      ? DEFAULT_UI_FONT_SIZE
       : candidate.uiFontSize;
   const legacyProfile = safeSchemeProfile(
     {
-      codeFont: candidate.codeFont,
-      contrast: candidate.contrast,
-      sidebarOpacity: candidate.sidebarOpacity,
       uiFont: candidate.uiFont,
+      codeFont: candidate.codeFont,
+      sidebarOpacity: candidate.sidebarOpacity,
+      contrast: candidate.contrast,
     },
-    defaultSchemeProfile
+    DEFAULT_SCHEME_PROFILE
   );
   const requestedPetSource = isPetSource(candidate.petSource)
     ? candidate.petSource
-    : defaultAppearanceSettings.petSource;
+    : DEFAULT_APPEARANCE_SETTINGS.petSource;
   const petId = safePetId(candidate.petId);
   const petSource =
-    requestedPetSource === "petshare" && petId != null && petId !== ""
+    requestedPetSource === "petshare" && petId
       ? requestedPetSource
-      : defaultAppearanceSettings.petSource;
+      : DEFAULT_APPEARANCE_SETTINGS.petSource;
   const customThemes: AppearanceTheme[] = [];
   const seenThemeIds = new Set<string>();
   if (Array.isArray(candidate.customThemes)) {
     for (const [index, value] of candidate.customThemes.entries()) {
-      if (customThemes.length >= maxCustomThemes) {
-        break;
-      }
+      if (customThemes.length >= MAX_CUSTOM_THEMES) break;
       const theme = safeCustomTheme(value, `custom-imported-${index}`);
-      if (!theme || seenThemeIds.has(theme.id)) {
-        continue;
-      }
+      if (!theme || seenThemeIds.has(theme.id)) continue;
       seenThemeIds.add(theme.id);
       customThemes.push(theme);
     }
   }
-  const availableIds = new Set<string>();
-  for (const theme of builtInThemes) {
-    availableIds.add(theme.id);
-  }
-  for (const theme of customThemes) {
-    availableIds.add(theme.id);
-  }
+  const availableIds = new Set([
+    ...BUILT_IN_THEMES.map((theme) => theme.id),
+    ...customThemes.map((theme) => theme.id),
+  ]);
   return {
+    version: 3,
+    preference: isPreference(candidate.preference)
+      ? candidate.preference
+      : DEFAULT_APPEARANCE_SETTINGS.preference,
     activeThemeId:
       typeof candidate.activeThemeId === "string" &&
       availableIds.has(candidate.activeThemeId)
         ? candidate.activeThemeId
-        : defaultAppearanceSettings.activeThemeId,
-    codeFontSize: clamp(
-      candidate.codeFontSize,
-      11,
-      18,
-      defaultAppearanceSettings.codeFontSize
-    ),
+        : DEFAULT_APPEARANCE_SETTINGS.activeThemeId,
     customThemes,
-    dark: safeSchemeProfile(candidate.dark, legacyProfile),
-    diffMarkers: isDiffMarkers(candidate.diffMarkers)
-      ? candidate.diffMarkers
-      : defaultAppearanceSettings.diffMarkers,
-    light: safeSchemeProfile(candidate.light, legacyProfile),
-    petActivityEnabled:
-      typeof candidate.petActivityEnabled === "boolean"
-        ? candidate.petActivityEnabled
-        : defaultAppearanceSettings.petActivityEnabled,
     petEnabled:
       typeof candidate.petEnabled === "boolean"
         ? candidate.petEnabled
-        : defaultAppearanceSettings.petEnabled,
+        : DEFAULT_APPEARANCE_SETTINGS.petEnabled,
+    petActivityEnabled:
+      typeof candidate.petActivityEnabled === "boolean"
+        ? candidate.petActivityEnabled
+        : DEFAULT_APPEARANCE_SETTINGS.petActivityEnabled,
+    petSize: isPetSize(candidate.petSize)
+      ? candidate.petSize
+      : DEFAULT_APPEARANCE_SETTINGS.petSize,
+    petSource,
     petId:
-      petSource === "petshare" && petId != null && petId !== ""
+      petSource === "petshare" && petId
         ? petId
-        : defaultAppearanceSettings.petId,
+        : DEFAULT_APPEARANCE_SETTINGS.petId,
     petName:
       petSource === "petshare"
         ? safeName(
             candidate.petName,
-            petId ?? defaultAppearanceSettings.petName
+            petId ?? DEFAULT_APPEARANCE_SETTINGS.petName
           )
-        : defaultAppearanceSettings.petName,
-    petSize: isPetSize(candidate.petSize)
-      ? candidate.petSize
-      : defaultAppearanceSettings.petSize,
-    petSource,
+        : DEFAULT_APPEARANCE_SETTINGS.petName,
+    light: safeSchemeProfile(candidate.light, legacyProfile),
+    dark: safeSchemeProfile(candidate.dark, legacyProfile),
+    uiFontSize: clamp(
+      uiFontSize,
+      12,
+      16,
+      DEFAULT_APPEARANCE_SETTINGS.uiFontSize
+    ),
+    codeFontSize: clamp(
+      candidate.codeFontSize,
+      11,
+      18,
+      DEFAULT_APPEARANCE_SETTINGS.codeFontSize
+    ),
     pointerCursors:
       typeof candidate.pointerCursors === "boolean"
         ? candidate.pointerCursors
-        : defaultAppearanceSettings.pointerCursors,
-    preference: isPreference(candidate.preference)
-      ? candidate.preference
-      : defaultAppearanceSettings.preference,
+        : DEFAULT_APPEARANCE_SETTINGS.pointerCursors,
     reduceMotion: isReduceMotion(candidate.reduceMotion)
       ? candidate.reduceMotion
-      : defaultAppearanceSettings.reduceMotion,
-    uiFontSize: clamp(uiFontSize, 12, 16, defaultAppearanceSettings.uiFontSize),
-    version: 3,
+      : DEFAULT_APPEARANCE_SETTINGS.reduceMotion,
+    diffMarkers: isDiffMarkers(candidate.diffMarkers)
+      ? candidate.diffMarkers
+      : DEFAULT_APPEARANCE_SETTINGS.diffMarkers,
   };
 }
 
 function read(): AppearanceSettings {
   try {
-    const raw = localStorage.getItem(storageKey);
-    if (raw != null && raw !== "") {
-      return normalizeAppearanceSettings(JSON.parse(raw));
-    }
-    const legacy = localStorage.getItem(legacyThemeKey);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return normalizeAppearanceSettings(JSON.parse(raw));
+    const legacy = localStorage.getItem(LEGACY_THEME_KEY);
     return normalizeAppearanceSettings({
-      ...defaultAppearanceSettings,
+      ...DEFAULT_APPEARANCE_SETTINGS,
       preference: isPreference(legacy) ? legacy : "system",
     });
   } catch {
-    return defaultAppearanceSettings;
+    return DEFAULT_APPEARANCE_SETTINGS;
   }
 }
 
@@ -447,21 +453,17 @@ let snapshot = read();
 
 function persist(): void {
   try {
-    localStorage.setItem(storageKey, JSON.stringify(snapshot));
-    localStorage.setItem(legacyThemeKey, snapshot.preference);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    localStorage.setItem(LEGACY_THEME_KEY, snapshot.preference);
   } catch {
-    /*
-    private mode — settings stay live for this process
-    */
+    /* private mode — settings stay live for this process */
   }
 }
 
 function emit(next: AppearanceSettings): void {
   snapshot = normalizeAppearanceSettings(next);
   persist();
-  for (const listener of listeners) {
-    listener();
-  }
+  for (const listener of listeners) listener();
 }
 
 function subscribe(listener: () => void): () => void {
@@ -488,79 +490,70 @@ export function setAppearanceSettings(
 }
 
 export function resetAppearanceSettings(): void {
-  emit(defaultAppearanceSettings);
+  emit(DEFAULT_APPEARANCE_SETTINGS);
 }
 
+/** Restore visual appearance without changing the companion configured on its own settings page. */
 export function resetVisualAppearanceSettings(): void {
   emit({
-    ...defaultAppearanceSettings,
-    petActivityEnabled: snapshot.petActivityEnabled,
+    ...DEFAULT_APPEARANCE_SETTINGS,
     petEnabled: snapshot.petEnabled,
-    petId: snapshot.petId,
-    petName: snapshot.petName,
+    petActivityEnabled: snapshot.petActivityEnabled,
     petSize: snapshot.petSize,
     petSource: snapshot.petSource,
+    petId: snapshot.petId,
+    petName: snapshot.petName,
   });
 }
 
+/** Restore only settings owned by the Pets page. */
 export function resetPetSettings(): void {
   emit({
     ...snapshot,
-    petActivityEnabled: defaultAppearanceSettings.petActivityEnabled,
-    petEnabled: defaultAppearanceSettings.petEnabled,
-    petId: defaultAppearanceSettings.petId,
-    petName: defaultAppearanceSettings.petName,
-    petSize: defaultAppearanceSettings.petSize,
-    petSource: defaultAppearanceSettings.petSource,
+    petEnabled: DEFAULT_APPEARANCE_SETTINGS.petEnabled,
+    petActivityEnabled: DEFAULT_APPEARANCE_SETTINGS.petActivityEnabled,
+    petSize: DEFAULT_APPEARANCE_SETTINGS.petSize,
+    petSource: DEFAULT_APPEARANCE_SETTINGS.petSource,
+    petId: DEFAULT_APPEARANCE_SETTINGS.petId,
+    petName: DEFAULT_APPEARANCE_SETTINGS.petName,
   });
 }
 
 export function themeCatalog(settings = snapshot): AppearanceTheme[] {
-  return [...builtInThemes, ...settings.customThemes];
+  return [...BUILT_IN_THEMES, ...settings.customThemes];
 }
 
 export function themeById(id: string, settings = snapshot): AppearanceTheme {
   return (
-    themeCatalog(settings).find((theme) => theme.id === id) ?? builtInThemes[0]
+    themeCatalog(settings).find((theme) => theme.id === id) ??
+    BUILT_IN_THEMES[0]
   );
 }
 
 function cssVariableName(value: string): string | null {
-  return /^var\((--[\w-]+)\)$/u.exec(value)?.[1] ?? null;
+  return value.match(/^var\((--[\w-]+)\)$/)?.[1] ?? null;
 }
 
 export function resolveThemeColor(value: string): string {
   const variable = cssVariableName(value);
-  if (variable == null || variable === "" || typeof document === "undefined") {
-    return value;
-  }
+  if (!variable || typeof document === "undefined") return value;
   return getComputedStyle(document.documentElement)
     .getPropertyValue(variable)
     .trim();
 }
 
 export function materializeTheme(theme: AppearanceTheme): AppearanceTheme {
-  const resolvePalette = (source: ThemePalette): ThemePalette => {
-    return {
-      accent: resolveThemeColor(source.accent),
-      background: resolveThemeColor(source.background),
-      foreground: resolveThemeColor(source.foreground),
-    };
-  };
+  const resolvePalette = (source: ThemePalette): ThemePalette => ({
+    accent: resolveThemeColor(source.accent),
+    background: resolveThemeColor(source.background),
+    foreground: resolveThemeColor(source.foreground),
+  });
   const light = resolvePalette(theme.light);
   const dark = resolvePalette(theme.dark);
-  const colors = [
-    light.accent,
-    light.background,
-    light.foreground,
-    dark.accent,
-    dark.background,
-    dark.foreground,
-  ];
-  if (!colors.every(isHexColor)) {
+  if (![...Object.values(light), ...Object.values(dark)].every(isHexColor)) {
     throw new Error("Theme colors are not available yet.");
   }
-  return { ...theme, dark, light };
+  return { ...theme, light, dark };
 }
 
 function customId(): string {
@@ -568,15 +561,14 @@ function customId(): string {
 }
 
 export function duplicateTheme(id: string, name?: string): AppearanceTheme {
-  if (snapshot.customThemes.length >= maxCustomThemes) {
+  if (snapshot.customThemes.length >= MAX_CUSTOM_THEMES)
     throw new Error("Theme limit reached.");
-  }
   const source = materializeTheme(themeById(id));
   const copy: AppearanceTheme = {
     ...source,
-    builtin: false,
     id: customId(),
     name: safeName(name, `${source.name} Copy`),
+    builtin: false,
   };
   emit({
     ...snapshot,
@@ -591,11 +583,9 @@ export function updateCustomTheme(
   patch: Partial<Omit<AppearanceTheme, "id" | "builtin">>
 ): void {
   const customThemes = snapshot.customThemes.map((theme) => {
-    if (theme.id !== id) {
-      return theme;
-    }
+    if (theme.id !== id) return theme;
     return (
-      safeCustomTheme({ ...theme, ...patch, builtin: false, id }, id) ?? theme
+      safeCustomTheme({ ...theme, ...patch, id, builtin: false }, id) ?? theme
     );
   });
   emit({ ...snapshot, customThemes });
@@ -605,16 +595,16 @@ export function removeCustomTheme(id: string): void {
   const customThemes = snapshot.customThemes.filter((theme) => theme.id !== id);
   emit({
     ...snapshot,
+    customThemes,
     activeThemeId:
       snapshot.activeThemeId === id
-        ? defaultAppearanceSettings.activeThemeId
+        ? DEFAULT_APPEARANCE_SETTINGS.activeThemeId
         : snapshot.activeThemeId,
-    customThemes,
   });
 }
 
 interface ThemeDocument {
-  format: typeof themeDocumentFormat;
+  format: typeof THEME_DOCUMENT_FORMAT;
   version: 1;
   theme: Pick<AppearanceTheme, "name" | "light" | "dark">;
 }
@@ -622,37 +612,33 @@ interface ThemeDocument {
 export function serializeAppearanceTheme(id: string): string {
   const theme = materializeTheme(themeById(id));
   const document: ThemeDocument = {
-    format: themeDocumentFormat,
-    theme: { dark: theme.dark, light: theme.light, name: theme.name },
+    format: THEME_DOCUMENT_FORMAT,
     version: 1,
+    theme: { name: theme.name, light: theme.light, dark: theme.dark },
   };
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 
 export function importAppearanceTheme(source: string): AppearanceTheme {
-  if (snapshot.customThemes.length >= maxCustomThemes) {
+  if (snapshot.customThemes.length >= MAX_CUSTOM_THEMES)
     throw new Error("Theme limit reached.");
-  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(source);
   } catch {
     throw new Error("Invalid theme JSON.");
   }
-  if (parsed == null || typeof parsed !== "object") {
+  if (!parsed || typeof parsed !== "object")
     throw new Error("Invalid theme document.");
-  }
   const document = parsed as Partial<ThemeDocument>;
-  if (document.format !== themeDocumentFormat || document.version !== 1) {
+  if (document.format !== THEME_DOCUMENT_FORMAT || document.version !== 1) {
     throw new Error("Unsupported theme format.");
   }
   const imported = safeCustomTheme(
-    { ...document.theme, builtin: false, id: customId() },
+    { ...(document.theme ?? {}), id: customId(), builtin: false },
     customId()
   );
-  if (!imported) {
-    throw new Error("Theme colors must use six-digit hex values.");
-  }
+  if (!imported) throw new Error("Theme colors must use six-digit hex values.");
   emit({
     ...snapshot,
     activeThemeId: imported.id,
@@ -670,10 +656,11 @@ function fontStack<T extends readonly { id: string; stack: string }[]>(
 
 function fontWeight(id: FontWeightId): number {
   return (
-    fontWeights.find((item) => item.id === id)?.value ?? fontWeights[0].value
+    FONT_WEIGHTS.find((item) => item.id === id)?.value ?? FONT_WEIGHTS[0].value
   );
 }
 
+/** Applies validated appearance settings to both the legacy and new semantic token layers. */
 export function applyAppearanceSettings(
   root: HTMLElement,
   settings: AppearanceSettings,
@@ -685,19 +672,18 @@ export function applyAppearanceSettings(
   const uiWeight = fontWeight(profile.uiFontWeight);
   const properties: Record<string, string> = {
     ...resolveThemeColorProperties(source, scheme, profile.contrast),
-    "--appearance-font-code-weight": `${fontWeight(profile.codeFontWeight)}`,
-    "--appearance-font-ui": fontStack(uiFonts, profile.uiFont),
+    "--appearance-font-ui": fontStack(UI_FONTS, profile.uiFont),
     "--appearance-font-ui-weight": `${uiWeight}`,
-    "--ds-font-mono": fontStack(codeFonts, profile.codeFont),
-    "--ds-font-ui": fontStack(uiFonts, profile.uiFont),
-    "--font-mono": fontStack(codeFonts, profile.codeFont),
+    "--appearance-font-code-weight": `${fontWeight(profile.codeFontWeight)}`,
+    "--font-mono": fontStack(CODE_FONTS, profile.codeFont),
+    "--ds-font-ui": fontStack(UI_FONTS, profile.uiFont),
+    "--ds-font-mono": fontStack(CODE_FONTS, profile.codeFont),
     ...resolveTypographyProperties(settings),
-    "--appearance-macos-panel-tint-opacity": `${Math.round(profile.sidebarOpacity * 0.45)}%`,
     "--appearance-sidebar-opacity": `${profile.sidebarOpacity}%`,
+    "--appearance-macos-panel-tint-opacity": `${Math.round(profile.sidebarOpacity * 0.45)}%`,
   };
-  for (const [name, value] of Object.entries(properties)) {
+  for (const [name, value] of Object.entries(properties))
     root.style.setProperty(name, value);
-  }
   root.dataset.appearancePointerCursors = settings.pointerCursors
     ? "true"
     : "false";

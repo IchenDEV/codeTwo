@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { SearchField } from "@/components/business/search-field";
 import { StatusIndicator } from "@/components/business/status-indicator";
@@ -88,20 +93,16 @@ interface DetailState {
 }
 
 function display(value: string | null | undefined): string {
-  return value != null && value !== "" && value !== "<none>" ? value : "—";
+  return value && value !== "<none>" ? value : "—";
 }
 
 function shortId(value: string | null): string {
-  return display(value?.replace(/^sha256:/u, "").slice(0, 12));
+  return display(value?.replace(/^sha256:/, "").slice(0, 12));
 }
 
 function imageReference(image: DockerImage): string {
-  if (
-    image.repository != null &&
-    image.repository !== "" &&
-    image.repository !== "<none>"
-  ) {
-    return image.tag != null && image.tag !== "" && image.tag !== "<none>"
+  if (image.repository && image.repository !== "<none>") {
+    return image.tag && image.tag !== "<none>"
       ? `${image.repository}:${image.tag}`
       : image.repository;
   }
@@ -114,10 +115,10 @@ function ActionButton({
   onClick,
   children,
 }: {
-  readonly label: string;
-  readonly busy?: boolean;
-  readonly onClick: () => void;
-  readonly children: ReactNode;
+  label: string;
+  busy?: boolean;
+  onClick: () => void;
+  children: ReactNode;
 }) {
   return (
     <TooltipButton
@@ -127,7 +128,7 @@ function ActionButton({
       disabled={busy}
       onClick={onClick}
     >
-      {busy === true ? (
+      {busy ? (
         <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
       ) : (
         children
@@ -142,10 +143,10 @@ export function DockerPage({
   onOpenPluginManager,
   headerLeadingAction,
 }: {
-  readonly enabled: boolean;
-  readonly callCommand: DockerCommandCaller;
-  readonly onOpenPluginManager: () => void;
-  readonly headerLeadingAction?: ReactNode;
+  enabled: boolean;
+  callCommand: DockerCommandCaller;
+  onOpenPluginManager: () => void;
+  headerLeadingAction?: ReactNode;
 }) {
   const t = useT();
   const toast = useToast();
@@ -160,10 +161,8 @@ export function DockerPage({
   const [pullReference, setPullReference] = useState("");
   const [removeTarget, setRemoveTarget] = useState<DockerImage | null>(null);
 
-  const refresh = async () => {
-    if (!enabled) {
-      return;
-    }
+  const refresh = useCallback(async () => {
+    if (!enabled) return;
     setLoading(true);
     setError(null);
     try {
@@ -186,129 +185,143 @@ export function DockerPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [callCommand, enabled]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filteredContainers = normalizedQuery
-    ? containers.filter((container) =>
-        `${container.name ?? ""}\n${container.image ?? ""}\n${container.state ?? ""}`
-          .toLocaleLowerCase()
-          .includes(normalizedQuery)
-      )
-    : containers;
-  const filteredImages = normalizedQuery
-    ? images.filter((image) =>
-        `${image.repository ?? ""}\n${image.tag ?? ""}\n${image.id ?? ""}`
-          .toLocaleLowerCase()
-          .includes(normalizedQuery)
-      )
-    : images;
+  const filteredContainers = useMemo(
+    () =>
+      normalizedQuery
+        ? containers.filter((container) =>
+            `${container.name ?? ""}\n${container.image ?? ""}\n${container.state ?? ""}`
+              .toLocaleLowerCase()
+              .includes(normalizedQuery)
+          )
+        : containers,
+    [containers, normalizedQuery]
+  );
+  const filteredImages = useMemo(
+    () =>
+      normalizedQuery
+        ? images.filter((image) =>
+            `${image.repository ?? ""}\n${image.tag ?? ""}\n${image.id ?? ""}`
+              .toLocaleLowerCase()
+              .includes(normalizedQuery)
+          )
+        : images,
+    [images, normalizedQuery]
+  );
 
-  const runContainerAction = async (
-    action: "start" | "stop" | "restart",
-    container: DockerContainer
-  ) => {
-    const name = container.name ?? container.id;
-    if (name == null || name === "") {
-      return;
-    }
-    const key = `${action}:${name}`;
-    setBusyAction(key);
-    try {
-      await callCommand(`docker.${action}`, { container: name });
-      const messageKey =
-        action === "start"
-          ? "docker.startedToast"
-          : action === "stop"
-            ? "docker.stoppedToast"
-            : "docker.restartedToast";
-      toast(t(messageKey, { name }), "success");
-      await refresh();
-    } catch (cause) {
-      toast(t("docker.commandFailed", { error: String(cause) }), "error");
-    } finally {
-      setBusyAction(null);
-    }
-  };
+  const runContainerAction = useCallback(
+    async (
+      action: "start" | "stop" | "restart",
+      container: DockerContainer
+    ) => {
+      const name = container.name ?? container.id;
+      if (!name) return;
+      const key = `${action}:${name}`;
+      setBusyAction(key);
+      try {
+        await callCommand(`docker.${action}`, { container: name });
+        const messageKey =
+          action === "start"
+            ? "docker.startedToast"
+            : action === "stop"
+              ? "docker.stoppedToast"
+              : "docker.restartedToast";
+        toast(t(messageKey, { name }), "success");
+        await refresh();
+      } catch (cause) {
+        toast(t("docker.commandFailed", { error: String(cause) }), "error");
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [callCommand, refresh, t, toast]
+  );
 
-  const showInspect = async (container: DockerContainer) => {
-    const name = container.name ?? container.id;
-    if (name == null || name === "") {
-      return;
-    }
-    setDetail({
-      content: null,
-      description: t("docker.inspectDescription"),
-      loading: true,
-      title: t("docker.inspectTitle", { name }),
-    });
-    try {
-      const result = await callCommand<{ details: unknown }>("docker.inspect", {
-        container: name,
+  const showInspect = useCallback(
+    async (container: DockerContainer) => {
+      const name = container.name ?? container.id;
+      if (!name) return;
+      setDetail({
+        title: t("docker.inspectTitle", { name }),
+        description: t("docker.inspectDescription"),
+        content: null,
+        loading: true,
       });
-      setDetail((current) =>
-        current
-          ? {
-              ...current,
-              content: JSON.stringify(result.details, null, 2),
-              loading: false,
-            }
-          : null
-      );
-    } catch (cause) {
-      setDetail((current) =>
-        current ? { ...current, content: String(cause), loading: false } : null
-      );
-    }
-  };
+      try {
+        const result = await callCommand<{ details: unknown }>(
+          "docker.inspect",
+          { container: name }
+        );
+        setDetail((current) =>
+          current
+            ? {
+                ...current,
+                content: JSON.stringify(result.details, null, 2),
+                loading: false,
+              }
+            : null
+        );
+      } catch (cause) {
+        setDetail((current) =>
+          current
+            ? { ...current, content: String(cause), loading: false }
+            : null
+        );
+      }
+    },
+    [callCommand, t]
+  );
 
-  const showLogs = async (container: DockerContainer) => {
-    const name = container.name ?? container.id;
-    if (name == null || name === "") {
-      return;
-    }
-    setDetail({
-      content: null,
-      description: t("docker.logsDescription"),
-      loading: true,
-      title: t("docker.logsTitle", { name }),
-    });
-    try {
-      const result = await callCommand<{ stdout: string; stderr: string }>(
-        "docker.logs",
-        {
-          container: name,
-          tail: 200,
-          timestamps: true,
-        }
-      );
-      setDetail((current) =>
-        current
-          ? {
-              ...current,
-              content: [result.stdout, result.stderr]
-                .filter(Boolean)
-                .join("\n"),
-              loading: false,
-            }
-          : null
-      );
-    } catch (cause) {
-      setDetail((current) =>
-        current ? { ...current, content: String(cause), loading: false } : null
-      );
-    }
-  };
+  const showLogs = useCallback(
+    async (container: DockerContainer) => {
+      const name = container.name ?? container.id;
+      if (!name) return;
+      setDetail({
+        title: t("docker.logsTitle", { name }),
+        description: t("docker.logsDescription"),
+        content: null,
+        loading: true,
+      });
+      try {
+        const result = await callCommand<{ stdout: string; stderr: string }>(
+          "docker.logs",
+          {
+            container: name,
+            tail: 200,
+            timestamps: true,
+          }
+        );
+        setDetail((current) =>
+          current
+            ? {
+                ...current,
+                content: [result.stdout, result.stderr]
+                  .filter(Boolean)
+                  .join("\n"),
+                loading: false,
+              }
+            : null
+        );
+      } catch (cause) {
+        setDetail((current) =>
+          current
+            ? { ...current, content: String(cause), loading: false }
+            : null
+        );
+      }
+    },
+    [callCommand, t]
+  );
 
-  const pullImage = async () => {
+  const pullImage = useCallback(async () => {
     const image = pullReference.trim();
-    if (!image) {
-      return;
-    }
+    if (!image) return;
     setBusyAction("pull");
     try {
       await callCommand("docker.pull", { image });
@@ -320,16 +333,12 @@ export function DockerPage({
     } finally {
       setBusyAction(null);
     }
-  };
+  }, [callCommand, pullReference, refresh, t, toast]);
 
-  const removeImage = async () => {
-    if (!removeTarget) {
-      return;
-    }
+  const removeImage = useCallback(async () => {
+    if (!removeTarget) return;
     const image = imageReference(removeTarget);
-    if (!image) {
-      return;
-    }
+    if (!image) return;
     setBusyAction(`remove:${image}`);
     try {
       await callCommand("docker.remove_image", { image });
@@ -341,7 +350,7 @@ export function DockerPage({
     } finally {
       setBusyAction(null);
     }
-  };
+  }, [callCommand, refresh, removeTarget, t, toast]);
 
   if (!enabled) {
     return (
@@ -492,8 +501,8 @@ export function DockerPage({
                   <tbody className="divide-border divide-y">
                     {filteredContainers.map((container) => {
                       const name = container.name ?? container.id ?? "—";
-                      const isRunning = container.state === "running";
-                      const isPaused = container.state === "paused";
+                      const running = container.state === "running";
+                      const paused = container.state === "paused";
                       return (
                         <tr
                           key={container.id ?? name}
@@ -513,17 +522,17 @@ export function DockerPage({
                               <span
                                 className={cn(
                                   "size-2 rounded-full",
-                                  isRunning
+                                  running
                                     ? "bg-success"
-                                    : isPaused
+                                    : paused
                                       ? "bg-warning"
                                       : "bg-muted-foreground/60"
                                 )}
                                 aria-hidden="true"
                               />
-                              {isRunning
+                              {running
                                 ? t("docker.running")
-                                : isPaused
+                                : paused
                                   ? t("docker.paused")
                                   : t("docker.stopped")}
                             </span>
@@ -548,7 +557,7 @@ export function DockerPage({
                               >
                                 <Info className="size-4" />
                               </ActionButton>
-                              {isRunning ? (
+                              {running ? (
                                 <ActionButton
                                   label={t("docker.stop")}
                                   busy={busyAction === `stop:${name}`}
@@ -733,9 +742,7 @@ export function DockerPage({
       <Dialog
         open={detail !== null}
         onOpenChange={(open) => {
-          if (!open) {
-            setDetail(null);
-          }
+          if (!open) setDetail(null);
         }}
       >
         <DialogContent className="sm:max-w-3xl">
@@ -744,10 +751,13 @@ export function DockerPage({
             <DialogDescription>{detail?.description}</DialogDescription>
           </DialogHeader>
           {detail?.loading ? (
-            <output className="text-body text-muted-foreground flex min-h-48 items-center justify-center gap-2">
+            <div
+              role="status"
+              className="text-body text-muted-foreground flex min-h-48 items-center justify-center gap-2"
+            >
               <ActivityOrb state="searching" visualSize={14} />
               {t("docker.loading")}
-            </output>
+            </div>
           ) : (
             <pre className="rounded-control bg-fill-quiet text-callout max-h-96 min-h-48 overflow-auto p-4 break-words whitespace-pre-wrap">
               {detail?.content || t("docker.noOutput")}
@@ -759,9 +769,7 @@ export function DockerPage({
       <AlertDialog
         open={removeTarget !== null}
         onOpenChange={(open) => {
-          if (!open && busyAction === null) {
-            setRemoveTarget(null);
-          }
+          if (!open && busyAction === null) setRemoveTarget(null);
         }}
       >
         <AlertDialogContent>

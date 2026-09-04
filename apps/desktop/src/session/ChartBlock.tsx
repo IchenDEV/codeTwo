@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,9 +19,9 @@ export interface ChartSpec {
   series: ChartSeries[];
 }
 
-const maxPoints = 100;
-const maxSeries = 6;
-const seriesColorClasses = [
+const MAX_POINTS = 100;
+const MAX_SERIES = 6;
+const SERIES_COLOR_CLASSES = [
   "text-viz-series-1",
   "text-viz-series-2",
   "text-viz-series-3",
@@ -31,13 +31,12 @@ const seriesColorClasses = [
 ] as const;
 
 function text(value: unknown, maximum: number): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
+  if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 && trimmed.length <= maximum ? trimmed : null;
 }
 
+/** Strict, bounded schema for fenced `chart` blocks. Invalid JSON remains a normal code block. */
 export function parseChartSpec(source: string): ChartSpec | null {
   let value: unknown;
   try {
@@ -45,72 +44,53 @@ export function parseChartSpec(source: string): ChartSpec | null {
   } catch {
     return null;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
-  const { type } = input;
+  const type = input.type;
   const title = text(input.title, 120);
   const xLabel = text(input.xLabel, 80);
   const yLabel = text(input.yLabel, 80);
-  if (
-    (type !== "line" && type !== "bar") ||
-    !title ||
-    !xLabel ||
-    yLabel == null ||
-    yLabel === ""
-  ) {
+  if ((type !== "line" && type !== "bar") || !title || !xLabel || !yLabel)
     return null;
-  }
   if (
     !Array.isArray(input.labels) ||
     input.labels.length === 0 ||
-    input.labels.length > maxPoints
+    input.labels.length > MAX_POINTS
   ) {
     return null;
   }
   const labels = input.labels.map((label) => text(label, 80));
-  if (labels.some((label) => label === null)) {
-    return null;
-  }
+  if (labels.some((label) => label === null)) return null;
   if (
     !Array.isArray(input.series) ||
     input.series.length === 0 ||
-    input.series.length > maxSeries
+    input.series.length > MAX_SERIES
   ) {
     return null;
   }
   const series: ChartSeries[] = [];
   for (const candidate of input.series) {
-    if (
-      !candidate ||
-      typeof candidate !== "object" ||
-      Array.isArray(candidate)
-    ) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate))
       return null;
-    }
     const item = candidate as Record<string, unknown>;
     const name = text(item.name, 80);
     if (
       !name ||
       !Array.isArray(item.values) ||
       item.values.length !== labels.length
-    ) {
+    )
       return null;
-    }
     const values = item.values.map(Number);
-    if (values.some((number) => !Number.isFinite(number))) {
-      return null;
-    }
+    if (values.some((number) => !Number.isFinite(number))) return null;
     series.push({ name, values });
   }
   return {
-    labels: labels as string[],
-    series,
-    title,
     type,
+    title,
     xLabel,
     yLabel,
+    labels: labels as string[],
+    series,
   };
 }
 
@@ -135,7 +115,7 @@ function paddedDomain(
   return [minimum - pad, maximum + pad];
 }
 
-export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
+export function ChartBlock({ spec }: { spec: ChartSpec }) {
   const t = useT();
   const { locale } = useLanguage();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -144,17 +124,13 @@ export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
 
   useEffect(() => {
     const root = rootRef.current;
-    if (!root) {
-      return;
-    }
+    if (!root) return;
     const measure = () =>
       setWidth(
         Math.max(320, Math.round(root.getBoundingClientRect().width || 680))
       );
     measure();
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(root);
     return () => observer.disconnect();
@@ -162,14 +138,15 @@ export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
 
   useEffect(() => setVisible(spec.series.map(() => true)), [spec]);
 
-  const visibleIndexes = visible.flatMap((shown, index) =>
-    shown ? [index] : []
+  const visibleIndexes = useMemo(
+    () => visible.flatMap((shown, index) => (shown ? [index] : [])),
+    [visible]
   );
   const effectiveIndexes = visibleIndexes.length > 0 ? visibleIndexes : [0];
   const [domainMin, domainMax] = paddedDomain(spec, effectiveIndexes);
-  const isNarrow = width < 480;
-  const height = isNarrow ? 250 : 280;
-  const margin = { bottom: 58, left: isNarrow ? 58 : 68, right: 14, top: 18 };
+  const narrow = width < 480;
+  const height = narrow ? 250 : 280;
+  const margin = { top: 18, right: 14, bottom: 58, left: narrow ? 58 : 68 };
   const plotWidth = Math.max(1, width - margin.left - margin.right);
   const plotHeight = height - margin.top - margin.bottom;
   const y = (value: number) =>
@@ -182,10 +159,10 @@ export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
     (_, index) =>
       domainMin + ((domainMax - domainMin) * index) / (tickCount - 1)
   );
-  const xStep = Math.max(1, Math.ceil(spec.labels.length / (isNarrow ? 4 : 8)));
+  const xStep = Math.max(1, Math.ceil(spec.labels.length / (narrow ? 4 : 8)));
   const xTicks = spec.labels.flatMap((label, index) =>
     index % xStep === 0 || index === spec.labels.length - 1
-      ? [{ index, label }]
+      ? [{ label, index }]
       : []
   );
   const barBand = (plotWidth / spec.labels.length) * 0.72;
@@ -194,14 +171,15 @@ export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
     Math.min(34, barBand / Math.max(1, visibleIndexes.length))
   );
   const zeroY = y(Math.min(domainMax, Math.max(domainMin, 0)));
-  const numberFormatter = new Intl.NumberFormat(locale, {
-    maximumFractionDigits: 2,
-  });
+  const numberFormatter = useMemo(
+    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
+    [locale]
+  );
   const summary = t("chart.summary", {
-    points: spec.labels.length,
-    series: spec.series.length,
     title: spec.title,
     type: t(spec.type === "line" ? "chart.type.line" : "chart.type.bar"),
+    series: spec.series.length,
+    points: spec.labels.length,
   });
 
   return (
@@ -237,7 +215,7 @@ export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
               <span
                 className={cn(
                   "size-2 rounded-full bg-current",
-                  seriesColorClasses[index]
+                  SERIES_COLOR_CLASSES[index]
                 )}
                 aria-hidden="true"
               />
@@ -317,9 +295,7 @@ export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
 
         {spec.type === "line"
           ? spec.series.map((series, seriesIndex) => {
-              if (!visible[seriesIndex]) {
-                return null;
-              }
+              if (!visible[seriesIndex]) return null;
               const path = series.values
                 .map(
                   (value, index) =>
@@ -329,7 +305,7 @@ export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
               return (
                 <g
                   key={series.name}
-                  className={seriesColorClasses[seriesIndex]}
+                  className={SERIES_COLOR_CLASSES[seriesIndex]}
                 >
                   <path
                     d={path}
@@ -353,13 +329,11 @@ export function ChartBlock({ spec }: { readonly spec: ChartSpec }) {
             })
           : spec.series.map((series, seriesIndex) => {
               const visiblePosition = visibleIndexes.indexOf(seriesIndex);
-              if (visiblePosition === -1) {
-                return null;
-              }
+              if (visiblePosition < 0) return null;
               return (
                 <g
                   key={series.name}
-                  className={seriesColorClasses[seriesIndex]}
+                  className={SERIES_COLOR_CLASSES[seriesIndex]}
                   fill="currentColor"
                 >
                   {series.values.map((value, index) => {

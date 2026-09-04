@@ -54,8 +54,8 @@ function renderPanel(props = {}) {
 
 // An earlier suite in the same bun run leaks a key-echo `useT` module mock, so a label renders
 // as either its English translation or its raw i18n key depending on file order. Accept both.
-const openLabels = ["Open as document", "planDoc.open"];
-const pinLabels = ["Pin as artifact", "planDoc.pin"];
+const OPEN_LABELS = ["Open as document", "planDoc.open"];
+const PIN_LABELS = ["Pin as artifact", "planDoc.pin"];
 
 function buttonByLabel(rendered, labels) {
   return [...rendered.container.querySelectorAll("button")].find((el) =>
@@ -86,10 +86,10 @@ describe("TaskPlanPanel plan-as-document", () => {
       onOpenPlanAsDocument: (entries) => opened.push(entries),
     });
 
-    const open = buttonByLabel(rendered, openLabels);
+    const open = buttonByLabel(rendered, OPEN_LABELS);
     expect(open).toBeTruthy();
     // Pin is gated on a plan-declaring scene; none is active here.
-    expect(buttonByLabel(rendered, pinLabels)).toBeFalsy();
+    expect(buttonByLabel(rendered, PIN_LABELS)).toBeFalsy();
 
     click(open);
     await flush();
@@ -111,7 +111,7 @@ describe("TaskPlanPanel plan-as-document", () => {
       canPinPlan: true,
     });
 
-    const pin = buttonByLabel(rendered, pinLabels);
+    const pin = buttonByLabel(rendered, PIN_LABELS);
     expect(pin).toBeTruthy();
     click(pin);
     await flush();
@@ -122,8 +122,8 @@ describe("TaskPlanPanel plan-as-document", () => {
   test("hides both affordances when no handlers are wired", async () => {
     activateDom();
     const rendered = renderPanel();
-    expect(buttonByLabel(rendered, openLabels)).toBeFalsy();
-    expect(buttonByLabel(rendered, pinLabels)).toBeFalsy();
+    expect(buttonByLabel(rendered, OPEN_LABELS)).toBeFalsy();
+    expect(buttonByLabel(rendered, PIN_LABELS)).toBeFalsy();
     rendered.unmount();
   });
 });

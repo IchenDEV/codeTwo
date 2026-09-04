@@ -1,11 +1,17 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
   Activity,
   FolderTree,
   GitBranch,
+  GitPullRequest,
   Globe,
   MessageSquare,
   TerminalIcon,
@@ -24,92 +30,85 @@ export type DockSurface =
   | "browser"
   | "side-chat"
   | "files"
-  | "git";
-/**
-"home" is the dock open with nothing chosen yet — the surface picker.
-*/
+  | "git"
+  | "pull-request";
+/** "home" is the dock open with nothing chosen yet — the surface picker. */
 export type DockTab = DockSurface | "home";
 export type DockContentMap = Partial<Record<DockSurface, ReactNode>>;
 
-/**
-The picker's cards, in the order a coding session tends to want them.
-*/
-interface DockSurfaceDefinition {
+/** The picker's cards, in the order a coding session tends to want them. */
+type DockSurfaceDefinition = {
   id: DockSurface;
   icon: typeof Globe;
   titleKey: StringKey;
   descKey: StringKey;
-}
+};
 
-interface DockProps {
-  /**
-  Whether the dock is expanded. It stays mounted while closed so shells survive.
-  */
-  readonly open: boolean;
-  /**
-  null while closed; the last surface stays rendered underneath the collapse animation.
-  */
-  readonly tab: DockTab | null;
-  readonly onTab: (surface: DockSurface) => void;
-  readonly onClose: () => void;
-  readonly width: number;
-  readonly onWidth: (width: number) => void;
-  /**
-  Inline shell width that must remain beside the document while the dock is open.
-  */
-  readonly reservedWidth?: number;
-  readonly autoTab?: DockSurface | null;
-  /**
-  Disabled surfaces are neither advertised nor mounted.
-  */
-  readonly availableSurfaces?: DockSurface[];
-  /**
-  Content is inert until its matching surface is enabled and mounted by the container.
-  */
-  readonly content?: DockContentMap;
-}
+type DockProps = {
+  /** Whether the dock is expanded. It stays mounted while closed so shells survive. */
+  open: boolean;
+  /** null while closed; the last surface stays rendered underneath the collapse animation. */
+  tab: DockTab | null;
+  onTab: (surface: DockSurface) => void;
+  onClose: () => void;
+  width: number;
+  onWidth: (width: number) => void;
+  /** Inline shell width that must remain beside the document while the dock is open. */
+  reservedWidth?: number;
+  autoTab?: DockSurface | null;
+  /** Disabled surfaces are neither advertised nor mounted. */
+  availableSurfaces?: DockSurface[];
+  /** Content is inert until its matching surface is enabled and mounted by the container. */
+  content?: DockContentMap;
+};
 
 const SURFACES: DockSurfaceDefinition[] = [
   {
-    descKey: "dock.trajectoryDesc",
-    icon: Activity,
     id: "trajectory",
+    icon: Activity,
     titleKey: "trajectory.label",
+    descKey: "dock.trajectoryDesc",
   },
   {
-    descKey: "dock.browserDesc",
-    icon: Globe,
     id: "browser",
+    icon: Globe,
     titleKey: "dock.browser",
+    descKey: "dock.browserDesc",
   },
   {
-    descKey: "dock.terminalDesc",
-    icon: TerminalIcon,
     id: "terminal",
+    icon: TerminalIcon,
     titleKey: "dock.terminal",
+    descKey: "dock.terminalDesc",
   },
   {
-    descKey: "sideChat.temporary",
-    icon: MessageSquare,
     id: "side-chat",
+    icon: MessageSquare,
     titleKey: "sideChat.title",
+    descKey: "sideChat.temporary",
   },
   {
-    descKey: "dock.filesDesc",
-    icon: FolderTree,
     id: "files",
+    icon: FolderTree,
     titleKey: "dock.files",
+    descKey: "dock.filesDesc",
   },
-  { descKey: "dock.gitDesc", icon: GitBranch, id: "git", titleKey: "dock.git" },
+  { id: "git", icon: GitBranch, titleKey: "dock.git", descKey: "dock.gitDesc" },
+  {
+    id: "pull-request",
+    icon: GitPullRequest,
+    titleKey: "dock.pullRequest",
+    descKey: "dock.pullRequestDesc",
+  },
 ];
 
-export const dockMinWidth = 300;
-export const dockMainMinWidth = 620;
+export const DOCK_MIN_WIDTH = 300;
+export const DOCK_MAIN_MIN_WIDTH = 620;
 
 export function dockMaxWidth(viewportWidth: number, reservedWidth = 0): number {
   return Math.max(
-    dockMinWidth,
-    viewportWidth - reservedWidth - dockMainMinWidth
+    DOCK_MIN_WIDTH,
+    viewportWidth - reservedWidth - DOCK_MAIN_MIN_WIDTH
   );
 }
 
@@ -117,16 +116,17 @@ export function shouldOverlayRailForWorkspace(
   viewportWidth: number,
   railWidth: number
 ): boolean {
-  return viewportWidth < railWidth + dockMainMinWidth;
+  return viewportWidth < railWidth + DOCK_MAIN_MIN_WIDTH;
 }
 
 export function shouldOverlayRailForDock(
   viewportWidth: number,
   railWidth: number
 ): boolean {
-  return viewportWidth < railWidth + dockMinWidth + dockMainMinWidth;
+  return viewportWidth < railWidth + DOCK_MIN_WIDTH + DOCK_MAIN_MIN_WIDTH;
 }
 
+/** Right-side container for navigation, sizing, animation, and caller-supplied surface content. */
 export function Dock({
   open,
   tab,
@@ -136,7 +136,14 @@ export function Dock({
   onWidth,
   reservedWidth = 0,
   autoTab,
-  availableSurfaces = ["trajectory", "browser", "terminal", "files", "git"],
+  availableSurfaces = [
+    "trajectory",
+    "browser",
+    "terminal",
+    "files",
+    "git",
+    "pull-request",
+  ],
   content = {},
 }: DockProps) {
   const t = useT();
@@ -147,11 +154,9 @@ export function Dock({
   const visibleSurfaces = SURFACES.filter(({ id }) =>
     availableSurfaceSet.has(id)
   );
-  const [fallbackTab, setFallbackTab] = useState<DockTab>("home");
-  if (tab != null && tab !== fallbackTab) {
-    setFallbackTab(tab);
-  }
-  const requested = tab ?? fallbackTab;
+  const lastTab = useRef<DockTab>("home");
+  if (tab) lastTab.current = tab;
+  const requested = tab ?? lastTab.current;
   const shown =
     requested === "home" || availableSurfaceSet.has(requested)
       ? requested
@@ -163,8 +168,8 @@ export function Dock({
   const [gone, setGone] = useState(!open);
   useEffect(() => {
     if (open) {
-      const id = window.setTimeout(() => setGone(false), 0);
-      return () => window.clearTimeout(id);
+      setGone(false);
+      return;
     }
     const id = window.setTimeout(() => setGone(true), 340);
     return () => window.clearTimeout(id);
@@ -172,20 +177,17 @@ export function Dock({
 
   // Never let the dock squeeze the document below a usable measure. Persist the preferred width,
   // but clamp only what is applied so it returns in full on a larger window.
-  const [maxSize, setMaxSize] = useState(() =>
-    dockMaxWidth(
-      typeof window === "undefined" ? 1280 : window.innerWidth,
-      reservedWidth
-    )
+  const maxForPlacement = useCallback(
+    () => dockMaxWidth(window.innerWidth, reservedWidth),
+    [reservedWidth]
   );
+  const [maxSize, setMaxSize] = useState(maxForPlacement);
   useEffect(() => {
-    const measure = () => {
-      setMaxSize(dockMaxWidth(window.innerWidth, reservedWidth));
-    };
+    const measure = () => setMaxSize(maxForPlacement());
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [reservedWidth]);
+  }, [maxForPlacement]);
   const applied = Math.min(width, maxSize);
 
   // A drag must track the pointer 1:1. The open/close width transition below would ease every
@@ -199,18 +201,18 @@ export function Dock({
   const resizeHandle = useResizeHandle({
     axis: "x",
     direction: -1,
-    disabled: !open,
+    value: applied,
+    min: DOCK_MIN_WIDTH,
     max: maxSize,
-    min: dockMinWidth,
+    disabled: !open,
+    onStart: () => {
+      setDragging(true);
+    },
+    onResize: onWidth,
     onEnd: () => {
       setDragging(false);
       window.dispatchEvent(new Event("resize"));
     },
-    onResize: onWidth,
-    onStart: () => {
-      setDragging(true);
-    },
-    value: applied,
   });
 
   const renderSurfaceCard = ({
@@ -245,9 +247,8 @@ export function Dock({
       aria-hidden={!open}
       onTransitionEnd={(e) => {
         // Terminals and iframes fit themselves to their box — refit once the sweep lands.
-        if (e.target === e.currentTarget && e.propertyName === "width") {
+        if (e.target === e.currentTarget && e.propertyName === "width")
           window.dispatchEvent(new Event("resize"));
-        }
       }}
       className={cn(
         "glass-panel dock-panel dock-panel-side relative flex shrink-0 flex-col overflow-hidden border-l",

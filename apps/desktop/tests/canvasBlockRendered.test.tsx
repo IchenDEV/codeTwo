@@ -38,7 +38,7 @@ function envelope(revision = 3) {
       gridStep: 5,
       viewModeEnabled: false,
     },
-    assetReferences: [],
+    assetRefs: [],
   });
 }
 
@@ -51,16 +51,14 @@ function runtime(events: string[], handleRef: any) {
     getAssets: () => [],
     onAsset: () => {},
     onCanvasActivity: () => {},
-    saveDraft: async () => {
-      return {
-        id: "canvas",
-        revision: 3,
-        title: "Canvas",
-        theme: "light",
-        envelope: { scene: {} },
-        assets: [],
-      };
-    },
+    saveDraft: async () => ({
+      id: "canvas",
+      revision: 3,
+      title: "Canvas",
+      theme: "light",
+      envelope: { scene: {} },
+      assets: [],
+    }),
     freezeDraft: async () => ({}),
     onCanvasRemoved: () => events.push("removed"),
     onCanvasRestored: () => events.push("restored"),
@@ -113,7 +111,9 @@ describe("mounted CanvasBlock host behavior", () => {
     );
     expect(handleRef.current?.id).toBe("canvas");
     expect(
-      view.container.querySelector("[data-canvas-theme]")?.dataset.canvasTheme
+      view.container
+        .querySelector("[data-canvas-theme]")
+        ?.getAttribute("data-canvas-theme")
     ).toBe("dark");
     expect(maybeButton(view.container, "Send structure only")).toBeNull();
     await flush();

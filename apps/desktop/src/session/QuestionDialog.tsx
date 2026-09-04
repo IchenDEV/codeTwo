@@ -27,9 +27,10 @@ import {
   selectOption,
   setValue,
   toggleOption,
+  type ElicitationValues,
 } from "./elicitation";
-import type { ElicitationValues } from "./elicitation";
 
+/** happy-dom and React disagree about controlled inputs; the repo's fields drive them via onInput. */
 function noopChange() {}
 
 function Question({
@@ -38,10 +39,10 @@ function Question({
   values,
   onChange,
 }: {
-  readonly form: ElicitationForm;
-  readonly field: ElicitationField;
-  readonly values: ElicitationValues;
-  readonly onChange: (next: ElicitationValues) => void;
+  form: ElicitationForm;
+  field: ElicitationField;
+  values: ElicitationValues;
+  onChange: (next: ElicitationValues) => void;
 }) {
   const t = useT();
   const custom = customFieldFor(form, field.key);
@@ -51,47 +52,45 @@ function Question({
     : typeof value === "string"
       ? [value]
       : [];
-  const isMulti = field.kind === "multi_select";
-  const isNumeric = field.kind === "number" || field.kind === "integer";
+  const multi = field.kind === "multi_select";
+  const numeric = field.kind === "number" || field.kind === "integer";
 
   return (
     <section className="flex min-w-0 flex-col gap-2">
-      {field.title != null && field.title !== "" ? (
+      {field.title && (
         <h3 className="text-metadata text-muted-foreground font-medium uppercase">
           {field.title}
         </h3>
-      ) : null}
-      {field.description != null && field.description !== "" ? (
+      )}
+      {field.description && (
         <p className="text-body text-foreground/90">{field.description}</p>
-      ) : null}
+      )}
 
       {(field.options?.length ?? 0) > 0 ? (
-        isMulti ? (
+        multi ? (
           <div
             role="group"
             aria-label={field.title ?? field.description ?? field.key}
             className="gap-control-group flex flex-col"
           >
             {field.options?.map((option) => {
-              const isOptionSelected = selected.includes(option.value);
+              const optionSelected = selected.includes(option.value);
               return (
                 <ChoiceRow
                   key={option.value}
                   kind="checkbox"
                   label={option.label}
                   description={option.description}
-                  selected={isOptionSelected}
+                  selected={optionSelected}
                   onCheckedChange={(checked) => {
-                    if (checked !== isOptionSelected) {
+                    if (checked !== optionSelected) {
                       onChange(
                         toggleOption(values, form, field.key, option.value)
                       );
                     }
                   }}
                   details={
-                    option.preview != null &&
-                    option.preview !== "" &&
-                    isOptionSelected ? (
+                    option.preview && optionSelected ? (
                       <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
                         {option.preview}
                       </pre>
@@ -110,7 +109,7 @@ function Question({
             aria-label={field.title ?? field.description ?? field.key}
           >
             {field.options?.map((option) => {
-              const isOptionSelected = selected.includes(option.value);
+              const optionSelected = selected.includes(option.value);
               return (
                 <ChoiceRow
                   key={option.value}
@@ -118,11 +117,9 @@ function Question({
                   value={option.value}
                   label={option.label}
                   description={option.description}
-                  selected={isOptionSelected}
+                  selected={optionSelected}
                   details={
-                    option.preview != null &&
-                    option.preview !== "" &&
-                    isOptionSelected ? (
+                    option.preview && optionSelected ? (
                       <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
                         {option.preview}
                       </pre>
@@ -146,12 +143,12 @@ function Question({
       ) : (
         <Input
           aria-label={field.title ?? field.description ?? field.key}
-          type={isNumeric ? "number" : "text"}
+          type={numeric ? "number" : "text"}
           value={value === undefined ? "" : String(value)}
           onChange={noopChange}
           onInput={(event) => {
             const text = event.currentTarget.value;
-            if (!isNumeric) {
+            if (!numeric) {
               onChange(setValue(values, field, text));
               return;
             }
@@ -166,7 +163,7 @@ function Question({
         />
       )}
 
-      {custom ? (
+      {custom && (
         <label className="flex flex-col gap-1">
           <span className="text-metadata text-muted-foreground uppercase">
             {custom.title || t("question.other")}
@@ -185,24 +182,32 @@ function Question({
             }
           />
         </label>
-      ) : null}
+      )}
     </section>
   );
 }
 
+/**
+ * The agent asking the user something (ACP `elicitation/create`): Claude Code's `AskUserQuestion`,
+ * or an MCP form elicitation. Distinct from the permission dialog on purpose — this is a question,
+ * not an approval, so it offers the agent's own options rather than allow/deny, and "Skip" answers
+ * honestly (the agent is told nothing was chosen) instead of pretending the user rejected a tool.
+ *
+ * Mount with `key={requestId}` so a second question never inherits the first one's draft answers.
+ */
 export function QuestionDialog({
   form,
   onAnswer,
 }: {
-  readonly form: ElicitationForm;
-  readonly onAnswer: (answer: ElicitationAnswer) => void;
+  form: ElicitationForm;
+  onAnswer: (answer: ElicitationAnswer) => void;
 }) {
   const t = useT();
   const [values, setValues] = useState<ElicitationValues>({});
   const questions = questionFields(form);
   // With one question the message *is* the question, so repeating it above the options would just
   // read as the same sentence twice.
-  const isSingle = questions.length === 1;
+  const single = questions.length === 1;
 
   return (
     <Dialog
@@ -227,7 +232,7 @@ export function QuestionDialog({
             <Question
               key={field.key}
               form={form}
-              field={isSingle ? { ...field, description: null } : field}
+              field={single ? { ...field, description: null } : field}
               values={values}
               onChange={setValues}
             />

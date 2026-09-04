@@ -11,17 +11,15 @@ import {
 
 import { isDesktop, transcribeAudio, voiceAvailable } from "../bridge";
 import { useT } from "../i18n";
-import type { SceneInfo, SceneSlotDefinition } from "../session/scene";
+import type { SceneInfo, SceneSlotDef } from "../session/scene";
 import { useToast } from "../ui/toast";
 import { shouldUseWebSpeech } from "./platform";
 import { preferredRecordingType, toWav16kMono } from "./wav";
 
 type Mode = "idle" | "listening" | "transcribing" | "structuring";
 
-/**
-A press this long or longer is hold-to-talk; anything shorter is the classic click-to-toggle.
-*/
-const holdMs = 300;
+/** A press this long or longer is hold-to-talk; anything shorter is the classic click-to-toggle. */
+const HOLD_MS = 300;
 
 // The Web Speech API isn't in lib.dom for every target, so reach for it defensively.
 function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
@@ -50,50 +48,62 @@ interface SpeechResultEvent {
   results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
 }
 
-/**
-What the R11 structuring path needs from the app shell — injected so it unit-tests purely.
-*/
+/** What the R11 structuring path needs from the app shell — injected so it unit-tests purely. */
 export interface TranscriptHandlerDeps {
   scene: SceneInfo | null;
   structureBrief: (
     transcript: string,
-    slots: SceneSlotDefinition[]
+    slots: SceneSlotDef[]
   ) => Promise<Record<string, string> | null>;
   insertBrief: (scene: SceneInfo, values: Record<string, string>) => void;
   insertText: (text: string) => void;
-  /**
-  Called alongside the raw-text fallback so the user hears why no brief appeared (toast).
-  */
+  /** Called alongside the raw-text fallback so the user hears why no brief appeared (toast). */
   onDegrade: () => void;
 }
 
+/**
+ * R11: build the `onTranscript` handler for the active scene, or `undefined` when the scene has
+ * no brief (the button then behaves exactly as before). The hard rule is that the transcript is
+ * never lost: any structuring failure — bridge null, throw, or an empty slot map — degrades to
+ * inserting the raw text.
+ */
 export function makeTranscriptHandler(
   deps: TranscriptHandlerDeps
 ): ((full: string) => Promise<void>) | undefined {
   const { scene } = deps;
-  if (!scene?.brief) {
-    return undefined;
-  }
+  if (!scene?.brief) return undefined;
   const slots = scene.brief.slots ?? [];
   return async (full: string) => {
     const values = await deps.structureBrief(full, slots).catch(() => null);
-    if (values && Object.keys(values).length > 0) {
+    if (values && Object.keys(values).length > 0)
       deps.insertBrief(scene, values);
-    } else {
+    else {
       deps.insertText(full);
       deps.onDegrade();
     }
   };
 }
 
+/**
+ * Voice input. Prefers the webview's built-in speech recognition (live, no setup); otherwise records
+ * audio and hands it to the core's configured local transcriber.
+ *
+ * Two capture gestures share one button: press-and-hold (≥300ms) records for exactly the duration
+ * of the press, while a short press falls through to the original click-to-toggle — which is also
+ * what keyboard Enter/Space always do, so the accessibility path is unchanged.
+ *
+ * With `onTranscript` set, finals are buffered and delivered once on stop (the R11 structured-brief
+ * path, with a "structuring" spinner while the handler runs); without it, behavior is identical to
+ * the original per-chunk `onText` dictation.
+ */
 export function VoiceButton({
   onText,
   onTranscript,
   hint,
 }: {
-  readonly onText: (text: string) => void;
-  readonly onTranscript?: (full: string) => Promise<void>;
-  readonly hint?: string;
+  onText: (text: string) => void;
+  onTranscript?: (full: string) => Promise<void>;
+  hint?: string;
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [hasLocal, setHasLocal] = useState(false);
@@ -112,14 +122,10 @@ export function VoiceButton({
     activeRef.current = true;
     voiceAvailable()
       .then((available) => {
-        if (activeRef.current) {
-          setHasLocal(available);
-        }
+        if (activeRef.current) setHasLocal(available);
       })
       .catch(() => {
-        if (activeRef.current) {
-          setHasLocal(false);
-        }
+        if (activeRef.current) setHasLocal(false);
       });
     return () => {
       activeRef.current = false;
@@ -140,9 +146,7 @@ export function VoiceButton({
       if (recorder) {
         recorder.ondataavailable = null;
         recorder.onstop = null;
-        if (recorder.state !== "inactive") {
-          recorder.stop();
-        }
+        if (recorder.state !== "inactive") recorder.stop();
       }
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -155,19 +159,14 @@ export function VoiceButton({
     try {
       recRef.current?.stop();
     } catch {
-      /*
-      already stopped
-      */
+      /* already stopped */
     }
     recRef.current = null;
-    if (mediaRef.current && mediaRef.current.state !== "inactive") {
+    if (mediaRef.current && mediaRef.current.state !== "inactive")
       mediaRef.current.stop();
-    }
   };
 
-  /**
-  Deliver a finished capture: structure the buffer when asked to, otherwise just go idle.
-  */
+  /** Deliver a finished capture: structure the buffer when asked to, otherwise just go idle. */
   const finishCapture = (text: string) => {
     if (onTranscript && text) {
       setMode("structuring");
@@ -186,13 +185,9 @@ export function VoiceButton({
       let text = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) {
-          text += r[0].transcript;
-        }
+        if (r.isFinal) text += r[0].transcript;
       }
-      if (!text.trim()) {
-        return;
-      }
+      if (!text.trim()) return;
       // R11: buffer finals for one onTranscript on stop; classic path streams them out per chunk.
       if (onTranscript) {
         bufferRef.current += (bufferRef.current ? " " : "") + text.trim();
@@ -212,7 +207,7 @@ export function VoiceButton({
   };
 
   const startRecording = async () => {
-    if (navigator.mediaDevices?.getUserMedia == null) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       toast(t("voice.noMicApi"), "error");
       return;
     }
@@ -223,23 +218,16 @@ export function VoiceButton({
     }
     streamRef.current = stream;
     const mimeType = preferredRecordingType();
-    const mr = new MediaRecorder(
-      stream,
-      mimeType != null && mimeType !== "" ? { mimeType } : undefined
-    );
+    const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     chunksRef.current = [];
     mr.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
-      }
+      if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     mr.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       mediaRef.current = null;
-      if (!activeRef.current) {
-        return;
-      }
+      if (!activeRef.current) return;
       setMode("transcribing");
       try {
         // Send WAV, not the recorder's native container: whisper.cpp and the other local
@@ -248,26 +236,19 @@ export function VoiceButton({
           type: mr.mimeType || mimeType,
         });
         const wav = await toWav16kMono(blob);
-        if (!activeRef.current) {
-          return;
-        }
+        if (!activeRef.current) return;
         const text = (await transcribeAudio(wav, "wav")).trim();
-        if (!activeRef.current) {
-          return;
-        }
+        if (!activeRef.current) return;
         if (text && onTranscript) {
           // The local transcriber's single result rides the same structuring path as buffered
           // Web-Speech finals.
           finishCapture(text);
           return;
         }
-        if (text) {
-          onText(text);
-        } else {
-          toast(t("voice.noSpeech"), "error");
-        }
-      } catch (error) {
-        toast(t("voice.transcribeFailed", { error: String(error) }), "error");
+        if (text) onText(text);
+        else toast(t("voice.noSpeech"), "error");
+      } catch (e) {
+        toast(t("voice.transcribeFailed", { error: String(e) }), "error");
       }
       setMode("idle");
     };
@@ -282,9 +263,7 @@ export function VoiceButton({
       setMode("idle");
       return;
     }
-    if (mode === "transcribing" || mode === "structuring") {
-      return;
-    }
+    if (mode === "transcribing" || mode === "structuring") return;
     const SR = getSpeechRecognition();
     try {
       if (SR) {
@@ -293,52 +272,43 @@ export function VoiceButton({
       }
       // Re-check rather than trusting the mount-time answer: the transcriber may have been
       // installed since the app started.
-      const isLocal = hasLocal || (await voiceAvailable().catch(() => false));
-      if (!activeRef.current) {
-        return;
-      }
-      setHasLocal(isLocal);
-      if (isLocal) {
-        await startRecording();
-      } else {
+      const local = hasLocal || (await voiceAvailable().catch(() => false));
+      if (!activeRef.current) return;
+      setHasLocal(local);
+      if (local) await startRecording();
+      else {
         // Say so out loud, and name the fix — the button used to look simply broken here.
         toast(t("voice.unavailable"), "error");
       }
-    } catch (error) {
-      toast(t("voice.micUnavailable", { error: String(error) }), "error");
+    } catch (e) {
+      toast(t("voice.micUnavailable", { error: String(e) }), "error");
       setMode("idle");
     }
   };
 
   // ---- hold-to-talk --------------------------------------------------------------------------
-  // Pointer presses start capture immediately; releasing after ≥holdMs stops it (hold-to-talk),
+  // Pointer presses start capture immediately; releasing after ≥HOLD_MS stops it (hold-to-talk),
   // while a shorter press leaves the capture running — the same outcome as the classic
   // click-to-toggle "on". Either way the click that trails a handled press is swallowed so it
   // can't immediately re-toggle. Keyboard activation fires click without pointer events, so
   // Enter/Space keep plain toggle semantics untouched.
   const onPointerDown = () => {
     suppressClickRef.current = false;
-    if (mode !== "idle") {
-      return;
-    } // pressing a busy/listening button resolves via the click path
+    if (mode !== "idle") return; // pressing a busy/listening button resolves via the click path
     pressStartRef.current = Date.now();
     void toggle();
   };
 
-  const endPress = (isClickFollows: boolean) => {
+  const endPress = (clickFollows: boolean) => {
     const started = pressStartRef.current;
     pressStartRef.current = null;
-    if (started === null) {
-      return;
-    }
-    if (Date.now() - started >= holdMs) {
+    if (started === null) return;
+    if (Date.now() - started >= HOLD_MS) {
       stopAll();
       setMode((m) => (m === "listening" ? "idle" : m));
     }
     // Short press: keep listening (that *is* the toggle-on the click would have done).
-    if (isClickFollows) {
-      suppressClickRef.current = true;
-    }
+    if (clickFollows) suppressClickRef.current = true;
   };
 
   const onClick = () => {
@@ -392,9 +362,7 @@ export function VoiceButton({
       />
       <TooltipContent>
         {label}
-        {hint != null && hint !== "" ? (
-          <span className="ml-1.5 opacity-60">{hint}</span>
-        ) : null}
+        {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
       </TooltipContent>
     </Tooltip>
   );

@@ -25,12 +25,10 @@ const ISSUE = {
 };
 
 const realBridge = await import("../src/bridge");
-mock.module("../src/bridge", () => {
-  return {
-    ...realBridge,
-    listGithubIssues: async () => [ISSUE],
-  };
-});
+mock.module("../src/bridge", () => ({
+  ...realBridge,
+  listGithubIssues: async () => [ISSUE],
+}));
 
 const { IssuesModal } = await import("../src/issues/Issues");
 const { I18nProvider } = await import("../src/i18n");
@@ -41,9 +39,7 @@ const { I18nProvider } = await import("../src/i18n");
 const mountedRoots = [];
 
 afterEach(() => {
-  for (const mounted of mountedRoots.splice(0)) {
-    mounted.unmount();
-  }
+  for (const mounted of mountedRoots.splice(0)) mounted.unmount();
   dom.document.body.replaceChildren();
   restoreDom();
 });
@@ -105,9 +101,7 @@ function labeledButton(translated, key) {
   );
 }
 
-/**
-Radix menus open on pointerdown (mouse) — the harness click alone is not enough.
-*/
+/** Radix menus open on pointerdown (mouse) — the harness click alone is not enough. */
 async function openDelegateMenu() {
   const trigger = labeledButton("Delegate…", "issueDeleg.delegate");
   await reactAct(async () => {
@@ -127,9 +121,9 @@ async function openDelegateMenu() {
 }
 
 function menuItems() {
-  return [
-    ...dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'),
-  ];
+  return Array.from(
+    dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]')
+  );
 }
 
 describe("IssuesModal delegation", () => {
@@ -169,8 +163,8 @@ describe("IssuesModal delegation", () => {
     const items = menuItems();
     expect(items).toHaveLength(1);
     expect(items[0].textContent).toMatch(
-      /No scenes available|issueDeleg\.noScenes/u
+      /No scenes available|issueDeleg\.noScenes/
     );
-    expect(items[0].dataset.disabled).not.toBeNull();
+    expect(items[0].getAttribute("data-disabled")).not.toBeNull();
   });
 });

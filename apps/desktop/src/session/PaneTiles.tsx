@@ -1,25 +1,45 @@
-import { useRef } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 import { PaneDivider } from "./PaneDivider";
-import { computeDividers, computePaneRects, listPanes } from "./paneLayout";
-import type { PaneLayout } from "./paneLayout";
+import {
+  computeDividers,
+  computePaneRects,
+  listPanes,
+  type PaneEdge,
+  type PaneLayout,
+  type PaneNode,
+} from "./paneLayout";
 
 const percent = (value: number): string => `${value * 100}%`;
 
-export interface PaneTilesProps {
-  readonly layout: PaneLayout;
-  /**
-  Renders a leaf's content. Called once per pane; the node is kept mounted across relayouts.
-  */
-  readonly renderPane: (paneId: string, isFocused: boolean) => ReactNode;
-  readonly onFocusPane: (paneId: string) => void;
-  readonly onResizeSplit: (splitId: string, ratio: number) => void;
-  readonly className?: string;
+function paneEntranceEdge(node: PaneNode, paneId: string): PaneEdge | null {
+  if (node.kind === "leaf") return null;
+  if (node.a.kind === "leaf" && node.a.id === paneId) {
+    return node.direction === "row" ? "left" : "top";
+  }
+  if (node.b.kind === "leaf" && node.b.id === paneId) {
+    return node.direction === "row" ? "right" : "bottom";
+  }
+  return paneEntranceEdge(node.a, paneId) ?? paneEntranceEdge(node.b, paneId);
 }
 
+export interface PaneTilesProps {
+  layout: PaneLayout;
+  /** Renders a leaf's content. Called once per pane; the node is kept mounted across relayouts. */
+  renderPane: (paneId: string, focused: boolean) => ReactNode;
+  onFocusPane: (paneId: string) => void;
+  onResizeSplit: (splitId: string, ratio: number) => void;
+  className?: string;
+}
+
+/**
+ * Renders a tiling workspace from a {@link PaneLayout}. Every pane is absolutely positioned from
+ * its normalized rectangle and keyed by paneId, so splitting, closing, focusing or resizing never
+ * moves a pane within the React tree — its composer/editor instance (and unsaved draft) survives a
+ * relayout. Dragging a divider reports a new ratio; the parent owns the layout state.
+ */
 export function PaneTiles({
   layout,
   renderPane,
@@ -31,9 +51,21 @@ export function PaneTiles({
   const paneIds = listPanes(layout.root);
   const rects = computePaneRects(layout.root);
   const dividers = computeDividers(layout.root);
+  const knownPaneIdsRef = useRef(new Set(paneIds));
+  const entranceEdgesRef = useRef(new Map<string, PaneEdge>());
+  const currentPaneIds = new Set(paneIds);
+  for (const paneId of paneIds) {
+    if (knownPaneIdsRef.current.has(paneId)) continue;
+    const edge = paneEntranceEdge(layout.root, paneId);
+    if (edge) entranceEdgesRef.current.set(paneId, edge);
+  }
+  for (const paneId of entranceEdgesRef.current.keys()) {
+    if (!currentPaneIds.has(paneId)) entranceEdgesRef.current.delete(paneId);
+  }
+  knownPaneIdsRef.current = currentPaneIds;
   // A lone pane fills the workspace, so a focus ring would just outline the whole column; only
   // show it once tiling actually splits the space.
-  const isMultiPane = paneIds.length > 1;
+  const multiPane = paneIds.length > 1;
 
   return (
     <div
@@ -42,35 +74,35 @@ export function PaneTiles({
     >
       {paneIds.map((paneId) => {
         const rect = rects.get(paneId);
-        if (!rect) {
-          return null;
-        }
-        const isFocused = paneId === layout.focused;
+        if (!rect) return null;
+        const focused = paneId === layout.focused;
+        const entranceEdge = entranceEdgesRef.current.get(paneId);
         const style: CSSProperties = {
-          height: percent(rect.h),
-          left: percent(rect.x),
           position: "absolute",
+          left: percent(rect.x),
           top: percent(rect.y),
           width: percent(rect.w),
+          height: percent(rect.h),
         };
         return (
           <div
             key={paneId}
             data-pane-id={paneId}
-            data-focused={isFocused || undefined}
+            data-focused={focused || undefined}
+            data-pane-entrance={entranceEdge}
             className={cn(
               "overflow-hidden",
-              isFocused &&
-                isMultiPane &&
+              entranceEdge && "pane-tile-enter",
+              entranceEdge && `pane-tile-enter-${entranceEdge}`,
+              focused &&
+                multiPane &&
                 "outline-ring outline outline-1 -outline-offset-1"
             )}
             style={style}
             // Focus on press so a click's action targets the pane it lands in.
-            onMouseDownCapture={
-              isFocused ? undefined : () => onFocusPane(paneId)
-            }
+            onMouseDownCapture={focused ? undefined : () => onFocusPane(paneId)}
           >
-            {renderPane(paneId, isFocused)}
+            {renderPane(paneId, focused)}
           </div>
         );
       })}

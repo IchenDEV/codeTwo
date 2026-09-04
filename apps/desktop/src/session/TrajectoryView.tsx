@@ -1,5 +1,11 @@
-import { useDeferredValue, useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { SearchField } from "@/components/business/search-field";
 import { Button } from "@/components/ui/button";
@@ -22,41 +28,39 @@ import {
   deriveTrajectory,
   filterTrajectory,
   formatTrajectoryDuration,
-} from "./trajectory";
-import type {
-  TrajectoryKind,
-  TrajectoryLane,
-  TrajectoryRecord,
+  type TrajectoryKind,
+  type TrajectoryLane,
+  type TrajectoryRecord,
 } from "./trajectory";
 import type { Turn } from "./turns";
 
-const kindLabel: Record<TrajectoryKind, StringKey> = {
+const KIND_LABEL: Record<TrajectoryKind, StringKey> = {
+  user: "trajectory.kind.user",
   assistant: "trajectory.kind.assistant",
-  error: "trajectory.kind.error",
-  memory: "trajectory.kind.memory",
-  plan: "trajectory.kind.plan",
   reasoning: "trajectory.kind.reasoning",
   tool: "trajectory.kind.tool",
-  user: "trajectory.kind.user",
+  memory: "trajectory.kind.memory",
+  plan: "trajectory.kind.plan",
+  error: "trajectory.kind.error",
 };
 
-const laneLabel: Record<TrajectoryLane, StringKey> = {
-  assistant: "trajectory.lane.assistant",
+const LANE_LABEL: Record<TrajectoryLane, StringKey> = {
   context: "trajectory.lane.context",
+  assistant: "trajectory.lane.assistant",
   tool: "trajectory.lane.tool",
 };
 
-const kindTone: Record<TrajectoryKind, string> = {
+const KIND_TONE: Record<TrajectoryKind, string> = {
+  user: "bg-primary",
   assistant: "bg-foreground",
-  error: "bg-destructive",
-  memory: "bg-success",
-  plan: "bg-primary/65",
   reasoning: "bg-muted-foreground",
   tool: "bg-warning",
-  user: "bg-primary",
+  memory: "bg-success",
+  plan: "bg-primary/65",
+  error: "bg-destructive",
 };
 
-const filterKinds: (TrajectoryKind | "all")[] = [
+const FILTER_KINDS: Array<TrajectoryKind | "all"> = [
   "all",
   "user",
   "assistant",
@@ -68,34 +72,24 @@ const filterKinds: (TrajectoryKind | "all")[] = [
 ];
 
 function safeDetail(value: unknown): { text: string; object: boolean } | null {
-  if (value === undefined || value === null || value === "") {
-    return null;
-  }
-  const isObject = typeof value !== "string";
+  if (value === undefined || value === null || value === "") return null;
+  const object = typeof value !== "string";
   let text: string;
   try {
-    text = isObject ? JSON.stringify(value, null, 2) : String(value);
+    text = object ? JSON.stringify(value, null, 2) : String(value);
   } catch {
     text = String(value);
   }
   const limit = 30_000;
   return {
-    object: isObject,
+    object,
     text: text.length > limit ? `${text.slice(0, limit)}\n…` : text,
   };
 }
 
-function DetailBlock({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: unknown;
-}) {
+function DetailBlock({ label, value }: { label: string; value: unknown }) {
   const detail = safeDetail(value);
-  if (!detail) {
-    return null;
-  }
+  if (!detail) return null;
   return (
     <section className="flex flex-col gap-2">
       <h3 className="text-callout text-foreground font-medium">{label}</h3>
@@ -127,9 +121,7 @@ function packLane(records: readonly TrajectoryRecord[]): {
     )
     .map((record) => {
       let track = ends.findIndex((end) => record.startAt >= end);
-      if (track < 0) {
-        track = ends.length;
-      }
+      if (track < 0) track = ends.length;
       ends[track] = Math.max(record.startAt, record.endAt);
       return { record, track };
     });
@@ -141,14 +133,14 @@ function Timeline({
   selectedId,
   onSelect,
 }: {
-  readonly records: readonly TrajectoryRecord[];
-  readonly selectedId: string | null;
-  readonly onSelect: (record: TrajectoryRecord) => void;
+  records: readonly TrajectoryRecord[];
+  selectedId: string | null;
+  onSelect: (record: TrajectoryRecord) => void;
 }) {
   const t = useT();
   const startAt = Math.min(...records.map((record) => record.startAt));
   const rawEnd = Math.max(...records.map((record) => record.endAt));
-  const endAt = Math.max(startAt + 1000, rawEnd);
+  const endAt = Math.max(startAt + 1_000, rawEnd);
   const span = endAt - startAt;
   const lanes: TrajectoryLane[] = ["context", "assistant", "tool"];
 
@@ -178,7 +170,7 @@ function Timeline({
           return (
             <div key={lane} className="contents">
               <span className="text-metadata text-muted-foreground self-center pe-3">
-                {t(laneLabel[lane])}
+                {t(LANE_LABEL[lane])}
               </span>
               <div className="trajectory-lane bg-background" style={{ height }}>
                 {packed.records.map(({ record, track }) => {
@@ -187,7 +179,7 @@ function Timeline({
                     ((Math.max(record.endAt, record.startAt) - record.startAt) /
                       span) *
                     100;
-                  const isSelected = record.id === selectedId;
+                  const selected = record.id === selectedId;
                   return (
                     <TooltipButton
                       key={record.id}
@@ -197,19 +189,19 @@ function Timeline({
                       focusStyle="inset"
                       className={cn(
                         "trajectory-bar",
-                        kindTone[record.kind],
-                        isSelected
+                        KIND_TONE[record.kind],
+                        selected
                           ? "ring-foreground/50 opacity-100 ring-2"
                           : "opacity-60 hover:opacity-90"
                       )}
                       style={{
-                        insetBlockStart: track * 12 + 4,
                         insetInlineStart: `${left}%`,
                         width: `${width}%`,
+                        insetBlockStart: track * 12 + 4,
                       }}
-                      label={`${t(kindLabel[record.kind])}: ${record.summary}`}
+                      label={`${t(KIND_LABEL[record.kind])}: ${record.summary}`}
                       tooltip={`${record.title} · ${formatTrajectoryDuration(record.endAt - record.startAt)}`}
-                      aria-pressed={isSelected}
+                      aria-pressed={selected}
                       onClick={() => onSelect(record)}
                     />
                   );
@@ -223,10 +215,10 @@ function Timeline({
   );
 }
 
-function EventMarker({ kind }: { readonly kind: TrajectoryKind }) {
+function EventMarker({ kind }: { kind: TrajectoryKind }) {
   return (
     <span
-      className={cn("rounded-control size-2 shrink-0", kindTone[kind])}
+      className={cn("rounded-control size-2 shrink-0", KIND_TONE[kind])}
       aria-hidden
     />
   );
@@ -237,9 +229,9 @@ function LedgerRow({
   selected,
   onSelect,
 }: {
-  readonly record: TrajectoryRecord;
-  readonly selected: boolean;
-  readonly onSelect: () => void;
+  record: TrajectoryRecord;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   const t = useT();
   return (
@@ -258,8 +250,8 @@ function LedgerRow({
       )}
       style={
         {
-          containIntrinsicSize: "36px",
           contentVisibility: "auto",
+          containIntrinsicSize: "36px",
         } as CSSProperties
       }
       onClick={onSelect}
@@ -269,13 +261,13 @@ function LedgerRow({
       </span>
       <span className="text-callout flex min-w-0 items-center gap-2 px-3 py-2">
         <EventMarker kind={record.kind} />
-        <span className="truncate">{t(kindLabel[record.kind])}</span>
+        <span className="truncate">{t(KIND_LABEL[record.kind])}</span>
       </span>
       <span className="text-callout min-w-0 px-3 py-2">
         <span className="text-foreground block truncate">
           {record.summary || record.title}
         </span>
-        {record.status != null && record.status !== "" ? (
+        {record.status ? (
           <span className="text-metadata text-muted-foreground block truncate">
             {record.title} · {record.status}
           </span>
@@ -289,8 +281,8 @@ function Inspector({
   record,
   formatClock,
 }: {
-  readonly record: TrajectoryRecord | null;
-  readonly formatClock: (timestamp: number) => string;
+  record: TrajectoryRecord | null;
+  formatClock: (timestamp: number) => string;
 }) {
   const t = useT();
   if (!record) {
@@ -314,13 +306,13 @@ function Inspector({
           <p className="text-callout text-muted-foreground mt-1">
             {record.step > 0
               ? t("trajectory.turnStep", {
-                  step: record.step,
                   turn: record.turn,
+                  step: record.step,
                 })
               : t("trajectory.turn", { turn: record.turn })}
           </p>
         </div>
-        {record.status != null && record.status !== "" ? (
+        {record.status ? (
           <span className="text-metadata text-muted-foreground shrink-0">
             {record.status}
           </span>
@@ -361,11 +353,11 @@ export function TrajectoryView({
   loadingEarlier,
   onLoadEarlier,
 }: {
-  readonly turns: readonly Turn[];
-  readonly usage: { input_tokens: number; output_tokens: number } | null;
-  readonly hasEarlier: boolean;
-  readonly loadingEarlier: boolean;
-  readonly onLoadEarlier: () => void;
+  turns: readonly Turn[];
+  usage: { input_tokens: number; output_tokens: number } | null;
+  hasEarlier: boolean;
+  loadingEarlier: boolean;
+  onLoadEarlier: () => void;
 }) {
   const t = useT();
   const { locale } = useLanguage();
@@ -380,15 +372,18 @@ export function TrajectoryView({
   const [now, setNow] = useState(() => Date.now());
   const ledgerRef = useRef<HTMLDivElement | null>(null);
 
-  const isRunning = turns.some((turn) => turn.endedAt === undefined);
-  const records = deriveTrajectory(turns, now);
-  const visibleRecords = filterTrajectory(records, kind, deferredQuery);
+  const running = turns.some((turn) => turn.endedAt === undefined);
+  const records = useMemo(() => deriveTrajectory(turns, now), [now, turns]);
+  const visibleRecords = useMemo(
+    () => filterTrajectory(records, kind, deferredQuery),
+    [deferredQuery, kind, records]
+  );
   const selected =
     visibleRecords.find((record) => record.id === selectedId) ??
     visibleRecords[visibleRecords.length - 1] ??
     null;
   const tailAt = records[records.length - 1]?.endAt ?? 0;
-  const turnsWithRecords = (() => {
+  const turnsWithRecords = useMemo(() => {
     const grouped = new Map<number, TrajectoryRecord[]>();
     for (const record of visibleRecords) {
       const group = grouped.get(record.turn) ?? [];
@@ -396,42 +391,38 @@ export function TrajectoryView({
       grouped.set(record.turn, group);
     }
     return [...grouped.entries()];
-  })();
-  const clock = new Intl.DateTimeFormat(locale, {
-    fractionalSecondDigits: 3,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  }, [visibleRecords]);
+  const clock = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        fractionalSecondDigits: 3,
+      }),
+    [locale]
+  );
   const formatClock = (timestamp: number) => clock.format(new Date(timestamp));
 
   useEffect(() => {
     setNow(Date.now());
-    if (!isRunning) {
-      return;
-    }
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
-  }, [isRunning, turns]);
+  }, [running, turns]);
 
   useEffect(() => {
-    if (!following) {
-      return;
-    }
+    if (!following) return;
     const frame = requestAnimationFrame(() => {
       const ledger = ledgerRef.current;
-      if (ledger) {
-        ledger.scrollTop = ledger.scrollHeight;
-      }
+      if (ledger) ledger.scrollTop = ledger.scrollHeight;
     });
     return () => cancelAnimationFrame(frame);
   }, [following, tailAt]);
 
   useEffect(() => {
     const ledger = ledgerRef.current;
-    if (!following || !ledger || typeof ResizeObserver === "undefined") {
-      return;
-    }
+    if (!following || !ledger || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       ledger.scrollTop = ledger.scrollHeight;
     });
@@ -442,19 +433,14 @@ export function TrajectoryView({
   const jumpToLatest = () => {
     setFollowing(true);
     const ledger = ledgerRef.current;
-    if (ledger) {
-      ledger.scrollTop = ledger.scrollHeight;
-    }
+    if (ledger) ledger.scrollTop = ledger.scrollHeight;
   };
 
   const toggleTurn = (turn: number) => {
     setCollapsedTurns((current) => {
       const next = new Set(current);
-      if (next.has(turn)) {
-        next.delete(turn);
-      } else {
-        next.add(turn);
-      }
+      if (next.has(turn)) next.delete(turn);
+      else next.add(turn);
       return next;
     });
   };
@@ -480,16 +466,16 @@ export function TrajectoryView({
         >
           <SelectTrigger size="sm" aria-label={t("trajectory.filter")}>
             <SelectValue>
-              {kind === "all" ? t("trajectory.filterAll") : t(kindLabel[kind])}
+              {kind === "all" ? t("trajectory.filterAll") : t(KIND_LABEL[kind])}
             </SelectValue>
           </SelectTrigger>
           <SelectContent position="popper" align="end">
             <SelectGroup>
-              {filterKinds.map((value) => (
+              {FILTER_KINDS.map((value) => (
                 <SelectItem key={value} value={value}>
                   {value === "all"
                     ? t("trajectory.filterAll")
-                    : t(kindLabel[value])}
+                    : t(KIND_LABEL[value])}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -562,7 +548,7 @@ export function TrajectoryView({
               </p>
             ) : (
               turnsWithRecords.map(([turn, group]) => {
-                const isCollapsed = collapsedTurns.has(turn);
+                const collapsed = collapsedTurns.has(turn);
                 return (
                   <section
                     key={turn}
@@ -574,10 +560,10 @@ export function TrajectoryView({
                       size="row"
                       focusStyle="inset"
                       className="bg-fill-quiet text-metadata text-muted-foreground w-full gap-2 px-3 py-2 font-medium"
-                      aria-expanded={!isCollapsed}
+                      aria-expanded={!collapsed}
                       onClick={() => toggleTurn(turn)}
                     >
-                      {isCollapsed ? (
+                      {collapsed ? (
                         <ChevronRight aria-hidden className="size-3" />
                       ) : (
                         <ChevronDown aria-hidden className="size-3" />
@@ -585,7 +571,7 @@ export function TrajectoryView({
                       <span>{t("trajectory.turn", { turn })}</span>
                       <span className="font-mono">{group.length}</span>
                     </Button>
-                    {isCollapsed
+                    {collapsed
                       ? null
                       : group.map((record) => (
                           <LedgerRow
@@ -600,7 +586,7 @@ export function TrajectoryView({
               })
             )}
           </div>
-          {following ? null : (
+          {!following ? (
             <Button
               type="button"
               size="compact"
@@ -611,7 +597,7 @@ export function TrajectoryView({
               <ArrowDown data-icon="inline-start" aria-hidden />
               {t("transcript.jumpLatest")}
             </Button>
-          )}
+          ) : null}
         </section>
         <Inspector record={selected} formatClock={formatClock} />
       </div>

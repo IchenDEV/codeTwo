@@ -18,46 +18,47 @@ import {
 import { ChevronDown, ChevronRight, Clapperboard } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-import { listGithubIssues, listIssueDelegations } from "../bridge";
-import type { Issue, IssueDelegation } from "../bridge";
+import {
+  listGithubIssues,
+  listIssueDelegations,
+  type Issue,
+  type IssueDelegation,
+} from "../bridge";
 import { useT } from "../i18n";
 import type { SceneInfo } from "../session/scene";
 
 // GitHub Issues: list open issues for the working dir's repo (via gh) and insert one as context.
 // R12 adds per-row delegation: pick a scene and the issue opens as a provenance-carrying block
 // in a fresh draft fully applied to that scene — you stay assignee.
+/** Lazily loaded delegation history for one issue: scene, when, session jump, tracker comment. */
 function DelegationTrail({
   issue,
   onOpenSession,
 }: {
-  readonly issue: Issue;
-  readonly onOpenSession?: (session: string) => void;
+  issue: Issue;
+  onOpenSession?: (session: string) => void;
 }) {
   const t = useT();
   const [rows, setRows] = useState<IssueDelegation[] | null>(null);
 
   useEffect(() => {
-    let isAlive = true;
+    let alive = true;
     void listIssueDelegations(issue.source, issue.id).then((r) => {
-      if (isAlive) {
-        setRows(r);
-      }
+      if (alive) setRows(r);
     });
     return () => {
-      isAlive = false;
+      alive = false;
     };
   }, [issue.source, issue.id]);
 
-  if (rows === null) {
+  if (rows === null)
     return <p className="text-callout text-muted-foreground px-2 pb-1">…</p>;
-  }
-  if (rows.length === 0) {
+  if (rows.length === 0)
     return (
       <p className="text-callout text-muted-foreground px-2 pb-1">
         {t("issueDeleg.none")}
       </p>
     );
-  }
   return (
     <div className="space-y-0.5 px-2 pb-1">
       {rows.map((row) => (
@@ -71,7 +72,7 @@ function DelegationTrail({
           <span className="shrink-0">
             {new Date(row.created_at).toLocaleString()}
           </span>
-          {row.session_id != null && row.session_id !== "" && onOpenSession ? (
+          {row.session_id && onOpenSession && (
             <Button
               type="button"
               variant="link"
@@ -81,8 +82,8 @@ function DelegationTrail({
             >
               {t("issueDeleg.openSession")}
             </Button>
-          ) : null}
-          {row.comment_url != null && row.comment_url !== "" ? (
+          )}
+          {row.comment_url && (
             <a
               href={row.comment_url}
               target="_blank"
@@ -91,7 +92,7 @@ function DelegationTrail({
             >
               {t("issueDeleg.comment")}
             </a>
-          ) : null}
+          )}
         </div>
       ))}
     </div>
@@ -106,12 +107,12 @@ export function IssuesModal({
   onOpenSession,
   onClose,
 }: {
-  readonly cwd: string;
-  readonly scenes: SceneInfo[];
-  readonly onInsert: (issue: Issue) => void;
-  readonly onDelegate: (issue: Issue, sceneReference: string) => void;
-  readonly onOpenSession?: (session: string) => void;
-  readonly onClose: () => void;
+  cwd: string;
+  scenes: SceneInfo[];
+  onInsert: (issue: Issue) => void;
+  onDelegate: (issue: Issue, sceneReference: string) => void;
+  onOpenSession?: (session: string) => void;
+  onClose: () => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const t = useT();
@@ -140,12 +141,10 @@ export function IssuesModal({
           <DialogTitle>GitHub Issues</DialogTitle>
         </DialogHeader>
 
-        {loading ? (
+        {loading && (
           <p className="text-metadata text-muted-foreground">Loading via gh…</p>
-        ) : null}
-        {err != null && err !== "" ? (
-          <p className="text-metadata text-destructive">{err}</p>
-        ) : null}
+        )}
+        {err && <p className="text-metadata text-destructive">{err}</p>}
 
         <ScrollArea className="max-h-dialog-content pe-3">
           <div className="space-y-1.5">
@@ -222,7 +221,7 @@ export function IssuesModal({
                 )}
               </div>
             ))}
-            {!loading && (err == null || err === "") && issues.length === 0 && (
+            {!loading && !err && issues.length === 0 && (
               <p className="text-body text-muted-foreground p-2">
                 No open issues (or this dir isn’t a GitHub repo).
               </p>

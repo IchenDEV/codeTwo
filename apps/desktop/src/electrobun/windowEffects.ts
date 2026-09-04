@@ -1,5 +1,4 @@
-import { dlopen, FFIType } from "bun:ffi";
-import type { Pointer } from "bun:ffi";
+import { dlopen, FFIType, type Pointer } from "bun:ffi";
 import { join } from "node:path";
 
 const libraryName = "libCodeTwoWindowEffects.dylib";
@@ -23,10 +22,10 @@ let windowEffects:
     >
   | undefined;
 
-export interface MacOSWindowEffectsStatus {
+export type MacOSWindowEffectsStatus = {
   backdrop: boolean;
   shadow: boolean;
-}
+};
 
 const unavailableStatus: MacOSWindowEffectsStatus = {
   backdrop: false,
@@ -39,12 +38,12 @@ function library() {
       args: [FFIType.ptr],
       returns: FFIType.u32,
     },
-    codetwoPerformTitlebarDoubleClick: {
-      args: [FFIType.ptr],
-      returns: FFIType.u32,
-    },
     codetwoSetDockBadgeCount: {
       args: [FFIType.u32],
+      returns: FFIType.u32,
+    },
+    codetwoPerformTitlebarDoubleClick: {
+      args: [FFIType.ptr],
       returns: FFIType.u32,
     },
   });
@@ -54,16 +53,14 @@ function library() {
 export function configureMacOSWindowEffects(
   windowPointer: Pointer
 ): MacOSWindowEffectsStatus {
-  if (process.platform !== "darwin") {
-    return unavailableStatus;
-  }
+  if (process.platform !== "darwin") return unavailableStatus;
 
   try {
     const configuredEffects =
       library().symbols.codetwoConfigureWindowEffects(windowPointer);
     return {
-      backdrop: (configuredEffects & 2) !== 0,
       shadow: (configuredEffects & 1) !== 0,
+      backdrop: (configuredEffects & 2) !== 0,
     };
   } catch (error) {
     console.warn("Could not configure the macOS window effects", error);
@@ -72,13 +69,11 @@ export function configureMacOSWindowEffects(
 }
 
 export function setMacOSSystemBadgeCount(count: number): boolean {
-  if (process.platform !== "darwin") {
-    return false;
-  }
+  if (process.platform !== "darwin") return false;
 
   try {
     const normalized = Number.isFinite(count)
-      ? Math.min(Math.max(Math.trunc(count), 0), 0xff_ff_ff_ff)
+      ? Math.min(Math.max(Math.trunc(count), 0), 0xffff_ffff)
       : 0;
     return library().symbols.codetwoSetDockBadgeCount(normalized) !== 0;
   } catch (error) {
@@ -90,9 +85,7 @@ export function setMacOSSystemBadgeCount(count: number): boolean {
 export function performMacOSTitlebarDoubleClick(
   windowPointer: Pointer
 ): boolean {
-  if (process.platform !== "darwin") {
-    return false;
-  }
+  if (process.platform !== "darwin") return false;
 
   try {
     return (

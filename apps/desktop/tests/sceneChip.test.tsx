@@ -16,8 +16,7 @@ import {
 activateDom();
 const { SceneChip, ScenePicker, SourceBadge } =
   await import("../src/session/SceneChip");
-const { ProviderPicker, SessionControls } =
-  await import("../src/session/Composer");
+const { SessionControls } = await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -48,6 +47,8 @@ function config(overrides = {}) {
     providersStatus: "ready",
     provider: "claude_code",
     onProvider: () => {},
+    onProviderModel: () => {},
+    providerChangeDisabled: false,
     onReloadProviders: () => {},
     mode: "ask",
     sandbox: "workspace_write",
@@ -88,13 +89,53 @@ function renderChip(cfg) {
   );
 }
 
-describe("ProviderPicker", () => {
+describe("Provider/model picker", () => {
+  test("locks provider replacement while the session runtime is busy", () => {
+    activateDom();
+    const providerModelChanges = [];
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config({
+            hasSession: true,
+            provider: "codex",
+            providerChangeDisabled: true,
+            providers: [
+              {
+                id: "codex",
+                display_name: "Codex",
+                available: true,
+                enabled: true,
+                models: [{ id: "gpt-5.6-sol", name: "GPT-5.6-Sol" }],
+              },
+            ],
+            onProviderModel: (provider, model) =>
+              providerModelChanges.push([provider, model]),
+          })}
+          models={[{ id: "gpt-5.6-sol", name: "GPT-5.6-Sol" }]}
+          currentModel="gpt-5.6-sol"
+          defaultModel="gpt-5.6-sol"
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>
+    );
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
+    expect(trigger?.disabled).toBe(true);
+    trigger?.click();
+    expect(providerModelChanges).toEqual([]);
+    rendered.unmount();
+  });
+
   test("keeps known providers selectable and offers retry when desktop detection fails", async () => {
     activateDom();
     let retries = 0;
     const rendered = mount(
       <I18nProvider>
-        <ProviderPicker
+        <SessionControls
           config={config({
             providers: [],
             providersStatus: "error",
@@ -103,10 +144,18 @@ describe("ProviderPicker", () => {
               retries += 1;
             },
           })}
+          models={[]}
+          currentModel={null}
+          defaultModel={null}
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
         />
       </I18nProvider>
     );
-    const trigger = rendered.container.querySelector("button");
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
 
     await reactAct(async () => {
       trigger?.dispatchEvent(
@@ -127,9 +176,9 @@ describe("ProviderPicker", () => {
       const popup = dom.document.body.querySelector(
         '[data-slot="popover-content"]'
       );
-      expect(trigger?.textContent?.trim()).toBe("Grok");
-      expect(popup?.textContent).toContain("Grok");
-      expect(popup?.textContent).toContain("Codex");
+      expect(trigger?.textContent).toContain("Default model");
+      button(popup, "Grok");
+      button(popup, "Codex");
       button(popup, "Retry").click();
       expect(retries).toBe(1);
     } finally {
@@ -247,6 +296,177 @@ describe("SceneChip", () => {
     expect(
       button(row, "Hide session settings").getAttribute("aria-expanded")
     ).toBe("true");
+    rendered.unmount();
+  });
+
+  test("combines Provider and model selection into one CodeTwo picker", async () => {
+    activateDom();
+    const providers = [
+      {
+        id: "codex",
+        display_name: "OpenAI Codex",
+        available: true,
+        enabled: true,
+        models: [
+          {
+            id: "gpt-5.6-sol",
+            name: "GPT-5.6-Sol",
+            description: "Frontier coding",
+          },
+          {
+            id: "gpt-5.6-terra",
+            name: "GPT-5.6-Terra",
+            description: "Balanced coding",
+          },
+        ],
+      },
+      {
+        id: "grok",
+        display_name: "Grok",
+        available: true,
+        enabled: true,
+        models: [
+          { id: "grok-4.6", name: "Grok 4.6", description: "Fast reasoning" },
+        ],
+      },
+    ];
+    const providerChanges = [];
+    const modelChanges = [];
+    const providerModelChanges = [];
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config({
+            hasSession: true,
+            provider: "codex",
+            providers,
+            onProvider: (provider) => providerChanges.push(provider),
+            onProviderModel: (provider, model) =>
+              providerModelChanges.push([provider, model]),
+          })}
+          models={providers[0].models}
+          currentModel="gpt-5.6-sol"
+          defaultModel="gpt-5.6-sol"
+          onModel={(model) => modelChanges.push(model)}
+          configOptions={[]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>
+    );
+
+    const controls = rendered.container.querySelector(
+      "[data-session-controls]"
+    );
+    expect(
+      controls?.querySelector('button[aria-label^="Provider:"]')
+    ).toBeNull();
+    const trigger = controls?.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
+    expect(trigger?.textContent).toContain("GPT-5.6-Sol");
+    if (!trigger)
+      throw new Error("combined Provider/model trigger did not render");
+    click(trigger);
+    await flush();
+
+    const picker = dom.document.body.querySelector(
+      "[data-provider-model-picker]"
+    );
+    expect(picker).toBeTruthy();
+    expect(picker?.querySelector("[data-provider-rail]")).toBeNull();
+    const providerSwitcher = picker?.querySelector("[data-provider-switcher]");
+    expect(providerSwitcher).toBeTruthy();
+    expect(providerSwitcher?.textContent).toContain("Codex");
+    expect(providerSwitcher?.textContent).not.toContain("OpenAI Codex");
+    expect(providerSwitcher?.textContent).toContain("Grok");
+    expect(
+      picker?.querySelector('input[aria-label="Search models"]')
+    ).toBeTruthy();
+    const grok = picker?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Grok"]'
+    );
+    if (!grok) throw new Error("Grok Provider switcher item did not render");
+    click(grok);
+    await flush();
+
+    expect(providerChanges).toEqual([]);
+    const grokModel = Array.from(
+      picker?.querySelectorAll<HTMLButtonElement>(
+        '[data-model-picker-row] [data-slot="selectable-row"]'
+      ) ?? []
+    ).find((row) => row.textContent?.includes("Grok 4.6"));
+    if (!grokModel)
+      throw new Error("Grok model did not render after switching Provider");
+    click(grokModel);
+    await flush();
+    expect(modelChanges).toEqual([]);
+    expect(providerModelChanges).toEqual([["grok", "grok-4.6"]]);
+
+    rendered.unmount();
+  });
+
+  test("selects an installed Provider without requiring a preset model", async () => {
+    activateDom();
+    const providerChanges = [];
+    const providerModelChanges = [];
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config({
+            provider: "codex",
+            providers: [
+              {
+                id: "codex",
+                display_name: "OpenAI Codex",
+                available: true,
+                enabled: true,
+                models: [{ id: "gpt-5.6-sol", name: "GPT-5.6-Sol" }],
+              },
+              {
+                id: "pi",
+                display_name: "Pi",
+                available: true,
+                enabled: true,
+                models: [],
+              },
+            ],
+            onProvider: (provider) => providerChanges.push(provider),
+            onProviderModel: (provider, model) =>
+              providerModelChanges.push([provider, model]),
+          })}
+          models={[{ id: "gpt-5.6-sol", name: "GPT-5.6-Sol" }]}
+          currentModel="gpt-5.6-sol"
+          defaultModel="gpt-5.6-sol"
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>
+    );
+
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
+    if (!trigger)
+      throw new Error("combined Provider/model trigger did not render");
+    click(trigger);
+    await flush();
+
+    const picker = dom.document.body.querySelector(
+      "[data-provider-model-picker]"
+    );
+    const pi = picker?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Pi"]'
+    );
+    if (!pi) throw new Error("Pi Provider switcher item did not render");
+    click(pi);
+    await flush();
+
+    expect(providerChanges).toEqual([]);
+    expect(providerModelChanges).toEqual([["pi", null]]);
+    expect(
+      dom.document.body.querySelector("[data-provider-model-picker]")
+    ).toBeNull();
     rendered.unmount();
   });
 

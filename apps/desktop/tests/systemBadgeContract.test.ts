@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const source = (relativePath: string) => {
-  return readFileSync(
-    new URL(relativePath, import.meta.url),
-    "utf-8"
-  ).replaceAll("\r\n", "\n");
-};
+const source = (relativePath: string) =>
+  readFileSync(new URL(relativePath, import.meta.url), "utf8").replaceAll(
+    "\r\n",
+    "\n"
+  );
 
 const app = source("../src/App.tsx");
 const bridge = source("../src/bridge.ts");
@@ -36,7 +35,7 @@ describe("system badge contract", () => {
     expect(nativeBadge).toContain("codetwoSetDockBadgeCount");
     expect(appKit).toContain("NSApp.dockTile");
     expect(appKit).toContain("dockTile.badgeLabel = count > 0");
-    expect(appKit).toMatch(/dockTile\.badgeLabel = count > 0[\s\S]*?: nil;/u);
+    expect(appKit).toMatch(/dockTile\.badgeLabel = count > 0[\s\S]*?: nil;/);
     expect(appKit).toContain("dispatch_sync(dispatch_get_main_queue()");
   });
 

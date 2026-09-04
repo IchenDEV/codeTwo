@@ -1,8 +1,9 @@
-import type { DocumentBlock } from "../bridge";
+import type { DocBlock } from "../bridge";
 import { isAgentImagePath } from "../files/imageTypes";
 
-export function workspaceReferenceBlock(path: string): DocumentBlock {
+/** Lower one visible `@file` mention to the provider-neutral document shape. */
+export function workspaceReferenceBlock(path: string): DocBlock {
   return isAgentImagePath(path)
-    ? { path, type: "image" }
-    : { path, type: "file" };
+    ? { type: "image", path }
+    : { type: "file", path };
 }

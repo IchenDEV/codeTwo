@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { StatusIndicator } from "@/components/business/status-indicator";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Check } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -28,19 +29,15 @@ import {
   remoteStatus,
   startRemote,
   stopRemote,
-} from "../bridge";
-import type {
-  RemoteClientProtocol,
-  RemoteDevice,
-  RemoteEndpoint,
-  RemotePairingLink,
-  RemoteStatus,
+  type RemoteClientProtocol,
+  type RemoteDevice,
+  type RemoteEndpoint,
+  type RemotePairingLink,
+  type RemoteStatus,
 } from "../bridge";
 
 function defaultEndpointId(status: RemoteStatus | null): string | null {
-  if (!status) {
-    return null;
-  }
+  if (!status) return null;
   return (
     status.endpoints.find(
       (endpoint) => endpoint.id.startsWith("lan-") && endpoint.qr_shareable
@@ -52,23 +49,17 @@ function defaultEndpointId(status: RemoteStatus | null): string | null {
 }
 
 function supportedProtocols(status: RemoteStatus): RemoteClientProtocol[] {
-  return status.protocols?.length != null ? status.protocols : ["t3", "legacy"];
+  return status.protocols?.length ? status.protocols : ["t3", "legacy"];
 }
 
 function protocolLabel(protocol: RemoteClientProtocol): string {
-  if (protocol === "c2") {
-    return "C2 device sync";
-  }
-  if (protocol === "t3") {
-    return "T3 Code mobile";
-  }
+  if (protocol === "c2") return "C2 device sync";
+  if (protocol === "t3") return "T3 Code mobile";
   return "Browser remote";
 }
 
 function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
-  if (!endpoint) {
-    return "No pairing address is currently available.";
-  }
+  if (!endpoint) return "No pairing address is currently available.";
   if (!endpoint.qr_shareable) {
     return "Works only with another C2 instance on this Mac. Other devices cannot reach 127.0.0.1.";
   }
@@ -78,7 +69,7 @@ function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
   return "Devices on the same network can use this address.";
 }
 
-export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
+export function RemoteModal({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [link, setLink] = useState<RemotePairingLink | null>(null);
@@ -96,16 +87,14 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const linkRequest = useRef(0);
 
-  const applyStatus = (next: RemoteStatus | null) => {
+  const applyStatus = useCallback((next: RemoteStatus | null) => {
     setStatus(next);
     setSelectedEndpointId((current) => {
       if (
-        current != null &&
-        current !== "" &&
+        current &&
         next?.endpoints.some((endpoint) => endpoint.id === current)
-      ) {
+      )
         return current;
-      }
       return defaultEndpointId(next);
     });
     if (next) {
@@ -116,49 +105,41 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
     } else {
       setLink(null);
     }
-  };
+  }, []);
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     remoteStatus()
       .then(applyStatus)
       .catch(() => {});
     remoteDevices()
       .then(setDevices)
       .catch(() => {});
-  };
+  }, [applyStatus]);
 
   useEffect(refresh, [refresh]);
 
-  const mintLink = async (
-    endpointId: string | null,
-    requestedProtocol = clientProtocol
-  ) => {
-    const request = ++linkRequest.current;
-    setLinkBusy(true);
-    setErr(null);
-    try {
-      const next = await remotePairingLink(
-        endpointId ?? undefined,
-        requestedProtocol
-      );
-      if (request !== linkRequest.current) {
-        return;
+  const mintLink = useCallback(
+    async (endpointId: string | null, requestedProtocol = clientProtocol) => {
+      const request = ++linkRequest.current;
+      setLinkBusy(true);
+      setErr(null);
+      try {
+        const next = await remotePairingLink(
+          endpointId ?? undefined,
+          requestedProtocol
+        );
+        if (request !== linkRequest.current) return;
+        setLink(next);
+        if (next) setSelectedEndpointId(next.endpoint_id);
+        setCopied(false);
+      } catch (error) {
+        if (request === linkRequest.current) setErr(String(error));
+      } finally {
+        if (request === linkRequest.current) setLinkBusy(false);
       }
-      setLink(next);
-      if (next) {
-        setSelectedEndpointId(next.endpoint_id);
-      }
-      setCopied(false);
-    } catch (error) {
-      if (request === linkRequest.current) {
-        setErr(String(error));
-      }
-    } finally {
-      if (request === linkRequest.current) {
-        setLinkBusy(false);
-      }
-    }
-  };
+    },
+    [clientProtocol]
+  );
 
   const turnOn = async () => {
     setBusy(true);
@@ -201,20 +182,14 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
   };
 
   const selectClientProtocol = (protocol: string) => {
-    if (protocol !== "c2" && protocol !== "t3" && protocol !== "legacy") {
-      return;
-    }
+    if (protocol !== "c2" && protocol !== "t3" && protocol !== "legacy") return;
     setClientProtocol(protocol);
     setLink(null);
-    if (status) {
-      void mintLink(selectedEndpointId, protocol);
-    }
+    if (status) void mintLink(selectedEndpointId, protocol);
   };
 
   const copy = async () => {
-    if (!link) {
-      return;
-    }
+    if (!link) return;
     try {
       await navigator.clipboard.writeText(link.url);
       setCopied(true);
@@ -225,9 +200,7 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
   };
 
   const pair = async () => {
-    if (!pairingUrl.trim()) {
-      return;
-    }
+    if (!pairingUrl.trim()) return;
     setPairBusy(true);
     setErr(null);
     setPairedMessage(null);
@@ -289,9 +262,8 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
               aria-label="C2 pairing link"
               onChange={(event) => setPairingUrl(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && pairingUrl.trim() && !pairBusy) {
+                if (event.key === "Enter" && pairingUrl.trim() && !pairBusy)
                   void pair();
-                }
               }}
             />
             <Button
@@ -301,9 +273,9 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
               {pairBusy ? "Pairing…" : "Pair"}
             </Button>
           </div>
-          {pairedMessage != null && pairedMessage !== "" ? (
+          {pairedMessage && (
             <p className="text-metadata text-foreground">{pairedMessage}</p>
-          ) : null}
+          )}
         </Card>
 
         {status ? (
@@ -367,9 +339,7 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
                 value={selectedEndpointId ?? undefined}
                 disabled={status.endpoints.length === 0}
                 onValueChange={(endpointId) =>
-                  endpointId != null &&
-                  endpointId !== "" &&
-                  selectEndpoint(endpointId)
+                  endpointId && selectEndpoint(endpointId)
                 }
               >
                 <SelectTrigger
@@ -415,7 +385,7 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
                   The link is one-time and expires in{" "}
                   {Math.round(link.expires_in / 60)} minutes.
                 </p>
-                {link.qr_svg ? (
+                {link.qr_svg && (
                   <div className="rounded-control bg-qr-surface mx-auto w-fit p-2">
                     <img
                       className="block size-44"
@@ -423,7 +393,7 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
                       src={`data:image/svg+xml;utf8,${encodeURIComponent(link.qr_svg)}`}
                     />
                   </div>
-                ) : null}
+                )}
                 <div className="rounded-control bg-fill-rest text-metadata px-3 py-2 font-mono break-all">
                   {link.url}
                 </div>
@@ -434,7 +404,14 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
                     disabled={linkBusy}
                     onClick={() => void copy()}
                   >
-                    {copied ? "Copied ✓" : "Copy link"}
+                    {copied ? (
+                      <>
+                        <Check data-icon="inline-start" aria-hidden />
+                        Copied
+                      </>
+                    ) : (
+                      "Copy link"
+                    )}
                   </Button>
                   <Button
                     variant="outline"
@@ -508,9 +485,7 @@ export function RemoteModal({ onClose }: { readonly onClose: () => void }) {
           </div>
         )}
 
-        {err != null && err !== "" ? (
-          <p className="text-metadata text-destructive">{err}</p>
-        ) : null}
+        {err && <p className="text-metadata text-destructive">{err}</p>}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

@@ -1,12 +1,11 @@
-import { useId } from "react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 interface SettingsSectionProps {
-  readonly title: ReactNode;
-  readonly description?: ReactNode;
-  readonly actions?: ReactNode;
-  readonly children: ReactNode;
-  readonly headingId?: string;
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  headingId?: string;
 }
 
 function SettingsSection({
@@ -37,23 +36,23 @@ function SettingsSection({
           >
             {title}
           </h2>
-          {description == null ? null : (
+          {description ? (
             <p
               data-slot="settings-section-description"
               className="mt-inline text-metadata text-content-muted"
             >
               {description}
             </p>
-          )}
+          ) : null}
         </div>
-        {actions == null ? null : (
+        {actions ? (
           <div
             data-slot="settings-section-actions"
             className="gap-inline flex max-w-full shrink-0 flex-wrap items-center"
           >
             {actions}
           </div>
-        )}
+        ) : null}
       </header>
       <div
         data-slot="settings-section-content"

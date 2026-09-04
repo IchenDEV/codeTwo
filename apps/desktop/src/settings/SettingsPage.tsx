@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import type { CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { NavigationRow } from "@/components/business/navigation-row";
 import { Button } from "@/components/ui/button";
@@ -36,22 +35,20 @@ import {
   getWorktreeSettings,
   listProjectWorktrees,
   updateWorktreeSettings,
-} from "../bridge";
-import type {
-  AppshotSettings,
-  BrowserUseSettings,
-  ComputerUseSettings,
-  AppUpdateStatus,
-  DeviceSyncStatus,
-  DiagnosticsExportResult,
-  KeymapEntry,
-  Project,
-  ProjectWorktreeMode,
-  ProviderInfo,
-  ProviderRuntimeOverride,
-  SessionImportResult,
-  WorktreeSettings,
-  PluginDeveloperStatus,
+  type AppshotSettings,
+  type BrowserUseSettings,
+  type ComputerUseSettings,
+  type AppUpdateStatus,
+  type DeviceSyncStatus,
+  type DiagnosticsExportResult,
+  type KeymapEntry,
+  type Project,
+  type ProjectWorktreeMode,
+  type ProviderInfo,
+  type ProviderRuntimeOverride,
+  type SessionImportResult,
+  type WorktreeSettings,
+  type PluginDeveloperStatus,
 } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
@@ -106,54 +103,61 @@ type SettingsNavItem = {
   labelKey: StringKey;
 };
 
-const navGroups: {
+const NAV_GROUPS: {
   id: "personal" | "workspace" | "integrations";
   labelKey: StringKey;
   items: SettingsNavItem[];
 }[] = [
   {
     id: "personal",
-    items: [
-      { icon: SlidersHorizontal, id: "general", labelKey: "settings.general" },
-      { icon: Download, id: "import", labelKey: "settings.import" },
-      { icon: UserRound, id: "profile", labelKey: "profile.title" },
-      { icon: Palette, id: "appearance", labelKey: "settings.appearance" },
-      { icon: PawPrint, id: "pets", labelKey: "settings.pets" },
-      { icon: Keyboard, id: "keybindings", labelKey: "settings.keybindings" },
-      { icon: ChartNoAxesColumn, id: "usage", labelKey: "usage.title" },
-    ],
     labelKey: "settings.navPersonal",
+    items: [
+      { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
+      { id: "import", icon: Download, labelKey: "settings.import" },
+      { id: "profile", icon: UserRound, labelKey: "profile.title" },
+      { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
+      { id: "pets", icon: PawPrint, labelKey: "settings.pets" },
+      { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
+      { id: "usage", icon: ChartNoAxesColumn, labelKey: "usage.title" },
+    ],
   },
   {
     id: "workspace",
-    items: [
-      { icon: Folder, id: "project", labelKey: "settings.project" },
-      { icon: GitBranch, id: "worktrees", labelKey: "settings.worktrees" },
-      { icon: BrainCircuit, id: "memory", labelKey: "memory.title" },
-      { icon: RefreshCw, id: "sync", labelKey: "settings.sync" },
-    ],
     labelKey: "settings.navWorkspace",
+    items: [
+      { id: "project", icon: Folder, labelKey: "settings.project" },
+      { id: "worktrees", icon: GitBranch, labelKey: "settings.worktrees" },
+      { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
+      { id: "sync", icon: RefreshCw, labelKey: "settings.sync" },
+    ],
   },
   {
     id: "integrations",
+    labelKey: "settings.navIntegrations",
     items: [
-      { icon: Package, id: "providers", labelKey: "settings.providers" },
+      { id: "providers", icon: Package, labelKey: "settings.providers" },
       {
-        icon: MousePointer2,
         id: "computer-use",
+        icon: MousePointer2,
         labelKey: "settings.computerUse",
       },
-      { icon: ScanText, id: "appshots", labelKey: "settings.appshots" },
-      { icon: Globe, id: "browser-use", labelKey: "settings.browserUse" },
-      { icon: Globe, id: "browser", labelKey: "settings.browser" },
-      { icon: Wrench, id: "developer", labelKey: "settings.developer" },
+      { id: "appshots", icon: ScanText, labelKey: "settings.appshots" },
+      { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
+      { id: "browser", icon: Globe, labelKey: "settings.browser" },
+      { id: "developer", icon: Wrench, labelKey: "settings.developer" },
     ],
-    labelKey: "settings.navIntegrations",
   },
 ];
 
-const emptyProjects: Project[] = [];
+const EMPTY_PROJECTS: Project[] = [];
 
+/**
+ * Settings as a full-window page: its own nav rail on the left (General, Memory, Keybindings,
+ * Providers, Usage)
+ * with a Back row above the category menu, and one scrolling column of rows per category. The
+ * window-wide takeover is deliberate — a settings surface with its own sidebar reads as a *place*
+ * you went to, which is what earns the explicit way back.
+ */
 export function SettingsPage({
   sidebarWidth = 288,
   bindings,
@@ -165,7 +169,7 @@ export function SettingsPage({
   provider,
   projectPath,
   project,
-  projects = emptyProjects,
+  projects = EMPTY_PROJECTS,
   onProjectWorktreeMode,
   onProjectRename = async () => {},
   onProjectIcon = async () => {},
@@ -213,114 +217,103 @@ export function SettingsPage({
   devtoolsOpener,
   diagnosticsExporter,
 }: {
-  /**
-  Matches the persisted width of the main session rail.
-  */
-  readonly sidebarWidth?: number;
-  readonly bindings: KeymapEntry[];
-  readonly capturing: string | null;
-  readonly onCapture: (action: string) => void;
-  readonly onReset?: (action: string) => void;
-  /**
-  Restore every shortcut to the shipped default — the header's "Restore defaults" on that tab.
-  */
-  readonly onResetAll?: () => void;
-  readonly providers: ProviderInfo[];
-  readonly provider: string;
-  readonly projectPath: string;
-  readonly project: Project | null;
-  readonly projects?: Project[];
-  readonly onProjectWorktreeMode: (
+  /** Matches the persisted width of the main session rail. */
+  sidebarWidth?: number;
+  bindings: KeymapEntry[];
+  capturing: string | null;
+  onCapture: (action: string) => void;
+  onReset?: (action: string) => void;
+  /** Restore every shortcut to the shipped default — the header's "Restore defaults" on that tab. */
+  onResetAll?: () => void;
+  providers: ProviderInfo[];
+  provider: string;
+  projectPath: string;
+  project: Project | null;
+  projects?: Project[];
+  onProjectWorktreeMode: (
     path: string,
     mode: ProjectWorktreeMode | null
   ) => Promise<void>;
-  readonly onProjectRename?: (path: string, name: string) => Promise<void>;
-  readonly onProjectIcon?: (
-    path: string,
-    source: string | null
-  ) => Promise<void>;
-  readonly onProjectAgentDefaults?: (
+  onProjectRename?: (path: string, name: string) => Promise<void>;
+  onProjectIcon?: (path: string, source: string | null) => Promise<void>;
+  onProjectAgentDefaults?: (
     path: string,
     provider: string | null,
     model: string | null,
     reasoningEffort: string | null
   ) => Promise<void>;
-  readonly onProjectRemove?: (path: string) => Promise<void>;
-  readonly projectIconPicker?: () => Promise<string | null>;
-  readonly projectActionsCount?: number;
-  readonly onAddProjectAction?: () => void;
-  readonly onOpenSession?: (sessionId: string) => void;
-  readonly sessionImporter?: (
+  onProjectRemove?: (path: string) => Promise<void>;
+  projectIconPicker?: () => Promise<string | null>;
+  projectActionsCount?: number;
+  onAddProjectAction?: () => void;
+  onOpenSession?: (sessionId: string) => void;
+  sessionImporter?: (
     fallbackCwd: string
   ) => Promise<SessionImportResult | null>;
-  readonly onSessionsImported?: () => void | Promise<unknown>;
-  readonly worktreeLister?: typeof listProjectWorktrees;
-  readonly worktreeSettingsLoader?: () => Promise<WorktreeSettings>;
-  readonly worktreeSettingsSaver?: (
+  onSessionsImported?: () => void | Promise<unknown>;
+  worktreeLister?: typeof listProjectWorktrees;
+  worktreeSettingsLoader?: () => Promise<WorktreeSettings>;
+  worktreeSettingsSaver?: (
     settings: WorktreeSettings
   ) => Promise<WorktreeSettings>;
-  readonly sessionWorktreeDiscarder?: typeof discardSessionWorktree;
-  readonly orphanWorktreeDiscarder?: typeof discardOrphanWorktree;
-  readonly worktreeDiscardConfirmer?: typeof confirmNative;
-  readonly onReloadProviders?: () => void | Promise<ProviderInfo[]>;
-  readonly memoryEnabled: boolean;
-  readonly deviceSyncEnabled?: boolean;
-  readonly initialTab?: SettingsTab;
-  readonly onClose: () => void;
-  readonly updateStatusLoader?: () => Promise<AppUpdateStatus>;
-  readonly updateCheckStarter?: () => Promise<AppUpdateStatus>;
-  readonly computerUseSettingsLoader?: () => Promise<ComputerUseSettings>;
-  readonly computerUseSelectionSaver?: (
-    backend: string
-  ) => Promise<ComputerUseSettings>;
-  readonly browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
-  readonly browserUseSelectionSaver?: (
-    backend: string
-  ) => Promise<BrowserUseSettings>;
-  readonly browserUseAccessSaver?: (
-    isEnabled: boolean
-  ) => Promise<BrowserUseSettings>;
-  readonly appshotSettingsLoader?: () => Promise<AppshotSettings>;
-  readonly appshotSettingsSaver?: (
+  sessionWorktreeDiscarder?: typeof discardSessionWorktree;
+  orphanWorktreeDiscarder?: typeof discardOrphanWorktree;
+  worktreeDiscardConfirmer?: typeof confirmNative;
+  onReloadProviders?: () => void | Promise<ProviderInfo[]>;
+  memoryEnabled: boolean;
+  deviceSyncEnabled?: boolean;
+  initialTab?: SettingsTab;
+  onClose: () => void;
+  updateStatusLoader?: () => Promise<AppUpdateStatus>;
+  updateCheckStarter?: () => Promise<AppUpdateStatus>;
+  computerUseSettingsLoader?: () => Promise<ComputerUseSettings>;
+  computerUseSelectionSaver?: (backend: string) => Promise<ComputerUseSettings>;
+  browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
+  browserUseSelectionSaver?: (backend: string) => Promise<BrowserUseSettings>;
+  browserUseAccessSaver?: (enabled: boolean) => Promise<BrowserUseSettings>;
+  appshotSettingsLoader?: () => Promise<AppshotSettings>;
+  appshotSettingsSaver?: (
     patch: Partial<
       Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">
     >
   ) => Promise<AppshotSettings>;
-  readonly appshotPermissionRequester?: (
+  appshotPermissionRequester?: (
     kind: "screen-recording" | "accessibility"
   ) => Promise<AppshotSettings>;
-  readonly appshotPrivacyOpener?: (
+  appshotPrivacyOpener?: (
     kind: "screen-recording" | "accessibility"
   ) => Promise<boolean>;
-  readonly appshotCapturer?: () => Promise<unknown>;
-  readonly providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
-  readonly providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
-  readonly providerEnabledSaver?: (
+  appshotCapturer?: () => Promise<unknown>;
+  providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
+  providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
+  providerEnabledSaver?: (
     provider: string,
-    isEnabled: boolean
+    enabled: boolean
   ) => Promise<ProviderInfo[]>;
-  readonly providerConfigurationSaver?: (
+  providerConfigurationSaver?: (
     provider: string,
     configuration: ProviderRuntimeOverride
   ) => Promise<ProviderInfo[]>;
-  readonly deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
-  readonly deviceSyncEnabledSaver?: (
-    isEnabled: boolean
-  ) => Promise<DeviceSyncStatus>;
-  readonly deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
-  readonly pluginDeveloperStatusLoader?: () => Promise<PluginDeveloperStatus>;
-  readonly pluginDeveloperModeSaver?: (
-    isEnabled: boolean
+  deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
+  deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
+  deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
+  pluginDeveloperStatusLoader?: () => Promise<PluginDeveloperStatus>;
+  pluginDeveloperModeSaver?: (
+    enabled: boolean
   ) => Promise<PluginDeveloperStatus>;
-  readonly pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
-  readonly devtoolsOpener?: () => Promise<void>;
-  readonly diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
+  pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
+  devtoolsOpener?: () => Promise<void>;
+  diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const { setPreference: setLanguage } = useLanguage();
-  const providerNames = Object.fromEntries(
-    providers.map((candidate) => [candidate.id, candidate.display_name])
+  const providerNames = useMemo(
+    () =>
+      Object.fromEntries(
+        providers.map((candidate) => [candidate.id, candidate.display_name])
+      ),
+    [providers]
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [projectNavigationLocked, setProjectNavigationLocked] = useState(false);
@@ -380,7 +373,7 @@ export function SettingsPage({
           className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pt-2 pb-6"
         >
           <div className="space-y-6">
-            {navGroups.map((group) => {
+            {NAV_GROUPS.map((group) => {
               const items = group.items
                 .filter(({ id }) => memoryEnabled || id !== "memory")
                 .filter(({ id }) => deviceSyncEnabled || id !== "sync");
@@ -488,13 +481,13 @@ export function SettingsPage({
               </Page>
             )}
 
-            {tab === "sync" && deviceSyncEnabled ? (
+            {tab === "sync" && deviceSyncEnabled && (
               <DeviceSyncSettingsPage
                 loader={deviceSyncStatusLoader}
                 enabledSaver={deviceSyncEnabledSaver}
                 syncStarter={deviceSyncStarter}
               />
-            ) : null}
+            )}
 
             {tab === "keybindings" && (
               <KeybindingsSettingsPage
@@ -534,13 +527,13 @@ export function SettingsPage({
               />
             )}
 
-            {tab === "memory" && memoryEnabled ? (
+            {tab === "memory" && memoryEnabled && (
               <MemorySettingsPage
                 projectPath={projectPath}
                 projects={projects}
                 onOpenSession={onOpenSession}
               />
-            ) : null}
+            )}
 
             {tab === "usage" && (
               <UsagePanel

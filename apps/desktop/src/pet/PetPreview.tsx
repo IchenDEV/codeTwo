@@ -1,7 +1,7 @@
-import { useAppearanceSettings } from "../appearance";
-import type { PetSize } from "../appearance";
+import { useAppearanceSettings, type PetSize } from "../appearance";
 import { CodeTwoPet } from "./CodeTwoPet";
 
+/** Development-only visual fixture for checking the pet at the real app scale. */
 export function PetPreview() {
   const appearance = useAppearanceSettings();
   const search = new URLSearchParams(window.location.search);
@@ -21,7 +21,7 @@ export function PetPreview() {
         aria-hidden="true"
       />
       <CodeTwoPet
-        animation={bubble != null && bubble !== "" ? "running" : "review"}
+        animation={bubble ? "running" : "review"}
         bubble={bubble}
         appearance={{ ...appearance, petSize }}
       />

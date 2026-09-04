@@ -39,7 +39,7 @@ function editorWith(...blocks) {
 }
 
 describe("docToBlocks issueRef", () => {
-  test("emits the core issue DocumentBlock with the context's body portion", () => {
+  test("emits the core issue DocBlock with the context's body portion", () => {
     const blocks = docToBlocks(editorWith(issueRef()));
     expect(blocks).toEqual([
       {

@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { DetailMetric } from "@/components/business/detail-metric";
 import { MasterDetailRow } from "@/components/business/master-detail-row";
@@ -63,24 +68,26 @@ import {
   runAutomationNow,
   setAutomationEnabled,
   updateAutomation,
-  providerLabel,
+  type Automation,
+  type AutomationInput,
+  type AutomationRun,
+  type AutomationRunStatus,
+  type PermissionMode,
+  type Project,
+  type ProviderInfo,
+  type Sandbox,
 } from "../bridge";
-import type {
-  Automation,
-  AutomationInput,
-  AutomationRun,
-  AutomationRunStatus,
-  PermissionMode,
-  Project,
-  ProviderInfo,
-  Sandbox,
-} from "../bridge";
+import { providerLabel } from "../bridge";
 import { useT } from "../i18n";
-import { useLatestRef } from "../lib/useLatestRef";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { useToast } from "../ui/toast";
-import { cronFromSchedule, localTimezone, scheduleFromCron } from "./schedule";
-import type { AutomationCadence, ScheduleDraft } from "./schedule";
+import {
+  cronFromSchedule,
+  localTimezone,
+  scheduleFromCron,
+  type AutomationCadence,
+  type ScheduleDraft,
+} from "./schedule";
 
 import "./automations.css";
 
@@ -99,13 +106,13 @@ interface Draft {
 
 type AutomationFilter = "all" | "active" | "paused";
 
-const activeRuns = new Set<AutomationRunStatus>([
+const ACTIVE_RUNS = new Set<AutomationRunStatus>([
   "starting",
   "running",
   "needs_attention",
 ]);
-const spinningRuns = new Set<AutomationRunStatus>(["starting", "running"]);
-const builtinProviders = new Set([
+const SPINNING_RUNS = new Set<AutomationRunStatus>(["starting", "running"]);
+const BUILTIN_PROVIDERS = new Set([
   "claude_code",
   "codex",
   "grok",
@@ -116,7 +123,7 @@ const builtinProviders = new Set([
   "kimi",
   "zcode",
 ]);
-const weekdayKeys = [
+const WEEKDAY_KEYS = [
   "automations.weekday.0",
   "automations.weekday.1",
   "automations.weekday.2",
@@ -131,9 +138,7 @@ function providerId(provider: Automation["provider"]): string {
 }
 
 function policyFromAutomation(automation: Automation): Draft["policy"] {
-  if (automation.sandbox_policy === "read_only") {
-    return "read_only";
-  }
+  if (automation.sandbox_policy === "read_only") return "read_only";
   return automation.permission_mode === "yolo" ? "automatic" : "ask";
 }
 
@@ -147,43 +152,35 @@ function inputFromDraft(draft: Draft): AutomationInput {
     permissionMode = "yolo";
   }
   return {
-    cron: cronFromSchedule(draft.schedule),
-    enabled: draft.enabled,
     name: draft.name,
-    permissionMode,
-    projectPath: draft.projectPath,
     prompt: draft.prompt,
-    provider: builtinProviders.has(draft.provider)
+    projectPath: draft.projectPath,
+    provider: BUILTIN_PROVIDERS.has(draft.provider)
       ? draft.provider
       : { custom: draft.provider },
-    sandboxPolicy,
+    cron: cronFromSchedule(draft.schedule),
     timezone: draft.timezone,
+    enabled: draft.enabled,
     useWorktree: draft.useWorktree,
+    permissionMode,
+    sandboxPolicy,
   };
 }
 
 function dateTime(value: number | null): string {
-  if (value === null) {
-    return "—";
-  }
+  if (value === null) return "—";
   return new Intl.DateTimeFormat(undefined, {
+    month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    month: "short",
   }).format(new Date(value));
 }
 
 function runIcon(status: AutomationRunStatus) {
-  if (status === "succeeded") {
-    return CheckCircle2;
-  }
-  if (status === "failed" || status === "interrupted") {
-    return CircleAlert;
-  }
-  if (status === "needs_attention") {
-    return Clock3;
-  }
+  if (status === "succeeded") return CheckCircle2;
+  if (status === "failed" || status === "interrupted") return CircleAlert;
+  if (status === "needs_attention") return Clock3;
   return null;
 }
 
@@ -195,12 +192,12 @@ function AutomationRow({
   selected,
   onSelect,
 }: {
-  readonly automation: Automation;
-  readonly projectName: string;
-  readonly schedule: string;
-  readonly status: string;
-  readonly selected: boolean;
-  readonly onSelect: () => void;
+  automation: Automation;
+  projectName: string;
+  schedule: string;
+  status: string;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   return (
     <MasterDetailRow
@@ -243,13 +240,13 @@ export function AutomationsPage({
   onOpenSession,
   headerLeadingAction,
 }: {
-  readonly projects: Project[];
-  readonly providers: ProviderInfo[];
-  readonly defaultProject: string;
-  readonly defaultProvider: string;
-  readonly onAddProject: () => void;
-  readonly onOpenSession: (session: string) => void;
-  readonly headerLeadingAction?: ReactNode;
+  projects: Project[];
+  providers: ProviderInfo[];
+  defaultProject: string;
+  defaultProvider: string;
+  onAddProject: () => void;
+  onOpenSession: (session: string) => void;
+  headerLeadingAction?: ReactNode;
 }) {
   const t = useT();
   const toast = useToast();
@@ -266,37 +263,29 @@ export function AutomationsPage({
 
   const scheduleLabel = (cron: string): string => {
     const schedule = scheduleFromCron(cron);
-    if (schedule.cadence === "custom") {
-      return cron;
-    }
+    if (schedule.cadence === "custom") return cron;
     if (schedule.cadence === "hourly") {
       return `${t("automations.cadence.hourly")} · :${schedule.time.slice(3)}`;
     }
     if (schedule.cadence === "weekly") {
-      return `${t("automations.cadence.weekly")} · ${t(weekdayKeys[schedule.weekday])} ${schedule.time}`;
+      return `${t("automations.cadence.weekly")} · ${t(WEEKDAY_KEYS[schedule.weekday])} ${schedule.time}`;
     }
     return `${t(`automations.cadence.${schedule.cadence}`)} · ${schedule.time}`;
   };
 
-  const filteredAutomations = (() => {
+  const filteredAutomations = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     return automations.filter((automation) => {
-      if (filter === "active" && !automation.enabled) {
-        return false;
-      }
-      if (filter === "paused" && automation.enabled) {
-        return false;
-      }
-      if (normalizedQuery === "") {
-        return true;
-      }
+      if (filter === "active" && !automation.enabled) return false;
+      if (filter === "paused" && automation.enabled) return false;
+      if (normalizedQuery === "") return true;
       return `${automation.name}\n${automation.prompt}`
         .toLocaleLowerCase()
         .includes(normalizedQuery);
     });
-  })();
+  }, [automations, filter, query]);
 
-  const groups = (() => {
+  const groups = useMemo(() => {
     const active = filteredAutomations.filter(
       (automation) => automation.enabled
     );
@@ -307,94 +296,85 @@ export function AutomationsPage({
       { id: "active" as const, items: active },
       { id: "paused" as const, items: paused },
     ].filter((group) => group.items.length > 0);
-  })();
-  const refresh = async () => {
+  }, [filteredAutomations]);
+  const refresh = useCallback(async () => {
     const next = await listAutomations();
     setAutomations(next);
     setSelectedId((current) =>
-      current != null &&
-      current !== "" &&
-      next.some((automation) => automation.id === current)
+      current && next.some((automation) => automation.id === current)
         ? current
         : (next[0]?.id ?? null)
     );
     setLoading(false);
-  };
+  }, []);
 
-  const refreshRuns = async (id: string | null) => {
-    setRuns(id != null && id !== "" ? await listAutomationRuns(id) : []);
-  };
-
-  const refreshRef = useLatestRef(refresh);
-  const refreshRunsRef = useLatestRef(refreshRuns);
-  const selectedIdRef = useLatestRef(selectedId);
+  const refreshRuns = useCallback(async (id: string | null) => {
+    setRuns(id ? await listAutomationRuns(id) : []);
+  }, []);
 
   useEffect(() => {
-    void refreshRef.current().catch((error) => {
+    void refresh().catch((error) => {
       setLoading(false);
       toast(t("automations.loadFailed", { error: String(error) }), "error");
     });
     let unlisten: (() => void) | null = null;
     void onAutomationChanged(() => {
-      void refreshRef.current();
-      void refreshRunsRef.current(selectedIdRef.current);
+      void refresh();
+      void refreshRuns(selectedId);
     }).then((dispose) => {
       unlisten = dispose;
     });
     return () => unlisten?.();
-  }, [t, toast, refreshRef, refreshRunsRef, selectedIdRef]);
+  }, [refresh, refreshRuns, selectedId, t, toast]);
 
   useEffect(() => {
-    void refreshRunsRef.current(selectedId);
-  }, [selectedId, refreshRunsRef]);
+    void refreshRuns(selectedId);
+  }, [refreshRuns, selectedId]);
 
-  if (!draft) {
-    const nextSelectedId =
+  useEffect(() => {
+    if (draft) return;
+    if (
       selectedId &&
       filteredAutomations.some((automation) => automation.id === selectedId)
-        ? selectedId
-        : (filteredAutomations[0]?.id ?? null);
-    if (nextSelectedId !== selectedId) {
-      setSelectedId(nextSelectedId);
-      setDetailTab("overview");
-    }
-  }
+    )
+      return;
+    setSelectedId(filteredAutomations[0]?.id ?? null);
+    setDetailTab("overview");
+  }, [draft, filteredAutomations, selectedId]);
 
   const emptyDraft = (): Draft => ({
-    enabled: true,
     id: null,
     name: "",
-    policy: "automatic",
-    projectPath: defaultProject || projects[0]?.path || "",
     prompt: "",
+    projectPath: defaultProject || projects[0]?.path || "",
     provider:
       providers.find(
         (candidate) => candidate.id === defaultProvider && candidate.available
       )?.id ??
       providers.find((candidate) => candidate.available)?.id ??
       defaultProvider,
-    schedule: { cadence: "daily", customCron: "", time: "09:00", weekday: 1 },
+    schedule: { cadence: "daily", time: "09:00", weekday: 1, customCron: "" },
     timezone: localTimezone(),
+    enabled: true,
     useWorktree: true,
+    policy: "automatic",
   });
 
   const editDraft = (automation: Automation): Draft => ({
-    enabled: automation.enabled,
     id: automation.id,
     name: automation.name,
-    policy: policyFromAutomation(automation),
-    projectPath: automation.project_path,
     prompt: automation.prompt,
+    projectPath: automation.project_path,
     provider: providerId(automation.provider),
     schedule: scheduleFromCron(automation.cron),
     timezone: automation.timezone,
+    enabled: automation.enabled,
     useWorktree: automation.use_worktree,
+    policy: policyFromAutomation(automation),
   });
 
   const save = async () => {
-    if (!draft) {
-      return;
-    }
+    if (!draft) return;
     setSaving(true);
     try {
       const saved = draft.id
@@ -404,11 +384,7 @@ export function AutomationsPage({
       await refresh();
       setSelectedId(saved.id);
       toast(
-        t(
-          draft.id != null && draft.id !== ""
-            ? "automations.updated"
-            : "automations.created"
-        ),
+        t(draft.id ? "automations.updated" : "automations.created"),
         "success"
       );
     } catch (error) {
@@ -443,9 +419,8 @@ export function AutomationsPage({
       !(await confirmNative(
         t("automations.deleteConfirm", { name: automation.name })
       ))
-    ) {
+    )
       return;
-    }
     try {
       await deleteAutomation(automation.id);
       await refresh();
@@ -457,7 +432,7 @@ export function AutomationsPage({
 
   const selected =
     automations.find((automation) => automation.id === selectedId) ?? null;
-  const activeRun = runs.find((run) => activeRuns.has(run.status)) ?? null;
+  const activeRun = runs.find((run) => ACTIVE_RUNS.has(run.status)) ?? null;
   const projectName = (automation: Automation) =>
     projects.find((project) => project.path === automation.project_path)
       ?.name ?? automation.project_path;
@@ -530,8 +505,8 @@ export function AutomationsPage({
               label={t("automations.filterLabel")}
               value={filter}
               options={(["all", "active", "paused"] as const).map((value) => ({
-                label: t(`automations.filter.${value}`),
                 value,
+                label: t(`automations.filter.${value}`),
               }))}
               onValueChange={setFilter}
             />
@@ -551,10 +526,13 @@ export function AutomationsPage({
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-3 pb-4" aria-live="polite">
             {loading && automations.length === 0 ? (
-              <output className="py-section text-body text-muted-foreground flex items-center justify-center gap-2">
+              <div
+                role="status"
+                className="py-section text-body text-muted-foreground flex items-center justify-center gap-2"
+              >
                 <Spinner />
                 {t("automations.loading")}
-              </output>
+              </div>
             ) : automations.length === 0 ? (
               <Empty className="py-section">
                 <EmptyHeader>
@@ -562,11 +540,11 @@ export function AutomationsPage({
                     <CalendarClock />
                   </EmptyMedia>
                   <EmptyTitle>{t("automations.empty")}</EmptyTitle>
-                  {hasProjects ? null : (
+                  {!hasProjects ? (
                     <EmptyDescription>
                       {t("automations.projectRequired")}
                     </EmptyDescription>
-                  )}
+                  ) : null}
                 </EmptyHeader>
                 <EmptyContent>
                   <Button
@@ -629,9 +607,7 @@ export function AutomationsPage({
           data-automation-detail-header
           className={cn(
             "electrobun-webkit-app-region-drag h-layout-titlebar flex shrink-0 items-center gap-2 pr-4",
-            headerLeadingAction == null
-              ? "pl-4"
-              : "window-controls-safe-compact-main"
+            headerLeadingAction ? "window-controls-safe-compact-main" : "pl-4"
           )}
         >
           {headerLeadingAction ? (
@@ -642,22 +618,20 @@ export function AutomationsPage({
               {headerLeadingAction}
             </div>
           ) : null}
-          {selectedId || draft ? (
+          {(selectedId || draft) && (
             <Button
               variant="ghost"
               size="icon-xs"
               className="automation-back"
               aria-label={t("automations.backToList")}
               onClick={() => {
-                if (draft) {
-                  setDraft(null);
-                }
+                if (draft) setDraft(null);
                 setCompactListVisible(true);
               }}
             >
               <ArrowLeft className="size-3.5" />
             </Button>
-          ) : null}
+          )}
           {draft ? (
             <span className="text-body font-medium">
               {draft.id
@@ -773,7 +747,14 @@ export function AutomationsPage({
               onSave={() => void save()}
             />
           </ScrollArea>
-        ) : selected ? (
+        ) : !selected ? (
+          <div className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center px-6 text-center">
+            <div>
+              <CalendarClock className="mx-auto mb-3 size-4" />
+              <p>{t("automations.select")}</p>
+            </div>
+          </div>
+        ) : (
           <ScrollArea className="min-h-0 flex-1">
             {detailTab === "overview" ? (
               <article className="mx-auto w-full max-w-5xl px-8 pt-5 pb-12">
@@ -886,7 +867,7 @@ export function AutomationsPage({
                   <div className="flex flex-col gap-1">
                     {runs.map((run) => {
                       const Icon = runIcon(run.status);
-                      const isOpenable = run.session_id !== null;
+                      const openable = run.session_id !== null;
                       return (
                         <Button
                           key={run.id}
@@ -894,15 +875,13 @@ export function AutomationsPage({
                           variant="ghost"
                           size="row"
                           focusStyle="inset"
-                          disabled={!isOpenable}
+                          disabled={!openable}
                           className="min-h-control-field bg-fill-quiet grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 disabled:opacity-80"
                           onClick={() =>
-                            run.session_id != null &&
-                            run.session_id !== "" &&
-                            onOpenSession(run.session_id)
+                            run.session_id && onOpenSession(run.session_id)
                           }
                         >
-                          {spinningRuns.has(run.status) ? (
+                          {SPINNING_RUNS.has(run.status) ? (
                             <Spinner className="text-primary" />
                           ) : Icon ? (
                             <Icon
@@ -930,7 +909,7 @@ export function AutomationsPage({
                               </span>
                             ) : null}
                           </span>
-                          {isOpenable ? (
+                          {openable ? (
                             <span className="text-metadata text-primary">
                               {t("automations.openRun")}
                             </span>
@@ -943,13 +922,6 @@ export function AutomationsPage({
               </div>
             )}
           </ScrollArea>
-        ) : (
-          <div className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-            <div>
-              <CalendarClock className="mx-auto mb-3 size-4" />
-              <p>{t("automations.select")}</p>
-            </div>
-          </div>
         )}
       </div>
     </section>
@@ -965,13 +937,13 @@ function AutomationEditor({
   onCancel,
   onSave,
 }: {
-  readonly draft: Draft;
-  readonly projects: Project[];
-  readonly providers: ProviderInfo[];
-  readonly saving: boolean;
-  readonly onChange: (draft: Draft) => void;
-  readonly onCancel: () => void;
-  readonly onSave: () => void;
+  draft: Draft;
+  projects: Project[];
+  providers: ProviderInfo[];
+  saving: boolean;
+  onChange: (draft: Draft) => void;
+  onCancel: () => void;
+  onSave: () => void;
 }) {
   const t = useT();
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) =>
@@ -992,7 +964,7 @@ function AutomationEditor({
       : draft.policy === "ask"
         ? t("automations.permissions.ask")
         : t("automations.permissions.readOnly");
-  const isValid =
+  const valid =
     draft.name.trim() !== "" &&
     draft.prompt.trim() !== "" &&
     draft.projectPath !== "" &&
@@ -1010,9 +982,7 @@ function AutomationEditor({
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-page font-semibold">
-            {draft.id != null && draft.id !== ""
-              ? draft.name
-              : t("automations.createTitle")}
+            {draft.id ? draft.name : t("automations.createTitle")}
           </h1>
           <p className="text-prose text-muted-foreground mt-2 max-w-2xl">
             {t("automations.formHint")}
@@ -1032,9 +1002,7 @@ function AutomationEditor({
         className="mt-7 grid gap-5"
         onSubmit={(event) => {
           event.preventDefault();
-          if (isValid && !saving) {
-            onSave();
-          }
+          if (valid && !saving) onSave();
         }}
       >
         <div className="grid gap-2">
@@ -1062,9 +1030,7 @@ function AutomationEditor({
             <Label>{t("automations.project")}</Label>
             <Select
               value={draft.projectPath}
-              onValueChange={(value) =>
-                value != null && value !== "" && update("projectPath", value)
-              }
+              onValueChange={(value) => value && update("projectPath", value)}
             >
               <SelectTrigger className="w-full">
                 <SelectValue>{selectedProject}</SelectValue>
@@ -1084,9 +1050,7 @@ function AutomationEditor({
             <Label>{t("automations.agent")}</Label>
             <Select
               value={draft.provider}
-              onValueChange={(value) =>
-                value != null && value !== "" && update("provider", value)
-              }
+              onValueChange={(value) => value && update("provider", value)}
             >
               <SelectTrigger className="w-full">
                 <SelectValue>{selectedProvider}</SelectValue>
@@ -1189,12 +1153,12 @@ function AutomationEditor({
             >
               <SelectTrigger className="w-full">
                 <SelectValue>
-                  {t(weekdayKeys[draft.schedule.weekday])}
+                  {t(WEEKDAY_KEYS[draft.schedule.weekday])}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {weekdayKeys.map((key, day) => (
+                  {WEEKDAY_KEYS.map((key, day) => (
                     <SelectItem key={key} value={String(day)}>
                       {t(key)}
                     </SelectItem>
@@ -1263,8 +1227,8 @@ function AutomationEditor({
           >
             {t("automations.cancel")}
           </Button>
-          <Button type="submit" size="compact" disabled={!isValid || saving}>
-            {saving ? <Spinner /> : null}
+          <Button type="submit" size="compact" disabled={!valid || saving}>
+            {saving && <Spinner />}
             {saving ? t("automations.saving") : t("automations.save")}
           </Button>
         </div>

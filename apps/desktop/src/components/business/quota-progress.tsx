@@ -4,18 +4,14 @@ type QuotaProgressDensity = "detail" | "rail";
 type QuotaProgressTone = "success" | "warning" | "destructive";
 
 interface QuotaProgressProps {
-  readonly label: string;
-  readonly remainingPercent: number;
-  readonly density?: QuotaProgressDensity;
+  label: string;
+  remainingPercent: number;
+  density?: QuotaProgressDensity;
 }
 
 function quotaTone(remainingPercent: number): QuotaProgressTone {
-  if (remainingPercent <= 5) {
-    return "destructive";
-  }
-  if (remainingPercent <= 20) {
-    return "warning";
-  }
+  if (remainingPercent <= 5) return "destructive";
+  if (remainingPercent <= 20) return "warning";
   return "success";
 }
 

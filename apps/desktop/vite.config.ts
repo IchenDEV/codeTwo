@@ -4,6 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+const webCoreTarget =
+  process.env.CODETWO_WEB_CORE_URL ?? "http://127.0.0.1:4599";
+
 // Electrobun loads this output through `views://`, so asset URLs must stay bundle-relative.
 export default defineConfig({
   plugins: [
@@ -22,6 +25,10 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    proxy: {
+      "/api": { target: webCoreTarget, changeOrigin: true },
+      "/ws": { target: webCoreTarget, changeOrigin: true, ws: true },
+    },
   },
   build: {
     target: "es2021",

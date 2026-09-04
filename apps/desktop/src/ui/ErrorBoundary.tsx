@@ -1,5 +1,4 @@
-import { Component } from "react";
-import type { ErrorInfo, ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -25,9 +24,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
 
   render() {
     const { error } = this.state;
-    if (!error) {
-      return this.props.children;
-    }
+    if (!error) return this.props.children;
 
     return (
       <div className="bg-background flex h-screen flex-col items-center justify-center gap-4 p-8 text-center">

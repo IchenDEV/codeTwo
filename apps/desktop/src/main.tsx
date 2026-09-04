@@ -17,18 +17,30 @@ import "./styles.css";
 document.documentElement.dataset.platform = currentDesktopPlatform();
 
 const searchParams = new URLSearchParams(window.location.search);
-const isShowDesktopPet =
+const showDesktopPet =
   document.querySelector(
     'meta[name="codetwo-surface"][content="desktop-pet"]'
   ) !== null;
-const isShowDesignSystem =
+const showDesignSystem =
   import.meta.env.DEV && searchParams.has("design-system");
-const isShowPetPreview = import.meta.env.DEV && searchParams.has("pet-preview");
-const isShowRichTranscript =
+const showPetPreview = import.meta.env.DEV && searchParams.has("pet-preview");
+const showRichTranscript =
   import.meta.env.DEV && searchParams.has("rich-transcript");
-if (isShowDesktopPet) {
+const uiLabRoute = import.meta.env.DEV ? searchParams.get("ui-lab") : null;
+const showUiLab = uiLabRoute !== null;
+const uiLabThemeOverride = showUiLab
+  ? searchParams.get("theme") === "light" ||
+    searchParams.get("theme") === "dark"
+    ? (searchParams.get("theme") as "light" | "dark")
+    : "system"
+  : undefined;
+const uiLabLanguageOverride = showUiLab
+  ? searchParams.get("lang") === "zh"
+    ? "zh-CN"
+    : "en"
+  : undefined;
+if (showDesktopPet)
   document.documentElement.classList.add("desktop-pet-window-root");
-}
 
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
@@ -39,9 +51,7 @@ document.addEventListener("contextmenu", (e) => {
   // Base UI needs the un-cancelled event to position an app-owned context menu. Its trigger is a
   // deliberate desktop interaction, not the webview's Reload / Inspect Element menu.
   const appContextMenu = el?.closest?.('[data-slot="context-menu-trigger"]');
-  if (!editable && !appContextMenu) {
-    e.preventDefault();
-  }
+  if (!editable && !appContextMenu) e.preventDefault();
 });
 
 // Electrobun drag regions include their descendants. Mark interactive descendants explicitly so
@@ -49,26 +59,20 @@ document.addEventListener("contextmenu", (e) => {
 const interactiveSelector =
   "button, input, textarea, select, a, summary, [role='button'], [contenteditable='true']";
 const protectInteractiveNode = (node: Node) => {
-  if (!(node instanceof Element)) {
-    return;
-  }
-  if (node.matches(interactiveSelector)) {
+  if (!(node instanceof Element)) return;
+  if (node.matches(interactiveSelector))
     node.classList.add("electrobun-webkit-app-region-no-drag");
-  }
   for (const element of node.querySelectorAll(interactiveSelector)) {
     element.classList.add("electrobun-webkit-app-region-no-drag");
   }
 };
 protectInteractiveNode(document.documentElement);
 new MutationObserver((records) => {
-  for (const record of records) {
-    for (const node of record.addedNodes) {
-      protectInteractiveNode(node);
-    }
-  }
+  for (const record of records)
+    for (const node of record.addedNodes) protectInteractiveNode(node);
 }).observe(document.documentElement, { childList: true, subtree: true });
 
-if (!isShowDesktopPet && currentDesktopPlatform() === "macos") {
+if (!showDesktopPet && currentDesktopPlatform() === "macos") {
   installDesktopTitlebarDoubleClick(document, (error) => {
     console.warn(
       "Could not perform the macOS titlebar double-click action",
@@ -79,21 +83,23 @@ if (!isShowDesktopPet && currentDesktopPlatform() === "macos") {
 
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
 async function render() {
-  const Root = isShowDesktopPet
+  const Root = showDesktopPet
     ? DesktopPetWindow
-    : isShowPetPreview
-      ? (await import("./pet/PetPreview")).PetPreview
-      : isShowRichTranscript
-        ? (await import("./session/RichTranscriptPreview"))
-            .RichTranscriptPreview
-        : isShowDesignSystem
-          ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
-          : App;
+    : showUiLab
+      ? (await import("./design/ui-lab/UiLab")).UiLab
+      : showPetPreview
+        ? (await import("./pet/PetPreview")).PetPreview
+        : showRichTranscript
+          ? (await import("./session/RichTranscriptPreview"))
+              .RichTranscriptPreview
+          : showDesignSystem
+            ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
+            : App;
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <ThemeProvider>
-        <I18nProvider>
+      <ThemeProvider preferenceOverride={uiLabThemeOverride}>
+        <I18nProvider preferenceOverride={uiLabLanguageOverride}>
           <ErrorBoundary>
             <TooltipProvider>
               <ToastProvider>

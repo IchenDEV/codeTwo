@@ -18,44 +18,50 @@ function rustFiles(directory: string): string[] {
 
 describe("plugin bridge contract", () => {
   test("keeps one typed renderer request and one versioned Plugin Kernel process boundary", () => {
-    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf-8");
+    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
+    const coreTransport = readFileSync(
+      resolve(desktop, "src/coreTransport.ts"),
+      "utf8"
+    );
     const client = readFileSync(
       resolve(desktop, "src/electrobun/client.ts"),
-      "utf-8"
+      "utf8"
     );
     const main = readFileSync(
       resolve(desktop, "src/electrobun/index.ts"),
-      "utf-8"
+      "utf8"
     );
     const adapter = readFileSync(
       resolve(desktop, "src/electrobun/nativeHost.ts"),
-      "utf-8"
+      "utf8"
     );
-    const host = readFileSync(resolve(desktop, "src-host/src/lib.rs"), "utf-8");
+    const host = readFileSync(resolve(desktop, "src-host/src/lib.rs"), "utf8");
     const enginePlugin = readFileSync(
       resolve(repository, "crates/plugins/src/app/plugins/engine.rs"),
-      "utf-8"
+      "utf8"
     );
     const config = readFileSync(
       resolve(desktop, "electrobun.config.ts"),
-      "utf-8"
+      "utf8"
     );
     const prepare = readFileSync(
       resolve(desktop, "scripts/prepare-electrobun.ts"),
-      "utf-8"
+      "utf8"
     );
     const macBundlePatch = readFileSync(
       resolve(desktop, "scripts/patch-macos-info.ts"),
-      "utf-8"
+      "utf8"
     );
     const macPackageSigning = readFileSync(
       resolve(desktop, "scripts/sign-macos-package.ts"),
-      "utf-8"
+      "utf8"
     );
 
     expect(bridge).toContain(
-      "return desktopCall<T>(name, args ?? null, projectPath)"
+      "return coreCall<T>(name, args ?? null, projectPath)"
     );
+    expect(coreTransport).toContain("call: desktopCall");
+    expect(coreTransport).toContain("listen: listenDesktop");
     expect(bridge).toContain("projectPath: string | null = callProjectPath");
     expect(bridge).toContain(
       'call<ManagedPluginCatalog>("plugins.catalog", { scope: managedPluginScopeToWire(scope) }, null)'
@@ -72,9 +78,9 @@ describe("plugin bridge contract", () => {
     expect(adapter).toContain(
       'return this.request("call", { name, args, project_path: projectPath })'
     );
-    expect(adapter).toContain("desktopHostProtocolVersion = 1");
+    expect(adapter).toContain("DESKTOP_HOST_PROTOCOL_VERSION = 1");
     expect(host).toContain('"protocol_version": 1');
-    expect(host.match(/if request\.method == "call"/gu)).toHaveLength(1);
+    expect(host.match(/if request\.method == "call"/g)).toHaveLength(1);
     expect(bridge).toContain("model: initialModel ?? null");
     expect(enginePlugin).toContain("model: Option<String>");
     expect(enginePlugin).toContain("model: args.model");
@@ -90,9 +96,9 @@ describe("plugin bridge contract", () => {
       'join(bundle, "Contents", "Resources", metadata)'
     );
     expect(macPackageSigning).toContain('"--force", "--deep", "--sign", "-"');
-    expect(`${bridge}\n${client}\n${main}\n${host}`).not.toContain(
-      "@tauri-apps"
-    );
+    expect(
+      `${bridge}\n${coreTransport}\n${client}\n${main}\n${host}`
+    ).not.toContain("@tauri-apps");
     expect(`${main}\n${adapter}`).not.toContain("PureBunHost");
     for (const legacyHost of [
       "builtinPlugins.ts",
@@ -107,23 +113,23 @@ describe("plugin bridge contract", () => {
   });
 
   test("registers every static command used by the renderer bridge", () => {
-    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf-8");
+    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
     const pluginSources = [
       ...rustFiles(resolve(repository, "crates/plugins/src/app/plugins")),
       ...rustFiles(resolve(desktop, "src-host/src")),
     ]
-      .map((path) => readFileSync(path, "utf-8"))
+      .map((path) => readFileSync(path, "utf8"))
       .join("\n");
 
     const used = new Set(
-      [...bridge.matchAll(/\bcall(?:<[^>]+>)?\(\s*"([^"]+)"/gu)].map(
+      [...bridge.matchAll(/\bcall(?:<[^>]+>)?\(\s*"([^"]+)"/g)].map(
         (match) => match[1]
       )
     );
     const registered = new Set(
       [
         ...pluginSources.matchAll(
-          /ctx\.command(?:_described|_with_realm|_extension_public)?\(\s*"([^"]+)"/gu
+          /ctx\.command(?:_described|_with_realm|_extension_public)?\(\s*"([^"]+)"/g
         ),
       ].map((match) => match[1])
     );
@@ -133,10 +139,10 @@ describe("plugin bridge contract", () => {
   });
 
   test("forwards plugin changes and exposes the developer commands through the typed bridge", () => {
-    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf-8");
+    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
     const hostEvents = readFileSync(
       resolve(desktop, "src-host/src/host_events.rs"),
-      "utf-8"
+      "utf8"
     );
 
     expect(bridge).toContain(

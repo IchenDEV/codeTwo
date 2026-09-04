@@ -15,30 +15,26 @@
  * inline style — that *is* the feature.
  */
 (() => {
-  if (window.__codetwoAnnotate) {
-    return;
-  }
+  if (window.__codetwoAnnotate) return;
 
-  /**
-  Properties the panel edits, in the order they appear. Reading is computed, writing is inline.
-  */
+  /** Properties the panel edits, in the order they appear. Reading is computed, writing is inline. */
   const FIELDS = [
-    { kind: "color", label: "Text color", prop: "color" },
-    { kind: "color", label: "Background", prop: "background-color" },
+    { prop: "color", label: "Text color", kind: "color" },
+    { prop: "background-color", label: "Background", kind: "color" },
     {
-      kind: "number",
-      label: "Opacity",
-      max: "1",
-      min: "0",
       prop: "opacity",
+      label: "Opacity",
+      kind: "number",
       step: "0.05",
+      min: "0",
+      max: "1",
     },
-    { kind: "text", label: "Font", prop: "font-family" },
-    { kind: "px", label: "Font size", prop: "font-size" },
-    { kind: "weight", label: "Font weight", prop: "font-weight" },
+    { prop: "font-family", label: "Font", kind: "text" },
+    { prop: "font-size", label: "Font size", kind: "px" },
+    { prop: "font-weight", label: "Font weight", kind: "weight" },
   ];
 
-  const WEIGHTS = new Set([
+  const WEIGHTS = [
     "100",
     "200",
     "300",
@@ -48,12 +44,10 @@
     "700",
     "800",
     "900",
-  ]);
+  ];
 
-  let isOn = false;
-  /**
-  Committed annotations, in the order they were made — the numbering the markers show.
-  */
+  let on = false;
+  /** Committed annotations, in the order they were made — the numbering the markers show. */
   const notes = [];
   let host = null;
   let root = null;
@@ -67,12 +61,11 @@
 
   // ---- selectors ------------------------------------------------------------------------------
 
-  function selectorFor(element) {
-    if (element.id) {
-      return `#${CSS.escape(element.id)}`;
-    }
+  /** A short selector that identifies the element well enough for a human and an agent to find it. */
+  function selectorFor(el) {
+    if (el.id) return `#${CSS.escape(el.id)}`;
     const parts = [];
-    let node = element;
+    let node = el;
     while (node && node.nodeType === 1 && parts.length < 4) {
       let part = node.tagName.toLowerCase();
       const cls = (node.getAttribute("class") || "")
@@ -88,9 +81,7 @@
         const same = [...parent.children].filter(
           (c) => c.tagName === node.tagName
         );
-        if (same.length > 1) {
-          part += `:nth-of-type(${same.indexOf(node) + 1})`;
-        }
+        if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`;
       }
       parts.unshift(part);
       if (node.id) {
@@ -102,10 +93,11 @@
     return parts.join(" > ");
   }
 
-  function textOf(element) {
-    const t = (element.textContent || element.textContent || "")
+  /** The visible text of an element, trimmed to something quotable. */
+  function textOf(el) {
+    const t = (el.innerText || el.textContent || "")
       .trim()
-      .replaceAll(/\s+/g, " ");
+      .replace(/\s+/g, " ");
     return t.length > 160 ? `${t.slice(0, 160)}…` : t;
   }
 
@@ -157,9 +149,7 @@
   `;
 
   function ensureUI() {
-    if (host) {
-      return;
-    }
+    if (host) return;
     host = document.createElement("div");
     host.className = "__codetwo-annotator";
     host.style.cssText =
@@ -175,11 +165,11 @@
     tag.style.display = "none";
     layer = document.createElement("div");
     root.append(style, hover, tag, layer);
-    document.documentElement.append(host);
+    document.documentElement.appendChild(host);
   }
 
-  function place(element, box, label) {
-    const r = element.getBoundingClientRect();
+  function place(el, box, label) {
+    const r = el.getBoundingClientRect();
     box.style.display = "block";
     box.style.left = `${r.left}px`;
     box.style.top = `${r.top}px`;
@@ -192,31 +182,29 @@
     }
   }
 
+  /** Marker bubbles are anchored to live elements, so they follow scrolling and reflow. */
   function drawPins() {
     layer.textContent = "";
-    for (const [index, n] of notes.entries()) {
-      if (!n.el || !n.el.isConnected) {
-        continue;
-      }
+    notes.forEach((n, i) => {
+      if (!n.el || !n.el.isConnected) return;
       const r = n.el.getBoundingClientRect();
       const pin = document.createElement("div");
       pin.className = "pin";
-      pin.textContent = String(index + 1);
+      pin.textContent = String(i + 1);
       pin.style.left = `${r.right - 10}px`;
       pin.style.top = `${r.top - 10}px`;
       pin.title = n.note || "(no note)";
-      layer.append(pin);
-    }
+      layer.appendChild(pin);
+    });
   }
 
   // ---- the editor -----------------------------------------------------------------------------
 
+  /** rgb()/rgba() as computed → the `#rrggbb` an `<input type=color>` will accept. */
   function toHex(value) {
     const m = String(value).match(/rgba?\(([^)]+)\)/);
-    if (!m) {
-      return "#000000";
-    }
-    const [r, g, b] = m[1].split(",").map((v) => Number.parseFloat(v));
+    if (!m) return "#000000";
+    const [r, g, b] = m[1].split(",").map((v) => parseFloat(v));
     const hex = (n) =>
       Math.max(0, Math.min(255, Math.round(n || 0)))
         .toString(16)
@@ -224,10 +212,10 @@
     return `#${hex(r)}${hex(g)}${hex(b)}`;
   }
 
-  function record(property, from, to) {
-    const seen = draft.styles.get(property);
-    draft.styles.set(property, { from: seen ? seen.from : from, to });
-    target.style.setProperty(property, to);
+  function record(prop, from, to) {
+    const seen = draft.styles.get(prop);
+    draft.styles.set(prop, { from: seen ? seen.from : from, to });
+    target.style.setProperty(prop, to);
   }
 
   function field(f, computed) {
@@ -235,99 +223,74 @@
     row.className = "row";
     const name = document.createElement("span");
     name.textContent = f.label;
-    row.append(name);
+    row.appendChild(name);
     const from = computed.getPropertyValue(f.prop).trim();
 
-    switch (f.kind) {
-      case "color": {
-        const wrap = document.createElement("div");
-        wrap.className = "swatch";
-        const dot = document.createElement("input");
-        dot.type = "color";
-        dot.value = toHex(from);
-        const text = document.createElement("input");
-        text.type = "text";
-        text.value = from;
-        dot.addEventListener("input", () => {
-          text.value = dot.value;
-          record(f.prop, from, dot.value);
-        });
-        text.addEventListener("change", () =>
-          record(f.prop, from, text.value.trim())
+    if (f.kind === "color") {
+      const wrap = document.createElement("div");
+      wrap.className = "swatch";
+      const dot = document.createElement("input");
+      dot.type = "color";
+      dot.value = toHex(from);
+      const text = document.createElement("input");
+      text.type = "text";
+      text.value = from;
+      dot.oninput = () => {
+        text.value = dot.value;
+        record(f.prop, from, dot.value);
+      };
+      text.onchange = () => record(f.prop, from, text.value.trim());
+      wrap.append(dot, text);
+      row.appendChild(wrap);
+    } else if (f.kind === "weight") {
+      const sel = document.createElement("select");
+      for (const w of WEIGHTS) {
+        const o = document.createElement("option");
+        o.value = w;
+        o.textContent = w;
+        sel.appendChild(o);
+      }
+      sel.value = WEIGHTS.includes(from) ? from : "400";
+      sel.onchange = () => record(f.prop, from, sel.value);
+      row.appendChild(sel);
+    } else if (f.kind === "px" || f.kind === "number") {
+      const input = document.createElement("input");
+      input.type = "number";
+      if (f.step) input.step = f.step;
+      if (f.min !== undefined) input.min = f.min;
+      if (f.max !== undefined) input.max = f.max;
+      input.value = parseFloat(from) || 0;
+      input.oninput = () =>
+        record(
+          f.prop,
+          from,
+          f.kind === "px" ? `${input.value}px` : input.value
         );
-        wrap.append(dot, text);
-        row.append(wrap);
-
-        break;
-      }
-      case "weight": {
-        const sel = document.createElement("select");
-        for (const w of WEIGHTS) {
-          const o = document.createElement("option");
-          o.value = w;
-          o.textContent = w;
-          sel.append(o);
-        }
-        sel.value = WEIGHTS.has(from) ? from : "400";
-        sel.addEventListener("change", () => record(f.prop, from, sel.value));
-        row.append(sel);
-
-        break;
-      }
-      case "px":
-      case "number": {
-        const input = document.createElement("input");
-        input.type = "number";
-        if (f.step) {
-          input.step = f.step;
-        }
-        if (f.min !== undefined) {
-          input.min = f.min;
-        }
-        if (f.max !== undefined) {
-          input.max = f.max;
-        }
-        input.value = Number.parseFloat(from) || 0;
-        input.addEventListener("input", () =>
-          record(
-            f.prop,
-            from,
-            f.kind === "px" ? `${input.value}px` : input.value
-          )
-        );
-        row.append(input);
-
-        break;
-      }
-      default: {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = from;
-        input.addEventListener("change", () =>
-          record(f.prop, from, input.value.trim())
-        );
-        row.append(input);
-      }
+      row.appendChild(input);
+    } else {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = from;
+      input.onchange = () => record(f.prop, from, input.value.trim());
+      row.appendChild(input);
     }
     return row;
   }
 
   function closePanel() {
-    if (panel) {
-      panel.remove();
-    }
+    if (panel) panel.remove();
     panel = null;
     target = null;
     draft = null;
     before = null;
   }
 
-  function select(element) {
+  function select(el) {
     closePanel();
-    target = element;
-    before = element.getAttribute("style");
+    target = el;
+    before = el.getAttribute("style");
     draft = { note: "", styles: new Map() };
-    const computed = getComputedStyle(element);
+    const computed = getComputedStyle(el);
 
     panel = document.createElement("div");
     panel.className = "card";
@@ -335,42 +298,37 @@
     const note = document.createElement("textarea");
     note.rows = 2;
     note.placeholder = "Describe these changes…";
-    note.addEventListener("input", () => (draft.note = note.value));
+    note.oninput = () => (draft.note = note.value);
 
     const who = document.createElement("div");
     who.className = "who";
-    who.textContent = element.tagName.toLowerCase();
+    who.textContent = el.tagName.toLowerCase();
 
     panel.append(note, who);
-    for (const f of FIELDS) {
-      panel.append(field(f, computed));
-    }
+    for (const f of FIELDS) panel.appendChild(field(f, computed));
 
     const acts = document.createElement("div");
     acts.className = "acts";
     const cancel = document.createElement("button");
     cancel.className = "cancel";
     cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => {
-      if (before === null) {
-        target.removeAttribute("style");
-      } else {
-        target.setAttribute("style", before);
-      }
+    cancel.onclick = () => {
+      if (before === null) target.removeAttribute("style");
+      else target.setAttribute("style", before);
       closePanel();
-    });
+    };
     const ok = document.createElement("button");
     ok.className = "ok";
     ok.textContent = "Add note";
-    ok.addEventListener("click", commit);
+    ok.onclick = commit;
     acts.append(cancel, ok);
-    panel.append(acts);
+    panel.appendChild(acts);
 
-    root.append(panel);
+    root.appendChild(panel);
 
     // Anchored below the element, pulled back inside the viewport — the dock is narrow and the
     // panel must never hang off the edge where it can't be reached.
-    const r = element.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
     const w = 300;
     panel.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left))}px`;
     panel.style.top = `${Math.max(8, Math.min(window.innerHeight - 120, r.bottom + 8))}px`;
@@ -378,21 +336,21 @@
   }
 
   function commit() {
-    if (!target) {
-      return;
-    }
+    if (!target) return;
     const styles = [...draft.styles.entries()]
       .filter(([, v]) => v.from !== v.to)
-      .map(([property, v]) => ({ from: v.from, property, to: v.to }));
+      .map(([property, v]) => ({ property, from: v.from, to: v.to }));
     if (draft.note.trim() || styles.length) {
       notes.push({
-        before,
         el: target,
-        note: draft.note.trim(),
+        // Kept so `clear()` can put the page back the way it found it: the style edits are a live
+        // preview, and dropping the notes that describe them should drop them too.
+        before,
         selector: selectorFor(target),
-        styles,
         tag: target.tagName.toLowerCase(),
         text: textOf(target),
+        note: draft.note.trim(),
+        styles,
       });
     }
     closePanel();
@@ -409,21 +367,15 @@
   }
 
   function onMove(e) {
-    if (!isOn || panel) {
-      return;
-    }
-    const element = e.target;
-    if (!element || element.nodeType !== 1 || inUI(element)) {
-      return;
-    }
-    place(element, hover, tag);
-    tag.textContent = element.tagName.toLowerCase();
+    if (!on || panel) return;
+    const el = e.target;
+    if (!el || el.nodeType !== 1 || inUI(el)) return;
+    place(el, hover, tag);
+    tag.textContent = el.tagName.toLowerCase();
   }
 
   function onClick(e) {
-    if (!isOn || inUI(e.target)) {
-      return;
-    }
+    if (!on || inUI(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     hover.style.display = "none";
@@ -432,29 +384,25 @@
   }
 
   function onKey(e) {
-    if (!(isOn && e.key === "Escape" && panel)) {
-      return;
+    if (on && e.key === "Escape" && panel) {
+      e.preventDefault();
+      closePanel();
     }
-
-    e.preventDefault();
-    closePanel();
   }
 
   function reflow() {
-    if (isOn) {
-      drawPins();
-    }
+    if (on) drawPins();
   }
 
   function setMode(next) {
-    isOn = !!next;
+    on = !!next;
     ensureUI();
-    if (isOn) {
-      document.addEventListener("mousemove", onMove, { capture: true });
-      document.addEventListener("click", onClick, { capture: true });
-      document.addEventListener("keydown", onKey, { capture: true });
-      window.addEventListener("scroll", reflow, { capture: true });
-      window.addEventListener("resize", reflow, { capture: true });
+    if (on) {
+      document.addEventListener("mousemove", onMove, true);
+      document.addEventListener("click", onClick, true);
+      document.addEventListener("keydown", onKey, true);
+      window.addEventListener("scroll", reflow, true);
+      window.addEventListener("resize", reflow, true);
       drawPins();
     } else {
       document.removeEventListener("mousemove", onMove, true);
@@ -467,37 +415,31 @@
       tag.style.display = "none";
       layer.textContent = "";
     }
-    return isOn;
+    return on;
   }
 
   window.__codetwoAnnotate = {
+    setMode,
+    /** What the app pulls out: plain data, no element references. */
+    list: () =>
+      notes.map((n) => ({
+        selector: n.selector,
+        tag: n.tag,
+        text: n.text,
+        note: n.note,
+        styles: n.styles,
+      })),
+    count: () => notes.length,
     clear: () => {
       for (const n of notes) {
-        if (!n.el) {
-          continue;
-        }
-        if (n.before === null) {
-          n.el.removeAttribute("style");
-        } else {
-          n.el.setAttribute("style", n.before);
-        }
+        if (!n.el) continue;
+        if (n.before === null) n.el.removeAttribute("style");
+        else n.el.setAttribute("style", n.before);
       }
       notes.length = 0;
       closePanel();
-      if (layer) {
-        layer.textContent = "";
-      }
+      if (layer) layer.textContent = "";
       return 0;
     },
-    count: () => notes.length,
-    list: () =>
-      notes.map((n) => ({
-        note: n.note,
-        selector: n.selector,
-        styles: n.styles,
-        tag: n.tag,
-        text: n.text,
-      })),
-    setMode,
   };
 })();

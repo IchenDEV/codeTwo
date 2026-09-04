@@ -19,7 +19,7 @@ const { PluginManagerPage, PluginUiSlot, buildPluginManagerCatalog } =
   await import("../src/plugins");
 const desktopStyles = readFileSync(
   new URL("../src/styles.css", import.meta.url),
-  "utf-8"
+  "utf8"
 );
 
 afterEach(() => {
@@ -327,7 +327,7 @@ describe("PluginManagerPage", () => {
     ).toBe("Feishu connection settings");
 
     click(
-      [...view.container.querySelectorAll("button")].find((candidate) =>
+      Array.from(view.container.querySelectorAll("button")).find((candidate) =>
         candidate.textContent?.includes("Memory")
       )
     );
@@ -420,31 +420,27 @@ describe("PluginManagerPage", () => {
       "composer.above",
       "composer.toolbar",
     ];
-    const contributions = slots.map((slot, order) => {
-      return {
-        id: `action-${order}`,
-        pluginId: "review-tools",
-        pluginName: "Review Tools",
-        slot,
-        label: `Action ${order}`,
-        description: `Action ${order} description`,
-        command: "review.run",
-        input: null,
-        order,
-      };
-    });
+    const contributions = slots.map((slot, order) => ({
+      id: `action-${order}`,
+      pluginId: "review-tools",
+      pluginName: "Review Tools",
+      slot,
+      label: `Action ${order}`,
+      description: `Action ${order} description`,
+      command: "review.run",
+      input: null,
+      order,
+    }));
     const view = mount(
       <div>
-        {slots.map((slot, order) => {
-          return (
-            <PluginUiSlot
-              key={slot}
-              slot={slot}
-              contributions={[contributions[order]]}
-              onInvoke={async (value) => invoked.push(value)}
-            />
-          );
-        })}
+        {slots.map((slot, order) => (
+          <PluginUiSlot
+            key={slot}
+            slot={slot}
+            contributions={[contributions[order]]}
+            onInvoke={async (value) => invoked.push(value)}
+          />
+        ))}
       </div>
     );
     await flush();
@@ -460,7 +456,7 @@ describe("PluginManagerPage", () => {
         ) ?? button(region, order === 3 ? "Run" : `Action ${order}`);
       expect(action).not.toBeNull();
       if (slot === "session.header") {
-        expect(action.dataset.variant).toBe("ghost");
+        expect(action.getAttribute("data-variant")).toBe("ghost");
         expect(action.classList.contains("text-muted-foreground")).toBe(true);
         expect(action.classList.contains("hover:text-muted-foreground")).toBe(
           true
@@ -541,6 +537,8 @@ describe("PluginManagerPage", () => {
     const listControls = view.container.querySelector(
       "[data-plugin-manager-list-controls]"
     );
+    expect(listControls?.className).toContain("px-2");
+    expect(listControls?.className).not.toContain("px-4");
     expect(listControls?.querySelectorAll('[role="tab"]')).toHaveLength(5);
     expect(
       listControls?.querySelector("[data-plugin-manager-search]")
@@ -558,14 +556,22 @@ describe("PluginManagerPage", () => {
     expect(desktopStyles).toContain(
       "@container plugin-manager-list (max-width: 24rem)"
     );
-    expect(desktopStyles).toContain(".plugin-manager-tab:not(:first-of-type)");
-    expect(desktopStyles).toContain("padding-inline: var(--ds-space-optical)");
+    expect(desktopStyles).toMatch(
+      /\.plugin-manager-tabs\s*{[^}]*gap:\s*var\(--ds-space-inline\)/s
+    );
+    expect(desktopStyles).toMatch(
+      /\.plugin-manager-tabs \.plugin-manager-tab\s*{[^}]*padding-inline:\s*var\(--ds-space-inline\)/s
+    );
+    expect(desktopStyles).not.toContain(
+      ".plugin-manager-tab:not(:first-of-type)"
+    );
     expect(
       view.container.querySelector(".plugin-manager-detail-pane")
     ).not.toBeNull();
     expect(
-      view.container.querySelector("[data-plugin-manager-page]")?.dataset
-        .compactDetail
+      view.container
+        .querySelector("[data-plugin-manager-page]")
+        ?.getAttribute("data-compact-detail")
     ).toBe("true");
     expect(
       view.container
@@ -609,9 +615,9 @@ describe("PluginManagerPage", () => {
       view.container.querySelector("[data-plugin-details]")?.textContent
     ).toContain("MemoryCapability");
     expect(
-      view.container.querySelector(
-        "[data-plugin-details] [data-slot='status-badge']"
-      )?.dataset.tone
+      view.container
+        .querySelector("[data-plugin-details] [data-slot='status-badge']")
+        ?.getAttribute("data-tone")
     ).toBe("success");
     expect(
       view.container.querySelector("#plugin-config-endpoint")
@@ -656,8 +662,8 @@ describe("PluginManagerPage", () => {
     click(button(view.container, "MCPs 1"));
     await flush();
     click(
-      view.container.ownerDocument.querySelector(
-        "#component-state-skill:docs-search"
+      view.container.ownerDocument.getElementById(
+        "component-state-skill:docs-search"
       )
     );
     await flush();
@@ -718,32 +724,34 @@ describe("PluginManagerPage", () => {
 
   test("maps failed plugin and trusted bundle states independently", async () => {
     activateDom();
-    const trustedPlugins = plugins.map((plugin) => {
-      return plugin.id === "review-tools"
+    const trustedPlugins = plugins.map((plugin) =>
+      plugin.id === "review-tools"
         ? { ...plugin, bundle: { ...plugin.bundle, trusted: true } }
-        : plugin;
-    });
+        : plugin
+    );
     const { view } = renderManager({ plugins: trustedPlugins });
     await flush();
 
-    const bundleButton = [...view.container.querySelectorAll("button")].find(
-      (candidate) => candidate.textContent?.includes("Review Tools")
-    );
+    const bundleButton = Array.from(
+      view.container.querySelectorAll("button")
+    ).find((candidate) => candidate.textContent?.includes("Review Tools"));
     click(bundleButton);
     await flush();
 
-    const detailsTones = [
-      ...view.container.querySelectorAll(
+    const detailsTones = Array.from(
+      view.container.querySelectorAll(
         "[data-plugin-details] [data-slot='status-badge']"
-      ),
-    ].map((badge) => badge.dataset.tone);
+      )
+    ).map((badge) => badge.getAttribute("data-tone"));
     expect(detailsTones.filter((tone) => tone === "destructive")).toHaveLength(
       2
     );
     expect(
-      view.container.querySelector(
-        "[data-bundle-administration] [data-slot='status-badge']"
-      )?.dataset.tone
+      view.container
+        .querySelector(
+          "[data-bundle-administration] [data-slot='status-badge']"
+        )
+        ?.getAttribute("data-tone")
     ).toBe("success");
     view.unmount();
   });
@@ -753,9 +761,9 @@ describe("PluginManagerPage", () => {
     const { view, calls } = renderManager();
     await flush();
 
-    const bundleButton = [...view.container.querySelectorAll("button")].find(
-      (candidate) => candidate.textContent?.includes("Review Tools")
-    );
+    const bundleButton = Array.from(
+      view.container.querySelectorAll("button")
+    ).find((candidate) => candidate.textContent?.includes("Review Tools"));
     click(bundleButton);
     await flush();
 
@@ -767,7 +775,9 @@ describe("PluginManagerPage", () => {
     expect(administration?.textContent).toContain("1 Process runtime");
     expect(administration?.textContent).toContain("Trust before running.");
     expect(
-      administration?.querySelector('[data-slot="status-badge"]')?.dataset.tone
+      administration
+        ?.querySelector('[data-slot="status-badge"]')
+        ?.getAttribute("data-tone")
     ).toBe("destructive");
     expect(
       details?.querySelector("[data-plugin-trust-gate]")?.textContent
@@ -986,9 +996,9 @@ describe("PluginManagerPage", () => {
     );
     expect(trigger?.textContent).toContain("Inherit");
     await openSelect(trigger);
-    const disabled = [
-      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
-    ].find((item) => item.textContent?.trim() === "Disabled");
+    const disabled = Array.from(
+      dom.document.body.querySelectorAll('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.trim() === "Disabled");
     await selectItem(disabled);
 
     expect(calls.planned[0]).toMatchObject({
@@ -1090,9 +1100,9 @@ describe("PluginManagerPage", () => {
     );
     expect(trigger?.textContent).toContain("Disabled");
     await openSelect(trigger);
-    const enabled = [
-      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
-    ].find((item) => item.textContent?.trim() === "Enabled");
+    const enabled = Array.from(
+      dom.document.body.querySelectorAll('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.trim() === "Enabled");
     await selectItem(enabled);
 
     expect(calls.planned[0]).toMatchObject({

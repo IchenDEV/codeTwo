@@ -20,20 +20,26 @@ import {
   describeContextWindow,
   formatExactContextTokens,
   formatContextWindowPercentage,
+  type ContextWindow,
 } from "./contextWindow";
-import type { ContextWindow } from "./contextWindow";
 // Explicit extension: this dir holds both `statusline.ts` (logic) and `Statusline.tsx` (this
 // file), and bun's resolver matches the pair case-insensitively without it.
 import { contextTone, formatCost } from "./statusline.ts";
 
 export interface StatuslineUsage {
   costUsd: number | null;
-  /**
-  Output tokens per minute, derived from successive usage polls.
-  */
+  /** Output tokens per minute, derived from successive usage polls. */
   burnRate: number | null;
 }
 
+/**
+ * The per-session statusline in the Composer controls row (roadmap R7): the context-window
+ * meter that used to be `ContextWindowStatus`, now with a tone dot at 60%/85% fill, plus a
+ * cost segment that only appears once the core's per-session usage command exists (the bridge
+ * feature-detects it; `usage` stays null until then). One Chip-sized control either way.
+ *
+ * Clicking opens a detailed context breakdown popover showing per-category token allocation.
+ */
 export function Statusline({
   contextWindow,
   usage,
@@ -41,11 +47,11 @@ export function Statusline({
   compactDisabled = false,
   compactDisabledReason = null,
 }: {
-  readonly contextWindow: ContextWindow | null;
-  readonly usage: StatuslineUsage | null;
-  readonly onCompact?: () => void;
-  readonly compactDisabled?: boolean;
-  readonly compactDisabledReason?: string | null;
+  contextWindow: ContextWindow | null;
+  usage: StatuslineUsage | null;
+  onCompact?: () => void;
+  compactDisabled?: boolean;
+  compactDisabledReason?: string | null;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -57,23 +63,21 @@ export function Statusline({
       ? t("statusline.burn", { rate: String(Math.round(usage.burnRate)) })
       : null;
   if (!contextWindow || !display) {
-    if ((cost == null || cost === "") && (burn == null || burn === "")) {
-      return null;
-    }
+    if (!cost && !burn) return null;
     return (
       <span className="text-metadata text-muted-foreground flex shrink-0 items-center gap-1.5 px-0 py-1 @lg/composer:px-1.5">
-        {cost != null && cost !== "" ? <span>{cost}</span> : null}
-        {burn != null && burn !== "" ? <span>{burn}</span> : null}
+        {cost && <span>{cost}</span>}
+        {burn && <span>{burn}</span>}
       </span>
     );
   }
   const exact = t("composer.contextWindowExact", {
+    used: formatExactContextTokens(contextWindow.usedTokens),
     capacity: formatExactContextTokens(contextWindow.contextWindow),
     percentage: formatContextWindowPercentage(contextWindow),
-    used: formatExactContextTokens(contextWindow.usedTokens),
   });
   const tone = contextTone(
-    display.percentage === null ? null : display.percentage / 100
+    display.percentage !== null ? display.percentage / 100 : null
   );
 
   const chipContent = (
@@ -97,25 +101,25 @@ export function Statusline({
       <span className="@lg/composer:hidden" aria-hidden="true">
         {display.capacity}
       </span>
-      {usage && (cost || burn) ? (
+      {usage && (cost || burn) && (
         <span
           aria-hidden="true"
           className="hidden items-center gap-1.5 @lg/composer:flex"
         >
-          {cost != null && cost !== "" ? (
+          {cost && (
             <>
               <span>·</span>
               <span>{cost}</span>
             </>
-          ) : null}
-          {burn != null && burn !== "" ? (
+          )}
+          {burn && (
             <>
               <span>·</span>
               <span>{burn}</span>
             </>
-          ) : null}
+          )}
         </span>
-      ) : null}
+      )}
     </>
   );
 
@@ -158,10 +162,8 @@ export function Statusline({
             <div>
               {t("statusline.contextTitle")}: {exact}
             </div>
-            {cost != null && cost !== "" ? (
-              <div>{t("statusline.cost", { cost })}</div>
-            ) : null}
-            {burn != null && burn !== "" ? <div>{burn}</div> : null}
+            {cost && <div>{t("statusline.cost", { cost })}</div>}
+            {burn && <div>{burn}</div>}
           </div>
         </TooltipContent>
       </Tooltip>

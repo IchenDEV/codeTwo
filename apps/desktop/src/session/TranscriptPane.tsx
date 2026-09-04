@@ -1,5 +1,4 @@
-import { useRef } from "react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
@@ -16,31 +15,26 @@ import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { useTranscriptScroll } from "./useTranscriptScroll";
 
 interface TranscriptPaneProps {
-  readonly variant: "main" | "side";
-  readonly turns: readonly Turn[];
-  readonly loading: boolean;
-  readonly hasEarlier: boolean;
-  readonly loadingEarlier: boolean;
-  readonly onLoadEarlier: (scroll: TranscriptScrollController) => void;
-  /**
-  R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden.
-  */
-  readonly onSaveTemplate?: (promptText: string) => void;
-  readonly linkActions?: BuiltinLinkActions;
-  /**
-  Durable source session used for scroll restoration.
-  */
-  readonly sessionId?: string | null;
-  readonly onForkTurn?: (turn: Turn) => void;
-  readonly onAddSelection: (text: string) => void;
-  readonly onExplainSelection: (text: string) => void;
-  readonly onAskSelectionInSideChat: (text: string) => void;
-  /**
-  Host-rendered declarative plugin actions above the transcript.
-  */
-  readonly before?: ReactNode;
+  variant: "main" | "side";
+  turns: readonly Turn[];
+  loading: boolean;
+  hasEarlier: boolean;
+  loadingEarlier: boolean;
+  onLoadEarlier: (scroll: TranscriptScrollController) => void;
+  /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
+  onSaveTemplate?: (promptText: string) => void;
+  linkActions?: BuiltinLinkActions;
+  /** Durable source session used for scroll restoration. */
+  sessionId?: string | null;
+  onForkTurn?: (turn: Turn) => void;
+  onAddSelection: (text: string) => void;
+  onExplainSelection: (text: string) => void;
+  onAskSelectionInSideChat: (text: string) => void;
+  /** Host-rendered declarative plugin actions above the transcript. */
+  before?: ReactNode;
 }
 
+/** One transcript renderer shared by the main column and document-mode side panel. */
 export function TranscriptPane({
   sessionId,
   variant,
@@ -91,10 +85,13 @@ export function TranscriptPane({
         >
           {before}
           {loading ? (
-            <output className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12">
+            <p
+              role="status"
+              className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12"
+            >
               <ActivityOrb state="connecting" aria-hidden="true" />
               {t("session.loading")}
-            </output>
+            </p>
           ) : (
             <>
               {hasEarlier ? (

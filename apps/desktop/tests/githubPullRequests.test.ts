@@ -8,7 +8,9 @@ import {
   filterPullRequests,
   githubPullRequestReference,
   groupPullRequests,
+  pullRequestCheckResult,
   pullRequestCheckState,
+  pullRequestMergeReadiness,
   shortPullRequestAge,
 } from "../src/github/pullRequests";
 
@@ -60,9 +62,10 @@ describe("GitHub pull request projections", () => {
 
   test("assigns each pull request to the highest-priority visible group once", () => {
     expect(
-      groupPullRequests(items, "all").map((group) => {
-        return [group.id, group.items.map((item) => item.id)];
-      })
+      groupPullRequests(items, "all").map((group) => [
+        group.id,
+        group.items.map((item) => item.id),
+      ])
     ).toEqual([
       ["review-requested", ["1"]],
       ["reviewed", ["2"]],
@@ -125,6 +128,42 @@ describe("GitHub pull request projections", () => {
         ],
       })
     ).toBe("failed");
+    expect(
+      pullRequestCheckResult({
+        name: "neutral",
+        status: "COMPLETED",
+        conclusion: "NEUTRAL",
+        detailsUrl: null,
+      })
+    ).toBe("passed");
+    expect(pullRequestMergeReadiness({ ...base, checks: [] })).toBe("ready");
+    expect(
+      pullRequestMergeReadiness({ ...base, isDraft: true, checks: [] })
+    ).toBe("draft");
+    expect(
+      pullRequestMergeReadiness({
+        ...base,
+        mergeable: "CONFLICTING",
+        checks: [],
+      })
+    ).toBe("conflicting");
+    expect(
+      pullRequestMergeReadiness({ ...base, state: "CLOSED", checks: [] })
+    ).toBe("closed");
+    expect(
+      pullRequestMergeReadiness({
+        ...base,
+        reviewDecision: "REVIEW_REQUIRED",
+        checks: [],
+      })
+    ).toBe("review_required");
+    expect(
+      pullRequestMergeReadiness({
+        ...base,
+        reviewDecision: "CHANGES_REQUESTED",
+        checks: [],
+      })
+    ).toBe("changes_requested");
   });
 
   test("projects the stable GitHub identity stored by task links", () => {

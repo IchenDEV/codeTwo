@@ -1,8 +1,7 @@
 import type { CanvasExport } from "../bridge";
-import { asJsonObject } from "../lib/jsonValue";
 
-export const longPromptMaxLines = 8;
-export const longPromptMaxChars = 600;
+export const LONG_PROMPT_MAX_LINES = 8;
+export const LONG_PROMPT_MAX_CHARS = 600;
 
 /**
  * The current transcript API exposes Canvas history as two internal marker lines. Keep the
@@ -15,58 +14,43 @@ export interface CanvasHistoryMarker {
   textOriginals: string[];
 }
 
-const canvasHistoryLine =
-  /^\s*\[canvas-history\s+([^\s\]@]+)@(\d+)\]\s*(.*)\s*$/u;
-const canvasTextLine = /^\s*canvas-text:\s?(.*)$/u;
-const canvasHistoryJsonLine = /^\s*\[canvas-history-json\s+(.+)\]\s*$/u;
+const CANVAS_HISTORY_LINE =
+  /^\s*\[canvas-history\s+([^\s\]@]+)@(\d+)\]\s*(.*)\s*$/;
+const CANVAS_TEXT_LINE = /^\s*canvas-text:\s?(.*)$/;
+const CANVAS_HISTORY_JSON_LINE = /^\s*\[canvas-history-json\s+(.+)\]\s*$/;
 
 function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
-  const match = canvasHistoryJsonLine.exec(line);
-  if (!match) {
-    return null;
-  }
+  const match = line.match(CANVAS_HISTORY_JSON_LINE);
+  if (!match) return null;
   let decoded: unknown;
   try {
     decoded = JSON.parse(match[1]);
   } catch {
     return null;
   }
-  const value = asJsonObject(decoded);
-  if (value == null) {
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
     return null;
-  }
-  if (value.version !== 1) {
+  const value = decoded as Record<string, unknown>;
+  if (value.version !== 1) return null;
+  if (typeof value.id !== "string" || value.id.trim().length === 0) return null;
+  if (!Number.isSafeInteger(value.revision) || (value.revision as number) <= 0)
     return null;
-  }
-  if (typeof value.id !== "string" || value.id.trim().length === 0) {
+  if (typeof value.title !== "string" || Array.from(value.title).length > 200)
     return null;
-  }
-  if (
-    typeof value.revision !== "number" ||
-    !Number.isSafeInteger(value.revision) ||
-    value.revision <= 0
-  ) {
-    return null;
-  }
-  if (typeof value.title !== "string" || [...value.title].length > 200) {
-    return null;
-  }
   if (
     !Array.isArray(value.text_originals) ||
     value.text_originals.length > 64 ||
-    value.text_originals.some(
-      (text) => !(typeof text === "string" && [...text].length <= 2000)
+    !value.text_originals.every(
+      (text) => typeof text === "string" && Array.from(text).length <= 2_000
     )
   ) {
     return null;
   }
   return {
     id: value.id,
-    revision: value.revision,
-    textOriginals: value.text_originals.filter(
-      (text): text is string => typeof text === "string"
-    ),
+    revision: value.revision as number,
     title: value.title,
+    textOriginals: [...(value.text_originals as string[])],
   };
 }
 
@@ -77,59 +61,58 @@ export function parseCanvasHistoryPrompt(prompt: string): {
   const visible: string[] = [];
   const canvases: CanvasHistoryMarker[] = [];
   let current: CanvasHistoryMarker | null = null;
-  let isMarkerTextContext = false;
-  for (const line of prompt.split(/\r?\n/u)) {
+  let markerTextContext = false;
+  for (const line of prompt.split(/\r?\n/)) {
     const structured = parseCanvasHistoryJson(line);
     if (structured) {
       canvases.push(structured);
       current = structured;
-      isMarkerTextContext = false;
+      markerTextContext = false;
       continue;
     }
-    const marker = canvasHistoryLine.exec(line);
+    const marker = line.match(CANVAS_HISTORY_LINE);
     if (marker) {
       current = {
         id: marker[1],
         revision: Number(marker[2]),
-        textOriginals: [],
         title: marker[3] || "Canvas",
+        textOriginals: [],
       };
       canvases.push(current);
-      isMarkerTextContext = true;
+      markerTextContext = true;
       continue;
     }
-    const text = canvasTextLine.exec(line);
+    const text = line.match(CANVAS_TEXT_LINE);
     if (text) {
-      if (current && isMarkerTextContext) {
-        if (text[1].trim()) {
-          current.textOriginals.push(text[1].trim());
-        }
+      if (current && markerTextContext) {
+        if (text[1].trim()) current.textOriginals.push(text[1].trim());
         continue;
       }
       // A user-authored line with this prefix is ordinary prompt text unless it immediately
       // follows a canonical marker. Keep it visible rather than over-stripping history.
       visible.push(line);
       current = null;
-      isMarkerTextContext = false;
+      markerTextContext = false;
       continue;
     }
     visible.push(line);
     current = null;
-    isMarkerTextContext = false;
+    markerTextContext = false;
   }
   return {
-    canvases,
     visiblePrompt: visible
       .join("\n")
-      .replaceAll(/\n{3,}/gu, "\n\n")
+      .replace(/\n{3,}/g, "\n\n")
       .trim(),
+    canvases,
   };
 }
 
+/** Convert a validated bridge export to a browser image without exposing mutable scene state. */
 export function canvasExportDataUrl(item: CanvasExport): string {
   const bytes = Uint8Array.from(item.bytes);
   let binary = "";
-  const chunkSize = 0x80_00;
+  const chunkSize = 0x8000;
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
     binary += String.fromCharCode(
       ...bytes.subarray(offset, offset + chunkSize)
@@ -138,14 +121,19 @@ export function canvasExportDataUrl(item: CanvasExport): string {
   return `data:${item.mimeType};base64,${btoa(binary)}`;
 }
 
+/** Match t3code's long-message boundary without coupling the transcript card to string policy. */
 export function isLongPrompt(prompt: string): boolean {
   return (
-    [...prompt].length > longPromptMaxChars ||
-    prompt.split(/\r?\n/u).length > longPromptMaxLines
+    Array.from(prompt).length > LONG_PROMPT_MAX_CHARS ||
+    prompt.split(/\r?\n/).length > LONG_PROMPT_MAX_LINES
   );
 }
 
+/** Keep the collapsed copy inside both limits and avoid splitting a Unicode surrogate pair. */
 export function collapsedPrompt(prompt: string): string {
-  const lines = prompt.split(/\r?\n/u).slice(0, longPromptMaxLines).join("\n");
-  return [...lines].slice(0, longPromptMaxChars).join("").trimEnd();
+  const lines = prompt
+    .split(/\r?\n/)
+    .slice(0, LONG_PROMPT_MAX_LINES)
+    .join("\n");
+  return Array.from(lines).slice(0, LONG_PROMPT_MAX_CHARS).join("").trimEnd();
 }

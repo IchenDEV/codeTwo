@@ -1,6 +1,5 @@
 import type { SuggestionMenuProps } from "@blocknote/react";
-import { useEffect, useRef } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,103 +10,87 @@ import {
   FileType,
   MessageSquare,
   Package,
+  type AppIcon,
 } from "@/components/ui/icons";
-import type { HugeIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 import { useT } from "../i18n";
 
-/**
-One workspace file, split for display. The core ranks these; this only draws them.
-*/
+/** One workspace file, split for display. The core ranks these; this only draws them. */
 export interface FileItem {
   kind: "file";
   path: string;
-  /**
-  `src/session/` — dimmed, so the eye lands on the name. Empty at the workspace root.
-  */
+  /** `src/session/` — dimmed, so the eye lands on the name. Empty at the workspace root. */
   dir: string;
   name: string;
-  /**
-  Where the query matched `name`, for highlighting. Null when it matched only the directory.
-  */
+  /** Where the query matched `name`, for highlighting. Null when it matched only the directory. */
   hit: [number, number] | null;
 }
 
-/**
-One past chat, offered for `@`-mentioning its transcript as context.
-*/
+/** One past chat, offered for `@`-mentioning its transcript as context. */
 export interface ChatItem {
   kind: "chat";
   id: string;
   title: string;
-  /**
-  `created_at` in ms — drawn as a short date so same-titled chats stay tellable apart.
-  */
+  /** `created_at` in ms — drawn as a short date so same-titled chats stay tellable apart. */
   when: number;
 }
 
-/**
-One stored scene artifact, offered for `@`-mentioning its content as context (R4).
-*/
+/** One stored scene artifact, offered for `@`-mentioning its content as context (R4). */
 export interface ArtifactAtItem {
   kind: "artifact";
   recordId: number;
   title: string;
-  /**
-  Declared scene-artifact kind ("plan", "report", …) — drawn as the row's right-hand hint.
-  */
+  /** Declared scene-artifact kind ("plan", "report", …) — drawn as the row's right-hand hint. */
   artifactKind: string;
   version: number;
 }
 
-/**
-Everything the `@` picker can insert: chats, then artifacts, then workspace files.
-*/
+/** Everything the `@` picker can insert: chats, then artifacts, then workspace files. */
 export type AtItem = ChatItem | ArtifactAtItem | FileItem;
 
-const byExtension: Record<string, HugeIcon> = {
-  conf: FileType,
-  css: FileCode,
-  gif: FileImage,
-  go: FileCode,
-  html: FileCode,
-  icns: FileImage,
-  ico: FileImage,
-  ini: FileType,
-  jpeg: FileImage,
-  jpg: FileImage,
-  js: FileCode,
-  json: FileJson,
-  jsx: FileCode,
-  lock: FileJson,
-  plist: FileType,
-  png: FileImage,
-  py: FileCode,
-  rb: FileCode,
-  rs: FileCode,
-  sh: FileCode,
-  svg: FileImage,
-  swift: FileCode,
-  toml: FileType,
+const BY_EXTENSION: Record<string, AppIcon> = {
   ts: FileCode,
   tsx: FileCode,
-  webp: FileImage,
+  js: FileCode,
+  jsx: FileCode,
+  rs: FileCode,
+  py: FileCode,
+  go: FileCode,
+  rb: FileCode,
+  sh: FileCode,
+  css: FileCode,
+  html: FileCode,
+  swift: FileCode,
+  json: FileJson,
+  lock: FileJson,
+  toml: FileType,
   yaml: FileType,
   yml: FileType,
+  plist: FileType,
+  conf: FileType,
+  ini: FileType,
+  png: FileImage,
+  jpg: FileImage,
+  jpeg: FileImage,
+  gif: FileImage,
+  svg: FileImage,
+  webp: FileImage,
+  ico: FileImage,
+  icns: FileImage,
 };
 
-function iconFor(name: string): HugeIcon {
+/** A page icon on every row says only "this is a file", which the user already knows. */
+function iconFor(name: string): AppIcon {
   const dot = name.lastIndexOf(".");
   return (
-    (dot > 0 && byExtension[name.slice(dot + 1).toLowerCase()]) || FileText
+    (dot > 0 && BY_EXTENSION[name.slice(dot + 1).toLowerCase()]) || FileText
   );
 }
 
+/** Split a name around the matched span so the middle can be emphasised. */
 function parts(item: FileItem): [string, string, string] {
-  if (!item.hit) {
-    return [item.name, "", ""];
-  }
+  if (!item.hit) return [item.name, "", ""];
   const [from, to] = item.hit;
   return [
     item.name.slice(0, from),
@@ -117,16 +100,13 @@ function parts(item: FileItem): [string, string, string] {
 }
 
 function itemKey(item: AtItem): string {
-  if (item.kind === "chat") {
-    return item.id;
-  }
-  if (item.kind === "artifact") {
-    return `artifact-${item.recordId}`;
-  }
+  if (item.kind === "chat") return item.id;
+  if (item.kind === "artifact") return `artifact-${item.recordId}`;
   return item.path;
 }
 
-function GroupLabel({ children }: { readonly children: ReactNode }) {
+/** Muted group label — only drawn when the list actually mixes chats and files. */
+function GroupLabel({ children }: { children: ReactNode }) {
   return (
     <p className="text-metadata text-muted-foreground px-2 pt-1.5 pb-0.5 first:pt-1">
       {children}
@@ -134,6 +114,19 @@ function GroupLabel({ children }: { readonly children: ReactNode }) {
   );
 }
 
+/**
+ * The `@` picker.
+ *
+ * BlockNote's stock menu renders one generic page glyph and one full path per row, at a row height
+ * built for a handful of block types. Pointed at a workspace it becomes a wall: a dozen files on
+ * screen, every row identically iconed, and the part that distinguishes them — the file's own name —
+ * buried at the end of a path. This trades the glyph for the file's kind, puts the name first with
+ * its directory trailing in muted text, marks what the query matched, and packs the rows tight
+ * enough to show a useful number of them at once.
+ *
+ * Past chats sit above the files under their own label: mentioning one inlines its transcript, the
+ * way mentioning a file inlines its contents.
+ */
 export function FileMenu({
   items,
   loadingState,
@@ -146,9 +139,7 @@ export function FileMenu({
   // Arrow keys are the controller's; it moves `selectedIndex` without knowing this list scrolls.
   // Rows are found by index attribute — group labels between them would break child-position math.
   useEffect(() => {
-    if (selectedIndex === undefined) {
-      return;
-    }
+    if (selectedIndex === undefined) return;
     listRef.current
       ?.querySelector(`[data-row="${selectedIndex}"]`)
       ?.scrollIntoView({ block: "nearest" });
@@ -252,11 +243,11 @@ export function FileMenu({
                     <span className="text-primary">{match}</span>
                     {after}
                   </span>
-                  {item.dir ? (
+                  {item.dir && (
                     <span className="text-callout text-muted-foreground/70 min-w-0 flex-1 truncate text-right">
                       {item.dir}
                     </span>
-                  ) : null}
+                  )}
                 </Button>
               );
             })()

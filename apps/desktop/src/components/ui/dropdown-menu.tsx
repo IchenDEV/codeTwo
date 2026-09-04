@@ -78,9 +78,7 @@ function DropdownMenuItem({
   className,
   variant = "default",
   ...props
-}: MenuPrimitive.Item.Props & {
-  readonly variant?: "default" | "destructive";
-}) {
+}: MenuPrimitive.Item.Props & { variant?: "default" | "destructive" }) {
   return (
     <MenuPrimitive.Item
       data-slot="dropdown-menu-item"
@@ -174,6 +172,7 @@ function DropdownMenuSeparator({
   );
 }
 
+/** Right-aligned shortcut hint on a menu row. */
 function DropdownMenuShortcut({
   className,
   ...props

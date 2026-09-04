@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,24 +10,23 @@ import { onPtyTitle, ptyDump, ptyKill } from "../bridge";
 import { useT } from "../i18n";
 import { TerminalPanel } from "./Terminal";
 
-function terminalId(sessionKey: string, slot: number, isTmux: boolean): string {
-  return `${sessionKey}-${slot}${isTmux ? "-tmux" : ""}`;
+function terminalId(sessionKey: string, slot: number, tmux: boolean): string {
+  return `${sessionKey}-${slot}${tmux ? "-tmux" : ""}`;
 }
 
 function terminalLabel(title: string | undefined, slot: number): string {
-  if (title == null || title === "") {
-    return String(slot);
-  }
+  if (!title) return String(slot);
   return title.split("/").filter(Boolean).pop() ?? title;
 }
 
-interface TerminalDockContentProps {
-  readonly cwd: string | null;
-  readonly projectPath: string | null;
-  readonly sessionKey: string;
-  readonly onSendText: (text: string) => void;
-}
+type TerminalDockContentProps = {
+  cwd: string | null;
+  projectPath: string | null;
+  sessionKey: string;
+  onSendText: (text: string) => void;
+};
 
+/** Terminal-specific tabs and lifecycle, rendered inside the generic Dock container. */
 export function TerminalDockContent({
   cwd,
   projectPath,
@@ -46,9 +45,7 @@ export function TerminalDockContent({
     setTitles({});
     void (async () => {
       stop = await onPtyTitle(({ id, title, project_path }) => {
-        if (project_path !== projectPath) {
-          return;
-        }
+        if (project_path !== projectPath) return;
         setTitles((current) => ({ ...current, [id]: title }));
       });
     })();
@@ -56,19 +53,15 @@ export function TerminalDockContent({
   }, [projectPath]);
 
   const activeId = terminalId(sessionKey, activeSlot, tmux);
-  const sendToAgent = async () => {
+  const sendToAgent = useCallback(async () => {
     const text = (await ptyDump(activeId, true)).trimEnd();
-    if (text) {
-      onSendText(text);
-    }
-  };
+    if (text) onSendText(text);
+  }, [activeId, onSendText]);
 
   function closeSlot(slot: number) {
     const remaining = slots.filter((candidate) => candidate !== slot);
     setSlots(remaining);
-    if (activeSlot === slot && remaining[0]) {
-      setActiveSlot(remaining[0]);
-    }
+    if (activeSlot === slot && remaining[0]) setActiveSlot(remaining[0]);
     void ptyKill(terminalId(sessionKey, slot, false));
     void ptyKill(terminalId(sessionKey, slot, true));
   }

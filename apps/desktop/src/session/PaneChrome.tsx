@@ -6,6 +6,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PanelBottom, PanelRight, X } from "@/components/ui/icons";
@@ -16,13 +17,14 @@ import { TurnCard } from "./TurnCard";
 import type { Turn } from "./turns";
 
 interface PaneToolbarProps {
-  readonly onSplitRight: () => void;
-  readonly onSplitDown: () => void;
-  readonly onClose: () => void;
-  readonly canClose: boolean;
-  readonly labels: { splitRight: string; splitDown: string; close: string };
+  onSplitRight: () => void;
+  onSplitDown: () => void;
+  onClose: () => void;
+  canClose: boolean;
+  labels: { splitRight: string; splitDown: string; close: string };
 }
 
+/** The split / close controls shown on every tiled pane. */
 export function PaneToolbar({
   onSplitRight,
   onSplitDown,
@@ -69,19 +71,22 @@ export function PaneToolbar({
 }
 
 interface PaneLayoutToolbarProps extends PaneToolbarProps {
-  readonly panelActive: boolean;
-  readonly onTogglePanel: () => void;
-  readonly panelLabel: string;
-  readonly groupLabel: string;
-  readonly viewLabel: string;
+  panelActive: boolean;
+  onTogglePanel: () => void;
+  panelLabel: string;
+  groupLabel: string;
+  viewLabel: string;
+  shortcuts: { splitRight: string; splitDown: string; sidePanel: string };
 }
 
+/** Pane and panel controls grouped at the trailing edge of the focused session titlebar. */
 export function PaneLayoutToolbar({
   panelActive,
   onTogglePanel,
   panelLabel,
   groupLabel,
   viewLabel,
+  shortcuts,
   onSplitRight,
   onSplitDown,
   onClose,
@@ -121,10 +126,14 @@ export function PaneLayoutToolbar({
             <DropdownMenuItem onClick={onSplitRight}>
               <PanelRight aria-hidden />
               {labels.splitRight}
+              <DropdownMenuShortcut>
+                {shortcuts.splitRight}
+              </DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onSplitDown}>
               <PanelBottom aria-hidden />
               {labels.splitDown}
+              <DropdownMenuShortcut>{shortcuts.splitDown}</DropdownMenuShortcut>
             </DropdownMenuItem>
             {canClose ? (
               <DropdownMenuItem onClick={onClose}>
@@ -139,6 +148,7 @@ export function PaneLayoutToolbar({
             >
               <PanelRight aria-hidden />
               {panelLabel}
+              <DropdownMenuShortcut>{shortcuts.sidePanel}</DropdownMenuShortcut>
             </DropdownMenuCheckboxItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>
@@ -148,13 +158,18 @@ export function PaneLayoutToolbar({
 }
 
 interface PanePreviewProps {
-  readonly title: string;
-  readonly running: boolean;
-  readonly turns: readonly Turn[];
-  readonly emptyLabel: string;
-  readonly toolbar: PaneToolbarProps;
+  title: string;
+  running: boolean;
+  turns: readonly Turn[];
+  emptyLabel: string;
+  toolbar: PaneToolbarProps;
 }
 
+/**
+ * A non-focused pane: its live transcript, read-only. Turns still stream in through the
+ * session-routed event handler, so this mirrors a background agent's progress. Pressing anywhere
+ * focuses the pane (handled by the tiling host) — this component only renders.
+ */
 export function PanePreview({
   title,
   running,

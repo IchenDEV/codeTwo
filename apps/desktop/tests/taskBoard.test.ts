@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  corruptBoardWarning,
-  defaultTasks,
-  loadBoardWarning,
+  CORRUPT_BOARD_WARNING,
+  DEFAULT_TASKS,
+  LOAD_BOARD_WARNING,
   PRIORITIES,
-  saveBoardWarning,
-  taskboardSnapshotVersion,
-  taskboardStorageKey,
-  taskPriorities,
-  taskBoardLanes,
-  taskStatuses,
+  SAVE_BOARD_WARNING,
+  TASKBOARD_SNAPSHOT_VERSION,
+  TASKBOARD_STORAGE_KEY,
+  TASK_PRIORITIES,
+  TASK_BOARD_LANES,
+  TASK_STATUSES,
   associateTaskPullRequest,
   associateTaskSession,
   boardLabels,
@@ -29,16 +29,15 @@ import {
   taskForPullRequest,
   taskForSession,
   unlinkTaskPullRequest,
+  type BoardFilters,
+  type BoardTask,
+  type GitHubPullRequestReference,
+  type StorageLike,
+  type TaskBoardState,
+  type TaskPriority,
+  type TaskStatus,
 } from "../src/taskboard/taskBoard";
-import type {
-  BoardFilters,
-  BoardTask,
-  GitHubPullRequestReference,
-  StorageLike,
-  TaskBoardState,
-  TaskPriority,
-  TaskStatus,
-} from "../src/taskboard/taskBoard";
+import { continueTaskBoardPrompt } from "../src/taskboard/taskBoardContinuation";
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -52,7 +51,61 @@ class MemoryStorage implements StorageLike {
   }
 }
 
-const baseTime = Date.UTC(2026, 7, 13, 10);
+const BASE_TIME = Date.UTC(2026, 7, 13, 10);
+
+describe("TaskBoard prompt continuation", () => {
+  test("appends to an existing destination draft without clearing it", async () => {
+    const events: string[] = [];
+
+    const inserted = await continueTaskBoardPrompt({
+      target: { paneId: "pane-a", sessionId: "session-a" },
+      prompt: "Review this approach",
+      selectSession: async () => {
+        events.push("selected");
+      },
+      isTargetActive: () => true,
+      openDocumentMode: () => events.push("document"),
+      insertMarkdown: async (markdown, mode) => {
+        events.push(`${mode}:${markdown}`);
+      },
+      focusEditor: () => events.push("focused"),
+    });
+
+    expect(inserted).toBe(true);
+    expect(events).toEqual([
+      "selected",
+      "document",
+      "append:Review this approach",
+      "focused",
+    ]);
+  });
+
+  test("drops a stale insertion when focus changes during Session loading", async () => {
+    let resolveSelection: (() => void) | null = null;
+    let active = true;
+    const events: string[] = [];
+    const selection = new Promise<void>((resolve) => {
+      resolveSelection = resolve;
+    });
+    const continuation = continueTaskBoardPrompt({
+      target: { paneId: "pane-a", sessionId: "session-a" },
+      prompt: "Do not redirect this",
+      selectSession: () => selection,
+      isTargetActive: () => active,
+      openDocumentMode: () => events.push("document"),
+      insertMarkdown: async () => {
+        events.push("inserted");
+      },
+      focusEditor: () => events.push("focused"),
+    });
+
+    active = false;
+    resolveSelection?.();
+
+    expect(await continuation).toBe(false);
+    expect(events).toEqual([]);
+  });
+});
 
 function task(
   id: string,
@@ -68,8 +121,8 @@ function task(
     priority: "none",
     labels: [],
     order,
-    createdAt: baseTime,
-    updatedAt: baseTime,
+    createdAt: BASE_TIME,
+    updatedAt: BASE_TIME,
     sessionIds: [],
     pullRequest: null,
     pullRequestLinkRevision: 0,
@@ -105,11 +158,17 @@ function idsForStatus(board: TaskBoardState, status: TaskStatus): string[] {
 
 describe("task board model constants and creation", () => {
   test("exposes the complete status and priority wire values", () => {
-    expect(taskStatuses).toEqual(["todo", "in_progress", "in_review", "done"]);
-    expect(taskBoardLanes).toEqual(["queue", "running", "needs_you", "done"]);
-    expect(taskPriorities).toEqual(["none", "low", "medium", "high", "urgent"]);
-    expect(PRIORITIES).toBe(taskPriorities);
-    expect(taskboardStorageKey).toBe("codetwo.taskboard.v1");
+    expect(TASK_STATUSES).toEqual(["todo", "in_progress", "in_review", "done"]);
+    expect(TASK_BOARD_LANES).toEqual(["queue", "running", "needs_you", "done"]);
+    expect(TASK_PRIORITIES).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "urgent",
+    ]);
+    expect(PRIORITIES).toBe(TASK_PRIORITIES);
+    expect(TASKBOARD_STORAGE_KEY).toBe("codetwo.taskboard.v1");
   });
 
   test("returns deterministic, realistic Chinese seed tasks as fresh objects", () => {
@@ -117,7 +176,7 @@ describe("task board model constants and creation", () => {
     const second = seedTasks();
 
     expect(first).toEqual(second);
-    expect(first).toEqual(defaultTasks);
+    expect(first).toEqual(DEFAULT_TASKS);
     expect(first).not.toBe(second);
     expect(first[0]).not.toBe(second[0]);
     expect(first[0]?.labels).not.toBe(second[0]?.labels);
@@ -125,7 +184,7 @@ describe("task board model constants and creation", () => {
       true
     );
     expect(new Set(first.map((item) => item.status))).toEqual(
-      new Set(taskStatuses)
+      new Set(TASK_STATUSES)
     );
     expect(first).toHaveLength(9);
     expect(countTasksByStatus(first)).toEqual({
@@ -151,7 +210,7 @@ describe("task board model constants and creation", () => {
         labels: [" 前端 ", "", "前端", "体验"],
         sessionIds: [" session-7 ", "session-7", " session-8 "],
       },
-      { id: " task-7 ", now: baseTime }
+      { id: " task-7 ", now: BASE_TIME }
     );
 
     expect(created).toEqual({
@@ -162,8 +221,8 @@ describe("task board model constants and creation", () => {
       priority: "high",
       labels: ["前端", "体验"],
       order: 0,
-      createdAt: baseTime,
-      updatedAt: baseTime,
+      createdAt: BASE_TIME,
+      updatedAt: BASE_TIME,
       sessionIds: ["session-7", "session-8"],
       pullRequest: null,
       pullRequestLinkRevision: 0,
@@ -179,12 +238,12 @@ describe("task board model constants and creation", () => {
       tasks,
       "tracked",
       "session-2",
-      baseTime + 1
+      BASE_TIME + 1
     );
 
     expect(associated?.[0]).toMatchObject({
       status: "in_progress",
-      updatedAt: baseTime + 1,
+      updatedAt: BASE_TIME + 1,
       sessionIds: ["session-1", "session-2"],
     });
     expect(taskForSession(associated ?? [], "session-2")?.id).toBe("tracked");
@@ -206,7 +265,7 @@ describe("task board model constants and creation", () => {
       tasks,
       "target",
       reference,
-      baseTime + 1
+      BASE_TIME + 1
     )!;
 
     expect(taskForPullRequest(linked, reference)?.id).toBe("target");
@@ -232,12 +291,12 @@ describe("task board model constants and creation", () => {
       "target",
       githubPullRequestIdentity(reference),
       1,
-      baseTime + 2
+      BASE_TIME + 2
     );
     expect(unlinked?.[0]).toMatchObject({
       pullRequest: null,
       pullRequestLinkRevision: 2,
-      updatedAt: baseTime + 2,
+      updatedAt: BASE_TIME + 2,
     });
     expect(tasks[0]?.pullRequest).toBeNull();
   });
@@ -302,13 +361,11 @@ describe("task board projection helpers", () => {
   });
 
   test("searches id, title, description, and labels case-insensitively", () => {
-    const filters = (query: string): BoardFilters => {
-      return {
-        query,
-        priorities: [],
-        labels: [],
-      };
-    };
+    const filters = (query: string): BoardFilters => ({
+      query,
+      priorities: [],
+      labels: [],
+    });
     expect(
       filterBoardTasks(tasks, filters("THIRD")).map((item) => item.id)
     ).toEqual(["third"]);
@@ -376,14 +433,14 @@ describe("task board persistence", () => {
     const storage = new MemoryStorage();
     const loaded = loadBoardSnapshot(storage);
     expect(loaded).toEqual(createInitialTaskBoardState());
-    expect(loaded.tasks).not.toBe(defaultTasks);
+    expect(loaded.tasks).not.toBe(DEFAULT_TASKS);
   });
 
   test("round-trips a snapshot and preserves an explicitly saved empty board", () => {
     const storage = new MemoryStorage();
     expect(saveBoardSnapshot([], storage)).toEqual({ ok: true });
-    expect(JSON.parse(storage.values.get(taskboardStorageKey)!)).toEqual({
-      version: taskboardSnapshotVersion,
+    expect(JSON.parse(storage.values.get(TASKBOARD_STORAGE_KEY)!)).toEqual({
+      version: TASKBOARD_SNAPSHOT_VERSION,
       tasks: [],
     });
     expect(loadBoardSnapshot(storage)).toEqual({ tasks: [], warning: null });
@@ -410,15 +467,15 @@ describe("task board persistence", () => {
       "{ definitely not json",
       JSON.stringify({ version: 99, tasks: [] }),
       JSON.stringify({
-        version: taskboardSnapshotVersion,
+        version: TASKBOARD_SNAPSHOT_VERSION,
         tasks: [{ ...malformedTask, status: "blocked" }],
       }),
       JSON.stringify({
-        version: taskboardSnapshotVersion,
+        version: TASKBOARD_SNAPSHOT_VERSION,
         tasks: [malformedTask, malformedTask],
       }),
       JSON.stringify({
-        version: taskboardSnapshotVersion,
+        version: TASKBOARD_SNAPSHOT_VERSION,
         tasks: [
           {
             ...malformedTask,
@@ -428,7 +485,7 @@ describe("task board persistence", () => {
         ],
       }),
       JSON.stringify({
-        version: taskboardSnapshotVersion,
+        version: TASKBOARD_SNAPSHOT_VERSION,
         tasks: [
           {
             ...malformedTask,
@@ -445,7 +502,7 @@ describe("task board persistence", () => {
 
     for (const raw of corruptValues) {
       const loaded = parseBoardSnapshot(raw);
-      expect(loaded.warning).toBe(corruptBoardWarning);
+      expect(loaded.warning).toBe(CORRUPT_BOARD_WARNING);
       expect(loaded.tasks).toEqual(seedTasks());
     }
   });
@@ -457,7 +514,7 @@ describe("task board persistence", () => {
       sessionIds: [" session-1 ", "session-1", " session-2 "],
     });
     const loaded = parseBoardSnapshot(
-      JSON.stringify({ version: taskboardSnapshotVersion, tasks: [rawTask] })
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [rawTask] })
     );
     expect(loaded).toEqual({
       warning: null,
@@ -508,7 +565,7 @@ describe("task board persistence", () => {
     const reference = pullRequest();
     const repaired = parseBoardSnapshot(
       JSON.stringify({
-        version: taskboardSnapshotVersion,
+        version: TASKBOARD_SNAPSHOT_VERSION,
         tasks: [
           task("first-owner", "todo", 0, {
             pullRequest: reference,
@@ -537,14 +594,14 @@ describe("task board persistence", () => {
       setItem: () => undefined,
     };
     const loaded = loadBoardSnapshot(storage);
-    expect(loaded.warning).toBe(loadBoardWarning);
+    expect(loaded.warning).toBe(LOAD_BOARD_WARNING);
     expect(loaded.tasks).toEqual(seedTasks());
   });
 
   test("reports absent and throwing storage writes without throwing", () => {
     expect(saveBoardSnapshot([], null)).toEqual({
       ok: false,
-      warning: saveBoardWarning,
+      warning: SAVE_BOARD_WARNING,
     });
     const storage: StorageLike = {
       getItem: () => null,
@@ -555,7 +612,7 @@ describe("task board persistence", () => {
     expect(() => saveBoardSnapshot([task("unsaved")], storage)).not.toThrow();
     expect(saveBoardSnapshot([task("unsaved")], storage)).toEqual({
       ok: false,
-      warning: saveBoardWarning,
+      warning: SAVE_BOARD_WARNING,
     });
   });
 });
@@ -584,7 +641,7 @@ describe("task board reducer", () => {
     const renamed = {
       ...initial.tasks[0]!,
       title: "Renamed",
-      updatedAt: baseTime + 1,
+      updatedAt: BASE_TIME + 1,
     };
     const sameColumn = boardReducer(initial, { type: "update", task: renamed });
     expect(sameColumn.tasks.find((item) => item.id === "a")?.title).toBe(
@@ -595,7 +652,7 @@ describe("task board reducer", () => {
     const movedEdit = {
       ...renamed,
       status: "in_review" as const,
-      updatedAt: baseTime + 2,
+      updatedAt: BASE_TIME + 2,
     };
     const next = boardReducer(sameColumn, { type: "update", task: movedEdit });
     expect(idsForStatus(next, "todo")).toEqual(["b"]);
@@ -671,25 +728,25 @@ describe("task board reducer", () => {
       id: "b",
       status: "in_review",
       beforeId: "review",
-      now: baseTime + 5_000,
+      now: BASE_TIME + 5_000,
     });
 
     expect(next.tasks.find((item) => item.id === "b")?.updatedAt).toBe(
-      baseTime + 5_000
+      BASE_TIME + 5_000
     );
     expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(
-      baseTime
+      BASE_TIME
     );
     expect(next.tasks.find((item) => item.id === "review")?.updatedAt).toBe(
-      baseTime
+      BASE_TIME
     );
     expect(initial.tasks.find((item) => item.id === "b")?.updatedAt).toBe(
-      baseTime
+      BASE_TIME
     );
   });
 
   test("keeps a moved task timestamp valid and monotonic when the clock rolls back", () => {
-    const createdAt = baseTime + 10_000;
+    const createdAt = BASE_TIME + 10_000;
     const initial = state([
       task("a", "todo", 0, { createdAt, updatedAt: createdAt }),
       task("b", "done", 0),
@@ -699,7 +756,7 @@ describe("task board reducer", () => {
       type: "move",
       id: "a",
       status: "done",
-      now: baseTime,
+      now: BASE_TIME,
     });
 
     expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(

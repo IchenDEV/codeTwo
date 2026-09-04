@@ -6,11 +6,9 @@ import {
   classifyToolSurface,
   followReduce,
   initialFollowState,
-} from "../src/session/toolActivity";
-import type {
-  FollowEvent,
-  FollowState,
-  ToolSurfaceHint,
+  type FollowEvent,
+  type FollowState,
+  type ToolSurfaceHint,
 } from "../src/session/toolActivity";
 import type { Turn } from "../src/session/turns";
 
@@ -112,36 +110,32 @@ describe("classifyToolSurface", () => {
 });
 
 describe("activeInteractivePreview", () => {
-  const artifact = (id: string) => {
-    return {
-      id,
-      mime_type: "image/png",
-      bytes: 100,
-      width: 1280,
-      height: 720,
-      display_name: `${id}.png`,
-    };
-  };
-  const turn = (overrides: Partial<Turn> = {}): Turn => {
-    return {
-      id: 1,
-      accepted: true,
-      streamBoundaryKnown: true,
-      prompt: "Inspect the page",
-      text: "",
-      textDeltas: [],
-      observedTextDeltas: 0,
-      observedThoughtDeltas: 0,
-      pendingTextDeltaSkips: 0,
-      pendingThoughtDeltaSkips: 0,
-      thoughts: [],
-      tools: [],
-      content: [],
-      plan: [],
-      startedAt: 1,
-      ...overrides,
-    };
-  };
+  const artifact = (id: string) => ({
+    id,
+    mime_type: "image/png",
+    bytes: 100,
+    width: 1280,
+    height: 720,
+    display_name: `${id}.png`,
+  });
+  const turn = (overrides: Partial<Turn> = {}): Turn => ({
+    id: 1,
+    accepted: true,
+    streamBoundaryKnown: true,
+    prompt: "Inspect the page",
+    text: "",
+    textDeltas: [],
+    observedTextDeltas: 0,
+    observedThoughtDeltas: 0,
+    pendingTextDeltaSkips: 0,
+    pendingThoughtDeltaSkips: 0,
+    thoughts: [],
+    tools: [],
+    content: [],
+    plan: [],
+    startedAt: 1,
+    ...overrides,
+  });
 
   test("uses the latest screenshot from an in-flight Browser Use call", () => {
     expect(
@@ -283,14 +277,12 @@ describe("followReduce", () => {
     surface: DockSurface,
     now: number,
     dockOpen = true
-  ): FollowEvent => {
-    return {
-      kind: "tool",
-      hint: hint(surface),
-      now,
-      dockOpen,
-    };
-  };
+  ): FollowEvent => ({
+    kind: "tool",
+    hint: hint(surface),
+    now,
+    dockOpen,
+  });
 
   function run(events: FollowEvent[], from: FollowState = initialFollowState) {
     let state = from;
@@ -298,9 +290,7 @@ describe("followReduce", () => {
     for (const event of events) {
       const result = followReduce(state, event);
       state = result.state;
-      if (result.setTab) {
-        emitted.push(result.setTab);
-      }
+      if (result.setTab) emitted.push(result.setTab);
     }
     return { state, emitted };
   }

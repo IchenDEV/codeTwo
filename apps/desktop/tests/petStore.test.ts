@@ -33,15 +33,15 @@ describe("PetShare catalog", () => {
     expect(() => parsePetShareCatalog([pet(), pet()])).toThrow(
       "Invalid pet catalog item"
     );
-    expect(() => {
-      return parsePetShareCatalog([
+    expect(() =>
+      parsePetShareCatalog([
         {
           ...pet(),
           spritesheetPath:
             "https://example.com/pets/columbina/spritesheet.webp",
         },
-      ]);
-    }).toThrow("Invalid pet catalog asset");
+      ])
+    ).toThrow("Invalid pet catalog asset");
   });
 
   test("falls back to the built-in spritesheet for an invalid saved id", () => {

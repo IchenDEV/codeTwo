@@ -125,7 +125,9 @@ describe("SceneEditor rendered", () => {
       dom.document.body.querySelector('[data-slot="dialog-content"]')
     ).toBeNull();
     expect(
-      dom.document.body.querySelector('[data-slot="tabs"]')?.dataset.orientation
+      dom.document.body
+        .querySelector('[data-slot="tabs"]')
+        ?.getAttribute("data-orientation")
     ).toBe("horizontal");
     expect(
       dom.document.body.querySelector('[data-slot="tabs"]')?.className
@@ -163,18 +165,16 @@ describe("SceneEditor rendered", () => {
     const rendered = renderEditor({
       request: { kind: "duplicate", scene: source },
       scenes: [source],
-      getScene: async () => {
-        return {
-          reference: source.reference,
-          source: "builtin",
-          scene: {
-            $schema: "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
-            name: "review",
-            title: "Review",
-            extensions: { "dev.codetwo": { retained: true } },
-          },
-        };
-      },
+      getScene: async () => ({
+        reference: source.reference,
+        source: "builtin",
+        scene: {
+          $schema: "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+          name: "review",
+          title: "Review",
+          extensions: { "dev.codetwo": { retained: true } },
+        },
+      }),
     });
     await reactAct(async () => {
       await Promise.resolve();

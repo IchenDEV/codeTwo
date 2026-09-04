@@ -3,44 +3,38 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-mock.module("electrobun/bun", () => {
-  return {
-    GlobalShortcut: {
-      isRegistered: () => false,
-      register: () => false,
-      unregister: () => undefined,
-    },
-    Utils: { openExternal: () => true },
-  };
-});
+mock.module("electrobun/bun", () => ({
+  GlobalShortcut: {
+    isRegistered: () => false,
+    register: () => false,
+    unregister: () => undefined,
+  },
+  Utils: { openExternal: () => true },
+}));
 
-mock.module("../src/electrobun/appshots.native", () => {
-  return {
-    captureMacOSAppshot: () => ({ ok: false }),
-    macOSAppshotPermissions: () => {
-      return {
-        available: false,
-        screenRecording: false,
-        accessibility: false,
-      };
-    },
-    macOSCommandKeyState: () => 0,
-    requestMacOSAppshotPermissions: () => undefined,
-  };
-});
+mock.module("../src/electrobun/appshots.native", () => ({
+  captureMacOSAppshot: () => ({ ok: false }),
+  macOSAppshotPermissions: () => ({
+    available: false,
+    screenRecording: false,
+    accessibility: false,
+  }),
+  macOSCommandKeyState: () => 0,
+  requestMacOSAppshotPermissions: () => undefined,
+}));
 
 const { AppshotManager } = await import("../src/electrobun/appshots");
 
 const temporaryDirectories: string[] = [];
 
 function managerFixture() {
-  const dataDirectory = mkdtempSync(join(tmpdir(), "codetwo-appshots-"));
-  temporaryDirectories.push(dataDirectory);
+  const dataDir = mkdtempSync(join(tmpdir(), "codetwo-appshots-"));
+  temporaryDirectories.push(dataDir);
   return {
-    dataDirectory,
-    capturesDir: join(dataDirectory, "appshots"),
+    dataDir,
+    capturesDir: join(dataDir, "appshots"),
     manager: new AppshotManager(
-      dataDirectory,
+      dataDir,
       "dev.codetwo.test",
       () => {},
       () => {},
@@ -95,7 +89,7 @@ describe("stored Appshots", () => {
   });
 
   test("rejects traversal, mismatched metadata, and symlinked capture files", () => {
-    const { dataDirectory, capturesDir, manager } = managerFixture();
+    const { dataDir, capturesDir, manager } = managerFixture();
     expect(() => manager.getCapture("../../escape")).toThrow(
       "Appshot id is invalid"
     );
@@ -111,7 +105,7 @@ describe("stored Appshots", () => {
     );
 
     const linked = "00000000-0000-4000-8000-000000000003";
-    const external = join(dataDirectory, "external.png");
+    const external = join(dataDir, "external.png");
     writeFileSync(external, Buffer.from([4, 5, 6]));
     writeFileSync(
       join(capturesDir, `${linked}.json`),

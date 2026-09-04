@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 
 import { StatusBadge } from "@/components/business/status-badge";
 import { ActivityOrb } from "@/components/ui/activity-orb";
@@ -48,37 +48,40 @@ import {
   openExternal,
   revealArtifact,
   saveArtifactAs,
+  type ArtifactRef,
+  type CanvasSnapshot,
 } from "../bridge";
-import type { ArtifactReference, CanvasSnapshot } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import {
   agentActivityState,
   deriveAgentRoster,
   isAgentActivityTool,
+  type AgentActivity,
+  type AgentActivityState,
 } from "./agentActivity";
-import type { AgentActivity, AgentActivityState } from "./agentActivity";
-import { MarkdownContent } from "./MarkdownContent";
-import type { BuiltinLinkActions } from "./MarkdownContent";
+import { MarkdownContent, type BuiltinLinkActions } from "./MarkdownContent";
 import {
   canvasExportDataUrl,
   collapsedPrompt,
   isLongPrompt,
   parseCanvasHistoryPrompt,
+  type CanvasHistoryMarker,
 } from "./promptPreview";
-import type { CanvasHistoryMarker } from "./promptPreview";
-import { isRunning } from "./turns";
-import type { PromptImage, ToolEntry, Turn } from "./turns";
+import {
+  isRunning,
+  type PromptImage,
+  type ToolEntry,
+  type Turn,
+} from "./turns";
 
-const emptyPromptImages: PromptImage[] = [];
-const searchToolPattern = /\b(?:search|searched|find|found|grep|rg)\b/iu;
-const readToolPattern = /\b(?:read|reading|open|view|inspect)\b/iu;
-const commandToolPattern =
-  /\b(?:command|exec|execute|run|shell|terminal|test)\b/iu;
+const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
+const SEARCH_TOOL_PATTERN = /\b(?:search|searched|find|found|grep|rg)\b/i;
+const READ_TOOL_PATTERN = /\b(?:read|reading|open|view|inspect)\b/i;
+const COMMAND_TOOL_PATTERN =
+  /\b(?:command|exec|execute|run|shell|terminal|test)\b/i;
 
 function duration(t: Turn): string | null {
-  if (t.endedAt == null) {
-    return null;
-  }
+  if (!t.endedAt) return null;
   const s = Math.max(0, Math.round((t.endedAt - t.startedAt) / 1000));
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
@@ -90,9 +93,9 @@ function TurnActionButton({
   onClick,
   children,
 }: {
-  readonly label: string;
-  readonly onClick: () => void;
-  readonly children: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <TooltipButton
@@ -108,26 +111,16 @@ function TurnActionButton({
 }
 
 function toolStatusDot(status: string): string {
-  if (status === "completed") {
-    return "bg-success";
-  }
-  if (status === "failed") {
-    return "bg-destructive";
-  }
+  if (status === "completed") return "bg-success";
+  if (status === "failed") return "bg-destructive";
   return "bg-warning";
 }
 
 function toolIcon(tool: ToolEntry) {
   const signal = `${tool.kind ?? ""} ${tool.title}`;
-  if (searchToolPattern.test(signal)) {
-    return Search;
-  }
-  if (readToolPattern.test(signal)) {
-    return BookOpen;
-  }
-  if (commandToolPattern.test(signal)) {
-    return Terminal;
-  }
+  if (SEARCH_TOOL_PATTERN.test(signal)) return Search;
+  if (READ_TOOL_PATTERN.test(signal)) return BookOpen;
+  if (COMMAND_TOOL_PATTERN.test(signal)) return Terminal;
   return Wrench;
 }
 
@@ -136,12 +129,8 @@ function toolHasOutput(tool: ToolEntry): boolean {
 }
 
 function prettySize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -153,39 +142,29 @@ function promptTextWithoutImageMarkers(
   const markers = new Set<string>();
   for (const image of images) {
     markers.add(`[attachment:${image.id}]`);
-    if (image.name != null && image.name !== "") {
-      markers.add(`[image:${image.name}]`);
-    }
+    if (image.name) markers.add(`[image:${image.name}]`);
   }
-  for (const marker of markers) {
-    visible = visible.split(marker).join("");
-  }
-  return visible.replaceAll(/\n(?:[ \t]*\n){2,}/gu, "\n\n").trim();
+  for (const marker of markers) visible = visible.split(marker).join("");
+  return visible.replace(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
 }
 
-function PromptImageThumbnail({ image }: { readonly image: PromptImage }) {
+function PromptImageThumbnail({ image }: { image: PromptImage }) {
   const [loaded, setLoaded] = useState<Awaited<
     ReturnType<typeof getPromptImage>
   > | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (image.previewDataUrl != null && image.previewDataUrl !== "") {
-      return;
-    }
-    let isAlive = true;
+    if (image.previewDataUrl) return;
+    let alive = true;
     void getPromptImage(image.id)
       .then((capture) => {
-        if (isAlive) {
-          setLoaded(capture);
-        }
+        if (alive) setLoaded(capture);
       })
       .catch(() => {
-        if (isAlive) {
-          setFailed(true);
-        }
+        if (alive) setFailed(true);
       });
     return () => {
-      isAlive = false;
+      alive = false;
     };
   }, [image.id, image.previewDataUrl]);
 
@@ -199,7 +178,7 @@ function PromptImageThumbnail({ image }: { readonly image: PromptImage }) {
       data-prompt-image={image.id}
       className="rounded-module bg-background/25 ring-foreground/10 flex min-h-24 max-w-80 min-w-0 items-center justify-center overflow-hidden ring-[0.5px]"
     >
-      {src != null && src !== "" && !failed ? (
+      {src && !failed ? (
         <img
           src={src}
           alt={name}
@@ -219,12 +198,13 @@ function PromptImageThumbnail({ image }: { readonly image: PromptImage }) {
           <span className="truncate">{name}</span>
         </div>
       ) : (
-        <output
+        <div
+          role="status"
           aria-label={`Loading ${name}`}
           className="text-muted-foreground px-3 py-8"
         >
           <Spinner />
-        </output>
+        </div>
       )}
     </figure>
   );
@@ -242,24 +222,22 @@ export function safeResourceLink(
     ) {
       return null;
     }
-    return { host: parsed.host, uri: parsed.toString() };
+    return { uri: parsed.toString(), host: parsed.host };
   } catch {
     return null;
   }
 }
 
-function ArtifactImage({ artifact }: { readonly artifact: ArtifactReference }) {
+function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   useEffect(() => {
-    let isAlive = true;
+    let alive = true;
     let objectUrl: string | null = null;
     void getArtifact(artifact.id)
       .then((bytes) => {
-        if (!isAlive) {
-          return;
-        }
+        if (!alive) return;
         objectUrl = URL.createObjectURL(
           new Blob([bytes.slice().buffer as ArrayBuffer], {
             type: artifact.mime_type,
@@ -267,19 +245,17 @@ function ArtifactImage({ artifact }: { readonly artifact: ArtifactReference }) {
         );
         setUrl(objectUrl);
       })
-      .catch(() => isAlive && setError(true));
+      .catch(() => alive && setError(true));
     return () => {
-      isAlive = false;
-      if (objectUrl != null && objectUrl !== "") {
-        URL.revokeObjectURL(objectUrl);
-      }
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [artifact.id, artifact.mime_type]);
 
   return (
     <figure className="rounded-module bg-fill-quiet min-w-0 overflow-hidden border">
       <div className="image-checker flex min-h-32 items-center justify-center">
-        {url != null && url !== "" ? (
+        {url ? (
           <img
             src={url}
             alt={artifact.display_name}
@@ -333,9 +309,9 @@ function ArtifactImage({ artifact }: { readonly artifact: ArtifactReference }) {
         >
           <FolderOpen className="size-3.5" />
         </TooltipButton>
-        {actionError != null && actionError !== "" ? (
+        {actionError && (
           <span className="text-destructive basis-full">{actionError}</span>
-        ) : null}
+        )}
       </figcaption>
     </figure>
   );
@@ -345,8 +321,8 @@ function ToolCallBlock({
   tool,
   compact = false,
 }: {
-  readonly tool: ToolEntry;
-  readonly compact?: boolean;
+  tool: ToolEntry;
+  compact?: boolean;
 }) {
   const textOutputs = (tool.outputs ?? []).flatMap((output) =>
     output.type === "text" ? [output.text] : []
@@ -355,9 +331,7 @@ function ToolCallBlock({
     output.type === "image" ? [output.artifact] : []
   );
   const resourceLinks = (tool.outputs ?? []).flatMap((output) => {
-    if (output.type !== "resource_link") {
-      return [];
-    }
+    if (output.type !== "resource_link") return [];
     const safe = safeResourceLink(output.uri);
     return safe ? [{ ...output, ...safe }] : [];
   });
@@ -377,7 +351,7 @@ function ToolCallBlock({
       >
         {tool.title}
       </span>
-      {!compact && tool.kind != null && tool.kind !== "" ? (
+      {!compact && tool.kind ? (
         <span className="text-metadata text-muted-foreground shrink-0 font-mono">
           {tool.kind}
         </span>
@@ -491,7 +465,7 @@ function ToolCallBlock({
   );
 }
 
-function ToolCallGroup({ tools }: { readonly tools: ToolEntry[] }) {
+function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
   const t = useT();
   let status = "completed";
   for (const tool of tools) {
@@ -499,22 +473,19 @@ function ToolCallGroup({ tools }: { readonly tools: ToolEntry[] }) {
       status = tool.status;
       break;
     }
-    if (status === "completed" && tool.status !== "completed") {
+    if (status === "completed" && tool.status !== "completed")
       status = tool.status;
-    }
   }
-  const isActive = status !== "completed" && status !== "failed";
+  const active = status !== "completed" && status !== "failed";
   const latest = tools[tools.length - 1];
   const LatestIcon = toolIcon(latest);
   const history = toolHasOutput(latest) ? tools : tools.slice(0, -1);
-  const isHistoryIsLong = history.length > 6;
-  const [open, setOpen] = useState(isActive);
+  const historyIsLong = history.length > 6;
+  const [open, setOpen] = useState(active);
 
   useEffect(() => {
-    if (isActive) {
-      setOpen(true);
-    }
-  }, [isActive, tools.length]);
+    if (active) setOpen(true);
+  }, [active, tools.length]);
 
   return (
     <Collapsible
@@ -546,7 +517,7 @@ function ToolCallGroup({ tools }: { readonly tools: ToolEntry[] }) {
             <CircleAlert className="size-3.5" aria-hidden />
             {status}
           </span>
-        ) : isActive ? (
+        ) : active ? (
           <span
             className={cn(
               "size-1.5 shrink-0 rounded-full",
@@ -564,10 +535,10 @@ function ToolCallGroup({ tools }: { readonly tools: ToolEntry[] }) {
         <div
           className={cn(
             "max-h-56 min-w-0 overflow-y-auto overscroll-contain py-1 ps-5 pe-2",
-            isHistoryIsLong && "tool-call-history--faded pb-8"
+            historyIsLong && "tool-call-history--faded pb-8"
           )}
           data-tool-call-history
-          data-faded={isHistoryIsLong || undefined}
+          data-faded={historyIsLong || undefined}
         >
           {history.map((tool) => (
             <ToolCallBlock key={tool.id} tool={tool} compact />
@@ -582,6 +553,7 @@ type RenderBlock =
   | { kind: "text"; text: string }
   | { kind: "tools"; tools: ToolEntry[] };
 
+/** Join adjacent streamed chunks and tool runs while retaining their exact event boundaries. */
 function orderedBlocks(turn: Turn): RenderBlock[] {
   const tools = new Map(
     turn.tools
@@ -592,37 +564,26 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
   const blocks: RenderBlock[] = [];
   const appendTool = (tool: ToolEntry) => {
     const tail = blocks[blocks.length - 1];
-    if (tail?.kind === "tools") {
-      tail.tools.push(tool);
-    } else {
-      blocks.push({ kind: "tools", tools: [tool] });
-    }
+    if (tail?.kind === "tools") tail.tools.push(tool);
+    else blocks.push({ kind: "tools", tools: [tool] });
   };
   for (const entry of turn.content ?? []) {
     if (entry.kind === "text") {
       const tail = blocks[blocks.length - 1];
-      if (tail?.kind === "text") {
-        tail.text += entry.text;
-      } else {
-        blocks.push({ kind: "text", text: entry.text });
-      }
+      if (tail?.kind === "text") tail.text += entry.text;
+      else blocks.push({ kind: "text", text: entry.text });
       continue;
     }
     const tool = tools.get(entry.toolId);
-    if (!tool || seenTools.has(tool.id)) {
-      continue;
-    }
+    if (!tool || seenTools.has(tool.id)) continue;
     seenTools.add(tool.id);
     appendTool(tool);
   }
   // Compatibility for turns produced by older renderers and manually constructed fixtures.
-  if (blocks.length === 0 && turn.text) {
+  if (blocks.length === 0 && turn.text)
     blocks.push({ kind: "text", text: turn.text });
-  }
   for (const tool of tools.values()) {
-    if (!seenTools.has(tool.id)) {
-      appendTool(tool);
-    }
+    if (!seenTools.has(tool.id)) appendTool(tool);
   }
   return blocks;
 }
@@ -638,9 +599,7 @@ function downloadCanvasPng(
   const exportItem =
     snapshot?.exports.find((item) => item.kind === "overview") ??
     snapshot?.exports[0];
-  if (!exportItem || typeof document === "undefined") {
-    return;
-  }
+  if (!exportItem || typeof document === "undefined") return;
   const anchor = document.createElement("a");
   anchor.href = canvasExportDataUrl(exportItem);
   anchor.download = `${canvas.id}-${canvas.revision}.png`;
@@ -648,9 +607,7 @@ function downloadCanvasPng(
 }
 
 function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
-  if (typeof window === "undefined") {
-    return;
-  }
+  if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent("codetwo-canvas-duplicate", {
       detail: { id: canvas.id, revision: canvas.revision },
@@ -658,6 +615,7 @@ function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
   );
 }
 
+/** A collapsible group of secondary detail (agents / thinking / plan / memory). */
 function Detail({
   icon: Icon,
   label,
@@ -666,16 +624,14 @@ function Detail({
   wide = false,
   defaultOpen = false,
 }: {
-  readonly icon: typeof Brain;
-  readonly label: string;
-  readonly count: number;
-  readonly children: React.ReactNode;
-  readonly wide?: boolean;
-  readonly defaultOpen?: boolean;
+  icon: typeof Brain;
+  label: string;
+  count: number;
+  children: React.ReactNode;
+  wide?: boolean;
+  defaultOpen?: boolean;
 }) {
-  if (count === 0) {
-    return null;
-  }
+  if (count === 0) return null;
   return (
     <Collapsible
       defaultOpen={defaultOpen}
@@ -704,9 +660,7 @@ function agentStatusLabel(
 }
 
 function agentElapsed(agent: AgentActivity, now: number): string | null {
-  if (agent.startedAt === undefined) {
-    return null;
-  }
+  if (agent.startedAt === undefined) return null;
   const totalSeconds = Math.max(
     0,
     Math.floor(((agent.endedAt ?? now) - agent.startedAt) / 1000)
@@ -714,16 +668,12 @@ function agentElapsed(agent: AgentActivity, now: number): string | null {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${seconds}s`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
   return `${seconds}s`;
 }
 
-function AgentStateIcon({ state }: { readonly state: AgentActivityState }) {
+function AgentStateIcon({ state }: { state: AgentActivityState }) {
   if (state === "active") {
     return <ActivityOrb state="working" visualSize={20} aria-hidden="true" />;
   }
@@ -741,14 +691,12 @@ function AgentRosterSection({
   label,
   now,
 }: {
-  readonly agents: readonly AgentActivity[];
-  readonly label: string;
-  readonly now: number;
+  agents: readonly AgentActivity[];
+  label: string;
+  now: number;
 }) {
   const t = useT();
-  if (agents.length === 0) {
-    return null;
-  }
+  if (agents.length === 0) return null;
   return (
     <div role="group" aria-label={label}>
       <div className="text-metadata text-muted-foreground flex items-center gap-2 px-2 py-1 font-medium tracking-wide uppercase">
@@ -778,19 +726,19 @@ function AgentRosterSection({
                     {agent.role}
                   </span>
                 </div>
-                {agent.task != null && agent.task !== "" ? (
+                {agent.task && (
                   <p className="text-callout text-muted-foreground mt-0.5 line-clamp-2">
                     {agent.task}
                   </p>
-                ) : null}
+                )}
               </div>
               <div className="text-metadata text-muted-foreground shrink-0 text-right">
                 <span className="block" aria-live="polite" aria-atomic="true">
                   {agentStatusLabel(state, t)}
                 </span>
-                {elapsed != null && elapsed !== "" ? (
+                {elapsed && (
                   <time className="block tabular-nums">{elapsed}</time>
-                ) : null}
+                )}
               </div>
             </li>
           );
@@ -800,11 +748,7 @@ function AgentRosterSection({
   );
 }
 
-function AgentRoster({
-  agents,
-}: {
-  readonly agents: readonly AgentActivity[];
-}) {
+function AgentRoster({ agents }: { agents: readonly AgentActivity[] }) {
   const t = useT();
   const active = agents.filter((agent) => {
     const state = agentActivityState(agent.status);
@@ -816,9 +760,7 @@ function AgentRoster({
   });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (active.length === 0) {
-      return;
-    }
+    if (active.length === 0) return;
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, [active.length]);
@@ -847,57 +789,56 @@ function AgentRoster({
  * their streamed position, with adjacent calls sharing one disclosure; thinking and memory
  * metadata stay collapsed underneath. The current task plan lives in the right information panel.
  */
-export function TurnCardComponent({
+export const TurnCard = memo(function TurnCard({
   turn,
   canvasSnapshotLoader = canvasGetSnapshot,
   onSaveTemplate,
   linkActions,
   onFork,
 }: {
-  readonly turn: Turn;
-  readonly canvasSnapshotLoader?: typeof canvasGetSnapshot;
-  /**
-  Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden.
-  */
-  readonly onSaveTemplate?: (promptText: string) => void;
-  /**
-  Native context-menu actions for links rendered inside the assistant response.
-  */
-  readonly linkActions?: BuiltinLinkActions;
-  /**
-  Starts a new task whose referenced context ends at this completed turn.
-  */
-  readonly onFork?: (turn: Turn) => void;
+  turn: Turn;
+  canvasSnapshotLoader?: typeof canvasGetSnapshot;
+  /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
+  onSaveTemplate?: (promptText: string) => void;
+  /** Native context-menu actions for links rendered inside the assistant response. */
+  linkActions?: BuiltinLinkActions;
+  /** Starts a new task whose referenced context ends at this completed turn. */
+  onFork?: (turn: Turn) => void;
 }) {
   const t = useT();
   const toast = useToast();
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [copied, setCopied] = useState<CopyTarget | null>(null);
-  const isTurnRunning = isRunning(turn);
-  const isQueued = turn.delivery === "queued";
+  const running = isRunning(turn);
+  const queued = turn.delivery === "queued";
   const dur = duration(turn);
-  const agents = deriveAgentRoster(turn.tools);
+  const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
   const activeAgentCount = agents.filter((agent) => {
     const state = agentActivityState(agent.status);
     return state === "active" || state === "pending";
   }).length;
-  const blocks = orderedBlocks(turn);
-  const history = parseCanvasHistoryPrompt(turn.prompt);
-  const promptImages = turn.promptImages ?? emptyPromptImages;
-  const promptText = promptTextWithoutImageMarkers(
-    history.visiblePrompt,
-    promptImages
+  const blocks = useMemo(
+    () => orderedBlocks(turn),
+    [turn.content, turn.text, turn.tools]
   );
-  const clock = new Intl.DateTimeFormat(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const history = useMemo(
+    () => parseCanvasHistoryPrompt(turn.prompt),
+    [turn.prompt]
+  );
+  const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
+  const promptText = useMemo(
+    () => promptTextWithoutImageMarkers(history.visiblePrompt, promptImages),
+    [history.visiblePrompt, promptImages]
+  );
+  const clock = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }),
+    [locale]
+  );
   useEffect(() => {
-    if (!copied) {
-      return;
-    }
-    const timeout = window.setTimeout(() => setCopied(null), 1500);
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopied(null), 1_500);
     return () => window.clearTimeout(timeout);
   }, [copied]);
   const copyText = (target: CopyTarget, text: string) => {
@@ -910,18 +851,16 @@ export function TurnCardComponent({
       .then(() => setCopied(target))
       .catch(() => toast(t("turn.copyFailed"), "error"));
   };
-  const historySnapshots = new Map<string, CanvasSnapshot>();
+  const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>(
     {}
   );
   useEffect(() => {
-    let isCancelled = false;
+    let cancelled = false;
     for (const canvas of history.canvases) {
       void canvasSnapshotLoader(canvas.id, canvas.revision)
         .then((snapshot) => {
-          if (isCancelled || !snapshot) {
-            return;
-          }
+          if (cancelled || !snapshot) return;
           historySnapshots.set(canvasKey(canvas), snapshot);
           setSnapshots((current) => ({
             ...current,
@@ -933,31 +872,26 @@ export function TurnCardComponent({
         });
     }
     return () => {
-      isCancelled = true;
+      cancelled = true;
       historySnapshots.clear();
     };
   }, [canvasSnapshotLoader, history.canvases, historySnapshots]);
   const hasDetail =
     agents.length + turn.thoughts.length + (turn.memory?.items.length ?? 0) > 0;
-  const isPromptIsLong = isLongPrompt(promptText);
+  const promptIsLong = isLongPrompt(promptText);
   const visiblePrompt =
-    isPromptIsLong && !promptExpanded
-      ? collapsedPrompt(promptText)
-      : promptText;
+    promptIsLong && !promptExpanded ? collapsedPrompt(promptText) : promptText;
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
     // conversation advancing rather than the list redrawing.
-    <article
-      aria-busy={isTurnRunning ? !isQueued : undefined}
-      className="animate-rise-in py-7"
-    >
+    <article aria-busy={running && !queued} className="animate-rise-in py-7">
       {/* prompt */}
       <div className="group/prompt flex flex-col items-end">
         <div className="flex items-start justify-end gap-1">
           {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
               button so future turn actions slot in beside "Save as template…". */}
-          {onSaveTemplate ? (
+          {onSaveTemplate && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -980,7 +914,7 @@ export function TurnCardComponent({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          ) : null}
+          )}
           <div className="rounded-module bg-secondary text-prose text-secondary-foreground max-w-[86%] px-3.5 py-2">
             {promptImages.length > 0 && (
               <div
@@ -999,17 +933,17 @@ export function TurnCardComponent({
                 ))}
               </div>
             )}
-            {visiblePrompt ? (
+            {visiblePrompt && (
               <p className="break-words whitespace-pre-wrap">{visiblePrompt}</p>
-            ) : null}
-            {turn.delivery ? (
+            )}
+            {turn.delivery && (
               <p className="text-metadata text-muted-foreground mt-1.5 font-medium uppercase">
                 {turn.delivery === "queued"
                   ? t("turn.queued", { position: turn.queuePosition ?? 1 })
                   : t("turn.steered")}
               </p>
-            ) : null}
-            {isPromptIsLong ? (
+            )}
+            {promptIsLong && (
               <Button
                 type="button"
                 variant="ghost"
@@ -1026,7 +960,7 @@ export function TurnCardComponent({
                 )}
                 {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
               </Button>
-            ) : null}
+            )}
           </div>
         </div>
         <div
@@ -1036,7 +970,7 @@ export function TurnCardComponent({
           <time dateTime={new Date(turn.startedAt).toISOString()}>
             {clock.format(turn.startedAt)}
           </time>
-          {promptText ? (
+          {promptText && (
             <TurnActionButton
               label={t(
                 copied === "prompt" ? "turn.copiedPrompt" : "turn.copyPrompt"
@@ -1049,7 +983,7 @@ export function TurnCardComponent({
                 <Copy aria-hidden />
               )}
             </TurnActionButton>
-          ) : null}
+          )}
         </div>
       </div>
 
@@ -1066,22 +1000,20 @@ export function TurnCardComponent({
                 className="canvas-ui-module bg-fill-quiet text-callout border p-2.5"
               >
                 <div className="flex items-start gap-2">
-                  {thumbnail ? (
+                  {thumbnail && (
                     <img
                       src={canvasExportDataUrl(thumbnail)}
                       alt={`${canvas.title} thumbnail`}
                       className="rounded-control size-14 shrink-0 border object-cover"
                     />
-                  ) : null}
+                  )}
                   <div className="min-w-0 flex-1">
                     <h3 className="text-foreground truncate font-medium">
                       {canvas.title}
                     </h3>
                     <p className="text-muted-foreground">
                       rev {canvas.revision}
-                      {snapshot == null
-                        ? ""
-                        : ` · ${snapshot.objectCount} objects`}
+                      {snapshot ? ` · ${snapshot.objectCount} objects` : ""}
                       {snapshot?.frozenAt
                         ? ` · ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(snapshot.frozenAt)}`
                         : ""}
@@ -1128,9 +1060,7 @@ export function TurnCardComponent({
               <MarkdownContent
                 key={`text-${index}`}
                 text={block.text}
-                streaming={
-                  isTurnRunning ? index === blocks.length - 1 : undefined
-                }
+                streaming={running && index === blocks.length - 1}
                 linkActions={linkActions}
               />
             ) : block.tools.length === 1 ? (
@@ -1142,8 +1072,9 @@ export function TurnCardComponent({
         </div>
       ) : null}
 
-      {isTurnRunning && !isQueued && !turn.text ? (
-        <output
+      {running && !queued && !turn.text && (
+        <p
+          role="status"
           aria-live="polite"
           className="text-body text-muted-foreground mt-3.5 flex items-center gap-2"
         >
@@ -1152,22 +1083,22 @@ export function TurnCardComponent({
             aria-hidden="true"
           />
           {t("turn.working")}
-        </output>
-      ) : null}
+        </p>
+      )}
 
-      {turn.error != null && turn.error !== "" ? (
+      {turn.error && (
         <p className="rounded-control bg-destructive/10 text-body text-destructive mt-3.5 flex items-start gap-1.5 px-3 py-2">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
         </p>
-      ) : null}
+      )}
 
       {/* secondary detail + outcome, on one quiet line */}
-      {hasDetail ||
-      dur ||
-      turn.stopReason ||
-      isQueued ||
-      (isTurnRunning && turn.text) ? (
+      {(hasDetail ||
+        dur ||
+        turn.stopReason ||
+        queued ||
+        (running && turn.text)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
           <Detail
             icon={Bot}
@@ -1198,7 +1129,7 @@ export function TurnCardComponent({
             label={t("turn.memory")}
             count={turn.memory?.items.length ?? 0}
           >
-            {turn.memory ? (
+            {turn.memory && (
               <div className="text-callout flex flex-col gap-2">
                 <p className="text-muted-foreground">
                   {t("turn.memoryTokens", {
@@ -1234,15 +1165,15 @@ export function TurnCardComponent({
                   })}
                 </ul>
               </div>
-            ) : null}
+            )}
           </Detail>
 
           <span className="ms-auto flex shrink-0 items-center gap-1.5">
-            {isQueued ? (
+            {queued ? (
               <StatusBadge tone="neutral">
                 {t("turn.queued", { position: turn.queuePosition ?? 1 })}
               </StatusBadge>
-            ) : isTurnRunning ? (
+            ) : running ? (
               <StatusBadge tone="neutral">
                 <Spinner className="size-2.5" /> {t("turn.running")}
               </StatusBadge>
@@ -1253,16 +1184,16 @@ export function TurnCardComponent({
                 <StatusBadge tone="neutral">{turn.stopReason}</StatusBadge>
               )
             )}
-            {dur != null && dur !== "" ? (
+            {dur && (
               <span className="text-metadata text-muted-foreground font-mono">
                 {dur}
               </span>
-            ) : null}
+            )}
           </span>
         </div>
-      ) : null}
+      )}
 
-      {!isTurnRunning && turn.text ? (
+      {!running && turn.text && (
         <div
           data-turn-actions="response"
           className="text-callout text-muted-foreground mt-2 flex min-h-(--ds-control-mini) items-center gap-1"
@@ -1281,23 +1212,21 @@ export function TurnCardComponent({
               <Copy aria-hidden />
             )}
           </TurnActionButton>
-          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined ? (
+          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined && (
             <TurnActionButton
               label={t("turn.fork")}
               onClick={() => onFork(turn)}
             >
               <GitFork aria-hidden />
             </TurnActionButton>
-          ) : null}
+          )}
           <time
             dateTime={new Date(turn.endedAt ?? turn.startedAt).toISOString()}
           >
             {clock.format(turn.endedAt ?? turn.startedAt)}
           </time>
         </div>
-      ) : null}
+      )}
     </article>
   );
-}
-
-export const TurnCard = memo(TurnCardComponent);
+});

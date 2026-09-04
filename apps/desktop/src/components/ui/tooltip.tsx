@@ -4,12 +4,12 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const tooltipFirstOpenDelay = 600;
-const tooltipInstantPhaseTimeout = 400;
+const TOOLTIP_FIRST_OPEN_DELAY = 600;
+const TOOLTIP_INSTANT_PHASE_TIMEOUT = 400;
 
 function TooltipProvider({
-  delay = tooltipFirstOpenDelay,
-  timeout = tooltipInstantPhaseTimeout,
+  delay = TOOLTIP_FIRST_OPEN_DELAY,
+  timeout = TOOLTIP_INSTANT_PHASE_TIMEOUT,
   ...props
 }: TooltipPrimitive.Provider.Props) {
   return (
@@ -73,14 +73,12 @@ function TooltipContent({
 }
 
 interface TooltipButtonProps extends React.ComponentProps<typeof Button> {
-  readonly label: string;
-  readonly tooltip?: React.ReactNode;
-  readonly tooltipSide?: TooltipPrimitive.Positioner.Props["side"];
+  label: string;
+  tooltip?: React.ReactNode;
+  tooltipSide?: TooltipPrimitive.Positioner.Props["side"];
 }
 
-/**
-One accessible name and one themed tooltip for icon-only product actions.
-*/
+/** One accessible name and one themed tooltip for icon-only product actions. */
 const TooltipButton = React.forwardRef<HTMLButtonElement, TooltipButtonProps>(
   ({ label, tooltip = label, tooltipSide = "top", ...props }, ref) => (
     <Tooltip>
@@ -96,8 +94,8 @@ const TooltipButton = React.forwardRef<HTMLButtonElement, TooltipButtonProps>(
 TooltipButton.displayName = "TooltipButton";
 
 export {
-  tooltipFirstOpenDelay,
-  tooltipInstantPhaseTimeout,
+  TOOLTIP_FIRST_OPEN_DELAY,
+  TOOLTIP_INSTANT_PHASE_TIMEOUT,
   Tooltip,
   TooltipTrigger,
   TooltipContent,

@@ -1,5 +1,4 @@
-import { cva } from "class-variance-authority";
-import type { VariantProps } from "class-variance-authority";
+import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
@@ -30,13 +29,13 @@ function EmptyHeader({ className, ...props }: ComponentProps<"div">) {
 const emptyMediaVariants = cva(
   "text-muted-foreground flex shrink-0 items-center justify-center [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
   {
-    defaultVariants: { variant: "default" },
     variants: {
       variant: {
         default: "bg-transparent",
         icon: "rounded-control bg-fill-quiet size-8 [&_svg:not([class*='size-'])]:size-4",
       },
     },
+    defaultVariants: { variant: "default" },
   }
 );
 
@@ -49,7 +48,7 @@ function EmptyMedia({
     <div
       data-slot="empty-media"
       data-variant={variant}
-      className={cn(emptyMediaVariants({ className, variant }))}
+      className={cn(emptyMediaVariants({ variant, className }))}
       {...props}
     />
   );

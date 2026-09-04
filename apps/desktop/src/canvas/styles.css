@@ -1,18 +1,9 @@
-@import url("@excalidraw/excalidraw/index.css");
+@import "@excalidraw/excalidraw/index.css";
 
 .canvas-editor {
-  position: relative;
-  overflow: hidden;
-  min-height: 12rem;
-  border-radius: var(--canvas-radius-module);
-  background: var(--canvas-ui-bg);
-  color: var(--canvas-ui-text);
-
   /* Desktop supplies the --ds-* tokens; Remote is a vanilla shell, so every token has a local
      fallback. Keep these aliases scoped to the island instead of changing the shell globally. */
   color-scheme: dark;
-  contain: layout paint;
-
   --canvas-fallback-surface: Canvas;
   --canvas-fallback-raised: ButtonFace;
   --canvas-fallback-text: CanvasText;
@@ -59,10 +50,16 @@
   --canvas-type-caption-size: var(--ds-type-caption-size, 0.75rem);
   --canvas-type-body-size: var(--ds-type-body-size, 0.875rem);
   --canvas-type-body-leading: var(--ds-type-body-leading, 1.4);
-
   /* Excalidraw owns the first toolbar row. C2 controls live in this second row so they
      never cover approved selection/drawing/undo tools, including on narrow Remote viewports. */
   --canvas-chrome-offset: 4rem;
+  position: relative;
+  min-height: 12rem;
+  color: var(--canvas-ui-text);
+  background: var(--canvas-ui-bg);
+  border-radius: var(--canvas-radius-module);
+  overflow: hidden;
+  contain: layout paint;
 }
 
 .canvas-editor[data-canvas-theme="light"] {
@@ -80,14 +77,14 @@
   min-height: 12rem;
   align-items: center;
   justify-content: center;
+  gap: var(--canvas-space-control-group);
   padding: var(--canvas-space-section);
+  color: var(--canvas-ui-text);
+  background: var(--canvas-ui-bg);
   border: 0;
   border-radius: inherit;
-  background: var(--canvas-ui-bg);
-  color: var(--canvas-ui-text);
-  cursor: pointer;
   font: inherit;
-  gap: var(--canvas-space-control-group);
+  cursor: pointer;
 }
 
 .canvas-editor__preview:hover {
@@ -112,8 +109,8 @@
   display: block;
   max-width: min(16rem, 36%);
   max-height: 8rem;
-  border-radius: var(--canvas-radius-control);
   object-fit: contain;
+  border-radius: var(--canvas-radius-control);
 }
 
 .canvas-editor__preview-title {
@@ -129,8 +126,8 @@
 
 .canvas-editor__stage {
   position: relative;
-  height: min(70vh, 42rem);
   min-height: 20rem;
+  height: min(70vh, 42rem);
 }
 
 .canvas-editor__stage .excalidraw {
@@ -139,8 +136,7 @@
   --text-primary-color: var(--canvas-ui-text);
   --text-secondary-color: var(--canvas-ui-muted);
   --color-primary: var(--canvas-ui-primary);
-  --ui-font: -apple-system, blinkmacsystemfont, "Segoe UI", sans-serif;
-
+  --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   width: 100%;
   height: 100%;
 }
@@ -148,32 +144,32 @@
 .canvas-editor__chrome {
   position: absolute;
   z-index: 20;
-  display: flex;
-  overflow: hidden;
-  width: calc(100% - (var(--canvas-space-module-inset) * 2));
-  min-width: 0;
-  max-width: calc(100% - (var(--canvas-space-module-inset) * 2));
-  align-items: center;
-  gap: var(--canvas-space-control-group);
   inset-block-start: var(--canvas-chrome-offset);
-  inset-inline: var(--canvas-space-module-inset)
-    var(--canvas-space-module-inset);
+  inset-inline-start: var(--canvas-space-module-inset);
+  inset-inline-end: var(--canvas-space-module-inset);
+  width: calc(100% - (var(--canvas-space-module-inset) * 2));
+  max-width: calc(100% - (var(--canvas-space-module-inset) * 2));
+  min-width: 0;
+  display: flex;
+  gap: var(--canvas-space-control-group);
+  align-items: center;
+  overflow: hidden;
 }
 
 .canvas-editor__presets {
-  display: flex;
-  width: auto;
-  min-width: 0;
-  max-width: none;
   flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  max-width: none;
+  width: auto;
   align-items: center;
-  padding: var(--canvas-space-inline);
-  border-radius: var(--canvas-radius-control);
-  background: var(--canvas-ui-raised);
-  color: var(--canvas-ui-muted);
-  font-size: var(--canvas-type-caption-size);
   gap: var(--canvas-space-inline);
   overflow-x: auto;
+  padding: var(--canvas-space-inline);
+  color: var(--canvas-ui-muted);
+  background: var(--canvas-ui-raised);
+  border-radius: var(--canvas-radius-control);
+  font-size: var(--canvas-type-caption-size);
 }
 
 .canvas-editor__chrome > [data-canvas-owned]:not(.canvas-editor__presets),
@@ -191,10 +187,10 @@
   padding: 0 var(--canvas-space-inline);
   border: 0;
   border-radius: var(--canvas-radius-control);
-  background: var(--canvas-ui-fill-rest);
   color: var(--canvas-ui-text);
-  cursor: pointer;
+  background: var(--canvas-ui-fill-rest);
   font: inherit;
+  cursor: pointer;
 }
 
 .canvas-editor__preset:hover {
@@ -207,12 +203,12 @@
   padding: 0 var(--canvas-space-module-inset);
   border: 0;
   border-radius: var(--canvas-button-radius);
-  background: var(--canvas-ui-fill-rest);
   color: var(--canvas-ui-text);
-  cursor: pointer;
+  background: var(--canvas-ui-fill-rest);
   font: inherit;
   font-size: var(--canvas-type-body-size);
   line-height: var(--canvas-type-body-leading);
+  cursor: pointer;
 }
 
 .canvas-editor__done:hover,
@@ -221,8 +217,8 @@
 }
 
 .canvas-editor__done {
-  background: var(--canvas-ui-primary);
   color: var(--canvas-ui-primary-text);
+  background: var(--canvas-ui-primary);
 }
 
 .canvas-editor__file-input {
@@ -236,17 +232,17 @@
 .canvas-editor__error {
   position: absolute;
   z-index: 21;
-  padding: var(--canvas-space-inline) var(--canvas-space-control-group);
-  border-radius: var(--canvas-radius-control);
-  background: var(--canvas-ui-raised);
-  color: var(--canvas-ui-destructive);
-  font-size: var(--canvas-type-callout-size);
   inset-block-end: var(--canvas-space-module-inset);
   inset-inline: var(--canvas-space-module-inset);
+  padding: var(--canvas-space-inline) var(--canvas-space-control-group);
+  color: var(--canvas-ui-destructive);
+  background: var(--canvas-ui-raised);
+  border-radius: var(--canvas-radius-control);
+  font-size: var(--canvas-type-callout-size);
 }
 
 /* Excalidraw moves Hand into a floating control at <=450px. Keep the C2 row below it. */
-@media screen and (width <= 450px) {
+@media screen and (max-width: 450px) {
   .canvas-editor {
     --canvas-chrome-offset: 8rem;
   }
@@ -274,7 +270,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   html:not([data-reduce-motion="off"]) .canvas-editor * {
-    animation-duration: 0ms;
     transition-duration: 0ms;
+    animation-duration: 0ms;
   }
 }

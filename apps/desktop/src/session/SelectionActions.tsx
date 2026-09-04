@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent, RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -12,19 +18,20 @@ interface CapturedSelection {
 }
 
 interface SelectionActionsProps {
-  readonly scopeRef: RefObject<HTMLElement | null>;
-  readonly onAdd: (text: string) => void;
-  readonly onDetails: (text: string) => void;
-  readonly onAskInSideChat: (text: string) => void;
+  scopeRef: RefObject<HTMLElement | null>;
+  onAdd: (text: string) => void;
+  onDetails: (text: string) => void;
+  onAskInSideChat: (text: string) => void;
 }
 
 interface SelectionToolbarProps {
-  readonly text: string;
-  readonly onAdd: (text: string) => void;
-  readonly onDetails: (text: string) => void;
-  readonly onAskInSideChat: (text: string) => void;
+  text: string;
+  onAdd: (text: string) => void;
+  onDetails: (text: string) => void;
+  onAskInSideChat: (text: string) => void;
 }
 
+/** Presentational seam kept independent from Range positioning so its actions stay easy to test. */
 export function SelectionToolbar({
   text,
   onAdd,
@@ -36,32 +43,24 @@ export function SelectionToolbar({
   const [tabStop, setTabStop] = useState(0);
 
   const onToolbarKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const buttons = [
-      ...(toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
+    const buttons = Array.from(
+      toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
         "button:not(:disabled)"
-      ) ?? []),
-    ];
-    if (buttons.length === 0) {
-      return;
-    }
+      ) ?? []
+    );
+    if (buttons.length === 0) return;
 
     const current = Math.max(
       0,
       buttons.indexOf(document.activeElement as HTMLButtonElement)
     );
     let next: number | null = null;
-    if (event.key === "ArrowRight") {
-      next = (current + 1) % buttons.length;
-    } else if (event.key === "ArrowLeft") {
+    if (event.key === "ArrowRight") next = (current + 1) % buttons.length;
+    else if (event.key === "ArrowLeft")
       next = (current - 1 + buttons.length) % buttons.length;
-    } else if (event.key === "Home") {
-      next = 0;
-    } else if (event.key === "End") {
-      next = buttons.length - 1;
-    }
-    if (next === null) {
-      return;
-    }
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = buttons.length - 1;
+    if (next === null) return;
 
     event.preventDefault();
     setTabStop(next);
@@ -116,29 +115,28 @@ export function SelectionToolbar({
   );
 }
 
+/** Read a non-empty selection only when it belongs to this transcript. */
 function readSelection(scope: HTMLElement): CapturedSelection | null {
   const selection = window.getSelection();
-  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0)
     return null;
-  }
 
   const text = selection.toString().trim();
-  if (!text) {
-    return null;
-  }
+  if (!text) return null;
 
   const range = selection.getRangeAt(0);
-  if (!scope.contains(range.commonAncestorContainer)) {
-    return null;
-  }
+  if (!scope.contains(range.commonAncestorContainer)) return null;
 
   const rect = range.getBoundingClientRect();
-  if (rect.width <= 0 && rect.height <= 0) {
-    return null;
-  }
-  return { rect, text };
+  if (rect.width <= 0 && rect.height <= 0) return null;
+  return { text, rect };
 }
 
+/**
+ * A native-feeling text-selection toolbar anchored to the browser Range itself. Base UI owns the
+ * popup lifecycle, collision handling, outside press and Escape behavior; this component only
+ * captures the selected text and exposes the three product actions.
+ */
 export function SelectionActions({
   scopeRef,
   onAdd,
@@ -149,9 +147,7 @@ export function SelectionActions({
 
   useEffect(() => {
     const scope = scopeRef.current;
-    if (!scope) {
-      return;
-    }
+    if (!scope) return;
 
     let timer = 0;
     const capture = () => {
@@ -170,7 +166,7 @@ export function SelectionActions({
     // accessibility actions through the document-level selectionchange event. Those paths do
     // not consistently dispatch an ending pointer or mouse event to the transcript element.
     document.addEventListener("selectionchange", capture);
-    scope.addEventListener("scroll", close);
+    scope.addEventListener("scroll", close, { passive: true });
     window.addEventListener("resize", close);
     return () => {
       window.clearTimeout(timer);
@@ -183,16 +179,18 @@ export function SelectionActions({
     };
   }, [scopeRef]);
 
-  const anchor = captured
-    ? {
-        getBoundingClientRect: () => captured.rect,
-      }
-    : null;
+  const anchor = useMemo(
+    () =>
+      captured
+        ? {
+            getBoundingClientRect: () => captured.rect,
+          }
+        : null,
+    [captured]
+  );
 
   const run = (action: (text: string) => void) => {
-    if (!captured) {
-      return;
-    }
+    if (!captured) return;
     action(captured.text);
     window.getSelection()?.removeAllRanges();
     setCaptured(null);
@@ -202,9 +200,7 @@ export function SelectionActions({
     <Popover
       open={captured !== null}
       onOpenChange={(open) => {
-        if (!open) {
-          setCaptured(null);
-        }
+        if (!open) setCaptured(null);
       }}
     >
       {captured && anchor ? (

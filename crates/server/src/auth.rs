@@ -71,6 +71,9 @@ pub struct Device {
     /// A task-transfer credential is revoked immediately after target activation.
     #[serde(default)]
     ephemeral_handoff: bool,
+    /// A human identity is optional for backward compatibility. Team routes require it.
+    #[serde(default)]
+    member_id: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +105,8 @@ pub struct DeviceInfo {
     pub last_seen: u64,
     pub direction: &'static str,
     pub protocol: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub member_id: Option<String>,
 }
 
 /// Result of a successful pairing: the raw bearer is returned exactly once.
@@ -109,12 +114,15 @@ pub struct DeviceInfo {
 pub struct Paired {
     pub device_id: String,
     pub bearer: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub member_id: Option<String>,
 }
 
 struct PairingToken {
     token_hash: String,
     expires_at: u64,
     protocol: CredentialProtocol,
+    member_id: Option<String>,
 }
 
 struct WsTicket {
@@ -131,6 +139,13 @@ pub(crate) struct BearerAuthorization {
     pub expires_at: Option<u64>,
     pub scopes: Vec<String>,
     pub ephemeral_handoff: bool,
+    pub member_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeamAuthorization {
+    pub device_id: String,
+    pub member_id: String,
 }
 
 pub(crate) struct TicketAuthorization {
@@ -215,23 +230,34 @@ impl AuthState {
     /// Mint a one-time pairing token. The raw token is returned (put it in a URL fragment / QR);
     /// only its hash is kept.
     pub fn issue_pairing_token(&self, ttl: Duration) -> String {
-        self.issue_pairing_token_for_protocol(ttl, CredentialProtocol::Legacy)
+        self.issue_pairing_token_for_protocol(ttl, CredentialProtocol::Legacy, None)
+    }
+
+    /// Mint a normal remote credential that is additionally bound to one server-owned Member.
+    /// The Member id comes from the trusted local invite surface, never from the pairing request.
+    pub fn issue_member_pairing_token(&self, member_id: &str, ttl: Duration) -> String {
+        self.issue_pairing_token_for_protocol(
+            ttl,
+            CredentialProtocol::Legacy,
+            Some(member_id.to_string()),
+        )
     }
 
     /// Mint a one-time bootstrap code that may only be redeemed through the T3 OAuth exchange.
     pub fn issue_t3_pairing_token(&self, ttl: Duration) -> String {
-        self.issue_pairing_token_for_protocol(ttl, CredentialProtocol::T3)
+        self.issue_pairing_token_for_protocol(ttl, CredentialProtocol::T3, None)
     }
 
     /// Mint a token usable only by the paired-C2 synchronization protocol.
     pub fn issue_c2_pairing_token(&self, ttl: Duration) -> String {
-        self.issue_pairing_token_for_protocol(ttl, CredentialProtocol::C2)
+        self.issue_pairing_token_for_protocol(ttl, CredentialProtocol::C2, None)
     }
 
     fn issue_pairing_token_for_protocol(
         &self,
         ttl: Duration,
         protocol: CredentialProtocol,
+        member_id: Option<String>,
     ) -> String {
         let token = new_secret();
         let now = now_secs();
@@ -241,6 +267,7 @@ impl AuthState {
             token_hash: hash(&token),
             expires_at: now + ttl.as_secs(),
             protocol,
+            member_id,
         });
         token
     }
@@ -260,6 +287,7 @@ impl AuthState {
             Vec::new(),
             CredentialProtocol::Legacy,
             false,
+            None,
             None,
         )
     }
@@ -281,6 +309,7 @@ impl AuthState {
             CredentialProtocol::C2,
             false,
             Some(peer_id.trim().to_string()),
+            None,
         )
     }
 
@@ -325,6 +354,7 @@ impl AuthState {
             CredentialProtocol::T3,
             ephemeral_handoff,
             None,
+            None,
         )
     }
 
@@ -337,6 +367,7 @@ impl AuthState {
         protocol: CredentialProtocol,
         ephemeral_handoff: bool,
         peer_id: Option<String>,
+        explicit_member_id: Option<String>,
     ) -> Result<Option<Paired>, String> {
         let now = now_secs();
         let token_hash = hash(token);
@@ -348,6 +379,7 @@ impl AuthState {
         else {
             return Ok(None);
         };
+        let member_id = explicit_member_id.or_else(|| pairing[pairing_index].member_id.clone());
         let bearer = new_secret();
         let device = Device {
             id: uuid::Uuid::new_v4().to_string(),
@@ -364,6 +396,7 @@ impl AuthState {
             protocol: Some(protocol),
             peer_id: peer_id.clone(),
             ephemeral_handoff,
+            member_id: member_id.clone(),
         };
         let device_id = device.id.clone();
         let mut devices = self.devices.lock().unwrap();
@@ -379,7 +412,11 @@ impl AuthState {
         self.persist(&updated)?;
         *devices = updated;
         pairing.remove(pairing_index);
-        Ok(Some(Paired { device_id, bearer }))
+        Ok(Some(Paired {
+            device_id,
+            bearer,
+            member_id,
+        }))
     }
 
     /// Validate a bearer, returning the device id and refreshing `last_seen`.
@@ -390,6 +427,15 @@ impl AuthState {
 
     pub(crate) fn authorize_bearer_profile(&self, bearer: &str) -> Option<BearerAuthorization> {
         self.authorize_bearer_for_protocol(bearer, CredentialProtocol::T3)
+    }
+
+    pub fn authorize_member_bearer(&self, bearer: &str) -> Option<TeamAuthorization> {
+        let authorization =
+            self.authorize_bearer_for_protocol(bearer, CredentialProtocol::Legacy)?;
+        Some(TeamAuthorization {
+            device_id: authorization.device_id,
+            member_id: authorization.member_id?,
+        })
     }
 
     pub fn authorize_c2_bearer(&self, bearer: &str) -> Option<String> {
@@ -425,6 +471,7 @@ impl AuthState {
             expires_at: dev.expires_at,
             scopes: dev.scopes.clone(),
             ephemeral_handoff: dev.ephemeral_handoff,
+            member_id: dev.member_id.clone(),
         };
         if let Err(error) = self.persist(&devices) {
             tracing::warn!("persist remote device last-seen failed: {error}");
@@ -533,6 +580,7 @@ impl AuthState {
                     CredentialProtocol::Legacy => "legacy",
                     CredentialProtocol::T3 => "t3",
                 },
+                member_id: d.member_id.clone(),
             })
             .collect()
     }
@@ -560,6 +608,17 @@ impl AuthState {
 
     pub(crate) fn subscribe_revocations(&self) -> broadcast::Receiver<String> {
         self.revocations.subscribe()
+    }
+
+    pub(crate) fn member_for_device(&self, device_id: &str) -> Option<String> {
+        let now = now_secs();
+        self.devices.lock().unwrap().iter().find_map(|device| {
+            (device.id == device_id
+                && device.effective_protocol() == CredentialProtocol::Legacy
+                && device.expires_at.is_none_or(|expires_at| expires_at > now))
+            .then(|| device.member_id.clone())
+            .flatten()
+        })
     }
 
     pub(crate) fn t3_device_is_authorized(&self, id: &str) -> bool {
@@ -760,6 +819,34 @@ mod tests {
             reloaded.authorize_bearer(&paired.bearer),
             Some(paired.device_id)
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn member_binding_is_issued_by_the_invite_and_survives_reload() {
+        let dir = std::env::temp_dir().join(format!("codetwo-team-auth-{}", uuid::Uuid::new_v4()));
+        let path = dir.join("remote-devices.json");
+        let auth = AuthState::load(Some(path.clone()));
+        let token = auth.issue_member_pairing_token("member-bob", DEFAULT_PAIRING_TTL);
+        let paired = auth.pair(&token, "Bob Mac").unwrap();
+        assert_eq!(paired.member_id.as_deref(), Some("member-bob"));
+        assert_eq!(
+            auth.authorize_member_bearer(&paired.bearer)
+                .unwrap()
+                .member_id,
+            "member-bob"
+        );
+
+        let reloaded = AuthState::load(Some(path));
+        assert_eq!(
+            reloaded
+                .authorize_member_bearer(&paired.bearer)
+                .unwrap()
+                .member_id,
+            "member-bob"
+        );
+        assert!(reloaded.revoke_device(&paired.device_id));
+        assert!(reloaded.authorize_member_bearer(&paired.bearer).is_none());
         let _ = std::fs::remove_dir_all(dir);
     }
 

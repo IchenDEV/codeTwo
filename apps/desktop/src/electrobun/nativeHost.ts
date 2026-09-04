@@ -1,30 +1,29 @@
 import { mkdirSync } from "node:fs";
 
-import { assertIpcResult } from "../lib/ipcResult";
 import type { DesktopEvent } from "./rpc";
 
-export const desktopHostProtocolVersion = 1;
+export const DESKTOP_HOST_PROTOCOL_VERSION = 1;
 
-const maxProtocolLineLength = 32 * 1024 * 1024;
+const MAX_PROTOCOL_LINE_LENGTH = 32 * 1024 * 1024;
 
 interface HostInput {
-  write: (data: string) => unknown;
-  flush: () => unknown;
-  end: () => unknown;
+  write(data: string): unknown;
+  flush(): unknown;
+  end(): unknown;
 }
 
 export interface NativeHostProcess {
   stdin: HostInput;
   stdout: ReadableStream<Uint8Array>;
   exited: Promise<number>;
-  kill: () => unknown;
+  kill(): unknown;
 }
 
 export type NativeHostSpawner = (command: string[]) => NativeHostProcess;
 
 export interface NativeHostOptions {
   executable: string;
-  dataDirectory: string;
+  dataDir: string;
   onEvent: (event: DesktopEvent) => void;
   spawn?: NativeHostSpawner;
   startupTimeoutMs?: number;
@@ -45,31 +44,27 @@ interface PendingRequest {
 }
 
 function error(value: unknown): Error {
-  return Error.isError(value) ? value : new Error(String(value));
+  return value instanceof Error ? value : new Error(String(value));
 }
 
-async function withTimeout<T>(
+function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
   message: string
 ): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  return await Promise.race([
+  return Promise.race([
     promise,
     new Promise<never>((_, reject) => {
-      timeout = setTimeout(() => {
-        reject(new Error(message));
-      }, timeoutMs);
+      timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
     }),
   ]).finally(() => {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
+    if (timeout) clearTimeout(timeout);
   });
 }
 
 function desktopEvent(value: unknown): DesktopEvent {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("C2 Plugin Kernel emitted an invalid event envelope");
   }
   const candidate = value as { name?: unknown; payload?: unknown };
@@ -80,22 +75,18 @@ function desktopEvent(value: unknown): DesktopEvent {
 }
 
 function assertReadyPayload(payload: unknown): void {
-  if (
-    payload == null ||
-    typeof payload !== "object" ||
-    Array.isArray(payload)
-  ) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("C2 Plugin Kernel emitted an invalid readiness payload");
   }
   const ready = payload as { protocol_version?: unknown; commands?: unknown };
-  if (ready.protocol_version !== desktopHostProtocolVersion) {
+  if (ready.protocol_version !== DESKTOP_HOST_PROTOCOL_VERSION) {
     throw new Error(
-      `C2 Plugin Kernel protocol mismatch: expected ${desktopHostProtocolVersion}, received ${String(ready.protocol_version)}`
+      `C2 Plugin Kernel protocol mismatch: expected ${DESKTOP_HOST_PROTOCOL_VERSION}, received ${String(ready.protocol_version)}`
     );
   }
   if (
     !Array.isArray(ready.commands) ||
-    ready.commands.some((name) => typeof name !== "string")
+    !ready.commands.every((name) => typeof name === "string")
   ) {
     throw new Error(
       "C2 Plugin Kernel readiness payload has an invalid command catalog"
@@ -128,49 +119,39 @@ export class NativeHost {
       this.resolveReady = resolve;
       this.rejectReady = reject;
     });
-    void this.readyPromise.catch(() => {});
+    void this.readyPromise.catch(() => undefined);
   }
 
-  async start(): Promise<void> {
-    if (this.startPromise) {
-      await this.startPromise;
-      return;
-    }
+  start(): Promise<void> {
+    if (this.startPromise) return this.startPromise;
     if (this.stopping || this.stopped) {
-      throw new Error("C2 Plugin Kernel has already stopped");
+      return Promise.reject(new Error("C2 Plugin Kernel has already stopped"));
     }
     this.startPromise = this.startProcess();
-    await this.startPromise;
+    return this.startPromise;
   }
 
   async call(
     name: string,
-    argumentsValue: unknown,
+    args: unknown,
     projectPath: string | null
   ): Promise<unknown> {
-    if (!this.startPromise) {
+    if (!this.startPromise)
       throw new Error("C2 Plugin Kernel has not been started");
-    }
     await this.startPromise;
-    return await this.request("call", {
-      args: argumentsValue,
-      name,
-      project_path: projectPath,
-    });
+    return this.request("call", { name, args, project_path: projectPath });
   }
 
   async shutdown(): Promise<void> {
-    const { child } = this;
-    if (!child || this.stopped) {
-      return;
-    }
+    const child = this.child;
+    if (!child || this.stopped) return;
     this.stopping = true;
 
     try {
       if (this.ready && !this.failure) {
         await withTimeout(
           this.request("shutdown", null),
-          this.options.shutdownTimeoutMs ?? 2000,
+          this.options.shutdownTimeoutMs ?? 2_000,
           "C2 Plugin Kernel shutdown timed out"
         );
       }
@@ -184,14 +165,14 @@ export class NativeHost {
       }
     }
 
-    const isExited = await withTimeout(
+    const exited = await withTimeout(
       child.exited.then(() => true),
-      this.options.shutdownTimeoutMs ?? 2000,
+      this.options.shutdownTimeoutMs ?? 2_000,
       "C2 Plugin Kernel did not exit after shutdown"
     ).catch(() => false);
-    if (!isExited) {
+    if (!exited) {
       child.kill();
-      await child.exited.catch(() => {});
+      await child.exited.catch(() => undefined);
     }
     this.child = null;
     this.stopped = true;
@@ -199,33 +180,29 @@ export class NativeHost {
   }
 
   private async startProcess(): Promise<void> {
-    mkdirSync(this.options.dataDirectory, { recursive: true });
+    mkdirSync(this.options.dataDir, { recursive: true });
     try {
       this.child = (this.options.spawn ?? defaultSpawn)([
         this.options.executable,
         "--data-dir",
-        this.options.dataDirectory,
+        this.options.dataDir,
       ]);
-    } catch (_error) {
+    } catch (cause) {
       const startupError = new Error(
-        `C2 Plugin Kernel could not be launched: ${error(_error).message}`
+        `C2 Plugin Kernel could not be launched: ${error(cause).message}`
       );
       this.fail(startupError);
       throw startupError;
     }
 
-    const { child } = this;
-    void this.readOutput(child.stdout).catch((_error) => {
-      this.fail(error(_error));
+    const child = this.child;
+    void this.readOutput(child.stdout).catch((cause) => {
+      this.fail(error(cause));
       child.kill();
     });
     void child.exited.then(
-      (status) => {
-        this.handleExit(status);
-      },
-      (_error) => {
-        this.fail(error(_error));
-      }
+      (status) => this.handleExit(status),
+      (cause) => this.fail(error(cause))
     );
 
     try {
@@ -234,40 +211,35 @@ export class NativeHost {
         this.options.startupTimeoutMs ?? 60_000,
         "C2 Plugin Kernel did not become ready"
       );
-    } catch (_error) {
-      const startupError = error(_error);
+    } catch (cause) {
+      const startupError = error(cause);
       this.fail(startupError);
       child.kill();
       throw startupError;
     }
   }
 
-  private async request(method: string, parameters: unknown): Promise<unknown> {
-    const { child } = this;
-    if (!child) {
-      throw new Error("C2 Plugin Kernel is not running");
-    }
-    if (this.failure) {
-      throw this.failure;
-    }
+  private request(method: string, params: unknown): Promise<unknown> {
+    const child = this.child;
+    if (!child)
+      return Promise.reject(new Error("C2 Plugin Kernel is not running"));
+    if (this.failure) return Promise.reject(this.failure);
     if (this.stopping && method !== "shutdown") {
-      throw new Error("C2 Plugin Kernel is stopping");
+      return Promise.reject(new Error("C2 Plugin Kernel is stopping"));
     }
 
     const id = this.nextId++;
     const response = new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { reject, resolve });
+      this.pending.set(id, { resolve, reject });
     });
     try {
-      child.stdin.write(
-        `${JSON.stringify({ id, method, params: parameters })}\n`
-      );
+      child.stdin.write(`${JSON.stringify({ id, method, params })}\n`);
       child.stdin.flush();
-    } catch (_error) {
+    } catch (cause) {
       this.pending.delete(id);
-      return await Promise.reject(error(_error));
+      return Promise.reject(error(cause));
     }
-    return await response;
+    return response;
   }
 
   private async readOutput(stdout: ReadableStream<Uint8Array>): Promise<void> {
@@ -276,39 +248,33 @@ export class NativeHost {
     let buffer = "";
     while (true) {
       const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
+      if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      if (buffer.length > maxProtocolLineLength && !buffer.includes("\n")) {
+      if (buffer.length > MAX_PROTOCOL_LINE_LENGTH && !buffer.includes("\n")) {
         throw new Error(
           "C2 Plugin Kernel exceeded the desktop protocol line limit"
         );
       }
       let newline = buffer.indexOf("\n");
       while (newline >= 0) {
-        if (newline > maxProtocolLineLength) {
+        if (newline > MAX_PROTOCOL_LINE_LENGTH) {
           throw new Error(
             "C2 Plugin Kernel exceeded the desktop protocol line limit"
           );
         }
         const line = buffer.slice(0, newline).trim();
         buffer = buffer.slice(newline + 1);
-        if (line) {
-          this.handleLine(line);
-        }
+        if (line) this.handleLine(line);
         newline = buffer.indexOf("\n");
       }
     }
     const tail = (buffer + decoder.decode()).trim();
-    if (tail.length > maxProtocolLineLength) {
+    if (tail.length > MAX_PROTOCOL_LINE_LENGTH) {
       throw new Error(
         "C2 Plugin Kernel exceeded the desktop protocol line limit"
       );
     }
-    if (tail) {
-      this.handleLine(tail);
-    }
+    if (tail) this.handleLine(tail);
     if (!this.stopping && !this.stopped) {
       throw new Error("C2 Plugin Kernel output stream closed unexpectedly");
     }
@@ -317,10 +283,10 @@ export class NativeHost {
   private handleLine(line: string): void {
     let message: HostResponse;
     try {
-      message = assertIpcResult<HostResponse>(JSON.parse(line) as unknown);
-    } catch (_error) {
+      message = JSON.parse(line) as HostResponse;
+    } catch (cause) {
       throw new Error(
-        `C2 Plugin Kernel emitted invalid protocol data: ${error(_error).message}`
+        `C2 Plugin Kernel emitted invalid protocol data: ${error(cause).message}`
       );
     }
 
@@ -333,27 +299,23 @@ export class NativeHost {
       }
       try {
         this.options.onEvent(event);
-      } catch (_error) {
-        console.error("C2 desktop event handler failed", _error);
+      } catch (cause) {
+        console.error("C2 desktop event handler failed", cause);
       }
       return;
     }
 
     if (typeof message.id !== "number") {
-      throw new TypeError(
+      throw new Error(
         "C2 Plugin Kernel emitted a response without a numeric id"
       );
     }
     const pending = this.pending.get(message.id);
-    if (!pending) {
-      return;
-    }
+    if (!pending) return;
     this.pending.delete(message.id);
-    if (typeof message.error === "string") {
+    if (typeof message.error === "string")
       pending.reject(new Error(message.error));
-    } else {
-      pending.resolve(message.result);
-    }
+    else pending.resolve(message.result);
   }
 
   private handleExit(status: number): void {
@@ -365,26 +327,22 @@ export class NativeHost {
   }
 
   private fail(reason: Error): void {
-    if (this.failure) {
-      return;
-    }
+    if (this.failure) return;
     this.failure = reason;
     this.rejectReady(reason);
     this.rejectPending(reason);
   }
 
   private rejectPending(reason: Error): void {
-    for (const request of this.pending.values()) {
-      request.reject(reason);
-    }
+    for (const request of this.pending.values()) request.reject(reason);
     this.pending.clear();
   }
 }
 
 function defaultSpawn(command: string[]): NativeHostProcess {
   return Bun.spawn(command, {
-    stderr: "inherit",
     stdin: "pipe",
     stdout: "pipe",
+    stderr: "inherit",
   });
 }

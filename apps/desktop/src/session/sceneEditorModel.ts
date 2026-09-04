@@ -1,4 +1,3 @@
-import { assertIpcResult } from "../lib/ipcResult";
 import type {
   SceneDocument,
   SceneExitCriterion,
@@ -6,14 +5,12 @@ import type {
   SceneInfo,
 } from "./scene";
 
-/**
-Frozen schema id shared by structured and raw-JSON editing.
-*/
-export const sceneSchemaId =
+/** Frozen schema id shared by structured and raw-JSON editing. */
+export const SCENE_SCHEMA_ID =
   "https://agent-scenes.org/schemas/1.0.0/scene.schema.json";
 
-const slugPattern = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u;
-const artifactPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
+const SLUG_PATTERN = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
+const ARTIFACT_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 export interface SceneDraftIssue {
   field: string;
@@ -23,7 +20,7 @@ export interface SceneDraftIssue {
 
 export function splitSceneList(value: string): string[] {
   return value
-    .split(/[\n,]/u)
+    .split(/[\n,]/)
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
@@ -36,10 +33,10 @@ export function slugSceneName(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replaceAll(/[^a-z0-9.-]+/gu, "-")
-    .replaceAll(/-{2,}/gu, "-")
-    .replaceAll(/\.{2,}/gu, ".")
-    .replaceAll(/^[^a-z0-9]+|[^a-z0-9]+$/gu, "")
+    .replace(/[^a-z0-9.-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
     .slice(0, 64);
 }
 
@@ -48,14 +45,10 @@ function nextAvailableName(
   existing: ReadonlySet<string>
 ): string {
   const seed = slugSceneName(base) || "custom-scene";
-  if (!existing.has(seed)) {
-    return seed;
-  }
+  if (!existing.has(seed)) return seed;
   for (let suffix = 2; suffix < 10_000; suffix += 1) {
-    const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/u, "");
-    if (!existing.has(candidate)) {
-      return candidate;
-    }
+    const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/, "");
+    if (!existing.has(candidate)) return candidate;
   }
   return `custom-${Date.now()}`;
 }
@@ -65,19 +58,19 @@ export function createSceneDocument(
 ): SceneDocument {
   const existing = new Set(existingScenes.map((scene) => scene.name));
   return {
-    $schema: sceneSchemaId,
-    artifacts: [],
-    constraints: { guardrails: [], tools: { allow: [], deny: [] } },
+    $schema: SCENE_SCHEMA_ID,
+    name: nextAvailableName("custom-scene", existing),
+    version: "1.0.0",
+    title: "New scene",
     description: "",
-    execution: {},
-    extensions: {},
-    hooks: [],
     keywords: [],
     localizations: {},
-    name: nextAvailableName("custom-scene", existing),
-    skills: { inline: [], pinned: [], suppress_unpinned: false },
-    title: "New scene",
-    version: "1.0.0",
+    execution: {},
+    skills: { pinned: [], inline: [], suppress_unpinned: false },
+    artifacts: [],
+    hooks: [],
+    constraints: { guardrails: [], tools: { allow: [], deny: [] } },
+    extensions: {},
   };
 }
 
@@ -87,7 +80,7 @@ export function duplicateSceneDocument(
 ): SceneDocument {
   const copy = structuredClone(source);
   const existing = new Set(existingScenes.map((scene) => scene.name));
-  copy.$schema = sceneSchemaId;
+  copy.$schema = SCENE_SCHEMA_ID;
   copy.name = nextAvailableName(`${source.name}-copy`, existing);
   copy.title = `${source.title} copy`;
   return copy;
@@ -98,15 +91,15 @@ export function defaultExitCriterion(): SceneExitCriterion {
 }
 
 export function defaultSceneHook(): SceneHook {
-  return { action: { kind: "notify", message: "" }, on: "turn_end" };
+  return { on: "turn_end", action: { kind: "notify", message: "" } };
 }
 
 export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   const issues: SceneDraftIssue[] = [];
-  if (scene.$schema !== sceneSchemaId) {
+  if (scene.$schema !== SCENE_SCHEMA_ID) {
     issues.push({ field: "$schema", key: "sceneEditor.errorSchema" });
   }
-  if (!slugPattern.test(scene.name) || scene.name.length > 64) {
+  if (!SLUG_PATTERN.test(scene.name) || scene.name.length > 64) {
     issues.push({ field: "name", key: "sceneEditor.errorName" });
   }
   if (!scene.title.trim()) {
@@ -124,7 +117,7 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
       });
     }
     for (const [index, slot] of (scene.brief.slots ?? []).entries()) {
-      if (!slugPattern.test(slot.id) || slot.id.length > 64) {
+      if (!SLUG_PATTERN.test(slot.id) || slot.id.length > 64) {
         issues.push({
           field: `brief.slots.${index}.id`,
           key: "sceneEditor.errorSlotId",
@@ -157,7 +150,7 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
 
   const artifactIds = new Set<string>();
   for (const [index, artifact] of (scene.artifacts ?? []).entries()) {
-    if (!artifactPattern.test(artifact.id) || artifact.id.length > 64) {
+    if (!ARTIFACT_PATTERN.test(artifact.id) || artifact.id.length > 64) {
       issues.push({
         field: `artifacts.${index}.id`,
         key: "sceneEditor.errorArtifactId",
@@ -181,19 +174,13 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   }
 
   for (const [index, criterion] of (scene.exit?.criteria ?? []).entries()) {
-    if (
-      criterion.kind === "checklist_complete" &&
-      (criterion.artifact == null || criterion.artifact === "")
-    ) {
+    if (criterion.kind === "checklist_complete" && !criterion.artifact) {
       issues.push({
         field: `exit.criteria.${index}.artifact`,
         key: "sceneEditor.errorChecklistArtifact",
       });
     }
-    if (
-      criterion.kind === "custom" &&
-      (criterion.description?.trim() ?? "") === ""
-    ) {
+    if (criterion.kind === "custom" && !criterion.description?.trim()) {
       issues.push({
         field: `exit.criteria.${index}.description`,
         key: "sceneEditor.errorCustomCriterion",
@@ -204,35 +191,26 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   for (const [index, hook] of (scene.hooks ?? []).entries()) {
     if (
       hook.on === "schedule" &&
-      hook.schedule?.trim().split(/\s+/u).length !== 5
+      hook.schedule?.trim().split(/\s+/).length !== 5
     ) {
       issues.push({
         field: `hooks.${index}.schedule`,
         key: "sceneEditor.errorSchedule",
       });
     }
-    if (
-      hook.action.kind === "suggest_scene" &&
-      (hook.action.scene?.trim() ?? "") === ""
-    ) {
+    if (hook.action.kind === "suggest_scene" && !hook.action.scene?.trim()) {
       issues.push({
         field: `hooks.${index}.action.scene`,
         key: "sceneEditor.errorHookScene",
       });
     }
-    if (
-      hook.action.kind === "run_macro" &&
-      (hook.action.macro?.trim() ?? "") === ""
-    ) {
+    if (hook.action.kind === "run_macro" && !hook.action.macro?.trim()) {
       issues.push({
         field: `hooks.${index}.action.macro`,
         key: "sceneEditor.errorHookMacro",
       });
     }
-    if (
-      hook.action.kind === "notify" &&
-      (hook.action.message?.trim() ?? "") === ""
-    ) {
+    if (hook.action.kind === "notify" && !hook.action.message?.trim()) {
       issues.push({
         field: `hooks.${index}.action.message`,
         key: "sceneEditor.errorHookMessage",
@@ -247,12 +225,12 @@ export function parseSceneJson(value: string): {
   error: string | null;
 } {
   try {
-    const scene = assertIpcResult<SceneDocument>(JSON.parse(value) as unknown);
-    return { error: null, scene };
+    const scene = JSON.parse(value) as SceneDocument;
+    return { scene, error: null };
   } catch (error) {
     return {
-      error: Error.isError(error) ? error.message : String(error),
       scene: null,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }

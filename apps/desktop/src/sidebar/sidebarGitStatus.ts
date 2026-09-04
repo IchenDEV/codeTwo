@@ -14,7 +14,7 @@ export interface SidebarPullRequestStatus {
   state: SidebarPullRequestState;
 }
 
-const failedCheckConclusions = new Set([
+const FAILED_CHECK_CONCLUSIONS = new Set([
   "ACTION_REQUIRED",
   "CANCELLED",
   "ERROR",
@@ -24,27 +24,25 @@ const failedCheckConclusions = new Set([
   "TIMED_OUT",
 ]);
 
-const successfulCheckConclusions = new Set(["NEUTRAL", "SKIPPED", "SUCCESS"]);
+const SUCCESSFUL_CHECK_CONCLUSIONS = new Set(["NEUTRAL", "SKIPPED", "SUCCESS"]);
 
 export function sidebarPullRequestStatus(
   pullRequest: GitHubPullRequest | null
 ): SidebarPullRequestStatus | null {
-  if (!pullRequest) {
-    return null;
-  }
+  if (!pullRequest) return null;
   const state = pullRequest.state.toLocaleUpperCase();
   if (state === "MERGED") {
     return {
       number: pullRequest.number,
-      state: "merged",
       url: pullRequest.url,
+      state: "merged",
     };
   }
   if (state !== "OPEN") {
     return {
       number: pullRequest.number,
-      state: "closed",
       url: pullRequest.url,
+      state: "closed",
     };
   }
   if (
@@ -53,19 +51,19 @@ export function sidebarPullRequestStatus(
   ) {
     return {
       number: pullRequest.number,
-      state: "conflicting",
       url: pullRequest.url,
+      state: "conflicting",
     };
   }
   if (
     pullRequest.checks.some((check) =>
-      failedCheckConclusions.has((check.conclusion ?? "").toLocaleUpperCase())
+      FAILED_CHECK_CONCLUSIONS.has((check.conclusion ?? "").toLocaleUpperCase())
     )
   ) {
     return {
       number: pullRequest.number,
-      state: "ci_failed",
       url: pullRequest.url,
+      state: "ci_failed",
     };
   }
   if (
@@ -73,7 +71,7 @@ export function sidebarPullRequestStatus(
       const conclusion = (check.conclusion ?? "").toLocaleUpperCase();
       const status = (check.status ?? "").toLocaleUpperCase();
       return (
-        !successfulCheckConclusions.has(conclusion) &&
+        !SUCCESSFUL_CHECK_CONCLUSIONS.has(conclusion) &&
         (conclusion === "" ||
           status === "IN_PROGRESS" ||
           status === "QUEUED" ||
@@ -83,11 +81,11 @@ export function sidebarPullRequestStatus(
   ) {
     return {
       number: pullRequest.number,
-      state: "ci_running",
       url: pullRequest.url,
+      state: "ci_running",
     };
   }
-  return { number: pullRequest.number, state: "open", url: pullRequest.url };
+  return { number: pullRequest.number, url: pullRequest.url, state: "open" };
 }
 
 export interface SidebarGitTarget {
@@ -107,9 +105,7 @@ export async function loadSidebarPullRequests(
   const worker = async () => {
     while (cursor < paths.length) {
       const path = paths[cursor++];
-      if (!path) {
-        continue;
-      }
+      if (!path) continue;
       try {
         result.set(path, sidebarPullRequestStatus(await load(path)));
       } catch {

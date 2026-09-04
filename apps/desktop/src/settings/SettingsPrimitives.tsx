@@ -4,16 +4,17 @@ import { SettingRow } from "@/components/business/setting-row";
 import { SettingsPanel } from "@/components/business/settings-panel";
 import { cn } from "@/lib/utils";
 
-interface RowProps {
-  readonly icon?: ReactNode;
-  readonly label: string;
-  readonly hint?: ReactNode;
-  readonly compact?: boolean;
-  readonly className?: string;
-  readonly controlClassName?: string;
-  readonly children: ReactNode;
-}
+type RowProps = {
+  icon?: ReactNode;
+  label: string;
+  hint?: ReactNode;
+  compact?: boolean;
+  className?: string;
+  controlClassName?: string;
+  children: ReactNode;
+};
 
+/** Shared anatomy for every setting: description on the left, control on the right. */
 export function Row({
   icon,
   label,
@@ -28,7 +29,7 @@ export function Row({
       label={label}
       description={hint}
       leading={icon}
-      density={compact === true ? "compact" : "default"}
+      density={compact ? "compact" : "default"}
       className={cn("settings-row", className)}
       controlClassName={cn("settings-row-control", controlClassName)}
     >
@@ -37,13 +38,14 @@ export function Row({
   );
 }
 
+/** Project settings share one trailing control lane so fields and actions stay on the same grid. */
 export function ProjectRow(props: RowProps) {
   return (
     <SettingRow
       label={props.label}
       description={props.hint}
       leading={props.icon}
-      density={props.compact === true ? "compact" : "default"}
+      density={props.compact ? "compact" : "default"}
       controlSize="wide"
       className={cn("project-settings-row", props.className)}
       controlClassName={cn("project-settings-control", props.controlClassName)}
@@ -53,7 +55,7 @@ export function ProjectRow(props: RowProps) {
   );
 }
 
-export function GroupHeading({ children }: { readonly children: ReactNode }) {
+export function GroupHeading({ children }: { children: ReactNode }) {
   return (
     <h3 className="pt-section text-metadata text-muted-foreground font-semibold tracking-wider uppercase">
       {children}
@@ -66,9 +68,9 @@ export function Page({
   description,
   children,
 }: {
-  readonly title: string;
-  readonly description?: string;
-  readonly children: ReactNode;
+  title: string;
+  description?: string;
+  children: ReactNode;
 }) {
   return (
     <SettingsPanel title={title} description={description}>

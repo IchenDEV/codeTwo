@@ -1,18 +1,17 @@
-import { useId } from "react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Check } from "@/components/ui/icons";
 
 interface SelectableRowProps {
-  readonly label: string;
-  readonly accessibilityContext?: string;
-  readonly description?: string | null;
-  readonly leading?: ReactNode;
-  readonly meta?: ReactNode;
-  readonly selected: boolean;
-  readonly disabled?: boolean;
-  readonly onSelect: () => void;
+  label: string;
+  accessibilityContext?: string;
+  description?: string | null;
+  leading?: ReactNode;
+  meta?: ReactNode;
+  selected: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
 }
 
 function SelectableRow({
@@ -30,16 +29,14 @@ function SelectableRow({
   const metaId = useId();
   const describedBy =
     [
-      leading == null ? null : leadingId,
-      description != null && description !== "" ? descriptionId : null,
-      meta == null ? null : metaId,
+      leading ? leadingId : null,
+      description ? descriptionId : null,
+      meta ? metaId : null,
     ]
       .filter(Boolean)
       .join(" ") || undefined;
   const accessibleName =
-    accessibilityContext != null &&
-    accessibilityContext !== "" &&
-    accessibilityContext !== label
+    accessibilityContext && accessibilityContext !== label
       ? `${label}, ${accessibilityContext}`
       : label;
 
@@ -55,11 +52,7 @@ function SelectableRow({
       aria-pressed={selected}
       disabled={disabled}
       onClick={onSelect}
-      className={
-        description != null && description !== ""
-          ? "items-start"
-          : "items-center"
-      }
+      className={description ? "items-start" : "items-center"}
     >
       <span
         data-slot="selectable-row-indicator"
@@ -68,7 +61,7 @@ function SelectableRow({
       >
         {selected ? <Check className="size-3.5" /> : null}
       </span>
-      {leading == null ? null : (
+      {leading ? (
         <span
           id={leadingId}
           data-slot="selectable-row-leading"
@@ -76,12 +69,12 @@ function SelectableRow({
         >
           {leading}
         </span>
-      )}
+      ) : null}
       <span data-slot="selectable-row-content" className="min-w-0 flex-1">
         <span data-slot="selectable-row-label" className="block truncate">
           {label}
         </span>
-        {description != null && description !== "" ? (
+        {description ? (
           <span
             id={descriptionId}
             data-slot="selectable-row-description"
@@ -91,7 +84,7 @@ function SelectableRow({
           </span>
         ) : null}
       </span>
-      {meta == null ? null : (
+      {meta ? (
         <span
           id={metaId}
           data-slot="selectable-row-meta"
@@ -99,7 +92,7 @@ function SelectableRow({
         >
           {meta}
         </span>
-      )}
+      ) : null}
     </Button>
   );
 }

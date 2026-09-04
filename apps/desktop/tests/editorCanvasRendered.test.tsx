@@ -31,7 +31,7 @@ function newFakeEditor() {
     insertBlocks(blocks: any[], reference: any) {
       const index = editor.document.indexOf(reference);
       editor.document.splice(
-        index === -1 ? editor.document.length : index + 1,
+        index < 0 ? editor.document.length : index + 1,
         0,
         ...blocks
       );
@@ -40,7 +40,7 @@ function newFakeEditor() {
     replaceBlocks(blocks: any[], replacement: any[]) {
       const first = editor.document.indexOf(blocks[0]);
       editor.document.splice(
-        first === -1 ? 0 : first,
+        first < 0 ? 0 : first,
         blocks.length,
         ...replacement
       );
@@ -71,64 +71,54 @@ const realFileMenu = await import("../src/editor/FileMenu");
 const realTheme = await import("../src/theme");
 const realBridge = await import("../src/bridge");
 
-mock.module("@blocknote/core", () => {
-  return {
-    ...realCore,
-    filterSuggestionItems: (items: any[]) => items,
-  };
-});
-mock.module("@blocknote/mantine", () => {
-  return {
-    ...realMantine,
-    BlockNoteView: (props: any) => {
-      const runtime = React.useContext(mockedCanvasRuntimeContext);
-      latestCanvasRuntime = runtime;
-      latestViewProps = props;
-      return React.createElement(
-        actualCanvasRuntimeContext.Provider,
-        { value: runtime },
-        React.createElement(
-          React.Fragment,
-          null,
-          React.createElement("div", {
-            className: "ProseMirror",
-            contentEditable: true,
-          }),
-          props.children,
-          mountedCanvasBlock
-        )
-      );
-    },
-  };
-});
-mock.module("@blocknote/react", () => {
-  return {
-    ...realReact,
-    SuggestionMenuController: () => null,
-    getDefaultReactSlashMenuItems: () => [],
-    useCreateBlockNote: () => {
-      if (fakeEditor == null) {
-        fakeEditor = newFakeEditor();
-      }
-      createCount += 1;
-      return fakeEditor;
-    },
-  };
-});
+mock.module("@blocknote/core", () => ({
+  ...realCore,
+  filterSuggestionItems: (items: any[]) => items,
+}));
+mock.module("@blocknote/mantine", () => ({
+  ...realMantine,
+  BlockNoteView: (props: any) => {
+    const runtime = React.useContext(mockedCanvasRuntimeContext);
+    latestCanvasRuntime = runtime;
+    latestViewProps = props;
+    return React.createElement(
+      actualCanvasRuntimeContext.Provider,
+      { value: runtime },
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement("div", {
+          className: "ProseMirror",
+          contentEditable: true,
+        }),
+        props.children,
+        mountedCanvasBlock
+      )
+    );
+  },
+}));
+mock.module("@blocknote/react", () => ({
+  ...realReact,
+  SuggestionMenuController: () => null,
+  getDefaultReactSlashMenuItems: () => [],
+  useCreateBlockNote: () => {
+    if (!fakeEditor) fakeEditor = newFakeEditor();
+    createCount += 1;
+    return fakeEditor;
+  },
+}));
 mock.module("../src/skillInline", () => ({
   ...realSkillInline,
   CanvasBlockRuntimeContext: mockedCanvasRuntimeContext,
-  canvasBlockPropsFromDraft: (draft: any, options: any = {}) => {
-    return {
-      id: draft.id,
-      revision: draft.revision,
-      title: draft.title,
-      envelope: "{}",
-      pixelPolicy: options.pixelPolicy ?? "required",
-      deliveryError: options.deliveryError,
-      deliveryErrorKind: options.deliveryErrorKind,
-    };
-  },
+  canvasBlockPropsFromDraft: (draft: any, options: any = {}) => ({
+    id: draft.id,
+    revision: draft.revision,
+    title: draft.title,
+    envelope: "{}",
+    pixelPolicy: options.pixelPolicy ?? "required",
+    deliveryError: options.deliveryError,
+    deliveryErrorKind: options.deliveryErrorKind,
+  }),
   docToBlocks: (editor: any) =>
     editor.document.flatMap((block: any) => {
       if (block.type === "canvas") {
@@ -143,14 +133,12 @@ mock.module("../src/skillInline", () => ({
       }
       // Keep the fake faithful for slot cards: bun module mocks leak across test files, so later
       // suites exercising slotCard serialization must still see the real behavior.
-      if (block.type === "slotCard") {
+      if (block.type === "slotCard")
         return realSlotCard.slotCardToDocBlocks(block.props);
-      }
       // Same leak rule for issue references (R12): the issueBlock suite must see the real
       // serialization (header-stripped body, provenance kept off the prompt record).
-      if (block.type === "issueRef") {
+      if (block.type === "issueRef")
         return realDocToBlocks({ document: [block] } as never);
-      }
       // Same leak rule for artifact mentions: delegate the whole paragraph to the real walker so
       // inline ordering and token emission stay exact for the artifactMention suite.
       if (
@@ -159,9 +147,8 @@ mock.module("../src/skillInline", () => ({
       ) {
         return realDocToBlocks({ document: [block] } as never);
       }
-      if (block.type === "image") {
+      if (block.type === "image")
         return [{ type: "image", path: block.props.url }];
-      }
       const text =
         typeof block.content === "string"
           ? block.content
@@ -171,48 +158,37 @@ mock.module("../src/skillInline", () => ({
                 .map((inline: any) => inline.text ?? "")
                 .join("")
             : "";
-      if (text != null) {
-        return [{ type: "text", text }];
-      }
+      if (text) return [{ type: "text", text }];
       if (Array.isArray(block.content)) {
         const inline = block.content.find(
-          (item: any) => item?.type != null && item.type !== "text"
+          (item: any) => item?.type && item.type !== "text"
         );
-        if (inline?.type === "skill") {
+        if (inline?.type === "skill")
           return [
             { type: "skill", skill_id: inline.props.skillId, params: {} },
           ];
-        }
-        if (inline?.type === "fileMention") {
+        if (inline?.type === "fileMention")
           return [{ type: "file", path: inline.props.path }];
-        }
-        if (inline?.type === "sessionMention") {
+        if (inline?.type === "sessionMention")
           return [{ type: "session", session_id: inline.props.sessionId }];
-        }
       }
       return [];
     }),
 }));
-mock.module("../src/editor/FileMenu", () => {
-  return {
-    ...realFileMenu,
-    FileMenu: () => null,
-  };
-});
-mock.module("../src/theme", () => {
-  return {
-    ...realTheme,
-    useColorScheme: () => editorScheme,
-  };
-});
-mock.module("../src/bridge", () => {
-  return {
-    ...realBridge,
-    listArchivedSessions: async () => [],
-    listFiles: async () => [],
-    listSessions: async () => [],
-  };
-});
+mock.module("../src/editor/FileMenu", () => ({
+  ...realFileMenu,
+  FileMenu: () => null,
+}));
+mock.module("../src/theme", () => ({
+  ...realTheme,
+  useColorScheme: () => editorScheme,
+}));
+mock.module("../src/bridge", () => ({
+  ...realBridge,
+  listArchivedSessions: async () => [],
+  listFiles: async () => [],
+  listSessions: async () => [],
+}));
 
 const { DocEditor } = await import("../src/editor/Editor");
 const { canvasIdsToPurgeAfterTurnStart } = await import("../src/session/turns");
@@ -238,7 +214,7 @@ function canvasEnvelope(revision = 1) {
       gridStep: 5,
       viewModeEnabled: false,
     },
-    assetReferences: [],
+    assetRefs: [],
   });
 }
 
@@ -386,9 +362,7 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
       getAssets: () => [],
       onAsset: () => {},
       onCanvasActivity: (_id: string, nonEmpty: boolean) => {
-        if (nonEmpty) {
-          events.push(["activity", "canvas-life", true]);
-        }
+        if (nonEmpty) events.push(["activity", "canvas-life", true]);
       },
       saveDraft: async () => ({}),
       freezeDraft: async () => ({}),
@@ -464,9 +438,7 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
       freezeDraft: async () => ({}),
       onCanvasRemoved: (id: string) => {
         events.push(["remove", id]);
-        if (purgeRequested.delete(id)) {
-          events.push(["purge", id]);
-        }
+        if (purgeRequested.delete(id)) events.push(["purge", id]);
       },
       onCanvasRestored: () => {},
       onCanvasUnmount: () => {},
@@ -503,11 +475,8 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     insertDraftRef.current(draft("canvas-accepted", 1));
     latestViewProps.onChange();
     latestCanvasRuntime.onCanvasActivity("canvas-accepted", true);
-    for (const id of canvasIdsToPurgeAfterTurnStart(true, [
-      "canvas-accepted",
-    ])) {
+    for (const id of canvasIdsToPurgeAfterTurnStart(true, ["canvas-accepted"]))
       purgeRequested.add(id);
-    }
     clearRef.current();
     latestViewProps.onChange();
     expect(events).toContainEqual(["purge", "canvas-accepted"]);

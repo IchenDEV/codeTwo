@@ -5,25 +5,21 @@ type ActionHandler = (action: string) => void;
 
 const pendingMenus = new Map<string, ActionHandler>();
 let nextRequestId = 0;
-let isListening = false;
+let listening = false;
 
-export const isNativeContextMenusAvailable =
+export const nativeContextMenusAvailable =
   isElectrobun &&
   typeof navigator !== "undefined" &&
-  /Mac|Win/u.test(navigator.platform);
+  /Mac|Win/.test(navigator.platform);
 
 function ensureActionListener(): void {
-  if (isListening) {
-    return;
-  }
-  isListening = true;
+  if (listening) return;
+  listening = true;
   listenDesktop<NativeContextMenuAction>(
     "native-context-menu-action",
     ({ requestId, action }) => {
       const handler = pendingMenus.get(requestId);
-      if (!handler) {
-        return;
-      }
+      if (!handler) return;
       pendingMenus.delete(requestId);
       handler(action);
     }
@@ -43,7 +39,7 @@ export async function showNativeContextMenu(
   pendingMenus.set(requestId, onAction);
 
   try {
-    await desktopShowContextMenu({ items, requestId });
+    await desktopShowContextMenu({ requestId, items });
   } catch (error) {
     pendingMenus.delete(requestId);
     throw error;

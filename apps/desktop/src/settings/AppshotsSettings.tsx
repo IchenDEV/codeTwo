@@ -19,8 +19,8 @@ import {
   requestAppshotPermissions,
   takeAppshot,
   updateAppshotSettings,
+  type AppshotSettings,
 } from "../bridge";
-import type { AppshotSettings } from "../bridge";
 import { useT } from "../i18n";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
@@ -31,19 +31,19 @@ export function AppshotsSettingsPage({
   privacyOpener = openAppshotPrivacySettings,
   capturer = takeAppshot,
 }: {
-  readonly loader?: () => Promise<AppshotSettings>;
-  readonly saver?: (
+  loader?: () => Promise<AppshotSettings>;
+  saver?: (
     patch: Partial<
       Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">
     >
   ) => Promise<AppshotSettings>;
-  readonly permissionRequester?: (
+  permissionRequester?: (
     kind: "screen-recording" | "accessibility"
   ) => Promise<AppshotSettings>;
-  readonly privacyOpener?: (
+  privacyOpener?: (
     kind: "screen-recording" | "accessibility"
   ) => Promise<boolean>;
-  readonly capturer?: () => Promise<unknown>;
+  capturer?: () => Promise<unknown>;
 }) {
   const t = useT();
   const [appshotSettings, setAppshotSettings] =
@@ -53,21 +53,18 @@ export function AppshotsSettingsPage({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let isActive = true;
+    let active = true;
     setError(null);
     void loader()
       .then((next) => {
-        if (isActive) {
-          setAppshotSettings(next);
-        }
+        if (active) setAppshotSettings(next);
       })
-      .catch((error) => {
-        if (isActive) {
-          setError(t("settings.appshotsLoadFailed", { error: String(error) }));
-        }
+      .catch((cause) => {
+        if (active)
+          setError(t("settings.appshotsLoadFailed", { error: String(cause) }));
       });
     return () => {
-      isActive = false;
+      active = false;
     };
   }, [loader, t]);
 
@@ -75,21 +72,18 @@ export function AppshotsSettingsPage({
     if (
       !appshotSettings?.available ||
       (appshotSettings.screen_recording && appshotSettings.accessibility)
-    ) {
+    )
       return;
-    }
-    let isActive = true;
+    let active = true;
     const timer = window.setInterval(() => {
       void loader()
         .then((next) => {
-          if (isActive) {
-            setAppshotSettings(next);
-          }
+          if (active) setAppshotSettings(next);
         })
         .catch(() => {});
     }, 1000);
     return () => {
-      isActive = false;
+      active = false;
       window.clearInterval(timer);
     };
   }, [
@@ -108,8 +102,8 @@ export function AppshotsSettingsPage({
     setError(null);
     try {
       setAppshotSettings(await saver(patch));
-    } catch (error) {
-      setError(t("settings.appshotsSaveFailed", { error: String(error) }));
+    } catch (cause) {
+      setError(t("settings.appshotsSaveFailed", { error: String(cause) }));
     } finally {
       setSaving(false);
     }
@@ -120,9 +114,9 @@ export function AppshotsSettingsPage({
     setError(null);
     try {
       setAppshotSettings(await permissionRequester(kind));
-    } catch (error) {
+    } catch (cause) {
       setError(
-        t("settings.appshotsPermissionFailed", { error: String(error) })
+        t("settings.appshotsPermissionFailed", { error: String(cause) })
       );
     } finally {
       setSaving(false);
@@ -134,8 +128,8 @@ export function AppshotsSettingsPage({
     setError(null);
     try {
       await capturer();
-    } catch (error) {
-      setError(t("settings.appshotsCaptureFailed", { error: String(error) }));
+    } catch (cause) {
+      setError(t("settings.appshotsCaptureFailed", { error: String(cause) }));
     } finally {
       setCapturing(false);
     }
@@ -178,120 +172,115 @@ export function AppshotsSettingsPage({
         </SettingRow>
       </div>
 
-      {error != null && error !== "" ? (
+      {error && (
         <p data-appshots-error className="text-metadata text-destructive pb-2">
           {error}
         </p>
-      ) : null}
-      {appshotSettings ? (
-        !appshotSettings.available ? (
-          <p className="py-section text-body text-muted-foreground">
-            {appshotSettings.unavailable_reason ??
-              t("settings.appshotsUnavailable")}
-          </p>
-        ) : (
-          <>
-            <Row
-              label={t("settings.appshotsHotkey")}
-              hint={t("settings.appshotsHotkeyHint")}
-            >
-              <Select
-                value={appshotSettings.hotkey}
-                disabled={saving}
-                onValueChange={(hotkey) => {
-                  if (hotkey) {
-                    void save({ hotkey: hotkey as AppshotSettings["hotkey"] });
-                  }
-                }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-48 justify-between"
-                  aria-label={t("settings.appshotsHotkey")}
-                >
-                  <SelectValue>{hotkeyLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent position="popper" align="end">
-                  <SelectGroup>
-                    <SelectItem value="both-command">
-                      {t("settings.appshotsHotkeyBothCommand")}
-                    </SelectItem>
-                    <SelectItem value="command-shift-2">
-                      {t("settings.appshotsHotkeyCommandShift2")}
-                    </SelectItem>
-                    <SelectItem value="command-option-2">
-                      {t("settings.appshotsHotkeyCommandOption2")}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Row>
-            <Row
-              label={t("settings.appshotsDestination")}
-              hint={t("settings.appshotsDestinationHint")}
-            >
-              <Select
-                value={appshotSettings.destination}
-                disabled={saving}
-                onValueChange={(destination) => {
-                  if (destination) {
-                    void save({
-                      destination:
-                        destination as AppshotSettings["destination"],
-                    });
-                  }
-                }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-48 justify-between"
-                  aria-label={t("settings.appshotsDestination")}
-                >
-                  <SelectValue>{destinationLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent position="popper" align="end">
-                  <SelectGroup>
-                    <SelectItem value="automatic">
-                      {t("settings.appshotsDestinationAutomatic")}
-                    </SelectItem>
-                    <SelectItem value="current">
-                      {t("settings.appshotsDestinationCurrent")}
-                    </SelectItem>
-                    <SelectItem value="new">
-                      {t("settings.appshotsDestinationNew")}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Row>
-            <SettingToggle
-              label={t("settings.appshotsSound")}
-              checked={appshotSettings.play_sound}
-              disabled={saving}
-              onCheckedChange={(play_sound) => void save({ play_sound })}
-            />
-
-            <GroupHeading>{t("settings.appshotsPermissions")}</GroupHeading>
-            <PermissionRow
-              label={t("settings.appshotsScreenRecording")}
-              hint={t("settings.appshotsScreenRecordingHint")}
-              allowed={appshotSettings.screen_recording}
-              onAllow={() => void grant("screen-recording")}
-              onOpen={() => void privacyOpener("screen-recording")}
-            />
-            <PermissionRow
-              label={t("settings.appshotsAccessibility")}
-              hint={t("settings.appshotsAccessibilityHint")}
-              allowed={appshotSettings.accessibility}
-              onAllow={() => void grant("accessibility")}
-              onOpen={() => void privacyOpener("accessibility")}
-            />
-          </>
-        )
-      ) : (
+      )}
+      {!appshotSettings ? (
         <p className="py-section text-body text-muted-foreground">
           {t("settings.appshotsLoading")}
         </p>
+      ) : !appshotSettings.available ? (
+        <p className="py-section text-body text-muted-foreground">
+          {appshotSettings.unavailable_reason ??
+            t("settings.appshotsUnavailable")}
+        </p>
+      ) : (
+        <>
+          <Row
+            label={t("settings.appshotsHotkey")}
+            hint={t("settings.appshotsHotkeyHint")}
+          >
+            <Select
+              value={appshotSettings.hotkey}
+              disabled={saving}
+              onValueChange={(hotkey) => {
+                if (hotkey)
+                  void save({ hotkey: hotkey as AppshotSettings["hotkey"] });
+              }}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-48 justify-between"
+                aria-label={t("settings.appshotsHotkey")}
+              >
+                <SelectValue>{hotkeyLabel}</SelectValue>
+              </SelectTrigger>
+              <SelectContent position="popper" align="end">
+                <SelectGroup>
+                  <SelectItem value="both-command">
+                    {t("settings.appshotsHotkeyBothCommand")}
+                  </SelectItem>
+                  <SelectItem value="command-shift-2">
+                    {t("settings.appshotsHotkeyCommandShift2")}
+                  </SelectItem>
+                  <SelectItem value="command-option-2">
+                    {t("settings.appshotsHotkeyCommandOption2")}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Row>
+          <Row
+            label={t("settings.appshotsDestination")}
+            hint={t("settings.appshotsDestinationHint")}
+          >
+            <Select
+              value={appshotSettings.destination}
+              disabled={saving}
+              onValueChange={(destination) => {
+                if (destination)
+                  void save({
+                    destination: destination as AppshotSettings["destination"],
+                  });
+              }}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-48 justify-between"
+                aria-label={t("settings.appshotsDestination")}
+              >
+                <SelectValue>{destinationLabel}</SelectValue>
+              </SelectTrigger>
+              <SelectContent position="popper" align="end">
+                <SelectGroup>
+                  <SelectItem value="automatic">
+                    {t("settings.appshotsDestinationAutomatic")}
+                  </SelectItem>
+                  <SelectItem value="current">
+                    {t("settings.appshotsDestinationCurrent")}
+                  </SelectItem>
+                  <SelectItem value="new">
+                    {t("settings.appshotsDestinationNew")}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Row>
+          <SettingToggle
+            label={t("settings.appshotsSound")}
+            checked={appshotSettings.play_sound}
+            disabled={saving}
+            onCheckedChange={(play_sound) => void save({ play_sound })}
+          />
+
+          <GroupHeading>{t("settings.appshotsPermissions")}</GroupHeading>
+          <PermissionRow
+            label={t("settings.appshotsScreenRecording")}
+            hint={t("settings.appshotsScreenRecordingHint")}
+            allowed={appshotSettings.screen_recording}
+            onAllow={() => void grant("screen-recording")}
+            onOpen={() => void privacyOpener("screen-recording")}
+          />
+          <PermissionRow
+            label={t("settings.appshotsAccessibility")}
+            hint={t("settings.appshotsAccessibilityHint")}
+            allowed={appshotSettings.accessibility}
+            onAllow={() => void grant("accessibility")}
+            onOpen={() => void privacyOpener("accessibility")}
+          />
+        </>
       )}
     </Page>
   );
@@ -304,11 +293,11 @@ function PermissionRow({
   onAllow,
   onOpen,
 }: {
-  readonly label: string;
-  readonly hint: string;
-  readonly allowed: boolean;
-  readonly onAllow: () => void;
-  readonly onOpen: () => void;
+  label: string;
+  hint: string;
+  allowed: boolean;
+  onAllow: () => void;
+  onOpen: () => void;
 }) {
   const t = useT();
   return (

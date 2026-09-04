@@ -1,24 +1,23 @@
-import { cva } from "class-variance-authority";
-import type { VariantProps } from "class-variance-authority";
+import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
 const cardVariants = cva("rounded-card text-card-foreground flex flex-col", {
-  defaultVariants: {
-    density: "default",
-    variant: "surface",
-  },
   variants: {
-    density: {
-      compact: "gap-2 py-3",
-      default: "gap-6 py-6",
-    },
     variant: {
+      surface: "bg-card shadow-surface",
       flat: "bg-fill-quiet shadow-none",
       raised: "bg-raised shadow-raised",
-      surface: "bg-card shadow-surface",
     },
+    density: {
+      default: "gap-6 py-6",
+      compact: "gap-2 py-3",
+    },
+  },
+  defaultVariants: {
+    variant: "surface",
+    density: "default",
   },
 });
 
@@ -33,7 +32,7 @@ function Card({
       data-slot="card"
       data-variant={variant ?? "surface"}
       data-density={density ?? "default"}
-      className={cn(cardVariants({ density, variant }), className)}
+      className={cn(cardVariants({ variant, density }), className)}
       {...props}
     />
   );

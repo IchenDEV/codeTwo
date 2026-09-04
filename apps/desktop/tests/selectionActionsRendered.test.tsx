@@ -1,6 +1,6 @@
-// @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 
+// @ts-nocheck
 import { useRef } from "react";
 
 import {

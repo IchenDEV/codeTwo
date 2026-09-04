@@ -51,11 +51,9 @@ describe("Appearance settings", () => {
     const view = mount(<Harness />);
     await flush();
 
-    const radios = [
-      ...view.container.querySelectorAll(
-        'input[name="appearance-color-scheme"]'
-      ),
-    ];
+    const radios = Array.from(
+      view.container.querySelectorAll('input[name="appearance-color-scheme"]')
+    );
     expect(radios.map((radio) => radio.getAttribute("value"))).toEqual([
       "system",
       "light",
@@ -256,16 +254,14 @@ describe("Appearance settings", () => {
   });
 
   test("persists independent profiles and the Codex preference controls", () => {
-    setAppearanceSettings((current) => {
-      return {
-        ...current,
-        light: { ...current.light, uiFont: "inter", contrast: 32 },
-        dark: { ...current.dark, codeFont: "monaco", contrast: 71 },
-        pointerCursors: false,
-        reduceMotion: "off",
-        diffMarkers: "symbols",
-      };
-    });
+    setAppearanceSettings((current) => ({
+      ...current,
+      light: { ...current.light, uiFont: "inter", contrast: 32 },
+      dark: { ...current.dark, codeFont: "monaco", contrast: 71 },
+      pointerCursors: false,
+      reduceMotion: "off",
+      diffMarkers: "symbols",
+    }));
 
     expect(getAppearanceSettings()).toMatchObject({
       light: { uiFont: "inter", contrast: 32 },

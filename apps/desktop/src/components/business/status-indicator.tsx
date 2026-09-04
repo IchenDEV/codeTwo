@@ -1,15 +1,15 @@
 type StatusIndicatorTone = "neutral" | "success" | "warning" | "destructive";
 
 interface StatusIndicatorProps {
-  readonly tone: StatusIndicatorTone;
-  readonly label: string;
+  tone: StatusIndicatorTone;
+  label: string;
 }
 
 const dotToneClasses: Record<StatusIndicatorTone, string> = {
-  destructive: "bg-status-destructive",
   neutral: "bg-muted-foreground/50",
   success: "bg-status-success",
   warning: "bg-status-warning",
+  destructive: "bg-status-destructive",
 };
 
 function StatusIndicator({ tone, label }: StatusIndicatorProps) {

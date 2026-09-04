@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,8 +20,8 @@ import {
   Settings,
   SlidersHorizontal,
   SquarePlus,
+  type AppIcon,
 } from "@/components/ui/icons";
-import type { HugeIcon } from "@/components/ui/icons";
 import {
   Popover,
   PopoverContent,
@@ -31,8 +30,13 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-import { getArtifact } from "../bridge";
-import type { GitStatus, PlanEntry, Project } from "../bridge";
+import {
+  getArtifact,
+  type GitStatus,
+  type PlanEntry,
+  type Project,
+} from "../bridge";
+import { GitSyncStatus } from "../git/GitSyncStatus";
 import { useT } from "../i18n";
 import { TaskPlanPanel } from "../session/TaskPlanPanel";
 import type { InteractiveToolPreview } from "../session/toolActivity";
@@ -47,38 +51,36 @@ function EnvironmentRow({
   active = false,
   disabled = false,
 }: {
-  readonly icon: HugeIcon;
-  readonly label: string;
-  readonly description?: string;
-  readonly detail?: ReactNode;
-  readonly onClick?: () => void;
-  readonly active?: boolean;
-  readonly disabled?: boolean;
+  icon: AppIcon;
+  label: string;
+  description?: string;
+  detail?: ReactNode;
+  onClick?: () => void;
+  active?: boolean;
+  disabled?: boolean;
 }) {
   const content = (
     <>
       <Icon
         className={cn(
           "text-muted-foreground size-4 shrink-0",
-          description != null && description !== "" && "mt-0.5 self-start"
+          description && "mt-0.5 self-start"
         )}
       />
       <span className="min-w-0 flex-1">
         <span className="text-body block truncate">{label}</span>
-        {description != null && description !== "" ? (
+        {description && (
           <span className="text-callout text-muted-foreground block truncate">
             {description}
           </span>
-        ) : null}
+        )}
       </span>
       {detail !== undefined && (
         <span className="text-metadata text-muted-foreground shrink-0">
           {detail}
         </span>
       )}
-      {active ? (
-        <span className="bg-primary size-1.5 shrink-0 rounded-full" />
-      ) : null}
+      {active && <span className="bg-primary size-1.5 shrink-0 rounded-full" />}
     </>
   );
 
@@ -100,20 +102,14 @@ function EnvironmentRow({
       aria-pressed={active || undefined}
       disabled={disabled}
       onClick={onClick}
-      className={
-        description != null && description !== "" ? "items-start" : undefined
-      }
+      className={description ? "items-start" : undefined}
     >
       {content}
     </Button>
   );
 }
 
-function ToolPreview({
-  preview,
-}: {
-  readonly preview: InteractiveToolPreview;
-}) {
+function ToolPreview({ preview }: { preview: InteractiveToolPreview }) {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -123,15 +119,13 @@ function ToolPreview({
   const Icon = preview.kind === "browser" ? Globe2 : Monitor;
 
   useEffect(() => {
-    let isAlive = true;
+    let alive = true;
     let objectUrl: string | null = null;
     setUrl(null);
     setFailed(false);
     void getArtifact(preview.artifact.id)
       .then((bytes) => {
-        if (!isAlive) {
-          return;
-        }
+        if (!alive) return;
         objectUrl = URL.createObjectURL(
           new Blob([bytes.slice().buffer as ArrayBuffer], {
             type: preview.artifact.mime_type,
@@ -140,15 +134,11 @@ function ToolPreview({
         setUrl(objectUrl);
       })
       .catch(() => {
-        if (isAlive) {
-          setFailed(true);
-        }
+        if (alive) setFailed(true);
       });
     return () => {
-      isAlive = false;
-      if (objectUrl != null && objectUrl !== "") {
-        URL.revokeObjectURL(objectUrl);
-      }
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [preview.artifact.id, preview.artifact.mime_type]);
 
@@ -170,7 +160,7 @@ function ToolPreview({
         </span>
       </figcaption>
       <div className="image-checker flex min-h-32 items-center justify-center">
-        {url != null && url !== "" && !failed ? (
+        {url && !failed ? (
           <img
             src={url}
             alt={t("environment.livePreview", { tool: label })}
@@ -180,7 +170,8 @@ function ToolPreview({
             onError={() => setFailed(true)}
           />
         ) : (
-          <output
+          <span
+            role="status"
             className={cn(
               "text-callout text-muted-foreground flex items-center gap-2 px-3 py-8",
               failed && "text-destructive"
@@ -192,13 +183,17 @@ function ToolPreview({
                 ? "environment.previewUnavailable"
                 : "environment.previewLoading"
             )}
-          </output>
+          </span>
         )}
       </div>
     </figure>
   );
 }
 
+/**
+ * The project environment at a glance. It keeps the compact, frequently checked Git facts in a
+ * header-anchored popover. The neighboring panel control owns the dock independently.
+ */
 export function EnvironmentPopover({
   project,
   projectPath,
@@ -217,25 +212,23 @@ export function EnvironmentPopover({
   preview = null,
   suppressed = false,
 }: {
-  readonly project: string | null;
-  readonly projectPath: string | null;
-  readonly projects: Project[];
-  readonly git: GitStatus | null;
-  readonly diffStat: { added: number; deleted: number };
-  readonly onRefresh: () => void;
-  readonly onSelectProject: (path: string) => void;
-  readonly onAddProject: () => void;
-  readonly onOpenSourceControl: () => void;
-  readonly onOpenSettings: () => void;
-  readonly turns: readonly Turn[];
-  readonly onOpenPlanAsDocument?: (entries: PlanEntry[]) => void;
-  readonly onPinPlanArtifact?: (markdown: string) => void;
-  readonly canPinPlan?: boolean;
-  readonly preview?: InteractiveToolPreview | null;
-  /**
-  Keeps the mounted session workspace from leaking this portal over another full-page surface.
-  */
-  readonly suppressed?: boolean;
+  project: string | null;
+  projectPath: string | null;
+  projects: Project[];
+  git: GitStatus | null;
+  diffStat: { added: number; deleted: number };
+  onRefresh: () => void;
+  onSelectProject: (path: string) => void;
+  onAddProject: () => void;
+  onOpenSourceControl: () => void;
+  onOpenSettings: () => void;
+  turns: readonly Turn[];
+  onOpenPlanAsDocument?: (entries: PlanEntry[]) => void;
+  onPinPlanArtifact?: (markdown: string) => void;
+  canPinPlan?: boolean;
+  preview?: InteractiveToolPreview | null;
+  /** Keeps the mounted session workspace from leaking this portal over another full-page surface. */
+  suppressed?: boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -243,9 +236,7 @@ export function EnvironmentPopover({
   const isRepo = git?.is_repo === true;
 
   useEffect(() => {
-    if (suppressed) {
-      setOpen(false);
-    }
+    if (suppressed) setOpen(false);
   }, [suppressed]);
 
   const changeDetail =
@@ -279,13 +270,9 @@ export function EnvironmentPopover({
     <Popover
       open={!suppressed && open}
       onOpenChange={(next) => {
-        if (suppressed) {
-          return;
-        }
+        if (suppressed) return;
         setOpen(next);
-        if (next) {
-          onRefresh();
-        }
+        if (next) onRefresh();
       }}
     >
       <PopoverTrigger
@@ -311,8 +298,7 @@ export function EnvironmentPopover({
       />
 
       <PopoverContent
-        align="end"
-        alignOffset={-36}
+        align="start"
         sideOffset={16}
         className="max-h-(--available-height) overflow-y-auto p-2"
         initialFocus={false}
@@ -356,11 +342,11 @@ export function EnvironmentPopover({
                 <span className="text-body min-w-0 flex-1 truncate font-medium">
                   {t("environment.local")}
                 </span>
-                {project ? (
+                {project && (
                   <span className="text-metadata text-muted-foreground max-w-28 truncate">
                     {project}
                   </span>
-                ) : null}
+                )}
                 {projectsOpen ? (
                   <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
                 ) : (
@@ -393,11 +379,11 @@ export function EnvironmentPopover({
           label={isRepo ? git.branch || "?" : t("rail.notARepo")}
           detail={
             isRepo && (git.ahead > 0 || git.behind > 0) ? (
-              <span className="text-primary font-mono">
-                {git.ahead > 0 && `↑${git.ahead}`}
-                {git.ahead > 0 && git.behind > 0 && " "}
-                {git.behind > 0 && `↓${git.behind}`}
-              </span>
+              <GitSyncStatus
+                ahead={git.ahead}
+                behind={git.behind}
+                className="text-primary font-mono"
+              />
             ) : undefined
           }
         />
@@ -429,11 +415,11 @@ export function EnvironmentPopover({
           canPinPlan={canPinPlan}
         />
 
-        {preview ? (
+        {preview && (
           <div className="mt-2">
             <ToolPreview key={preview.artifact.id} preview={preview} />
           </div>
-        ) : null}
+        )}
       </PopoverContent>
     </Popover>
   );

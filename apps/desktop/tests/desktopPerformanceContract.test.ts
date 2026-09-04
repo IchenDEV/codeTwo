@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
-const source = (path: string) => readFileSync(resolve(root, path), "utf-8");
+const source = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 const appSource = source("src/App.tsx");
 const styleSource = source("src/styles.css");
@@ -13,6 +13,11 @@ const tabsSource = source("src/components/ui/tabs.tsx");
 const composerSource = source("src/session/Composer.tsx");
 const packageSource = source("package.json");
 const lockSource = source("bun.lock");
+const taskBoardSearchSource = [
+  source("src/taskboard/TaskBoardPage.tsx"),
+  source("src/taskboard/TaskBoardHeader.tsx"),
+  source("src/taskboard/useTaskBoardData.ts"),
+].join("\n");
 const pageSources = [
   source("src/taskboard/TaskBoardPage.tsx"),
   source("src/github/PullRequestsPage.tsx"),
@@ -30,14 +35,14 @@ describe("desktop interaction performance contracts", () => {
       sideChatSource,
     ]) {
       expect(implementation).not.toMatch(
-        /liquid-gooey|LiquidSelectionGroup|LiquidActionSurface|data-gooey|<Liquid\b|Liquid\./u
+        /liquid-gooey|LiquidSelectionGroup|LiquidActionSurface|data-gooey|<Liquid\b|Liquid\./
       );
     }
 
     expect(packageSource).not.toContain('"liquid-gooey"');
     expect(lockSource).not.toContain('"liquid-gooey"');
     expect(tabsSource).not.toMatch(
-      /MutationObserver|ResizeObserver|getBoundingClientRect|useLiquidIndicator/u
+      /MutationObserver|ResizeObserver|getBoundingClientRect|useLiquidIndicator/
     );
     expect(sessionRailSource).not.toContain("typeof ResizeObserver");
   });
@@ -53,7 +58,7 @@ describe("desktop interaction performance contracts", () => {
       "./plugins/PluginManagerPage",
       "./docker/DockerPage",
     ]) {
-      expect(appSource).toContain(`import("${modulePath}")`);
+      expect(appSource).toContain(`import(\"${modulePath}\")`);
     }
 
     expect(appSource).not.toContain(
@@ -70,32 +75,34 @@ describe("desktop interaction performance contracts", () => {
     }
 
     const keyframes = styleSource.match(
-      /@keyframes data-page-in\s*\{([\s\S]*?)\n\s*\}/u
+      /@keyframes data-page-in\s*\{([\s\S]*?)\n\s*\}/
     )?.[1];
     expect(keyframes).toContain("opacity:");
     expect(keyframes).not.toContain("transform:");
     expect(styleSource).toMatch(
-      /\.animate-data-page-in\s*\{[\s\S]*animation:\s*data-page-in\s+var\(--motion-slow\)/u
+      /\.animate-data-page-in\s*\{[\s\S]*animation:\s*data-page-in\s+var\(--motion-slow\)/
     );
   });
 
   test("defers collection filtering while search inputs stay controlled", () => {
-    for (const path of [
-      "src/taskboard/TaskBoardPage.tsx",
-      "src/github/PullRequestsPage.tsx",
-      "src/plugins/PluginManagerPage.tsx",
+    for (const pageSource of [
+      taskBoardSearchSource,
+      source("src/github/PullRequestsPage.tsx"),
+      source("src/plugins/PluginManagerPage.tsx"),
     ]) {
-      const pageSource = source(path);
       expect(pageSource).toContain("useDeferredValue");
       expect(pageSource).toContain("deferredQuery");
-      expect(pageSource).toMatch(/value=\{query\}/u);
+      expect(pageSource).toMatch(/value=\{(?:props\.)?query\}/);
     }
   });
 
   test("defers off-screen session-row paint without virtualizing rows out of the DOM", () => {
     expect(sessionRailSource).toContain("session-rail-row");
     expect(styleSource).toMatch(
-      /\.session-rail-row\s*\{[\s\S]*content-visibility:\s*auto;[\s\S]*contain-intrinsic-size:/u
+      /\.session-rail-row\s*\{[\s\S]*content-visibility:\s*auto;[\s\S]*contain-intrinsic-size:/
+    );
+    expect(styleSource).toMatch(
+      /\.session-rail-row:has\(\[aria-current="page"\]\)\s*\{[\s\S]*content-visibility:\s*visible;/
     );
     expect(sessionRailSource).not.toContain("react-window");
     expect(sessionRailSource).not.toContain("react-virtualized");

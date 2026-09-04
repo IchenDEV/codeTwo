@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Download, RotateCcw } from "@/components/ui/icons";
@@ -19,22 +19,19 @@ import {
   checkForAppUpdates,
   getAppUpdateStatus,
   importSessionFiles,
+  type AppUpdateStatus,
+  type KeymapEntry,
+  type SessionImportResult,
 } from "../bridge";
-import type {
-  AppUpdateStatus,
-  KeymapEntry,
-  SessionImportResult,
-} from "../bridge";
-import { useLanguage, useT } from "../i18n";
-import type { LanguagePreference } from "../i18n";
-import { en as EN_STRINGS, LOCALES } from "../i18n/strings";
-import type { StringKey } from "../i18n/strings";
-import { formatCombo, modifierLabel } from "../keys";
+import { useLanguage, useT, type LanguagePreference } from "../i18n";
+import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
+import { formatCombo, MOD_LABEL } from "../keys";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
 const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
   {
+    labelKey: "settings.groupPrompt",
     actions: [
       "run",
       "cancel",
@@ -42,21 +39,29 @@ const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
       "focus_editor",
       "toggle_doc_mode",
     ],
-    labelKey: "settings.groupPrompt",
   },
   {
-    actions: ["new_session", "prev_session", "next_session"],
     labelKey: "settings.groupSessions",
+    actions: ["new_session", "prev_session", "next_session"],
   },
   {
-    actions: ["toggle_terminal", "toggle_browser", "toggle_git", "close_panel"],
     labelKey: "settings.groupPanels",
+    actions: [
+      "toggle_terminal",
+      "toggle_browser",
+      "toggle_git",
+      "split_pane_right",
+      "split_pane_down",
+      "toggle_side_panel",
+      "close_panel",
+    ],
   },
   {
-    actions: ["refresh_git", "open_source_control"],
     labelKey: "settings.groupGit",
+    actions: ["refresh_git", "open_source_control"],
   },
   {
+    labelKey: "settings.groupOpen",
     actions: [
       "open_command_palette",
       "open_market",
@@ -66,17 +71,16 @@ const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
       "open_usage",
       "open_settings",
     ],
-    labelKey: "settings.groupOpen",
   },
-  { actions: ["cycle_permission_mode"], labelKey: "settings.groupModes" },
+  { labelKey: "settings.groupModes", actions: ["cycle_permission_mode"] },
 ];
 
 export function GeneralSettingsPage({
   statusLoader = getAppUpdateStatus,
   checkStarter = checkForAppUpdates,
 }: {
-  readonly statusLoader?: () => Promise<AppUpdateStatus>;
-  readonly checkStarter?: () => Promise<AppUpdateStatus>;
+  statusLoader?: () => Promise<AppUpdateStatus>;
+  checkStarter?: () => Promise<AppUpdateStatus>;
 }) {
   const t = useT();
   const { preference: language, setPreference: setLanguage } = useLanguage();
@@ -84,78 +88,63 @@ export function GeneralSettingsPage({
   const [update, setUpdate] = useState<AppUpdateStatus | null>(null);
 
   useEffect(() => {
-    let isActive = true;
+    let active = true;
     void statusLoader()
       .then((status) => {
-        if (isActive) {
-          setUpdate(status);
-        }
+        if (active) setUpdate(status);
       })
       .catch((error) => {
-        if (isActive) {
-          setUpdate({ message: String(error), state: "unavailable" });
-        }
+        if (active) setUpdate({ state: "unavailable", message: String(error) });
       });
     return () => {
-      isActive = false;
+      active = false;
     };
   }, [statusLoader]);
 
   useEffect(() => {
-    if (update?.state !== "checking") {
-      return;
-    }
-    let isActive = true;
+    if (update?.state !== "checking") return;
+    let active = true;
     const timer = window.setInterval(() => {
       void statusLoader()
         .then((status) => {
-          if (isActive) {
-            setUpdate(status);
-          }
+          if (active) setUpdate(status);
         })
         .catch((error) => {
-          if (isActive) {
-            setUpdate({ message: String(error), state: "unavailable" });
-          }
+          if (active)
+            setUpdate({ state: "unavailable", message: String(error) });
         });
     }, 1000);
     return () => {
-      isActive = false;
+      active = false;
       window.clearInterval(timer);
     };
   }, [statusLoader, update?.state]);
 
   const updateHint = (() => {
     switch (update?.state) {
-      case "ready": {
+      case "ready":
         return t("settings.updateReady", {
           version: update.currentVersion ?? t("settings.updateUnknownVersion"),
         });
-      }
-      case "checking": {
+      case "checking":
         return t("settings.updateChecking");
-      }
-      case "not-configured": {
+      case "not-configured":
         return t("settings.updateNotConfigured");
-      }
-      case "unsupported": {
+      case "unsupported":
         return t("settings.updateUnsupported");
-      }
-      case "unavailable": {
+      case "unavailable":
         return t("settings.updateUnavailable");
-      }
-      default: {
+      default:
         return t("settings.updateLoading");
-      }
     }
   })();
 
   async function startUpdateCheck() {
-    setUpdate({ currentVersion: update?.currentVersion, state: "checking" });
+    setUpdate({ state: "checking", currentVersion: update?.currentVersion });
     try {
       setUpdate(await checkStarter());
     } catch (error) {
-      setUpdate({ message: String(error), state: "unavailable" });
+      setUpdate({ state: "unavailable", message: String(error) });
     }
   }
 
@@ -233,7 +222,7 @@ export function GeneralSettingsPage({
           size="compact"
           type="number"
           min={100}
-          max={200_000}
+          max={200000}
           step={1000}
           value={terminal.scrollback}
           onChange={(event) =>
@@ -252,12 +241,10 @@ export function ImportSettingsPage({
   onImported = async () => {},
   onOpenSession = () => {},
 }: {
-  readonly projectPath: string;
-  readonly importer?: (
-    fallbackCwd: string
-  ) => Promise<SessionImportResult | null>;
-  readonly onImported?: () => void | Promise<unknown>;
-  readonly onOpenSession?: (sessionId: string) => void;
+  projectPath: string;
+  importer?: (fallbackCwd: string) => Promise<SessionImportResult | null>;
+  onImported?: () => void | Promise<unknown>;
+  onOpenSession?: (sessionId: string) => void;
 }) {
   const t = useT();
   const [importing, setImporting] = useState(false);
@@ -269,15 +256,11 @@ export function ImportSettingsPage({
     setError(null);
     try {
       const next = await importer(projectPath);
-      if (!next) {
-        return;
-      }
+      if (!next) return;
       setResult(next);
-      if (next.imported > 0) {
-        await onImported();
-      }
-    } catch (error) {
-      setError(t("settings.importFailed", { error: String(error) }));
+      if (next.imported > 0) await onImported();
+    } catch (cause) {
+      setError(t("settings.importFailed", { error: String(cause) }));
     } finally {
       setImporting(false);
     }
@@ -307,12 +290,12 @@ export function ImportSettingsPage({
             : t("settings.chooseSessionFiles")}
         </Button>
       </Row>
-      {error != null && error !== "" ? (
+      {error && (
         <p role="alert" className="text-metadata text-destructive mt-3">
           {error}
         </p>
-      ) : null}
-      {result ? (
+      )}
+      {result && (
         <div
           data-session-import-result
           role={result.failed > 0 ? "alert" : "status"}
@@ -322,9 +305,9 @@ export function ImportSettingsPage({
           <div className="min-w-0">
             <p className="text-body font-medium">
               {t("settings.importResult", {
-                failed: result.failed,
                 imported: result.imported,
                 skipped: result.skipped,
+                failed: result.failed,
               })}
             </p>
             <p className="text-metadata text-muted-foreground mt-0.5">
@@ -339,7 +322,7 @@ export function ImportSettingsPage({
               </p>
             ))}
           </div>
-          {result.sessions[0] == null ? null : (
+          {result.sessions[0] && (
             <Button
               variant="secondary"
               size="sm"
@@ -350,7 +333,7 @@ export function ImportSettingsPage({
             </Button>
           )}
         </div>
-      ) : null}
+      )}
     </Page>
   );
 }
@@ -361,41 +344,40 @@ export function KeybindingsSettingsPage({
   onCapture,
   onReset,
 }: {
-  readonly bindings: KeymapEntry[];
-  readonly capturing: string | null;
-  readonly onCapture: (action: string) => void;
-  readonly onReset?: (action: string) => void;
+  bindings: KeymapEntry[];
+  capturing: string | null;
+  onCapture: (action: string) => void;
+  onReset?: (action: string) => void;
 }) {
   const t = useT();
-  const byAction = new Map(bindings.map((binding) => [binding[0], binding]));
-  const conflicts = (() => {
+  const byAction = useMemo(
+    () => new Map(bindings.map((binding) => [binding[0], binding])),
+    [bindings]
+  );
+  const conflicts = useMemo(() => {
     const seen = new Map<string, number>();
-    for (const [, key] of bindings) {
-      seen.set(key, (seen.get(key) ?? 0) + 1);
-    }
+    for (const [, key] of bindings) seen.set(key, (seen.get(key) ?? 0) + 1);
     return new Set(
       [...seen.entries()].filter(([, count]) => count > 1).map(([key]) => key)
     );
-  })();
+  }, [bindings]);
   const known = new Set(GROUPS.flatMap((group) => group.actions));
   const groups = [
     ...GROUPS.map((group) => ({
-      actions: group.actions,
       title: t(group.labelKey),
+      actions: group.actions,
     })),
     {
+      title: t("settings.groupOther"),
       actions: bindings
         .map((binding) => binding[0])
         .filter((action) => !known.has(action)),
-      title: t("settings.groupOther"),
     },
   ].filter((group) => group.actions.length > 0);
 
   function renderRow(action: string) {
     const entry = byAction.get(action);
-    if (!entry) {
-      return null;
-    }
+    if (!entry) return null;
     const [, key, coreLabel] = entry;
     const labelKey = `action.${action}` as StringKey;
     const label = labelKey in EN_STRINGS ? t(labelKey) : coreLabel;
@@ -421,7 +403,7 @@ export function KeybindingsSettingsPage({
         >
           {capturing === action ? t("settings.capturing") : formatCombo(key)}
         </Button>
-        {onReset ? (
+        {onReset && (
           <TooltipButton
             label={t("settings.reset")}
             variant="ghost"
@@ -431,7 +413,7 @@ export function KeybindingsSettingsPage({
           >
             <RotateCcw className="size-3.5" />
           </TooltipButton>
-        ) : null}
+        )}
       </Row>
     );
   }
@@ -439,7 +421,7 @@ export function KeybindingsSettingsPage({
   return (
     <Page
       title={t("settings.keybindings")}
-      description={t("settings.keysHint", { mod: modifierLabel })}
+      description={t("settings.keysHint", { mod: MOD_LABEL })}
     >
       {groups.map((group) => (
         <div key={group.title}>

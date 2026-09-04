@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +20,9 @@ export function FileBrowserModal({
   onInsert,
   onClose,
 }: {
-  readonly cwd: string;
-  readonly onInsert: (path: string) => void;
-  readonly onClose: () => void;
+  cwd: string;
+  onInsert: (path: string) => void;
+  onClose: () => void;
 }) {
   const [all, setAll] = useState<string[]>([]);
   const [q, setQ] = useState("");
@@ -38,13 +38,13 @@ export function FileBrowserModal({
       .catch(() => setLoading(false));
   }, [cwd]);
 
-  const filtered = (() => {
+  const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     return (s ? all.filter((p) => p.toLowerCase().includes(s)) : all).slice(
       0,
       300
     );
-  })();
+  }, [all, q]);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -59,9 +59,9 @@ export function FileBrowserModal({
           onChange={(e) => setQ(e.target.value)}
           autoFocus
         />
-        {loading ? (
+        {loading && (
           <p className="text-metadata text-muted-foreground">Scanning…</p>
-        ) : null}
+        )}
 
         <ScrollArea className="max-h-[52vh] pr-3">
           <div className="space-y-0.5">

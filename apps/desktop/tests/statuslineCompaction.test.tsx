@@ -49,9 +49,9 @@ describe("provider-native context compaction", () => {
     );
     click(available.container.querySelector('[role="meter"]'));
     await flush();
-    const action = [...dom.document.body.querySelectorAll("button")].find(
-      (button) => button.textContent?.includes("Compact context")
-    );
+    const action = Array.from(
+      dom.document.body.querySelectorAll("button")
+    ).find((button) => button.textContent?.includes("Compact context"));
     expect(action).toBeDefined();
     click(action);
     await flush();
@@ -73,9 +73,9 @@ describe("provider-native context compaction", () => {
     );
     click(rendered.container.querySelector('[role="meter"]'));
     await flush();
-    const action = [...dom.document.body.querySelectorAll("button")].find(
-      (button) => button.textContent?.includes("Compact context")
-    );
+    const action = Array.from(
+      dom.document.body.querySelectorAll("button")
+    ).find((button) => button.textContent?.includes("Compact context"));
     expect(action?.hasAttribute("disabled")).toBe(true);
     expect(dom.document.body.textContent).toContain(
       "Send or clear the current draft before compacting."

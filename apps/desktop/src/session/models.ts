@@ -11,9 +11,7 @@ import type { ModelChoice } from "../bridge";
  * effort maps back to one of the adapter's own ids, never an invented one.
  */
 
-/**
-Effort levels adapters encode into variant names, lowest to highest.
-*/
+/** Effort levels adapters encode into variant names, lowest to highest. */
 export const EFFORTS = [
   "minimal",
   "low",
@@ -29,38 +27,30 @@ export type Effort = (typeof EFFORTS)[number];
 // paren, "·", ":") — deliberately not "-" or "_", because hyphens join real model names
 // ("gpt-5.1-codex-max" is a model, not "gpt-5.1-codex" at max effort). Longer alternatives come
 // first so "extra high" isn't eaten as "high".
-const effortRe =
-  /^(.*?)[\s(·:]+(extra[\s-]?high|x[\s-]?high|minimal|medium|low|high|max|ultra)\s*\)?\s*$/iu;
-
-function isEffort(value: string): value is Effort {
-  return EFFORTS.some((effort) => effort === value);
-}
+const EFFORT_RE =
+  /^(.*?)[\s(·:]+(extra[\s-]?high|x[\s-]?high|minimal|medium|low|high|max|ultra)\s*\)?\s*$/i;
 
 function normalizeEffort(token: string): Effort {
   const t = token
     .toLowerCase()
-    .replaceAll(/[\s-]+/gu, " ")
+    .replace(/[\s-]+/g, " ")
     .trim();
-  if (t === "extra high" || t === "x high" || t === "xhigh") {
-    return "xhigh";
-  }
-  return isEffort(t) ? t : "medium";
+  return t === "extra high" || t === "x high" || t === "xhigh"
+    ? "xhigh"
+    : (t as Effort);
 }
 
+/** `"GPT-5 Codex (High)"` → base `"GPT-5 Codex"`, effort `"high"`. No suffix → effort null. */
 export function splitEffort(name: string): {
   base: string;
   effort: Effort | null;
 } {
-  const m = effortRe.exec(name);
-  if (!m) {
-    return { base: name.trim(), effort: null };
-  }
+  const m = EFFORT_RE.exec(name);
+  if (!m) return { base: name.trim(), effort: null };
   return { base: m[1].trim(), effort: normalizeEffort(m[2]) };
 }
 
-/**
-One selectable effort level of a family. `effort: null` is the adapter's unsuffixed entry.
-*/
+/** One selectable effort level of a family. `effort: null` is the adapter's unsuffixed entry. */
 export interface ModelVariant {
   effort: Effort | null;
   choice: ModelChoice;
@@ -78,13 +68,19 @@ export interface ModelFamily {
 
 const rank = (e: Effort | null) => (e === null ? -1 : EFFORTS.indexOf(e));
 
+/**
+ * Group by base name, in first-appearance order. A base only becomes an effort family when the
+ * adapter really offers a choice — at least two entries with two distinct efforts. Anything short
+ * of that stays a standalone row under its full name, so a lone "Codex Max" is never presented as
+ * "Codex" at max effort.
+ */
 export function groupModels(models: ModelChoice[]): ModelFamily[] {
   const buckets = new Map<string, { label: string; members: ModelVariant[] }>();
   for (const choice of models) {
     const { base, effort } = splitEffort(choice.name);
     const key = base.toLowerCase();
     const bucket = buckets.get(key) ?? { label: base, members: [] };
-    bucket.members.push({ choice, effort });
+    bucket.members.push({ effort, choice });
     buckets.set(key, bucket);
   }
 
@@ -106,7 +102,7 @@ export function groupModels(models: ModelChoice[]): ModelFamily[] {
         families.push({
           key: v.choice.id,
           label: v.choice.name,
-          variants: [{ choice: v.choice, effort: null }],
+          variants: [{ effort: null, choice: v.choice }],
         });
       }
     }
@@ -114,47 +110,43 @@ export function groupModels(models: ModelChoice[]): ModelFamily[] {
   return families;
 }
 
+/** The family containing the model id, if the id is one the adapter listed. */
 export function familyOf(
   families: ModelFamily[],
   id: string | null
 ): ModelFamily | null {
-  if (id == null || id === "") {
-    return null;
-  }
+  if (!id) return null;
   return (
     families.find((f) => f.variants.some((v) => v.choice.id === id)) ?? null
   );
 }
 
+/** The concrete variant behind a model id. */
 export function variantOf(
   families: ModelFamily[],
   id: string | null
 ): ModelVariant | null {
-  if (id == null || id === "") {
-    return null;
-  }
+  if (!id) return null;
   for (const f of families) {
     const v = f.variants.find((x) => x.choice.id === id);
-    if (v) {
-      return v;
-    }
+    if (v) return v;
   }
   return null;
 }
 
+/**
+ * The variant to land on when switching to `family`: keep the effort you had, else the adapter's
+ * default if it lives here, else medium, else the family's first (lowest) entry.
+ */
 export function pickVariant(
   family: ModelFamily,
   effort: Effort | null,
   defaultId: string | null
 ): ModelChoice {
   const same = family.variants.find((v) => v.effort === effort);
-  if (same) {
-    return same.choice;
-  }
+  if (same) return same.choice;
   const dflt = family.variants.find((v) => v.choice.id === defaultId);
-  if (dflt) {
-    return dflt.choice;
-  }
+  if (dflt) return dflt.choice;
   const medium = family.variants.find((v) => v.effort === "medium");
   return (medium ?? family.variants[0]).choice;
 }

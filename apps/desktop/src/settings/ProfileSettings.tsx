@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Check, Lock, Pencil, Share2, UserRound } from "@/components/ui/icons";
@@ -7,15 +7,24 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
-import { usageHistory, usageReport, systemProfileAvatar } from "../bridge";
-import type { SourceUsage, UsageHistoryReport, UsageReport } from "../bridge";
+import {
+  usageHistory,
+  usageReport,
+  systemProfileAvatar,
+  type SourceUsage,
+  type UsageHistoryReport,
+  type UsageReport,
+} from "../bridge";
 import { useLanguage } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
-import { fmtTokens, stackHistory } from "../usage/usageMath";
-import type { StackedBucket } from "../usage/usageMath";
+import {
+  fmtTokens,
+  stackHistory,
+  type StackedBucket,
+} from "../usage/usageMath";
 
-const storageKey = "codetwo.profile";
-const activityDays = 90;
+const STORAGE_KEY = "codetwo.profile";
+const ACTIVITY_DAYS = 90;
 
 export interface ProfileActivitySummary {
   totalTokens: number;
@@ -31,7 +40,7 @@ export function summarizeProfileActivity(
   report: UsageReport,
   history: UsageHistoryReport
 ): ProfileActivitySummary {
-  const { buckets } = stackHistory(history.history);
+  const buckets = stackHistory(history.history).buckets;
   const totals = buckets.map((bucket) => bucket.total);
   let currentStreak = 0;
   for (
@@ -43,15 +52,15 @@ export function summarizeProfileActivity(
   }
 
   return {
-    activeDays: totals.filter((total) => total > 0).length,
-    buckets,
-    currentStreak,
+    totalTokens: totals.reduce((sum, total) => sum + total, 0),
     peakTokens: Math.max(0, ...totals),
+    activeDays: totals.filter((total) => total > 0).length,
+    currentStreak,
+    transcripts: report.transcripts,
+    buckets,
     providers: [...history.by_source].sort(
       (left, right) => right.total_tokens - left.total_tokens
     ),
-    totalTokens: totals.reduce((sum, total) => sum + total, 0),
-    transcripts: report.transcripts,
   };
 }
 
@@ -61,57 +70,58 @@ interface ProfileSnapshot {
   bio: string;
 }
 
-const emptyProfile: ProfileSnapshot = { bio: "", handle: "", name: "" };
+const EMPTY_PROFILE: ProfileSnapshot = { name: "", handle: "", bio: "" };
 
 function loadProfile(): ProfileSnapshot {
   try {
     const parsed = JSON.parse(
-      localStorage.getItem(storageKey) ?? "null"
+      localStorage.getItem(STORAGE_KEY) ?? "null"
     ) as Partial<ProfileSnapshot> | null;
     return {
-      bio: typeof parsed?.bio === "string" ? parsed.bio : "",
-      handle: typeof parsed?.handle === "string" ? parsed.handle : "",
       name: typeof parsed?.name === "string" ? parsed.name : "",
+      handle: typeof parsed?.handle === "string" ? parsed.handle : "",
+      bio: typeof parsed?.bio === "string" ? parsed.bio : "",
     };
   } catch {
-    return emptyProfile;
+    return EMPTY_PROFILE;
   }
 }
 
 function profileInitials(name: string): string {
-  const words = name.trim().split(/\s+/u).filter(Boolean);
-  if (words.length > 1) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length > 1)
     return words
       .slice(0, 2)
-      .map((word) => [...word][0])
+      .map((word) => Array.from(word)[0])
       .join("")
       .toUpperCase();
-  }
-  return [...(words[0] ?? "C2")].slice(0, 2).join("").toUpperCase();
+  return Array.from(words[0] ?? "C2")
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
 async function shareProfile(
   title: string,
   text: string
 ): Promise<"shared" | "copied" | "cancelled"> {
-  const { share } = navigator as Navigator & {
-    share?: (data: { title: string; text: string }) => Promise<void>;
-  };
+  const share = (
+    navigator as Navigator & {
+      share?: (data: { title: string; text: string }) => Promise<void>;
+    }
+  ).share;
 
-  if (share != null) {
+  if (share) {
     try {
-      await share.call(navigator, { text, title });
+      await share.call(navigator, { title, text });
       return "shared";
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (error instanceof DOMException && error.name === "AbortError")
         return "cancelled";
-      }
     }
   }
 
-  if (navigator.clipboard?.writeText == null) {
-    throw new Error("clipboard unavailable");
-  }
+  if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
   await navigator.clipboard.writeText(text);
   return "copied";
 }
@@ -123,11 +133,11 @@ export function ProfileSettings({
   avatarLoader = systemProfileAvatar,
   share = shareProfile,
 }: {
-  readonly providerNames?: Record<string, string>;
-  readonly reportLoader?: () => Promise<UsageReport>;
-  readonly historyLoader?: (days: number) => Promise<UsageHistoryReport>;
-  readonly avatarLoader?: () => Promise<string | null>;
-  readonly share?: (
+  providerNames?: Record<string, string>;
+  reportLoader?: () => Promise<UsageReport>;
+  historyLoader?: (days: number) => Promise<UsageHistoryReport>;
+  avatarLoader?: () => Promise<string | null>;
+  share?: (
     title: string,
     text: string
   ) => Promise<"shared" | "copied" | "cancelled">;
@@ -144,52 +154,52 @@ export function ProfileSettings({
   const [nameInvalid, setNameInvalid] = useState(false);
 
   const displayName = profile.name.trim() || t("profile.defaultName");
-  const handle = profile.handle.trim().replace(/^@+/u, "");
+  const handle = profile.handle.trim().replace(/^@+/, "");
   const bio = profile.bio.trim() || t("profile.defaultBio");
 
-  const loadActivity = () => {
+  const loadActivity = useCallback(() => {
     setLoading(true);
     setLoadFailed(false);
-    void Promise.all([reportLoader(), historyLoader(activityDays)])
+    void Promise.all([reportLoader(), historyLoader(ACTIVITY_DAYS)])
       .then(([report, history]) =>
         setSummary(summarizeProfileActivity(report, history))
       )
       .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
-  };
+  }, [historyLoader, reportLoader]);
 
   useEffect(loadActivity, [loadActivity]);
 
   useEffect(() => {
-    let isActive = true;
+    let active = true;
     void avatarLoader()
       .then((url) => {
-        if (isActive) {
-          setAvatarUrl(url);
-        }
+        if (active) setAvatarUrl(url);
       })
       .catch(() => {});
     return () => {
-      isActive = false;
+      active = false;
     };
   }, [avatarLoader]);
 
-  const dateFormatter = new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "short",
-  });
-  const numberFormatter = new Intl.NumberFormat(locale);
-  const leadingCells =
-    summary?.buckets.length == null
-      ? 0
-      : new Date(summary.buckets[0].startMs).getDay();
-  const activityCellCount = summary?.buckets.length || activityDays;
+  const dateFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }),
+    [locale]
+  );
+  const numberFormatter = useMemo(
+    () => new Intl.NumberFormat(locale),
+    [locale]
+  );
+  const leadingCells = summary?.buckets.length
+    ? new Date(summary.buckets[0].startMs).getDay()
+    : 0;
+  const activityCellCount = summary?.buckets.length || ACTIVITY_DAYS;
 
   const save = () => {
     const next = {
-      bio: draft.bio.trim(),
-      handle: draft.handle.trim().replace(/^@+/u, ""),
       name: draft.name.trim(),
+      handle: draft.handle.trim().replace(/^@+/, ""),
+      bio: draft.bio.trim(),
     };
     if (!next.name) {
       setNameInvalid(true);
@@ -200,7 +210,7 @@ export function ProfileSettings({
     setDraft(next);
     setEditing(false);
     try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setStatus(t("profile.saved"));
     } catch {
       setStatus(t("profile.saveSessionOnly"));
@@ -208,15 +218,13 @@ export function ProfileSettings({
   };
 
   const shareCurrentProfile = async () => {
-    if (!summary) {
-      return;
-    }
+    if (!summary) return;
     const text = t("profile.shareText", {
-      days: summary.activeDays,
       name: displayName,
-      sessions: summary.transcripts,
-      streak: summary.currentStreak,
       tokens: fmtTokens(summary.totalTokens),
+      days: summary.activeDays,
+      streak: summary.currentStreak,
+      sessions: summary.transcripts,
     });
     try {
       const result = await share(
@@ -240,7 +248,7 @@ export function ProfileSettings({
       <header className="profile-header">
         <section className="profile-identity" aria-labelledby="profile-name">
           <div className="profile-avatar" aria-hidden="true">
-            {avatarUrl != null && avatarUrl !== "" ? (
+            {avatarUrl ? (
               <img src={avatarUrl} alt="" onError={() => setAvatarUrl(null)} />
             ) : profile.name ? (
               profileInitials(displayName)
@@ -255,9 +263,9 @@ export function ProfileSettings({
             >
               {displayName}
             </h1>
-            {handle ? (
+            {handle && (
               <p className="text-body text-muted-foreground">@{handle}</p>
-            ) : null}
+            )}
             <p className="profile-bio text-metadata text-muted-foreground">
               {bio}
             </p>
@@ -296,7 +304,7 @@ export function ProfileSettings({
         </div>
       </header>
 
-      {editing ? (
+      {editing && (
         <form
           className="profile-editor"
           noValidate
@@ -320,12 +328,10 @@ export function ProfileSettings({
                 onInput={(event) => {
                   const name = event.currentTarget.value;
                   setDraft((current) => ({ ...current, name }));
-                  if (name.trim()) {
-                    setNameInvalid(false);
-                  }
+                  if (name.trim()) setNameInvalid(false);
                 }}
               />
-              {nameInvalid ? (
+              {nameInvalid && (
                 <p
                   id="profile-display-name-error"
                   role="alert"
@@ -333,7 +339,7 @@ export function ProfileSettings({
                 >
                   {t("profile.nameRequired")}
                 </p>
-              ) : null}
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="profile-handle">{t("profile.handle")}</Label>
@@ -381,25 +387,26 @@ export function ProfileSettings({
             </Button>
           </div>
         </form>
-      ) : null}
+      )}
 
-      {status ? (
-        <output
+      {status && (
+        <p
+          role="status"
           aria-live="polite"
           className="profile-status text-metadata text-muted-foreground"
         >
           {status}
-        </output>
-      ) : null}
+        </p>
+      )}
 
-      {loading && !summary ? (
+      {loading && !summary && (
         <div className="py-page-section text-metadata text-muted-foreground flex items-center justify-center gap-2">
           <Spinner />
           {t("profile.loading")}
         </div>
-      ) : null}
+      )}
 
-      {loadFailed && !summary ? (
+      {loadFailed && !summary && (
         <div className="py-page-section flex flex-col items-center gap-3 text-center">
           <p className="text-metadata text-muted-foreground">
             {t("profile.loadFailed")}
@@ -408,9 +415,9 @@ export function ProfileSettings({
             {t("profile.retry")}
           </Button>
         </div>
-      ) : null}
+      )}
 
-      {summary ? (
+      {summary && (
         <section
           className="profile-activity-surface"
           aria-labelledby="profile-summary-heading"
@@ -487,9 +494,9 @@ export function ProfileSettings({
                       key={bucket?.startMs ?? `empty-${index}`}
                       aria-hidden
                       title={
-                        bucket == null
-                          ? undefined
-                          : `${dateFormatter.format(bucket.startMs)} · ${fmtTokens(bucket.total)}`
+                        bucket
+                          ? `${dateFormatter.format(bucket.startMs)} · ${fmtTokens(bucket.total)}`
+                          : undefined
                       }
                       className={
                         bucket?.total
@@ -562,7 +569,7 @@ export function ProfileSettings({
             )}
           </div>
         </section>
-      ) : null}
+      )}
     </div>
   );
 }

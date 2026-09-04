@@ -148,7 +148,7 @@ describe("unified plugin manager lifecycle", () => {
   test("routes every plugin operation through the single unified App surface", () => {
     const app = readFileSync(
       resolve(import.meta.dir, "../src/App.tsx"),
-      "utf-8"
+      "utf8"
     );
     const openManagerStart = app.indexOf("const openPluginManager");
     const openManagerEnd = app.indexOf(

@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 type StatusTone = "neutral" | "success" | "warning" | "destructive";
 
 interface StatusBadgeProps {
-  readonly tone: StatusTone;
-  readonly children: ReactNode;
+  tone: StatusTone;
+  children: ReactNode;
 }
 
 function StatusBadge({ tone, children }: StatusBadgeProps) {

@@ -1,7 +1,5 @@
-import { memo } from "react";
-import type { CSSProperties, ComponentProps } from "react";
-import { ThinkingOrb } from "thinking-orbs";
-import type { OrbState } from "thinking-orbs";
+import { memo, type CSSProperties, type ComponentProps } from "react";
+import { ThinkingOrb, type OrbState } from "thinking-orbs";
 
 import { cn } from "@/lib/utils";
 
@@ -11,12 +9,10 @@ export interface ActivityOrbProps extends Omit<
   ThinkingOrbProps,
   "size" | "state" | "style"
 > {
-  readonly state: OrbState;
-  /**
-  C2's 14px loading contract, the native 20px inline preset, or the 64px avatar preset.
-  */
-  readonly visualSize?: 14 | 20 | 64;
-  readonly style?: CSSProperties;
+  state: OrbState;
+  /** C2's 14px loading contract, the native 20px inline preset, or the 64px avatar preset. */
+  visualSize?: 14 | 20 | 64;
+  style?: CSSProperties;
 }
 
 /**
@@ -25,7 +21,7 @@ export interface ActivityOrbProps extends Omit<
  * thinking-orbs has separately tuned 20px and 64px drawings. C2's compact controls need a 14px
  * loading mark, so that case keeps the detailed 20px preset and only changes its CSS footprint.
  */
-function ActivityOrbComponent({
+export const ActivityOrb = memo(function ActivityOrb({
   state,
   visualSize = 20,
   className,
@@ -42,9 +38,7 @@ function ActivityOrbComponent({
       state={state}
       size={presetSize}
       className={cn("shrink-0", className)}
-      style={{ height: visualSize, width: visualSize, ...style }}
+      style={{ width: visualSize, height: visualSize, ...style }}
     />
   );
-}
-
-export const ActivityOrb = memo(ActivityOrbComponent);
+});

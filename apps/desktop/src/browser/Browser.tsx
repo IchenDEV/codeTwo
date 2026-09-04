@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { CompositeActionRow } from "@/components/business/composite-action-row";
 import { Button } from "@/components/ui/button";
@@ -53,8 +59,8 @@ import {
   onBrowserRegistry,
   onBrowserTitle,
   openExternal,
+  type Annotation,
 } from "../bridge";
-import type { Annotation } from "../bridge";
 import { embeddedBrowserRenderer, registerBrowserWebview } from "../container";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
@@ -65,22 +71,18 @@ import {
   removeBrowserVisit,
   saveBrowserHistory,
   updateBrowserVisitTitle,
+  type BrowserHistoryState,
+  type StorageLike,
 } from "./history";
-import type { BrowserHistoryState, StorageLike } from "./history";
 
 const BLANK = "about:blank";
 
+/** "3000" → localhost:3000, "localhost:1420" → http, everything else defaults to https. */
 function normalizeUrl(u: string): string {
   const s = u.trim();
-  if (/^\d+$/u.test(s)) {
-    return `http://localhost:${s}`;
-  }
-  if (/^https?:\/\//u.test(s)) {
-    return s;
-  }
-  if (/^(localhost|127\.|0\.0\.0\.0)/u.test(s)) {
-    return `http://${s}`;
-  }
+  if (/^\d+$/.test(s)) return `http://localhost:${s}`;
+  if (/^https?:\/\//.test(s)) return s;
+  if (/^(localhost|127\.|0\.0\.0\.0)/.test(s)) return `http://${s}`;
   return `https://${s}`;
 }
 
@@ -112,16 +114,10 @@ const labelOf = (id: number) => `browser-${id}`;
 
 function visitAge(at: number, now = Date.now()): string | null {
   const minutes = Math.max(0, Math.floor((now - at) / 60_000));
-  if (minutes < 1) {
-    return null;
-  }
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
+  if (minutes < 1) return null;
+  if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours}h`;
-  }
+  if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
 }
 
@@ -133,6 +129,11 @@ function localHistoryStorage(): StorageLike | null {
   }
 }
 
+/** True while a dock or split drag is live (the class the drag handlers put on `<body>`).
+ *
+ *  The DOM equivalent was `pointer-events: none` on the iframe. A native webview has no such switch:
+ *  the moment the pointer crosses into it, the app's own webview stops seeing `mousemove` and the
+ *  drag dies halfway. So the page gets out of the way for the length of the drag. */
 function useDragging(): boolean {
   const [dragging, set] = useState(false);
   useEffect(() => {
@@ -143,22 +144,23 @@ function useDragging(): boolean {
       );
     read();
     const mo = new MutationObserver(read);
-    mo.observe(document.body, { attributeFilter: ["class"], attributes: true });
+    mo.observe(document.body, { attributes: true, attributeFilter: ["class"] });
     return () => mo.disconnect();
   }, []);
   return dragging;
 }
 
+/** A menu row. The popover-of-buttons shape, styled like a native context menu. */
 function MenuItem({
   icon: Icon,
   label,
   onClick,
   checked,
 }: {
-  readonly icon: typeof Globe;
-  readonly label: string;
-  readonly onClick: () => void;
-  readonly checked?: boolean;
+  icon: typeof Globe;
+  label: string;
+  onClick: () => void;
+  checked?: boolean;
 }) {
   return (
     <Button
@@ -171,9 +173,7 @@ function MenuItem({
     >
       <Icon className="text-muted-foreground size-3.5 shrink-0" />
       <span className="flex-1">{label}</span>
-      {checked === true ? (
-        <Check className="text-primary size-3.5 shrink-0" />
-      ) : null}
+      {checked && <Check className="text-primary size-3.5 shrink-0" />}
     </Button>
   );
 }
@@ -183,12 +183,14 @@ function BrowserWebview({
   url,
   visible,
 }: {
-  readonly label: string;
-  readonly url: string;
-  readonly visible: boolean;
+  label: string;
+  url: string;
+  visible: boolean;
 }) {
-  const connect = (element: HTMLElement | null) =>
-    registerBrowserWebview(label, element);
+  const connect = useCallback(
+    (element: HTMLElement | null) => registerBrowserWebview(label, element),
+    [label]
+  );
   return (
     <electrobun-webview
       ref={connect}
@@ -204,6 +206,18 @@ function BrowserWebview({
   );
 }
 
+/**
+ * The built-in browser as browser, not just an iframe with an address bar: tabs along the top,
+ * back/forward/reload, an overflow menu with the inspector, zoom and device widths — and the
+ * annotate bar at the bottom, which is the part that makes it C2's browser rather than a
+ * worse Safari: what you see feeds the prompt.
+ *
+ * The page itself is a native webview floating over `hostRef`, because an iframe cannot browse:
+ * `X-Frame-Options: DENY` and `frame-ancestors` are honoured, and most of the web — github.com and
+ * google.com included — comes back blank. Two consequences the code below spends its time on: the
+ * page area's geometry has to be pushed to the native side whenever it changes, and the page is
+ * *above* the DOM, so anything we want to draw over it means hiding it first.
+ */
 export function BrowserPanel({
   url,
   projectPath,
@@ -211,23 +225,19 @@ export function BrowserPanel({
   onNavigate,
   onAnnotate,
 }: {
-  readonly url: string;
-  /**
-  Logical source project. Worktree sessions keep browser history with their source project.
-  */
-  readonly projectPath: string | null;
+  url: string;
+  /** Logical source project. Worktree sessions keep browser history with their source project. */
+  projectPath: string | null;
   /** The dock's open state. It closes by sweeping its width to zero without unmounting, and a
    *  child webview has no idea it is inside a collapsed box — it would keep painting over the app. */
-  readonly visible: boolean;
-  readonly onNavigate: (u: string) => void;
-  /**
-  Everything the user marked up on the page, one entry per annotated element.
-  */
-  readonly onAnnotate: (notes: Annotation[]) => void;
+  visible: boolean;
+  onNavigate: (u: string) => void;
+  /** Everything the user marked up on the page, one entry per annotated element. */
+  onAnnotate: (notes: Annotation[]) => void;
 }) {
   const t = useT();
   const toast = useToast();
-  const [tabs, setTabs] = useState<Tab[]>([{ id: 1, title: "", url }]);
+  const [tabs, setTabs] = useState<Tab[]>([{ id: 1, url, title: "" }]);
   const [activeId, setActiveId] = useState(1);
   const [addr, setAddr] = useState(url === BLANK ? "" : url);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -236,7 +246,7 @@ export function BrowserPanel({
   const [deviceBar, setDeviceBar] = useState(false);
   const addrRef = useRef<HTMLInputElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const isDragging = useDragging();
+  const dragging = useDragging();
   const [annotating, setAnnotating] = useState(false);
   const [pending, setPending] = useState(0);
   const [historyState, setHistoryState] = useState<BrowserHistoryState>(() =>
@@ -247,10 +257,10 @@ export function BrowserPanel({
 
   const active = tabs.find((x) => x.id === activeId) ?? tabs[0];
   const activeLabel = labelOf(active.id);
-  const isBlank = active.url === BLANK;
+  const blank = active.url === BLANK;
   // A native view can't be layered under a popover, and can't let a drag pass through it either, so
   // the page steps aside for both.
-  const isShowPage = visible && !isBlank && !menuOpen && !isDragging;
+  const showPage = visible && !blank && !menuOpen && !dragging;
   const recentSites = recentSitesForProject(historyState, projectPath);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
@@ -259,29 +269,30 @@ export function BrowserPanel({
   const annotatingRef = useRef(annotating);
   annotatingRef.current = annotating;
 
-  const applyRegistry = (registry: import("../bridge").BrowserTab[]) => {
-    const restored = registry
-      .map((tab) => ({
-        agentActive: tab.agent_active,
-        id: Number(tab.id.replace(/^browser-/u, "")),
-        leaseSession: tab.lease_session,
-        title: tab.title,
-        url: tab.url,
-      }))
-      .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
-    if (restored.length === 0) {
-      return;
-    }
-    const selected = registry.find((tab) => tab.active);
-    const selectedId = selected
-      ? Number(selected.id.replace(/^browser-/u, ""))
-      : restored[0].id;
-    const selectedTab =
-      restored.find((tab) => tab.id === selectedId) ?? restored[0];
-    setTabs(restored);
-    setActiveId(selectedTab.id);
-    setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
-  };
+  const applyRegistry = useCallback(
+    (registry: import("../bridge").BrowserTab[]) => {
+      const restored = registry
+        .map((tab) => ({
+          id: Number(tab.id.replace(/^browser-/, "")),
+          url: tab.url,
+          title: tab.title,
+          agentActive: tab.agent_active,
+          leaseSession: tab.lease_session,
+        }))
+        .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
+      if (restored.length === 0) return;
+      const selected = registry.find((tab) => tab.active);
+      const selectedId = selected
+        ? Number(selected.id.replace(/^browser-/, ""))
+        : restored[0].id;
+      const selectedTab =
+        restored.find((tab) => tab.id === selectedId) ?? restored[0];
+      setTabs(restored);
+      setActiveId(selectedTab.id);
+      setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
+    },
+    []
+  );
 
   useEffect(() => {
     void browserRegistrySnapshot().then(applyRegistry);
@@ -295,49 +306,43 @@ export function BrowserPanel({
     setHistoryState(loadBrowserHistory(localHistoryStorage()));
   }, [projectPath]);
 
-  const updateHistory = (
-    update: (current: BrowserHistoryState) => BrowserHistoryState
-  ) => {
-    const storage = localHistoryStorage();
-    const current = loadBrowserHistory(storage);
-    const next = update(current);
-    saveBrowserHistory(storage, next);
-    setHistoryState(next);
-  };
+  const updateHistory = useCallback(
+    (update: (current: BrowserHistoryState) => BrowserHistoryState) => {
+      const storage = localHistoryStorage();
+      const current = loadBrowserHistory(storage);
+      const next = update(current);
+      saveBrowserHistory(storage, next);
+      setHistoryState(next);
+    },
+    []
+  );
 
   const patch = (id: number, f: (t: Tab) => Tab) =>
     setTabs((prev) => prev.map((x) => (x.id === id ? f(x) : x)));
 
-  /**
-  Where the native page belongs, in the window's own logical coordinates.
-  */
-  const rect = () => {
+  /** Where the native page belongs, in the window's own logical coordinates. */
+  const rect = useCallback(() => {
     const r = hostRef.current?.getBoundingClientRect();
-    return r ? { height: r.height, width: r.width, x: r.left, y: r.top } : null;
-  };
+    return r ? { x: r.left, y: r.top, width: r.width, height: r.height } : null;
+  }, []);
 
   /* Create/move/show the active tab's webview. This runs on every layout-affecting change, and
      `browser_open` is idempotent, so it doubles as the "keep it pinned to the placeholder" path. */
   useLayoutEffect(() => {
     const r = rect();
-    if (!r) {
-      return;
-    }
-    if (!isShowPage) {
+    if (!r) return;
+    if (!showPage) {
       void browserVisible(activeLabel, false);
       return;
     }
     void browserOpen(activeLabel, active.url, r);
-  }, [activeLabel, active.url, isShowPage, device, rect]);
+  }, [activeLabel, active.url, showPage, device, rect]);
 
   /* Hide every other tab's page: they stay alive (and keep their scroll position) but must not
      paint over the one in front. */
   useEffect(() => {
-    for (const x of tabs) {
-      if (x.id !== activeId) {
-        void browserVisible(labelOf(x.id), false);
-      }
-    }
+    for (const x of tabs)
+      if (x.id !== activeId) void browserVisible(labelOf(x.id), false);
   }, [tabs, activeId]);
 
   /* The dock is resizable and the window is not, so a size change of the placeholder is the common
@@ -345,20 +350,16 @@ export function BrowserPanel({
   useEffect(() => {
     const sync = () => {
       const r = rect();
-      if (r && isShowPage) {
-        void browserBounds(activeLabel, r);
-      }
+      if (r && showPage) void browserBounds(activeLabel, r);
     };
     const ro = new ResizeObserver(sync);
-    if (hostRef.current) {
-      ro.observe(hostRef.current);
-    }
+    if (hostRef.current) ro.observe(hostRef.current);
     window.addEventListener("resize", sync);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [activeLabel, isShowPage, rect]);
+  }, [activeLabel, showPage, rect]);
 
   useEffect(() => {
     void browserZoom(activeLabel, zoom);
@@ -367,11 +368,9 @@ export function BrowserPanel({
   /* Element picking follows the toggle, the active tab, and — via `browser-load` — every fresh
      document, since a new page comes with a new, disarmed annotator. */
   useEffect(() => {
-    if (isBlank) {
-      return;
-    }
+    if (blank) return;
     void browserAnnotate(activeLabel, annotating);
-  }, [activeLabel, annotating, isBlank]);
+  }, [activeLabel, annotating, blank]);
 
   /* The badge. The page can't call out to us, so the count is polled — cheaply, and only while
      the annotator is actually armed. */
@@ -380,17 +379,15 @@ export function BrowserPanel({
       setPending(0);
       return;
     }
-    let isAlive = true;
+    let alive = true;
     const tick = async () => {
       const n = await browserAnnotationCount(activeLabel);
-      if (isAlive) {
-        setPending(n);
-      }
+      if (alive) setPending(n);
     };
     void tick();
     const id = setInterval(() => void tick(), 700);
     return () => {
-      isAlive = false;
+      alive = false;
       clearInterval(id);
     };
   }, [annotating, activeLabel]);
@@ -399,16 +396,12 @@ export function BrowserPanel({
      Nothing else can: a native webview outlives React and would keep painting over the app. */
   useEffect(() => () => void browserCloseAll(), []);
 
-  /**
-  Address-bar navigation.
-  */
+  /** Address-bar navigation. */
   const go = (raw: string) => {
     const u = normalizeUrl(raw);
     setAddr(u);
     patch(active.id, (x) => ({ ...x, url: u }));
-    if (!isBlank) {
-      void browserNavigate(activeLabel, u);
-    }
+    if (!blank) void browserNavigate(activeLabel, u);
     onNavigate(u);
   };
 
@@ -421,18 +414,16 @@ export function BrowserPanel({
   const openTab = (to: string) => {
     void browserRegistryCreate(to).then((created) => {
       const tab: Tab = {
-        agentActive: created.agent_active,
-        id: Number(created.id.replace(/^browser-/u, "")),
-        leaseSession: created.lease_session,
-        title: created.title,
+        id: Number(created.id.replace(/^browser-/, "")),
         url: created.url,
+        title: created.title,
+        agentActive: created.agent_active,
+        leaseSession: created.lease_session,
       };
       setTabs((prev) => [...prev.filter((entry) => entry.id !== tab.id), tab]);
       setActiveId(tab.id);
       setAddr(to === BLANK ? "" : to);
-      if (to === BLANK) {
-        setTimeout(() => addrRef.current?.focus(), 0);
-      }
+      if (to === BLANK) setTimeout(() => addrRef.current?.focus(), 0);
     });
   };
 
@@ -440,9 +431,7 @@ export function BrowserPanel({
     const left = tabs.filter((x) => x.id !== id);
     void browserClose(labelOf(id));
     setTabs(left);
-    if (id === activeId && left.length > 0) {
-      selectTab(left[left.length - 1]);
-    }
+    if (id === activeId && left.length > 0) selectTab(left[left.length - 1]);
   };
 
   /* The page navigating itself is the normal case once you can actually browse: links, redirects,
@@ -454,9 +443,7 @@ export function BrowserPanel({
           void browserAnnotate(label, true);
         }
         const project = projectPathRef.current;
-        if (project == null || project === "") {
-          return;
-        }
+        if (!project) return;
         const title =
           tabsRef.current.find((tab) => labelOf(tab.id) === label)?.title ??
           null;
@@ -490,23 +477,17 @@ export function BrowserPanel({
       onBrowserPopup(({ url: to }) => openTab(to)),
     ];
     return () => {
-      for (const p of un) {
-        void p.then((f) => f());
-      }
+      for (const p of un) void p.then((f) => f());
     };
     // `openTab` and `onNavigate` are re-made every render; re-subscribing on each one would drop
     // events. The identity that matters here is which tab is in front.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, updateHistory]);
 
-  /**
-  Hand the page's markup to the prompt, then clear it — sent notes are done, not pending.
-  */
+  /** Hand the page's markup to the prompt, then clear it — sent notes are done, not pending. */
   const annotate = async () => {
     const marks = await browserAnnotations(activeLabel, active.url);
-    if (marks.length === 0) {
-      return;
-    }
+    if (marks.length === 0) return;
     onAnnotate(marks);
     await browserAnnotationsClear(activeLabel);
     setPending(0);
@@ -586,7 +567,7 @@ export function BrowserPanel({
           size="icon"
           className="text-muted-foreground size-7 disabled:opacity-30"
           label={t("browser.back")}
-          disabled={isBlank}
+          disabled={blank}
           onClick={() => void browserHistory(activeLabel, -1)}
         >
           <ArrowLeft className="size-3.5" />
@@ -596,7 +577,7 @@ export function BrowserPanel({
           size="icon"
           className="text-muted-foreground size-7 disabled:opacity-30"
           label={t("browser.forward")}
-          disabled={isBlank}
+          disabled={blank}
           onClick={() => void browserHistory(activeLabel, 1)}
         >
           <ArrowRight className="size-3.5" />
@@ -606,7 +587,7 @@ export function BrowserPanel({
           size="icon"
           className="text-muted-foreground size-7 disabled:opacity-30"
           label={t("browser.reload")}
-          disabled={isBlank}
+          disabled={blank}
           onClick={() => void browserReload(activeLabel)}
         >
           <RotateCw className="size-3.5" />
@@ -621,7 +602,7 @@ export function BrowserPanel({
           )}
           label={t("browser.annotateMode")}
           aria-pressed={annotating}
-          disabled={isBlank}
+          disabled={blank}
           onClick={() => setAnnotating((v) => !v)}
         >
           <SquareDashedMousePointer className="size-3.5" />
@@ -638,7 +619,7 @@ export function BrowserPanel({
           spellCheck={false}
         />
 
-        {active.agentActive ? (
+        {active.agentActive && (
           <Button
             variant="outline"
             size="sm"
@@ -649,7 +630,7 @@ export function BrowserPanel({
             <SquareDashedMousePointer className="size-3.5" />
             Take Control
           </Button>
-        ) : null}
+        )}
 
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverTrigger
@@ -696,9 +677,7 @@ export function BrowserPanel({
               checked={deviceBar}
               onClick={() => {
                 setDeviceBar((v) => {
-                  if (v) {
-                    setDevice(null);
-                  }
+                  if (v) setDevice(null);
                   return !v;
                 });
               }}
@@ -742,7 +721,7 @@ export function BrowserPanel({
       {/* The whole annotate flow lives inside the page (the picker, the card, the style wells);
           this strip only says the mode is on and, once notes exist, offers the one action that
           matters — send them to the prompt. Nothing else, so the page keeps the room. */}
-      {annotating && !isBlank ? (
+      {annotating && !blank && (
         <div className="border-primary/20 bg-primary/[0.06] flex h-8 items-center gap-2 border-y px-2.5">
           <span className="bg-primary size-1.5 shrink-0 rounded-full" />
           <span className="text-callout text-muted-foreground min-w-0 flex-1 truncate">
@@ -772,16 +751,16 @@ export function BrowserPanel({
             </>
           )}
         </div>
-      ) : null}
+      )}
 
       {/* ---- device toolbar --------------------------------------------------------------- */}
-      {deviceBar ? (
+      {deviceBar && (
         <div className="flex items-center gap-1 px-2 py-1">
           {(
             [
-              { label: t("browser.responsive"), w: null },
-              { label: t("browser.mobile"), w: 375 },
-              { label: t("browser.tablet"), w: 768 },
+              { w: null, label: t("browser.responsive") },
+              { w: 375, label: t("browser.mobile") },
+              { w: 768, label: t("browser.tablet") },
             ] as { w: number | null; label: string }[]
           ).map((d) => (
             <Button
@@ -802,45 +781,41 @@ export function BrowserPanel({
               {d.label}
             </Button>
           ))}
-          {device != null ? (
+          {device && (
             <span className="text-metadata text-muted-foreground ml-auto font-mono">
               {device}px
             </span>
-          ) : null}
+          )}
         </div>
-      ) : null}
+      )}
 
       {/* ---- the page --------------------------------------------------------------------- */}
       {/* Electrobun keeps each sandboxed child webview aligned to its custom element. A device
           width narrows this container and the native page follows without accepting iframe CSP. */}
-      <div
-        className={cn(
-          "relative min-h-0 flex-1",
-          device != null && "bg-muted/40"
-        )}
-      >
+      <div className={cn("relative min-h-0 flex-1", device && "bg-muted/40")}>
         <div
           ref={hostRef}
           className={cn(
             "relative h-full",
-            device != null && "ring-foreground/15 mx-auto shadow-lg ring-1"
+            device && "ring-foreground/15 mx-auto shadow-lg ring-1"
           )}
-          style={device != null ? { width: device } : undefined}
+          style={device ? { width: device } : undefined}
         >
-          {isDesktop
-            ? tabs
-                .filter((tab) => tab.url !== BLANK)
-                .map((tab) => (
-                  <BrowserWebview
-                    key={tab.id}
-                    label={labelOf(tab.id)}
-                    url={tab.url}
-                    visible={tab.id === activeId && isShowPage}
-                  />
-                ))
-            : null}
+          {isDesktop &&
+            tabs
+              .filter((tab) => tab.url !== BLANK)
+              .map((tab) => (
+                <BrowserWebview
+                  key={tab.id}
+                  label={labelOf(tab.id)}
+                  url={tab.url}
+                  visible={tab.id === activeId && showPage}
+                />
+              ))}
         </div>
-        {isBlank ? (
+        {blank && (
+          // No webview for a blank tab: an empty native page paints a white sheet, which in dark
+          // mode reads as a rendering bug rather than an empty tab.
           <div className="absolute inset-0 flex items-start justify-center overflow-y-auto px-6 pt-[14vh]">
             {recentSites.length > 0 ? (
               <div className="w-full max-w-md">
@@ -869,9 +844,7 @@ export function BrowserPanel({
                           label={t("browser.removeRecent")}
                           onClick={() => {
                             const project = projectPathRef.current;
-                            if (project == null || project === "") {
-                              return;
-                            }
+                            if (!project) return;
                             updateHistory((current) =>
                               removeBrowserVisit(current, project, site.url)
                             );
@@ -909,8 +882,8 @@ export function BrowserPanel({
               </div>
             )}
           </div>
-        ) : null}
-        {!isBlank &&
+        )}
+        {!blank &&
           !isDesktop && (
             // The standalone Vite renderer has no native side. Say so rather than showing a void.
             <div className="absolute inset-0 flex items-center justify-center px-6 text-center">

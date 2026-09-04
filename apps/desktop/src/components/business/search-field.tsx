@@ -1,5 +1,9 @@
-import { useId, useRef } from "react";
-import type { ChangeEventHandler, ComponentProps } from "react";
+import {
+  useId,
+  useRef,
+  type ChangeEventHandler,
+  type ComponentProps,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Search, X } from "@/components/ui/icons";
@@ -10,11 +14,11 @@ interface SearchFieldBaseProps extends Omit<
   ComponentProps<typeof Input>,
   "type" | "value" | "onChange" | "size" | "className"
 > {
-  readonly label: string;
-  readonly value: string;
-  readonly className?: string;
-  readonly inputClassName?: string;
-  readonly onChange: ChangeEventHandler<HTMLInputElement>;
+  label: string;
+  value: string;
+  className?: string;
+  inputClassName?: string;
+  onChange: ChangeEventHandler<HTMLInputElement>;
 }
 
 type SearchFieldProps = SearchFieldBaseProps &
@@ -36,7 +40,7 @@ function SearchField({
   const generatedId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const id = generatedId;
-  const isClearable = onClear !== undefined && value.length > 0;
+  const clearable = onClear !== undefined && value.length > 0;
 
   return (
     <div
@@ -60,12 +64,12 @@ function SearchField({
         value={value}
         onChange={onChange}
         className={cn(
-          isClearable ? "ps-page-section pe-page-section" : "ps-page-section",
+          clearable ? "ps-page-section pe-page-section" : "ps-page-section",
           inputClassName
         )}
         {...inputProps}
       />
-      {isClearable ? (
+      {clearable ? (
         <Button
           type="button"
           variant="ghost"

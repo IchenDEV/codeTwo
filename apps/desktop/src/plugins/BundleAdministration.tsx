@@ -41,32 +41,24 @@ export function BundleAdministration({
   onSetTrusted,
   onUninstall,
 }: {
-  readonly pluginName: string;
-  readonly bundle: PluginManagerBundle;
-  readonly scope: PluginManagerScope;
-  readonly labels: PluginManagerLabels;
-  readonly busyAction: string | null;
-  readonly onSetTrusted?: (
-    pluginId: string,
-    isTrusted: boolean
-  ) => Promise<void>;
-  readonly onUninstall?: (
-    pluginId: string,
-    isKeepData: boolean
-  ) => Promise<void>;
+  pluginName: string;
+  bundle: PluginManagerBundle;
+  scope: PluginManagerScope;
+  labels: PluginManagerLabels;
+  busyAction: string | null;
+  onSetTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
+  onUninstall?: (pluginId: string, keepData: boolean) => Promise<void>;
 }) {
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const [keepData, setKeepData] = useState(true);
-  const isUserScope = scope.kind === "user";
+  const userScope = scope.kind === "user";
   const trustKey = `bundle-trust:${bundle.id}`;
   const uninstallKey = `bundle-uninstall:${bundle.id}`;
-  const isTrustBusy = busyAction === trustKey;
-  const isUninstallBusy = busyAction === uninstallKey;
+  const trustBusy = busyAction === trustKey;
+  const uninstallBusy = busyAction === uninstallKey;
   const repositoryUrl = (() => {
     const repository = bundle.repository?.trim();
-    if (repository == null || repository === "") {
-      return null;
-    }
+    if (!repository) return null;
     try {
       const url = new URL(repository);
       return url.protocol === "https:" || url.protocol === "http:"
@@ -78,9 +70,7 @@ export function BundleAdministration({
   })();
 
   const confirmUninstall = async () => {
-    if (!onUninstall || isUninstallBusy) {
-      return;
-    }
+    if (!onUninstall || uninstallBusy) return;
     try {
       await onUninstall(bundle.id, keepData);
     } finally {
@@ -127,21 +117,19 @@ export function BundleAdministration({
           )}
         </div>
 
-        {isUserScope ? (
-          bundle.requiresTrust && !bundle.trusted ? (
-            <p className="text-metadata text-muted-foreground flex items-start gap-2">
-              <ShieldAlert
-                className="text-warning mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              <span>{labels.trustRequired}</span>
-            </p>
-          ) : null
-        ) : (
+        {!userScope ? (
           <p className="text-metadata text-muted-foreground">
             {labels.bundleManagementUserOnly}
           </p>
-        )}
+        ) : bundle.requiresTrust && !bundle.trusted ? (
+          <p className="text-metadata text-muted-foreground flex items-start gap-2">
+            <ShieldAlert
+              className="text-warning mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
+            <span>{labels.trustRequired}</span>
+          </p>
+        ) : null}
 
         {bundle.contributions.length ? (
           <div className="flex flex-col gap-2">
@@ -180,8 +168,7 @@ export function BundleAdministration({
                   />
                   <span>
                     {diagnostic.message}
-                    {diagnostic.component != null &&
-                    diagnostic.component !== "" ? (
+                    {diagnostic.component ? (
                       <span className="text-callout block">
                         {diagnostic.component}
                       </span>
@@ -193,15 +180,15 @@ export function BundleAdministration({
           </div>
         ) : null}
 
-        {isUserScope ? (
+        {userScope ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              {repositoryUrl != null && repositoryUrl !== "" ? (
+              {repositoryUrl ? (
                 <Button
                   type="button"
                   size="compact"
                   variant="secondary"
-                  disabled={isTrustBusy || isUninstallBusy}
+                  disabled={trustBusy || uninstallBusy}
                   onClick={() => void openExternal(repositoryUrl)}
                 >
                   <ExternalLink data-icon="inline-start" />
@@ -213,10 +200,10 @@ export function BundleAdministration({
                   type="button"
                   size="compact"
                   variant={bundle.trusted ? "secondary" : "default"}
-                  disabled={isTrustBusy || isUninstallBusy}
+                  disabled={trustBusy || uninstallBusy}
                   onClick={() => void onSetTrusted(bundle.id, !bundle.trusted)}
                 >
-                  {isTrustBusy ? (
+                  {trustBusy ? (
                     <Spinner data-icon="inline-start" />
                   ) : (
                     <ShieldCheck data-icon="inline-start" />
@@ -231,7 +218,7 @@ export function BundleAdministration({
                 size="compact"
                 variant="ghost"
                 className="text-destructive hover:text-destructive"
-                disabled={isTrustBusy || isUninstallBusy}
+                disabled={trustBusy || uninstallBusy}
                 onClick={() => setUninstallOpen(true)}
               >
                 <Trash2 data-icon="inline-start" />
@@ -244,7 +231,7 @@ export function BundleAdministration({
 
       <AlertDialog
         open={uninstallOpen}
-        onOpenChange={(open) => !isUninstallBusy && setUninstallOpen(open)}
+        onOpenChange={(open) => !uninstallBusy && setUninstallOpen(open)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -259,7 +246,7 @@ export function BundleAdministration({
             <Checkbox
               id={`keep-plugin-data-${bundle.id}`}
               checked={keepData}
-              disabled={isUninstallBusy}
+              disabled={uninstallBusy}
               onCheckedChange={(checked) => setKeepData(checked === true)}
             />
             <FieldLabel htmlFor={`keep-plugin-data-${bundle.id}`}>
@@ -267,18 +254,18 @@ export function BundleAdministration({
             </FieldLabel>
           </Field>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isUninstallBusy}>
+            <AlertDialogCancel disabled={uninstallBusy}>
               {labels.cancel}
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              disabled={isUninstallBusy}
+              disabled={uninstallBusy}
               onClick={(event) => {
                 event.preventDefault();
                 void confirmUninstall();
               }}
             >
-              {isUninstallBusy ? <Spinner data-icon="inline-start" /> : null}
+              {uninstallBusy ? <Spinner data-icon="inline-start" /> : null}
               {labels.uninstall}
             </AlertDialogAction>
           </AlertDialogFooter>

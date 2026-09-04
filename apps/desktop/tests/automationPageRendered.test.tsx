@@ -18,11 +18,11 @@ const { I18nProvider } = await import("../src/i18n");
 const { ToastProvider } = await import("../src/ui/toast");
 const appSource = readFileSync(
   new URL("../src/App.tsx", import.meta.url),
-  "utf-8"
+  "utf8"
 );
 const automationSource = readFileSync(
   new URL("../src/automation/AutomationsPage.tsx", import.meta.url),
-  "utf-8"
+  "utf8"
 );
 
 afterEach(() => {
@@ -135,7 +135,7 @@ describe("AutomationsPage layout", () => {
 
     expect(page?.className).toContain("flex-1");
     expect(page?.className).toContain("automations-page");
-    expect(page?.dataset.compactDetail).toBe("false");
+    expect(page?.getAttribute("data-compact-detail")).toBe("false");
     expect(
       [...view.container.querySelectorAll("button")].some(
         (item) => item.textContent?.trim() === "Back"
@@ -183,12 +183,12 @@ describe("AutomationsPage layout", () => {
     expect(appSource).not.toContain(") : showAutomations ? (");
     expect(appSource).toContain("{showAutomations && (");
     expect(appSource).toMatch(
-      /showTaskBoard\s*\|\|\s*showPluginManager\s*\|\|\s*showAutomations/u
+      /showTaskBoard\s*\|\|\s*showPluginManager\s*\|\|\s*showAutomations/
     );
     const automationsCall =
-      appSource.match(/<AutomationsPage\b[\s\S]*?\n\s*\/>/u)?.[0] ?? "";
+      appSource.match(/<AutomationsPage\b[\s\S]*?\n\s*\/>/)?.[0] ?? "";
     const taskBoardCall =
-      appSource.match(/<TaskBoardPage\b[\s\S]*?\n\s*\/>/u)?.[0] ?? "";
+      appSource.match(/<TaskBoardPage\b[\s\S]*?\n\s*\/>/)?.[0] ?? "";
     expect(automationsCall).toContain("headerLeadingAction=");
     expect(automationsCall).toContain("onAddProject=");
     expect(taskBoardCall).toContain("headerLeadingAction=");
@@ -241,8 +241,9 @@ describe("AutomationsPage layout", () => {
       )
     ).not.toBeNull();
     expect(
-      view.container.querySelector("[data-automation-page]")?.dataset
-        .compactDetail
+      view.container
+        .querySelector("[data-automation-page]")
+        ?.getAttribute("data-compact-detail")
     ).toBe("true");
 
     click(button(view.container, "Back to automations"));
@@ -250,8 +251,9 @@ describe("AutomationsPage layout", () => {
 
     expect(view.container.querySelector("[data-automation-editor]")).toBeNull();
     expect(
-      view.container.querySelector("[data-automation-page]")?.dataset
-        .compactDetail
+      view.container
+        .querySelector("[data-automation-page]")
+        ?.getAttribute("data-compact-detail")
     ).toBe("false");
 
     await flush();

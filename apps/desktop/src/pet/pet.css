@@ -10,14 +10,14 @@
 .codetwo-pet-mascot {
   position: relative;
   display: grid;
+  cursor: pointer;
+  place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--ds-radius-modal);
-  background: transparent;
   color: inherit;
-  cursor: pointer;
+  background: transparent;
+  border-radius: var(--ds-radius-modal);
   outline: none;
-  place-items: center;
 }
 
 .codetwo-pet-mascot::after {
@@ -26,9 +26,9 @@
   bottom: var(--ds-space-module-inset);
   left: var(--ds-space-section);
   height: var(--ds-space-module-inset);
-  border-radius: var(--ds-radius-control);
-  background: color-mix(in oklch, var(--ds-color-text) 12%, transparent);
   content: "";
+  background: color-mix(in oklch, var(--ds-color-text) 12%, transparent);
+  border-radius: var(--ds-radius-control);
   filter: blur(var(--ds-space-module-inset));
   opacity: 0.48;
 }
@@ -48,6 +48,8 @@
 
 .codetwo-pet-bubble {
   position: absolute;
+  inset-block-end: calc(100% - var(--ds-space-module-inset));
+  inset-inline-start: 50%;
   z-index: 2;
   width: max-content;
   max-width: min(
@@ -55,37 +57,35 @@
     calc(var(--ds-control-field) * 5)
   );
   padding: var(--ds-space-module-inset) var(--ds-space-surface-inset);
-  border-radius: var(--ds-radius-modal);
-  backdrop-filter: blur(var(--ds-space-section));
-  background: color-mix(in oklch, var(--ds-color-surface) 94%, transparent);
-  box-shadow: var(--ds-elevation-raised);
   color: var(--ds-color-text);
+  background: color-mix(in oklch, var(--ds-color-surface) 94%, transparent);
+  border-radius: var(--ds-radius-modal);
+  box-shadow: var(--ds-elevation-raised);
   font-family: var(--ds-font-ui);
   font-size: var(--ds-type-metadata-size);
-  inset-block-end: calc(100% - var(--ds-space-module-inset));
-  inset-inline-start: 50%;
   line-height: var(--ds-type-metadata-leading);
   pointer-events: none;
   transform: translateX(-50%);
+  backdrop-filter: blur(var(--ds-space-section));
 }
 
 .codetwo-pet-bubble > span {
   display: -webkit-box;
-  overflow: hidden;
   max-height: calc(var(--ds-type-metadata-leading) * 3);
+  overflow: hidden;
+  overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-  overflow-wrap: anywhere;
 }
 
 .codetwo-pet-bubble::after {
   position: absolute;
-  width: var(--ds-space-module-inset);
-  height: var(--ds-space-module-inset);
-  background: inherit;
-  content: "";
   inset-block-end: calc(-1 * var(--ds-space-inline));
   inset-inline-start: 50%;
+  width: var(--ds-space-module-inset);
+  height: var(--ds-space-module-inset);
+  content: "";
+  background: inherit;
   transform: translateX(-50%) rotate(45deg);
 }
 
@@ -98,26 +98,26 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
+  gap: var(--ds-space-optical);
   padding: var(--ds-space-inline);
   background: transparent;
-  gap: var(--ds-space-optical);
 }
 
 .desktop-pet-window .codetwo-pet-stage {
-  margin: 0;
   gap: var(--ds-space-module-inset);
+  margin: 0;
 }
 
 .desktop-pet-drag-handle {
   position: absolute;
+  inset-block-start: var(--ds-space-optical);
+  inset-inline-start: 50%;
   width: 44px;
   height: 10px;
   flex: 0 0 auto;
-  border-radius: var(--ds-radius-control);
-  background: color-mix(in oklch, var(--ds-color-text) 18%, transparent);
   cursor: grab;
-  inset-block-start: var(--ds-space-optical);
-  inset-inline-start: 50%;
+  background: color-mix(in oklch, var(--ds-color-text) 18%, transparent);
+  border-radius: var(--ds-radius-control);
   transform: translateX(-50%);
   transition: background var(--motion-fast) var(--ease-standard);
 }
@@ -130,7 +130,7 @@
   cursor: grabbing;
 }
 
-@media (width <= 720px) {
+@media (max-width: 720px) {
   .codetwo-pet-stage {
     margin-block: var(--ds-space-module-inset) var(--ds-space-section);
   }

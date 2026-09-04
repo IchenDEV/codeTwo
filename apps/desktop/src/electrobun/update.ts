@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 
-import { assertIpcResult } from "../lib/ipcResult";
 import type { AppUpdateStatus } from "./rpc";
 
 interface HelperEvent {
@@ -12,50 +11,34 @@ interface HelperEvent {
 }
 
 let runningCheck: Promise<number> | null = null;
-const appName = process.env.CODETWO_APP_NAME ?? "C2";
+const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 
 export function enclosingAppBundle(executablePath: string): string | null {
   let candidate = posix.resolve(executablePath);
   while (true) {
-    if (posix.extname(candidate) === ".app") {
-      return candidate;
-    }
+    if (posix.extname(candidate) === ".app") return candidate;
     const parent = posix.dirname(candidate);
-    if (parent === candidate) {
-      return null;
-    }
+    if (parent === candidate) return null;
     candidate = parent;
   }
 }
 
-function updatePaths(): {
-  application: string;
-  helper: string;
-} | null {
-  const app =
+function updatePaths(): { application: string; helper: string } | null {
+  const application =
     process.env.CODETWO_APP_BUNDLE_PATH ?? enclosingAppBundle(process.execPath);
-  if (app == null || app === "") {
-    return null;
-  }
+  if (!application) return null;
   return {
-    application: app,
-    helper: join(app, "Contents", "Helpers", "CodeTwoUpdateHelper"),
+    application,
+    helper: join(application, "Contents", "Helpers", "CodeTwoUpdateHelper"),
   };
 }
 
 function parseHelperEvent(output: string): HelperEvent | null {
   const lines = output.trim().split("\n");
-  const line =
-    lines.length > 0
-      ? lines.length > 0
-        ? lines[lines.length - 1]
-        : undefined
-      : undefined;
-  if (line == null || line === "") {
-    return null;
-  }
+  const line = lines[lines.length - 1];
+  if (!line) return null;
   try {
-    return assertIpcResult<HelperEvent>(JSON.parse(line) as unknown);
+    return JSON.parse(line) as HelperEvent;
   } catch {
     return null;
   }
@@ -64,34 +47,32 @@ function parseHelperEvent(output: string): HelperEvent | null {
 export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
   if (process.platform !== "darwin") {
     return {
-      message: "Sparkle updates are available on macOS only.",
       state: "unsupported",
+      message: "Sparkle updates are available on macOS only.",
     };
   }
-  if (runningCheck) {
-    return { state: "checking" };
-  }
+  if (runningCheck) return { state: "checking" };
 
   const paths = updatePaths();
   if (!paths) {
     return {
-      message: `Run the packaged ${appName}.app to check for updates.`,
       state: "unavailable",
+      message: `Run the packaged ${applicationName}.app to check for updates.`,
     };
   }
   if (!existsSync(paths.helper)) {
     return {
-      message: "The Sparkle update helper is not embedded in this app.",
       state: "unavailable",
+      message: "The Sparkle update helper is not embedded in this app.",
     };
   }
 
   const helper = Bun.spawn(
     [paths.helper, "status", "--application", paths.application],
     {
-      stderr: "pipe",
       stdin: "ignore",
       stdout: "pipe",
+      stderr: "pipe",
     }
   );
   const [stdout, stderr, exitCode] = await Promise.all([
@@ -102,43 +83,40 @@ export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
   const event = parseHelperEvent(stdout);
   if (exitCode === 0 && event?.state === "ready") {
     return {
-      currentVersion: event.displayVersion ?? event.version,
       state: "ready",
+      currentVersion: event.displayVersion ?? event.version,
     };
   }
 
   return {
+    state: "not-configured",
     message:
       event?.message ??
       (stderr.trim() || "Sparkle update configuration is incomplete."),
-    state: "not-configured",
   };
 }
 
 export async function startAppUpdateCheck(): Promise<AppUpdateStatus> {
   const status = await getAppUpdateStatus();
-  if (status.state !== "ready") {
-    return status;
-  }
+  if (status.state !== "ready") return status;
 
   const paths = updatePaths();
-  if (!paths) {
+  if (!paths)
     return {
-      message: `${appName}.app could not be located.`,
       state: "unavailable",
+      message: `${applicationName}.app could not be located.`,
     };
-  }
 
   const helper = Bun.spawn(
     [paths.helper, "check", "--application", paths.application],
     {
-      stderr: "inherit",
       stdin: "ignore",
       stdout: "inherit",
+      stderr: "inherit",
     }
   );
   runningCheck = helper.exited.finally(() => {
     runningCheck = null;
   });
-  return { currentVersion: status.currentVersion, state: "checking" };
+  return { state: "checking", currentVersion: status.currentVersion };
 }

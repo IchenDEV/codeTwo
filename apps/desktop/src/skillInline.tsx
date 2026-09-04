@@ -7,9 +7,17 @@ import {
   createReactBlockSpec,
   createReactInlineContentSpec,
 } from "@blocknote/react";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { Button } from "@/components/ui/button";
+import { Package, Sparkles, X } from "@/components/ui/icons";
 import { TooltipButton } from "@/components/ui/tooltip";
 
 import type {
@@ -18,27 +26,33 @@ import type {
   CanvasPixelPolicy,
   CanvasStaticAsset,
   CanvasSnapshot,
-  DocumentBlock,
+  DocBlock,
   StyleChange,
 } from "./bridge";
-import { CanvasEditor } from "./canvas";
-import type {
-  CanvasEditorHandle,
-  CanvasEnvelope,
-  CanvasSceneSnapshot,
+import {
+  CanvasEditor,
+  type CanvasEditorHandle,
+  type CanvasEnvelope,
+  type CanvasSceneSnapshot,
 } from "./canvas";
 import { exportCanvasPng } from "./canvas/export";
 import type { CanvasMediaInput, NormalizedCanvasMedia } from "./canvas/media";
 import { rehydrateEnvelope } from "./canvas/serialize";
 import type {
-  CanvasAssetReference,
+  CanvasAssetRef,
   CanvasTheme,
   NormalizedStaticAsset,
 } from "./canvas/types";
-import { IssueRefBlock, issueRefToDocBlock } from "./editor/issueBlock";
-import type { IssueRefProps } from "./editor/issueBlock";
-import { SlotCardBlock, slotCardToDocBlocks } from "./editor/slotCard";
-import type { SlotCardProps } from "./editor/slotCard";
+import {
+  IssueRefBlock,
+  issueRefToDocBlock,
+  type IssueRefProps,
+} from "./editor/issueBlock";
+import {
+  SlotCardBlock,
+  slotCardToDocBlocks,
+  type SlotCardProps,
+} from "./editor/slotCard";
 import { workspaceReferenceBlock } from "./editor/workspaceReference";
 
 /** Props kept on the interactive BlockNote node. Scene JSON is intentionally not emitted by
@@ -50,9 +64,7 @@ export interface CanvasBlockProps {
   title: string;
   envelope: string;
   pixelPolicy: CanvasPixelPolicy;
-  /**
-  Transient delivery feedback used when a frozen history ref is restored for retry.
-  */
+  /** Transient delivery feedback used when a frozen history ref is restored for retry. */
   deliveryError?: string;
   deliveryErrorKind?: "provider_image" | "other";
 }
@@ -71,6 +83,12 @@ export interface CanvasBlockHandle {
   setError: (message: string, kind?: "provider_image" | "other") => void;
 }
 
+function SkillGlyph({ icon }: { icon: string }) {
+  const authored = icon.trim();
+  if (authored && authored !== "✦") return <span aria-hidden>{authored}</span>;
+  return <Sparkles className="size-3.5 shrink-0" aria-hidden />;
+}
+
 /** The Composer-owned seam for draft persistence and send-time freezing. Keeping this context
  * outside BlockNote's schema lets tests inject a deterministic bridge without changing the block
  * shape or allowing the block to call the desktop host directly. */
@@ -79,7 +97,7 @@ export interface CanvasBlockRuntime {
   /**
    * The current Composer color scheme. This is deliberately transient: an editable Canvas uses
    * it for the mounted editor chrome, while readonly/history views continue to use the frozen
-   * envelope theme below. It is not part of the BlockNote Canvas props or DocumentBlock reference.
+   * envelope theme below. It is not part of the BlockNote Canvas props or DocBlock reference.
    */
   theme?: CanvasTheme;
   normalizeMedia: (
@@ -92,7 +110,7 @@ export interface CanvasBlockRuntime {
   ) => Promise<NormalizedStaticAsset | null>;
   getAssets: (canvasId: string) => readonly CanvasStaticAsset[];
   onAsset: (canvasId: string, asset: CanvasStaticAsset) => void;
-  onCanvasActivity: (canvasId: string, isNonEmpty: boolean) => void;
+  onCanvasActivity: (canvasId: string, nonEmpty: boolean) => void;
   saveDraft: (
     canvasId: string,
     envelope: CanvasEnvelope,
@@ -105,9 +123,9 @@ export interface CanvasBlockRuntime {
     exports: readonly CanvasExport[],
     pixelPolicy: CanvasPixelPolicy
   ) => Promise<CanvasSnapshot>;
-  onCanvasRemoved: (canvasId: string, isNonEmpty: boolean) => void;
+  onCanvasRemoved: (canvasId: string, nonEmpty: boolean) => void;
   onCanvasRestored: (canvasId: string) => void;
-  onCanvasUnmount: (canvasId: string, isNonEmpty: boolean) => void;
+  onCanvasUnmount: (canvasId: string, nonEmpty: boolean) => void;
   onCanvasFrozen: (canvasId: string, revision: number) => void;
   onCanvasDeliveryError: (
     canvasId: string,
@@ -120,14 +138,17 @@ export interface CanvasBlockRuntime {
 export const CanvasBlockRuntimeContext =
   createContext<CanvasBlockRuntime | null>(null);
 
+/**
+ * Pick the visual theme for a Canvas surface without allowing a live Composer scheme to mutate
+ * an immutable snapshot. The runtime scheme is only authoritative for an interactive edit; a
+ * readonly or historical surface always retains the theme captured in its envelope.
+ */
 export function canvasThemeForMode(
   mode: "edit" | "readonly" | "historical",
   runtimeTheme: CanvasTheme | undefined,
   envelopeTheme: CanvasTheme | undefined
 ): CanvasTheme {
-  if (mode === "edit" && runtimeTheme) {
-    return runtimeTheme;
-  }
+  if (mode === "edit" && runtimeTheme) return runtimeTheme;
   return envelopeTheme ?? "light";
 }
 
@@ -173,11 +194,9 @@ export class CanvasDraftSaveQueue {
     envelope: CanvasEnvelope,
     assets: readonly CanvasStaticAsset[]
   ): Promise<void> {
-    this.pending = { assets, envelope };
+    this.pending = { envelope, assets };
     this.generation += 1;
-    if (this.running) {
-      return this.running;
-    }
+    if (this.running) return this.running;
     const run = this.drain();
     this.running = run;
     return run;
@@ -187,12 +206,8 @@ export class CanvasDraftSaveQueue {
     if (!this.running && this.pending) {
       this.enqueue(this.pending.envelope, this.pending.assets);
     }
-    if (this.running) {
-      await this.running;
-    }
-    if (this.failure) {
-      throw this.failure;
-    }
+    if (this.running) await this.running;
+    if (this.failure) throw this.failure;
   }
 
   private async drain(): Promise<void> {
@@ -218,7 +233,7 @@ export class CanvasDraftSaveQueue {
           this.options.onSaved(
             saved,
             authoritativeRequest,
-            requestGeneration === this.generation && this.pending == null
+            requestGeneration === this.generation && !this.pending
           );
         } catch (cause) {
           const error =
@@ -237,30 +252,28 @@ export class CanvasDraftSaveQueue {
 
 export function canvasDraftToEnvelope(draft: CanvasDraft): CanvasEnvelope {
   const scene =
-    draft.envelope.scene != null && typeof draft.envelope.scene === "object"
+    draft.envelope.scene && typeof draft.envelope.scene === "object"
       ? (draft.envelope.scene as Record<string, unknown>)
       : {};
   const elements = Array.isArray(scene.elements) ? scene.elements : [];
   const appState =
-    scene.appState != null && typeof scene.appState === "object"
-      ? scene.appState
-      : {};
+    scene.appState && typeof scene.appState === "object" ? scene.appState : {};
   return {
-    appState: appState as CanvasEnvelope["appState"],
-    assetReferences: draft.assets.map((asset) => ({
-      byteLength: asset.bytes.length,
-      fileId: asset.id,
-      height: asset.height,
-      mimeType: asset.mimeType === "image/webp" ? "image/webp" : "image/png",
-      ref: asset.id,
-      width: asset.width,
-    })),
-    elements: elements as CanvasEnvelope["elements"],
     engine: "@excalidraw/excalidraw",
     engineVersion: "0.18.1",
-    revision: draft.revision,
     schemaVersion: 1,
+    revision: draft.revision,
     theme: draft.theme === "dark" ? "dark" : "light",
+    elements: elements as CanvasEnvelope["elements"],
+    appState: appState as CanvasEnvelope["appState"],
+    assetRefs: draft.assets.map((asset) => ({
+      ref: asset.id,
+      fileId: asset.id,
+      mimeType: asset.mimeType === "image/webp" ? "image/webp" : "image/png",
+      byteLength: asset.bytes.length,
+      width: asset.width,
+      height: asset.height,
+    })),
   };
 }
 
@@ -272,20 +285,20 @@ export function canvasBlockPropsFromDraft(
   > = { pixelPolicy: "required" }
 ): CanvasBlockProps {
   return {
-    deliveryError: options.deliveryError,
-    deliveryErrorKind: options.deliveryErrorKind,
-    envelope: JSON.stringify(canvasDraftToEnvelope(draft)),
     id: draft.id,
-    pixelPolicy: options.pixelPolicy,
     revision: draft.revision,
     title: draft.title || "Canvas",
+    envelope: JSON.stringify(canvasDraftToEnvelope(draft)),
+    pixelPolicy: options.pixelPolicy,
+    deliveryError: options.deliveryError,
+    deliveryErrorKind: options.deliveryErrorKind,
   };
 }
 
 function readCanvasEnvelope(value: string): CanvasEnvelope | null {
   try {
     const parsed = JSON.parse(value) as CanvasEnvelope;
-    return parsed != null && typeof parsed === "object" ? parsed : null;
+    return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
   }
@@ -316,9 +329,9 @@ function pngDimensions(bytes: readonly number[]): {
         ((bytes[offset + 2] ?? 0) << 8) |
         (bytes[offset + 3] ?? 0)) >>>
       0;
-    return { height: Math.max(1, read(20)), width: Math.max(1, read(16)) };
+    return { width: Math.max(1, read(16)), height: Math.max(1, read(20)) };
   }
-  return { height: 1, width: 1 };
+  return { width: 1, height: 1 };
 }
 
 function canvasExportsFromPngs(
@@ -332,52 +345,58 @@ function canvasExportsFromPngs(
       const dimensions = pngDimensions(bytes);
       const index = png.kind === "detail" ? detailIndex++ : null;
       return {
-        bytes,
-        height: dimensions.height,
         id: `${canvasId}-${png.kind}-${png.kind === "overview" ? "overview" : index}`,
-        index,
         kind: png.kind,
+        index,
         mimeType: "image/png" as const,
         width: dimensions.width,
+        height: dimensions.height,
+        bytes,
       };
     })
   );
 }
 
+/**
+ * Resolve the scene used for send-time export. A collapsed BlockNote node does not keep an
+ * Excalidraw instance mounted, so its editor handle can legitimately report an empty snapshot;
+ * in that case rehydrate the authoritative envelope and normalized media instead of exporting an
+ * empty canvas.
+ */
 export async function resolveCanvasSnapshotForFreeze(
   envelope: CanvasEnvelope,
   assets: readonly CanvasStaticAsset[],
   live: CanvasSceneSnapshot | null
 ): Promise<CanvasSceneSnapshot> {
-  if (live && (live.elements.length > 0 || envelope.elements.length === 0)) {
+  if (live && (live.elements.length > 0 || envelope.elements.length === 0))
     return live;
-  }
   const normalizedAssets = assets.map((asset) => ({
-    bytes: new Uint8Array(asset.bytes),
+    ref: asset.id,
     fileId: asset.id,
     mimeType: asset.mimeType,
-    ref: asset.id,
+    bytes: new Uint8Array(asset.bytes),
   }));
   return rehydrateEnvelope(envelope, normalizedAssets);
 }
 
 // A real inline "skill" node: a first-class document element (not styled text), so a composed
-// prompt serializes deterministically into `DocumentBlock::Skill` with a stable skillId. This is what
+// prompt serializes deterministically into `DocBlock::Skill` with a stable skillId. This is what
 // makes "compose a prompt as a document, combine skills inline" work end to end.
 export const SkillInline = createReactInlineContentSpec(
   {
-    content: "none",
-    propSchema: {
-      icon: { default: "" },
-      name: { default: "" },
-      skillId: { default: "" },
-    },
     type: "skill",
+    propSchema: {
+      skillId: { default: "" },
+      name: { default: "" },
+      icon: { default: "" },
+    },
+    content: "none",
   } as const,
   {
     render: (props) => (
       <span className="skill-chip" contentEditable={false}>
-        {props.inlineContent.props.icon} {props.inlineContent.props.name}
+        <SkillGlyph icon={props.inlineContent.props.icon} />
+        {props.inlineContent.props.name}
       </span>
     ),
   }
@@ -391,11 +410,11 @@ export const SkillInline = createReactInlineContentSpec(
 // a chip.
 export const FileInline = createReactInlineContentSpec(
   {
-    content: "none",
+    type: "fileMention",
     propSchema: {
       path: { default: "" },
     },
-    type: "fileMention",
+    content: "none",
   } as const,
   {
     render: (props) => (
@@ -411,13 +430,13 @@ export const FileInline = createReactInlineContentSpec(
 // implements it ("we discussed this — here's the discussion").
 export const SessionMentionInline = createReactInlineContentSpec(
   {
-    content: "none",
+    type: "sessionMention",
     propSchema: {
       sessionId: { default: "" },
-      throughSeq: { default: 0 },
       title: { default: "" },
+      throughSeq: { default: 0 },
     },
-    type: "sessionMention",
+    content: "none",
   } as const,
   {
     render: (props) => (
@@ -435,18 +454,18 @@ export const SessionMentionInline = createReactInlineContentSpec(
 // interpolation (and core's `compile_full` for richer flows) resolves into the stored content.
 export const ArtifactInline = createReactInlineContentSpec(
   {
-    content: "none",
+    type: "artifactMention",
     propSchema: {
       artifactId: { default: "" },
-      kind: { default: "" },
       title: { default: "" },
+      kind: { default: "" },
     },
-    type: "artifactMention",
+    content: "none",
   } as const,
   {
     render: (props) => (
       <span className="chat-chip" contentEditable={false}>
-        ⌘{" "}
+        <Package className="size-3.5 shrink-0" aria-hidden />
         {props.inlineContent.props.title ||
           props.inlineContent.props.artifactId}
       </span>
@@ -461,16 +480,18 @@ export const ArtifactInline = createReactInlineContentSpec(
 // view of it, never a re-rendering.
 export const BrowserNoteBlock = createReactBlockSpec(
   {
-    content: "none",
-    propSchema: {
-      context: { default: "" },
-      note: { default: "" },
-      selectedText: { default: "" },
-      selector: { default: "" },
-      styles: { default: "[]" },
-      url: { default: "" },
-    },
     type: "browserNote",
+    propSchema: {
+      url: { default: "" },
+      note: { default: "" },
+      selector: { default: "" },
+      selectedText: { default: "" },
+      /// `StyleChange[]` as JSON — BlockNote props are scalars only.
+      styles: { default: "[]" },
+      /// The exact markdown block `browser_context` rendered; what the document compiles to.
+      context: { default: "" },
+    },
+    content: "none",
   } as const,
   {
     render: (props) => {
@@ -479,26 +500,20 @@ export const BrowserNoteBlock = createReactBlockSpec(
       try {
         host = new URL(url).host || url;
       } catch {
-        /*
-        keep as-is
-        */
+        /* keep as-is */
       }
       let changes: StyleChange[] = [];
       try {
         changes = JSON.parse(styles) as StyleChange[];
       } catch {
-        /*
-        corrupt props render as no changes
-        */
+        /* corrupt props render as no changes */
       }
       return (
         <div className="bn-annotation" contentEditable={false}>
           <div className="bn-annotation-head">
             <span className="bn-annotation-dot" />
             <span className="bn-annotation-host">{host}</span>
-            {selector ? (
-              <code className="bn-annotation-sel">{selector}</code>
-            ) : null}
+            {selector && <code className="bn-annotation-sel">{selector}</code>}
             <TooltipButton
               label="Remove"
               type="button"
@@ -507,13 +522,13 @@ export const BrowserNoteBlock = createReactBlockSpec(
               className="bn-annotation-x"
               onClick={() => props.editor.removeBlocks([props.block])}
             >
-              ×
+              <X className="size-3.5" aria-hidden />
             </TooltipButton>
           </div>
-          {selectedText ? (
+          {selectedText && (
             <div className="bn-annotation-quote">“{selectedText}”</div>
-          ) : null}
-          {note ? <div className="bn-annotation-note">{note}</div> : null}
+          )}
+          {note && <div className="bn-annotation-note">{note}</div>}
           {changes.length > 0 && (
             <div className="bn-annotation-styles">
               {changes.map((c) => (
@@ -536,10 +551,8 @@ export function CanvasBlockView({
   block,
   editor,
 }: {
-  readonly block: { props: CanvasBlockProps };
-  readonly editor: {
-    updateBlock: (block: unknown, update: unknown) => unknown;
-  };
+  block: { props: CanvasBlockProps };
+  editor: { updateBlock: (block: unknown, update: unknown) => unknown };
 }) {
   const runtime = useContext(CanvasBlockRuntimeContext);
   const id = block.props.id;
@@ -566,7 +579,7 @@ export function CanvasBlockView({
     block.props.pixelPolicy === "structure_only"
       ? "structure_only"
       : "required";
-  const canvasMode = runtime?.enabled === true ? "edit" : "readonly";
+  const canvasMode = runtime?.enabled ? "edit" : "readonly";
   const canvasTheme = canvasThemeForMode(
     canvasMode,
     runtime?.theme,
@@ -577,16 +590,11 @@ export function CanvasBlockView({
   const pixelPolicyRef = useRef(pixelPolicy);
   pixelPolicyRef.current = pixelPolicy;
 
-  const saveQueue = (() => {
-    if (!runtime || !runtime.enabled) {
-      return null;
-    }
+  const saveQueue = useMemo(() => {
+    if (!runtime || !runtime.enabled) return null;
     return new CanvasDraftSaveQueue({
       initialRevision: block.props.revision,
-      onError: (cause) => {
-        setError(cause.message);
-        setErrorKind("other");
-      },
+      save: (next, assets) => runtime.saveDraft(id, next, assets),
       onSaved: (saved, request, isLatest) => {
         const savedEnvelope = canvasDraftToEnvelope(saved);
         if (isLatest) {
@@ -596,26 +604,29 @@ export function CanvasBlockView({
         try {
           editor.updateBlock(blockRef.current, {
             props: {
-              deliveryError: blockRef.current.props.deliveryError,
-              deliveryErrorKind: blockRef.current.props.deliveryErrorKind,
+              id,
+              revision: saved.revision,
+              title: saved.title,
+              // Keep the newest local scene in BlockNote while an older CAS acknowledgement is
+              // being followed by the rebased queue write.
               envelope: JSON.stringify(
                 isLatest ? savedEnvelope : (envelopeRef.current ?? request)
               ),
-              id,
               pixelPolicy: pixelPolicyRef.current,
-              revision: saved.revision,
-              title: saved.title,
+              deliveryError: blockRef.current.props.deliveryError,
+              deliveryErrorKind: blockRef.current.props.deliveryErrorKind,
             },
           });
         } catch {
-          /*
-          BlockNote may be tearing down during an async autosave.
-          */
+          /* BlockNote may be tearing down during an async autosave. */
         }
       },
-      save: (next, assets) => runtime.saveDraft(id, next, assets),
+      onError: (cause) => {
+        setError(cause.message);
+        setErrorKind("other");
+      },
     });
-  })();
+  }, [editor, id, runtime]);
 
   useEffect(() => {
     envelopeRef.current = readCanvasEnvelope(block.props.envelope);
@@ -632,26 +643,30 @@ export function CanvasBlockView({
   const enqueueSave = (
     next: CanvasEnvelope,
     assets: readonly CanvasStaticAsset[]
-  ): Promise<void> => saveQueue?.enqueue(next, assets) ?? Promise.resolve();
+  ): Promise<void> => {
+    return saveQueue?.enqueue(next, assets) ?? Promise.resolve();
+  };
 
   const flushSaves = async (): Promise<void> => {
     await saveQueue?.flush();
-    if (saveQueue?.lastError) {
-      throw saveQueue.lastError;
-    }
+    if (saveQueue?.lastError) throw saveQueue.lastError;
   };
 
   useEffect(() => {
-    if (!runtime || !id) {
-      return;
-    }
+    if (!runtime || !id) return;
     return runtime.register({
+      id,
+      getEnvelope: () => envelopeRef.current,
+      getSnapshot: () => editorHandle.current?.getSnapshot() ?? null,
+      getAssets: () => Array.from(assetsRef.current.values()),
+      getPixelPolicy: () =>
+        block.props.pixelPolicy === "structure_only"
+          ? "structure_only"
+          : "required",
       freeze: async () => {
         await flushSaves();
         const current = envelopeRef.current;
-        if (!current) {
-          throw new Error("Canvas scene is not ready");
-        }
+        if (!current) throw new Error("Canvas scene is not ready");
         const authoritative = {
           ...current,
           revision: saveQueue?.authoritativeRevision ?? current.revision,
@@ -668,9 +683,8 @@ export function CanvasBlockView({
           snapshot.files
         );
         const exports = await canvasExportsFromPngs(id, pngs);
-        if (exports.length === 0) {
+        if (exports.length === 0)
           throw new Error("Canvas export produced no pixels");
-        }
         const frozen = await runtime.freezeDraft(
           id,
           authoritative,
@@ -680,16 +694,8 @@ export function CanvasBlockView({
         );
         setFrozenRevision(frozen.revision);
         runtime.onCanvasFrozen(id, frozen.revision);
-        return { exports, snapshot: frozen };
+        return { snapshot: frozen, exports };
       },
-      getAssets: () => Array.from(assetsRef.current.values()),
-      getEnvelope: () => envelopeRef.current,
-      getPixelPolicy: () =>
-        block.props.pixelPolicy === "structure_only"
-          ? "structure_only"
-          : "required",
-      getSnapshot: () => editorHandle.current?.getSnapshot() ?? null,
-      id,
       markFrozen: (revision) => setFrozenRevision(revision),
       setError: (message, kind = "other") => {
         setError(message);
@@ -698,63 +704,71 @@ export function CanvasBlockView({
     });
   }, [editor, id, pixelPolicy, runtime]);
 
-  const mediaNormalizer = runtime
-    ? (input: CanvasMediaInput) =>
-        runtime.normalizeMedia(id, input).then((media) => {
-          if (media) {
-            const bytes =
-              media.bytes instanceof Uint8Array
-                ? Array.from(media.bytes)
-                : media.bytes instanceof ArrayBuffer
-                  ? Array.from(new Uint8Array(media.bytes))
-                  : undefined;
-            if (bytes) {
-              const asset: CanvasStaticAsset = {
-                bytes,
-                height: media.height ?? 1,
-                id: media.ref,
-                mimeType: media.mimeType,
-                width: media.width ?? 1,
-              };
-              assetsRef.current.set(asset.id, asset);
-              runtime.onAsset(id, asset);
+  const mediaNormalizer = useMemo(
+    () =>
+      runtime
+        ? (input: CanvasMediaInput) =>
+            runtime.normalizeMedia(id, input).then((media) => {
+              if (media) {
+                const bytes =
+                  media.bytes instanceof Uint8Array
+                    ? Array.from(media.bytes)
+                    : media.bytes instanceof ArrayBuffer
+                      ? Array.from(new Uint8Array(media.bytes))
+                      : undefined;
+                if (bytes) {
+                  const asset: CanvasStaticAsset = {
+                    id: media.ref,
+                    mimeType: media.mimeType,
+                    width: media.width ?? 1,
+                    height: media.height ?? 1,
+                    bytes,
+                  };
+                  assetsRef.current.set(asset.id, asset);
+                  runtime.onAsset(id, asset);
+                }
+              }
+              return media;
+            })
+        : undefined,
+    [id, runtime]
+  );
+  const assetResolver = useMemo(
+    () =>
+      runtime
+        ? (asset: CanvasAssetRef) => {
+            const stored =
+              assetsRef.current.get(asset.ref) ??
+              assetsRef.current.get(asset.fileId);
+            if (stored) {
+              return Promise.resolve({
+                ref: stored.id,
+                fileId: stored.id,
+                mimeType: stored.mimeType,
+                bytes: new Uint8Array(stored.bytes),
+              } satisfies NormalizedStaticAsset);
             }
-          }
-          return media;
-        })
-    : undefined;
-  const assetResolver = runtime
-    ? (asset: CanvasAssetReference) => {
-        const stored =
-          assetsRef.current.get(asset.ref) ??
-          assetsRef.current.get(asset.fileId);
-        if (stored) {
-          return Promise.resolve({
-            bytes: new Uint8Array(stored.bytes),
-            fileId: stored.id,
-            mimeType: stored.mimeType,
-            ref: stored.id,
-          } satisfies NormalizedStaticAsset);
-        }
-        return runtime.resolveAsset(id, asset).then((resolved) => {
-          if (resolved) {
-            assetsRef.current.set(resolved.ref, {
-              bytes:
-                resolved.bytes instanceof Uint8Array
-                  ? Array.from(resolved.bytes)
-                  : resolved.bytes instanceof ArrayBuffer
-                    ? Array.from(new Uint8Array(resolved.bytes))
-                    : [],
-              height: asset.height ?? 1,
-              id: resolved.ref,
-              mimeType: resolved.mimeType,
-              width: asset.width ?? 1,
+            return runtime.resolveAsset(id, asset).then((resolved) => {
+              if (resolved) {
+                assetsRef.current.set(resolved.ref, {
+                  id: resolved.ref,
+                  mimeType: resolved.mimeType,
+                  width: asset.width ?? 1,
+                  height: asset.height ?? 1,
+                  bytes:
+                    resolved.bytes instanceof Uint8Array
+                      ? Array.from(resolved.bytes)
+                      : resolved.bytes instanceof ArrayBuffer
+                        ? Array.from(new Uint8Array(resolved.bytes))
+                        : [],
+                });
+              }
+              return resolved;
             });
           }
-          return resolved;
-        });
-      }
-    : undefined;
+        : undefined,
+    [id, runtime]
+  );
 
   const onChange = (next: CanvasEnvelope) => {
     envelopeRef.current = next;
@@ -765,27 +779,21 @@ export function CanvasBlockView({
     try {
       editor.updateBlock(block, {
         props: {
-          deliveryError: block.props.deliveryError,
-          deliveryErrorKind: block.props.deliveryErrorKind,
-          envelope: JSON.stringify(next),
           id,
-          pixelPolicy,
           revision: next.revision,
           title: block.props.title,
+          envelope: JSON.stringify(next),
+          pixelPolicy,
+          deliveryError: block.props.deliveryError,
+          deliveryErrorKind: block.props.deliveryErrorKind,
         },
       });
     } catch {
-      /*
-      BlockNote may be tearing down while a delayed Excalidraw change arrives.
-      */
+      /* BlockNote may be tearing down while a delayed Excalidraw change arrives. */
     }
-    if (!runtime || !runtime.enabled) {
-      return;
-    }
+    if (!runtime || !runtime.enabled) return;
     void enqueueSave(next, Array.from(assetsRef.current.values())).catch(() => {
-      /*
-      Queue onError has already surfaced the authoritative CAS failure in the block.
-      */
+      /* Queue onError has already surfaced the authoritative CAS failure in the block. */
     });
   };
 
@@ -824,11 +832,14 @@ export function CanvasBlockView({
         name={block.props.title || "Canvas"}
       />
       {frozenRevision !== null ? (
-        <output className="text-callout text-muted-foreground mt-1 px-1">
+        <p
+          className="text-callout text-muted-foreground mt-1 px-1"
+          role="status"
+        >
           Frozen revision {frozenRevision}
-        </output>
+        </p>
       ) : null}
-      {error != null && error !== "" ? (
+      {error ? (
         <div
           className="text-callout text-warning mt-1 flex flex-wrap items-center gap-2 px-1"
           role="alert"
@@ -866,17 +877,17 @@ export function CanvasBlockView({
 
 export const CanvasBlock = createReactBlockSpec(
   {
-    content: "none",
+    type: "canvas",
     propSchema: {
-      deliveryError: { default: "" },
-      deliveryErrorKind: { default: "other" },
-      envelope: { default: "" },
       id: { default: "" },
-      pixelPolicy: { default: "required" },
       revision: { default: 1 },
       title: { default: "Canvas" },
+      envelope: { default: "" },
+      pixelPolicy: { default: "required" },
+      deliveryError: { default: "" },
+      deliveryErrorKind: { default: "other" },
     },
-    type: "canvas",
+    content: "none",
   } as const,
   {
     render: (props) => (
@@ -894,29 +905,28 @@ export const schema = BlockNoteSchema.create({
     ...defaultBlockSpecs,
     browserNote: BrowserNoteBlock,
     canvas: CanvasBlock,
-    issueRef: IssueRefBlock,
     slotCard: SlotCardBlock,
+    issueRef: IssueRefBlock,
   },
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
-    artifactMention: ArtifactInline,
+    skill: SkillInline,
     fileMention: FileInline,
     sessionMention: SessionMentionInline,
-    skill: SkillInline,
+    artifactMention: ArtifactInline,
   },
 });
 
 export type CodeTwoEditor = typeof schema.BlockNoteEditor;
 
-/// Walk the document into neutral `DocumentBlock`s: contiguous text collapses into text blocks; each
+/// Walk the document into neutral `DocBlock`s: contiguous text collapses into text blocks; each
 /// inline skill node becomes its own skill block, preserving inline ordering.
-export function docToBlocks(editor: CodeTwoEditor): DocumentBlock[] {
-  const out: DocumentBlock[] = [];
+export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
+  const out: DocBlock[] = [];
   let buf = "";
   const flush = () => {
-    if (buf.trim().length > 0) {
-      out.push({ text: buf.replace(/\n+$/u, ""), type: "text" });
-    }
+    if (buf.trim().length > 0)
+      out.push({ type: "text", text: buf.replace(/\n+$/, "") });
     buf = "";
   };
 
@@ -925,21 +935,17 @@ export function docToBlocks(editor: CodeTwoEditor): DocumentBlock[] {
     if (block.type === "browserNote") {
       flush();
       const text = String((block.props as { context?: string }).context ?? "");
-      if (text.trim()) {
-        out.push({ text, type: "text" });
-      }
+      if (text.trim()) out.push({ type: "text", text });
       continue;
     }
-    // An issue reference serializes into the core `DocumentBlock::Issue` (R12): snapshot fields plus
+    // An issue reference serializes into the core `DocBlock::Issue` (R12): snapshot fields plus
     // the body portion of the embedded context, so compiling stays offline-safe and byte-stable.
     if (block.type === "issueRef") {
       flush();
       const docBlock = issueRefToDocBlock(
         block.props as unknown as IssueRefProps
       );
-      if (docBlock) {
-        out.push(docBlock);
-      }
+      if (docBlock) out.push(docBlock);
       continue;
     }
     if (block.type === "canvas") {
@@ -947,15 +953,15 @@ export function docToBlocks(editor: CodeTwoEditor): DocumentBlock[] {
       const props = block.props as unknown as CanvasBlockProps;
       if (props.id) {
         out.push({
+          type: "canvas",
+          id: props.id,
           frozen_revision: Number.isFinite(Number(props.revision))
             ? Number(props.revision)
             : 0,
-          id: props.id,
           pixel_policy:
             props.pixelPolicy === "structure_only"
               ? "structure_only"
               : "required",
-          type: "canvas",
         });
       }
       continue;
@@ -964,9 +970,7 @@ export function docToBlocks(editor: CodeTwoEditor): DocumentBlock[] {
       flush();
       const props = block.props as { url?: string; name?: string };
       const path = String(props.url ?? props.name ?? "");
-      if (path) {
-        out.push({ path, type: "image" });
-      }
+      if (path) out.push({ type: "image", path });
       continue;
     }
     // A slot card serializes from its JSON-encoded props: a macro card becomes one skill block
@@ -985,7 +989,7 @@ export function docToBlocks(editor: CodeTwoEditor): DocumentBlock[] {
         } else if (inline.type === "skill") {
           flush();
           const props = inline.props as { skillId: string };
-          out.push({ params: {}, skill_id: props.skillId, type: "skill" });
+          out.push({ type: "skill", skill_id: props.skillId, params: {} });
         } else if (inline.type === "fileMention") {
           flush();
           const props = inline.props as { path: string };
@@ -998,8 +1002,8 @@ export function docToBlocks(editor: CodeTwoEditor): DocumentBlock[] {
           };
           const throughSeq = Number(props.throughSeq ?? 0);
           out.push({
-            session_id: props.sessionId,
             type: "session",
+            session_id: props.sessionId,
             ...(Number.isSafeInteger(throughSeq) && throughSeq > 0
               ? { through_seq: throughSeq }
               : {}),
@@ -1008,8 +1012,8 @@ export function docToBlocks(editor: CodeTwoEditor): DocumentBlock[] {
           flush();
           const props = inline.props as { artifactId: string };
           out.push({
-            text: "{{artifact:" + props.artifactId + "}}",
             type: "text",
+            text: "{{artifact:" + props.artifactId + "}}",
           });
         } else if (inline.type === "link") {
           const parts =

@@ -23,7 +23,7 @@ function SelectTrigger({
   children,
   ...props
 }: SelectPrimitive.Trigger.Props & {
-  readonly size?: "sm" | "default";
+  size?: "sm" | "default";
 }) {
   return (
     <SelectPrimitive.Trigger
@@ -52,23 +52,23 @@ function SelectContent({
   sideOffset = 4,
   ...props
 }: SelectPrimitive.Popup.Props & {
-  readonly position?: "item-aligned" | "popper";
+  position?: "item-aligned" | "popper";
 } & Pick<SelectPrimitive.Positioner.Props, "align" | "side" | "sideOffset">) {
-  const isAlignItemWithTrigger = position === "item-aligned";
+  const alignItemWithTrigger = position === "item-aligned";
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
         align={align}
         side={side}
         sideOffset={sideOffset}
-        alignItemWithTrigger={isAlignItemWithTrigger}
+        alignItemWithTrigger={alignItemWithTrigger}
         className="isolate z-50"
       >
         <SelectPrimitive.Popup
           data-slot="select-content"
           className={cn(
             "pop-layer raised-material rounded-menu text-content shadow-menu relative z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto outline-none",
-            !isAlignItemWithTrigger && "w-(--anchor-width)",
+            !alignItemWithTrigger && "w-(--anchor-width)",
             className
           )}
           {...props}

@@ -83,18 +83,27 @@ describe("Dock plugin component gate", () => {
     activateDom();
     const opened = [];
     const view = renderDock(
-      ["trajectory", "browser", "terminal", "side-chat", "files", "git"],
+      [
+        "trajectory",
+        "browser",
+        "terminal",
+        "side-chat",
+        "files",
+        "git",
+        "pull-request",
+      ],
       "home",
       true,
       (surface) => opened.push(surface)
     );
     await flush();
 
-    const cards = [
-      ...view.container.querySelectorAll(".dock-surface-grid > button"),
-    ];
+    const cards = Array.from(
+      view.container.querySelectorAll(".dock-surface-grid > button")
+    );
     expect(cards[2]?.textContent).toContain("Terminal");
     expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
+    expect(cards[6]?.getAttribute("aria-label")).toBe("PR");
     expect(
       cards.every((card) => card.classList.contains("dock-surface-card"))
     ).toBe(true);
@@ -141,7 +150,7 @@ describe("Dock plugin component gate", () => {
     expect(panel).not.toBeNull();
     expect(panel?.classList.contains("dock-panel-side")).toBe(true);
     expect(panel?.classList.contains("border-l")).toBe(true);
-    expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/u);
+    expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/);
     expect(panel?.getAttribute("style")).not.toContain("height");
     expect(
       panel?.querySelector('[data-dock-resize="horizontal"]')

@@ -15,7 +15,7 @@ export type {
   ActivePluginUiContributionsBySlot,
 } from "./contributions";
 export {
-  builtinUiComponents,
+  BUILTIN_UI_COMPONENTS,
   buildPluginManagerCatalog,
   normalizePluginProjectPath,
   pluginManagerComponentEnabled,

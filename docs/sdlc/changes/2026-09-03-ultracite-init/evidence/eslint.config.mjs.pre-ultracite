@@ -1,10 +1,16 @@
 import js from "@eslint/js";
 import betterTailwindcss from "eslint-plugin-better-tailwindcss";
 import reactHooks from "eslint-plugin-react-hooks";
+import sonarjs from "eslint-plugin-sonarjs";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
 const sourceFiles = ["src/**/*.{js,jsx,ts,tsx}"];
+const taskBoardWorkspaceFiles = ["src/taskboard/**/*.{ts,tsx}"];
+const taskBoardLegacyFiles = [
+  "src/taskboard/TaskEditorDialog.tsx",
+  "src/taskboard/taskBoard.ts",
+];
 const inlineRadiusRestriction = {
   message: "Express border radius through a semantic class or CSS rule, not inline style.",
   selector: "Property[key.name='borderRadius']",
@@ -91,6 +97,47 @@ export default tseslint.config(
         rawTextareaRestriction,
         inlineRadiusRestriction,
       ],
+    },
+  },
+  {
+    files: taskBoardWorkspaceFiles,
+    ignores: taskBoardLegacyFiles,
+    linterOptions: {
+      reportUnusedDisableDirectives: "error",
+    },
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    plugins: { sonarjs },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-assignment": "error",
+      "@typescript-eslint/no-unsafe-call": "error",
+      "@typescript-eslint/no-unsafe-member-access": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/no-unused-vars": "error",
+      complexity: ["error", { max: 21 }],
+      "max-lines": ["error", { max: 249 }],
+      "no-duplicate-imports": "error",
+      "no-restricted-syntax": [
+        "error",
+        rawButtonRestriction,
+        rawTextareaRestriction,
+        inlineRadiusRestriction,
+      ],
+      "sonarjs/cognitive-complexity": ["error", 21],
+      "sonarjs/no-all-duplicated-branches": "error",
+      "sonarjs/no-identical-conditions": "error",
+      "sonarjs/no-identical-expressions": "error",
+      "sonarjs/no-redundant-assignments": "error",
+      "sonarjs/no-redundant-boolean": "error",
+      "sonarjs/no-redundant-jump": "error",
+      "sonarjs/no-unused-collection": "error",
+      "sonarjs/unused-import": "error",
     },
   },
 );

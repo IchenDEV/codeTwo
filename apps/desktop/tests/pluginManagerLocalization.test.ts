@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { zhCN } from "../src/i18n/strings";
-import type { StringKey } from "../src/i18n/strings";
+import { zhCN, type StringKey } from "../src/i18n/strings";
 import {
   createPluginManagerLabels,
   localizePluginManagerCatalog,
@@ -10,7 +9,7 @@ import {
 const t = (key: StringKey, vars?: Record<string, string | number>) => {
   const template = zhCN[key];
   return vars
-    ? template.replaceAll(/\{(\w+)\}/gu, (whole, name) =>
+    ? template.replace(/\{(\w+)\}/g, (whole, name) =>
         name in vars ? String(vars[name]) : whole
       )
     : template;

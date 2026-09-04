@@ -1,5 +1,12 @@
-import { useEffect, useId, useRef, useState } from "react";
-import type { MutableRefObject, ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from "react";
 
 import { SearchField } from "@/components/business/search-field";
 import { SelectableRow } from "@/components/business/selectable-row";
@@ -46,171 +53,138 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { cn } from "@/lib/utils";
 
-import { fallbackProviders, providerDisplayName } from "../bridge";
-import type {
-  ConfigOptionInfo,
-  AppshotCapture,
-  GoalCapabilityInfo,
-  GoalSnapshot,
-  ModelChoice,
+import {
+  fallbackProviders,
+  type ConfigOptionInfo,
+  type AppshotCapture,
+  type GoalCapabilityInfo,
+  type GoalSnapshot,
+  type ModelChoice,
 } from "../bridge";
 import { briefOfferVisible } from "../editor/slotCard";
 import { useT } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
-import type { SessionConfig } from "./config";
+import { memoryPresetsForProvider, type SessionConfig } from "./config";
 import type { ContextWindow } from "./contextWindow";
-import { sessionModes, sessionMode } from "./mode";
+import { SESSION_MODES, sessionMode } from "./mode";
 import { useProviderModelFavorites } from "./modelFavorites";
 import { useProviderModelPreferences } from "./modelPreferences";
-import { familyOf, groupModels, pickVariant, variantOf } from "./models";
-import type { Effort } from "./models";
+import {
+  familyOf,
+  groupModels,
+  pickVariant,
+  variantOf,
+  type Effort,
+} from "./models";
 import type { SceneInfo } from "./scene";
 import { SceneChip } from "./SceneChip";
 import { worktreeGatingReason } from "./sessionEvents";
 // Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
-import { Statusline } from "./Statusline.tsx";
-import type { StatuslineUsage } from "./Statusline.tsx";
+import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
 
 interface ComposerProps {
-  /**
-  The document editor itself. The composer only owns the frame around it.
-  */
-  readonly children: ReactNode;
-  readonly config: SessionConfig;
-  /**
-  The checkout bar under the card: execution location on the left, source control on the right.
-  */
-  readonly checkout?: {
+  /** The document editor itself. The composer only owns the frame around it. */
+  children: ReactNode;
+  config: SessionConfig;
+  /** The checkout bar under the card: execution location on the left, source control on the right. */
+  checkout?: {
     project: string | null;
     branch: string | null;
     dirty: number;
     onOpen: () => void;
   } | null;
-  /**
-  Empty-thread centre stage: the card narrows to the reference's hero measure.
-  */
-  readonly hero?: boolean;
-  /**
-  Full-page authoring: the document takes the whole column and the transcript steps aside.
-  */
-  readonly docMode: boolean;
-  readonly onDocMode: (isEnabled: boolean) => void;
-  /**
-  Height of the document area in compact mode, in px — dragged by the grip, persisted.
-  */
-  readonly height: number;
-  readonly onHeight: (n: number) => void;
-  /**
-  The column the composer lives in; bounds the drag so it can't swallow the transcript.
-  */
-  readonly boundsRef: React.MutableRefObject<HTMLElement | null>;
-  /**
-  What the agent reported it can run. Empty until a session exists, or if it reports none.
-  */
-  readonly models: ModelChoice[];
-  readonly currentModel: string | null;
-  /**
-  The current session's authoritative provider context usage/capacity, if reported.
-  */
-  readonly contextWindow: ContextWindow | null;
-  /**
-  Per-session cost/burn for the statusline; null until the core's usage command exists.
-  */
-  readonly usage?: StatuslineUsage | null;
-  /**
-  Present only after the live provider session advertises its native `/compact` command.
-  */
-  readonly onCompactContext?: () => void;
-  /**
-  The adapter's own pick at session/new — worth a "Default" badge in the menus.
-  */
-  readonly defaultModel: string | null;
-  readonly onModel: (id: string) => void;
-  /**
-  Selectors the agent reported as session config options — model and reasoning effort.
-  */
-  readonly configOptions: ConfigOptionInfo[];
-  readonly onConfigOption: (configId: string, value: string) => void;
-  readonly running: boolean;
-  /**
-  Session summary is visible while its transcript detail is still loading; sending is gated.
-  */
-  readonly loading: boolean;
-  readonly docEmpty: boolean;
-  readonly appshots?: AppshotCapture[];
-  readonly onRemoveAppshot?: (id: string) => void;
-  readonly onRun: () => void;
-  readonly onQueue: () => void;
-  readonly onMultitask: () => void;
-  readonly onSteer: () => void;
-  readonly onStop: () => void;
-  readonly steeringSupported: boolean;
-  readonly goalCapability: GoalCapabilityInfo | null;
-  readonly goal: GoalSnapshot | null;
-  readonly onGoal: (
+  /** Empty-thread centre stage: the card narrows to the reference's hero measure. */
+  hero?: boolean;
+  /** Full-page authoring: the document takes the whole column and the transcript steps aside. */
+  docMode: boolean;
+  onDocMode: (v: boolean) => void;
+  /** The column the composer lives in; bounds compact content so it can't swallow the transcript. */
+  boundsRef: React.MutableRefObject<HTMLElement | null>;
+  /** What the agent reported it can run. Empty until a session exists, or if it reports none. */
+  models: ModelChoice[];
+  currentModel: string | null;
+  /** The current session's authoritative provider context usage/capacity, if reported. */
+  contextWindow: ContextWindow | null;
+  /** Per-session cost/burn for the statusline; null until the core's usage command exists. */
+  usage?: StatuslineUsage | null;
+  /** Present only after the live provider session advertises its native `/compact` command. */
+  onCompactContext?: () => void;
+  /** The adapter's own pick at session/new — worth a "Default" badge in the menus. */
+  defaultModel: string | null;
+  onModel: (id: string) => void;
+  /** Selectors the agent reported as session config options — model and reasoning effort. */
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
+  running: boolean;
+  /** Session summary is visible while its transcript detail is still loading; sending is gated. */
+  loading: boolean;
+  docEmpty: boolean;
+  appshots?: AppshotCapture[];
+  onRemoveAppshot?: (id: string) => void;
+  onRun: () => void;
+  onQueue: () => void;
+  onMultitask: () => void;
+  onSteer: () => void;
+  onStop: () => void;
+  steeringSupported: boolean;
+  goalCapability: GoalCapabilityInfo | null;
+  goal: GoalSnapshot | null;
+  onGoal: (
     action: "set" | "pause" | "resume" | "clear",
     objective?: string
   ) => Promise<void>;
-  readonly onAttachFile: () => void;
-  readonly onAttachImages: (files: readonly File[]) => void | Promise<void>;
-  readonly onInsertSkill: () => void;
-  readonly onInsertIssue: () => void;
-  readonly onOpenMarket: () => void;
-  readonly onNewSkill: () => void;
-  readonly canvasEnabled: boolean;
-  readonly onInsertCanvas: () => void;
-  /**
-  Component-policy gate; false means the voice plugin may already be unloaded.
-  */
-  readonly voiceEnabled: boolean;
-  readonly onVoiceText: (text: string) => void;
-  /**
-  R11: present only when the active scene has a brief — voice then structures into it.
-  */
-  readonly onVoiceTranscript?: (full: string) => Promise<void>;
-  readonly runHint: string;
-  readonly skillHint: string;
-  readonly filesHint: string;
-  /**
-  Host-rendered declarative plugin actions in the compact control row.
-  */
-  readonly pluginActions?: ReactNode;
-  /**
-  Keys the per-session brief-offer dismissal; null while no session exists yet.
-  */
-  readonly sessionId?: string | null;
-  /**
-  Editor-owned seam that inserts the active scene's brief as a slot card (R5).
-  */
-  readonly insertBriefRef?: MutableRefObject<
+  onAttachFile: () => void;
+  onAttachImages: (files: readonly File[]) => void | Promise<void>;
+  onInsertSkill: () => void;
+  onInsertIssue: () => void;
+  onOpenMarket: () => void;
+  onNewSkill: () => void;
+  canvasEnabled: boolean;
+  onInsertCanvas: () => void;
+  /** Component-policy gate; false means the voice plugin may already be unloaded. */
+  voiceEnabled: boolean;
+  onVoiceText: (text: string) => void;
+  /** R11: present only when the active scene has a brief — voice then structures into it. */
+  onVoiceTranscript?: (full: string) => Promise<void>;
+  runHint: string;
+  skillHint: string;
+  filesHint: string;
+  /** Host-rendered declarative plugin actions in the compact control row. */
+  pluginActions?: ReactNode;
+  /** Keys the per-session brief-offer dismissal; null while no session exists yet. */
+  sessionId?: string | null;
+  /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
+  insertBriefRef?: MutableRefObject<
     ((scene: SceneInfo, values?: Record<string, string>) => void) | null
   >;
 }
 
 function displayGitRef(reference: string | null | undefined): string | null {
-  if (!reference) {
-    return null;
-  }
+  if (!reference) return null;
   return reference
-    .replace(/^refs\/heads\//u, "")
-    .replace(/^refs\/remotes\//u, "");
+    .replace(/^refs\/heads\//, "")
+    .replace(/^refs\/remotes\//, "");
 }
 
+/**
+ * The persistent checkout control. It keeps execution location separate from source control, and
+ * only presents baselines the engine can actually materialize.
+ */
 export function CheckoutBar({
   config,
   checkout,
 }: {
-  readonly config: SessionConfig;
-  readonly checkout: NonNullable<ComposerProps["checkout"]>;
+  config: SessionConfig;
+  checkout: NonNullable<ComposerProps["checkout"]>;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -223,7 +197,7 @@ export function CheckoutBar({
     ? (config.activeWorktreeBaseline?.kind ?? null)
     : config.worktreeBase;
   const selected =
-    selectedKind === null || selectedKind === undefined
+    selectedKind == null
       ? null
       : config.worktreeOptions.find((option) => option.kind === selectedKind);
   const selectedRef = displayGitRef(
@@ -233,7 +207,7 @@ export function CheckoutBar({
   );
   const modeLabel = config.activeWorktreeUnknown
     ? t("checkout.legacy")
-    : selectedKind === null || selectedKind === undefined
+    : selectedKind == null
       ? t("checkout.project")
       : config.hasSession
         ? t("checkout.sessionWorktree")
@@ -308,9 +282,7 @@ export function CheckoutBar({
                 disabled
                 label={
                   selectedRef ??
-                  (selectedKind === null || selectedKind === undefined
-                    ? projectLabel
-                    : modeLabel)
+                  (selectedKind == null ? projectLabel : modeLabel)
                 }
                 accessibilityContext={modeLabel}
                 meta={t("checkout.currentBadge")}
@@ -328,15 +300,11 @@ export function CheckoutBar({
           ) : (
             <>
               <SelectableRow
-                selected={
-                  config.worktreeBase === null ||
-                  config.worktreeBase === undefined
-                }
+                selected={config.worktreeBase == null}
                 label={projectLabel}
                 accessibilityContext={t("checkout.project")}
                 meta={
-                  config.worktreeBase === null ||
-                  config.worktreeBase === undefined
+                  config.worktreeBase == null
                     ? t("checkout.currentBadge")
                     : t("checkout.projectBadge")
                 }
@@ -347,13 +315,12 @@ export function CheckoutBar({
                 }}
               />
 
-              {worktreeBaselines.map((kind) => {
+              {WORKTREE_BASELINES.map((kind) => {
                 const option = config.worktreeOptions.find(
                   (candidate) => candidate.kind === kind
                 );
-                const isUnavailable =
-                  !config.worktreeOptionsLoading &&
-                  (option?.resolved === null || option?.resolved === undefined);
+                const unavailable =
+                  !config.worktreeOptionsLoading && option?.resolved == null;
                 const detail = config.worktreeOptionsLoading
                   ? t("worktree.resolving")
                   : (option?.resolved?.display ??
@@ -364,7 +331,7 @@ export function CheckoutBar({
                   <SelectableRow
                     key={kind}
                     selected={config.worktreeBase === kind}
-                    disabled={isUnavailable}
+                    disabled={unavailable}
                     label={
                       displayGitRef(option?.resolved?.ref) ??
                       (kind === "current"
@@ -377,7 +344,7 @@ export function CheckoutBar({
                         : t("checkout.originRef")
                     }
                     meta={
-                      isUnavailable
+                      unavailable
                         ? t("checkout.unavailableBadge")
                         : config.worktreeBase === kind
                           ? t("checkout.currentBadge")
@@ -396,7 +363,7 @@ export function CheckoutBar({
         </PopoverContent>
       </Popover>
 
-      {checkout.branch ? (
+      {checkout.branch && (
         <Button
           type="button"
           variant="ghost"
@@ -420,12 +387,13 @@ export function CheckoutBar({
             </span>
           )}
         </Button>
-      ) : null}
+      )}
     </div>
   );
 }
 
-function MenuSection({ children }: { readonly children: ReactNode }) {
+/** Muted section header inside a picker menu — "Model", "Reasoning". */
+function MenuSection({ children }: { children: ReactNode }) {
   return (
     <p className="text-metadata text-muted-foreground shrink-0 px-2.5 pt-1.5 pb-1">
       {children}
@@ -433,6 +401,7 @@ function MenuSection({ children }: { readonly children: ReactNode }) {
   );
 }
 
+/** The small "Default" pill on the adapter's own pick. */
 function DefaultBadge() {
   const t = useT();
   return (
@@ -442,9 +411,7 @@ function DefaultBadge() {
   );
 }
 
-/**
-One row of a picker menu, normalized so the two data sources below render identically.
-*/
+/** One row of a picker menu, normalized so the two data sources below render identically. */
 interface PickerRow {
   key: string;
   label: string;
@@ -461,11 +428,11 @@ function ModelPickerRow({
   onSelect,
   onToggleFavorite,
 }: {
-  readonly row: PickerRow;
-  readonly favorite: boolean;
-  readonly disabled: boolean;
-  readonly onSelect: () => void;
-  readonly onToggleFavorite: () => void;
+  row: PickerRow;
+  favorite: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+  onToggleFavorite: () => void;
 }) {
   const t = useT();
   const favoriteLabel = t(
@@ -510,25 +477,30 @@ function ModelPickerRow({
   );
 }
 
+/**
+ * One chip, one question.
+ *
+ * These used to be a single popover holding provider, working directory, permissions and two
+ * isolation toggles — a settings dashboard behind every chip in the row, so clicking "Auto-edit"
+ * asked you about four other things first. Each control row chip now opens only its own list.
+ */
 export function SessionModePicker({
   mode,
   sandbox,
   disabled = false,
   onMode,
 }: {
-  readonly mode: SessionConfig["mode"];
-  readonly sandbox: SessionConfig["sandbox"];
-  readonly disabled?: boolean;
-  readonly onMode: SessionConfig["onSessionMode"];
+  mode: SessionConfig["mode"];
+  sandbox: SessionConfig["sandbox"];
+  disabled?: boolean;
+  onMode: SessionConfig["onSessionMode"];
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active = sessionMode(mode, sandbox);
 
   useEffect(() => {
-    if (disabled) {
-      setOpen(false);
-    }
+    if (disabled) setOpen(false);
   }, [disabled]);
 
   return (
@@ -557,7 +529,7 @@ export function SessionModePicker({
       />
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.mode")}</MenuSection>
-        {sessionModes.map((m) => (
+        {SESSION_MODES.map((m) => (
           <SelectableRow
             key={m.id}
             selected={m.id === active}
@@ -575,7 +547,7 @@ export function SessionModePicker({
   );
 }
 
-export function ModePicker({ config }: { readonly config: SessionConfig }) {
+export function ModePicker({ config }: { config: SessionConfig }) {
   return (
     <SessionModePicker
       mode={config.mode}
@@ -586,21 +558,15 @@ export function ModePicker({ config }: { readonly config: SessionConfig }) {
   );
 }
 
-const memoryPresets = [
-  { id: "standard", read: "inherit", write: "inherit" },
-  { id: "read_only", read: "allow", write: "deny" },
-  { id: "private", read: "deny", write: "deny" },
-  { id: "learn_only", read: "deny", write: "allow" },
-] as const;
-
-export function MemoryPicker({ config }: { readonly config: SessionConfig }) {
+export function MemoryPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const presets = memoryPresetsForProvider(config.provider);
   const active =
-    memoryPresets.find(
+    presets.find(
       (preset) =>
         preset.read === config.memoryRead && preset.write === config.memoryWrite
-    ) ?? memoryPresets[0];
+    ) ?? presets[0];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -620,7 +586,7 @@ export function MemoryPicker({ config }: { readonly config: SessionConfig }) {
       />
       <PopoverContent align="start" side="top" className="w-72 p-1.5">
         <MenuSection>{t("config.memory")}</MenuSection>
-        {memoryPresets.map((preset) => (
+        {presets.map((preset) => (
           <SelectableRow
             key={preset.id}
             selected={preset.id === active.id}
@@ -628,7 +594,7 @@ export function MemoryPicker({ config }: { readonly config: SessionConfig }) {
             description={t(
               `memory.preset.${preset.id}Hint` as "memory.preset.standardHint"
             )}
-            meta={preset.id === "standard" ? <DefaultBadge /> : undefined}
+            meta={preset.isDefault ? <DefaultBadge /> : undefined}
             onSelect={() => {
               config.onMemoryPolicy(preset.read, preset.write);
               setOpen(false);
@@ -640,12 +606,13 @@ export function MemoryPicker({ config }: { readonly config: SessionConfig }) {
   );
 }
 
+/** A provider-reported collaboration selector. Plan is never synthesized into prompt text. */
 export function CollaborationModePicker({
   options,
   onChange,
 }: {
-  readonly options: ConfigOptionInfo[];
-  readonly onChange: (configId: string, value: string) => void;
+  options: ConfigOptionInfo[];
+  onChange: (configId: string, value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const option = options.find(
@@ -653,9 +620,7 @@ export function CollaborationModePicker({
       candidate.category === "collaboration_mode" ||
       candidate.id === "collaboration_mode"
   );
-  if (!option || option.choices.length < 2) {
-    return null;
-  }
+  if (!option || option.choices.length < 2) return null;
   const current = option.choices.find((choice) => choice.id === option.current);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -694,9 +659,9 @@ export function GoalPicker({
   goal,
   onGoal,
 }: {
-  readonly capability: GoalCapabilityInfo | null;
-  readonly goal: GoalSnapshot | null;
-  readonly onGoal: (
+  capability: GoalCapabilityInfo | null;
+  goal: GoalSnapshot | null;
+  onGoal: (
     action: "set" | "pause" | "resume" | "clear",
     objective?: string
   ) => Promise<void>;
@@ -705,21 +670,17 @@ export function GoalPicker({
   const [open, setOpen] = useState(false);
   const [objective, setObjective] = useState("");
   const [pending, setPending] = useState(false);
-  if (!capability) {
-    return null;
-  }
+  if (!capability) return null;
   const run = async (action: "set" | "pause" | "resume" | "clear") => {
     setPending(true);
     try {
       await onGoal(action, action === "set" ? objective.trim() : undefined);
-      if (action === "set") {
-        setObjective("");
-      }
+      if (action === "set") setObjective("");
     } finally {
       setPending(false);
     }
   };
-  const isCan = (action: string) => capability.actions.includes(action);
+  const can = (action: string) => capability.actions.includes(action);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -750,7 +711,7 @@ export function GoalPicker({
               </p>
             </div>
             <div className="flex gap-1.5">
-              {goal.status === "paused" && isCan("resume") ? (
+              {goal.status === "paused" && can("resume") ? (
                 <Button
                   size="sm"
                   disabled={pending}
@@ -758,7 +719,7 @@ export function GoalPicker({
                 >
                   {t("goal.resume")}
                 </Button>
-              ) : isCan("pause") ? (
+              ) : can("pause") ? (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -768,7 +729,7 @@ export function GoalPicker({
                   {t("goal.pause")}
                 </Button>
               ) : null}
-              {isCan("clear") ? (
+              {can("clear") ? (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -780,14 +741,12 @@ export function GoalPicker({
               ) : null}
             </div>
           </div>
-        ) : isCan("set") ? (
+        ) : can("set") ? (
           <form
             className="space-y-2"
             onSubmit={(event) => {
               event.preventDefault();
-              if (objective.trim()) {
-                void run("set");
-              }
+              if (objective.trim()) void run("set");
             }}
           >
             <Input
@@ -810,9 +769,10 @@ export function GoalPicker({
   );
 }
 
-const worktreeBaselines = ["current", "origin_default"] as const;
+const WORKTREE_BASELINES = ["current", "origin_default"] as const;
 
-export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
+/** Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit. */
+export function WorktreePicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   // No git repository, no picker: every baseline is unavailable, so the trigger greys out with
@@ -826,30 +786,26 @@ export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
   useEffect(() => {
     // A project default (or a leftover draft choice) may still name a baseline; snap it back to
     // Off so the disabled trigger and the state creation would use never disagree.
-    if (gatingReason !== null && config.worktreeBase !== null) {
+    if (gatingReason !== null && config.worktreeBase !== null)
       config.onWorktreeBase(null);
-    }
   }, [gatingReason, config.worktreeBase, config.onWorktreeBase]);
   const selectedKind = config.hasSession
     ? (config.activeWorktreeBaseline?.kind ?? null)
     : config.worktreeBase;
   const selected =
-    selectedKind === null || selectedKind === undefined
+    selectedKind == null
       ? null
       : config.worktreeOptions.find((option) => option.kind === selectedKind);
-  const isSelectedUnavailable =
+  const selectedUnavailable =
     !config.hasSession &&
-    selectedKind !== null &&
-    selectedKind !== undefined &&
+    selectedKind != null &&
     !config.worktreeOptionsLoading &&
-    (selected?.resolved === null || selected?.resolved === undefined);
+    selected?.resolved == null;
   const compactLabel = config.activeWorktreeUnknown
     ? t("worktree.legacyUnknown")
     : config.hasSession && config.activeWorktreeBaseline
       ? config.activeWorktreeBaseline.display
-      : selectedKind === null ||
-          selectedKind === undefined ||
-          gatingReason !== null
+      : selectedKind == null || gatingReason !== null
         ? t("worktree.off")
         : t(`worktree.${selectedKind}` as "worktree.current");
 
@@ -859,7 +815,7 @@ export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
         render={
           <Chip
             tone={
-              isSelectedUnavailable && gatingReason === null
+              selectedUnavailable && gatingReason === null
                 ? "warning"
                 : undefined
             }
@@ -868,9 +824,8 @@ export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
             aria-expanded={open}
             disabled={gatingReason !== null}
             className={cn(
-              selectedKind !== null &&
-                selectedKind !== undefined &&
-                !isSelectedUnavailable &&
+              selectedKind != null &&
+                !selectedUnavailable &&
                 "text-primary hover:text-primary",
               "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             )}
@@ -890,7 +845,7 @@ export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
               label={
                 config.activeWorktreeUnknown
                   ? t("worktree.legacyUnknown")
-                  : selectedKind === null || selectedKind === undefined
+                  : selectedKind == null
                     ? t("worktree.off")
                     : t(`worktree.${selectedKind}` as "worktree.current")
               }
@@ -910,10 +865,7 @@ export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
         ) : (
           <>
             <SelectableRow
-              selected={
-                config.worktreeBase === null ||
-                config.worktreeBase === undefined
-              }
+              selected={config.worktreeBase == null}
               label={t("worktree.off")}
               description={t("worktree.offHint")}
               onSelect={() => {
@@ -921,13 +873,12 @@ export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
                 setOpen(false);
               }}
             />
-            {worktreeBaselines.map((kind) => {
+            {WORKTREE_BASELINES.map((kind) => {
               const option = config.worktreeOptions.find(
                 (candidate) => candidate.kind === kind
               );
-              const isUnavailable =
-                !config.worktreeOptionsLoading &&
-                (option?.resolved === null || option?.resolved === undefined);
+              const unavailable =
+                !config.worktreeOptionsLoading && option?.resolved == null;
               const detail = config.worktreeOptionsLoading
                 ? t("worktree.resolving")
                 : option?.resolved
@@ -939,7 +890,7 @@ export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
                   selected={config.worktreeBase === kind}
                   label={t(`worktree.${kind}` as "worktree.current")}
                   description={detail}
-                  disabled={isUnavailable}
+                  disabled={unavailable}
                   onSelect={() => {
                     config.onWorktreeBase(kind);
                     setOpen(false);
@@ -957,132 +908,28 @@ export function WorktreePicker({ config }: { readonly config: SessionConfig }) {
   );
 }
 
-export function ProviderPicker({ config }: { readonly config: SessionConfig }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const registry =
-    config.providers.length > 0 ? config.providers : fallbackProviders();
-  // Disabled providers stop being new-session choices. Keep the active one visible so a resumed
-  // session still identifies the runtime it already owns.
-  const providers = registry.filter(
-    (candidate) =>
-      candidate.enabled !== false || candidate.id === config.provider
-  );
-  const active = providers.find((p) => p.id === config.provider);
-  const activeLabel =
-    active?.display_name ?? providerDisplayName(config.provider);
-  const isRegistryReady = config.providersStatus === "ready";
-
-  useEffect(() => {
-    const openProviderPicker = () => {
-      setOpen(true);
-      window.setTimeout(() => triggerRef.current?.focus(), 0);
-    };
-    window.addEventListener("codetwo-open-provider-picker", openProviderPicker);
-    return () =>
-      window.removeEventListener(
-        "codetwo-open-provider-picker",
-        openProviderPicker
-      );
-  }, []);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Chip
-            ref={triggerRef}
-            title={
-              config.providersStatus === "error"
-                ? t("config.providersLoadFailed")
-                : t("config.provider")
-            }
-            aria-label={`${t("config.provider")}: ${activeLabel}`}
-            aria-busy={config.providersStatus === "loading"}
-          >
-            {isRegistryReady && active && !active.available ? (
-              <span
-                className="bg-warning size-1.5 shrink-0 rounded-full"
-                title={t("composer.cliNotFound")}
-              />
-            ) : null}
-            <span className="text-foreground/80 max-w-40 truncate">
-              {activeLabel}
-            </span>
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
-          </Chip>
-        }
-      />
-      <PopoverContent align="start" side="top" className="w-64 p-1.5">
-        <MenuSection>{t("config.provider")}</MenuSection>
-        {config.providersStatus === "loading" && (
-          <output className="text-callout text-muted-foreground px-2.5 pb-2">
-            {t("config.providersLoading")}
-          </output>
-        )}
-        {config.providersStatus === "error" && (
-          <div className="rounded-control bg-muted/60 px-module-inset text-callout mb-1 flex items-center gap-2 py-2">
-            <span role="alert" className="text-muted-foreground min-w-0 flex-1">
-              {t("config.providersLoadFailed")}
-            </span>
-            <Button
-              type="button"
-              variant="link"
-              size="compact"
-              className="text-foreground shrink-0 px-0 font-medium"
-              onClick={config.onReloadProviders}
-            >
-              {t("config.retryProviders")}
-            </Button>
-          </div>
-        )}
-        {providers.map((p) => (
-          <SelectableRow
-            key={p.id}
-            selected={p.id === config.provider}
-            label={p.display_name}
-            // The dot says installed; the line under it says what's missing, so the list itself
-            // answers "why can't I use that one?" without a paragraph of warning text.
-            description={
-              isRegistryReady && !p.available
-                ? p.enabled === false
-                  ? t("settings.providerDisabled")
-                  : p.needs_node
-                    ? t("settings.needsNode")
-                    : t("settings.notInstalled")
-                : null
-            }
-            leading={
-              <>
-                <span
-                  className={cn(
-                    "size-1.5 shrink-0 rounded-full",
-                    isRegistryReady && p.available ? "bg-success" : "bg-border"
-                  )}
-                />
-                {/* The brand mark; dimmed when the CLI isn't installed, like the row's text. */}
-                <ProviderIcon
-                  provider={p.id}
-                  className={cn(
-                    "size-3.5 shrink-0",
-                    isRegistryReady && !p.available && "opacity-40"
-                  )}
-                />
-              </>
-            }
-            disabled={isRegistryReady ? !p.available : undefined}
-            onSelect={() => {
-              config.onProvider(p.id);
-              setOpen(false);
-            }}
-          />
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
+/**
+ * The model this turn will run on: a model chip, and an effort chip when the model comes in
+ * reasoning variants.
+ *
+ * Agents describe this two different ways, so the picker reads both and renders one menu.
+ *
+ * Newer adapters (claude-agent-acp, codex-acp) report *selectors* as session config options — a
+ * "model" one and a "thought_level" one — and those are taken at face value: no parsing, and
+ * effort is independent of the model, which is the only way it works for Claude Code.
+ *
+ * Older adapters report a flat model list instead, and encode effort by minting one entry per
+ * level ("gpt-5.1-codex low/medium/high"). `groupModels` folds those back into families: the first
+ * chip picks the family, the second the effort, and together they resolve to one of the adapter's
+ * own ids.
+ *
+ * Both APIs are optional and many adapters skip both, in which case the flat list is the core's
+ * built-in one for that provider rather than the agent's own — same shape either way. Only a
+ * provider we have no list for (a custom one) falls through to the note explaining that its CLI
+ * config decides. Before a session exists, the main composer only shows providers with an
+ * advertised model list; host surfaces may keep the explicit affordance visible while metadata is
+ * loading. Provider-owned config options still arrive after session creation.
+ */
 export function ModelPicker({
   models,
   current,
@@ -1092,48 +939,111 @@ export function ModelPicker({
   configOptions,
   onConfigOption,
   hasSession,
+  providerConfig,
   showWhenUnavailable = false,
   disabled = false,
 }: {
-  readonly models: ModelChoice[];
-  readonly current: string | null;
-  readonly defaultModel: string | null;
-  readonly provider: string;
-  readonly onModel: (id: string) => void;
-  readonly configOptions: ConfigOptionInfo[];
-  readonly onConfigOption: (configId: string, value: string) => void;
-  readonly hasSession: boolean;
-  /**
-  Keep an explicit model affordance while a host surface is waiting for provider metadata.
-  */
-  readonly showWhenUnavailable?: boolean;
-  /**
-  A live turn owns its provider runtime; model and effort changes wait until it ends.
-  */
-  readonly disabled?: boolean;
+  models: ModelChoice[];
+  current: string | null;
+  defaultModel: string | null;
+  provider: string;
+  onModel: (id: string) => void;
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
+  hasSession: boolean;
+  /** Primary Composer only: fold Provider browsing into the model surface. */
+  providerConfig?: SessionConfig;
+  /** Keep an explicit model affordance while a host surface is waiting for provider metadata. */
+  showWhenUnavailable?: boolean;
+  /** A live turn owns its provider runtime; model and effort changes wait until it ends. */
+  disabled?: boolean;
 }) {
   const t = useT();
   const [modelOpen, setModelOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [effortOpen, setEffortOpen] = useState(false);
-  const families = groupModels(models);
+  const [browseProvider, setBrowseProvider] = useState(provider);
+  const modelTriggerRef = useRef<HTMLButtonElement>(null);
+  const providerSwitcherEnabled = providerConfig !== undefined;
+  const providerRegistry = providerConfig
+    ? providerConfig.providers.length > 0
+      ? providerConfig.providers
+      : fallbackProviders()
+    : [];
+  const providerChoices = providerConfig
+    ? providerRegistry.filter(
+        (candidate) =>
+          candidate.enabled !== false ||
+          candidate.id === providerConfig.provider
+      )
+    : [];
+  const pickerProvider = providerSwitcherEnabled ? browseProvider : provider;
+  const pickerProviderInfo = providerChoices.find(
+    (candidate) => candidate.id === pickerProvider
+  );
+  const browsingCurrentProvider = pickerProvider === provider;
+  const pickerModels = browsingCurrentProvider
+    ? models
+    : (pickerProviderInfo?.models ?? []);
+  const pickerConfigOptions = browsingCurrentProvider ? configOptions : [];
+  const pickerCurrent = browsingCurrentProvider ? current : null;
+  const pickerDefaultModel = browsingCurrentProvider ? defaultModel : null;
+  const selectPickerModel = (id: string) => {
+    if (providerConfig && pickerProvider !== provider) {
+      providerConfig.onProviderModel(pickerProvider, id);
+      return;
+    }
+    onModel(id);
+  };
+  const families = useMemo(() => groupModels(models), [models]);
+  const pickerFamilies = useMemo(
+    () => groupModels(pickerModels),
+    [pickerModels]
+  );
   const { favorites, toggle: toggleFavorite } =
-    useProviderModelFavorites(provider);
-  const { hidden: hiddenModels } = useProviderModelPreferences(provider);
+    useProviderModelFavorites(pickerProvider);
+  const { hidden: hiddenModels } = useProviderModelPreferences(pickerProvider);
   useEffect(() => {
     if (disabled) {
       setModelOpen(false);
       setEffortOpen(false);
     }
   }, [disabled]);
-  if (!hasSession && models.length === 0 && !showWhenUnavailable) {
+  useEffect(() => {
+    if (!modelOpen) setBrowseProvider(provider);
+  }, [modelOpen, provider]);
+  useEffect(() => {
+    if (!providerSwitcherEnabled) return;
+    const openProviderModelPicker = () => {
+      setBrowseProvider(provider);
+      setModelOpen(true);
+      window.setTimeout(() => modelTriggerRef.current?.focus(), 0);
+    };
+    window.addEventListener(
+      "codetwo-open-provider-picker",
+      openProviderModelPicker
+    );
+    return () =>
+      window.removeEventListener(
+        "codetwo-open-provider-picker",
+        openProviderModelPicker
+      );
+  }, [provider, providerSwitcherEnabled]);
+  if (
+    !providerSwitcherEnabled &&
+    !hasSession &&
+    models.length === 0 &&
+    !showWhenUnavailable
+  )
     return null;
-  }
 
   const effortName = (e: Effort | null) =>
     e ? t(`effort.${e}` as "effort.low") : t("composer.default");
 
   const modelOpt = configOptions.find(
+    (o) => o.category === "model" || o.id === "model"
+  );
+  const pickerModelOpt = pickerConfigOptions.find(
     (o) => o.category === "model" || o.id === "model"
   );
   const effortOpt = configOptions.find(
@@ -1144,6 +1054,8 @@ export function ModelPicker({
   );
   const activeFamily = familyOf(families, current);
   const activeVariant = variantOf(families, current);
+  const pickerActiveFamily = familyOf(pickerFamilies, pickerCurrent);
+  const pickerActiveVariant = variantOf(pickerFamilies, pickerCurrent);
 
   let modelLabel: string;
   let modelRows: PickerRow[];
@@ -1151,35 +1063,46 @@ export function ModelPicker({
   let effortRows: PickerRow[] = [];
 
   if (modelOpt) {
-    // The adapter described its own selectors; show them as described.
+    // Keep the trigger anchored to the active Provider even while the popup browses another one.
     modelLabel =
       modelOpt.choices.find((c) => c.id === modelOpt.current)?.name ||
       modelOpt.current ||
       t("composer.defaultModel");
-    modelRows = modelOpt.choices.map((c) => ({
-      detail: c.description,
-      isDefault: c.id === defaultModel,
-      key: c.id,
-      label: c.name,
-      select: () => onConfigOption(modelOpt.id, c.id),
-      selected: c.id === modelOpt.current,
-    }));
   } else {
-    // Flat list: regroup by the effort suffix parsed out of each name.
     const active = models.find((m) => m.id === current);
     modelLabel =
       activeFamily?.label ??
       active?.name ??
       current ??
       t("composer.defaultModel");
-    modelRows = families.map((f) => ({
-      detail: f.variants[0]?.choice.description,
-      isDefault: f.variants.some((v) => v.choice.id === defaultModel),
+  }
+
+  if (pickerModelOpt) {
+    // The active adapter described its own selector; preserve that provider-owned path.
+    modelRows = pickerModelOpt.choices.map((c) => ({
+      key: c.id,
+      label: c.name,
+      detail: c.description,
+      isDefault: c.id === pickerDefaultModel,
+      selected: c.id === pickerModelOpt.current,
+      select: () => onConfigOption(pickerModelOpt.id, c.id),
+    }));
+  } else {
+    // Flat lists from either the active runtime or another registry Provider share one projection.
+    modelRows = pickerFamilies.map((f) => ({
       key: f.key,
       label: f.label,
+      detail: f.variants[0]?.choice.description,
+      isDefault: f.variants.some((v) => v.choice.id === pickerDefaultModel),
+      selected: f === pickerActiveFamily,
       select: () =>
-        onModel(pickVariant(f, activeVariant?.effort ?? null, defaultModel).id),
-      selected: f === activeFamily,
+        selectPickerModel(
+          pickVariant(
+            f,
+            pickerActiveVariant?.effort ?? null,
+            pickerDefaultModel
+          ).id
+        ),
     }));
   }
 
@@ -1191,21 +1114,21 @@ export function ModelPicker({
       effortOpt.choices.find((c) => c.id === effortOpt.current)?.name ||
       effortOpt.current;
     effortRows = effortOpt.choices.map((c) => ({
-      detail: c.description,
-      isDefault: false,
       key: c.id,
       label: c.name,
-      select: () => onConfigOption(effortOpt.id, c.id),
+      detail: c.description,
+      isDefault: false,
       selected: c.id === effortOpt.current,
+      select: () => onConfigOption(effortOpt.id, c.id),
     }));
   } else if (activeFamily) {
     effortLabel = effortName(activeVariant?.effort ?? null);
     effortRows = activeFamily.variants.map((v) => ({
-      isDefault: v.choice.id === defaultModel,
       key: v.choice.id,
       label: effortName(v.effort),
-      select: () => onModel(v.choice.id),
+      isDefault: v.choice.id === defaultModel,
       selected: v.choice.id === current,
+      select: () => onModel(v.choice.id),
     }));
   }
 
@@ -1222,9 +1145,8 @@ export function ModelPicker({
           .includes(normalizedSearch)
       )
     : visibleModelRows;
-  for (const row of filteredModelRows) {
+  for (const row of filteredModelRows)
     (favorites.has(row.key) ? favoriteRows : regularRows).push(row);
-  }
   const renderModelRow = (row: PickerRow) => (
     <ModelPickerRow
       key={row.key}
@@ -1238,6 +1160,51 @@ export function ModelPicker({
       onToggleFavorite={() => toggleFavorite(row.key)}
     />
   );
+  const modelMenu =
+    modelRows.length === 0 ? (
+      <p className="text-callout text-muted-foreground px-2 py-2">
+        {t("composer.noModels")}
+      </p>
+    ) : (
+      <>
+        <SearchField
+          autoFocus
+          label={t("composer.searchModels")}
+          placeholder={t("composer.searchModels")}
+          value={modelSearch}
+          clearLabel={t("composer.clearModelSearch")}
+          onClear={() => setModelSearch("")}
+          onChange={(event) => setModelSearch(event.target.value)}
+          className="mb-1"
+        />
+        <div
+          data-model-picker-list
+          className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+        >
+          {filteredModelRows.length === 0 ? (
+            <p className="text-fine text-muted-foreground px-2 py-3 text-center">
+              {normalizedSearch
+                ? t("composer.noMatchingModels")
+                : t("composer.noVisibleModels")}
+            </p>
+          ) : favoriteRows.length > 0 ? (
+            <>
+              <MenuSection>{t("composer.favorites")}</MenuSection>
+              {favoriteRows.map(renderModelRow)}
+              {regularRows.length > 0 ? (
+                <MenuSection>{t("composer.model")}</MenuSection>
+              ) : null}
+              {regularRows.map(renderModelRow)}
+            </>
+          ) : (
+            <>
+              <MenuSection>{t("composer.model")}</MenuSection>
+              {filteredModelRows.map(renderModelRow)}
+            </>
+          )}
+        </div>
+      </>
+    );
 
   return (
     <>
@@ -1245,14 +1212,13 @@ export function ModelPicker({
         open={modelOpen}
         onOpenChange={(open) => {
           setModelOpen(disabled ? false : open);
-          if (!open) {
-            setModelSearch("");
-          }
+          if (!open) setModelSearch("");
         }}
       >
         <PopoverTrigger
           render={
             <Chip
+              ref={modelTriggerRef}
               title={t("composer.model")}
               disabled={disabled}
               aria-busy={disabled}
@@ -1269,51 +1235,108 @@ export function ModelPicker({
         <PopoverContent
           align="start"
           side="top"
-          className="flex max-h-(--available-height) w-64 flex-col overflow-hidden p-1.5"
+          className={cn(
+            "flex max-h-(--available-height) overflow-hidden",
+            providerSwitcherEnabled
+              ? "w-menu-wide max-w-(--available-width) flex-col p-0"
+              : "w-64 flex-col p-1.5"
+          )}
         >
-          {modelRows.length === 0 ? (
-            <p className="text-callout text-muted-foreground px-2 py-2">
-              {t("composer.noModels")}
-            </p>
-          ) : (
-            <>
-              <SearchField
-                autoFocus
-                label={t("composer.searchModels")}
-                placeholder={t("composer.searchModels")}
-                value={modelSearch}
-                clearLabel={t("composer.clearModelSearch")}
-                onClear={() => setModelSearch("")}
-                onChange={(event) => setModelSearch(event.target.value)}
-                className="mb-1"
-              />
+          {providerConfig ? (
+            <div
+              data-provider-model-picker
+              className="flex min-h-72 min-w-0 flex-1 flex-col"
+            >
               <div
-                data-model-picker-list
-                className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+                data-provider-switcher
+                role="listbox"
+                aria-label={t("config.provider")}
+                className="flex shrink-0 [scrollbar-width:none] gap-1 overflow-x-auto overscroll-x-contain p-2 [&::-webkit-scrollbar]:hidden"
               >
-                {filteredModelRows.length === 0 ? (
-                  <p className="text-fine text-muted-foreground px-2 py-3 text-center">
-                    {normalizedSearch
-                      ? t("composer.noMatchingModels")
-                      : t("composer.noVisibleModels")}
-                  </p>
-                ) : favoriteRows.length > 0 ? (
-                  <>
-                    <MenuSection>{t("composer.favorites")}</MenuSection>
-                    {favoriteRows.map(renderModelRow)}
-                    {regularRows.length > 0 ? (
-                      <MenuSection>{t("composer.model")}</MenuSection>
-                    ) : null}
-                    {regularRows.map(renderModelRow)}
-                  </>
-                ) : (
-                  <>
-                    <MenuSection>{t("composer.model")}</MenuSection>
-                    {filteredModelRows.map(renderModelRow)}
-                  </>
-                )}
+                {providerChoices.map((candidate) => {
+                  const selected = candidate.id === pickerProvider;
+                  const unavailable =
+                    providerConfig.providersStatus === "ready" &&
+                    !candidate.available;
+                  const displayName =
+                    candidate.id === "codex" ? "Codex" : candidate.display_name;
+                  return (
+                    <Button
+                      key={candidate.id}
+                      type="button"
+                      variant="selectable"
+                      size="compact"
+                      role="option"
+                      aria-label={displayName}
+                      aria-selected={selected}
+                      data-selected={selected ? "true" : "false"}
+                      disabled={unavailable}
+                      className="max-w-40 shrink-0 justify-start px-2 font-normal"
+                      onClick={() => {
+                        setModelSearch("");
+                        if (
+                          candidate.id !== provider &&
+                          candidate.models.length === 0 &&
+                          providerConfig.providersStatus === "ready" &&
+                          candidate.available
+                        ) {
+                          providerConfig.onProviderModel(candidate.id, null);
+                          setModelOpen(false);
+                          return;
+                        }
+                        setBrowseProvider(candidate.id);
+                      }}
+                    >
+                      <ProviderIcon
+                        provider={candidate.id}
+                        className={cn("size-3.5", unavailable && "opacity-40")}
+                      />
+                      <span className="truncate">{displayName}</span>
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "ml-auto size-1.5 shrink-0 rounded-full",
+                          unavailable ? "bg-border" : "bg-success"
+                        )}
+                      />
+                    </Button>
+                  );
+                })}
               </div>
-            </>
+              <Separator />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2">
+                {providerConfig.providersStatus === "loading" ? (
+                  <p
+                    role="status"
+                    className="text-callout text-muted-foreground px-2 pb-2"
+                  >
+                    {t("config.providersLoading")}
+                  </p>
+                ) : null}
+                {providerConfig.providersStatus === "error" ? (
+                  <div className="rounded-control bg-fill-quiet px-module-inset text-callout mb-1 flex items-center gap-2 py-2">
+                    <span
+                      role="alert"
+                      className="text-muted-foreground min-w-0 flex-1"
+                    >
+                      {t("config.providersLoadFailed")}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="compact"
+                      className="text-foreground shrink-0 px-0 font-medium"
+                      onClick={providerConfig.onReloadProviders}
+                    >
+                      {t("config.retryProviders")}
+                    </Button>
+                  </div>
+                ) : null}
+                {modelMenu}
+              </div>
+            </div>
+          ) : (
+            modelMenu
           )}
         </PopoverContent>
       </Popover>
@@ -1359,6 +1382,7 @@ export function ModelPicker({
   );
 }
 
+/** High-frequency, session-scoped configuration stays one click from the prompt. */
 export function SessionControls({
   config,
   models,
@@ -1370,18 +1394,16 @@ export function SessionControls({
   modelChangeDisabled = false,
   showWorktreePicker = true,
 }: {
-  readonly config: SessionConfig;
-  readonly models: ModelChoice[];
-  readonly currentModel: string | null;
-  readonly defaultModel: string | null;
-  readonly onModel: (id: string) => void;
-  readonly configOptions: ConfigOptionInfo[];
-  readonly onConfigOption: (configId: string, value: string) => void;
-  readonly modelChangeDisabled?: boolean;
-  /**
-  The checkout bar already owns this choice when it is rendered below the composer.
-  */
-  readonly showWorktreePicker?: boolean;
+  config: SessionConfig;
+  models: ModelChoice[];
+  currentModel: string | null;
+  defaultModel: string | null;
+  onModel: (id: string) => void;
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
+  modelChangeDisabled?: boolean;
+  /** The checkout bar already owns this choice when it is rendered below the composer. */
+  showWorktreePicker?: boolean;
 }) {
   const t = useT();
   const optionsId = useId();
@@ -1403,7 +1425,6 @@ export function SessionControls({
     >
       <div className="flex max-w-full flex-wrap items-center gap-0.5">
         {config.scenesEnabled ? <SceneChip config={config} /> : null}
-        <ProviderPicker config={config} />
         <ModelPicker
           models={models}
           current={currentModel}
@@ -1413,7 +1434,8 @@ export function SessionControls({
           configOptions={configOptions}
           onConfigOption={onConfigOption}
           hasSession={config.hasSession}
-          disabled={modelChangeDisabled}
+          providerConfig={config}
+          disabled={modelChangeDisabled || config.providerChangeDisabled}
         />
         <Tooltip>
           <TooltipTrigger
@@ -1467,6 +1489,15 @@ export function SessionControls({
   );
 }
 
+/**
+ * The prompt composer.
+ *
+ * Two shapes, one document. Compact, it's docked to the foot of the transcript and reads like a
+ * chat box — that's the point, it's where you type. Expanded, it *becomes the page*: the card
+ * chrome falls away and the document runs the full column on the app's own background, with a
+ * centred measure and a real block gutter. It is the same BlockNote document in both — headings,
+ * lists, code, `/` skills and `@` files work throughout.
+ */
 export function Composer({
   children,
   config,
@@ -1474,8 +1505,6 @@ export function Composer({
   hero,
   docMode,
   onDocMode,
-  height,
-  onHeight,
   boundsRef,
   models,
   currentModel,
@@ -1527,23 +1556,21 @@ export function Composer({
   const briefDismissedRef = useRef(new Set<string>());
   const [, bumpBriefDismissals] = useState(0);
   const sessionKey = sessionId ?? "draft";
-  const isComposerEmpty = docEmpty && appshots.length === 0;
+  const composerEmpty = docEmpty && appshots.length === 0;
   const activeBrief = config.activeScene?.brief ?? null;
   const insertBrief = () => {
     const scene = config.activeScene;
-    if (scene?.brief) {
-      insertBriefRef?.current?.(scene);
-    }
+    if (scene?.brief) insertBriefRef?.current?.(scene);
   };
   const dismissBrief = () => {
     briefDismissedRef.current.add(sessionKey);
     bumpBriefDismissals((n) => n + 1);
   };
-  const isShowBriefOffer = briefOfferVisible({
-    dismissed: briefDismissedRef.current.has(sessionKey),
-    docEmpty: isComposerEmpty,
+  const showBriefOffer = briefOfferVisible({
     docMode,
+    docEmpty: composerEmpty,
     hasBrief: activeBrief !== null,
+    dismissed: briefDismissedRef.current.has(sessionKey),
   });
 
   // Required slot-card fields still empty — published by the editor on document change (same
@@ -1551,7 +1578,7 @@ export function Composer({
   const [unfilledRequired, setUnfilledRequired] = useState<string[]>([]);
   useEffect(() => {
     const onRequiredSlots = (event: Event) => {
-      const { detail } = event as CustomEvent<string[]>;
+      const detail = (event as CustomEvent<string[]>).detail;
       setUnfilledRequired(Array.isArray(detail) ? detail : []);
     };
     window.addEventListener("codetwo-required-slots", onRequiredSlots);
@@ -1571,16 +1598,7 @@ export function Composer({
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [boundsRef]);
-  const applied = Math.min(height, maxHeight);
-
-  const resizeHandle = useResizeHandle({
-    axis: "y",
-    direction: -1,
-    max: maxHeight,
-    min: 72,
-    onResize: onHeight,
-    value: applied,
-  });
+  const applied = Math.min(190, maxHeight);
 
   const controls = (
     <>
@@ -1591,11 +1609,9 @@ export function Composer({
         multiple
         hidden
         onChange={(event) => {
-          const files = [...(event.currentTarget.files ?? [])];
+          const files = Array.from(event.currentTarget.files ?? []);
           event.currentTarget.value = "";
-          if (files.length > 0) {
-            void onAttachImages(files);
-          }
+          if (files.length > 0) void onAttachImages(files);
         }}
       />
       <DropdownMenu>
@@ -1616,9 +1632,9 @@ export function Composer({
             <DropdownMenuItem onClick={onAttachFile}>
               <FileText />
               {t("composer.mentionFile")}
-              {filesHint ? (
+              {filesHint && (
                 <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>
-              ) : null}
+              )}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
               <ImagePlus />
@@ -1627,16 +1643,16 @@ export function Composer({
             <DropdownMenuItem onClick={onInsertSkill}>
               <Sparkles />
               {t("composer.insertSkill")}
-              {skillHint ? (
+              {skillHint && (
                 <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>
-              ) : null}
+              )}
             </DropdownMenuItem>
-            {canvasEnabled ? (
+            {canvasEnabled && (
               <DropdownMenuItem onClick={onInsertCanvas}>
                 <PenLine />
                 {t("composer.insertCanvas")}
               </DropdownMenuItem>
-            ) : null}
+            )}
             <DropdownMenuItem onClick={onInsertIssue}>
               <Ticket />
               {t("composer.pullIssue")}
@@ -1651,12 +1667,12 @@ export function Composer({
             </DropdownMenuItem>
             {/* With content already in the document the floating offer stays away; the brief is
                 still one menu entry away while a scene with one is active. */}
-            {activeBrief && !isComposerEmpty ? (
+            {activeBrief && !composerEmpty && (
               <DropdownMenuItem onClick={insertBrief}>
                 <ListChecks />
                 {t("brief.menuInsert")}
               </DropdownMenuItem>
-            ) : null}
+            )}
           </DropdownMenuGroup>
           <p className="text-callout text-muted-foreground px-2 pt-1.5 pb-1">
             {t("composer.addHint")}
@@ -1674,13 +1690,13 @@ export function Composer({
         contextWindow={contextWindow}
         usage={usage ?? null}
         onCompact={onCompactContext}
-        compactDisabled={running || loading || !isComposerEmpty}
+        compactDisabled={running || loading || !composerEmpty}
         compactDisabledReason={
           running || loading
             ? t("context.compactBusy")
-            : isComposerEmpty
-              ? null
-              : t("context.compactDraft")
+            : !composerEmpty
+              ? t("context.compactDraft")
+              : null
         }
       />
 
@@ -1751,11 +1767,11 @@ export function Composer({
 
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
-      {isComposerEmpty && !running && !loading && runHint ? (
+      {composerEmpty && !running && !loading && runHint && (
         <span className="text-callout text-muted-foreground mx-1 hidden shrink-0 whitespace-nowrap @2xl/composer:inline">
           {t("composer.toSend", { key: runHint })}
         </span>
-      ) : null}
+      )}
 
       {running ? (
         <>
@@ -1829,7 +1845,7 @@ export function Composer({
             render={
               <Button
                 size="icon"
-                variant={isComposerEmpty ? "secondary" : "default"}
+                variant={composerEmpty ? "secondary" : "default"}
                 className="size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"
                 onClick={onRun}
                 disabled={loading}
@@ -1848,7 +1864,7 @@ export function Composer({
           <TooltipContent>
             {loading
               ? t("composer.loadingSession")
-              : isComposerEmpty
+              : composerEmpty
                 ? t("composer.runEmpty")
                 : t("composer.run")}
             {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
@@ -1896,16 +1912,6 @@ export function Composer({
               : "rounded-composer bg-card shadow-raised duration-feedback ease-enter focus-within:focus-ring-inset transition-shadow"
           )}
         >
-          {/* Grip: drag for any height, double-click for the full page. Meaningless once the
-              document owns the column, so it's hidden — but kept mounted to preserve the tree. */}
-          <div
-            className={cn("composer-grip", docMode && "hidden")}
-            aria-label={t("composer.grip")}
-            onDoubleClick={() => onDocMode(true)}
-            title={t("composer.grip")}
-            {...resizeHandle}
-          />
-
           <div
             className={cn(
               "min-h-0 overflow-y-auto",
@@ -1935,8 +1941,8 @@ export function Composer({
                       {appshot.kind === "attachment" ? (
                         <p className="text-callout text-muted-foreground">
                           {t("composer.imageDimensions", {
-                            height: appshot.height,
                             width: appshot.width,
+                            height: appshot.height,
                           })}
                         </p>
                       ) : (
@@ -1981,7 +1987,7 @@ export function Composer({
               positioned overlay inside the same tree (see the reconciliation note above) — it
               never auto-inserts, and dismissing it keeps it away for this session. Only rendered
               in doc mode, where the card is `relative`. */}
-          {isShowBriefOffer && config.activeScene ? (
+          {showBriefOffer && config.activeScene && (
             <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
               <div className="raised-material canvas-ui-module shadow-raised pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 px-3 py-2">
                 <ListChecks className="text-muted-foreground size-3.5 shrink-0" />
@@ -2001,7 +2007,7 @@ export function Composer({
                 </Button>
               </div>
             </div>
-          ) : null}
+          )}
 
           {/* Expanded, the control rows *float* over the foot of the page as their own raised card.
               In normal flow it sat at the column's bottom edge, where the transcript panel beside
@@ -2045,9 +2051,9 @@ export function Composer({
 
         {/* Execution location and source control are adjacent but distinct: changing where a fresh
             session runs must never be confused with inspecting the current branch. */}
-        {!docMode && checkout ? (
+        {!docMode && checkout && (
           <CheckoutBar config={config} checkout={checkout} />
-        ) : null}
+        )}
       </div>
     </section>
   );

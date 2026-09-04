@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,10 @@ import {
   getWorktreeSettings,
   listProjectWorktrees,
   updateWorktreeSettings,
-} from "../bridge";
-import type {
-  Project,
-  WorktreeEntryKind,
-  WorktreeSettings,
-  WorktreeStatusEntry,
+  type Project,
+  type WorktreeEntryKind,
+  type WorktreeSettings,
+  type WorktreeStatusEntry,
 } from "../bridge";
 import { useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
@@ -29,24 +27,24 @@ import {
   worktreeBranchDisplay,
   worktreeDiscardRoute,
   worktreeStatusBadges,
+  type WorktreeStatusBadge,
 } from "./worktrees";
-import type { WorktreeStatusBadge } from "./worktrees";
 
-interface ProjectWorktreeState {
+type ProjectWorktreeState = {
   entries: WorktreeStatusEntry[];
   error: string | null;
-}
+};
 
-const worktreeKindLabels: Record<WorktreeEntryKind, StringKey> = {
-  orphan: "worktree.kindOrphan",
+const WORKTREE_KIND_LABELS: Record<WorktreeEntryKind, StringKey> = {
   session: "worktree.kindSession",
+  orphan: "worktree.kindOrphan",
   stale: "worktree.kindStale",
 };
 
-const worktreeBadgeLabels: Record<WorktreeStatusBadge, StringKey> = {
+const WORKTREE_BADGE_LABELS: Record<WorktreeStatusBadge, StringKey> = {
   archived: "worktree.badgeArchived",
-  checkoutMissing: "worktree.badgeCheckoutMissing",
   discarded: "worktree.badgeDiscarded",
+  checkoutMissing: "worktree.badgeCheckoutMissing",
 };
 
 export function WorktreeSettingsPage({
@@ -59,16 +57,14 @@ export function WorktreeSettingsPage({
   orphanDiscarder = discardOrphanWorktree,
   confirmer = confirmNative,
 }: {
-  readonly projects: Project[];
-  readonly onOpenSession?: (sessionId: string) => void;
-  readonly lister?: typeof listProjectWorktrees;
-  readonly settingsLoader?: () => Promise<WorktreeSettings>;
-  readonly settingsSaver?: (
-    settings: WorktreeSettings
-  ) => Promise<WorktreeSettings>;
-  readonly sessionDiscarder?: typeof discardSessionWorktree;
-  readonly orphanDiscarder?: typeof discardOrphanWorktree;
-  readonly confirmer?: typeof confirmNative;
+  projects: Project[];
+  onOpenSession?: (sessionId: string) => void;
+  lister?: typeof listProjectWorktrees;
+  settingsLoader?: () => Promise<WorktreeSettings>;
+  settingsSaver?: (settings: WorktreeSettings) => Promise<WorktreeSettings>;
+  sessionDiscarder?: typeof discardSessionWorktree;
+  orphanDiscarder?: typeof discardOrphanWorktree;
+  confirmer?: typeof confirmNative;
 }) {
   const t = useT();
   const [worktreesByProject, setWorktreesByProject] = useState<
@@ -88,33 +84,34 @@ export function WorktreeSettingsPage({
   );
   const requestRef = useRef(0);
 
-  const loadWorktrees = async (projectList: Project[]) => {
-    const request = ++requestRef.current;
-    setWorktreesLoading(true);
-    const results = await Promise.all(
-      projectList.map(async (candidate) => {
-        try {
-          return [
-            candidate.path,
-            { entries: await lister(candidate.path), error: null },
-          ] as const;
-        } catch (error) {
-          return [
-            candidate.path,
-            {
-              entries: [],
-              error: t("worktree.manageFailed", { error: String(error) }),
-            },
-          ] as const;
-        }
-      })
-    );
-    if (request !== requestRef.current) {
-      return;
-    }
-    setWorktreesByProject(Object.fromEntries(results));
-    setWorktreesLoading(false);
-  };
+  const loadWorktrees = useCallback(
+    async (projectList: Project[]) => {
+      const request = ++requestRef.current;
+      setWorktreesLoading(true);
+      const results = await Promise.all(
+        projectList.map(async (candidate) => {
+          try {
+            return [
+              candidate.path,
+              { entries: await lister(candidate.path), error: null },
+            ] as const;
+          } catch (cause) {
+            return [
+              candidate.path,
+              {
+                entries: [],
+                error: t("worktree.manageFailed", { error: String(cause) }),
+              },
+            ] as const;
+          }
+        })
+      );
+      if (request !== requestRef.current) return;
+      setWorktreesByProject(Object.fromEntries(results));
+      setWorktreesLoading(false);
+    },
+    [lister, t]
+  );
 
   useEffect(() => {
     void loadWorktrees(projects);
@@ -124,26 +121,23 @@ export function WorktreeSettingsPage({
   }, [loadWorktrees, projects]);
 
   useEffect(() => {
-    let isActive = true;
+    let active = true;
     setWorktreeSettingsError(null);
     void settingsLoader()
       .then((settings) => {
-        if (!isActive) {
-          return;
-        }
+        if (!active) return;
         setWorktreeSettings(settings);
         setWorktreeRootDraft(settings.root ?? "");
         setWorktreeLimitDraft(String(settings.auto_delete_limit));
       })
-      .catch((error) => {
-        if (isActive) {
+      .catch((cause) => {
+        if (active)
           setWorktreeSettingsError(
-            t("worktree.settingsLoadFailed", { error: String(error) })
+            t("worktree.settingsLoadFailed", { error: String(cause) })
           );
-        }
       });
     return () => {
-      isActive = false;
+      active = false;
     };
   }, [settingsLoader, t]);
 
@@ -154,21 +148,19 @@ export function WorktreeSettingsPage({
         ...current,
         [path]: { entries, error: null },
       }));
-    } catch (error) {
+    } catch (cause) {
       setWorktreesByProject((current) => ({
         ...current,
         [path]: {
           entries: [],
-          error: t("worktree.manageFailed", { error: String(error) }),
+          error: t("worktree.manageFailed", { error: String(cause) }),
         },
       }));
     }
   }
 
   async function saveGlobalWorktreeSettings(patch: Partial<WorktreeSettings>) {
-    if (!worktreeSettings) {
-      return false;
-    }
+    if (!worktreeSettings) return false;
     setWorktreeSettingsSaving(true);
     setWorktreeSettingsError(null);
     try {
@@ -183,9 +175,9 @@ export function WorktreeSettingsPage({
         await loadWorktrees(projects);
       }
       return true;
-    } catch (error) {
+    } catch (cause) {
       setWorktreeSettingsError(
-        t("worktree.settingsSaveFailed", { error: String(error) })
+        t("worktree.settingsSaveFailed", { error: String(cause) })
       );
       setWorktreeRootDraft(worktreeSettings.root ?? "");
       setWorktreeLimitDraft(String(worktreeSettings.auto_delete_limit));
@@ -196,20 +188,14 @@ export function WorktreeSettingsPage({
   }
 
   function commitWorktreeRoot() {
-    if (!worktreeSettings) {
-      return;
-    }
+    if (!worktreeSettings) return;
     const root = worktreeRootDraft.trim() || undefined;
-    if (root === worktreeSettings.root) {
-      return;
-    }
+    if (root === worktreeSettings.root) return;
     void saveGlobalWorktreeSettings({ root });
   }
 
   function commitWorktreeLimit() {
-    if (!worktreeSettings) {
-      return;
-    }
+    if (!worktreeSettings) return;
     const parsed = Number.parseInt(worktreeLimitDraft, 10);
     const limit = Number.isFinite(parsed)
       ? Math.min(1000, Math.max(1, parsed))
@@ -224,26 +210,20 @@ export function WorktreeSettingsPage({
     projectPath: string,
     entry: WorktreeStatusEntry
   ) {
-    if (
-      !(await confirmer(t("worktree.discardConfirm", { path: entry.path })))
-    ) {
+    if (!(await confirmer(t("worktree.discardConfirm", { path: entry.path }))))
       return;
-    }
     setDiscardingWorktree(entry.path);
     try {
       const route = worktreeDiscardRoute(entry);
-      if (route.kind === "session") {
-        await sessionDiscarder(route.session);
-      } else {
-        await orphanDiscarder(projectPath, route.worktreePath);
-      }
+      if (route.kind === "session") await sessionDiscarder(route.session);
+      else await orphanDiscarder(projectPath, route.worktreePath);
       await loadProjectWorktrees(projectPath);
-    } catch (error) {
+    } catch (cause) {
       setWorktreesByProject((current) => ({
         ...current,
         [projectPath]: {
           entries: current[projectPath]?.entries ?? [],
-          error: t("worktree.discardFailed", { error: String(error) }),
+          error: t("worktree.discardFailed", { error: String(cause) }),
         },
       }));
     } finally {
@@ -276,9 +256,7 @@ export function WorktreeSettingsPage({
                 onChange={(event) => setWorktreeRootDraft(event.target.value)}
                 onBlur={commitWorktreeRoot}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
+                  if (event.key === "Enter") event.currentTarget.blur();
                 }}
               />
             </Row>
@@ -329,9 +307,7 @@ export function WorktreeSettingsPage({
                 onChange={(event) => setWorktreeLimitDraft(event.target.value)}
                 onBlur={commitWorktreeLimit}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
+                  if (event.key === "Enter") event.currentTarget.blur();
                 }}
               />
             </Row>
@@ -342,7 +318,7 @@ export function WorktreeSettingsPage({
           </p>
         )}
       </section>
-      {worktreeSettingsError != null && worktreeSettingsError !== "" ? (
+      {worktreeSettingsError ? (
         <p className="text-metadata text-destructive mt-2" role="alert">
           {worktreeSettingsError}
         </p>
@@ -403,7 +379,7 @@ export function WorktreeSettingsPage({
               </div>
 
               <div className="worktree-project-card">
-                {state.error != null && state.error !== "" ? (
+                {state.error ? (
                   <p
                     className="text-metadata text-destructive px-3 py-3"
                     role="alert"
@@ -428,18 +404,18 @@ export function WorktreeSettingsPage({
                           <span className="block min-w-0">
                             <span className="flex flex-wrap items-center gap-1.5">
                               <Badge variant="secondary">
-                                {t(worktreeKindLabels[entry.kind])}
+                                {t(WORKTREE_KIND_LABELS[entry.kind])}
                               </Badge>
                               {worktreeStatusBadges(entry).map((badge) => (
                                 <Badge key={badge} variant="secondary">
-                                  {t(worktreeBadgeLabels[badge])}
+                                  {t(WORKTREE_BADGE_LABELS[badge])}
                                 </Badge>
                               ))}
-                              {branch != null && branch !== "" ? (
+                              {branch && (
                                 <span className="shrink-0 font-mono">
                                   {branch}
                                 </span>
-                              ) : null}
+                              )}
                             </span>
                             <span
                               className="mt-1 block truncate font-mono"
@@ -450,7 +426,7 @@ export function WorktreeSettingsPage({
                           </span>
                         }
                       >
-                        {entry.session_id != null && entry.session_id !== "" ? (
+                        {entry.session_id ? (
                           <Button
                             variant="secondary"
                             size="xs"

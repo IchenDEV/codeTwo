@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { SettingRow } from "@/components/business/setting-row";
 import { SettingToggle } from "@/components/business/setting-toggle";
@@ -18,9 +23,9 @@ import {
 import { TooltipButton } from "@/components/ui/tooltip";
 
 import {
-  codeFonts,
-  fontWeights,
-  uiFonts,
+  CODE_FONTS,
+  FONT_WEIGHTS,
+  UI_FONTS,
   duplicateTheme,
   importAppearanceTheme,
   isHexColor,
@@ -31,19 +36,17 @@ import {
   themeCatalog,
   updateCustomTheme,
   useAppearanceSettings,
-} from "../appearance";
-import type {
-  AppearanceColorKey,
-  AppearanceTheme,
-  CodeFontId,
-  ColorScheme,
-  DiffMarkerPreference,
-  FontWeightId,
-  ReduceMotionPreference,
-  SchemeAppearanceProfile,
-  ThemePalette,
-  ThemePreference,
-  UiFontId,
+  type AppearanceColorKey,
+  type AppearanceTheme,
+  type CodeFontId,
+  type ColorScheme,
+  type DiffMarkerPreference,
+  type FontWeightId,
+  type ReduceMotionPreference,
+  type SchemeAppearanceProfile,
+  type ThemePalette,
+  type ThemePreference,
+  type UiFontId,
 } from "../appearance";
 import {
   pickAppearanceThemeDocument,
@@ -57,12 +60,12 @@ const SCHEMES: {
   value: ThemePreference;
   label: "settings.themeSystem" | "settings.themeLight" | "settings.themeDark";
 }[] = [
-  { label: "settings.themeSystem", value: "system" },
-  { label: "settings.themeLight", value: "light" },
-  { label: "settings.themeDark", value: "dark" },
+  { value: "system", label: "settings.themeSystem" },
+  { value: "light", label: "settings.themeLight" },
+  { value: "dark", label: "settings.themeDark" },
 ];
 
-const profileSchemes = ["light", "dark"] as const;
+const PROFILE_SCHEMES = ["light", "dark"] as const;
 
 function paletteVariables(palette: ThemePalette): CSSProperties {
   return {
@@ -72,7 +75,7 @@ function paletteVariables(palette: ThemePalette): CSSProperties {
   } as CSSProperties;
 }
 
-function MiniApp({ palette }: { readonly palette: ThemePalette }) {
+function MiniApp({ palette }: { palette: ThemePalette }) {
   return (
     <div className="appearance-mini-app" style={paletteVariables(palette)}>
       <div className="appearance-mini-titlebar">
@@ -110,8 +113,8 @@ function SchemePreview({
   scheme,
   theme,
 }: {
-  readonly scheme: ThemePreference;
-  readonly theme: AppearanceTheme;
+  scheme: ThemePreference;
+  theme: AppearanceTheme;
 }) {
   if (scheme !== "system") {
     return (
@@ -140,8 +143,8 @@ function ThemeSwatch({
   palette,
   scheme,
 }: {
-  readonly palette: ThemePalette;
-  readonly scheme: ColorScheme;
+  palette: ThemePalette;
+  scheme: ColorScheme;
 }) {
   return (
     <span
@@ -159,10 +162,10 @@ function ThemeCard({
   onSelect,
   onDuplicate,
 }: {
-  readonly theme: AppearanceTheme;
-  readonly selected: boolean;
-  readonly onSelect: () => void;
-  readonly onDuplicate: () => void;
+  theme: AppearanceTheme;
+  selected: boolean;
+  onSelect: () => void;
+  onDuplicate: () => void;
 }) {
   const t = useT();
   return (
@@ -205,9 +208,9 @@ function ColorField({
   value,
   onCommit,
 }: {
-  readonly label: string;
-  readonly value: string;
-  readonly onCommit: (value: string) => void;
+  label: string;
+  value: string;
+  onCommit: (value: string) => void;
 }) {
   const t = useT();
   const resolved = resolveThemeColor(value).toLowerCase();
@@ -216,9 +219,7 @@ function ColorField({
 
   const commit = (next: string) => {
     const normalized = next.toLowerCase();
-    if (!isHexColor(normalized)) {
-      return;
-    }
+    if (!isHexColor(normalized)) return;
     setDraft(normalized);
     onCommit(normalized);
   };
@@ -239,14 +240,10 @@ function ColorField({
           onChange={(event) => {
             const next = event.target.value;
             setDraft(next);
-            if (isHexColor(next)) {
-              commit(next);
-            }
+            if (isHexColor(next)) commit(next);
           }}
           onBlur={() => {
-            if (!isHexColor(draft)) {
-              setDraft(resolved);
-            }
+            if (!isHexColor(draft)) setDraft(resolved);
           }}
           spellCheck={false}
           className="text-metadata w-28 font-mono"
@@ -261,9 +258,9 @@ function PaletteEditor({
   palette,
   onChange,
 }: {
-  readonly scheme: ColorScheme;
-  readonly palette: ThemePalette;
-  readonly onChange: (key: AppearanceColorKey, value: string) => void;
+  scheme: ColorScheme;
+  palette: ThemePalette;
+  onChange: (key: AppearanceColorKey, value: string) => void;
 }) {
   const t = useT();
   return (
@@ -309,13 +306,13 @@ function RangeSetting({
   suffix,
   onChange,
 }: {
-  readonly label: string;
-  readonly hint: string;
-  readonly value: number;
-  readonly min: number;
-  readonly max: number;
-  readonly suffix: string;
-  readonly onChange: (value: number) => void;
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  suffix: string;
+  onChange: (value: number) => void;
 }) {
   return (
     <SettingRow label={label} description={hint}>
@@ -338,9 +335,9 @@ function RangeSetting({
   );
 }
 
-const fontWeightLabels = {
-  medium: "settings.fontWeightMedium",
+const FONT_WEIGHT_LABELS = {
   regular: "settings.fontWeightRegular",
+  medium: "settings.fontWeightMedium",
   semibold: "settings.fontWeightSemibold",
 } as const;
 
@@ -348,8 +345,8 @@ function ProfileHeading({
   scheme,
   palette,
 }: {
-  readonly scheme: ColorScheme;
-  readonly palette: ThemePalette;
+  scheme: ColorScheme;
+  palette: ThemePalette;
 }) {
   const t = useT();
   return (
@@ -370,10 +367,10 @@ function TypographyProfileEditor({
   profile,
   onChange,
 }: {
-  readonly scheme: ColorScheme;
-  readonly palette: ThemePalette;
-  readonly profile: SchemeAppearanceProfile;
-  readonly onChange: (patch: Partial<SchemeAppearanceProfile>) => void;
+  scheme: ColorScheme;
+  palette: ThemePalette;
+  profile: SchemeAppearanceProfile;
+  onChange: (patch: Partial<SchemeAppearanceProfile>) => void;
 }) {
   const t = useT();
   const label =
@@ -402,7 +399,7 @@ function TypographyProfileEditor({
             </SelectTrigger>
             <SelectContent position="popper" align="end">
               <SelectGroup>
-                {uiFonts.map((font) => (
+                {UI_FONTS.map((font) => (
                   <SelectItem key={font.id} value={font.id}>
                     {font.label}
                   </SelectItem>
@@ -425,9 +422,9 @@ function TypographyProfileEditor({
             </SelectTrigger>
             <SelectContent position="popper" align="end">
               <SelectGroup>
-                {fontWeights.map((weight) => (
+                {FONT_WEIGHTS.map((weight) => (
                   <SelectItem key={weight.id} value={weight.id}>
-                    {t(fontWeightLabels[weight.id])}
+                    {t(FONT_WEIGHT_LABELS[weight.id])}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -453,7 +450,7 @@ function TypographyProfileEditor({
             </SelectTrigger>
             <SelectContent position="popper" align="end">
               <SelectGroup>
-                {codeFonts.map((font) => (
+                {CODE_FONTS.map((font) => (
                   <SelectItem key={font.id} value={font.id}>
                     {font.label}
                   </SelectItem>
@@ -476,9 +473,9 @@ function TypographyProfileEditor({
             </SelectTrigger>
             <SelectContent position="popper" align="end">
               <SelectGroup>
-                {fontWeights.map((weight) => (
+                {FONT_WEIGHTS.map((weight) => (
                   <SelectItem key={weight.id} value={weight.id}>
-                    {t(fontWeightLabels[weight.id])}
+                    {t(FONT_WEIGHT_LABELS[weight.id])}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -496,10 +493,10 @@ function SurfaceProfileEditor({
   profile,
   onChange,
 }: {
-  readonly scheme: ColorScheme;
-  readonly palette: ThemePalette;
-  readonly profile: SchemeAppearanceProfile;
-  readonly onChange: (patch: Partial<SchemeAppearanceProfile>) => void;
+  scheme: ColorScheme;
+  palette: ThemePalette;
+  profile: SchemeAppearanceProfile;
+  onChange: (patch: Partial<SchemeAppearanceProfile>) => void;
 }) {
   const t = useT();
   const label =
@@ -536,12 +533,12 @@ export function AppearanceSettings({
   value,
   onChange,
 }: {
-  readonly value: ThemePreference;
-  readonly onChange: (preference: ThemePreference) => void;
+  value: ThemePreference;
+  onChange: (preference: ThemePreference) => void;
 }) {
   const t = useT();
   const settings = useAppearanceSettings();
-  const catalog = themeCatalog(settings);
+  const catalog = useMemo(() => themeCatalog(settings), [settings]);
   const activeTheme =
     catalog.find((theme) => theme.id === settings.activeThemeId) ?? catalog[0];
   const fileInput = useRef<HTMLInputElement>(null);
@@ -576,9 +573,7 @@ export function AppearanceSettings({
     let editable = activeTheme;
     if (editable.builtin) {
       const copy = duplicate(activeTheme);
-      if (!copy) {
-        return;
-      }
+      if (!copy) return;
       editable = copy;
     }
     updateCustomTheme(editable.id, {
@@ -592,13 +587,11 @@ export function AppearanceSettings({
       const filename = `${
         activeTheme.name
           .toLowerCase()
-          .replaceAll(/[^a-z0-9]+/gu, "-")
-          .replaceAll(/^-|-$/gu, "") || "codetwo-theme"
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || "codetwo-theme"
       }.json`;
       const nativeResult = await saveAppearanceThemeDocument(filename, json);
-      if (nativeResult === "cancelled") {
-        return;
-      }
+      if (nativeResult === "cancelled") return;
       if (nativeResult === "saved") {
         setStatus(t("settings.themeExported", { name: activeTheme.name }));
         return;
@@ -628,26 +621,19 @@ export function AppearanceSettings({
   };
 
   const importThemeFile = async (file: File | undefined) => {
-    if (!file) {
-      return;
-    }
+    if (!file) return;
     try {
       importSource(await file.text());
     } finally {
-      if (fileInput.current) {
-        fileInput.current.value = "";
-      }
+      if (fileInput.current) fileInput.current.value = "";
     }
   };
 
   const chooseThemeFile = async () => {
     try {
       const source = await pickAppearanceThemeDocument();
-      if (source === undefined) {
-        fileInput.current?.click();
-      } else if (source !== null) {
-        importSource(source);
-      }
+      if (source === undefined) fileInput.current?.click();
+      else if (source !== null) importSource(source);
     } catch {
       setStatus(t("settings.themeImportFailed"));
     }
@@ -826,7 +812,7 @@ export function AppearanceSettings({
           {t("settings.typography")}
         </h2>
         <div className="appearance-profile-grid">
-          {profileSchemes.map((scheme) => (
+          {PROFILE_SCHEMES.map((scheme) => (
             <TypographyProfileEditor
               key={scheme}
               scheme={scheme}
@@ -866,7 +852,7 @@ export function AppearanceSettings({
           {t("settings.surfaces")}
         </h2>
         <div className="appearance-profile-grid">
-          {profileSchemes.map((scheme) => (
+          {PROFILE_SCHEMES.map((scheme) => (
             <SurfaceProfileEditor
               key={scheme}
               scheme={scheme}
@@ -902,9 +888,9 @@ export function AppearanceSettings({
               label={t("settings.reduceMotion")}
               value={settings.reduceMotion}
               options={[
-                { label: t("settings.preferenceSystem"), value: "system" },
-                { label: t("settings.preferenceOn"), value: "on" },
-                { label: t("settings.preferenceOff"), value: "off" },
+                { value: "system", label: t("settings.preferenceSystem") },
+                { value: "on", label: t("settings.preferenceOn") },
+                { value: "off", label: t("settings.preferenceOff") },
               ]}
               onValueChange={(reduceMotion) =>
                 setAppearanceSettings({ reduceMotion })
@@ -919,8 +905,8 @@ export function AppearanceSettings({
               label={t("settings.diffMarkers")}
               value={settings.diffMarkers}
               options={[
-                { label: t("settings.diffMarkersColor"), value: "color" },
-                { label: t("settings.diffMarkersSymbols"), value: "symbols" },
+                { value: "color", label: t("settings.diffMarkersColor") },
+                { value: "symbols", label: t("settings.diffMarkersSymbols") },
               ]}
               onValueChange={(diffMarkers) =>
                 setAppearanceSettings({ diffMarkers })
@@ -930,7 +916,11 @@ export function AppearanceSettings({
         </div>
       </section>
 
-      {status ? <output className="appearance-status">{status}</output> : null}
+      {status && (
+        <p className="appearance-status" role="status">
+          {status}
+        </p>
+      )}
     </div>
   );
 }

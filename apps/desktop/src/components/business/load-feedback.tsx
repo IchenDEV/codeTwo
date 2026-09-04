@@ -14,14 +14,15 @@ type LoadFeedbackProps =
 function LoadFeedback(props: LoadFeedbackProps) {
   if (props.state === "loading") {
     return (
-      <output
+      <div
         data-slot="load-feedback"
         data-state="loading"
+        role="status"
         className="gap-control-group py-page text-body text-content-muted flex min-h-0 w-full flex-1 items-center justify-center text-center"
       >
         <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
         <span data-slot="load-feedback-message">{props.message}</span>
-      </output>
+      </div>
     );
   }
 

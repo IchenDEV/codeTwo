@@ -11,38 +11,31 @@
  * references, formatting, and published diagnostics.
  */
 import { lspSend, lspStart, onLspExit, onLspMessage } from "../bridge";
-import {
-  asJsonArray,
-  asJsonObject,
-  objectField,
-  parseJsonPayload,
-  stringField,
-} from "./json";
-import type { JsonObject } from "./json";
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- the wire format is untyped JSON */
+type Json = any;
 
 interface Pending {
-  resolve: (v: unknown) => void;
+  resolve: (v: Json) => void;
   reject: (e: Error) => void;
 }
 
 // The App enables this only after the active project catalog has loaded. Starting closed avoids a
 // file-editor mount racing a persisted project-level disable during desktop bootstrap.
-let isRuntimeEnabled = false;
+let runtimeEnabled = false;
 let runtimeGeneration = 0;
 
-/**
-Languages served by an external LSP server rather than Monaco's built-in workers.
-*/
-const builtinServerGroups: Record<string, string[]> = {
-  clangd: ["c", "cpp"],
-  go: ["go"],
-  php: ["php"],
-  python: ["python"],
-  ruby: ["ruby"],
+/** Languages served by an external LSP server rather than Monaco's built-in workers. */
+const BUILTIN_SERVER_GROUPS: Record<string, string[]> = {
   rust: ["rust"],
-  svelte: ["svelte"],
+  python: ["python"],
+  go: ["go"],
+  clangd: ["c", "cpp"],
   ts: ["typescript", "javascript"],
   vue: ["vue"],
+  svelte: ["svelte"],
+  ruby: ["ruby"],
+  php: ["php"],
   yaml: ["yaml"],
 };
 
@@ -56,23 +49,21 @@ let pluginServerGroups: Record<string, string[]> = {};
 let pluginServerSignature = "[]";
 
 function serverGroups(): Record<string, string[]> {
-  return { ...builtinServerGroups, ...pluginServerGroups };
+  return { ...BUILTIN_SERVER_GROUPS, ...pluginServerGroups };
 }
 
 function groupOf(lang: string): string | null {
   for (const [group, langs] of [
     ...Object.entries(pluginServerGroups),
-    ...Object.entries(builtinServerGroups),
+    ...Object.entries(BUILTIN_SERVER_GROUPS),
   ]) {
-    if (langs.includes(lang)) {
-      return group;
-    }
+    if (langs.includes(lang)) return group;
   }
   return null;
 }
 
 export function isLspLanguage(lang: string): boolean {
-  return isRuntimeEnabled && groupOf(lang) !== null;
+  return runtimeEnabled && groupOf(lang) !== null;
 }
 
 export function pathToUri(p: string): string {
@@ -81,42 +72,35 @@ export function pathToUri(p: string): string {
     const [authority, ...segments] = normalized.slice(2).split("/");
     return `file://${encodeURIComponent(authority)}/${segments.map(encodeURIComponent).join("/")}`;
   }
-  const path = /^[a-z]:\//iu.test(normalized) ? `/${normalized}` : normalized;
+  const path = /^[a-z]:\//i.test(normalized) ? `/${normalized}` : normalized;
   return `file://${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 export function uriToPath(uri: string): string {
-  const unc = uri.match(/^file:\/\/([^/]+)(\/.*)?$/u);
+  const unc = uri.match(/^file:\/\/([^/]+)(\/.*)?$/);
   if (unc) {
     const rest = decodeURIComponent(unc[2] ?? "").replaceAll("/", "\\");
     return `\\\\${decodeURIComponent(unc[1])}${rest}`;
   }
-  const decoded = decodeURIComponent(uri.replace(/^file:\/\//u, ""));
-  if (/^\/[a-z]:\//iu.test(decoded)) {
+  const decoded = decodeURIComponent(uri.replace(/^file:\/\//, ""));
+  if (/^\/[a-z]:\//i.test(decoded))
     return decoded.slice(1).replaceAll("/", "\\");
-  }
   return decoded;
 }
 
 export class LspClient {
-  /**
-  Live clients by backend key ("binary:cwd"). ./providers routes models here.
-  */
+  /** Live clients by backend key ("binary:cwd"). ./providers routes models here. */
   static clients = new Map<string, LspClient>();
 
   readonly key: string;
   readonly cwd: string;
   readonly langs: string[];
-  /**
-  Server capabilities from the initialize response — providers read trigger characters etc.
-  */
-  capabilities: JsonObject = {};
-  /**
-  Resolves false when the handshake fails; callers then fall back to built-ins.
-  */
+  /** Server capabilities from the initialize response — providers read trigger characters etc. */
+  capabilities: Json = {};
+  /** Resolves false when the handshake fails; callers then fall back to built-ins. */
   readonly ready: Promise<boolean>;
 
-  onDiagnostics: ((uri: string, diagnostics: unknown[]) => void) | null = null;
+  onDiagnostics: ((uri: string, diagnostics: Json[]) => void) | null = null;
 
   private nextId = 1;
   private pending = new Map<number, Pending>();
@@ -139,85 +123,67 @@ export class LspClient {
   }
 
   private async initialize(): Promise<void> {
-    const name = this.cwd.split(/[\\/]/u).filter(Boolean).pop() ?? this.cwd;
+    const name = this.cwd.split(/[\\/]/).filter(Boolean).pop() ?? this.cwd;
     const result = await this.request("initialize", {
+      processId: null,
+      clientInfo: { name: "C2" },
+      rootUri: pathToUri(this.cwd),
+      rootPath: this.cwd,
+      workspaceFolders: [{ uri: pathToUri(this.cwd), name }],
       capabilities: {
         textDocument: {
+          synchronization: { didSave: true },
           completion: {
             completionItem: {
-              documentationFormat: ["markdown", "plaintext"],
-              insertReplaceSupport: true,
               snippetSupport: true,
+              insertReplaceSupport: true,
+              documentationFormat: ["markdown", "plaintext"],
             },
             contextSupport: true,
           },
-          definition: {},
-          formatting: {},
           hover: { contentFormat: ["markdown", "plaintext"] },
-          publishDiagnostics: {},
-          references: {},
           signatureHelp: {
             signatureInformation: {
               documentationFormat: ["markdown", "plaintext"],
               parameterInformation: { labelOffsetSupport: true },
             },
           },
-          synchronization: { didSave: true },
+          definition: {},
+          references: {},
+          formatting: {},
+          publishDiagnostics: {},
         },
-        window: { workDoneProgress: true },
         workspace: { workspaceFolders: true },
+        window: { workDoneProgress: true },
       },
-      clientInfo: { name: "C2" },
-      processId: null,
-      rootPath: this.cwd,
-      rootUri: pathToUri(this.cwd),
-      workspaceFolders: [{ name, uri: pathToUri(this.cwd) }],
     });
-    this.capabilities = objectField(asJsonObject(result), "capabilities") ?? {};
+    this.capabilities = result?.capabilities ?? {};
     this.notify("initialized", {});
   }
 
-  /**
-  Feed one raw message from the bridge into the protocol machinery.
-  */
+  /** Feed one raw message from the bridge into the protocol machinery. */
   handle(payload: string): void {
-    if (this.dead || !isRuntimeEnabled) {
-      return;
-    }
-    let msgValue: unknown;
+    if (this.dead || !runtimeEnabled) return;
+    let msg: Json;
     try {
-      msgValue = parseJsonPayload(payload);
+      msg = JSON.parse(payload);
     } catch {
-      return;
-    }
-    const msg = asJsonObject(msgValue);
-    if (msg == null) {
       return;
     }
     if (msg.method !== undefined && msg.id !== undefined) {
       this.answer(msg);
     } else if (msg.id !== undefined) {
-      const id = typeof msg.id === "number" ? msg.id : Number(msg.id);
-      if (!Number.isFinite(id)) {
-        return;
-      }
-      const pending = this.pending.get(id);
-      if (!pending) {
-        return;
-      }
-      this.pending.delete(id);
-      const error = asJsonObject(msg.error);
-      if (error == null) {
-        pending.resolve(msg.result ?? null);
-      } else {
-        pending.reject(
-          new Error(String(stringField(error, "message") ?? "LSP error"))
-        );
-      }
+      const p = this.pending.get(msg.id);
+      if (!p) return;
+      this.pending.delete(msg.id);
+      if (msg.error)
+        p.reject(new Error(String(msg.error.message ?? "LSP error")));
+      else p.resolve(msg.result ?? null);
     } else if (msg.method === "textDocument/publishDiagnostics") {
-      const params = objectField(msg, "params");
-      const diagnostics = asJsonArray(params?.diagnostics) ?? [];
-      this.onDiagnostics?.(stringField(params, "uri") ?? "", diagnostics);
+      this.onDiagnostics?.(
+        msg.params?.uri ?? "",
+        msg.params?.diagnostics ?? []
+      );
     }
     // Other notifications (progress, logs) are noise for a pane this size.
   }
@@ -227,42 +193,35 @@ export class LspClient {
    * unanswered request (rust-analyzer's progress tokens, pyright's configuration pulls) can stall
    * its whole queue, which presents as "completions never arrive", not as an error.
    */
-  private answer(msg: JsonObject): void {
-    let result: unknown = null;
+  private answer(msg: Json): void {
+    let result: Json = null;
     if (msg.method === "workspace/configuration") {
-      const items = asJsonArray(objectField(msg, "params")?.items) ?? [];
-      result = items.map(() => null);
+      result = (msg.params?.items ?? []).map(() => null);
     } else if (msg.method === "workspace/applyEdit") {
       result = { applied: false };
     }
-    void this.send({ id: msg.id, jsonrpc: "2.0", result });
+    void this.send({ jsonrpc: "2.0", id: msg.id, result });
   }
 
-  request(method: string, params: JsonObject): Promise<unknown> {
-    if (this.dead || !isRuntimeEnabled) {
-      return Promise.resolve(null);
-    }
+  request(method: string, params: Json): Promise<Json> {
+    if (this.dead || !runtimeEnabled) return Promise.resolve(null);
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { reject, resolve });
-      void this.send({ id, jsonrpc: "2.0", method, params }).catch((error) => {
+      this.pending.set(id, { resolve, reject });
+      void this.send({ jsonrpc: "2.0", id, method, params }).catch((e) => {
         this.pending.delete(id);
-        reject(error instanceof Error ? error : new Error(String(error)));
+        reject(e instanceof Error ? e : new Error(String(e)));
       });
     });
   }
 
-  notify(method: string, params: JsonObject): void {
-    if (this.dead || !isRuntimeEnabled) {
-      return;
-    }
+  notify(method: string, params: Json): void {
+    if (this.dead || !runtimeEnabled) return;
     void this.send({ jsonrpc: "2.0", method, params });
   }
 
-  private send(msg: JsonObject): Promise<void> {
-    if (this.dead || !isRuntimeEnabled) {
-      return Promise.resolve();
-    }
+  private send(msg: Json): Promise<void> {
+    if (this.dead || !runtimeEnabled) return Promise.resolve();
     return lspSend(this.key, JSON.stringify(msg));
   }
 
@@ -273,24 +232,18 @@ export class LspClient {
   }
 
   didOpen(uri: string, languageId: string, text: string): void {
-    if (this.openVersions.has(uri)) {
-      return;
-    }
+    if (this.openVersions.has(uri)) return;
     this.openVersions.set(uri, 1);
     this.notify("textDocument/didOpen", {
-      textDocument: { languageId, text, uri, version: 1 },
+      textDocument: { uri, languageId, version: 1, text },
     });
   }
 
-  /**
-  Debounced full-document sync — batches keystrokes; `flush` forces the send before requests.
-  */
+  /** Debounced full-document sync — batches keystrokes; `flush` forces the send before requests. */
   scheduleChange(uri: string, text: string): void {
     this.changeText.set(uri, text);
     const timer = this.changeTimer.get(uri);
-    if (timer) {
-      clearTimeout(timer);
-    }
+    if (timer) clearTimeout(timer);
     this.changeTimer.set(
       uri,
       setTimeout(() => this.flush(uri), 150)
@@ -299,28 +252,22 @@ export class LspClient {
 
   flush(uri: string): void {
     const timer = this.changeTimer.get(uri);
-    if (timer) {
-      clearTimeout(timer);
-    }
+    if (timer) clearTimeout(timer);
     this.changeTimer.delete(uri);
     const text = this.changeText.get(uri);
-    if (text === undefined || !this.openVersions.has(uri)) {
-      return;
-    }
+    if (text === undefined || !this.openVersions.has(uri)) return;
     this.changeText.delete(uri);
     const version = (this.openVersions.get(uri) ?? 1) + 1;
     this.openVersions.set(uri, version);
     // A change event without a range is a full-document replace — legal under any sync kind.
     this.notify("textDocument/didChange", {
-      contentChanges: [{ text }],
       textDocument: { uri, version },
+      contentChanges: [{ text }],
     });
   }
 
   didSave(uri: string): void {
-    if (!this.openVersions.has(uri)) {
-      return;
-    }
+    if (!this.openVersions.has(uri)) return;
     this.flush(uri);
     this.notify("textDocument/didSave", { textDocument: { uri } });
   }
@@ -328,72 +275,60 @@ export class LspClient {
   dispose(): void {
     this.dead = true;
     LspClient.clients.delete(this.key);
-    for (const timer of this.changeTimer.values()) {
-      clearTimeout(timer);
-    }
+    for (const timer of this.changeTimer.values()) clearTimeout(timer);
     this.changeTimer.clear();
     this.changeText.clear();
     this.openVersions.clear();
-    for (const p of this.pending.values()) {
+    for (const p of this.pending.values())
       p.reject(new Error("LSP client disposed"));
-    }
     this.pending.clear();
   }
 }
 
+/** The live client whose project contains `path` and whose server speaks `lang`, if any. */
 export function clientForPath(path: string, lang: string): LspClient | null {
-  if (!isRuntimeEnabled) {
-    return null;
-  }
+  if (!runtimeEnabled) return null;
   for (const client of LspClient.clients.values()) {
-    if (client.langs.includes(lang) && path.startsWith(`${client.cwd}/`)) {
+    if (client.langs.includes(lang) && path.startsWith(`${client.cwd}/`))
       return client;
-    }
   }
   return null;
 }
 
 // ---- client acquisition ------------------------------------------------------------------------
 
-/**
-One in-flight/complete acquisition per (cwd, server group); null is a cached "not installed".
-*/
+/** One in-flight/complete acquisition per (cwd, server group); null is a cached "not installed". */
 const acquisitions = new Map<string, Promise<LspClient | null>>();
-let isListening = false;
+let listening = false;
 type RuntimeEnabledListener = (workspace: string | undefined) => void;
 const runtimeEnabledListeners = new Set<RuntimeEnabledListener>();
 
+/** Replace the manifest-provided language routing table and reconnect mounted editor models. */
 export function configurePluginLanguageServers(
   servers: PluginLanguageServerRegistration[]
 ): void {
   const normalized = servers
-    .map((server) => {
-      return {
-        id: server.id,
-        languages: [
-          ...new Set(
-            server.languages.map((language) => language.toLocaleLowerCase())
-          ),
-        ].sort(),
-        pluginId: server.pluginId,
-      };
-    })
-    .sort((left, right) => {
-      return (
+    .map((server) => ({
+      pluginId: server.pluginId,
+      id: server.id,
+      languages: [
+        ...new Set(
+          server.languages.map((language) => language.toLocaleLowerCase())
+        ),
+      ].sort(),
+    }))
+    .sort(
+      (left, right) =>
         left.pluginId.localeCompare(right.pluginId) ||
         left.id.localeCompare(right.id)
-      );
-    });
+    );
   const signature = JSON.stringify(normalized);
-  if (signature === pluginServerSignature) {
-    return;
-  }
+  if (signature === pluginServerSignature) return;
   pluginServerSignature = signature;
   const providers = new Map<string, number>();
   for (const server of normalized) {
-    for (const language of server.languages) {
+    for (const language of server.languages)
       providers.set(language, (providers.get(language) ?? 0) + 1);
-    }
   }
   pluginServerGroups = Object.fromEntries(
     normalized.flatMap((server) => {
@@ -407,41 +342,33 @@ export function configurePluginLanguageServers(
   );
   runtimeGeneration += 1;
   acquisitions.clear();
-  for (const client of [...LspClient.clients.values()]) {
-    client.dispose();
-  }
-  if (isRuntimeEnabled) {
-    for (const listener of runtimeEnabledListeners) {
-      listener(undefined);
-    }
+  for (const client of [...LspClient.clients.values()]) client.dispose();
+  if (runtimeEnabled) {
+    for (const listener of runtimeEnabledListeners) listener(undefined);
   }
 }
 
+/** Apply the active project component policy without ever calling the unloadable LSP commands. */
 export function setLspRuntimeEnabled(
-  isEnabled: boolean,
+  enabled: boolean,
   workspace?: string
 ): void {
-  if (isRuntimeEnabled === isEnabled) {
-    return;
-  }
-  isRuntimeEnabled = isEnabled;
+  if (runtimeEnabled === enabled) return;
+  runtimeEnabled = enabled;
   runtimeGeneration += 1;
   acquisitions.clear();
-  if (!isEnabled) {
-    for (const client of [...LspClient.clients.values()]) {
-      client.dispose();
-    }
+  if (!enabled) {
+    for (const client of [...LspClient.clients.values()]) client.dispose();
     return;
   }
-  for (const listener of runtimeEnabledListeners) {
-    listener(workspace);
-  }
+  for (const listener of runtimeEnabledListeners) listener(workspace);
 }
 
 export function isLspRuntimeEnabled(): boolean {
-  return isRuntimeEnabled;
+  return runtimeEnabled;
 }
 
+/** Reconnect mounted editor models after a suspended component is resumed. */
 export function onLspRuntimeEnabled(
   listener: RuntimeEnabledListener
 ): () => void {
@@ -450,10 +377,8 @@ export function onLspRuntimeEnabled(
 }
 
 async function ensureListeners(): Promise<void> {
-  if (isListening) {
-    return;
-  }
-  isListening = true;
+  if (listening) return;
+  listening = true;
   await onLspMessage(({ key, payload }) =>
     LspClient.clients.get(key)?.handle(payload)
   );
@@ -462,25 +387,23 @@ async function ensureListeners(): Promise<void> {
     // Drop the acquisition cache lines that produced this client, so reopening a file respawns.
     for (const [k, v] of acquisitions) {
       void v.then((c) => {
-        if (c?.key === key) {
-          acquisitions.delete(k);
-        }
+        if (c?.key === key) acquisitions.delete(k);
       });
     }
   });
 }
 
+/**
+ * The client serving `lang` under `cwd`, spawning the server on first ask. Resolves null when no
+ * server binary is installed or the handshake failed — callers treat that as "no LSP here".
+ */
 export async function getClient(
   cwd: string,
   lang: string
 ): Promise<LspClient | null> {
-  if (!isRuntimeEnabled) {
-    return null;
-  }
+  if (!runtimeEnabled) return null;
   const group = groupOf(lang);
-  if (group == null || group === "") {
-    return null;
-  }
+  if (!group) return null;
   const cacheKey = `${cwd}::${group}`;
   let acq = acquisitions.get(cacheKey);
   if (!acq) {
@@ -489,18 +412,10 @@ export async function getClient(
     acq = (async () => {
       try {
         await ensureListeners();
-        if (!isRuntimeEnabled || generation !== runtimeGeneration) {
-          return null;
-        }
+        if (!runtimeEnabled || generation !== runtimeGeneration) return null;
         const key = await lspStart(cwd, lang);
-        if (
-          key == null ||
-          key === "" ||
-          !isRuntimeEnabled ||
-          generation !== runtimeGeneration
-        ) {
+        if (!key || !runtimeEnabled || generation !== runtimeGeneration)
           return null;
-        }
         const client =
           LspClient.clients.get(key) ??
           new LspClient(key, cwd, serverGroups()[group]);

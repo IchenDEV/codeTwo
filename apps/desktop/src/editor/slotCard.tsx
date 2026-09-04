@@ -4,6 +4,7 @@ import { createContext, useContext, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { X } from "@/components/ui/icons";
+import { Sparkles } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -16,16 +17,16 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-import type { DocumentBlock } from "../bridge";
+import type { DocBlock } from "../bridge";
 import { useT } from "../i18n";
-import type { SceneSlotDefinition } from "../session/scene";
+import type { SceneSlotDef } from "../session/scene";
 
 /**
  * The one slot-card block behind both R1 (parameterized macros) and R5 (scene briefs).
  *
  * BlockNote props are scalars only, so the structured pieces ride as JSON strings — the same
  * canvas-envelope pattern `CanvasBlock` uses in `skillInline.tsx`. `mode` decides what the card
- * serializes into: a macro card compiles to one `DocumentBlock::Skill` with filled params; a brief
+ * serializes into: a macro card compiles to one `DocBlock::Skill` with filled params; a brief
  * card compiles to the template's prose interleaved with the filled slot values.
  */
 export interface SlotCardProps {
@@ -35,7 +36,7 @@ export interface SlotCardProps {
   title: string;
   icon: string;
   template: string; // raw template with {{slot-id}} placeholders
-  slots: string; // JSON SceneSlotDefinition[]
+  slots: string; // JSON SceneSlotDef[]
   values: string; // JSON Record<string, string>
 }
 
@@ -52,43 +53,40 @@ export const SlotCardRuntimeContext = createContext<SlotCardRuntime | null>(
   null
 );
 
-/**
-`{{slot-id}}` placeholders (Agent Scenes 1.0.0 slot-id charset).
-*/
-const slotToken = /\{\{([a-z0-9-]+)\}\}/gu;
+/** `{{slot-id}}` placeholders (Agent Scenes 1.0.0 slot-id charset). */
+const SLOT_TOKEN = /\{\{([a-z0-9-]+)\}\}/g;
 
 export type TemplateSegment =
   | { kind: "text"; text: string }
   | { kind: "slot"; id: string };
 
+/** Split a template into prose and slot references, preserving order. */
 export function templateSegments(template: string): TemplateSegment[] {
   const segments: TemplateSegment[] = [];
   let last = 0;
-  for (const match of template.matchAll(slotToken)) {
+  for (const match of template.matchAll(SLOT_TOKEN)) {
     const at = match.index ?? 0;
-    if (at > last) {
+    if (at > last)
       segments.push({ kind: "text", text: template.slice(last, at) });
-    }
-    segments.push({ id: match[1], kind: "slot" });
+    segments.push({ kind: "slot", id: match[1] });
     last = at + match[0].length;
   }
-  if (last < template.length) {
+  if (last < template.length)
     segments.push({ kind: "text", text: template.slice(last) });
-  }
   return segments;
 }
 
+/** Legacy macros stored slots as bare id strings; scenes and new macros store full objects. */
 export function normalizeSlots(
-  raw: readonly (string | (Partial<SceneSlotDefinition> & { id: string }))[]
-): SceneSlotDefinition[] {
+  raw: readonly (string | (Partial<SceneSlotDef> & { id: string }))[]
+): SceneSlotDef[] {
   return raw
-    .map((entry): SceneSlotDefinition | null => {
+    .map((entry): SceneSlotDef | null => {
       if (typeof entry === "string") {
-        return { id: entry, kind: "text", label: "" };
+        return { id: entry, label: "", kind: "text" };
       }
-      if (!entry || typeof entry.id !== "string" || entry.id.length === 0) {
+      if (!entry || typeof entry.id !== "string" || entry.id.length === 0)
         return null;
-      }
       const kind =
         entry.kind === "multiline" ||
         entry.kind === "select" ||
@@ -97,20 +95,21 @@ export function normalizeSlots(
           ? entry.kind
           : "text";
       return {
-        default: typeof entry.default === "string" ? entry.default : undefined,
         id: entry.id,
-        kind,
         label: typeof entry.label === "string" ? entry.label : "",
+        kind,
         options: Array.isArray(entry.options)
           ? entry.options.filter((o) => typeof o === "string")
           : undefined,
         required: entry.required === true,
+        default: typeof entry.default === "string" ? entry.default : undefined,
       };
     })
-    .filter((slot): slot is SceneSlotDefinition => slot !== null);
+    .filter((slot): slot is SceneSlotDef => slot !== null);
 }
 
-export function parseSlots(json: string): SceneSlotDefinition[] {
+/** Corrupt JSON props degrade to an empty slot list, never a crash (canvas-envelope discipline). */
+export function parseSlots(json: string): SceneSlotDef[] {
   try {
     const parsed = JSON.parse(json);
     return Array.isArray(parsed) ? normalizeSlots(parsed) : [];
@@ -119,19 +118,17 @@ export function parseSlots(json: string): SceneSlotDefinition[] {
   }
 }
 
+/** Corrupt JSON props degrade to no values. */
 export function parseValues(json: string): Record<string, string> {
   try {
     const parsed = JSON.parse(json);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
       return {};
-    }
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(
       parsed as Record<string, unknown>
     )) {
-      if (typeof value === "string") {
-        out[key] = value;
-      }
+      if (typeof value === "string") out[key] = value;
     }
     return out;
   } catch {
@@ -139,36 +136,39 @@ export function parseValues(json: string): Record<string, string> {
   }
 }
 
+/** The filled value a slot compiles with: user input, else the authored default, else empty. */
 export function effectiveSlotValue(
-  slot: SceneSlotDefinition,
+  slot: SceneSlotDef,
   values: Record<string, string>
 ): string {
   return values[slot.id] ?? slot.default ?? "";
 }
 
-export function slotCardToDocBlocks(
-  props: Partial<SlotCardProps>
-): DocumentBlock[] {
+/**
+ * Serialize one slot card's props into neutral `DocBlock`s. A macro card becomes one skill block
+ * with filled params; a brief card becomes the template's prose interleaved with the filled slot
+ * values — a filled file slot compiles like an `@` mention, a filled artifact slot becomes the
+ * core's `{{artifact:<id>}}` interpolation token. Corrupt JSON degrades to empty slots/values.
+ */
+export function slotCardToDocBlocks(props: Partial<SlotCardProps>): DocBlock[] {
   const slots = parseSlots(props.slots ?? "[]");
   const values = parseValues(props.values ?? "{}");
   if (props.mode !== "brief") {
     return [
       {
+        type: "skill",
+        skill_id: props.skillId ?? "",
         params: Object.fromEntries(
           slots.map((slot) => [slot.id, effectiveSlotValue(slot, values)])
         ),
-        skill_id: props.skillId ?? "",
-        type: "skill",
       },
     ];
   }
   const byId = new Map(slots.map((slot) => [slot.id, slot]));
-  const out: DocumentBlock[] = [];
+  const out: DocBlock[] = [];
   let text = "";
   const flushText = () => {
-    if (text.trim().length > 0) {
-      out.push({ text, type: "text" });
-    }
+    if (text.trim().length > 0) out.push({ type: "text", text });
     text = "";
   };
   for (const segment of templateSegments(props.template ?? "")) {
@@ -177,16 +177,12 @@ export function slotCardToDocBlocks(
       continue;
     }
     const slot = byId.get(segment.id);
-    if (!slot) {
-      continue;
-    }
+    if (!slot) continue;
     const value = effectiveSlotValue(slot, values);
-    if (!value) {
-      continue;
-    }
+    if (!value) continue;
     if (slot.kind === "file") {
       flushText();
-      out.push({ path: value, type: "file" });
+      out.push({ type: "file", path: value });
     } else if (slot.kind === "artifact") {
       text += `{{artifact:${value}}}`;
     } else {
@@ -197,22 +193,21 @@ export function slotCardToDocBlocks(
   return out;
 }
 
+/**
+ * Labels (falling back to ids) of every required slot in the document that has neither a value
+ * nor a default. A warning for the Run row — never a block on running.
+ */
 export function unfilledRequiredSlots(editor: {
   document: readonly { type: string; props?: unknown }[];
 }): string[] {
   const out: string[] = [];
   for (const block of editor.document) {
-    if (block.type !== "slotCard") {
-      continue;
-    }
+    if (block.type !== "slotCard") continue;
     const props = block.props as Partial<SlotCardProps> | undefined;
     const slots = parseSlots(props?.slots ?? "[]");
     const values = parseValues(props?.values ?? "{}");
     for (const slot of slots) {
-      if (
-        slot.required === true &&
-        effectiveSlotValue(slot, values).trim() === ""
-      ) {
+      if (slot.required && effectiveSlotValue(slot, values).trim() === "") {
         out.push(slot.label || slot.id);
       }
     }
@@ -220,6 +215,8 @@ export function unfilledRequiredSlots(editor: {
   return out;
 }
 
+/** R5 offer-banner visibility: empty document, doc mode, an active scene with a brief, and the
+ * user has not dismissed the offer for this session. Never auto-inserts. */
 export function briefOfferVisible(state: {
   docMode: boolean;
   docEmpty: boolean;
@@ -229,6 +226,7 @@ export function briefOfferVisible(state: {
   return state.docMode && state.docEmpty && state.hasBrief && !state.dismissed;
 }
 
+/** Move focus into a just-inserted card's first field once BlockNote has rendered it. */
 export function focusSlotCardField(blockId: string): void {
   setTimeout(() => {
     const field = document.querySelector<HTMLElement>(
@@ -249,8 +247,8 @@ export function SlotCardView({
   block,
   editor,
 }: {
-  readonly block: { id?: string; props: SlotCardProps };
-  readonly editor: SlotCardEditor;
+  block: { id?: string; props: SlotCardProps };
+  editor: SlotCardEditor;
 }) {
   const t = useT();
   const runtime = useContext(SlotCardRuntimeContext);
@@ -275,9 +273,7 @@ export function SlotCardView({
         props: { ...block.props, values: JSON.stringify(next) },
       });
     } catch {
-      /*
-      BlockNote may be tearing down while a field commit lands.
-      */
+      /* BlockNote may be tearing down while a field commit lands. */
     }
   };
   // Committing on the native `input` event (via onInput) keeps one write per edit in browsers
@@ -289,9 +285,7 @@ export function SlotCardView({
     try {
       editor.setTextCursorPosition(block, "end");
     } catch {
-      /*
-      A content:none block may reject the cursor; focusing is what matters.
-      */
+      /* A content:none block may reject the cursor; focusing is what matters. */
     }
     editor.focus();
   };
@@ -303,18 +297,14 @@ export function SlotCardView({
       exitToEditor();
       return;
     }
-    if (event.key !== "Tab") {
-      return;
-    }
+    if (event.key !== "Tab") return;
     const host = containerRef.current;
-    if (!host) {
-      return;
-    }
-    const fields = [...host.querySelectorAll<HTMLElement>("[data-slot-field]")];
+    if (!host) return;
+    const fields = Array.from(
+      host.querySelectorAll<HTMLElement>("[data-slot-field]")
+    );
     const index = fields.indexOf(event.target as HTMLElement);
-    if (index === -1) {
-      return;
-    }
+    if (index < 0) return;
     event.preventDefault();
     event.stopPropagation();
     const next = index + (event.shiftKey ? -1 : 1);
@@ -326,11 +316,11 @@ export function SlotCardView({
     fields[next]?.focus();
   };
 
-  const renderField = (slot: SceneSlotDefinition) => {
+  const renderField = (slot: SceneSlotDef) => {
     const value = values[slot.id] ?? slot.default ?? "";
     const label = slot.label || slot.id;
     switch (slot.kind) {
-      case "multiline": {
+      case "multiline":
         return (
           <Textarea
             data-slot-field
@@ -351,13 +341,12 @@ export function SlotCardView({
             }}
           />
         );
-      }
-      case "select": {
+      case "select":
         return (
           <Select
             items={(slot.options ?? []).map((option) => ({
-              label: option,
               value: option,
+              label: option,
             }))}
             value={value}
             onValueChange={(next) => write(slot.id, next ?? "")}
@@ -381,15 +370,14 @@ export function SlotCardView({
             </SelectContent>
           </Select>
         );
-      }
-      case "file": {
+      case "file":
         return runtime ? (
           <span className="inline-flex min-w-0 items-center gap-1.5">
-            {value ? (
+            {value && (
               <span className="text-callout text-foreground max-w-48 truncate font-mono">
                 {value}
               </span>
-            ) : null}
+            )}
             <Button
               data-slot-field
               type="button"
@@ -398,9 +386,7 @@ export function SlotCardView({
               aria-label={`${label}: ${t("slotCard.pickFile")}`}
               onClick={() => {
                 void runtime.pickFile().then((path) => {
-                  if (path) {
-                    write(slot.id, path);
-                  }
+                  if (path) write(slot.id, path);
                 });
               }}
             >
@@ -420,7 +406,6 @@ export function SlotCardView({
             onInput={(event) => write(slot.id, event.currentTarget.value)}
           />
         );
-      }
       case "artifact": {
         const artifacts = runtime?.carriedArtifacts() ?? [];
         if (artifacts.length === 0 && !value) {
@@ -436,8 +421,8 @@ export function SlotCardView({
         return (
           <Select
             items={artifacts.map((artifact) => ({
-              label: artifact.title,
               value: artifact.id,
+              label: artifact.title,
             }))}
             value={value}
             onValueChange={(next) => write(slot.id, next ?? "")}
@@ -462,7 +447,7 @@ export function SlotCardView({
           </Select>
         );
       }
-      default: {
+      default:
         return (
           <Input
             data-slot-field
@@ -475,7 +460,6 @@ export function SlotCardView({
             onInput={(event) => write(slot.id, event.currentTarget.value)}
           />
         );
-      }
     }
   };
 
@@ -489,11 +473,13 @@ export function SlotCardView({
       onKeyDown={onKeyDown}
     >
       <div className="flex items-center gap-1.5 pb-2">
-        {block.props.icon ? (
+        {block.props.icon.trim() && block.props.icon !== "✦" ? (
           <span className="text-body shrink-0" aria-hidden>
             {block.props.icon}
           </span>
-        ) : null}
+        ) : (
+          <Sparkles className="size-3.5 shrink-0" aria-hidden />
+        )}
         <span className="text-body text-foreground min-w-0 flex-1 truncate font-medium">
           {block.props.title}
         </span>
@@ -570,18 +556,18 @@ export function SlotCardView({
 
 export const SlotCardBlock = createReactBlockSpec(
   {
-    content: "none",
+    type: "slotCard",
     propSchema: {
-      icon: { default: "" },
       mode: { default: "macro" },
-      sceneName: { default: "" },
       skillId: { default: "" },
-      slots: { default: "[]" },
-      template: { default: "" },
+      sceneName: { default: "" },
       title: { default: "" },
+      icon: { default: "" },
+      template: { default: "" },
+      slots: { default: "[]" },
       values: { default: "{}" },
     },
-    type: "slotCard",
+    content: "none",
   } as const,
   {
     render: (props) => (

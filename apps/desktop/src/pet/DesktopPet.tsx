@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 
 import { useT } from "@/i18n";
 
@@ -10,59 +14,56 @@ import {
   desktopUpdatePetState,
   isElectrobun,
   listenDesktop,
-  isNativeContextMenusAvailable,
+  nativeContextMenusAvailable,
   showNativeContextMenu,
+  type DesktopPetState,
+  type NativeContextMenuItem,
 } from "../container";
-import type { DesktopPetState, NativeContextMenuItem } from "../container";
 import { CodeTwoPet } from "./CodeTwoPet";
 import type { CodeTwoPetAnimation } from "./state";
 
-const petStateUpdateIntervalMs = 160;
-export const desktopPetCloseAction = "close";
+const PET_STATE_UPDATE_INTERVAL_MS = 160;
+export const DESKTOP_PET_CLOSE_ACTION = "close";
 
 export function desktopPetContextMenu(
   closeLabel: string
 ): NativeContextMenuItem[] {
-  return [{ action: desktopPetCloseAction, label: closeLabel, type: "item" }];
+  return [
+    { type: "item", label: closeLabel, action: DESKTOP_PET_CLOSE_ACTION },
+  ];
 }
 
 export function DesktopPetBridge({
   animation,
   bubble,
 }: {
-  readonly animation: CodeTwoPetAnimation;
-  readonly bubble: string | null;
+  animation: CodeTwoPetAnimation;
+  bubble: string | null;
 }) {
   const appearance = useAppearanceSettings();
   const pendingState = useRef<DesktopPetState | null>(null);
   const updateTimer = useRef<number>();
 
   useEffect(() => {
-    if (!isElectrobun) {
-      return;
-    }
+    if (!isElectrobun) return;
     pendingState.current = {
+      visible: appearance.petEnabled,
       animation,
+      bubble,
       appearance: {
         petActivityEnabled: appearance.petActivityEnabled,
-        petId: appearance.petId,
-        petName: appearance.petName,
         petSize: appearance.petSize,
         petSource: appearance.petSource,
+        petId: appearance.petId,
+        petName: appearance.petName,
       },
-      bubble,
-      visible: appearance.petEnabled,
     };
-    if (updateTimer.current !== undefined) {
-      return;
-    }
+    if (updateTimer.current !== undefined) return;
     updateTimer.current = window.setTimeout(() => {
       updateTimer.current = undefined;
       const state = pendingState.current;
-      if (state) {
-        void desktopUpdatePetState(state).catch(() => undefined);
-      }
-    }, petStateUpdateIntervalMs);
+      if (state) void desktopUpdatePetState(state).catch(() => undefined);
+    }, PET_STATE_UPDATE_INTERVAL_MS);
   }, [
     animation,
     appearance.petActivityEnabled,
@@ -76,17 +77,14 @@ export function DesktopPetBridge({
 
   useEffect(
     () => () => {
-      if (updateTimer.current !== undefined) {
+      if (updateTimer.current !== undefined)
         window.clearTimeout(updateTimer.current);
-      }
     },
     []
   );
 
   useEffect(() => {
-    if (!isElectrobun) {
-      return;
-    }
+    if (!isElectrobun) return;
     const stopHidden = listenDesktop("desktop-pet-hidden", () => {
       setAppearanceSettings({ petEnabled: false });
     });
@@ -103,36 +101,28 @@ export function DesktopPetWindow() {
   const [state, setState] = useState<DesktopPetState | null>(null);
 
   useEffect(() => {
-    let isActive = true;
+    let active = true;
     const stop = listenDesktop<DesktopPetState>("desktop-pet-state", setState);
     void desktopGetPetState()
       .then((value) => {
-        if (isActive) {
-          setState(value);
-        }
+        if (active) setState(value);
       })
       .catch(() => undefined);
     return () => {
-      isActive = false;
+      active = false;
       stop();
     };
   }, []);
 
-  if (!state) {
-    return null;
-  }
+  if (!state) return null;
 
   const openContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
     event.preventDefault();
-    if (!isNativeContextMenusAvailable) {
-      return;
-    }
+    if (!nativeContextMenusAvailable) return;
     void showNativeContextMenu(
       desktopPetContextMenu(t("pet.close")),
       (action) => {
-        if (action === desktopPetCloseAction) {
-          void desktopHidePet();
-        }
+        if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet();
       }
     );
   };

@@ -13,12 +13,12 @@ export interface CanvasExportBudget {
   margin: number;
 }
 
-export const defaultExportBudget: CanvasExportBudget = {
-  margin: 24,
-  maxBytes: 20 * 1024 * 1024,
+export const DEFAULT_EXPORT_BUDGET: CanvasExportBudget = {
   maxImages: 16,
   maxPixels: 32_000_000,
+  maxBytes: 20 * 1024 * 1024,
   tileSize: 2048,
+  margin: 24,
 };
 
 export interface CanvasExportTile {
@@ -57,11 +57,12 @@ function scaledDimension(value: number, maxDimension: number): number {
   return Math.max(1, Math.min(maxDimension, Math.ceil(value)));
 }
 
+/** Builds a deterministic overview-first, row-major detail tile plan without rendering. */
 export function planCanvasExportTiles(
   bounds: CanvasExportBounds,
   budget: Partial<CanvasExportBudget> = {}
 ): readonly CanvasExportTile[] {
-  const limits = { ...defaultExportBudget, ...budget };
+  const limits = { ...DEFAULT_EXPORT_BUDGET, ...budget };
   const sourceWidth = Math.max(1, Math.ceil(finite(bounds.maxX - bounds.minX)));
   const sourceHeight = Math.max(
     1,
@@ -81,37 +82,34 @@ export function planCanvasExportTiles(
   );
   const tiles: CanvasExportTile[] = [
     {
-      column: 0,
-      height: overviewHeight,
       kind: "overview",
-      pixels: overviewWidth * overviewHeight,
       row: 0,
-      sourceHeight,
-      sourceWidth,
+      column: 0,
       sourceX: 0,
       sourceY: 0,
+      sourceWidth,
+      sourceHeight,
       width: overviewWidth,
+      height: overviewHeight,
+      pixels: overviewWidth * overviewHeight,
     },
   ];
   if (sourceWidth <= limits.tileSize && sourceHeight <= limits.tileSize) {
-    if (tiles.length > limits.maxImages) {
+    if (tiles.length > limits.maxImages)
       throw new CanvasExportBudgetError(
         "image-count",
         `Canvas export requires ${tiles.length} images; limit is ${limits.maxImages}`
       );
-    }
-    if (tiles[0].pixels > limits.maxPixels) {
+    if (tiles[0].pixels > limits.maxPixels)
       throw new CanvasExportBudgetError(
         "pixel-budget",
         "Canvas overview exceeds the pixel budget"
       );
-    }
-    if (tiles[0].pixels * 4 > limits.maxBytes) {
+    if (tiles[0].pixels * 4 > limits.maxBytes)
       throw new CanvasExportBudgetError(
         "byte-budget",
         "Canvas overview exceeds the byte budget"
       );
-    }
     return tiles;
   }
   const rows = Math.ceil(sourceHeight / limits.tileSize);
@@ -123,16 +121,16 @@ export function planCanvasExportTiles(
       const tileWidth = Math.min(limits.tileSize, sourceWidth - sourceX);
       const tileHeight = Math.min(limits.tileSize, sourceHeight - sourceY);
       tiles.push({
-        column,
-        height: tileHeight,
         kind: "detail",
-        pixels: tileWidth * tileHeight,
         row,
-        sourceHeight: tileHeight,
-        sourceWidth: tileWidth,
+        column,
         sourceX,
         sourceY,
+        sourceWidth: tileWidth,
+        sourceHeight: tileHeight,
         width: tileWidth,
+        height: tileHeight,
+        pixels: tileWidth * tileHeight,
       });
     }
   }

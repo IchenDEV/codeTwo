@@ -26,18 +26,14 @@ export function projectActionId(
     name
       .normalize("NFKD")
       .toLocaleLowerCase()
-      .replaceAll(/[^a-z0-9]+/gu, "-")
-      .replaceAll(/^-+|-+$/gu, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
       .slice(0, 56) || "action";
   const ids = new Set(actions.map((action) => action.id));
-  if (!ids.has(stem)) {
-    return stem;
-  }
+  if (!ids.has(stem)) return stem;
   for (let suffix = 2; suffix < 10_000; suffix += 1) {
     const candidate = `${stem}-${suffix}`;
-    if (!ids.has(candidate)) {
-      return candidate;
-    }
+    if (!ids.has(candidate)) return candidate;
   }
   return `${stem}-${Date.now()}`;
 }
@@ -47,13 +43,9 @@ export function projectActionIssue(
   bindings: KeymapEntry[],
   actions: ProjectScript[]
 ): { issue: ProjectActionIssue; conflict?: string } | null {
-  if (!draft.name.trim()) {
-    return { issue: "name_required" };
-  }
+  if (!draft.name.trim()) return { issue: "name_required" };
   if (draft.kind === "prompt") {
-    if (!draft.prompt.trim()) {
-      return { issue: "prompt_required" };
-    }
+    if (!draft.prompt.trim()) return { issue: "prompt_required" };
   } else if (!draft.command.trim()) {
     return { issue: "command_required" };
   }
@@ -69,16 +61,14 @@ export function projectActionIssue(
   }
   if (draft.keybinding) {
     const builtin = bindings.find(([, key]) => key === draft.keybinding);
-    if (builtin) {
-      return { conflict: builtin[2], issue: "keybinding_conflict" };
-    }
+    if (builtin) return { issue: "keybinding_conflict", conflict: builtin[2] };
     const action = actions.find(
       (candidate) => candidate.keybinding === draft.keybinding
     );
     if (action) {
       return {
-        conflict: action.name || action.id,
         issue: "keybinding_conflict",
+        conflict: action.name || action.id,
       };
     }
   }
@@ -86,8 +76,8 @@ export function projectActionIssue(
 }
 
 export function projectActionBindings(actions: ProjectScript[]): KeymapEntry[] {
-  return actions.flatMap((action) => {
-    return action.keybinding
+  return actions.flatMap((action) =>
+    action.keybinding
       ? [
           [
             `project_action:${action.id}`,
@@ -95,6 +85,6 @@ export function projectActionBindings(actions: ProjectScript[]): KeymapEntry[] {
             action.name || action.id,
           ] as KeymapEntry,
         ]
-      : [];
-  });
+      : []
+  );
 }

@@ -3,7 +3,7 @@ import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
 
 import { cn } from "@/lib/utils";
 
-export function RadioGroup<Value>({
+function RadioGroup<Value>({
   className,
   ...props
 }: RadioGroupPrimitive.Props<Value>) {
@@ -16,7 +16,7 @@ export function RadioGroup<Value>({
   );
 }
 
-export function Radio<Value>({
+function Radio<Value>({
   className,
   ...props
 }: RadioPrimitive.Root.Props<Value>) {
@@ -36,3 +36,5 @@ export function Radio<Value>({
     </RadioPrimitive.Root>
   );
 }
+
+export { Radio, RadioGroup };

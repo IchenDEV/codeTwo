@@ -98,9 +98,7 @@ export interface AppshotSettings {
 
 export interface AppshotCapture {
   id: string;
-  /**
-  Absent on legacy Appshot events; private user-selected images identify themselves explicitly.
-  */
+  /** Absent on legacy Appshot events; private user-selected images identify themselves explicitly. */
   kind?: "appshot" | "attachment";
   app_name: string;
   window_title: string;
@@ -113,7 +111,7 @@ export interface AppshotCapture {
   destination: AppshotDestination;
 }
 
-export interface CodeTwoRPC {
+export type CodeTwoRPC = {
   bun: RPCSchema<{
     requests: {
       call: {
@@ -176,4 +174,4 @@ export interface CodeTwoRPC {
       appshotFailed: { message: string };
     };
   }>;
-}
+};

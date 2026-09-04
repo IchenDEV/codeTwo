@@ -25,10 +25,10 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   proposeMacroSlots as bridgePropose,
   saveSkill as bridgeSave,
+  type Skill,
 } from "../bridge";
-import type { Skill } from "../bridge";
 import { useT } from "../i18n";
-import type { SceneSlotDefinition } from "./scene";
+import type { SceneSlotDef } from "./scene";
 
 /**
  * R2 "Save as template…" dialog: a past prompt becomes a Macro skill. The heuristic proposal is
@@ -39,7 +39,7 @@ import type { SceneSlotDefinition } from "./scene";
  * v1: raw edit keeps the {{token}} ↔ slot-row contract obvious and testable).
  */
 
-export const slotKinds = [
+export const SLOT_KINDS = [
   "text",
   "multiline",
   "select",
@@ -47,20 +47,18 @@ export const slotKinds = [
   "artifact",
 ] as const;
 
-/**
-One editable slot row. Options ride as a raw comma list so typing stays free-form.
-*/
+/** One editable slot row. Options ride as a raw comma list so typing stays free-form. */
 export interface SlotRow {
   id: string;
   label: string;
-  kind: SceneSlotDefinition["kind"];
+  kind: SceneSlotDef["kind"];
   options: string;
   required: boolean;
   default: string;
 }
 
-const tokenPattern = /\{\{\s*([^{}\s]+)\s*\}\}/gu;
-const idPattern = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/u;
+const TOKEN_PATTERN = /\{\{\s*([^{}\s]+)\s*\}\}/g;
+const ID_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
 
 export function splitOptions(raw: string): string[] {
   return raw
@@ -73,23 +71,22 @@ export function splitOptions(raw: string): string[] {
  * Pure draft validation: every `{{token}}` needs a slot row and vice versa, ids must be slugs,
  * and a select must list options. Non-empty result disables Save.
  */
-/**
-Localizable validation message: a `templateFrom.err*` key plus its interpolation vars.
-*/
+/** Localizable validation message: a `templateFrom.err*` key plus its interpolation vars. */
 type DraftError = { key: string; vars: Record<string, string | number> };
 
-const draftErrorEn: Record<string, string> = {
-  "templateFrom.errDuplicate": 'Slot {index}: duplicate id "{id}".',
-  "templateFrom.errNoOptions": 'Slot "{id}" is a select but lists no options.',
-  "templateFrom.errNoRow": "Template token {token} has no slot row.",
-  "templateFrom.errNoToken":
-    'Slot "{id}" never appears in the template as {token}.',
+const DRAFT_ERROR_EN: Record<string, string> = {
   "templateFrom.errSlug":
     'Slot {index}: id "{id}" is not a slug (lowercase letters, digits, - or _).',
+  "templateFrom.errDuplicate": 'Slot {index}: duplicate id "{id}".',
+  "templateFrom.errNoToken":
+    'Slot "{id}" never appears in the template as {token}.',
+  "templateFrom.errNoOptions": 'Slot "{id}" is a select but lists no options.',
+  "templateFrom.errNoRow": "Template token {token} has no slot row.",
 };
 
+/** English fallback so the pure validator stays testable without an i18n provider. */
 function formatDraftError(error: DraftError): string {
-  let out = draftErrorEn[error.key] ?? error.key;
+  let out = DRAFT_ERROR_EN[error.key] ?? error.key;
   for (const [name, value] of Object.entries(error.vars)) {
     out = out.replaceAll(`{${name}}`, String(value));
   }
@@ -103,21 +100,19 @@ export function validateMacroDraft(
 ): string[] {
   const errors: DraftError[] = [];
   const tokens = new Set<string>();
-  for (const match of template.matchAll(tokenPattern)) {
-    tokens.add(match[1]);
-  }
+  for (const match of template.matchAll(TOKEN_PATTERN)) tokens.add(match[1]);
   const ids = new Set<string>();
   for (const [index, slot] of slots.entries()) {
     const id = slot.id.trim();
-    if (!idPattern.test(id)) {
+    if (!ID_PATTERN.test(id)) {
       errors.push({
         key: "templateFrom.errSlug",
-        vars: { id, index: index + 1 },
+        vars: { index: index + 1, id },
       });
     } else if (ids.has(id)) {
       errors.push({
         key: "templateFrom.errDuplicate",
-        vars: { id, index: index + 1 },
+        vars: { index: index + 1, id },
       });
     } else if (!tokens.has(id)) {
       errors.push({
@@ -143,21 +138,22 @@ export function validateMacroDraft(
   );
 }
 
+/** Same id derivation the App's skill-draft flow uses. */
 function slugName(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-|-$/gu, "");
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
-function toRow(slot: SceneSlotDefinition): SlotRow {
+function toRow(slot: SceneSlotDef): SlotRow {
   return {
-    default: slot.default ?? "",
     id: slot.id,
-    kind: slot.kind ?? "text",
     label: slot.label || slot.id,
+    kind: slot.kind ?? "text",
     options: (slot.options ?? []).join(", "),
     required: slot.required ?? false,
+    default: slot.default ?? "",
   };
 }
 
@@ -168,14 +164,12 @@ export function TemplateDialog({
   propose = bridgePropose,
   save = bridgeSave,
 }: {
-  readonly source: string;
-  readonly onClose: () => void;
-  readonly onSaved: () => void;
-  /**
-  Test seams; both default to the bridge functions.
-  */
-  readonly propose?: typeof bridgePropose;
-  readonly save?: (skill: Skill) => Promise<void>;
+  source: string;
+  onClose: () => void;
+  onSaved: () => void;
+  /** Test seams; both default to the bridge functions. */
+  propose?: typeof bridgePropose;
+  save?: (skill: Skill) => Promise<void>;
 }) {
   const t = useT();
   const [proposing, setProposing] = useState(true);
@@ -188,14 +182,12 @@ export function TemplateDialog({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    let isAlive = true;
+    let alive = true;
     setProposing(true);
     void propose(source)
       .catch(() => null)
       .then((proposed) => {
-        if (!isAlive) {
-          return;
-        }
+        if (!alive) return;
         setProposing(false);
         if (!proposed) {
           // Manual editor mode: the raw text is the template, the slot table starts blank.
@@ -206,7 +198,7 @@ export function TemplateDialog({
         setSlots(proposed.slots.map(toRow));
       });
     return () => {
-      isAlive = false;
+      alive = false;
     };
   }, [propose, source]);
 
@@ -229,12 +221,12 @@ export function TemplateDialog({
     setSlots((current) => [
       ...current,
       {
-        default: "",
         id: `slot-${current.length + 1}`,
-        kind: "text",
         label: "",
+        kind: "text",
         options: "",
         required: false,
+        default: "",
       },
     ]);
   };
@@ -243,23 +235,23 @@ export function TemplateDialog({
     setSaving(true);
     try {
       await save({
-        description: description.trim(),
-        icon: icon.trim() || null,
         id: slugName(name),
         name: name.trim(),
+        description: description.trim(),
+        icon: icon.trim() || null,
         payload: {
           kind: "macro",
+          template,
           slots: slots.map((row) => ({
             id: row.id.trim(),
-            kind: row.kind,
             label: row.label.trim(),
+            kind: row.kind,
             ...(row.kind === "select"
               ? { options: splitOptions(row.options) }
               : {}),
             ...(row.required ? { required: true } : {}),
             ...(row.default.trim() ? { default: row.default } : {}),
           })),
-          template,
         },
       });
       onSaved();
@@ -280,18 +272,21 @@ export function TemplateDialog({
             <pre className="rounded-control bg-fill-quiet text-callout text-muted-foreground max-h-64 overflow-y-auto border px-3 py-2 whitespace-pre-wrap">
               {source}
             </pre>
-            <output className="bg-background/60 text-body text-muted-foreground absolute inset-0 flex items-center justify-center gap-2">
+            <span
+              role="status"
+              className="bg-background/60 text-body text-muted-foreground absolute inset-0 flex items-center justify-center gap-2"
+            >
               <Spinner className="size-4" />
               {t("templateFrom.proposing")}
-            </output>
+            </span>
           </div>
         ) : (
           <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-            {manual ? (
+            {manual && (
               <p className="text-callout text-muted-foreground">
                 {t("templateFrom.manualHint")}
               </p>
-            ) : null}
+            )}
 
             <div className="flex gap-2">
               <Input
@@ -367,9 +362,9 @@ export function TemplateDialog({
                       }
                     />
                     <Select
-                      items={slotKinds.map((kind) => ({
-                        label: kind,
+                      items={SLOT_KINDS.map((kind) => ({
                         value: kind,
+                        label: kind,
                       }))}
                       value={row.kind}
                       onValueChange={(next) =>
@@ -385,7 +380,7 @@ export function TemplateDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          {slotKinds.map((kind) => (
+                          {SLOT_KINDS.map((kind) => (
                             <SelectItem key={kind} value={kind}>
                               {kind}
                             </SelectItem>

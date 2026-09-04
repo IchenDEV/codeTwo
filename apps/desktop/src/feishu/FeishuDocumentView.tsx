@@ -24,19 +24,15 @@ interface ComponentMessage {
   detail?: string;
 }
 
-const mountTimeoutMs = 20_000;
+const MOUNT_TIMEOUT_MS = 20_000;
 
 function componentLocale(locale: string): "en-US" | "zh-CN" | "ja-JP" {
-  if (locale === "zh-CN" || locale === "ja-JP") {
-    return locale;
-  }
+  if (locale === "zh-CN" || locale === "ja-JP") return locale;
   return "en-US";
 }
 
 function isComponentMessage(value: unknown): value is ComponentMessage {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+  if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<ComponentMessage>;
   return (
     candidate.type === "codetwo-feishu-doc-component" &&
@@ -48,8 +44,8 @@ function isComponentMessage(value: unknown): value is ComponentMessage {
 function readableFailure(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
   return message
-    .replace(/^Error:\s*/iu, "")
-    .replace(/^dsh-feishu-docs:\s*/iu, "")
+    .replace(/^Error:\s*/i, "")
+    .replace(/^dsh-feishu-docs:\s*/i, "")
     .trim();
 }
 
@@ -59,10 +55,10 @@ export function FeishuDocumentView({
   markdown,
   markdownLoading,
 }: {
-  readonly callCommand: CollaborationConnectorCaller;
-  readonly documentUrl: string;
-  readonly markdown: string;
-  readonly markdownLoading: boolean;
+  callCommand: CollaborationConnectorCaller;
+  documentUrl: string;
+  markdown: string;
+  markdownLoading: boolean;
 }) {
   const t = useT();
   const { locale } = useLanguage();
@@ -74,29 +70,25 @@ export function FeishuDocumentView({
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
-    let isLive = true;
+    let live = true;
     let activeId = "";
     let authRetries = 0;
     let mountTimer: number | undefined;
 
     const clearMountTimer = () => {
-      if (mountTimer !== undefined) {
-        window.clearTimeout(mountTimer);
-      }
+      if (mountTimer !== undefined) window.clearTimeout(mountTimer);
       mountTimer = undefined;
     };
 
     const fail = (message: string) => {
-      if (!isLive) {
-        return;
-      }
+      if (!live) return;
       clearMountTimer();
       setFailure(message);
       setPhase("failed");
       setView(null);
     };
 
-    const open = async (isRefreshAuth = false) => {
+    const open = async (refreshAuth = false) => {
       clearMountTimer();
       setFailure("");
       setPhase("loading");
@@ -108,21 +100,19 @@ export function FeishuDocumentView({
       try {
         const next = await callCommand<ComponentView>("document.component", {
           documentUrl,
-          locale: componentLocale(locale),
-          refreshAuth: isRefreshAuth,
           theme,
+          locale: componentLocale(locale),
+          refreshAuth,
         });
-        if (!isLive) {
-          return;
-        }
+        if (!live) return;
         activeId = next.id;
         setView(next);
         mountTimer = window.setTimeout(
           () => fail(t("feishu.documentComponentTimeout")),
-          mountTimeoutMs
+          MOUNT_TIMEOUT_MS
         );
-      } catch (error) {
-        fail(readableFailure(error));
+      } catch (cause) {
+        fail(readableFailure(cause));
       }
     };
 
@@ -130,12 +120,9 @@ export function FeishuDocumentView({
       if (
         event.source !== iframeRef.current?.contentWindow ||
         !isComponentMessage(event.data)
-      ) {
+      )
         return;
-      }
-      if (event.data.id !== activeId) {
-        return;
-      }
+      if (event.data.id !== activeId) return;
       if (event.data.state === "ready") {
         clearMountTimer();
         setPhase("ready");
@@ -152,7 +139,7 @@ export function FeishuDocumentView({
     window.addEventListener("message", onMessage);
     void open();
     return () => {
-      isLive = false;
+      live = false;
       clearMountTimer();
       window.removeEventListener("message", onMessage);
     };
@@ -193,10 +180,13 @@ export function FeishuDocumentView({
             </div>
           </div>
           {markdownLoading ? (
-            <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
+            <div
+              role="status"
+              className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center"
+            >
               <Spinner />
               {t("feishu.loadingDocument")}
-            </output>
+            </div>
           ) : (
             <div
               data-feishu-document
@@ -229,10 +219,13 @@ export function FeishuDocumentView({
         />
       ) : null}
       {phase === "loading" ? (
-        <output className="gap-module-inset bg-surface text-ui text-muted-foreground absolute inset-0 flex items-center justify-center">
+        <div
+          role="status"
+          className="gap-module-inset bg-surface text-ui text-muted-foreground absolute inset-0 flex items-center justify-center"
+        >
           <Spinner />
           {t("feishu.documentComponentLoading")}
-        </output>
+        </div>
       ) : null}
     </div>
   );

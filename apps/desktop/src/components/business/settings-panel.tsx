@@ -3,10 +3,10 @@ import type { ReactNode } from "react";
 import { PageHeader } from "@/components/business/page-header";
 
 interface SettingsPanelProps {
-  readonly title: ReactNode;
-  readonly description?: ReactNode;
-  readonly actions?: ReactNode;
-  readonly children: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
 }
 
 function SettingsPanel({

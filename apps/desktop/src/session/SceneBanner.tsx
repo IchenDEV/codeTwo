@@ -3,8 +3,7 @@ import { X } from "@/components/ui/icons";
 
 import type { CoreEvent } from "../bridge";
 import { useLanguage, useT } from "../i18n";
-import { sceneTitle } from "./scene";
-import type { SceneInfo, SceneNextSuggestion } from "./scene";
+import { sceneTitle, type SceneInfo, type SceneNextSuggestion } from "./scene";
 
 /**
  * The quiet scene banner above the composer (R8): either the completion state — "all declared
@@ -21,28 +20,27 @@ export interface SceneBannerState {
   carry: string[];
   message: string | null;
   unverified: string[];
-  /**
-  Set on pipeline-driven `suggest_next` (R9): accepting advances the instance, not just the scene.
-  */
+  /** Set on pipeline-driven `suggest_next` (R9): accepting advances the instance, not just the scene. */
   pipelineInstance: string | null;
   toStage: string | null;
 }
 
+/** Project the two banner-worthy core events into banner state; anything else is `null`. */
 export function sceneBannerFromEvent(
   ev: Extract<CoreEvent, { event: "exit_criteria_met" | "hook_suggestion" }>
 ): SceneBannerState | null {
   if (ev.event === "exit_criteria_met") {
     return {
-      carry: [],
-      kind: "complete",
-      message: null,
-      pipelineInstance: null,
-      sceneRef: ev.scene_ref,
       session: ev.session,
+      sceneRef: ev.scene_ref,
       stateKey: ev.state_key,
+      kind: "complete",
       targetScene: null,
-      toStage: null,
+      carry: [],
+      message: null,
       unverified: ev.unverified ?? [],
+      pipelineInstance: null,
+      toStage: null,
     };
   }
   if (
@@ -53,19 +51,20 @@ export function sceneBannerFromEvent(
     return null;
   }
   return {
-    carry: ev.carry ?? [],
-    kind: ev.kind,
-    message: ev.message ?? null,
-    pipelineInstance: ev.pipeline_instance ?? null,
-    sceneRef: ev.scene_ref,
     session: ev.session,
+    sceneRef: ev.scene_ref,
     stateKey: ev.state_key,
+    kind: ev.kind,
     targetScene: ev.target_scene ?? null,
-    toStage: ev.to_stage ?? null,
+    carry: ev.carry ?? [],
+    message: ev.message ?? null,
     unverified: [],
+    pipelineInstance: ev.pipeline_instance ?? null,
+    toStage: ev.to_stage ?? null,
   };
 }
 
+/** A suggestion's target may be a bare scene name or a pinned reference; resolve either. */
 export function resolveSceneReference(
   scenes: SceneInfo[],
   target: string
@@ -77,6 +76,7 @@ export function resolveSceneReference(
   );
 }
 
+/** The suggestions the banner offers: `exit.next` when complete, else the hook's target. */
 function bannerSuggestions(
   banner: SceneBannerState,
   scenes: SceneInfo[]
@@ -85,11 +85,9 @@ function bannerSuggestions(
     const active = resolveSceneReference(scenes, banner.sceneRef);
     return active?.exit?.next ?? [];
   }
-  if (banner.kind === "notify" || !banner.targetScene) {
-    return [];
-  }
+  if (banner.kind === "notify" || !banner.targetScene) return [];
   return [
-    { carry: banner.carry, label: banner.message, scene: banner.targetScene },
+    { scene: banner.targetScene, label: banner.message, carry: banner.carry },
   ];
 }
 
@@ -101,21 +99,14 @@ export function SceneBanner({
   onAdvancePipelineNewSession,
   onDismiss,
 }: {
-  readonly banner: SceneBannerState;
-  readonly scenes: SceneInfo[];
-  readonly onApplyScene: (reference: string) => void;
-  /**
-  Pipeline-driven suggestions advance the instance through the command layer (R9).
-  */
-  readonly onAdvancePipeline?: (instanceId: string, toStage: string) => void;
-  /**
-  Advance the pipeline stage in a fresh session (full-apply) instead of the current one.
-  */
-  readonly onAdvancePipelineNewSession?: (
-    instanceId: string,
-    toStage: string
-  ) => void;
-  readonly onDismiss: () => void;
+  banner: SceneBannerState;
+  scenes: SceneInfo[];
+  onApplyScene: (reference: string) => void;
+  /** Pipeline-driven suggestions advance the instance through the command layer (R9). */
+  onAdvancePipeline?: (instanceId: string, toStage: string) => void;
+  /** Advance the pipeline stage in a fresh session (full-apply) instead of the current one. */
+  onAdvancePipelineNewSession?: (instanceId: string, toStage: string) => void;
+  onDismiss: () => void;
 }) {
   const t = useT();
   const { locale } = useLanguage();
@@ -157,9 +148,7 @@ export function SceneBanner({
                   scenes,
                   suggestion.scene
                 );
-                if (!resolved) {
-                  return null;
-                }
+                if (!resolved) return null;
                 const carry = suggestion.carry ?? [];
                 return (
                   <Button
@@ -198,22 +187,22 @@ export function SceneBanner({
                 );
               })}
               {banner.pipelineInstance &&
-              banner.toStage &&
-              onAdvancePipelineNewSession ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  title={t("sceneBanner.newSessionHint")}
-                  onClick={() =>
-                    onAdvancePipelineNewSession(
-                      banner.pipelineInstance!,
-                      banner.toStage!
-                    )
-                  }
-                >
-                  {t("sceneBanner.newSession")}
-                </Button>
-              ) : null}
+                banner.toStage &&
+                onAdvancePipelineNewSession && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title={t("sceneBanner.newSessionHint")}
+                    onClick={() =>
+                      onAdvancePipelineNewSession(
+                        banner.pipelineInstance!,
+                        banner.toStage!
+                      )
+                    }
+                  >
+                    {t("sceneBanner.newSession")}
+                  </Button>
+                )}
             </div>
           )}
         </div>

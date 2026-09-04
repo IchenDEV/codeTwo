@@ -1,10 +1,8 @@
 // @ts-nocheck
 import { GlobalWindow } from "happy-dom";
-import { act as reactAct } from "react";
-import type { ReactElement } from "react";
+import React, { act as reactAct, type ReactElement } from "react";
 import { flushSync } from "react-dom";
-import { createRoot } from "react-dom/client";
-import type { Root } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 
 /**
  * The repository's CanvasEditor tests install their own happy-dom window at
@@ -22,7 +20,7 @@ if (typeof dom.Element.prototype.getAnimations !== "function") {
   });
 }
 
-const domKeys = [
+const DOM_KEYS = [
   "window",
   "document",
   "DocumentFragment",
@@ -53,7 +51,7 @@ const domKeys = [
 let previousGlobals: Record<string, unknown> | null = null;
 
 function installDom(): void {
-  for (const key of domKeys) {
+  for (const key of DOM_KEYS) {
     (globalThis as Record<string, unknown>)[key] = (
       dom as unknown as Record<string, unknown>
     )[key];
@@ -70,7 +68,7 @@ export function activateDom(): void {
   if (!previousGlobals) {
     previousGlobals = Object.fromEntries(
       [
-        ...domKeys,
+        ...DOM_KEYS,
         "getComputedStyle",
         "requestAnimationFrame",
         "cancelAnimationFrame",
@@ -88,11 +86,11 @@ export function restoreDom(): void {
   // source CanvasEditor test bind to different DOM owners in one Bun run.
 }
 
-export interface Mounted {
+export type Mounted = {
   container: HTMLElement;
   rerender: (element: ReactElement) => void;
   unmount: () => void;
-}
+};
 
 export function mount(element: ReactElement): Mounted {
   const container = dom.document.createElement("div") as unknown as HTMLElement;
@@ -105,17 +103,13 @@ export function mount(element: ReactElement): Mounted {
   return {
     container,
     rerender: (element: ReactElement) => {
-      if (!root) {
-        return;
-      }
+      if (!root) return;
       reactAct(() => {
         flushSync(() => root?.render(element));
       });
     },
     unmount: () => {
-      if (!root) {
-        return;
-      }
+      if (!root) return;
       flushSync(() => root?.unmount());
       container.remove();
       root = null;
@@ -124,7 +118,7 @@ export function mount(element: ReactElement): Mounted {
 }
 
 export async function flush(): Promise<void> {
-  await reactAct(async () => {});
+  await reactAct(async () => undefined);
 }
 
 export function click(element: Element): void {
@@ -134,16 +128,14 @@ export function click(element: Element): void {
 }
 
 export function button(container: ParentNode, name: string): HTMLButtonElement {
-  const candidates = [...container.querySelectorAll("button")];
+  const candidates = Array.from(container.querySelectorAll("button"));
   const result = candidates.find((candidate) => {
     const label =
       candidate.getAttribute("aria-label") ?? candidate.textContent ?? "";
-    return label.replaceAll(/\s+/gu, " ").trim() === name;
+    return label.replace(/\s+/g, " ").trim() === name;
   });
-  if (!result) {
-    throw new Error(`button not found: ${name}`);
-  }
-  return result;
+  if (!result) throw new Error(`button not found: ${name}`);
+  return result as HTMLButtonElement;
 }
 
 export function maybeButton(
@@ -158,22 +150,18 @@ export function maybeButton(
 }
 
 export function image(container: ParentNode, alt: string): HTMLImageElement {
-  const result = [...container.querySelectorAll("img")].find(
+  const result = Array.from(container.querySelectorAll("img")).find(
     (candidate) => candidate.getAttribute("alt") === alt
   );
-  if (!result) {
-    throw new Error(`image not found: ${alt}`);
-  }
-  return result;
+  if (!result) throw new Error(`image not found: ${alt}`);
+  return result as HTMLImageElement;
 }
 
 export function text(container: ParentNode, value: string): Element {
-  const result = [...container.querySelectorAll("*")].find((candidate) =>
+  const result = Array.from(container.querySelectorAll("*")).find((candidate) =>
     candidate.textContent?.includes(value)
   );
-  if (!result) {
-    throw new Error(`text not found: ${value}`);
-  }
+  if (!result) throw new Error(`text not found: ${value}`);
   return result;
 }
 

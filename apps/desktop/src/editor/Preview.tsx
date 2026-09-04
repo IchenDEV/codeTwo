@@ -18,8 +18,8 @@ export function PreviewModal({
   preview,
   onClose,
 }: {
-  readonly preview: CompiledPreview;
-  readonly onClose: () => void;
+  preview: CompiledPreview;
+  onClose: () => void;
 }) {
   // Tolerate a partial shape rather than white-screening if a field is ever absent.
   const files = preview.files ?? [];
@@ -106,7 +106,7 @@ export function PreviewModal({
                       >
                         <img
                           src={canvasExportDataUrl(item)}
-                          alt={`${canvas.title || "Canvas"} ${item.kind}${item.index === null || item.index === undefined ? "" : ` ${item.index + 1}`}`}
+                          alt={`${canvas.title || "Canvas"} ${item.kind}${item.index == null ? "" : ` ${item.index + 1}`}`}
                           className="block h-auto w-full"
                         />
                       </figure>

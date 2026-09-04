@@ -3,8 +3,7 @@ import { useEffect, useState } from "react";
 import { Folder } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
-import { getProjectIcon } from "../bridge";
-import type { Project, ProjectIconData } from "../bridge";
+import { getProjectIcon, type Project, type ProjectIconData } from "../bridge";
 
 const iconRequests = new Map<string, Promise<ProjectIconData | null>>();
 
@@ -14,36 +13,32 @@ function loadIcon(project: Project): Promise<ProjectIconData | null> {
   if (!request) {
     request = getProjectIcon(project.path).catch(() => null);
     iconRequests.set(key, request);
-    if (iconRequests.size > 64) {
+    if (iconRequests.size > 64)
       iconRequests.delete(iconRequests.keys().next().value!);
-    }
   }
   return request;
 }
 
+/** Project identity used in settings and the sidebar; custom pixels fall back to the folder mark. */
 export function ProjectIcon({
   project,
   size = 20,
   className,
 }: {
-  readonly project: Project;
-  readonly size?: number;
-  readonly className?: string;
+  project: Project;
+  size?: number;
+  className?: string;
 }) {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    let isActive = true;
+    let active = true;
     let objectUrl: string | null = null;
     setUrl(null);
-    if (project.has_icon !== true) {
-      return () => {};
-    }
+    if (!project.has_icon) return () => {};
 
     void loadIcon(project).then((icon) => {
-      if (!isActive || !icon) {
-        return;
-      }
+      if (!active || !icon) return;
       objectUrl = URL.createObjectURL(
         new Blob([icon.bytes.slice().buffer as ArrayBuffer], {
           type: icon.mime_type,
@@ -52,10 +47,8 @@ export function ProjectIcon({
       setUrl(objectUrl);
     });
     return () => {
-      isActive = false;
-      if (objectUrl != null && objectUrl !== "") {
-        URL.revokeObjectURL(objectUrl);
-      }
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [project.path, project.has_icon, project.icon_updated_at]);
 
@@ -67,15 +60,12 @@ export function ProjectIcon({
         "rounded-control bg-foreground/[0.055] text-muted-foreground ring-foreground/10 flex shrink-0 items-center justify-center overflow-hidden ring-1",
         className
       )}
-      style={{ height: size, width: size }}
+      style={{ width: size, height: size }}
     >
-      {url != null && url !== "" ? (
+      {url ? (
         <img src={url} alt="" className="size-full object-cover" />
       ) : (
-        <Folder
-          style={{ height: size * 0.52, width: size * 0.52 }}
-          strokeWidth={1.7}
-        />
+        <Folder style={{ width: size * 0.52, height: size * 0.52 }} />
       )}
     </span>
   );

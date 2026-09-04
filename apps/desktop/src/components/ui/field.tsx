@@ -1,5 +1,5 @@
-import { cva } from "class-variance-authority";
-import type { VariantProps } from "class-variance-authority";
+import { cva, type VariantProps } from "class-variance-authority";
+import { useMemo } from "react";
 
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -18,9 +18,7 @@ function FieldLegend({
   className,
   variant = "legend",
   ...props
-}: React.ComponentProps<"legend"> & {
-  readonly variant?: "legend" | "label";
-}) {
+}: React.ComponentProps<"legend"> & { variant?: "legend" | "label" }) {
   return (
     <legend
       data-slot="field-legend"
@@ -50,16 +48,16 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
 const fieldVariants = cva(
   "group/field data-[invalid=true]:text-destructive flex w-full gap-2",
   {
-    defaultVariants: { orientation: "vertical" },
     variants: {
       orientation: {
+        vertical: "flex-col *:w-full [&>.sr-only]:w-auto",
         horizontal:
           "flex-row items-center has-[>[data-slot=field-content]]:items-start *:data-[slot=field-label]:flex-auto",
         responsive:
           "flex-col *:w-full @md/field-group:flex-row @md/field-group:items-center @md/field-group:*:w-auto @md/field-group:*:data-[slot=field-label]:flex-auto",
-        vertical: "flex-col *:w-full [&>.sr-only]:w-auto",
       },
     },
+    defaultVariants: { orientation: "vertical" },
   }
 );
 
@@ -137,12 +135,10 @@ function FieldError({
   errors,
   ...props
 }: React.ComponentProps<"div"> & {
-  readonly errors?: ({ message?: string } | undefined)[];
+  errors?: Array<{ message?: string } | undefined>;
 }) {
-  const content = (() => {
-    if (children != null) {
-      return children;
-    }
+  const content = useMemo(() => {
+    if (children) return children;
     const unique = [
       ...new Map(
         (errors ?? []).map((error) => [error?.message, error])
@@ -150,12 +146,8 @@ function FieldError({
     ]
       .map((error) => error?.message)
       .filter(Boolean);
-    if (unique.length === 0) {
-      return null;
-    }
-    if (unique.length === 1) {
-      return unique[0];
-    }
+    if (unique.length === 0) return null;
+    if (unique.length === 1) return unique[0];
     return (
       <ul className="ms-4 flex list-disc flex-col gap-1">
         {unique.map((message) => (
@@ -163,11 +155,9 @@ function FieldError({
         ))}
       </ul>
     );
-  })();
+  }, [children, errors]);
 
-  if (content == null) {
-    return null;
-  }
+  if (!content) return null;
   return (
     <div
       role="alert"

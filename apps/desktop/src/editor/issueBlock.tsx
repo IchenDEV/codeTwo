@@ -1,9 +1,10 @@
 import { createReactBlockSpec } from "@blocknote/react";
 
 import { Badge } from "@/components/ui/badge";
+import { X } from "@/components/ui/icons";
 import { TooltipButton } from "@/components/ui/tooltip";
 
-import type { DocumentBlock } from "../bridge";
+import type { DocBlock } from "../bridge";
 import { useT } from "../i18n";
 
 // An issue-tracker reference as a first-class document block (R12), replacing the plain-text
@@ -12,29 +13,33 @@ import { useT } from "../i18n";
 // re-rendering. `delegatedScene` is provenance: non-empty means this draft was opened by
 // delegating the issue into that scene.
 export interface IssueRefProps {
-  /**
-  `github` | `linear`.
-  */
+  /** `github` | `linear`. */
   source: string;
   issueId: string;
   title: string;
   url: string;
   state: string;
-  /**
-  The exact `issueContext()` markdown — what the agent sees at compile time.
-  */
+  /** The exact `issueContext()` markdown — what the agent sees at compile time. */
   context: string;
-  /**
-  Scene title this issue was delegated to; empty for a plain add-to-prompt insert.
-  */
+  /** Scene title this issue was delegated to; empty for a plain add-to-prompt insert. */
   delegatedScene: string;
 }
 
+/**
+ * The body portion of the compiled context markdown. `issues::Issue::to_context` renders a
+ * two-line header (`**source #id** — title (state)` + url) and, only when the issue has a body,
+ * appends it after one blank line — so everything past the first blank line is the body, and a
+ * header-only context means the issue had none.
+ */
 export function issueContextBody(context: string): string {
   const cut = context.indexOf("\n\n");
-  return cut === -1 ? "" : context.slice(cut + 2);
+  return cut < 0 ? "" : context.slice(cut + 2);
 }
 
+/**
+ * Rebuild the context markdown from a core `DocBlock::Issue`, mirroring
+ * `issues::Issue::to_context` (which the core compile arm renders with state fixed to "open").
+ */
 export function issueContextMarkdown(
   block: {
     source: string;
@@ -50,17 +55,20 @@ export function issueContextMarkdown(
   return body ? `${head}\n\n${body.slice(0, 1500)}` : head;
 }
 
-export function issueRefToDocBlock(props: IssueRefProps): DocumentBlock | null {
-  if (!props.issueId) {
-    return null;
-  }
+/**
+ * Serialize the block into the core `DocBlock::Issue`. The core arm rebuilds `to_context` from
+ * source/id/title/url (state fixed to "open"), so `body` must carry only the body portion of the
+ * embedded context — passing the whole markdown would compile with a duplicated header.
+ */
+export function issueRefToDocBlock(props: IssueRefProps): DocBlock | null {
+  if (!props.issueId) return null;
   return {
-    body: issueContextBody(props.context),
-    id: props.issueId,
-    source: props.source,
-    title: props.title,
     type: "issue",
+    source: props.source,
+    id: props.issueId,
+    title: props.title,
     url: props.url,
+    body: issueContextBody(props.context),
   };
 }
 
@@ -68,8 +76,8 @@ function IssueRefCard({
   props,
   onRemove,
 }: {
-  readonly props: IssueRefProps;
-  readonly onRemove: () => void;
+  props: IssueRefProps;
+  onRemove: () => void;
 }) {
   const t = useT();
   return (
@@ -88,16 +96,16 @@ function IssueRefCard({
         #{props.issueId}
       </a>
       <span className="text-body min-w-0 flex-1 truncate">{props.title}</span>
-      {props.state ? (
+      {props.state && (
         <Badge variant="secondary" className="uppercase">
           {props.state}
         </Badge>
-      ) : null}
-      {props.delegatedScene ? (
+      )}
+      {props.delegatedScene && (
         <Badge variant="outline">
           {t("issueDeleg.pill", { scene: props.delegatedScene })}
         </Badge>
-      ) : null}
+      )}
       <TooltipButton
         label={t("issueDeleg.remove")}
         type="button"
@@ -106,7 +114,7 @@ function IssueRefCard({
         className="text-muted-foreground shrink-0"
         onClick={onRemove}
       >
-        ×
+        <X className="size-3.5" aria-hidden />
       </TooltipButton>
     </div>
   );
@@ -114,17 +122,17 @@ function IssueRefCard({
 
 export const IssueRefBlock = createReactBlockSpec(
   {
-    content: "none",
+    type: "issueRef",
     propSchema: {
-      context: { default: "" },
-      delegatedScene: { default: "" },
-      issueId: { default: "" },
       source: { default: "" },
-      state: { default: "" },
+      issueId: { default: "" },
       title: { default: "" },
       url: { default: "" },
+      state: { default: "" },
+      context: { default: "" },
+      delegatedScene: { default: "" },
     },
-    type: "issueRef",
+    content: "none",
   } as const,
   {
     render: (props) => (

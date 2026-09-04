@@ -1,5 +1,4 @@
-import { useId } from "react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -8,17 +7,17 @@ type SettingRowSurface = "plain" | "card";
 type SettingRowControlSize = "auto" | "wide";
 
 interface SettingRowProps {
-  readonly label: string;
-  readonly description?: ReactNode;
-  readonly leading?: ReactNode;
-  readonly children: ReactNode;
-  readonly density?: SettingRowDensity;
-  readonly surface?: SettingRowSurface;
-  readonly controlSize?: SettingRowControlSize;
-  readonly disabled?: boolean;
-  readonly controlId?: string;
-  readonly className?: string;
-  readonly controlClassName?: string;
+  label: string;
+  description?: ReactNode;
+  leading?: ReactNode;
+  children: ReactNode;
+  density?: SettingRowDensity;
+  surface?: SettingRowSurface;
+  controlSize?: SettingRowControlSize;
+  disabled?: boolean;
+  controlId?: string;
+  className?: string;
+  controlClassName?: string;
 }
 
 function SettingRow({
@@ -37,8 +36,7 @@ function SettingRow({
   const generatedId = useId();
   const accessibleId = controlId ?? generatedId;
   const labelId = `${accessibleId}-label`;
-  const descriptionId =
-    description == null ? undefined : `${accessibleId}-description`;
+  const descriptionId = description ? `${accessibleId}-description` : undefined;
   const labelClassName = cn(
     "text-body text-content block truncate font-medium",
     disabled && "text-content-muted"
@@ -66,7 +64,7 @@ function SettingRow({
         data-slot="setting-row-main"
         className="gap-surface-inset flex min-w-48 flex-1 items-center"
       >
-        {leading == null ? null : (
+        {leading ? (
           <span
             data-slot="setting-row-leading"
             className="text-content-muted flex shrink-0 items-center"
@@ -74,9 +72,9 @@ function SettingRow({
           >
             {leading}
           </span>
-        )}
+        ) : null}
         <div data-slot="setting-row-content" className="max-w-md min-w-0">
-          {controlId != null && controlId !== "" ? (
+          {controlId ? (
             <label
               id={labelId}
               data-slot="setting-row-label"
@@ -94,7 +92,7 @@ function SettingRow({
               {label}
             </div>
           )}
-          {description == null ? null : (
+          {description ? (
             <div
               id={descriptionId}
               data-slot="setting-row-description"
@@ -102,7 +100,7 @@ function SettingRow({
             >
               {description}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
       <div

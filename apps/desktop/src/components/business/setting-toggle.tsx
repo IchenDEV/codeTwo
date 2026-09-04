@@ -1,16 +1,18 @@
 import { useId } from "react";
 
-import { SettingRow } from "@/components/business/setting-row";
-import type { SettingRowSurface } from "@/components/business/setting-row";
+import {
+  SettingRow,
+  type SettingRowSurface,
+} from "@/components/business/setting-row";
 import { Switch } from "@/components/ui/switch";
 
 interface SettingToggleProps {
-  readonly label: string;
-  readonly description?: string;
-  readonly checked: boolean;
-  readonly disabled?: boolean;
-  readonly surface?: SettingRowSurface;
-  readonly onCheckedChange: (isChecked: boolean) => void;
+  label: string;
+  description?: string;
+  checked: boolean;
+  disabled?: boolean;
+  surface?: SettingRowSurface;
+  onCheckedChange: (checked: boolean) => void;
 }
 
 function SettingToggle({
@@ -22,10 +24,7 @@ function SettingToggle({
   onCheckedChange,
 }: SettingToggleProps) {
   const controlId = useId();
-  const descriptionId =
-    description != null && description !== ""
-      ? `${controlId}-description`
-      : undefined;
+  const descriptionId = description ? `${controlId}-description` : undefined;
 
   return (
     <div

@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { SettingToggle } from "@/components/business/setting-toggle";
 import { Button } from "@/components/ui/button";
@@ -26,18 +25,21 @@ import { Textarea } from "@/components/ui/textarea";
 import type { KeymapEntry, ProjectScript } from "../bridge";
 import { useT } from "../i18n";
 import { comboFromEvent, formatCombo, isModifierOnly } from "../keys";
-import { projectActionId, projectActionIssue } from "./projectActions";
-import type { ProjectActionDraft } from "./projectActions";
+import {
+  projectActionId,
+  projectActionIssue,
+  type ProjectActionDraft,
+} from "./projectActions";
 
-const emptyAction: ProjectActionDraft = {
-  command: "",
-  keybinding: "",
-  kind: "command",
+const EMPTY_ACTION: ProjectActionDraft = {
   name: "",
-  open_preview: false,
-  preview_url: "",
+  kind: "command",
+  command: "",
   prompt: "",
+  keybinding: "",
+  preview_url: "",
   run_on_worktree_create: false,
+  open_preview: false,
 };
 
 export function ProjectActionDialog({
@@ -47,74 +49,68 @@ export function ProjectActionDialog({
   onOpenChange,
   onSave,
 }: {
-  readonly open: boolean;
-  readonly actions: ProjectScript[];
-  readonly bindings: KeymapEntry[];
-  readonly onOpenChange: (isOpen: boolean) => void;
-  readonly onSave: (action: ProjectScript) => Promise<void>;
+  open: boolean;
+  actions: ProjectScript[];
+  bindings: KeymapEntry[];
+  onOpenChange: (open: boolean) => void;
+  onSave: (action: ProjectScript) => Promise<void>;
 }) {
   const t = useT();
-  const [draft, setDraft] = useState<ProjectActionDraft>(emptyAction);
+  const [draft, setDraft] = useState<ProjectActionDraft>(EMPTY_ACTION);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setDraft(emptyAction);
+    if (!open) return;
+    setDraft(EMPTY_ACTION);
     setSubmitted(false);
     setSaving(false);
     setSaveError(null);
   }, [open]);
 
-  const validation = projectActionIssue(draft, bindings, actions);
+  const validation = useMemo(
+    () => projectActionIssue(draft, bindings, actions),
+    [actions, bindings, draft]
+  );
   let validationMessage: string | null = null;
   switch (validation?.issue) {
-    case "name_required": {
+    case "name_required":
       validationMessage = t("actionDialog.nameRequired");
       break;
-    }
-    case "command_required": {
+    case "command_required":
       validationMessage = t("actionDialog.commandRequired");
       break;
-    }
-    case "prompt_required": {
+    case "prompt_required":
       validationMessage = t("actionDialog.promptRequired");
       break;
-    }
-    case "preview_invalid": {
+    case "preview_invalid":
       validationMessage = t("actionDialog.previewInvalid");
       break;
-    }
-    case "keybinding_conflict": {
+    case "keybinding_conflict":
       validationMessage = t("actionDialog.keybindingConflict", {
         name: validation.conflict ?? "",
       });
       break;
-    }
   }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitted(true);
     setSaveError(null);
-    if (validation) {
-      return;
-    }
+    if (validation) return;
     setSaving(true);
     try {
       await onSave({
-        command: draft.command.trim(),
         id: projectActionId(draft.name, actions),
-        keybinding: draft.keybinding,
-        kind: draft.kind,
         name: draft.name.trim(),
-        open_preview: Boolean(draft.preview_url.trim()) && draft.open_preview,
-        preview_url: draft.preview_url.trim(),
+        kind: draft.kind,
+        command: draft.command.trim(),
         prompt: draft.prompt.trim(),
+        keybinding: draft.keybinding,
+        preview_url: draft.preview_url.trim(),
         run_on_worktree_create: draft.run_on_worktree_create,
+        open_preview: Boolean(draft.preview_url.trim()) && draft.open_preview,
       });
       onOpenChange(false);
     } catch (error) {
@@ -144,9 +140,9 @@ export function ProjectActionDialog({
                   setDraft((current) => ({
                     ...current,
                     kind: kind as ProjectActionDraft["kind"],
-                    open_preview: kind === "command" && current.open_preview,
                     run_on_worktree_create:
                       kind === "command" && current.run_on_worktree_create,
+                    open_preview: kind === "command" && current.open_preview,
                   }))
                 }
               >
@@ -188,9 +184,7 @@ export function ProjectActionDialog({
                   value={draft.name}
                   placeholder={t("actionDialog.namePlaceholder")}
                   aria-invalid={
-                    submitted
-                      ? validation?.issue === "name_required"
-                      : undefined
+                    submitted && validation?.issue === "name_required"
                   }
                   onInput={(event) => {
                     const name = event.currentTarget.value;
@@ -211,9 +205,7 @@ export function ProjectActionDialog({
                 onKeyDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  if (isModifierOnly(event.nativeEvent)) {
-                    return;
-                  }
+                  if (isModifierOnly(event.nativeEvent)) return;
                   if (event.key === "Backspace" || event.key === "Delete") {
                     setDraft((current) => ({ ...current, keybinding: "" }));
                     return;
@@ -246,9 +238,7 @@ export function ProjectActionDialog({
                   value={draft.prompt}
                   placeholder={t("actionDialog.promptPlaceholder")}
                   aria-invalid={
-                    submitted
-                      ? validation?.issue === "prompt_required"
-                      : undefined
+                    submitted && validation?.issue === "prompt_required"
                   }
                   onInput={(event) => {
                     const prompt = event.currentTarget.value;
@@ -271,9 +261,7 @@ export function ProjectActionDialog({
                     value={draft.command}
                     placeholder={t("actionDialog.commandPlaceholder")}
                     aria-invalid={
-                      submitted
-                        ? validation?.issue === "command_required"
-                        : undefined
+                      submitted && validation?.issue === "command_required"
                     }
                     onInput={(event) => {
                       const command = event.currentTarget.value;
@@ -292,18 +280,16 @@ export function ProjectActionDialog({
                     value={draft.preview_url}
                     placeholder={t("actionDialog.previewPlaceholder")}
                     aria-invalid={
-                      submitted
-                        ? validation?.issue === "preview_invalid"
-                        : undefined
+                      submitted && validation?.issue === "preview_invalid"
                     }
                     onInput={(event) => {
                       const preview_url = event.currentTarget.value;
                       setDraft((current) => ({
                         ...current,
+                        preview_url,
                         open_preview: preview_url
                           ? current.open_preview
                           : false,
-                        preview_url,
                       }));
                     }}
                   />
@@ -336,12 +322,9 @@ export function ProjectActionDialog({
             )}
           </FieldGroup>
 
-          {saveError ||
-          (submitted &&
-            validationMessage != null &&
-            validationMessage !== "") ? (
+          {(saveError || (submitted && validationMessage)) && (
             <FieldError>{saveError ?? validationMessage}</FieldError>
-          ) : null}
+          )}
 
           <DialogFooter className="bg-fill-quiet -mx-6 -mb-6 px-6 py-4">
             <Button

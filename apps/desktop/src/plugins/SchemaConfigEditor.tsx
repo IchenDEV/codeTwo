@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,25 +42,24 @@ interface SimpleObjectSchema extends JsonSchema {
   properties: Record<string, JsonSchema>;
 }
 
-const supportedFieldTypes = new Set(["string", "number", "integer", "boolean"]);
+const SUPPORTED_FIELD_TYPES = new Set([
+  "string",
+  "number",
+  "integer",
+  "boolean",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function asSimpleObjectSchema(value: unknown): SimpleObjectSchema | null {
-  if (!isRecord(value) || !isRecord(value.properties)) {
-    return null;
-  }
-  if (value.type !== undefined && value.type !== "object") {
-    return null;
-  }
+  if (!isRecord(value) || !isRecord(value.properties)) return null;
+  if (value.type !== undefined && value.type !== "object") return null;
 
   const properties = value.properties as Record<string, JsonSchema>;
-  const isSupported = Object.values(properties).every((property) => {
-    if (!isRecord(property)) {
-      return false;
-    }
+  const supported = Object.values(properties).every((property) => {
+    if (!isRecord(property)) return false;
     if (Array.isArray(property.enum) && property.enum.length > 0) {
       return property.enum.every(
         (entry) =>
@@ -70,11 +69,11 @@ function asSimpleObjectSchema(value: unknown): SimpleObjectSchema | null {
     }
     return (
       typeof property.type === "string" &&
-      supportedFieldTypes.has(property.type)
+      SUPPORTED_FIELD_TYPES.has(property.type)
     );
   });
 
-  return isSupported ? ({ ...value, properties } as SimpleObjectSchema) : null;
+  return supported ? ({ ...value, properties } as SimpleObjectSchema) : null;
 }
 
 function formatJson(value: unknown): string {
@@ -102,9 +101,7 @@ function updateProperty(
   name: string,
   value: unknown
 ): Record<string, unknown> {
-  if (value !== undefined) {
-    return { ...current, [name]: value };
-  }
+  if (value !== undefined) return { ...current, [name]: value };
   const next = { ...current };
   delete next[name];
   return next;
@@ -117,19 +114,19 @@ function SchemaField({
   value,
   onChange,
 }: {
-  readonly name: string;
-  readonly schema: JsonSchema;
-  readonly required: boolean;
-  readonly value: unknown;
-  readonly onChange: (value: unknown) => void;
+  name: string;
+  schema: JsonSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (value: unknown) => void;
 }) {
   const id = `plugin-config-${name}`;
   const label = schema.title ?? name;
 
-  if (schema.enum?.length != null) {
+  if (schema.enum?.length) {
     const items = schema.enum.map((entry) => ({
-      label: enumLabel(entry),
       value: enumKey(entry),
+      label: enumLabel(entry),
     }));
     const selected =
       schema.enum.find((entry) => Object.is(entry, value)) ??
@@ -138,7 +135,7 @@ function SchemaField({
     return (
       <Field>
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        {schema.description != null && schema.description !== "" ? (
+        {schema.description ? (
           <FieldDescription>{schema.description}</FieldDescription>
         ) : null}
         <Select
@@ -146,9 +143,7 @@ function SchemaField({
           value={enumKey(selected as JsonPrimitive)}
           onValueChange={(key) => {
             const next = schema.enum?.find((entry) => enumKey(entry) === key);
-            if (next !== undefined) {
-              onChange(next);
-            }
+            if (next !== undefined) onChange(next);
           }}
         >
           <SelectTrigger id={id} className="w-full">
@@ -178,7 +173,7 @@ function SchemaField({
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <FieldLabel htmlFor={id}>{label}</FieldLabel>
-          {schema.description != null && schema.description !== "" ? (
+          {schema.description ? (
             <FieldDescription>{schema.description}</FieldDescription>
           ) : null}
         </div>
@@ -192,7 +187,7 @@ function SchemaField({
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      {schema.description != null && schema.description !== "" ? (
+      {schema.description ? (
         <FieldDescription>{schema.description}</FieldDescription>
       ) : null}
       <Input
@@ -220,13 +215,13 @@ export function SchemaConfigEditor({
   labels,
   onSave,
 }: {
-  readonly config: unknown;
-  readonly schema: unknown;
-  readonly labels: PluginManagerLabels;
-  readonly onSave: (config: unknown) => Promise<void>;
+  config: unknown;
+  schema: unknown;
+  labels: PluginManagerLabels;
+  onSave: (config: unknown) => Promise<void>;
 }) {
-  const simpleSchema = asSimpleObjectSchema(schema);
-  const incomingJson = formatJson(config);
+  const simpleSchema = useMemo(() => asSimpleObjectSchema(schema), [schema]);
+  const incomingJson = useMemo(() => formatJson(config), [config]);
   const [draft, setDraft] = useState<Record<string, unknown>>(() =>
     initialObject(config)
   );
@@ -246,9 +241,7 @@ export function SchemaConfigEditor({
   }, [incomingJson]);
 
   useEffect(() => {
-    if (!simpleSchema) {
-      setMode("json");
-    }
+    if (!simpleSchema) setMode("json");
   }, [simpleSchema]);
 
   const changeDraft = (name: string, value: unknown) => {
@@ -258,9 +251,7 @@ export function SchemaConfigEditor({
   };
 
   const save = async () => {
-    if (saving) {
-      return;
-    }
+    if (saving) return;
     setJsonError(null);
     setSaveError(null);
     let next: unknown = draft;
@@ -291,7 +282,7 @@ export function SchemaConfigEditor({
 
   const actions = (
     <>
-      {saveError != null && saveError !== "" ? (
+      {saveError ? (
         <p role="alert" className="text-callout text-destructive">
           {saveError}
         </p>
@@ -327,9 +318,7 @@ export function SchemaConfigEditor({
           setJsonError(null);
         }}
       />
-      {jsonError != null && jsonError !== "" ? (
-        <FieldError>{jsonError}</FieldError>
-      ) : null}
+      {jsonError ? <FieldError>{jsonError}</FieldError> : null}
     </Field>
   );
 
@@ -352,9 +341,8 @@ export function SchemaConfigEditor({
         } else if (mode === "json") {
           try {
             const parsed = JSON.parse(json);
-            if (!isRecord(parsed)) {
+            if (!isRecord(parsed))
               throw new Error(labels.invalidConfigurationObject);
-            }
             setDraft(parsed);
             setJsonError(null);
           } catch (error) {

@@ -17,13 +17,19 @@ import type {
 } from "../bridge";
 import { useT } from "../i18n";
 
+/**
+ * The horizontal stage track (docs/reference/scenes.md §UI contract): a pipeline-bound session renders its
+ * instance as one chip per stage — done ✓ / current highlighted / pending muted, a ×n loop badge
+ * when a stage has been entered more than once, and a lock glyph on confirm-gated stages. A chip
+ * expands to a small popover listing the stage's captured artifacts and its sessions.
+ */
+
+/** Newest version per artifact key (`list_for_instance` orders versions DESC within a key). */
 function newestPerKey(artifacts: SceneArtifactRecord[]): SceneArtifactRecord[] {
   const seen = new Set<string>();
   const out: SceneArtifactRecord[] = [];
   for (const record of artifacts) {
-    if (seen.has(record.artifact_key)) {
-      continue;
-    }
+    if (seen.has(record.artifact_key)) continue;
     seen.add(record.artifact_key);
     out.push(record);
   }
@@ -34,8 +40,8 @@ function StagePopover({
   stage,
   onSelectSession,
 }: {
-  readonly stage: PipelineStageStatus;
-  readonly onSelectSession: (sessionId: string) => void;
+  stage: PipelineStageStatus;
+  onSelectSession: (sessionId: string) => void;
 }) {
   const t = useT();
   const artifacts = newestPerKey(stage.artifacts);
@@ -98,8 +104,8 @@ export function StageTrack({
   detail,
   onSelectSession,
 }: {
-  readonly detail: PipelineInstanceDetail;
-  readonly onSelectSession: (sessionId: string) => void;
+  detail: PipelineInstanceDetail;
+  onSelectSession: (sessionId: string) => void;
 }) {
   const t = useT();
   const [openStage, setOpenStage] = useState<string | null>(null);

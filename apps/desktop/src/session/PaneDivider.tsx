@@ -1,93 +1,87 @@
-import type { CSSProperties, RefObject } from "react";
+import { type CSSProperties, type RefObject } from "react";
 
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
 
-import { minRatio } from "./paneLayout";
-import type { DividerRect } from "./paneLayout";
+import { MIN_RATIO, type DividerRect } from "./paneLayout";
 
 const percent = (value: number): string => `${value * 100}%`;
 
 interface PaneDividerProps {
-  readonly divider: DividerRect;
-  /**
-  The tiling container the normalized rectangles are measured against.
-  */
-  readonly containerRef: RefObject<HTMLElement | null>;
-  readonly onResize: (ratio: number) => void;
-  readonly className?: string;
+  divider: DividerRect;
+  /** The tiling container the normalized rectangles are measured against. */
+  containerRef: RefObject<HTMLElement | null>;
+  onResize: (ratio: number) => void;
+  className?: string;
 }
 
+/** Shared pointer-and-keyboard boundary for every tiled-pane host. */
 export function PaneDivider({
   divider,
   containerRef,
   onResize,
   className = "group z-20",
 }: PaneDividerProps) {
-  const isVertical = divider.direction === "row";
-  const boundary = isVertical
+  const vertical = divider.direction === "row";
+  const boundary = vertical
     ? divider.rect.x + divider.rect.w * divider.ratio
     : divider.rect.y + divider.rect.h * divider.ratio;
   const resizeHandle = useResizeHandle({
-    axis: isVertical ? "x" : "y",
-    max: 1 - minRatio,
-    min: minRatio,
-    onResize,
-    round: false,
-    step: 0.02,
+    axis: vertical ? "x" : "y",
     value: divider.ratio,
+    min: MIN_RATIO,
+    max: 1 - MIN_RATIO,
+    step: 0.02,
+    round: false,
     valueFromPointer: (event) => {
       const container = containerRef.current;
-      if (!container) {
-        return divider.ratio;
-      }
+      if (!container) return divider.ratio;
       const bounds = container.getBoundingClientRect();
-      if (bounds.width === 0 || bounds.height === 0) {
-        return divider.ratio;
-      }
-      return isVertical
+      if (bounds.width === 0 || bounds.height === 0) return divider.ratio;
+      return vertical
         ? (event.clientX - bounds.left - divider.rect.x * bounds.width) /
             (divider.rect.w * bounds.width)
         : (event.clientY - bounds.top - divider.rect.y * bounds.height) /
             (divider.rect.h * bounds.height);
     },
+    onResize,
   });
 
-  const handleStyle: CSSProperties = isVertical
+  const handleStyle: CSSProperties = vertical
     ? {
-        cursor: "col-resize",
-        height: percent(divider.rect.h),
-        left: percent(boundary),
         position: "absolute",
+        left: percent(boundary),
         top: percent(divider.rect.y),
-        touchAction: "none",
-        transform: "translateX(-50%)",
+        height: percent(divider.rect.h),
         width: 8,
+        transform: "translateX(-50%)",
+        cursor: "col-resize",
+        touchAction: "none",
       }
     : {
-        cursor: "row-resize",
-        height: 8,
-        left: percent(divider.rect.x),
         position: "absolute",
         top: percent(boundary),
-        touchAction: "none",
-        transform: "translateY(-50%)",
+        left: percent(divider.rect.x),
         width: percent(divider.rect.w),
+        height: 8,
+        transform: "translateY(-50%)",
+        cursor: "row-resize",
+        touchAction: "none",
       };
-  const lineStyle: CSSProperties = isVertical
+  const lineStyle: CSSProperties = vertical
     ? {
-        bottom: 0,
-        left: "50%",
         position: "absolute",
+        left: "50%",
         top: 0,
-        transform: "translateX(-50%)",
+        bottom: 0,
         width: 1,
+        transform: "translateX(-50%)",
       }
     : {
-        height: 1,
-        left: 0,
         position: "absolute",
-        right: 0,
         top: "50%",
+        left: 0,
+        right: 0,
+        height: 1,
         transform: "translateY(-50%)",
       };
 

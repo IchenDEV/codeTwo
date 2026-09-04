@@ -41,11 +41,11 @@ function buttonByLabel(labels) {
   });
 }
 
-const idLabels = ["Id", "templateFrom.id"];
-const nameLabels = ["Name", "templateFrom.name"];
-const templateLabels = ["Template", "templateFrom.template"];
-const saveLabels = ["Save template", "templateFrom.save"];
-const addLabels = ["Add slot", "templateFrom.addSlot"];
+const ID_LABELS = ["Id", "templateFrom.id"];
+const NAME_LABELS = ["Name", "templateFrom.name"];
+const TEMPLATE_LABELS = ["Template", "templateFrom.template"];
+const SAVE_LABELS = ["Save template", "templateFrom.save"];
+const ADD_LABELS = ["Add slot", "templateFrom.addSlot"];
 
 function setValue(el, value) {
   // React installs a value tracker on the element instance; go through the prototype setter so
@@ -54,11 +54,8 @@ function setValue(el, value) {
     Object.getPrototypeOf(el),
     "value"
   )?.set;
-  if (setter) {
-    setter.call(el, value);
-  } else {
-    el.value = value;
-  }
+  if (setter) setter.call(el, value);
+  else el.value = value;
   el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 }
 
@@ -134,9 +131,9 @@ describe("TemplateDialog", () => {
     activateDom();
     renderDialog();
     await waitFor(() => {
-      expect(field(templateLabels)?.value).toBe(PROPOSAL.template);
+      expect(field(TEMPLATE_LABELS)?.value).toBe(PROPOSAL.template);
     });
-    const ids = fields(idLabels).map((el) => el.value);
+    const ids = fields(ID_LABELS).map((el) => el.value);
     expect(ids).toEqual(["slot-1", "slot-2"]);
     const kind = [
       ...dom.document.body.querySelectorAll(
@@ -150,15 +147,15 @@ describe("TemplateDialog", () => {
     activateDom();
     const { calls } = renderDialog({ propose: async () => null });
     await waitFor(() => {
-      expect(field(templateLabels)?.value).toBe(
+      expect(field(TEMPLATE_LABELS)?.value).toBe(
         'Rename "old name" in src/a.rs'
       );
     });
-    expect(fields(idLabels)).toHaveLength(0);
+    expect(fields(ID_LABELS)).toHaveLength(0);
     // Still fully usable: rows can be added by hand.
-    click(buttonByLabel(addLabels));
+    click(buttonByLabel(ADD_LABELS));
     await waitFor(() => {
-      expect(fields(idLabels)).toHaveLength(1);
+      expect(fields(ID_LABELS)).toHaveLength(1);
     });
     expect(calls.saved).toHaveLength(0);
   });
@@ -167,13 +164,13 @@ describe("TemplateDialog", () => {
     activateDom();
     const { calls } = renderDialog();
     await waitFor(() => {
-      expect(field(templateLabels)?.value).toBe(PROPOSAL.template);
+      expect(field(TEMPLATE_LABELS)?.value).toBe(PROPOSAL.template);
     });
-    setValue(field(nameLabels), "My Template");
+    setValue(field(NAME_LABELS), "My Template");
     await waitFor(() => {
-      expect(buttonByLabel(saveLabels)?.disabled).toBe(false);
+      expect(buttonByLabel(SAVE_LABELS)?.disabled).toBe(false);
     });
-    click(buttonByLabel(saveLabels));
+    click(buttonByLabel(SAVE_LABELS));
     await waitFor(() => {
       expect(calls.saved).toHaveLength(1);
     });
@@ -208,13 +205,13 @@ describe("TemplateDialog", () => {
     activateDom();
     renderDialog();
     await waitFor(() => {
-      expect(field(templateLabels)?.value).toBe(PROPOSAL.template);
+      expect(field(TEMPLATE_LABELS)?.value).toBe(PROPOSAL.template);
     });
-    setValue(field(nameLabels), "My Template");
+    setValue(field(NAME_LABELS), "My Template");
     // Orphan the second token: its slot row still exists but the id no longer matches.
-    setValue(fields(idLabels)[1], "renamed");
+    setValue(fields(ID_LABELS)[1], "renamed");
     await waitFor(() => {
-      expect(buttonByLabel(saveLabels)?.disabled).toBe(true);
+      expect(buttonByLabel(SAVE_LABELS)?.disabled).toBe(true);
     });
   });
 });

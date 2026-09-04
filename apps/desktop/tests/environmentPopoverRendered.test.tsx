@@ -1,7 +1,7 @@
-// @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+// @ts-nocheck
 import { act as reactAct } from "react";
 
 import {
@@ -49,11 +49,19 @@ describe("EnvironmentPopover layout", () => {
   test("remains mounted in the session header", () => {
     const appSource = readFileSync(
       new URL("../src/App.tsx", import.meta.url),
-      "utf-8"
+      "utf8"
+    );
+    const environmentSource = readFileSync(
+      new URL("../src/environment/EnvironmentPopover.tsx", import.meta.url),
+      "utf8"
     );
 
     expect(appSource).toContain('from "./environment/EnvironmentPopover"');
     expect(appSource).toContain("<EnvironmentPopover");
+    expect(environmentSource).toMatch(
+      /<PopoverContent\s+align="start"\s+sideOffset=\{16\}/
+    );
+    expect(environmentSource).not.toContain("alignOffset={-36}");
   });
 
   test("stays out of the reading surface until requested and dismisses on outside press", async () => {
@@ -74,7 +82,7 @@ describe("EnvironmentPopover layout", () => {
       '[aria-label="Project environment"]'
     );
     expect(trigger).toBeTruthy();
-    expect(trigger?.dataset.variant).toBe("ghost");
+    expect(trigger?.getAttribute("data-variant")).toBe("ghost");
     expect(trigger?.classList.contains("text-foreground")).toBe(true);
     expect(
       trigger?.querySelector(".session-header-context-label")?.textContent
@@ -102,7 +110,7 @@ describe("EnvironmentPopover layout", () => {
       '[data-slot="popover-content"]'
     );
     expect(content).toBeTruthy();
-    expect(trigger?.dataset.variant).toBe("ghost");
+    expect(trigger?.getAttribute("data-variant")).toBe("ghost");
     expect(trigger?.classList.contains("bg-fill-rest")).toBe(true);
     expect(trigger?.classList.contains("text-primary")).toBe(false);
     expect(content?.className).toContain("max-h-(--available-height)");
@@ -178,7 +186,7 @@ describe("EnvironmentPopover layout", () => {
       '[data-tool-preview="browser"]'
     );
     expect(preview).toBeTruthy();
-    expect(preview?.dataset.artifactId).toBe("browser-shot-2");
+    expect(preview?.getAttribute("data-artifact-id")).toBe("browser-shot-2");
     expect(preview?.textContent).toContain("Browser Use");
     expect(preview?.textContent).toContain("Open example.com");
     view.unmount();

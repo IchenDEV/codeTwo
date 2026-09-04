@@ -20,7 +20,7 @@ export interface MemoryFilter {
   sort: MemorySort;
 }
 
-export const memoryCategories = [
+export const MEMORY_CATEGORIES = [
   "constraint",
   "preference",
   "fact",
@@ -38,39 +38,26 @@ function matchesView(
   view: MemoryView,
   recentSince: number
 ): boolean {
-  if (record.layer === "L3") {
-    return false;
-  }
-  if (view === "forgotten") {
+  if (record.layer === "L3") return false;
+  if (view === "forgotten")
     return !record.active && record.forgotten_at !== null;
-  }
-  if (view === "conflicts") {
-    return record.conflict_with_id !== null;
-  }
-  if (!record.active || record.conflict_with_id !== null) {
-    return false;
-  }
+  if (view === "conflicts") return record.conflict_with_id !== null;
+  if (!record.active || record.conflict_with_id !== null) return false;
   switch (view) {
-    case "pinned": {
+    case "pinned":
       return record.pinned;
-    }
-    case "constraints": {
+    case "constraints":
       return (
         record.category === "constraint" || record.category === "preference"
       );
-    }
-    case "facts": {
+    case "facts":
       return ["fact", "relationship", "event"].includes(record.category);
-    }
-    case "episodes": {
+    case "episodes":
       return record.category === "episode" || record.layer === "L2";
-    }
-    case "recent": {
+    case "recent":
       return record.accessed_at !== null && record.accessed_at >= recentSince;
-    }
-    default: {
+    default:
       return true;
-    }
   }
 }
 
@@ -91,26 +78,21 @@ export function filterMemories(
       (record) => filter.origin === "all" || record.origin === filter.origin
     )
     .filter((record) => {
-      if (!query) {
-        return true;
-      }
+      if (!query) return true;
       return [record.content, record.category, record.origin].some((value) =>
         value.toLocaleLowerCase().includes(query)
       );
     })
     .sort((left, right) => {
-      if (filter.view === "all" && left.pinned !== right.pinned) {
+      if (filter.view === "all" && left.pinned !== right.pinned)
         return left.pinned ? -1 : 1;
-      }
       if (filter.sort === "used") {
         return (
           right.access_count - left.access_count ||
           memoryActivityAt(right) - memoryActivityAt(left)
         );
       }
-      if (filter.sort === "updated") {
-        return right.updated_at - left.updated_at;
-      }
+      if (filter.sort === "updated") return right.updated_at - left.updated_at;
       return memoryActivityAt(right) - memoryActivityAt(left);
     });
 }
@@ -131,17 +113,13 @@ export function originLabelKey(
   | "memory.origin.userCorrection"
   | "memory.origin.profile" {
   switch (origin) {
-    case "manual": {
+    case "manual":
       return "memory.origin.manual";
-    }
-    case "user_correction": {
+    case "user_correction":
       return "memory.origin.userCorrection";
-    }
-    case "profile": {
+    case "profile":
       return "memory.origin.profile";
-    }
-    default: {
+    default:
       return "memory.origin.automatic";
-    }
   }
 }

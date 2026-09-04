@@ -1,5 +1,4 @@
 import type { PetSource } from "../appearance";
-import { asJsonObject } from "../lib/jsonValue";
 
 export interface PetCatalogItem {
   id: string;
@@ -20,33 +19,27 @@ interface PetShareCatalogEntry {
   downloadPath?: unknown;
 }
 
-function asPetShareCatalogEntry(value: unknown): PetShareCatalogEntry | null {
-  return asJsonObject(value);
-}
+export const PETSHARE_ORIGIN = "https://petshare.idevlab.dev";
+export const PETSHARE_CATALOG_URL = `${PETSHARE_ORIGIN}/pets.json`;
+const MAX_CATALOG_ITEMS = 200;
+const CATALOG_TIMEOUT_MS = 10_000;
+const PET_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
-export const petshareOrigin = "https://petshare.idevlab.dev";
-export const petshareCatalogUrl = `${petshareOrigin}/pets.json`;
-const maxCatalogItems = 200;
-const catalogTimeoutMs = 10_000;
-const petIdPattern = /^[a-z0-9][a-z0-9-]{0,79}$/u;
-
-export const builtinPet: PetCatalogItem = {
-  description: "A quiet C2 companion that keeps pace with your sessions.",
-  displayName: "Naiwa",
+export const BUILTIN_PET: PetCatalogItem = {
   id: "naiwa",
+  displayName: "Naiwa",
+  description: "A quiet C2 companion that keeps pace with your sessions.",
   source: "builtin",
-  spriteVersionNumber: 2,
   spritesheetUrl: "/pets/naiwa/spritesheet.webp",
+  spriteVersionNumber: 2,
 };
 
 function isExactPetShareUrl(value: unknown, path: string): value is string {
-  if (typeof value !== "string") {
-    return false;
-  }
+  if (typeof value !== "string") return false;
   try {
-    const url = new URL(value, petshareOrigin);
+    const url = new URL(value, PETSHARE_ORIGIN);
     return (
-      url.origin === petshareOrigin &&
+      url.origin === PETSHARE_ORIGIN &&
       url.pathname === path &&
       url.search === "" &&
       url.hash === "" &&
@@ -59,37 +52,31 @@ function isExactPetShareUrl(value: unknown, path: string): value is string {
 }
 
 function safeCatalogText(value: unknown, maxLength: number): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const text = value.trim().replaceAll(/\s+/gu, " ");
+  if (typeof value !== "string") return null;
+  const text = value.trim().replace(/\s+/g, " ");
   return text && text.length <= maxLength ? text : null;
 }
 
 export function parsePetShareCatalog(value: unknown): PetCatalogItem[] {
-  if (!Array.isArray(value) || value.length > maxCatalogItems) {
+  if (!Array.isArray(value) || value.length > MAX_CATALOG_ITEMS) {
     throw new Error("Invalid pet catalog");
   }
 
   const seen = new Set<string>();
   return value.map((raw) => {
-    const item = asPetShareCatalogEntry(raw);
-    if (item == null) {
+    if (!raw || typeof raw !== "object")
       throw new Error("Invalid pet catalog item");
-    }
+    const item = raw as PetShareCatalogEntry;
     const id =
-      typeof item.id === "string" && petIdPattern.test(item.id)
+      typeof item.id === "string" && PET_ID_PATTERN.test(item.id)
         ? item.id
         : null;
     const displayName = safeCatalogText(item.displayName, 80);
     const description = safeCatalogText(item.description, 240);
     if (
-      id == null ||
-      id === "" ||
-      displayName == null ||
-      displayName === "" ||
-      description == null ||
-      description === "" ||
+      !id ||
+      !displayName ||
+      !description ||
       item.spriteVersionNumber !== 2 ||
       seen.has(id)
     ) {
@@ -107,29 +94,29 @@ export function parsePetShareCatalog(value: unknown): PetCatalogItem[] {
     }
     seen.add(id);
     return {
-      description,
-      displayName,
       id,
+      displayName,
+      description,
       source: "petshare" as const,
+      spritesheetUrl: `${PETSHARE_ORIGIN}/pets/${id}/spritesheet.webp`,
       spriteVersionNumber: 2 as const,
-      spritesheetUrl: `${petshareOrigin}/pets/${id}/spritesheet.webp`,
     };
   });
 }
 
 export async function fetchPetShareCatalog(): Promise<PetCatalogItem[]> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => {
-    controller.abort();
-  }, catalogTimeoutMs);
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    CATALOG_TIMEOUT_MS
+  );
   try {
-    const response = await fetch(petshareCatalogUrl, {
+    const response = await fetch(PETSHARE_CATALOG_URL, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
-    if (!response.ok) {
+    if (!response.ok)
       throw new Error(`Pet catalog returned ${response.status}`);
-    }
     return parsePetShareCatalog(await response.json());
   } finally {
     window.clearTimeout(timeout);
@@ -137,8 +124,8 @@ export async function fetchPetShareCatalog(): Promise<PetCatalogItem[]> {
 }
 
 export function petSpritesheetUrl(source: PetSource, id: string): string {
-  if (source === "petshare" && petIdPattern.test(id)) {
-    return `${petshareOrigin}/pets/${id}/spritesheet.webp`;
+  if (source === "petshare" && PET_ID_PATTERN.test(id)) {
+    return `${PETSHARE_ORIGIN}/pets/${id}/spritesheet.webp`;
   }
-  return builtinPet.spritesheetUrl;
+  return BUILTIN_PET.spritesheetUrl;
 }

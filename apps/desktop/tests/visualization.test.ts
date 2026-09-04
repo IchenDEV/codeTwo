@@ -55,7 +55,7 @@ describe("visualize transcript references", () => {
     expect(document).toContain("window.openai={sendFollowUpMessage");
     expect(document).toContain("background:var(--background)");
     expect(document).toContain("document.body.scrollHeight");
-    expect(document).toContain(".viz-icon{");
+    expect(document).not.toContain(".viz-icon{");
     expect(document).toContain("--visualization-radius-control:12px");
     expect(document).toContain("--visualization-radius-module:16px");
     expect(document).toContain(
@@ -64,7 +64,7 @@ describe("visualize transcript references", () => {
     expect(document).toContain(
       "border-radius:var(--visualization-radius-module)"
     );
-    expect(document).not.toMatch(/border-radius:(?:8px|999px)/u);
+    expect(document).not.toMatch(/border-radius:(?:8px|999px)/);
     expect(document).not.toContain("<script src=");
     expect(document).toContain('<div id="plot">Plot</div>');
     expect(document).toContain("safe-token");

@@ -4,17 +4,14 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
-const sourceFiles = (directory: string): string[] => {
-  return readdirSync(resolve(root, directory), { withFileTypes: true }).flatMap(
+const sourceFiles = (directory: string): string[] =>
+  readdirSync(resolve(root, directory), { withFileTypes: true }).flatMap(
     (entry) => {
       const relative = `${directory}/${entry.name}`;
-      if (entry.isDirectory()) {
-        return sourceFiles(relative);
-      }
-      return /\.tsx?$/u.test(entry.name) ? [relative] : [];
+      if (entry.isDirectory()) return sourceFiles(relative);
+      return /\.tsx?$/.test(entry.name) ? [relative] : [];
     }
   );
-};
 
 describe("desktop UI stack", () => {
   test("configures shadcn for Base UI", () => {
@@ -22,6 +19,7 @@ describe("desktop UI stack", () => {
     const packageJson = JSON.parse(read("package.json"));
 
     expect(config.style).toStartWith("base-");
+    expect(config.iconLibrary).toBe("phosphor");
     expect(packageJson.dependencies["@base-ui/react"]).toBeTruthy();
     expect(packageJson.dependencies["radix-ui"]).toBeUndefined();
   });
@@ -38,6 +36,41 @@ describe("desktop UI stack", () => {
     expect(productSource).not.toContain('from "@base-ui/react');
     expect(productSource).not.toContain('from "radix-ui"');
     expect(productSource).not.toContain("asChild");
+  });
+
+  test("keeps generic interface icons behind the Phosphor adapter", () => {
+    const files = sourceFiles("src");
+    const sources = new Map(files.map((path) => [path, read(path)]));
+    const productSource = [...sources.values()].join("\n");
+    const bridgeSource = sources.get("src/bridge.ts") ?? "";
+
+    expect(
+      files.filter((path) =>
+        sources.get(path)?.includes("@phosphor-icons/react")
+      )
+    ).toEqual(["src/components/ui/icons.tsx"]);
+    expect(productSource).not.toContain("@hugeicons");
+    expect(bridgeSource).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(
+      files.filter((path) => sources.get(path)?.includes("<svg")).sort()
+    ).toEqual([
+      "src/providers/ProviderIcon.tsx",
+      "src/session/ChartBlock.tsx",
+      "src/usage/Usage.tsx",
+    ]);
+    expect(productSource).not.toMatch(/>\s*×\s*</);
+    expect(productSource).not.toContain("Copied ✓");
+    expect(
+      files.filter((path) => sources.get(path)?.includes("✦")).sort()
+    ).toEqual(["src/editor/slotCard.tsx", "src/skillInline.tsx"]);
+
+    for (const path of [
+      "src/environment/EnvironmentPopover.tsx",
+      "src/git/GitDockContent.tsx",
+      "src/git/SourceControl.tsx",
+    ]) {
+      expect(sources.get(path)).not.toMatch(/[↑↓]\$?\{/);
+    }
   });
 
   test("uses the documented semantic radius scale for shared surfaces", () => {

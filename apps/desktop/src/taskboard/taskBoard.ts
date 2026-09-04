@@ -1,20 +1,20 @@
-export const taskStatuses = [
+export const TASK_STATUSES = [
   "todo",
   "in_progress",
   "in_review",
   "done",
 ] as const;
 
-export type TaskStatus = (typeof taskStatuses)[number];
+export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-export const taskBoardLanes = [
+export const TASK_BOARD_LANES = [
   "queue",
   "running",
   "needs_you",
   "done",
 ] as const;
 
-export type TaskBoardLane = (typeof taskBoardLanes)[number];
+export type TaskBoardLane = (typeof TASK_BOARD_LANES)[number];
 
 export type TaskSessionActivityKind =
   | "idle"
@@ -22,16 +22,16 @@ export type TaskSessionActivityKind =
   | "awaiting_input"
   | "failed";
 
-export const taskPriorities = [
+export const TASK_PRIORITIES = [
   "none",
   "low",
   "medium",
   "high",
   "urgent",
 ] as const;
-export const PRIORITIES = taskPriorities;
+export const PRIORITIES = TASK_PRIORITIES;
 
-export type TaskPriority = (typeof taskPriorities)[number];
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export interface GitHubPullRequestReference {
   provider: "github";
@@ -51,39 +51,28 @@ export interface BoardTask {
   order: number;
   createdAt: number;
   updatedAt: number;
-  /**
-  Ordered oldest to newest. A Task owns its Session history, never only one Session.
-  */
+  /** Ordered oldest to newest. A Task owns its Session history, never only one Session. */
   sessionIds: string[];
-  /**
-  Durable identity for the one GitHub pull request this Task currently owns.
-  */
+  /** Durable identity for the one GitHub pull request this Task currently owns. */
   pullRequest: GitHubPullRequestReference | null;
-  /**
-  Incremented on every link change so stale UI actions cannot rewrite a newer association.
-  */
+  /** Incremented on every link change so stale UI actions cannot rewrite a newer association. */
   pullRequestLinkRevision: number;
 }
 
+/**
+ * Board lanes are a projection, not another persisted workflow field. A Task keeps its durable
+ * stage while the latest Session supplies live execution and attention state.
+ */
 export function taskBoardLane(
   task: Pick<BoardTask, "status">,
   activity: TaskSessionActivityKind = "idle"
 ): TaskBoardLane {
-  if (task.status === "done") {
-    return "done";
-  }
-  if (task.status === "in_review") {
+  if (task.status === "done") return "done";
+  if (task.status === "in_review") return "needs_you";
+  if (task.status === "todo") return "queue";
+  if (activity === "awaiting_input" || activity === "failed")
     return "needs_you";
-  }
-  if (task.status === "todo") {
-    return "queue";
-  }
-  if (activity === "awaiting_input" || activity === "failed") {
-    return "needs_you";
-  }
-  if (activity === "running") {
-    return "running";
-  }
+  if (activity === "running") return "running";
   return "queue";
 }
 
@@ -103,201 +92,201 @@ export interface StorageLike {
   setItem(key: string, value: string): void;
 }
 
-export const taskboardStorageKey = "codetwo.taskboard.v1";
-export const taskboardSnapshotVersion = 3 as const;
+export const TASKBOARD_STORAGE_KEY = "codetwo.taskboard.v1";
+export const TASKBOARD_SNAPSHOT_VERSION = 3 as const;
 
-export const corruptBoardWarning =
+export const CORRUPT_BOARD_WARNING =
   "无法读取已保存的任务看板，已恢复为示例任务。";
-export const loadBoardWarning = "无法访问本地任务数据，已恢复为示例任务。";
-export const saveBoardWarning = "任务已更新，但暂时无法保存到本地。";
+export const LOAD_BOARD_WARNING = "无法访问本地任务数据，已恢复为示例任务。";
+export const SAVE_BOARD_WARNING = "任务已更新，但暂时无法保存到本地。";
 
 export interface BoardSnapshot {
-  version: typeof taskboardSnapshotVersion;
+  version: typeof TASKBOARD_SNAPSHOT_VERSION;
   tasks: BoardTask[];
 }
 
 export type BoardSaveResult =
   | { ok: true }
-  | { ok: false; warning: typeof saveBoardWarning };
+  | { ok: false; warning: typeof SAVE_BOARD_WARNING };
 
-const statusIndex: Record<TaskStatus, number> = {
-  done: 3,
+const STATUS_INDEX: Record<TaskStatus, number> = {
+  todo: 0,
   in_progress: 1,
   in_review: 2,
-  todo: 0,
+  done: 3,
 };
 
-const defaultTaskData: readonly Omit<
+const DEFAULT_TASK_DATA: readonly Omit<
   BoardTask,
   "pullRequest" | "pullRequestLinkRevision"
 >[] = [
   {
-    createdAt: Date.UTC(2026, 7, 4, 9, 0),
-    description: "和团队确认待处理、进行中、待审阅与已完成四个阶段的进入条件。",
     id: "seed-define-workflow",
+    title: "确认任务流转规则",
+    description: "和团队确认待处理、进行中、待审阅与已完成四个阶段的进入条件。",
+    status: "done",
+    priority: "high",
     labels: ["产品", "流程"],
     order: 0,
-    priority: "high",
-    sessionIds: [],
-    status: "done",
-    title: "确认任务流转规则",
+    createdAt: Date.UTC(2026, 7, 4, 9, 0),
     updatedAt: Date.UTC(2026, 7, 6, 16, 30),
+    sessionIds: [],
   },
   {
-    createdAt: Date.UTC(2026, 7, 7, 10, 15),
-    description: "保存看板快照，并在数据损坏或浏览器存储不可用时提供清晰反馈。",
     id: "seed-local-persistence",
+    title: "接入任务本地持久化",
+    description: "保存看板快照，并在数据损坏或浏览器存储不可用时提供清晰反馈。",
+    status: "in_progress",
+    priority: "urgent",
     labels: ["工程", "可靠性"],
     order: 0,
-    priority: "urgent",
-    sessionIds: [],
-    status: "in_progress",
-    title: "接入任务本地持久化",
+    createdAt: Date.UTC(2026, 7, 7, 10, 15),
     updatedAt: Date.UTC(2026, 7, 12, 14, 20),
+    sessionIds: [],
   },
   {
-    createdAt: Date.UTC(2026, 7, 8, 11, 0),
-    description: "验证窄屏下的横向浏览、任务操作菜单与筛选体验。",
     id: "seed-review-mobile-layout",
+    title: "审阅移动端看板布局",
+    description: "验证窄屏下的横向浏览、任务操作菜单与筛选体验。",
+    status: "in_review",
+    priority: "medium",
     labels: ["设计", "移动端"],
     order: 0,
-    priority: "medium",
-    sessionIds: [],
-    status: "in_review",
-    title: "审阅移动端看板布局",
+    createdAt: Date.UTC(2026, 7, 8, 11, 0),
     updatedAt: Date.UTC(2026, 7, 12, 18, 45),
+    sessionIds: [],
   },
   {
-    createdAt: Date.UTC(2026, 7, 10, 9, 40),
-    description: "为第一次使用看板的成员准备简洁、可行动的中文引导。",
     id: "seed-empty-state-copy",
+    title: "完善空状态与操作提示",
+    description: "为第一次使用看板的成员准备简洁、可行动的中文引导。",
+    status: "todo",
+    priority: "low",
     labels: ["文案", "体验"],
     order: 0,
-    priority: "low",
-    sessionIds: [],
-    status: "todo",
-    title: "完善空状态与操作提示",
+    createdAt: Date.UTC(2026, 7, 10, 9, 40),
     updatedAt: Date.UTC(2026, 7, 10, 9, 40),
+    sessionIds: [],
   },
   {
-    createdAt: Date.UTC(2026, 7, 11, 13, 25),
+    id: "seed-session-link",
+    title: "设计会话关联入口",
     description:
       "让任务可以跳转到相关编码会话，同时保持任务状态由看板独立管理。",
-    id: "seed-session-link",
+    status: "todo",
+    priority: "medium",
     labels: ["产品", "会话"],
     order: 1,
-    priority: "medium",
-    sessionIds: [],
-    status: "todo",
-    title: "设计会话关联入口",
+    createdAt: Date.UTC(2026, 7, 11, 13, 25),
     updatedAt: Date.UTC(2026, 7, 11, 13, 25),
+    sessionIds: [],
   },
   {
-    createdAt: Date.UTC(2026, 7, 12, 8, 50),
-    description: "覆盖焦点顺序、按钮名称以及不用拖拽也能移动任务的操作路径。",
     id: "seed-accessibility-notes",
+    title: "补充键盘操作与无障碍说明",
+    description: "覆盖焦点顺序、按钮名称以及不用拖拽也能移动任务的操作路径。",
+    status: "todo",
+    priority: "medium",
     labels: ["无障碍", "文档"],
     order: 2,
-    priority: "medium",
-    sessionIds: [],
-    status: "todo",
-    title: "补充键盘操作与无障碍说明",
+    createdAt: Date.UTC(2026, 7, 12, 8, 50),
     updatedAt: Date.UTC(2026, 7, 12, 8, 50),
+    sessionIds: [],
   },
   {
-    createdAt: Date.UTC(2026, 7, 9, 14, 10),
-    description: "支持按关键词、优先级和标签缩小任务范围，并保持原有排序。",
     id: "seed-filter-search",
+    title: "实现看板筛选与搜索",
+    description: "支持按关键词、优先级和标签缩小任务范围，并保持原有排序。",
+    status: "in_progress",
+    priority: "high",
     labels: ["工程", "搜索"],
     order: 1,
-    priority: "high",
-    sessionIds: [],
-    status: "in_progress",
-    title: "实现看板筛选与搜索",
+    createdAt: Date.UTC(2026, 7, 9, 14, 10),
     updatedAt: Date.UTC(2026, 7, 13, 9, 15),
+    sessionIds: [],
   },
   {
-    createdAt: Date.UTC(2026, 7, 10, 15, 35),
-    description: "检查同列重排、跨列移动和筛选状态下的任务顺序是否稳定。",
     id: "seed-review-drag-order",
+    title: "验证跨列拖拽顺序",
+    description: "检查同列重排、跨列移动和筛选状态下的任务顺序是否稳定。",
+    status: "in_review",
+    priority: "high",
     labels: ["测试", "交互"],
     order: 1,
-    priority: "high",
-    sessionIds: [],
-    status: "in_review",
-    title: "验证跨列拖拽顺序",
+    createdAt: Date.UTC(2026, 7, 10, 15, 35),
     updatedAt: Date.UTC(2026, 7, 13, 11, 5),
+    sessionIds: [],
   },
   {
-    createdAt: Date.UTC(2026, 7, 5, 10, 20),
-    description: "明确无、低、中、高和紧急五档优先级的使用场景。",
     id: "seed-priority-guidelines",
+    title: "整理任务优先级规范",
+    description: "明确无、低、中、高和紧急五档优先级的使用场景。",
+    status: "done",
+    priority: "medium",
     labels: ["产品", "规范"],
     order: 1,
-    priority: "medium",
-    sessionIds: [],
-    status: "done",
-    title: "整理任务优先级规范",
+    createdAt: Date.UTC(2026, 7, 5, 10, 20),
     updatedAt: Date.UTC(2026, 7, 9, 17, 40),
+    sessionIds: [],
   },
 ];
 
-const englishSeedCopy: Record<
+const ENGLISH_SEED_COPY: Record<
   string,
   Pick<BoardTask, "title" | "description" | "labels">
 > = {
-  "seed-accessibility-notes": {
-    description:
-      "Cover focus order, button names, and a non-drag path for moving tasks.",
-    labels: ["Accessibility", "Docs"],
-    title: "Document keyboard and accessibility behavior",
-  },
   "seed-define-workflow": {
+    title: "Confirm the task workflow",
     description:
       "Agree on the entry criteria for To do, In progress, In review, and Done.",
     labels: ["Product", "Workflow"],
-    title: "Confirm the task workflow",
-  },
-  "seed-empty-state-copy": {
-    description: "Give first-time board users concise, actionable guidance.",
-    labels: ["Copy", "Experience"],
-    title: "Improve empty states and guidance",
-  },
-  "seed-filter-search": {
-    description:
-      "Narrow tasks by query, priority, and label without changing their order.",
-    labels: ["Engineering", "Search"],
-    title: "Implement task filters and search",
   },
   "seed-local-persistence": {
+    title: "Add local task persistence",
     description:
       "Save the board and explain clearly when stored data is damaged or unavailable.",
     labels: ["Engineering", "Reliability"],
-    title: "Add local task persistence",
-  },
-  "seed-priority-guidelines": {
-    description:
-      "Clarify when to use no, low, medium, high, and urgent priority.",
-    labels: ["Product", "Guidelines"],
-    title: "Define task priority guidelines",
-  },
-  "seed-review-drag-order": {
-    description:
-      "Check same-column reordering, cross-column moves, and filtered task order.",
-    labels: ["Testing", "Interaction"],
-    title: "Verify drag ordering across columns",
   },
   "seed-review-mobile-layout": {
+    title: "Review the narrow board layout",
     description:
       "Verify horizontal browsing, task menus, and filters in a narrow window.",
     labels: ["Design", "Responsive"],
-    title: "Review the narrow board layout",
+  },
+  "seed-empty-state-copy": {
+    title: "Improve empty states and guidance",
+    description: "Give first-time board users concise, actionable guidance.",
+    labels: ["Copy", "Experience"],
   },
   "seed-session-link": {
+    title: "Design the session link entry point",
     description:
       "Let a task open its coding sessions while the board remains the source of task state.",
     labels: ["Product", "Sessions"],
-    title: "Design the session link entry point",
+  },
+  "seed-accessibility-notes": {
+    title: "Document keyboard and accessibility behavior",
+    description:
+      "Cover focus order, button names, and a non-drag path for moving tasks.",
+    labels: ["Accessibility", "Docs"],
+  },
+  "seed-filter-search": {
+    title: "Implement task filters and search",
+    description:
+      "Narrow tasks by query, priority, and label without changing their order.",
+    labels: ["Engineering", "Search"],
+  },
+  "seed-review-drag-order": {
+    title: "Verify drag ordering across columns",
+    description:
+      "Check same-column reordering, cross-column moves, and filtered task order.",
+    labels: ["Testing", "Interaction"],
+  },
+  "seed-priority-guidelines": {
+    title: "Define task priority guidelines",
+    description:
+      "Clarify when to use no, low, medium, high, and urgent priority.",
+    labels: ["Product", "Guidelines"],
   },
 };
 
@@ -305,22 +294,23 @@ function cloneTask(task: BoardTask): BoardTask {
   return {
     ...task,
     labels: [...task.labels],
-    pullRequest: task.pullRequest ? { ...task.pullRequest } : null,
     sessionIds: [...task.sessionIds],
+    pullRequest: task.pullRequest ? { ...task.pullRequest } : null,
   };
 }
 
+/** Returns a fresh localized starter board so consumers cannot mutate the shared template. */
 export function seedTasks(locale: "en" | "zh-CN" = "zh-CN"): BoardTask[] {
-  return defaultTaskData.map((task) => {
-    return cloneTask({
-      ...(locale === "en" ? { ...task, ...englishSeedCopy[task.id] } : task),
+  return DEFAULT_TASK_DATA.map((task) =>
+    cloneTask({
+      ...(locale === "en" ? { ...task, ...ENGLISH_SEED_COPY[task.id] } : task),
       pullRequest: null,
       pullRequestLinkRevision: 0,
-    });
-  });
+    })
+  );
 }
 
-export const defaultTasks: BoardTask[] = seedTasks();
+export const DEFAULT_TASKS: BoardTask[] = seedTasks();
 
 export function createInitialTaskBoardState(
   locale: "en" | "zh-CN" = "zh-CN"
@@ -333,9 +323,7 @@ function normalizeLabels(labels: readonly string[] | undefined): string[] {
   const seen = new Set<string>();
   for (const rawLabel of labels ?? []) {
     const label = rawLabel.trim();
-    if (!label || seen.has(label)) {
-      continue;
-    }
+    if (!label || seen.has(label)) continue;
     seen.add(label);
     normalized.push(label);
   }
@@ -370,25 +358,25 @@ export interface CreateBoardTaskOptions {
   now?: number;
 }
 
+/** Builds a complete task outside the reducer, keeping reducer evaluation deterministic and pure. */
 export function createBoardTask(
   input: CreateBoardTaskInput,
   options: CreateBoardTaskOptions = {}
 ): BoardTask {
   const now = options.now ?? Date.now();
-  const trimmedId = options.id?.trim();
   return {
-    createdAt: now,
+    id: options.id?.trim() || generatedTaskId(),
+    title: input.title.trim() || "未命名任务",
     description: input.description?.trim() ?? "",
-    id: trimmedId != null && trimmedId !== "" ? trimmedId : generatedTaskId(),
+    status: input.status ?? "todo",
+    priority: input.priority ?? "none",
     labels: normalizeLabels(input.labels),
     order: Number.isFinite(input.order) ? (input.order ?? 0) : 0,
-    priority: input.priority ?? "none",
+    createdAt: now,
+    updatedAt: now,
+    sessionIds: normalizeSessionIds(input.sessionIds),
     pullRequest: null,
     pullRequestLinkRevision: 0,
-    sessionIds: normalizeSessionIds(input.sessionIds),
-    status: input.status ?? "todo",
-    title: input.title.trim() || "未命名任务",
-    updatedAt: now,
   };
 }
 
@@ -397,9 +385,7 @@ function normalizeSessionIds(values: readonly string[] | undefined): string[] {
   const seen = new Set<string>();
   for (const rawValue of values ?? []) {
     const value = rawValue.trim();
-    if (!value || seen.has(value)) {
-      continue;
-    }
+    if (!value || seen.has(value)) continue;
     seen.add(value);
     normalized.push(value);
   }
@@ -427,9 +413,7 @@ function samePullRequestReference(
   left: GitHubPullRequestReference | null,
   right: GitHubPullRequestReference | null
 ): boolean {
-  if (left === null || right === null) {
-    return left === right;
-  }
+  if (left === null || right === null) return left === right;
   return (
     githubPullRequestIdentity(left) === githubPullRequestIdentity(right) &&
     left.url === right.url
@@ -442,15 +426,19 @@ export function taskForPullRequest(
 ): BoardTask | null {
   const identity = githubPullRequestIdentity(reference);
   return (
-    tasks.find((task) => {
-      return (
+    tasks.find(
+      (task) =>
         task.pullRequest !== null &&
         githubPullRequestIdentity(task.pullRequest) === identity
-      );
-    }) ?? null
+    ) ?? null
   );
 }
 
+/**
+ * Links one Task to one PR and evicts that same PR from any previous Task. Replacing a different
+ * PR on the target is supported only for explicit callers; the UI normally asks users to unlink
+ * first. No board status changes implicitly when source-control state changes.
+ */
 export function associateTaskPullRequest(
   tasks: readonly BoardTask[],
   taskId: string,
@@ -458,21 +446,18 @@ export function associateTaskPullRequest(
   now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
-  if (index === -1) {
-    return null;
-  }
+  if (index < 0) return null;
   const identity = githubPullRequestIdentity(reference);
   const target = tasks[index]!;
-  const isLinkedElsewhere = tasks.some((task, taskIndex) => {
-    return (
+  const linkedElsewhere = tasks.some(
+    (task, taskIndex) =>
       taskIndex !== index &&
       task.pullRequest !== null &&
       githubPullRequestIdentity(task.pullRequest) === identity
-    );
-  });
+  );
   if (
     samePullRequestReference(target.pullRequest, reference) &&
-    !isLinkedElsewhere
+    !linkedElsewhere
   ) {
     return tasks.map(cloneTask);
   }
@@ -481,9 +466,9 @@ export function associateTaskPullRequest(
     if (taskIndex === index) {
       return {
         ...cloneTask(task),
+        updatedAt: Math.max(now, task.createdAt, task.updatedAt),
         pullRequest: { ...reference },
         pullRequestLinkRevision: task.pullRequestLinkRevision + 1,
-        updatedAt: Math.max(now, task.createdAt, task.updatedAt),
       };
     }
     if (
@@ -494,13 +479,14 @@ export function associateTaskPullRequest(
     }
     return {
       ...cloneTask(task),
+      updatedAt: Math.max(now, task.createdAt, task.updatedAt),
       pullRequest: null,
       pullRequestLinkRevision: task.pullRequestLinkRevision + 1,
-      updatedAt: Math.max(now, task.createdAt, task.updatedAt),
     };
   });
 }
 
+/** Rejects stale unlink clicks by matching both the rendered identity and link revision. */
 export function unlinkTaskPullRequest(
   tasks: readonly BoardTask[],
   taskId: string,
@@ -511,25 +497,29 @@ export function unlinkTaskPullRequest(
   const index = tasks.findIndex((task) => task.id === taskId);
   const task = tasks[index];
   if (
-    index === -1 ||
+    index < 0 ||
     !task?.pullRequest ||
     task.pullRequestLinkRevision !== expectedRevision ||
     githubPullRequestIdentity(task.pullRequest) !== expectedIdentity
   ) {
     return null;
   }
-  return tasks.map((candidate, candidateIndex) => {
-    return candidateIndex === index
+  return tasks.map((candidate, candidateIndex) =>
+    candidateIndex === index
       ? {
           ...cloneTask(candidate),
+          updatedAt: Math.max(now, candidate.createdAt, candidate.updatedAt),
           pullRequest: null,
           pullRequestLinkRevision: candidate.pullRequestLinkRevision + 1,
-          updatedAt: Math.max(now, candidate.createdAt, candidate.updatedAt),
         }
-      : cloneTask(candidate);
-  });
+      : cloneTask(candidate)
+  );
 }
 
+/**
+ * Records the durable Session created for a Task. The first actual run starts a todo Task, while
+ * completed/review Tasks keep their explicit board state when a Session is merely inspected.
+ */
 export function associateTaskSession(
   tasks: readonly BoardTask[],
   taskId: string,
@@ -537,20 +527,18 @@ export function associateTaskSession(
   now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
-  if (index === -1) {
-    return null;
-  }
+  if (index < 0) return null;
   const task = tasks[index]!;
-  const isAlreadyLinked = task.sessionIds.includes(sessionId);
-  const isLinkedElsewhere = tasks.some(
+  const alreadyLinked = task.sessionIds.includes(sessionId);
+  const linkedElsewhere = tasks.some(
     (candidate, candidateIndex) =>
       candidateIndex !== index && candidate.sessionIds.includes(sessionId)
   );
   const status = task.status === "todo" ? "in_progress" : task.status;
   const updatedAt = Math.max(now, task.createdAt, task.updatedAt);
   if (
-    isAlreadyLinked &&
-    !isLinkedElsewhere &&
+    alreadyLinked &&
+    !linkedElsewhere &&
     status === task.status &&
     updatedAt === task.updatedAt
   ) {
@@ -558,38 +546,34 @@ export function associateTaskSession(
   }
   const updated: BoardTask = {
     ...task,
-    sessionIds: isAlreadyLinked
-      ? [...task.sessionIds]
-      : [...task.sessionIds, sessionId],
     status,
     updatedAt,
+    sessionIds: alreadyLinked
+      ? [...task.sessionIds]
+      : [...task.sessionIds, sessionId],
   };
   return tasks.map((candidate, candidateIndex) => {
-    if (candidateIndex === index) {
-      return updated;
-    }
-    if (!candidate.sessionIds.includes(sessionId)) {
-      return cloneTask(candidate);
-    }
+    if (candidateIndex === index) return updated;
+    if (!candidate.sessionIds.includes(sessionId)) return cloneTask(candidate);
     return {
       ...candidate,
+      updatedAt: Math.max(now, candidate.createdAt, candidate.updatedAt),
       labels: [...candidate.labels],
       sessionIds: candidate.sessionIds.filter((id) => id !== sessionId),
-      updatedAt: Math.max(now, candidate.createdAt, candidate.updatedAt),
     };
   });
 }
 
+/** Non-mutating, stable ordering by board column and then each task's explicit order. */
 export function sortBoardTasks(tasks: readonly BoardTask[]): BoardTask[] {
   return tasks
-    .map((task, index) => ({ index, task }))
-    .sort((a, b) => {
-      return (
-        statusIndex[a.task.status] - statusIndex[b.task.status] ||
+    .map((task, index) => ({ task, index }))
+    .sort(
+      (a, b) =>
+        STATUS_INDEX[a.task.status] - STATUS_INDEX[b.task.status] ||
         a.task.order - b.task.order ||
         a.index - b.index
-      );
-    })
+    )
     .map(({ task }) => task);
 }
 
@@ -599,6 +583,7 @@ function normalizedSearchValue(value: string): string {
   return value.toLocaleLowerCase().trim();
 }
 
+/** Applies facets without sorting, preserving the caller's (including a filtered drag view's) order. */
 export function filterBoardTasks(
   tasks: readonly BoardTask[],
   filters: BoardFilters
@@ -608,15 +593,10 @@ export function filterBoardTasks(
   const labels = new Set(filters.labels);
 
   return tasks.filter((task) => {
-    if (priorities.size > 0 && !priorities.has(task.priority)) {
+    if (priorities.size > 0 && !priorities.has(task.priority)) return false;
+    if (labels.size > 0 && !task.labels.some((label) => labels.has(label)))
       return false;
-    }
-    if (labels.size > 0 && !task.labels.some((label) => labels.has(label))) {
-      return false;
-    }
-    if (!query) {
-      return true;
-    }
+    if (!query) return true;
     const searchable = [
       task.id,
       task.title,
@@ -639,14 +619,13 @@ export function filterBoardTasks(
 
 export const filterTasks = filterBoardTasks;
 
+/** Returns unique labels in first-seen order, which stays stable as filters are applied. */
 export function boardLabels(tasks: readonly BoardTask[]): string[] {
   const labels: string[] = [];
   const seen = new Set<string>();
   for (const task of tasks) {
     for (const label of task.labels) {
-      if (seen.has(label)) {
-        continue;
-      }
+      if (seen.has(label)) continue;
       seen.add(label);
       labels.push(label);
     }
@@ -660,14 +639,12 @@ export function countTasksByStatus(
   tasks: readonly BoardTask[]
 ): Record<TaskStatus, number> {
   const counts: Record<TaskStatus, number> = {
-    done: 0,
+    todo: 0,
     in_progress: 0,
     in_review: 0,
-    todo: 0,
+    done: 0,
   };
-  for (const task of tasks) {
-    counts[task.status] += 1;
-  }
+  for (const task of tasks) counts[task.status] += 1;
   return counts;
 }
 
@@ -680,14 +657,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isTaskStatus(value: unknown): value is TaskStatus {
   return (
     typeof value === "string" &&
-    (taskStatuses as readonly string[]).includes(value)
+    (TASK_STATUSES as readonly string[]).includes(value)
   );
 }
 
 function isTaskPriority(value: unknown): value is TaskPriority {
   return (
     typeof value === "string" &&
-    (taskPriorities as readonly string[]).includes(value)
+    (TASK_PRIORITIES as readonly string[]).includes(value)
   );
 }
 
@@ -696,22 +673,18 @@ function isGitHubRepository(value: string): boolean {
   return (
     extra === undefined &&
     owner !== undefined &&
-    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u.test(owner) &&
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner) &&
     name !== undefined &&
     name.length <= 100 &&
-    /^[A-Za-z0-9._-]+$/u.test(name)
+    /^[A-Za-z0-9._-]+$/.test(name)
   );
 }
 
 function parseGitHubPullRequestReference(
   value: unknown
 ): GitHubPullRequestReference | null | undefined {
-  if (value === null) {
-    return null;
-  }
-  if (!isRecord(value)) {
-    return undefined;
-  }
+  if (value === null) return null;
+  if (!isRecord(value)) return undefined;
   const { provider, host, repository, number, url } = value;
   if (
     provider !== "github" ||
@@ -726,9 +699,7 @@ function parseGitHubPullRequestReference(
     return undefined;
   }
   const normalizedRepository = repository.trim();
-  if (!isGitHubRepository(normalizedRepository)) {
-    return undefined;
-  }
+  if (!isGitHubRepository(normalizedRepository)) return undefined;
   try {
     const parsed = new URL(url);
     const path = parsed.pathname.split("/").filter(Boolean);
@@ -751,23 +722,21 @@ function parseGitHubPullRequestReference(
     return undefined;
   }
   return {
-    host: "github.com",
-    number,
     provider: "github",
+    host: "github.com",
     repository: normalizedRepository,
+    number,
     url: `https://github.com/${normalizedRepository}/pull/${number}`,
   };
 }
 
-type SupportedBoardSnapshotVersion = 1 | 2 | typeof taskboardSnapshotVersion;
+type SupportedBoardSnapshotVersion = 1 | 2 | typeof TASKBOARD_SNAPSHOT_VERSION;
 
 function parseTask(
   value: unknown,
   version: SupportedBoardSnapshotVersion
 ): BoardTask | null {
-  if (!isRecord(value)) {
-    return null;
-  }
+  if (!isRecord(value)) return null;
   const {
     id,
     title,
@@ -813,7 +782,7 @@ function parseTask(
     updatedAt < createdAt ||
     !Array.isArray(persistedSessionIds) ||
     !persistedSessionIds.every(
-      (sessionId) => typeof sessionId === "string" && sessionId.trim() !== ""
+      (sessionId) => typeof sessionId === "string" && sessionId.trim()
     ) ||
     persistedPullRequest === undefined ||
     typeof persistedPullRequestRevision !== "number" ||
@@ -824,25 +793,26 @@ function parseTask(
     return null;
   }
   return {
-    createdAt,
-    description,
     id: id.trim(),
+    title: title.trim(),
+    description,
+    status,
+    priority,
     labels: normalizeLabels(labels),
     order,
-    priority,
+    createdAt,
+    updatedAt,
+    sessionIds: normalizeSessionIds(persistedSessionIds),
     pullRequest: persistedPullRequest,
     pullRequestLinkRevision: persistedPullRequestRevision,
-    sessionIds: normalizeSessionIds(persistedSessionIds),
-    status,
-    title: title.trim(),
-    updatedAt,
   };
 }
 
 function corruptBoardState(locale: "en" | "zh-CN" = "zh-CN"): TaskBoardState {
-  return { tasks: seedTasks(locale), warning: corruptBoardWarning };
+  return { tasks: seedTasks(locale), warning: CORRUPT_BOARD_WARNING };
 }
 
+/** Parses and validates the complete snapshot boundary; no unchecked persisted value reaches the UI. */
 export function parseBoardSnapshot(
   raw: string,
   locale: "en" | "zh-CN" = "zh-CN"
@@ -853,26 +823,22 @@ export function parseBoardSnapshot(
       !isRecord(value) ||
       (value.version !== 1 &&
         value.version !== 2 &&
-        value.version !== taskboardSnapshotVersion) ||
+        value.version !== TASKBOARD_SNAPSHOT_VERSION) ||
       !Array.isArray(value.tasks)
     ) {
       return corruptBoardState(locale);
     }
-    const { version } = value;
+    const version = value.version;
     const tasks: BoardTask[] = [];
     const ids = new Set<string>();
     const claimedSessions = new Set<string>();
     const claimedPullRequests = new Set<string>();
     for (const valueTask of value.tasks) {
       const task = parseTask(valueTask, version);
-      if (!task || ids.has(task.id)) {
-        return corruptBoardState(locale);
-      }
+      if (!task || ids.has(task.id)) return corruptBoardState(locale);
       ids.add(task.id);
       task.sessionIds = task.sessionIds.filter((sessionId) => {
-        if (claimedSessions.has(sessionId)) {
-          return false;
-        }
+        if (claimedSessions.has(sessionId)) return false;
         claimedSessions.add(sessionId);
         return true;
       });
@@ -906,16 +872,14 @@ export function loadBoardSnapshot(
   locale: "en" | "zh-CN" = "zh-CN"
 ): TaskBoardState {
   const resolvedStorage = storage === undefined ? defaultStorage() : storage;
-  if (!resolvedStorage) {
-    return createInitialTaskBoardState(locale);
-  }
+  if (!resolvedStorage) return createInitialTaskBoardState(locale);
   try {
-    const raw = resolvedStorage.getItem(taskboardStorageKey);
+    const raw = resolvedStorage.getItem(TASKBOARD_STORAGE_KEY);
     return raw === null
       ? createInitialTaskBoardState(locale)
       : parseBoardSnapshot(raw, locale);
   } catch {
-    return { tasks: seedTasks(locale), warning: loadBoardWarning };
+    return { tasks: seedTasks(locale), warning: LOAD_BOARD_WARNING };
   }
 }
 
@@ -926,19 +890,17 @@ export function saveBoardSnapshot(
   storage?: StorageLike | null
 ): BoardSaveResult {
   const resolvedStorage = storage === undefined ? defaultStorage() : storage;
-  if (!resolvedStorage) {
-    return { ok: false, warning: saveBoardWarning };
-  }
+  if (!resolvedStorage) return { ok: false, warning: SAVE_BOARD_WARNING };
   const tasks = "tasks" in value ? value.tasks : value;
   try {
     const snapshot: BoardSnapshot = {
+      version: TASKBOARD_SNAPSHOT_VERSION,
       tasks: tasks.map(cloneTask),
-      version: taskboardSnapshotVersion,
     };
-    resolvedStorage.setItem(taskboardStorageKey, JSON.stringify(snapshot));
+    resolvedStorage.setItem(TASKBOARD_STORAGE_KEY, JSON.stringify(snapshot));
     return { ok: true };
   } catch {
-    return { ok: false, warning: saveBoardWarning };
+    return { ok: false, warning: SAVE_BOARD_WARNING };
   }
 }
 
@@ -976,15 +938,14 @@ function reindexStatuses(
   const placement = new Map<string, { status: TaskStatus; order: number }>();
   for (const [status, statusTasks] of orderedByStatus) {
     statusTasks.forEach((task, order) =>
-      placement.set(task.id, { order, status })
+      placement.set(task.id, { status, order })
     );
   }
   return tasks.map((task) => {
     const next = placement.get(task.id);
-    if (!next || (task.status === next.status && task.order === next.order)) {
+    if (!next || (task.status === next.status && task.order === next.order))
       return task;
-    }
-    return { ...task, order: next.order, status: next.status };
+    return { ...task, status: next.status, order: next.order };
   });
 }
 
@@ -1009,15 +970,14 @@ function sameTask(left: BoardTask, right: BoardTask): boolean {
   );
 }
 
+/** Pure board state transitions. Time and ID generation deliberately happen before dispatch. */
 export function boardReducer(
   state: TaskBoardState,
   action: BoardAction
 ): TaskBoardState {
   switch (action.type) {
     case "create": {
-      if (state.tasks.some((task) => task.id === action.task.id)) {
-        return state;
-      }
+      if (state.tasks.some((task) => task.id === action.task.id)) return state;
       const current = tasksInStatus(state.tasks, action.task.status);
       const task = cloneTask(action.task);
       task.order = current.length;
@@ -1031,9 +991,7 @@ export function boardReducer(
     }
     case "update": {
       const previous = state.tasks.find((task) => task.id === action.task.id);
-      if (!previous || sameTask(previous, action.task)) {
-        return state;
-      }
+      if (!previous || sameTask(previous, action.task)) return state;
       const replacement = cloneTask(action.task);
       if (previous.status === replacement.status) {
         return {
@@ -1066,9 +1024,7 @@ export function boardReducer(
     }
     case "delete": {
       const task = state.tasks.find((candidate) => candidate.id === action.id);
-      if (!task) {
-        return state;
-      }
+      if (!task) return state;
       const tasks = state.tasks.filter(
         (candidate) => candidate.id !== action.id
       );
@@ -1082,9 +1038,7 @@ export function boardReducer(
     }
     case "move": {
       const moving = state.tasks.find((task) => task.id === action.id);
-      if (!moving || action.beforeId === moving.id) {
-        return state;
-      }
+      if (!moving || action.beforeId === moving.id) return state;
       const target = tasksInStatus(state.tasks, action.status, moving.id);
       let insertionIndex = target.length;
       if (action.beforeId !== undefined) {
@@ -1092,9 +1046,7 @@ export function boardReducer(
           (task) => task.id === action.beforeId
         );
         // A supplied anchor is exact: stale or cross-column IDs must not turn into an append.
-        if (insertionIndex < 0) {
-          return state;
-        }
+        if (insertionIndex < 0) return state;
       }
       const nextTarget = [...target];
       nextTarget.splice(insertionIndex, 0, moving);
@@ -1122,8 +1074,8 @@ export function boardReducer(
       const timestampedTasks =
         action.now === undefined
           ? state.tasks
-          : state.tasks.map((task) => {
-              return task.id === moving.id
+          : state.tasks.map((task) =>
+              task.id === moving.id
                 ? {
                     ...task,
                     updatedAt: Math.max(
@@ -1132,16 +1084,15 @@ export function boardReducer(
                       task.updatedAt
                     ),
                   }
-                : task;
-            });
+                : task
+            );
       return { ...state, tasks: reindexStatuses(timestampedTasks, orderings) };
     }
-    case "hydrate": {
+    case "hydrate":
       return {
         tasks: action.tasks.map(cloneTask),
         warning: action.warning ?? null,
       };
-    }
   }
 }
 

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { cn } from "@/lib/utils";
 
 import { Button } from "./button";
@@ -24,45 +26,50 @@ type SplitButtonVariant =
 type SplitButtonSize = "default" | "sm" | "compact" | "field";
 
 interface SplitButtonProps {
-  /**
-  Text shown on the primary (left) half.
-  */
-  readonly label: string;
-  /**
-  Handler for the primary button click.
-  */
-  readonly onClick: () => void;
-  /**
-  Alternative actions rendered inside the chevron dropdown.
-  */
-  readonly actions: SplitButtonAction[];
-  readonly variant?: SplitButtonVariant;
-  readonly size?: SplitButtonSize;
-  readonly disabled?: boolean;
-  readonly className?: string;
-  /**
-  Where the dropdown aligns relative to the trigger.
-  */
-  readonly menuAlign?: "start" | "center" | "end";
-  readonly menuSide?: "top" | "bottom";
+  /** Text shown on the primary (left) half. */
+  label: ReactNode;
+  /** Accessible name when the visible label is responsive or otherwise composite. */
+  primaryLabel?: string;
+  /** Handler for the primary button click. */
+  onClick: () => void;
+  /** Alternative actions rendered inside the chevron dropdown. */
+  actions: SplitButtonAction[];
+  variant?: SplitButtonVariant;
+  size?: SplitButtonSize;
+  disabled?: boolean;
+  className?: string;
+  primaryClassName?: string;
+  menuButtonClassName?: string;
+  menuLabel?: string;
+  /** Where the dropdown aligns relative to the trigger. */
+  menuAlign?: "start" | "center" | "end";
+  menuSide?: "top" | "bottom";
 }
 
 const separatorClass: Record<SplitButtonVariant, string> = {
   default: "before:bg-primary-foreground/25",
   destructive: "before:bg-destructive-foreground/25",
-  ghost: "before:bg-border",
   outline: "before:bg-border",
   secondary: "before:bg-secondary-foreground/20",
+  ghost: "before:bg-border",
 };
 
+/**
+ * A two-segment button: the left half fires the primary action, the right half opens a dropdown
+ * of alternatives. Mirrors the pattern Cursor uses for "Commit & Push ▾".
+ */
 function SplitButton({
   label,
+  primaryLabel,
   onClick,
   actions,
   variant = "default",
   size = "default",
   disabled = false,
   className,
+  primaryClassName,
+  menuButtonClassName,
+  menuLabel = "More actions",
   menuAlign = "end",
   menuSide = "top",
 }: SplitButtonProps) {
@@ -73,7 +80,8 @@ function SplitButton({
         variant={variant}
         size={size}
         disabled={disabled}
-        className={className}
+        aria-label={primaryLabel}
+        className={cn(className, primaryClassName)}
         onClick={onClick}
       >
         {label}
@@ -94,7 +102,8 @@ function SplitButton({
         variant={variant}
         size={size}
         disabled={disabled}
-        className="rounded-r-none focus-visible:z-10"
+        aria-label={primaryLabel}
+        className={cn("rounded-r-none focus-visible:z-10", primaryClassName)}
         onClick={onClick}
       >
         {label}
@@ -108,10 +117,11 @@ function SplitButton({
               variant={variant}
               size={size}
               disabled={disabled}
-              aria-label="More actions"
+              aria-label={menuLabel}
               className={cn(
                 "relative rounded-l-none px-1.5 before:absolute before:left-0 before:h-4 before:w-px focus-visible:z-10",
-                separatorClass[variant]
+                separatorClass[variant],
+                menuButtonClassName
               )}
             >
               <ChevronDown className="size-3.5" />

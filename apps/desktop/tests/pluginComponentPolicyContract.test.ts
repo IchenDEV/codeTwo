@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 const desktop = resolve(import.meta.dir, "..");
 const source = (path: string) =>
-  readFileSync(resolve(desktop, "src", path), "utf-8");
+  readFileSync(resolve(desktop, "src", path), "utf8");
 
 describe("built-in component policy integration", () => {
   test("projects voice, memory, scenes, and LSP policy into their real runtimes", () => {
@@ -22,19 +22,17 @@ describe("built-in component policy integration", () => {
     expect(app).toContain('componentEnabled("memory.settings")');
     expect(app).toContain('componentEnabled("scenes.surface")');
     expect(app).toContain('componentEnabled("lsp.runtime")');
-    expect(app.match(/voiceEnabled=\{voiceComposerEnabled\}/gu)).toHaveLength(
-      3
-    );
+    expect(app.match(/voiceEnabled=\{voiceComposerEnabled\}/g)).toHaveLength(3);
     expect(composer).toContain("{voiceEnabled ? (");
     expect(desktopPet).not.toContain("voiceEnabled");
     expect(desktopPet).not.toContain("desktopSendPetVoiceText");
     expect(pet).not.toContain("VoiceButton");
 
     expect(
-      app.match(/componentEnabledRef\.current\("memory\.settings"\)/gu)?.length
+      app.match(/componentEnabledRef\.current\("memory\.settings"\)/g)?.length
     ).toBeGreaterThanOrEqual(4);
     expect(
-      app.match(/componentEnabledRef\.current\("scenes\.surface"\)/gu)?.length
+      app.match(/componentEnabledRef\.current\("scenes\.surface"\)/g)?.length
     ).toBeGreaterThanOrEqual(8);
     expect(app).toContain("memoryEnabled: memorySettingsEnabled");
     expect(app).toContain("scenesEnabled: scenesSurfaceEnabled");
@@ -76,14 +74,8 @@ describe("built-in component policy integration", () => {
     const desktopPet = source("pet/DesktopPet.tsx");
     const pet = source("pet/CodeTwoPet.tsx");
     const transcript = source("session/TranscriptPane.tsx");
-    const petEntry = readFileSync(
-      resolve(desktop, "desktop-pet.html"),
-      "utf-8"
-    );
-    const viteConfig = readFileSync(
-      resolve(desktop, "vite.config.ts"),
-      "utf-8"
-    );
+    const petEntry = readFileSync(resolve(desktop, "desktop-pet.html"), "utf8");
+    const viteConfig = readFileSync(resolve(desktop, "vite.config.ts"), "utf8");
 
     expect(host).toContain('url: "views://main/desktop-pet.html"');
     expect(host).not.toContain("views://main/index.html?desktop-pet");
@@ -106,7 +98,7 @@ describe("built-in component policy integration", () => {
     );
     expect(desktopPet).toContain("showNativeContextMenu(desktopPetContextMenu");
     expect(desktopPet).toContain(
-      "if (action === desktopPetCloseAction) void desktopHidePet()"
+      "if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet()"
     );
     expect(pet).toContain("codetwo-pet-bubble");
     expect(pet).not.toContain("codetwo-pet-controls");

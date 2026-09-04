@@ -9,17 +9,15 @@ import {
 
 const entry = (
   overrides: Partial<WorktreeStatusEntry>
-): WorktreeStatusEntry => {
-  return {
-    path: "/repo/.codetwo-worktrees/one",
-    kind: "session",
-    registered: true,
-    checkout_present: true,
-    session_archived: false,
-    worktree_discarded: false,
-    ...overrides,
-  };
-};
+): WorktreeStatusEntry => ({
+  path: "/repo/.codetwo-worktrees/one",
+  kind: "session",
+  registered: true,
+  checkout_present: true,
+  session_archived: false,
+  worktree_discarded: false,
+  ...overrides,
+});
 
 describe("project worktree management rows", () => {
   test("shows the branch name people type, not the full ref", () => {

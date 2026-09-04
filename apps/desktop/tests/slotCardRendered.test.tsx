@@ -70,11 +70,8 @@ function setValue(field, value) {
     Object.getPrototypeOf(field),
     "value"
   )?.set;
-  if (setter) {
-    setter.call(field, value);
-  } else {
-    field.value = value;
-  }
+  if (setter) setter.call(field, value);
+  else field.value = value;
   field.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 }
 

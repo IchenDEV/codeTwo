@@ -4,8 +4,12 @@ import {
   deriveAgentRoster,
   isAgentActivityTool,
 } from "../src/session/agentActivity";
-import { applyEvent, newTurn, turnsFromTranscript } from "../src/session/turns";
-import type { ToolEntry } from "../src/session/turns";
+import {
+  applyEvent,
+  newTurn,
+  turnsFromTranscript,
+  type ToolEntry,
+} from "../src/session/turns";
 
 describe("agent activity projection", () => {
   test("keeps launch metadata across status-only live updates", () => {

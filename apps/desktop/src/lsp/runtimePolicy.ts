@@ -10,36 +10,37 @@ export interface LspRuntimePolicy {
 
 const backendPolicyQueues = new Map<string, Promise<void>>();
 
-async function updateBackendPolicy(
+function updateBackendPolicy(
   policy: LspRuntimePolicy,
-  setBackendEnabled: (isEnabled: boolean) => Promise<void>
+  setBackendEnabled: (enabled: boolean) => Promise<void>
 ): Promise<void> {
   const realm = policy.projectPath ?? "\0global";
   const previous = backendPolicyQueues.get(realm) ?? Promise.resolve();
   const update = previous
     .catch(() => {})
-    .then(async () => {
-      await setBackendEnabled(policy.componentEnabled);
-    });
+    .then(() => setBackendEnabled(policy.componentEnabled));
   backendPolicyQueues.set(realm, update);
   const cleanup = () => {
-    if (backendPolicyQueues.get(realm) === update) {
+    if (backendPolicyQueues.get(realm) === update)
       backendPolicyQueues.delete(realm);
-    }
   };
-  void update.catch(cleanup).then(cleanup);
-  await update;
+  void update.then(cleanup, cleanup);
+  return update;
 }
 
+/**
+ * Synchronize the renderer and backend gates in their safe order.
+ *
+ * Closing the renderer first prevents new acquisitions while the backend drains. Opening happens
+ * only after the backend accepts starts again, so editor effects cannot race a suspended realm.
+ */
 export async function synchronizeLspRuntimePolicy(
   policy: LspRuntimePolicy,
-  setBackendEnabled: (isEnabled: boolean) => Promise<void>,
+  setBackendEnabled: (enabled: boolean) => Promise<void>,
   isCurrent: () => boolean = () => true
 ): Promise<void> {
   setLspRuntimeEnabled(false);
-  if (!policy.catalogReady || !policy.pluginEnabled) {
-    return;
-  }
+  if (!policy.catalogReady || !policy.pluginEnabled) return;
 
   await updateBackendPolicy(policy, setBackendEnabled);
   if (policy.componentEnabled && isCurrent()) {

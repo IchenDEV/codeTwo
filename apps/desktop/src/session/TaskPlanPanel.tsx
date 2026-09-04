@@ -15,7 +15,7 @@ import type { Turn } from "./turns";
 
 export type TaskPlanStatus = "pending" | "in_progress" | "completed";
 
-const checkboxMarker = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/u;
+const CHECKBOX_MARKER = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/;
 
 export function taskPlanStatus(entry: PlanEntry): TaskPlanStatus {
   const status = (entry.status ?? "").trim().toLowerCase().replaceAll("-", "_");
@@ -27,16 +27,14 @@ export function taskPlanStatus(entry: PlanEntry): TaskPlanStatus {
   if (["in_progress", "active", "running", "started"].includes(status)) {
     return "in_progress";
   }
-  if (status) {
-    return "pending";
-  }
-  return checkboxMarker.exec(entry.content)?.[1]?.toLowerCase() === "x"
+  if (status) return "pending";
+  return CHECKBOX_MARKER.exec(entry.content)?.[1]?.toLowerCase() === "x"
     ? "completed"
     : "pending";
 }
 
 export function taskPlanLabel(entry: PlanEntry): string {
-  return checkboxMarker.exec(entry.content)?.[2] ?? entry.content;
+  return CHECKBOX_MARKER.exec(entry.content)?.[2] ?? entry.content;
 }
 
 export function planChecklistMarkdown(
@@ -45,9 +43,9 @@ export function planChecklistMarkdown(
   return entries
     .map((entry) => {
       const normalized = typeof entry === "string" ? { content: entry } : entry;
-      const marked = checkboxMarker.exec(normalized.content);
+      const marked = CHECKBOX_MARKER.exec(normalized.content);
       const explicitStatus = "status" in normalized ? normalized.status : null;
-      if (marked && (explicitStatus === null || explicitStatus === undefined)) {
+      if (marked && explicitStatus == null) {
         return `- [${marked[1] === " " ? " " : "x"}] ${marked[2]}`;
       }
       const checked = taskPlanStatus(normalized) === "completed" ? "x" : " ";
@@ -60,7 +58,7 @@ export function currentTaskPlan(turns: readonly Turn[]): readonly PlanEntry[] {
   return turns[turns.length - 1]?.plan ?? [];
 }
 
-function StatusIcon({ status }: { readonly status: TaskPlanStatus }) {
+function StatusIcon({ status }: { status: TaskPlanStatus }) {
   const t = useT();
   if (status === "completed") {
     return (
@@ -92,10 +90,10 @@ export function TaskPlanPanel({
   onPinPlanArtifact,
   canPinPlan = false,
 }: {
-  readonly turns: readonly Turn[];
-  readonly onOpenPlanAsDocument?: (entries: PlanEntry[]) => void;
-  readonly onPinPlanArtifact?: (markdown: string) => void;
-  readonly canPinPlan?: boolean;
+  turns: readonly Turn[];
+  onOpenPlanAsDocument?: (entries: PlanEntry[]) => void;
+  onPinPlanArtifact?: (markdown: string) => void;
+  canPinPlan?: boolean;
 }) {
   const t = useT();
   const entries = currentTaskPlan(turns);
@@ -103,7 +101,7 @@ export function TaskPlanPanel({
   const completed = statuses.filter((status) => status === "completed").length;
   const currentIndex = statuses.indexOf("in_progress");
   const currentStep =
-    currentIndex !== -1
+    currentIndex >= 0
       ? currentIndex + 1
       : entries.length > 0
         ? Math.min(completed + 1, entries.length)
@@ -129,12 +127,13 @@ export function TaskPlanPanel({
         <h2 className="text-body min-w-0 flex-1 truncate font-medium">
           {t("taskPlan.title")}
         </h2>
-        <output
+        <p
+          role="status"
           aria-live="polite"
           className="text-metadata text-muted-foreground shrink-0 font-medium tabular-nums"
         >
           {t("taskPlan.step", { current: currentStep, total: entries.length })}
-        </output>
+        </p>
       </div>
       <div className="px-2 pb-1">
         <Progress
@@ -174,9 +173,9 @@ export function TaskPlanPanel({
         })}
       </ol>
 
-      {onOpenPlanAsDocument || (canPinPlan && onPinPlanArtifact) ? (
+      {(onOpenPlanAsDocument || (canPinPlan && onPinPlanArtifact)) && (
         <div className="flex flex-wrap gap-1 px-2 pt-2">
-          {onOpenPlanAsDocument ? (
+          {onOpenPlanAsDocument && (
             <Button
               type="button"
               size="xs"
@@ -187,8 +186,8 @@ export function TaskPlanPanel({
             >
               {t("planDoc.open")}
             </Button>
-          ) : null}
-          {canPinPlan && onPinPlanArtifact ? (
+          )}
+          {canPinPlan && onPinPlanArtifact && (
             <Button
               type="button"
               size="xs"
@@ -197,9 +196,9 @@ export function TaskPlanPanel({
             >
               {t("planDoc.pin")}
             </Button>
-          ) : null}
+          )}
         </div>
-      ) : null}
+      )}
     </section>
   );
 }

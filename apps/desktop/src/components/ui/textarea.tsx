@@ -3,8 +3,8 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 type TextareaProps = React.ComponentProps<"textarea"> & {
-  readonly focusRing?: boolean;
-  readonly size?: "default" | "compact";
+  focusRing?: boolean;
+  size?: "default" | "compact";
 };
 
 function Textarea({

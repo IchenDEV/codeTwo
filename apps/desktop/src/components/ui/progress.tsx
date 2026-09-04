@@ -27,10 +27,10 @@ type ProgressProps =
       });
 
 const indicatorToneClasses: Record<ProgressTone, string> = {
-  destructive: "bg-status-destructive",
   primary: "bg-primary",
   success: "bg-status-success",
   warning: "bg-status-warning",
+  destructive: "bg-status-destructive",
 };
 
 function Progress({

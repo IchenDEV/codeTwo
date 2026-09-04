@@ -1,9 +1,10 @@
-import type {
-  PluginConnectorContribution,
-  PluginInfo,
-  PluginLanguageServer,
-  PluginUiContribution,
-  PluginUiSlotId,
+import {
+  PLUGIN_UI_SLOT_IDS,
+  type PluginConnectorContribution,
+  type PluginInfo,
+  type PluginLanguageServer,
+  type PluginUiContribution,
+  type PluginUiSlotId,
 } from "../bridge";
 import { pluginUiComponentId } from "../pluginModel";
 import type { PluginManagerComponent, PluginManagerPlugin } from "./types";
@@ -31,13 +32,10 @@ function activeBundle(
   bundle: PluginInfo,
   plugins: PluginManagerPlugin[]
 ): boolean {
-  if (!bundle.enabled || !bundle.trusted) {
-    return false;
-  }
+  if (!bundle.enabled || !bundle.trusted) return false;
   const managed = plugins.find((plugin) => plugin.id === `bundle:${bundle.id}`);
   return (
-    managed === null ||
-    managed === undefined ||
+    managed == null ||
     (managed.state.effectiveEnabled && managed.state.status === "active")
   );
 }
@@ -47,13 +45,9 @@ export function activePluginUiContributions(
   plugins: PluginManagerPlugin[],
   components: PluginManagerComponent[] = []
 ): ActivePluginUiContributionsBySlot {
-  const bySlot: ActivePluginUiContributionsBySlot = {
-    "composer.above": [],
-    "composer.toolbar": [],
-    "rail.features": [],
-    "session.header": [],
-    "transcript.before": [],
-  };
+  const bySlot = Object.fromEntries(
+    PLUGIN_UI_SLOT_IDS.map((slot) => [slot, []])
+  ) as unknown as ActivePluginUiContributionsBySlot;
   const componentById = new Map(
     components.map((component) => [component.id, component])
   );
@@ -65,9 +59,8 @@ export function activePluginUiContributions(
       const managedComponent = componentById.get(
         pluginUiComponentId(bundle.id, contribution.id)
       );
-      if (managedComponent && !managedComponent.state.effectiveEnabled) {
+      if (managedComponent && !managedComponent.state.effectiveEnabled)
         continue;
-      }
       bySlot[contribution.slot].push({
         ...contribution,
         pluginId: bundle.id,
@@ -92,21 +85,18 @@ export function activePluginLanguageServers(
 ): ActivePluginLanguageServer[] {
   return bundles
     .filter((bundle) => activeBundle(bundle, plugins))
-    .flatMap((bundle) => {
-      return bundle.lsp_servers.map((server) => {
-        return {
-          ...server,
-          pluginId: bundle.id,
-          pluginName: bundle.name,
-        };
-      });
-    })
-    .sort((left, right) => {
-      return (
+    .flatMap((bundle) =>
+      bundle.lsp_servers.map((server) => ({
+        ...server,
+        pluginId: bundle.id,
+        pluginName: bundle.name,
+      }))
+    )
+    .sort(
+      (left, right) =>
         left.pluginId.localeCompare(right.pluginId) ||
         left.id.localeCompare(right.id)
-      );
-    });
+    );
 }
 
 export function activePluginConnectorContributions(
@@ -115,18 +105,15 @@ export function activePluginConnectorContributions(
 ): ActivePluginConnectorContribution[] {
   return bundles
     .filter((bundle) => activeBundle(bundle, plugins))
-    .flatMap((bundle) => {
-      return bundle.connector_contributions.map((contribution) => {
-        return {
-          ...contribution,
-          pluginId: bundle.id,
-        };
-      });
-    })
-    .sort((left, right) => {
-      return (
+    .flatMap((bundle) =>
+      bundle.connector_contributions.map((contribution) => ({
+        ...contribution,
+        pluginId: bundle.id,
+      }))
+    )
+    .sort(
+      (left, right) =>
         left.pluginId.localeCompare(right.pluginId) ||
         left.id.localeCompare(right.id)
-      );
-    });
+    );
 }

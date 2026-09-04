@@ -16,7 +16,7 @@ const { I18nProvider } = await import("../src/i18n");
 const { CommandPalette } = await import("../src/palette/CommandPalette");
 const styles = readFileSync(
   new URL("../src/styles.css", import.meta.url),
-  "utf-8"
+  "utf8"
 );
 
 let previousResizeObserver;
@@ -56,7 +56,7 @@ describe("CommandPalette", () => {
       </I18nProvider>
     );
 
-    const { body } = dom.document;
+    const body = dom.document.body;
     expect(body.querySelector(".command-palette-surface")).toBeTruthy();
     expect(
       body.querySelector('[data-slot="command-list"]')?.className

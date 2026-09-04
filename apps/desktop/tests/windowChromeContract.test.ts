@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const source = (relativePath: string) => {
-  return readFileSync(
-    new URL(relativePath, import.meta.url),
-    "utf8"
-  ).replaceAll("\r\n", "\n");
-};
+const source = (relativePath: string) =>
+  readFileSync(new URL(relativePath, import.meta.url), "utf8").replaceAll(
+    "\r\n",
+    "\n"
+  );
 
 const electrobunHost = source("../src/electrobun/index.ts");
 const styles = source("../src/styles.css");
@@ -35,7 +34,7 @@ describe("macOS window chrome contract", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toContain("trafficLightOffset");
     expect(electrobunHost).toMatch(
-      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 16\);[\s\S]*?\}\s*rendererReady = true;/u
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 16\);[\s\S]*?\}\s*rendererReady = true;/
     );
     expect(electrobunHost).toContain(
       'mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(22, 16))'
@@ -44,7 +43,7 @@ describe("macOS window chrome contract", () => {
     expect(electrobunHost).not.toContain("getBoundingClientRect");
     expect(
       Array.from(
-        electrobunHost.matchAll(/setWindowButtonPosition\(([^)]*)\)/gu),
+        electrobunHost.matchAll(/setWindowButtonPosition\(([^)]*)\)/g),
         (match) => match[1]
       )
     ).toEqual(["22, 16", "22, 16"]);
@@ -88,10 +87,10 @@ describe("macOS window chrome contract", () => {
     expect(railSource).toContain("window-controls-safe-rail");
     expect(sceneStudioSource).toContain("window-controls-safe-scene");
     expect(styles).toMatch(
-      /html\[data-platform="macos"\] \.window-controls-safe-main\s*{[^}]*padding-left:\s*6rem/su
+      /html\[data-platform="macos"\] \.window-controls-safe-main\s*{[^}]*padding-left:\s*6rem/s
     );
     expect(styles).toMatch(
-      /\.window-controls-safe-main\s*{[^}]*padding-left:\s*1rem/su
+      /\.window-controls-safe-main\s*{[^}]*padding-left:\s*1rem/s
     );
   });
 
@@ -103,10 +102,10 @@ describe("macOS window chrome contract", () => {
       'document.documentElement.classList.add("macos-window-glass")'
     );
     expect(styles).toMatch(
-      /\.macos-window-glass \.app-shell\s*{[^}]*background:\s*transparent;/su
+      /\.macos-window-glass \.app-shell\s*{[^}]*background:\s*transparent;/s
     );
     expect(styles).toMatch(
-      /\.macos-window-glass \.glass-rail\s*{[^}]*--appearance-macos-panel-tint-opacity/su
+      /\.macos-window-glass \.glass-rail\s*{[^}]*--appearance-macos-panel-tint-opacity/s
     );
     expect(appSource).toContain(
       'className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"'
@@ -115,7 +114,7 @@ describe("macOS window chrome contract", () => {
 
   test("solidifies the glass panes while the app scheme disagrees with the system scheme", () => {
     expect(styles).toMatch(
-      /\.macos-window-glass\.scheme-mismatch \.glass-rail[^}]*--appearance-macos-panel-tint-opacity:\s*100%/su
+      /\.macos-window-glass\.scheme-mismatch \.glass-rail[^}]*--appearance-macos-panel-tint-opacity:\s*100%/s
     );
     expect(themeSource).toContain(
       'root.classList.toggle("scheme-mismatch", scheme !== system)'
@@ -166,9 +165,9 @@ describe("macOS window chrome contract", () => {
     expect(dockSource).not.toContain("DockPlacement");
     expect(dockSource).toContain('data-dock-placement="right"');
     expect(dockSource).toContain('className="dock-tab-label"');
-    expect(styles).toMatch(/@container dock \(max-width: 359px\)/u);
+    expect(styles).toMatch(/@container dock \(max-width: 359px\)/);
     expect(styles).toMatch(
-      /\.glass-panel\s*{[^}]*--appearance-sidebar-opacity/su
+      /\.glass-panel\s*{[^}]*--appearance-sidebar-opacity/s
     );
   });
 
@@ -192,15 +191,15 @@ describe("macOS window chrome contract", () => {
 
   test("keeps the rail, workspace, and both dock states on one shared titlebar baseline", () => {
     const titlebarClasses = Array.from(
-      dockSource.matchAll(/data-dock-titlebar[\s\S]*?className="([^"]+)"/gu),
-      (match) => match[1].split(/\s+/u)
+      dockSource.matchAll(/data-dock-titlebar[\s\S]*?className="([^"]+)"/g),
+      (match) => match[1].split(/\s+/)
     );
 
     expect(styles).toMatch(
-      /\.window-titlebar\s*{[^}]*height:\s*var\(--ds-titlebar-height\);/su
+      /\.window-titlebar\s*{[^}]*height:\s*var\(--ds-titlebar-height\);/s
     );
     expect(styles).toMatch(
-      /\.window-titlebar\s*{[^}]*box-shadow:\s*inset 0 calc\(-1 \* var\(--hairline-width\)\) 0 var\(--border\);/su
+      /\.window-titlebar\s*{[^}]*box-shadow:\s*inset 0 calc\(-1 \* var\(--hairline-width\)\) 0 var\(--border\);/s
     );
     expect(appSource).toContain(
       '"session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4"'
@@ -215,32 +214,32 @@ describe("macOS window chrome contract", () => {
       "session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
     );
     expect(styles).not.toMatch(
-      /\.session-header-actions\s*{[^}]*box-shadow:\s*inset 0 0 0 var\(--hairline-width\) var\(--border\);/su
+      /\.session-header-actions\s*{[^}]*box-shadow:\s*inset 0 0 0 var\(--hairline-width\) var\(--border\);/s
     );
     expect(styles).toMatch(
-      /\.session-header-context-label,[\s\S]*?\.session-header-layout-label,[\s\S]*?\[data-plugin-ui-slot="session\.header"\] \.session-header-action-label\s*{\s*display:\s*none;/su
+      /\.session-header-context-label,[\s\S]*?\.session-header-layout-label,[\s\S]*?\[data-plugin-ui-slot="session\.header"\] \.session-header-action-label\s*{\s*display:\s*none;/s
     );
     expect(styles).toMatch(
-      /\.session-header-action-icon,[\s\S]*?\.session-header-context-icon,[\s\S]*?\.session-header-layout-icon,[\s\S]*?\[data-plugin-ui-slot="session\.header"\] \[data-icon="inline-start"\]\s*{\s*display:\s*block;/su
+      /\.session-header-action-icon,[\s\S]*?\.session-header-context-icon,[\s\S]*?\.session-header-layout-icon,[\s\S]*?\[data-plugin-ui-slot="session\.header"\] \[data-icon="inline-start"\]\s*{\s*display:\s*block;/s
     );
     expect(styles).toMatch(
-      /\.session-header-context-main,[\s\S]*?\.session-header-plugin-action,[\s\S]*?\.session-header-layout-main\s*{[^}]*width:\s*var\(--ds-control-normal\);[^}]*justify-content:\s*center;/su
+      /\.session-header-context-main,[\s\S]*?\.session-header-plugin-action,[\s\S]*?\.session-header-layout-main\s*{[^}]*width:\s*var\(--ds-control-normal\);[^}]*justify-content:\s*center;/s
     );
     expect(styles).toMatch(
-      /@container session-header \(max-width: 36rem\)[\s\S]*?\.session-header-action-label\s*{\s*display:\s*none;/su
+      /@container session-header \(max-width: 36rem\)[\s\S]*?\.session-header-action-label\s*{\s*display:\s*none;/s
     );
     expect(appSource).toMatch(
-      /<EnvironmentPopover[\s\S]*?<SessionHeaderActions[\s\S]*?<PaneLayoutToolbar/u
+      /<EnvironmentPopover[\s\S]*?<SessionHeaderActions[\s\S]*?<PaneLayoutToolbar/
     );
     expect(appSource).toContain('viewLabel={t("pane.viewMenu")}');
     expect(railSource).toContain(
       'className="window-titlebar window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 pr-2"'
     );
     expect(styles).toMatch(
-      /\.session-rail \[data-rail-header\]\s*{[^}]*box-shadow:\s*none;/su
+      /\.session-rail \[data-rail-header\]\s*{[^}]*box-shadow:\s*none;/s
     );
     expect(styles).toMatch(
-      /\.glass-rail\s*{[^}]*box-shadow:\s*inset calc\(-1 \* var\(--hairline-width\)\) 0 0 var\(--sidebar-border\);/su
+      /\.glass-rail\s*{[^}]*box-shadow:\s*inset calc\(-1 \* var\(--hairline-width\)\) 0 0 var\(--sidebar-border\);/s
     );
     expect(titlebarClasses).toHaveLength(2);
     expect(
@@ -265,9 +264,9 @@ describe("macOS window chrome contract", () => {
       'data-has-conversation={hasConversationContent ? "true" : undefined}'
     );
     expect(appSource).toContain("{hasConversationContent && (");
-    expect(styles).toMatch(/\.session-header\s*{[^}]*box-shadow:\s*none;/su);
+    expect(styles).toMatch(/\.session-header\s*{[^}]*box-shadow:\s*none;/s);
     expect(styles).toMatch(
-      /\.session-header\[data-has-conversation="true"\]\s*{[^}]*box-shadow:\s*inset 0 calc\(-1 \* var\(--hairline-width\)\) 0 var\(--border\);/su
+      /\.session-header\[data-has-conversation="true"\]\s*{[^}]*box-shadow:\s*inset 0 calc\(-1 \* var\(--hairline-width\)\) 0 var\(--border\);/s
     );
   });
 
@@ -287,14 +286,14 @@ describe("macOS window chrome contract", () => {
 
   test("keeps the sidebar resize target invisible on hover", () => {
     expect(styles).toMatch(
-      /\.rail-grip\s*{[^}]*width:\s*6px;[^}]*cursor:\s*col-resize;/su
+      /\.rail-grip\s*{[^}]*width:\s*6px;[^}]*cursor:\s*col-resize;/s
     );
-    expect(styles).not.toMatch(/\.rail-grip(?:::after|:hover)/u);
+    expect(styles).not.toMatch(/\.rail-grip(?:::after|:hover)/);
   });
 
   test("aligns the visible dock resize affordance with the panel edge", () => {
     expect(styles).toMatch(
-      /\.dock-grip::after\s*{[^}]*left:\s*0;[^}]*width:\s*2px;/su
+      /\.dock-grip::after\s*{[^}]*left:\s*0;[^}]*width:\s*2px;/s
     );
   });
 });

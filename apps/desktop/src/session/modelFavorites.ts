@@ -1,16 +1,17 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { fromDomAny } from "../lib/ipcResult";
-import { asJsonObject } from "../lib/jsonValue";
+export const MODEL_FAVORITES_STORAGE_KEY = "codetwo.modelFavorites";
 
-export const modelFavoritesStorageKey = "codetwo.modelFavorites";
-
-const modelFavoritesVersion = 1;
-const modelFavoritesEvent = "codetwo:model-favorites-change";
-const maxProviders = 64;
-const maxFavoritesPerProvider = 200;
-const maxKeyLength = 512;
-const reservedProviderKeys = new Set(["__proto__", "constructor", "prototype"]);
+const MODEL_FAVORITES_VERSION = 1;
+const MODEL_FAVORITES_EVENT = "codetwo:model-favorites-change";
+const MAX_PROVIDERS = 64;
+const MAX_FAVORITES_PER_PROVIDER = 200;
+const MAX_KEY_LENGTH = 512;
+const RESERVED_PROVIDER_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
 
 interface ModelFavoritesChangeDetail {
   provider: string;
@@ -18,12 +19,12 @@ interface ModelFavoritesChangeDetail {
 }
 
 export interface ModelFavoritesStorage {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
 }
 
 interface ModelFavoritesSnapshot {
-  version: typeof modelFavoritesVersion;
+  version: typeof MODEL_FAVORITES_VERSION;
   providers: Record<string, string[]>;
 }
 
@@ -39,58 +40,44 @@ function isSafeKey(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.length > 0 &&
-    value.length <= maxKeyLength
+    value.length <= MAX_KEY_LENGTH
   );
 }
 
 function isSafeProviderKey(value: unknown): value is string {
-  return isSafeKey(value) && !reservedProviderKeys.has(value);
+  return isSafeKey(value) && !RESERVED_PROVIDER_KEYS.has(value);
 }
 
 function emptySnapshot(): ModelFavoritesSnapshot {
-  return { providers: {}, version: modelFavoritesVersion };
+  return { version: MODEL_FAVORITES_VERSION, providers: {} };
 }
 
 export function loadModelFavorites(
   storage: ModelFavoritesStorage | null = defaultStorage()
 ): ModelFavoritesSnapshot {
-  if (!storage) {
-    return emptySnapshot();
-  }
+  if (!storage) return emptySnapshot();
   try {
-    const raw = storage.getItem(modelFavoritesStorageKey);
-    if (raw == null || raw === "") {
-      return emptySnapshot();
-    }
+    const raw = storage.getItem(MODEL_FAVORITES_STORAGE_KEY);
+    if (!raw) return emptySnapshot();
     const parsed = JSON.parse(raw) as unknown;
-    if (parsed == null || typeof parsed !== "object") {
-      return emptySnapshot();
-    }
+    if (!parsed || typeof parsed !== "object") return emptySnapshot();
     const candidate = parsed as { version?: unknown; providers?: unknown };
-    if (candidate.version !== modelFavoritesVersion) {
+    if (candidate.version !== MODEL_FAVORITES_VERSION) return emptySnapshot();
+    if (!candidate.providers || typeof candidate.providers !== "object")
       return emptySnapshot();
-    }
-    if (
-      candidate.providers == null ||
-      typeof candidate.providers !== "object"
-    ) {
-      return emptySnapshot();
-    }
 
     const providers: Record<string, string[]> = {};
     for (const [provider, favorites] of Object.entries(
       candidate.providers
-    ).slice(0, maxProviders)) {
-      if (!isSafeProviderKey(provider) || !Array.isArray(favorites)) {
-        continue;
-      }
+    ).slice(0, MAX_PROVIDERS)) {
+      if (!isSafeProviderKey(provider) || !Array.isArray(favorites)) continue;
       providers[provider] = [
         ...new Set(
-          favorites.filter(isSafeKey).slice(0, maxFavoritesPerProvider)
+          favorites.filter(isSafeKey).slice(0, MAX_FAVORITES_PER_PROVIDER)
         ),
       ];
     }
-    return { providers, version: modelFavoritesVersion };
+    return { version: MODEL_FAVORITES_VERSION, providers };
   } catch {
     return emptySnapshot();
   }
@@ -100,9 +87,7 @@ export function favoritesForProvider(
   provider: string,
   storage: ModelFavoritesStorage | null = defaultStorage()
 ): string[] {
-  if (!isSafeProviderKey(provider)) {
-    return [];
-  }
+  if (!isSafeProviderKey(provider)) return [];
   return loadModelFavorites(storage).providers[provider] ?? [];
 }
 
@@ -111,18 +96,17 @@ export function toggleModelFavorite(
   model: string,
   storage: ModelFavoritesStorage | null = defaultStorage()
 ): string[] {
-  if (!isSafeProviderKey(provider) || !isSafeKey(model)) {
+  if (!isSafeProviderKey(provider) || !isSafeKey(model))
     return favoritesForProvider(provider, storage);
-  }
   const snapshot = loadModelFavorites(storage);
   const current = snapshot.providers[provider] ?? [];
   const next = current.includes(model)
     ? current.filter((favorite) => favorite !== model)
-    : [...current, model].slice(-maxFavoritesPerProvider);
+    : [...current, model].slice(-MAX_FAVORITES_PER_PROVIDER);
   snapshot.providers[provider] = next;
   if (storage) {
     try {
-      storage.setItem(modelFavoritesStorageKey, JSON.stringify(snapshot));
+      storage.setItem(MODEL_FAVORITES_STORAGE_KEY, JSON.stringify(snapshot));
     } catch {
       // Keep the preference usable for this mounted picker when storage is unavailable.
     }
@@ -130,54 +114,45 @@ export function toggleModelFavorite(
   return next;
 }
 
+/** Keep every visible picker in this renderer synchronized without lifting a local preference. */
 export function useProviderModelFavorites(provider: string) {
   const [favorites, setFavorites] = useState(() =>
     favoritesForProvider(provider)
   );
 
   useEffect(() => {
-    const syncFromStorage = () => {
-      setFavorites(favoritesForProvider(provider));
-    };
+    const syncFromStorage = () => setFavorites(favoritesForProvider(provider));
     const syncFromPicker = (event: Event) => {
-      const detail = asJsonObject(
-        fromDomAny(event instanceof CustomEvent ? event.detail : undefined)
-      );
-      if (
-        detail != null &&
-        detail.provider === provider &&
-        Array.isArray(detail.favorites) &&
-        detail.favorites.every((entry) => typeof entry === "string")
-      ) {
-        setFavorites(detail.favorites);
-      }
+      const detail = (event as CustomEvent<ModelFavoritesChangeDetail>).detail;
+      if (detail?.provider === provider) setFavorites(detail.favorites);
     };
     syncFromStorage();
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.addEventListener(modelFavoritesEvent, syncFromPicker);
+    if (typeof window === "undefined") return;
+    window.addEventListener(MODEL_FAVORITES_EVENT, syncFromPicker);
     window.addEventListener("storage", syncFromStorage);
     return () => {
-      window.removeEventListener(modelFavoritesEvent, syncFromPicker);
+      window.removeEventListener(MODEL_FAVORITES_EVENT, syncFromPicker);
       window.removeEventListener("storage", syncFromStorage);
     };
   }, [provider]);
 
-  const toggle = (model: string) => {
-    const next = toggleModelFavorite(provider, model);
-    setFavorites(next);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent<ModelFavoritesChangeDetail>(modelFavoritesEvent, {
-          detail: { favorites: next, provider },
-        })
-      );
-    }
-  };
+  const toggle = useCallback(
+    (model: string) => {
+      const next = toggleModelFavorite(provider, model);
+      setFavorites(next);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent<ModelFavoritesChangeDetail>(MODEL_FAVORITES_EVENT, {
+            detail: { provider, favorites: next },
+          })
+        );
+      }
+    },
+    [provider]
+  );
 
   return {
-    favorites: new Set(favorites),
+    favorites: useMemo(() => new Set(favorites), [favorites]),
     toggle,
   };
 }

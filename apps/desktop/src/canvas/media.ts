@@ -1,9 +1,8 @@
 import type { BinaryFileData } from "./excalidrawAdapter";
-import { toDataURL, toFileId } from "./excalidrawAdapter";
 
-export const mediaLimits = {
-  maxInputBytes: 20 * 1024 * 1024,
+export const MEDIA_LIMITS = {
   maxInputs: 16,
+  maxInputBytes: 20 * 1024 * 1024,
   maxOutputBytes: 20 * 1024 * 1024,
 } as const;
 
@@ -16,9 +15,7 @@ export interface CanvasMediaInput {
 }
 
 export interface NormalizedCanvasMedia {
-  /**
-  Trusted opaque asset identity assigned by the normalizer/core boundary.
-  */
+  /** Trusted opaque asset identity assigned by the normalizer/core boundary. */
   ref: string;
   bytes: Uint8Array | ArrayBuffer | Blob;
   mimeType: AcceptedMediaMime;
@@ -55,33 +52,25 @@ export interface CanvasMediaIntakeOptions {
   createFileId?: (media: NormalizedCanvasMedia, index: number) => string;
 }
 
-function byteLength(value: CanvasMediaInput["bytes"]): number {
-  if (value instanceof Uint8Array) {
-    return value.byteLength;
-  }
-  if (value instanceof ArrayBuffer) {
-    return value.byteLength;
-  }
+function byteLength(
+  value: CanvasMediaInput["bytes"] | NormalizedCanvasMedia["bytes"]
+): number {
+  if (value instanceof Uint8Array) return value.byteLength;
+  if (value instanceof ArrayBuffer) return value.byteLength;
   return value.size;
 }
 
 async function asUint8Array(
   value: NormalizedCanvasMedia["bytes"]
 ): Promise<Uint8Array> {
-  if (value instanceof Uint8Array) {
-    return value;
-  }
-  if (value instanceof ArrayBuffer) {
-    return new Uint8Array(value);
-  }
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
   return new Uint8Array(await value.arrayBuffer());
 }
 
 function asDataUrl(bytes: Uint8Array, mimeType: AcceptedMediaMime): string {
   let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
+  for (const byte of bytes) binary += String.fromCharCode(byte);
   return `data:${mimeType};base64,${btoa(binary)}`;
 }
 
@@ -89,7 +78,7 @@ function defaultFileId(index: number): string {
   return `canvas-file-${index + 1}`;
 }
 
-function assertOpaqueReference(
+function assertOpaqueRef(
   value: unknown,
   index: number
 ): asserts value is string {
@@ -97,8 +86,8 @@ function assertOpaqueReference(
     typeof value !== "string" ||
     value.length === 0 ||
     value.length > 160 ||
-    /^(?:data:|blob:|https?:|javascript:)/iu.test(value) ||
-    /[\\/\s]/u.test(value)
+    /^(?:data:|blob:|https?:|javascript:)/i.test(value) ||
+    /[\\/\s]/.test(value)
   ) {
     throw new CanvasMediaError(
       "normalizer-rejected",
@@ -107,6 +96,10 @@ function assertOpaqueReference(
   }
 }
 
+/**
+ * The one media intake path used by paste, drop, and the local picker. The normalizer is required;
+ * callers cannot accidentally pass raw SVG/GIF/JPEG bytes to Excalidraw.
+ */
 export async function intakeCanvasMedia(
   inputs: readonly CanvasMediaInput[],
   options: CanvasMediaIntakeOptions
@@ -117,9 +110,9 @@ export async function intakeCanvasMedia(
       "Canvas media normalizer callback is required"
     );
   }
-  const maxInputs = options.maxInputs ?? mediaLimits.maxInputs;
-  const maxInputBytes = options.maxInputBytes ?? mediaLimits.maxInputBytes;
-  const maxOutputBytes = options.maxOutputBytes ?? mediaLimits.maxOutputBytes;
+  const maxInputs = options.maxInputs ?? MEDIA_LIMITS.maxInputs;
+  const maxInputBytes = options.maxInputBytes ?? MEDIA_LIMITS.maxInputBytes;
+  const maxOutputBytes = options.maxOutputBytes ?? MEDIA_LIMITS.maxOutputBytes;
   if (inputs.length > maxInputs) {
     throw new CanvasMediaError(
       "input-budget",
@@ -140,13 +133,12 @@ export async function intakeCanvasMedia(
   let outputBytes = 0;
   for (const [index, input] of inputs.entries()) {
     const normalized = await options.normalize(input);
-    if (!normalized) {
+    if (!normalized)
       throw new CanvasMediaError(
         "normalizer-rejected",
         `Canvas media input ${index + 1} was rejected by the normalizer`
       );
-    }
-    assertOpaqueReference(normalized.ref, index);
+    assertOpaqueRef(normalized.ref, index);
     if (
       normalized.mimeType !== "image/png" &&
       normalized.mimeType !== "image/webp"
@@ -168,10 +160,13 @@ export async function intakeCanvasMedia(
     const fileId =
       options.createFileId?.(normalized, index) ?? defaultFileId(index);
     const file: BinaryFileData = {
-      created: 0,
-      dataURL: toDataURL(asDataUrl(bytes, normalized.mimeType)),
-      id: toFileId(fileId),
+      id: fileId as BinaryFileData["id"],
       mimeType: normalized.mimeType,
+      dataURL: asDataUrl(
+        bytes,
+        normalized.mimeType
+      ) as BinaryFileData["dataURL"],
+      created: 0,
       version: 1,
     };
     files.push(file);
@@ -191,10 +186,8 @@ export function mediaInputFromFile(file: File): CanvasMediaInput {
 export function mediaInputsFromDataTransfer(
   dataTransfer: DataTransfer | null | undefined
 ): readonly CanvasMediaInput[] {
-  if (!dataTransfer) {
-    return [];
-  }
-  return [...(dataTransfer.files ?? [])].map(mediaInputFromFile);
+  if (!dataTransfer) return [];
+  return Array.from(dataTransfer.files ?? []).map(mediaInputFromFile);
 }
 
 export function mediaInputsFromClipboard(

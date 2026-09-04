@@ -13,27 +13,35 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-import { providerLabel, sessionDiffStat } from "../bridge";
-import type { SessionDiffStat, SessionInfo } from "../bridge";
+import {
+  providerLabel,
+  sessionDiffStat,
+  type SessionDiffStat,
+  type SessionInfo,
+} from "../bridge";
 import { useT } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
-import { describeContextWindow } from "../session/contextWindow";
-import type { ContextWindowBySession } from "../session/contextWindow";
+import {
+  describeContextWindow,
+  type ContextWindowBySession,
+} from "../session/contextWindow";
 // Explicit extension: Bun's directory cache is case-insensitive, and `missionControl` without an
 // extension resolves against `MissionControl.tsx` (this file) when both live in one directory.
-import { missionRows } from "./missionControl.ts";
-import type { MissionRow, MissionState } from "./missionControl.ts";
+import {
+  missionRows,
+  type MissionRow,
+  type MissionState,
+} from "./missionControl.ts";
 
-/**
-The rail's color semantics, one dot per state: amber asks, red failed, primary at work.
-*/
-const dotClass: Record<MissionState, string> = {
+/** The rail's color semantics, one dot per state: amber asks, red failed, primary at work. */
+const DOT_CLASS: Record<MissionState, string> = {
   awaiting_input: "bg-warning animate-pulse",
   failed: "bg-destructive",
-  idle: "bg-muted-foreground/40",
   running: "bg-primary animate-pulse",
+  idle: "bg-muted-foreground/40",
 };
 
+/** A scene reference like `builtin:develop` reads better as its short name. */
 function sceneLabel(reference: string): string {
   const colon = reference.lastIndexOf(":");
   return colon >= 0 ? reference.slice(colon + 1) : reference;
@@ -45,15 +53,14 @@ function sceneLabel(reference: string): string {
  */
 const diffStatCache = new Map<string, SessionDiffStat | null>();
 
+/** Spinner → `+a −d · n files` → em dash when the checkout is gone or not a repo. */
 export function DiffStatCell({
   session,
   fetchStat = sessionDiffStat,
 }: {
-  readonly session: string;
-  /**
-  Injectable for tests; defaults to the bridge call.
-  */
-  readonly fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
+  session: string;
+  /** Injectable for tests; defaults to the bridge call. */
+  fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
 }) {
   const t = useT();
   const [stat, setStat] = useState<SessionDiffStat | null | undefined>(() =>
@@ -64,24 +71,20 @@ export function DiffStatCell({
       setStat(diffStatCache.get(session));
       return;
     }
-    let isCancelled = false;
+    let cancelled = false;
     void fetchStat(session).then((value) => {
       diffStatCache.set(session, value);
-      if (!isCancelled) {
-        setStat(value);
-      }
+      if (!cancelled) setStat(value);
     });
     return () => {
-      isCancelled = true;
+      cancelled = true;
     };
   }, [session, fetchStat]);
 
   if (stat === undefined) {
     return <Spinner className="text-muted-foreground size-3" />;
   }
-  if (stat === null) {
-    return <span className="text-muted-foreground">—</span>;
-  }
+  if (stat === null) return <span className="text-muted-foreground">—</span>;
   return (
     <span className="text-callout whitespace-nowrap tabular-nums">
       <span className="text-success">+{stat.additions}</span>{" "}
@@ -94,6 +97,10 @@ export function DiffStatCell({
   );
 }
 
+/**
+ * R6 (docs/roadmap.md): the cross-session overview answering "what needs me" — every session's
+ * state, scene, working-tree diff, and context occupancy, with one click into review.
+ */
 export function MissionControlDialog({
   sessions,
   runningSessions,
@@ -104,17 +111,15 @@ export function MissionControlDialog({
   onClose,
   fetchStat,
 }: {
-  readonly sessions: SessionInfo[];
-  readonly runningSessions: ReadonlySet<string>;
-  readonly contextWindows: ContextWindowBySession;
-  readonly sceneBySession: ReadonlyMap<string, string>;
-  readonly onSelect: (id: string) => void;
-  readonly onReview: (id: string) => void;
-  readonly onClose: () => void;
-  /**
-  Injectable for tests; defaults to the bridge call.
-  */
-  readonly fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
+  sessions: SessionInfo[];
+  runningSessions: ReadonlySet<string>;
+  contextWindows: ContextWindowBySession;
+  sceneBySession: ReadonlyMap<string, string>;
+  onSelect: (id: string) => void;
+  onReview: (id: string) => void;
+  onClose: () => void;
+  /** Injectable for tests; defaults to the bridge call. */
+  fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
 }) {
   const t = useT();
   const rows = missionRows(
@@ -153,21 +158,21 @@ export function MissionControlDialog({
         }
       >
         <span
-          className={cn("size-2 shrink-0 rounded-full", dotClass[r.state])}
+          className={cn("size-2 shrink-0 rounded-full", DOT_CLASS[r.state])}
           title={t(`mission.state.${r.state}` as "mission.state.idle")}
           aria-label={t(`mission.state.${r.state}` as "mission.state.idle")}
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="text-body min-w-0 truncate">{s.title}</span>
-            {r.scene ? (
+            {r.scene && (
               <Badge
                 variant="outline"
                 className="text-metadata text-muted-foreground shrink-0"
               >
                 {sceneLabel(r.scene)}
               </Badge>
-            ) : null}
+            )}
           </div>
           <div className="text-callout text-muted-foreground flex items-center gap-1">
             <ProviderIcon
@@ -191,7 +196,7 @@ export function MissionControlDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => open == null && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("mission.title")}</DialogTitle>

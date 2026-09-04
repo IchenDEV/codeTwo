@@ -8,11 +8,11 @@ import {
 } from "./state";
 
 const idle = {
-  awaitingInput: false,
-  completed: false,
-  failed: false,
   loading: false,
   running: false,
+  awaitingInput: false,
+  failed: false,
+  completed: false,
 };
 
 describe("C2 pet session state", () => {
@@ -32,8 +32,8 @@ describe("C2 pet session state", () => {
     expect(
       petAnimationForActivity({
         ...idle,
-        awaitingInput: true,
         running: true,
+        awaitingInput: true,
       })
     ).toBe("waiting");
     expect(
@@ -55,10 +55,7 @@ describe("C2 pet session state", () => {
       )
     ).toBe("Need your choice");
     expect(
-      petConversationBubbleForActivity(
-        { ...idle, running: true },
-        " ".repeat(3)
-      )
+      petConversationBubbleForActivity({ ...idle, running: true }, "   ")
     ).toBeNull();
     expect(
       petConversationBubbleForActivity(idle, "Finished response")
@@ -77,7 +74,7 @@ describe("C2 pet session state", () => {
       `${"旧".repeat(12)}${"新".repeat(170)}`
     );
 
-    expect([...(bubble ?? "")]).toHaveLength(160);
+    expect(Array.from(bubble ?? "")).toHaveLength(160);
     expect(bubble?.startsWith("…")).toBe(true);
     expect(bubble?.endsWith("新".repeat(159))).toBe(true);
   });

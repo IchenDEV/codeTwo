@@ -31,11 +31,8 @@ function setValue(
     Object.getPrototypeOf(element),
     "value"
   )?.set;
-  if (setter) {
-    setter.call(element, value);
-  } else {
-    element.value = value;
-  }
+  if (setter) setter.call(element, value);
+  else element.value = value;
   element.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 }
 
@@ -56,11 +53,11 @@ describe("ProjectActionDialog", () => {
     );
 
     await flush();
-    const { body } = dom.document;
+    const body = dom.document.body;
     const switches = body.querySelectorAll('[data-slot="switch"]');
     expect(switches).toHaveLength(2);
     const previewSwitch = switches[1] as HTMLElement;
-    expect(Object.hasOwn(previewSwitch.dataset, "disabled")).toBe(true);
+    expect(previewSwitch.hasAttribute("data-disabled")).toBe(true);
 
     setValue(body.querySelector("#action-name"), "Test");
     setValue(body.querySelector("#action-command"), "bun test");
@@ -69,7 +66,7 @@ describe("ProjectActionDialog", () => {
       "http://localhost:5173"
     );
     await flush();
-    expect(Object.hasOwn(previewSwitch.dataset, "disabled")).toBe(false);
+    expect(previewSwitch.hasAttribute("data-disabled")).toBe(false);
 
     const shortcut = button(body, "Keybinding");
     await reactAct(async () => {
@@ -129,7 +126,7 @@ describe("ProjectActionDialog", () => {
     );
 
     await flush();
-    const { body } = dom.document;
+    const body = dom.document.body;
     click(button(body, "Send prompt"));
     await flush();
     expect(body.querySelector("#action-command")).toBeNull();

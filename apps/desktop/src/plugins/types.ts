@@ -38,14 +38,10 @@ export interface PluginManagerActiveResource {
   kind?: string;
 }
 
-/**
-Evaluated state for the scope currently supplied to PluginManagerPage.
-*/
+/** Evaluated state for the scope currently supplied to PluginManagerPage. */
 export interface PluginManagerScopedState {
   effectiveEnabled: boolean;
-  /**
-  Present for a project scope. User-scoped entries use effectiveEnabled directly.
-  */
+  /** Present for a project scope. User-scoped entries use effectiveEnabled directly. */
   override?: PluginManagerOverride;
   status: PluginManagerStatus;
   missingDependencies?: string[];
@@ -73,9 +69,7 @@ export interface PluginManagerScaffold {
   files: number;
 }
 
-/**
-Installation and trust metadata for a plugin backed by an on-disk bundle.
-*/
+/** Installation and trust metadata for a plugin backed by an on-disk bundle. */
 export interface PluginManagerBundle {
   id: string;
   repository?: string | null;
@@ -105,14 +99,10 @@ export interface PluginManagerPlugin {
   services?: string[];
   componentIds?: string[];
   state: PluginManagerScopedState;
-  /**
-  JSON Schema. Simple object fields render as controls; other schemas use JSON.
-  */
+  /** JSON Schema. Simple object fields render as controls; other schemas use JSON. */
   configSchema?: unknown;
   configurable?: boolean;
-  /**
-  Present only for installed bundles; built-ins never receive installation controls.
-  */
+  /** Present only for installed bundles; built-ins never receive installation controls. */
   bundle?: PluginManagerBundle;
 }
 
@@ -120,9 +110,7 @@ export interface PluginManagerComponent {
   id: string;
   pluginId: string;
   pluginName: string;
-  /**
-  Managed plugin whose component policy controls this resource. Defaults to pluginId.
-  */
+  /** Managed plugin whose component policy controls this resource. Defaults to pluginId. */
   policyPluginId?: string;
   name: string;
   description?: string | null;
@@ -131,16 +119,12 @@ export interface PluginManagerComponent {
   source: PluginManagerSource;
   sourceLabel?: string | null;
   supportedScopes: PluginManagerScopeKind[];
-  /**
-  False when the descriptor is visible here but its runtime has no component-policy seam.
-  */
+  /** False when the descriptor is visible here but its runtime has no component-policy seam. */
   manageable?: boolean;
   availability?: "ready" | "requires_trust" | "requires_auth" | "unsupported";
   required?: boolean;
   state: PluginManagerScopedState;
-  /**
-  Actions available for a skill shown in the unified component catalog.
-  */
+  /** Actions available for a skill shown in the unified component catalog. */
   skill?: {
     id: string;
     removable: boolean;
@@ -159,9 +143,7 @@ export interface PluginManagerMarketplaceItem {
   installable: boolean;
   supportedScopes: PluginManagerScopeKind[];
   diagnostic?: string | null;
-  /**
-  Present for bundles loaded from a local marketplace manifest.
-  */
+  /** Present for bundles loaded from a local marketplace manifest. */
   marketplace?: {
     manifestPath: string;
     pluginName: string;
@@ -187,18 +169,16 @@ export interface PluginManagerChangeRequest {
 
 export interface PluginManagerChangePlan {
   confirmationId: string;
-  /**
-  Optional graph revision used by the host to reject stale confirmations.
-  */
+  /** Optional graph revision used by the host to reject stale confirmations. */
   graphRevision?: number;
   request: PluginManagerChangeRequest;
   summary: string;
   requiresConfirmation: boolean;
-  affectedPlugins?: {
+  affectedPlugins?: Array<{
     id: string;
     name: string;
     desiredState?: PluginManagerDesiredState;
-  }[];
+  }>;
   activeResources?: PluginManagerActiveResource[];
   warnings?: string[];
 }
@@ -322,9 +302,9 @@ export interface PluginManagerLabels {
   componentUninstalled: string;
   scaffoldApplied: (count: number) => string;
   settingsReset: string;
-  bundleEnabled: (name: string, isEnabled: boolean) => string;
-  bundleTrusted: (name: string, isTrusted: boolean) => string;
-  bundleUninstalled: (name: string, isKeepData: boolean) => string;
+  bundleEnabled: (name: string, enabled: boolean) => string;
+  bundleTrusted: (name: string, trusted: boolean) => string;
+  bundleUninstalled: (name: string, keepData: boolean) => string;
   confirmTitle: string;
   confirm: string;
   cancel: string;
@@ -357,10 +337,12 @@ export interface PluginManagerPageProps {
   ) => Promise<void>;
   onRefreshMarketplace?: () => Promise<void>;
   onOpenMarketplace?: () => Promise<void>;
-  onImportGithub?: (repo: string) => Promise<PluginManagerBundleInstallResult>;
-  onSetBundleEnabled?: (pluginId: string, isEnabled: boolean) => Promise<void>;
-  onSetBundleTrusted?: (pluginId: string, isTrusted: boolean) => Promise<void>;
-  onUninstallBundle?: (pluginId: string, isKeepData: boolean) => Promise<void>;
+  onImportGithub?: (
+    repository: string
+  ) => Promise<PluginManagerBundleInstallResult>;
+  onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
+  onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
+  onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
   onApplyScaffold?: (
     pluginId: string,
     scaffoldId: string

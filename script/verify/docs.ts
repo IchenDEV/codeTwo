@@ -120,13 +120,13 @@ export function validateDocumentation(repositoryRoot: string): string[] {
     if (!rule) continue;
     if (
       /\d{4}-\d{2}-\d{2}/.test(path)
-      && !new Set(["archive", "change-record", "change-evidence"]).has(rule.classification)
+      && !new Set(["archive", "change-record", "change-stage", "change-evidence"]).has(rule.classification)
     ) {
       errors.push(`${path}: dated snapshots belong in docs/archive or canonical change bundles`);
     }
-    if (rule.classification === "change-record") {
+    if (rule.classification === "change-record" || rule.classification === "change-stage") {
       const body = readFileSync(join(root, path), "utf8");
-      if (!/^schema: 2$/m.test(body)) errors.push(`${path}: canonical change record must use schema 2`);
+      if (!/^schema: 3$/m.test(body)) errors.push(`${path}: canonical change stage must use schema 3`);
     }
     if (new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]).has(extname(path).toLowerCase())) {
       if (!localReferences.has(path)) errors.push(`${path}: unreferenced documentation image`);

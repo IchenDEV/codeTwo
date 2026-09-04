@@ -14,35 +14,31 @@ import {
   workspaceStateForCwd,
 } from "../src/git/state";
 
-const file = (overrides: Partial<GitFile>): GitFile => {
-  return {
-    path: "src/app.ts",
-    original_path: null,
-    staged: false,
-    unstaged: true,
-    state: "modified",
-    staged_state: null,
-    unstaged_state: "modified",
-    ...overrides,
-  };
-};
+const file = (overrides: Partial<GitFile>): GitFile => ({
+  path: "src/app.ts",
+  original_path: null,
+  staged: false,
+  unstaged: true,
+  state: "modified",
+  staged_state: null,
+  unstaged_state: "modified",
+  ...overrides,
+});
 
 const sourceControl = (
   overrides: Partial<SourceControlInfo> = {}
-): SourceControlInfo => {
-  return {
-    remote_name: "origin",
-    provider: "github",
-    provider_name: "GitHub",
-    host: "github.com",
-    web_url: "https://github.com/acme/code-two",
-    change_request_label: "PR",
-    create_change_request_supported: true,
-    required_cli: "gh",
-    required_cli_available: true,
-    ...overrides,
-  };
-};
+): SourceControlInfo => ({
+  remote_name: "origin",
+  provider: "github",
+  provider_name: "GitHub",
+  host: "github.com",
+  web_url: "https://github.com/acme/code-two",
+  change_request_label: "PR",
+  create_change_request_supported: true,
+  required_cli: "gh",
+  required_cli_available: true,
+  ...overrides,
+});
 
 describe("source-control projection", () => {
   test("shows a partially staged file in both truthful sections", () => {
