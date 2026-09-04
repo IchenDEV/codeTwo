@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   useDragDropSortable,
   useDragDropZone,
+  type UseSortableInput,
 } from "@/components/ui/drag-drop";
 
 export type SidebarDragItem =
@@ -74,6 +75,7 @@ export function SidebarSortable({
   accept,
   collisionPriority = 0,
   disabled = false,
+  sensors,
   children,
 }: {
   item: SidebarDragItem;
@@ -82,6 +84,8 @@ export function SidebarSortable({
   accept: SidebarDragItem["kind"] | SidebarDragItem["kind"][];
   collisionPriority?: number;
   disabled?: boolean;
+  /** Per-item sensor overrides, e.g. a distance threshold when the whole row is the handle. */
+  sensors?: UseSortableInput<SidebarDndData>["sensors"];
   children: (state: DndRenderState) => ReactNode;
 }) {
   const sortable = useDragDropSortable<SidebarDndData>({
@@ -92,6 +96,7 @@ export function SidebarSortable({
     accept,
     collisionPriority,
     disabled,
+    sensors,
     data: { item, location },
   });
 

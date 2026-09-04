@@ -362,6 +362,39 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
+  test("project menu removes registered projects and hides removal for synthesized ones", async () => {
+    activateDom();
+    const removed: string[] = [];
+    const view = renderRail({
+      sessions: [
+        session("punctuation", "Punctuation"),
+        { ...session("ghosted", "Ghosted"), id: "ghosted", cwd: "/tmp/ghost", project_path: "/tmp/ghost" },
+      ],
+      previews: { punctuation: " · ", ghosted: "" },
+      onRemoveProject: (path: string) => removed.push(path),
+    });
+
+    click(view.container.querySelector('[data-project-actions="/tmp/repo"]'));
+    await waitFor(() => {
+      expect(dom.document.body.textContent).toContain("Remove from list");
+    });
+    const removeItem = [...dom.document.body.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent?.includes("Remove from list"),
+    );
+    expect(removeItem).toBeTruthy();
+    click(removeItem);
+    expect(removed).toEqual(["/tmp/repo"]);
+
+    click(view.container.querySelector('[data-project-actions="/tmp/ghost"]'));
+    await waitFor(() => {
+      const menu = [...dom.document.body.querySelectorAll('[role="menu"]')].pop();
+      expect(menu?.textContent).toContain("New section");
+      expect(menu?.textContent).not.toContain("Remove from list");
+    });
+
+    view.unmount();
+  });
+
   test("keeps resize tracking native to the separator and releases it when the pointer is cancelled", () => {
     activateDom();
     const widths: number[] = [];
