@@ -2617,6 +2617,18 @@ export default function App() {
     }
   }, [projects, refreshProjects, saveComposerDraftCollection, selectProject]);
 
+  // Rail menu removal keeps the settings page's confirmation so a misclick can't drop a project.
+  const requestProjectRemoval = useCallback(async (path: string) => {
+    const project = projects.find((candidate) => candidate.path === path);
+    if (!project) return;
+    if (!(await confirmNative(t("settings.removeProjectConfirm", { name: project.name })))) return;
+    try {
+      await removeProjectEntry(path);
+    } catch (error) {
+      toast(t("settings.projectSaveFailed", { error: String(error) }), "error");
+    }
+  }, [projects, removeProjectEntry, t, toast]);
+
   const addProjectFolder = useCallback(async () => {
     const picked = await pickDirectory();
     if (!picked) return; // cancelled — a normal outcome, not an error
@@ -7696,6 +7708,7 @@ export default function App() {
             await refreshSessions();
           }}
           onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
+          onRemoveProject={(path) => void requestProjectRemoval(path)}
           displayProvider={displayProvider}
           onOpenMarket={() => {
             setShowTaskBoard(false);

@@ -14,6 +14,9 @@ import {
 } from "react";
 import {
   DragDropRoot,
+  KeyboardSensor,
+  PointerActivationConstraints,
+  PointerSensor,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -158,6 +161,21 @@ function shortAge(timestamp: number, now: number): string {
   return `${Math.floor(seconds / (7 * 86_400))}w`;
 }
 
+// A whole Project row is the drag surface, so activation must wait for real movement —
+// the default handle behavior starts on pointerdown, which would swallow the collapse
+// toggle's and menu button's clicks.
+const projectRowSensors = [
+  PointerSensor.configure({
+    activationConstraints(event) {
+      if (event.pointerType === "touch") {
+        return [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })];
+      }
+      return [new PointerActivationConstraints.Distance({ value: 4 })];
+    },
+  }),
+  KeyboardSensor,
+];
+
 function RailUtilityButton({
   label,
   selected = false,
@@ -247,6 +265,7 @@ export function SessionRail({
   onPin,
   onArchive,
   onDiscardWorktree,
+  onRemoveProject,
   displayProvider,
   onOpenMarket,
   onOpenAutomations,
@@ -302,6 +321,8 @@ export function SessionRail({
   onArchive: (id: string, archived: boolean) => Promise<void> | void;
   /** Permanently removes a session's isolated checkout and branch, after confirmation. */
   onDiscardWorktree: (session: SessionInfo) => void;
+  /** Removes a registered Project from the rail, after confirmation; sessions stay on disk. */
+  onRemoveProject: (path: string) => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
   displayProvider: (p: SessionInfo["provider"]) => string;
   onOpenMarket: () => void;
@@ -1520,6 +1541,9 @@ export function SessionRail({
     const canMoveUp = projectIndex > 0;
     const canMoveDown = projectIndex >= 0 && projectIndex < paths.length - 1;
     const open = projectOrganization.collapsed[project.path] !== true;
+    // Only registry Projects can be removed; entries synthesized from live sessions would
+    // reappear on the next refresh, so the action stays hidden for them.
+    const removable = projects.some((candidate) => candidate.path === project.path);
     const moveToSection = (nextSectionId: string | null) =>
       dropProject(project.path, nextSectionId, null);
 
@@ -1537,6 +1561,7 @@ export function SessionRail({
         index={Math.max(0, projectIndex)}
         accept="project"
         collisionPriority={1}
+        sensors={projectRowSensors}
       >
         {({ ref: sortableRef, handleRef, sourceRef, targetRef, isDragging, isDropTarget }) => (
       <div
@@ -1557,22 +1582,15 @@ export function SessionRail({
         }
       >
         <div
-          ref={targetRef}
+          ref={(element) => {
+            handleRef?.(element);
+            targetRef?.(element);
+          }}
           data-project-header={project.path}
+          data-project-drag-handle={project.path}
           data-sidebar-drop-target={isDropTarget ? "true" : undefined}
           className="group/project relative flex min-h-control items-center rounded-control pr-1 transition-[background-color,opacity] hover:bg-fill-quiet data-[sidebar-dragging=true]:opacity-45"
-        >
-          <TooltipButton
-            ref={handleRef}
-            label={t("rail.dragProject")}
-            variant="ghost"
-            size="icon-xs"
-            data-project-drag-handle={project.path}
-            className="absolute left-0 z-10 cursor-grab text-foreground/35 opacity-0 group-hover/project:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
-          >
-            <GripVertical className="pointer-events-none" />
-          </TooltipButton>
-          <CollapsibleTrigger
+        >          <CollapsibleTrigger
             render={
               <Button
                 ref={sourceRef}
@@ -1630,6 +1648,18 @@ export function SessionRail({
                 <Plus />
                 {t("rail.newSection")}
               </DropdownMenuItem>
+              {removable ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => onRemoveProject(project.path)}
+                  >
+                    <Trash2 />
+                    {t("rail.removeProject")}
+                  </DropdownMenuItem>
+                </>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

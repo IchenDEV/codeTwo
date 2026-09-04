@@ -1,12 +1,15 @@
 import type { ComponentProps } from "react";
 import {
   DragDropProvider as DndKitProvider,
+  KeyboardSensor,
+  PointerSensor,
   useDroppable,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
   type UseDroppableInput,
 } from "@dnd-kit/react";
+import { PointerActivationConstraints } from "@dnd-kit/dom";
 import {
   useSortable,
   type UseSortableInput,
@@ -19,6 +22,9 @@ function DragDropRoot(props: ComponentProps<typeof DndKitProvider>) {
 
 export {
   DragDropRoot,
+  KeyboardSensor,
+  PointerActivationConstraints,
+  PointerSensor,
   useDroppable as useDragDropZone,
   useSortable as useDragDropSortable,
 };
