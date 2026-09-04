@@ -18,6 +18,7 @@ export type PetSize = "small" | "medium" | "large";
 export type PetSource = "builtin" | "petshare";
 export type FontWeightId = "regular" | "medium" | "semibold";
 export type ReduceMotionPreference = "system" | "on" | "off";
+export type WindowMotionPreference = "instant" | "fast" | "smooth";
 export type DiffMarkerPreference = "color" | "symbols";
 
 export interface AppearanceTheme {
@@ -54,6 +55,7 @@ export interface AppearanceSettings {
   codeFontSize: number;
   pointerCursors: boolean;
   reduceMotion: ReduceMotionPreference;
+  windowMotion: WindowMotionPreference;
   diffMarkers: DiffMarkerPreference;
 }
 
@@ -146,6 +148,7 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
   pointerCursors: true,
   reduceMotion: "system",
+  windowMotion: "smooth",
   diffMarkers: "color",
 };
 
@@ -173,6 +176,10 @@ function isFontWeight(value: unknown): value is FontWeightId {
 
 function isReduceMotion(value: unknown): value is ReduceMotionPreference {
   return value === "system" || value === "on" || value === "off";
+}
+
+function isWindowMotion(value: unknown): value is WindowMotionPreference {
+  return value === "instant" || value === "fast" || value === "smooth";
 }
 
 function isDiffMarkers(value: unknown): value is DiffMarkerPreference {
@@ -310,6 +317,9 @@ export function normalizeAppearanceSettings(value: unknown): AppearanceSettings 
     reduceMotion: isReduceMotion(candidate.reduceMotion)
       ? candidate.reduceMotion
       : DEFAULT_APPEARANCE_SETTINGS.reduceMotion,
+    windowMotion: isWindowMotion(candidate.windowMotion)
+      ? candidate.windowMotion
+      : DEFAULT_APPEARANCE_SETTINGS.windowMotion,
     diffMarkers: isDiffMarkers(candidate.diffMarkers)
       ? candidate.diffMarkers
       : DEFAULT_APPEARANCE_SETTINGS.diffMarkers,
@@ -529,5 +539,6 @@ export function applyAppearanceSettings(
   for (const [name, value] of Object.entries(properties)) root.style.setProperty(name, value);
   root.dataset.appearancePointerCursors = settings.pointerCursors ? "true" : "false";
   root.dataset.reduceMotion = settings.reduceMotion;
+  root.dataset.windowMotion = settings.windowMotion;
   root.dataset.diffMarkers = settings.diffMarkers;
 }

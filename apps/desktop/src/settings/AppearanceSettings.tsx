@@ -26,6 +26,7 @@ import {
   type ThemePalette,
   type ThemePreference,
   type UiFontId,
+  type WindowMotionPreference,
 } from "../appearance";
 import { pickAppearanceThemeDocument, saveAppearanceThemeDocument } from "../bridge";
 import { useT } from "../i18n";
@@ -691,6 +692,18 @@ export function AppearanceSettings({
                 { value: "off", label: t("settings.preferenceOff") },
               ]}
               onValueChange={(reduceMotion) => setAppearanceSettings({ reduceMotion })}
+            />
+          </SettingRow>
+          <SettingRow label={t("settings.windowMotion")} description={t("settings.windowMotionHint")}>
+            <ViewSwitcher<WindowMotionPreference>
+              label={t("settings.windowMotion")}
+              value={settings.windowMotion}
+              options={[
+                { value: "instant", label: t("settings.windowMotionInstant") },
+                { value: "fast", label: t("settings.windowMotionFast") },
+                { value: "smooth", label: t("settings.windowMotionSmooth") },
+              ]}
+              onValueChange={(windowMotion) => setAppearanceSettings({ windowMotion })}
             />
           </SettingRow>
           <SettingRow label={t("settings.diffMarkers")} description={t("settings.diffMarkersHint")}>

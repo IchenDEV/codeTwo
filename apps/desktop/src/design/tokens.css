@@ -225,6 +225,9 @@
   --ds-motion-layer: var(--ds-foundation-motion-160);
   --ds-motion-dialog: var(--ds-foundation-motion-220);
   --ds-motion-page: var(--ds-foundation-motion-280);
+  /* Pane geometry: how tiling panes glide between rectangles. The Window motion preference
+     rescales this single role; Smooth borrows the page duration and Fast the layer duration. */
+  --ds-motion-pane: var(--ds-foundation-motion-280);
   --ds-ease-enter: var(--ds-foundation-ease-enter);
   --ds-ease-exit: var(--ds-foundation-ease-exit);
 
@@ -391,11 +394,20 @@
   );
 }
 
+:root[data-window-motion="fast"] {
+  --ds-motion-pane: var(--ds-foundation-motion-160);
+}
+
+:root[data-window-motion="instant"] {
+  --ds-motion-pane: 0ms;
+}
+
 :root[data-reduce-motion="on"] {
   --ds-motion-feedback: 0ms;
   --ds-motion-layer: 0ms;
   --ds-motion-dialog: 0ms;
   --ds-motion-page: 0ms;
+  --ds-motion-pane: 0ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -404,6 +416,7 @@
     --ds-motion-layer: 0ms;
     --ds-motion-dialog: 0ms;
     --ds-motion-page: 0ms;
+    --ds-motion-pane: 0ms;
   }
 }
 

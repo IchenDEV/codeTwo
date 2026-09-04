@@ -402,9 +402,17 @@ focus, invalid, disabled, read-only, and loading all preserve the 36px field con
 | layer | 160ms | menu, popover, tooltip |
 | dialog | 220ms | dialog, dock, tree |
 | page | 280ms | full-page transition |
+| pane | 0/160/280ms | tiling pane geometry, scaled by the Window motion preference |
 
 Entrances use `cubic-bezier(0.16, 1, 0.3, 1)` and exits use `ease-in`. Do not add spring, bounce,
-hover scaling, or a one-off duration. Reduced Motion collapses all four semantic durations.
+hover scaling, or a one-off duration. Reduced Motion collapses all five semantic durations.
+
+The pane role is the one place a transition may move layout: when the tiling split tree changes,
+panes and dividers glide between their old and new rectangles. The Appearance → Window motion
+preference owns its duration — Instant is 0ms, Fast borrows the layer duration, Smooth borrows the
+page duration — so the choice never introduces a new timing. Pointer drags keep 1:1 pointer
+tracking with the transition suspended; only discrete layout changes (split, close, keyboard
+resize) glide.
 
 ## Window behavior
 
