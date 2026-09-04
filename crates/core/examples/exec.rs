@@ -80,7 +80,20 @@ fn parse_provider(s: &str) -> ProviderId {
         "pi" => ProviderId::Pi,
         "kimi" => ProviderId::Kimi,
         "zcode" => ProviderId::ZCode,
+        "amp" => ProviderId::Amp,
+        "droid" => ProviderId::Droid,
         other => ProviderId::Custom(other.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn advertised_amp_and_droid_providers_use_builtin_identities() {
+        assert_eq!(parse_provider("amp"), ProviderId::Amp);
+        assert_eq!(parse_provider("droid"), ProviderId::Droid);
     }
 }
 

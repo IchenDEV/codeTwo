@@ -1,12 +1,13 @@
-## Canonical change Artifact
+## Canonical change bundle
 
-Link the canonical `docs/sdlc/changes/<date>-<slug>/change.md`:
+Link the canonical `docs/sdlc/changes/<date>-<slug>/` bundle:
 
-- Change: <!-- docs/sdlc/changes/... -->
-- Schema: <!-- 2 -->
-- Lifecycle status: <!-- executing / failed / verified / ready-to-release / released / closed -->
-- Intent/Spec approval: <!-- named approver plus user request, issue, ADR, or design source -->
-- Risk and scope: <!-- low / medium / high / critical; exact files or directory prefixes -->
+- Bundle: <!-- docs/sdlc/changes/... -->
+- Schema: <!-- 3 -->
+- Intent approval: <!-- named approver + source -->
+- Spec approval: <!-- named approver -->
+- Plan approval: <!-- named approver + scope summary -->
+- Verification status: <!-- draft / passed / failed -->
 
 ## Outcome
 
@@ -14,8 +15,8 @@ Describe the observable product or repository result, not the implementation dia
 
 ## Verification
 
-- [ ] Every `AC-N` acceptance criterion is mapped to one actual command or linked evidence item.
-- [ ] The Artifact records `Verdict:` and `Residual risk:` consistently with its status.
+- [ ] Every `AC-N` acceptance criterion is mapped to one actual command or linked evidence item in `verification.md`.
+- [ ] `verification.md` records `Verdict:` and residual risk consistently with its status.
 - [ ] Verification mode, verifier, and date match the risk lane; high/critical verification is independent.
 - [ ] Relevant Rust, desktop, documentation, packaging, or runtime checks passed.
 - [ ] User-visible UI changes include real light, dark, and narrow evidence where applicable.

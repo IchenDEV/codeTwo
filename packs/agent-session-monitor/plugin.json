@@ -1,0 +1,54 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agent-session-monitor",
+  "version": "0.1.0",
+  "description": "Contributes the most relevant C2 agent sessions as compact host actions.",
+  "author": { "name": "C2" },
+  "license": "MIT",
+  "keywords": ["agent", "sessions", "actions"],
+  "extensions": {
+    "dev.codetwo": {
+      "standardVersion": "1.2.0",
+      "commands": [
+        {
+          "id": "agent-monitor.actions",
+          "title": "Agent session monitor",
+          "description": "Render or invoke compact agent-session actions.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["context"],
+            "properties": {
+              "input": { "type": ["object", "null"] },
+              "context": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["operation"],
+                "properties": {
+                  "operation": { "enum": ["render", "invoke"] },
+                  "input": { "type": ["object", "null"] }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "runtime": {
+        "protocol": "1.0.0",
+        "command": "node",
+        "args": ["plugin.js"],
+        "inject": ["desktop-host-actions"]
+      },
+      "ui": [
+        {
+          "id": "agent-sessions",
+          "slot": "host.actions",
+          "label": "Agent sessions",
+          "description": "Show the most relevant agent sessions as compact host actions.",
+          "command": "agent-monitor.actions",
+          "order": 0
+        }
+      ]
+    }
+  }
+}

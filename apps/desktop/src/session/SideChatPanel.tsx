@@ -25,6 +25,7 @@ import {
   type CoreEvent,
   type DocBlock,
   type ModelChoice,
+  type MemoryAccess,
   type PermissionMode,
   type ProviderInfo,
   type Sandbox,
@@ -47,6 +48,10 @@ export interface TransientChatSeed {
 }
 
 export type SideChatSeed = TransientChatSeed;
+
+export function transientMemoryPolicy(provider: string): [MemoryAccess, MemoryAccess] {
+  return provider === "codex" ? ["allow", "deny"] : ["inherit", "deny"];
+}
 
 interface TransientChatTab {
   localId: string;
@@ -457,7 +462,8 @@ function TransientChatPanel({
         void (async () => {
           // Transient chat can use project memory for context, but app-lifetime conversations never
           // write durable memories of their own.
-          await setSessionMemoryPolicy(event.session, "inherit", "deny");
+          const [memoryRead, memoryWrite] = transientMemoryPolicy(tab.provider);
+          await setSessionMemoryPolicy(event.session, memoryRead, memoryWrite);
           if (!tabsRef.current.some((candidate) => candidate.localId === pending.tabId)) {
             await closeTransientSession(event.session);
             return;
@@ -837,7 +843,7 @@ function TransientChatPanel({
           ) : null}
           <div
             data-transient-chat-composer=""
-            className="rounded-module bg-card shadow-control focus-within:focus-ring-inset"
+            className="rounded-module bg-card shadow-control transition-colors duration-feedback ease-enter focus-within:bg-fill-hover"
           >
             <input
               ref={imageInputRef}

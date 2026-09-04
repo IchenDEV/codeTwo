@@ -92,7 +92,25 @@
       "collapseAt": 704,
       "listContentLine": 32,
       "listControlsOuterInset": 16,
-      "listContentBehavior": "Split-list titles, first selection labels, and search icons share the pageSection content line; collapsed-sidebar recovery actions remain shell chrome."
+      "listContentBehavior": "Split-list titles, first selection labels, and search icons share the pageSection content line; collapsed-sidebar recovery actions remain shell chrome.",
+      "pullRequests": {
+        "inspectorMinWidth": 192,
+        "inspectorPreferredWidth": "23cqw",
+        "inspectorMaxWidth": 256,
+        "inspectorCollapseAt": 960,
+        "inspectorInset": 12,
+        "inspectorRadius": "modal",
+        "inspectorElevation": "raised",
+        "behavior": "Show list, primary PR detail, and a reserved floating Inspector at standard widths; collapse the Inspector before the existing list/detail compact transition."
+      }
+    },
+    "uiLab": {
+      "navigationWidth": 196,
+      "catalogMaxWidth": 1160,
+      "scenarioToolbarHeight": 48,
+      "cardMinWidth": 280,
+      "compactAt": 760,
+      "behavior": "Keep a persistent catalog rail at standard widths, move it above content at compact widths, and let each production scenario retain its own container-query breakpoints."
     }
   },
   "verticalRhythm": {

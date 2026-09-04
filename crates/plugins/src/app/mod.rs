@@ -308,7 +308,7 @@ impl CoreApp {
     ///
     /// This includes internal commands and is deliberately broader than the public Extension API.
     pub async fn call(&self, name: &str, args: Value) -> Result<Value, KernelError> {
-        self.app.ctx().call(name, args).await
+        self.plugin_manager.call(name, args).await
     }
 
     /// Invoke through one project's command realm, falling back to global commands when the
@@ -319,20 +319,8 @@ impl CoreApp {
         name: &str,
         args: Value,
     ) -> Result<Value, KernelError> {
-        let (project_path, _activity) = self
-            .plugin_manager
-            .lease_project_command(project_path)
-            .map_err(|error| KernelError::Config {
-                name: "plugin-manager".into(),
-                message: error.to_string(),
-            })?;
-        // Child-loader reconciliation is synchronous, while plugin application runs on the
-        // shared kernel driver. Settle it before dispatch so the first project call is real.
-        self.app.flush().await;
-        self.app
-            .ctx()
-            .with_command_realm(CommandRealm::project(project_path))
-            .call(name, args)
+        self.plugin_manager
+            .call_in_project(project_path, name, args)
             .await
     }
 

@@ -43,6 +43,10 @@ macro_rules! string_id {
 string_id!(TaskId);
 string_id!(WorkItemId);
 string_id!(AgentId);
+string_id!(WorkspaceId);
+string_id!(MemberId);
+string_id!(TaskCommentId);
+string_id!(SuggestionId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -496,4 +500,146 @@ pub struct RunSnapshot {
     pub budget: TaskBudget,
     pub budget_state: TaskBudgetState,
     pub loop_guard: LoopGuardState,
+}
+
+/// The intentionally small first-version role model for one trusted C2 Workspace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceRole {
+    Admin,
+    Member,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Workspace {
+    pub id: WorkspaceId,
+    pub name: String,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Member {
+    pub id: MemberId,
+    pub workspace_id: WorkspaceId,
+    pub display_name: String,
+    pub role: WorkspaceRole,
+    pub active: bool,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskComment {
+    pub id: TaskCommentId,
+    pub author_id: MemberId,
+    pub body: String,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SuggestionStatus {
+    Pending,
+    Approved,
+    Rejected,
+    ExecutionFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskSuggestion {
+    pub id: SuggestionId,
+    pub author_id: MemberId,
+    pub body: String,
+    pub status: SuggestionStatus,
+    pub decided_by: Option<MemberId>,
+    pub decided_at_ms: Option<i64>,
+    pub execution_session_id: Option<SessionId>,
+    pub execution_error: Option<String>,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TaskActivityKind {
+    TaskCreated,
+    CommentAdded {
+        comment_id: TaskCommentId,
+    },
+    SuggestionCreated {
+        suggestion_id: SuggestionId,
+    },
+    SuggestionApproved {
+        suggestion_id: SuggestionId,
+    },
+    SuggestionExecutionStarted {
+        suggestion_id: SuggestionId,
+        session_id: SessionId,
+    },
+    SuggestionExecutionFailed {
+        suggestion_id: SuggestionId,
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskActivityEvent {
+    pub sequence: u64,
+    pub actor_id: MemberId,
+    pub kind: TaskActivityKind,
+    pub created_at_ms: i64,
+}
+
+/// A member-specific projection derived from durable Task state, never a second Task status.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AttentionItem {
+    PendingSuggestion {
+        task_id: TaskId,
+        task_revision: u64,
+        suggestion_id: SuggestionId,
+        author_id: MemberId,
+        created_at_ms: i64,
+    },
+}
+
+/// Shared collaboration state. Runtime execution remains authoritative in [`RunSnapshot`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskCollaborationSnapshot {
+    pub task_id: TaskId,
+    pub revision: u64,
+    pub owner_id: MemberId,
+    pub collaborator_ids: Vec<MemberId>,
+    pub cwd: String,
+    pub comments: Vec<TaskComment>,
+    pub suggestions: Vec<TaskSuggestion>,
+    pub activity: Vec<TaskActivityEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedTaskSnapshot {
+    pub runtime: RunSnapshot,
+    pub collaboration: TaskCollaborationSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SuggestionApprovalReceipt {
+    pub task_id: TaskId,
+    pub suggestion_id: SuggestionId,
+    pub revision: u64,
+    pub execution_claimed: bool,
+}
+
+/// Internal command result: callers return the durable receipt in both cases, but only the first
+/// acceptance may perform the claimed side effect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdempotentCommand<T> {
+    pub receipt: T,
+    pub replayed: bool,
 }

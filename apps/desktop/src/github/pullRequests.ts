@@ -3,6 +3,17 @@ import type { GitHubPullRequestReference } from "../taskboard/taskBoard";
 
 export type PullRequestView = "all" | "reviewing" | "authored";
 export type PullRequestReadiness = "all" | "draft" | "ready";
+export type PullRequestMergeReadiness =
+  | "closed"
+  | "draft"
+  | "conflicting"
+  | "checks_failed"
+  | "checks_pending"
+  | "changes_requested"
+  | "review_required"
+  | "ready"
+  | "pending";
+export type PullRequestCheckResult = "passed" | "failed" | "pending";
 
 export interface PullRequestGroup {
   id: "review-requested" | "reviewed" | "authored";
@@ -83,13 +94,45 @@ export function pullRequestCheckState(detail: GitHubPullRequestDetail):
   | "failed"
   | "passed" {
   if (detail.checks.length === 0) return "none";
-  if (detail.checks.some((check) =>
-    ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].includes(
-      check.conclusion.toLocaleUpperCase() || check.status.toLocaleUpperCase(),
-    ))) return "failed";
-  if (detail.checks.some((check) =>
-    !check.conclusion || ["QUEUED", "IN_PROGRESS", "PENDING", "EXPECTED"].includes(
-      check.status.toLocaleUpperCase(),
-    ))) return "pending";
+  if (detail.checks.some((check) => pullRequestCheckResult(check) === "failed")) return "failed";
+  if (detail.checks.some((check) => pullRequestCheckResult(check) === "pending")) return "pending";
   return "passed";
+}
+
+export function pullRequestCheckResult(
+  check: GitHubPullRequestDetail["checks"][number],
+): PullRequestCheckResult {
+  const conclusion = check.conclusion.toLocaleUpperCase();
+  if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion)) return "passed";
+  if ([
+    "FAILURE",
+    "ERROR",
+    "CANCELLED",
+    "TIMED_OUT",
+    "ACTION_REQUIRED",
+    "STALE",
+    "STARTUP_FAILURE",
+  ].includes(conclusion)) return "failed";
+  return "pending";
+}
+
+export function pullRequestMergeReadiness(
+  detail: GitHubPullRequestDetail,
+): PullRequestMergeReadiness {
+  if (detail.state.toLocaleUpperCase() !== "OPEN") return "closed";
+  if (detail.isDraft) return "draft";
+  if (
+    detail.mergeable.toLocaleUpperCase() === "CONFLICTING"
+    || detail.mergeStateStatus.toLocaleUpperCase() === "DIRTY"
+  ) return "conflicting";
+
+  const checks = pullRequestCheckState(detail);
+  if (checks === "failed") return "checks_failed";
+
+  const review = detail.reviewDecision.toLocaleUpperCase();
+  if (review === "CHANGES_REQUESTED") return "changes_requested";
+  if (checks === "pending") return "checks_pending";
+  if (review === "REVIEW_REQUIRED") return "review_required";
+  if (detail.mergeable.toLocaleUpperCase() === "MERGEABLE") return "ready";
+  return "pending";
 }

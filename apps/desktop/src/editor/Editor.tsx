@@ -121,9 +121,8 @@ export interface CanvasInsertOptions {
 
 // The `/` "Skills" group, built from the live library. Skills auto-discovered from a harness's
 // skill directory (~/.claude/skills, .codex/skills, …) carry a `source` and get their own group
-// per product. Picking one inserts a real inline skill node either way. Rows all share the
-// neutral ✦ glyph — a column of assorted emoji read as noise, and the group label already says
-// what a row is; the skill's own icon still shows on the inserted chip.
+// per product. Picking one inserts a real inline skill node either way. Rows use shared Phosphor
+// concepts; an authored extension icon remains attached to the inserted chip as extension content.
 function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSuggestionItem[] {
   return skills.map((s) => {
     const kind = s.kind === "subagent" ? "Subagent" : s.kind === "mcp" ? "MCP" : "Skill";
@@ -144,7 +143,7 @@ function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSug
           return;
         }
         editor.insertInlineContent([
-          { type: "skill", props: { skillId: s.id, name: s.name, icon: s.icon ?? "✦" } },
+          { type: "skill", props: { skillId: s.id, name: s.name, icon: s.icon ?? "" } },
           " ",
         ]);
       },
@@ -402,7 +401,7 @@ export function DocEditor({
               props: {
                 skillId: block.skill_id,
                 name: skill?.name ?? block.skill_id,
-                icon: skill?.icon ?? "✦",
+                icon: skill?.icon ?? "",
               },
             }, " "],
           }];
@@ -655,7 +654,7 @@ export function DocEditor({
         return;
       }
       editor.insertInlineContent([
-        { type: "skill", props: { skillId: skill.id, name: skill.name, icon: skill.icon ?? "✦" } },
+        { type: "skill", props: { skillId: skill.id, name: skill.name, icon: skill.icon ?? "" } },
         " ",
       ]);
       onEmptyChange(false);

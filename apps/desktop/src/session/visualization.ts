@@ -148,7 +148,6 @@ svg text{font-family:inherit}
 .tooltip{position:absolute;z-index:10;pointer-events:none;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:var(--visualization-radius-control);padding:6px 8px}
 .viz-tile{min-height:44px}
 .viz-tile[aria-pressed=true]{box-shadow:0 0 0 2px var(--ring)}
-.viz-icon{display:inline-block;width:16px;height:16px;flex:none}
 @media(max-width:420px){.viz-controls{align-items:stretch}.viz-controls>.form-label{width:100%}}
 `;
 

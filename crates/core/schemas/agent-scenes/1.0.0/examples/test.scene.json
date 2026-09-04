@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "title": "Test",
   "description": "Exercise the change against its acceptance criteria and produce a pass/fail test report.",
-  "icon": "🧪",
   "localizations": {
     "zh-CN": { "title": "测试", "description": "对照验收标准执行测试，产出通过/失败矩阵报告。" }
   },

@@ -242,8 +242,8 @@ rebuilt even when its stable `bundle:<id>` name did not change.
 The same installed record may contribute safe UI actions, external-system connectors, and stdio
 language servers. UI actions
 render only in the C2-owned `rail.features`, `session.header`, `transcript.before`,
-`composer.above`, or `composer.toolbar` slots and route back to a command owned by the bundle's
-active process runtime; bundles never inject React or HTML into the renderer. LSP
+`composer.above`, `composer.toolbar`, or semantic `host.actions` slots and route back to a command
+owned by the bundle's active process runtime; bundles never inject React or HTML into the renderer. LSP
 descriptors add language routing to the existing editor client, while the desktop host owns process
 startup, standard LSP framing, project cwd, conflict rejection, and teardown when bundle policy or
 trust changes.
@@ -253,6 +253,12 @@ route a host-rendered integration through one bundle-owned runtime command. The 
 the descriptor from the active catalog; it does not recognize a bundle name or call
 provider-specific commands directly. Provider authentication and data access remain inside the
 bundle adapter.
+
+The `host.actions` UI slot reuses that existing descriptor, policy, and invocation route. A generic
+desktop controller validates its bounded action document and passes it to a two-method adapter; the
+macOS implementation maps it to public `NSTouchBar` controls without recognizing the bundle. The
+agent-session example reads `sessions.summary` and calls `desktop.reveal_session`, while Core remains
+unaware of windows and AppKit.
 
 That unification currently applies to the bundle's **process runtime**. Skills and other data-only
 extension components shipped in the same bundle remain user-wide contributions. The unified page
@@ -349,8 +355,8 @@ registry.register_arc(Box::new(|| my_engine));  // or replace a built-in by name
 CoreApp::boot_with(config, registry).await?;
 ```
 
-A full desktop adapter adds only host-owned automation, event, language-server, browser, voice, and
-remote modules; product commands remain behind the same command seam as the TUI and server. C2's
+A full desktop adapter adds only host-owned automation, event, language-server, browser, voice,
+native-action, and remote modules; product commands remain behind the same command seam as the TUI and server. C2's
 Electrobun adapter packages that Rust graph as `codetwo-desktop-host`; Bun owns only shell-native
 window, dialog, update, and process-lifecycle operations.
 

@@ -6,11 +6,13 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use codetwo_core::engine::DesktopMcpConfig;
 use codetwo_core::event::Event;
+use codetwo_core::memory::MemoryCapability;
 use codetwo_core::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
-use codetwo_core::session::Session;
+use codetwo_core::session::{MemoryAccess, Session};
 use codetwo_core::skill::{DocBlock, McpServer, McpTransport, SkillLibrary};
-use codetwo_core::{Engine, Op, Store};
+use codetwo_core::{CanvasFeatureGate, Engine, Op, Store};
 
 const HOST_TOOL_AGENT: &str = r#"
 import json, sys
@@ -36,7 +38,7 @@ for line in sys.stdin:
         send({"jsonrpc":"2.0","id":request_id,"result":{"stopReason":"end_turn"}})
 "#;
 
-const CODEX_CONTEXT_AGENT: &str = r#"
+const CODEX_CONTEXT_AGENT: &str = r###"
 import json, os, sys
 config = json.loads(os.environ.get("CODEX_CONFIG", "{}"))
 def send(message): print(json.dumps(message), flush=True)
@@ -57,12 +59,19 @@ for line in sys.stdin:
         text = ";".join([
             "config_host=" + str("HOST_TOOL_MARKER" in instructions).lower(),
             "config_sites=" + str("[C2 Sites routing and safety]" in instructions).lower(),
+            "config_rules=" + str("## Project rules" in instructions).lower(),
+            "config_scene=" + str("[C2 Auto Scene]" in instructions).lower(),
             "prompt_host=" + str("HOST_TOOL_MARKER" in prompt).lower(),
             "prompt_sites=" + str("[C2 Sites routing and safety]" in prompt).lower(),
+            "prompt_rules=" + str("## Project rules" in prompt).lower(),
+            "prompt_native_rule=" + str("CODEX_NATIVE_RULE_MARKER" in prompt).lower(),
+            "prompt_portable_rule=" + str("C2_PORTABLE_RULE_MARKER" in prompt).lower(),
+            "prompt_scene=" + str("[C2 Auto Scene]" in prompt).lower(),
+            "prompt_memory=" + str("MEMORY_MARKER" in prompt).lower(),
         ])
         send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":message["params"]["sessionId"],"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":text}}}})
         send({"jsonrpc":"2.0","id":request_id,"result":{"stopReason":"end_turn"}})
-"#;
+"###;
 
 const CODEX_BROWSER_GATE_AGENT: &str = r#"
 import json, os, sys
@@ -384,12 +393,88 @@ async fn codex_stable_context_uses_developer_config_instead_of_the_user_prompt()
             _ => {}
         }
     };
-    let expected = ["config_host=true;config_sites=true;prompt_host=false;prompt_sites=false"];
+    let expected = ["config_host=true;config_sites=true;config_rules=false;config_scene=false;prompt_host=false;prompt_sites=false;prompt_rules=false;prompt_native_rule=false;prompt_portable_rule=false;prompt_scene=false;prompt_memory=false"];
     assert_eq!(
         run_turn(&engine, &mut events, session.clone()).await,
         expected
     );
     assert_eq!(run_turn(&engine, &mut events, session).await, expected);
+}
+
+#[tokio::test]
+async fn codex_host_context_does_not_appear_as_user_prompt_text() {
+    let project = std::env::temp_dir().join(format!(
+        "codetwo-codex-visible-context-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(project.join("AGENTS.md"), "CODEX_NATIVE_RULE_MARKER").unwrap();
+    std::fs::write(project.join("CLAUDE.md"), "C2_PORTABLE_RULE_MARKER").unwrap();
+    let project = std::fs::canonicalize(project)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    store
+        .add_memory(&project, "preference", "MEMORY_MARKER", true)
+        .unwrap();
+    let memory = MemoryCapability::new(store.clone());
+    let (engine, mut events) = Engine::with_store_canvas_and_desktop_mcp(
+        vec![mock_codex_provider()],
+        SkillLibrary::default(),
+        store.clone(),
+        Some(memory),
+        CanvasFeatureGate::default(),
+        DesktopMcpConfig {
+            command: "/codetwo/core".into(),
+            socket_path: "/tmp/codetwo-visible-context.sock".into(),
+            master_key: "test-master-key".into(),
+            browser_enabled: false,
+        },
+        Arc::new(RwLock::new(codex_toolsets())),
+    );
+    engine
+        .submit(Op::NewSession {
+            provider: ProviderId::Codex,
+            cwd: project.clone(),
+            use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: Some("codex-visible-context-session".into()),
+            model: None,
+            initial_policy: None,
+        })
+        .await
+        .unwrap();
+
+    let session = loop {
+        match events.recv().await.expect("session event") {
+            Event::SessionCreated { session, .. } => break session,
+            Event::Error { message, .. } => panic!("unexpected session error: {message}"),
+            _ => {}
+        }
+    };
+    store.set_session_auto_scene(&session, true).unwrap();
+    assert!(store
+        .memory_context(&project, &session, "go")
+        .unwrap()
+        .contains("MEMORY_MARKER"));
+
+    assert_eq!(
+        run_turn(&engine, &mut events, session.clone()).await,
+        ["config_host=true;config_sites=true;config_rules=false;config_scene=false;prompt_host=false;prompt_sites=false;prompt_rules=true;prompt_native_rule=false;prompt_portable_rule=true;prompt_scene=false;prompt_memory=false"]
+    );
+    assert!(store.list_memory_receipts(&session).unwrap().is_empty());
+    store
+        .set_session_memory_policy(&session, MemoryAccess::Allow, MemoryAccess::Inherit)
+        .unwrap();
+    assert_eq!(
+        run_turn(&engine, &mut events, session.clone()).await,
+        ["config_host=true;config_sites=true;config_rules=false;config_scene=false;prompt_host=false;prompt_sites=false;prompt_rules=true;prompt_native_rule=false;prompt_portable_rule=true;prompt_scene=false;prompt_memory=true"]
+    );
+    assert_eq!(store.list_memory_receipts(&session).unwrap().len(), 1);
+
+    let _ = std::fs::remove_dir_all(project);
 }
 
 #[tokio::test]
@@ -449,7 +534,7 @@ async fn revived_codex_session_restores_hidden_static_context() {
 
     assert_eq!(
         run_turn(&engine, &mut events, id).await,
-        ["config_host=true;config_sites=true;prompt_host=false;prompt_sites=false"]
+        ["config_host=true;config_sites=true;config_rules=false;config_scene=false;prompt_host=false;prompt_sites=false;prompt_rules=false;prompt_native_rule=false;prompt_portable_rule=false;prompt_scene=false;prompt_memory=false"]
     );
 }
 

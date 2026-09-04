@@ -3,6 +3,7 @@ import {
   Activity,
   FolderTree,
   GitBranch,
+  GitPullRequest,
   Globe,
   MessageSquare,
   TerminalIcon,
@@ -15,7 +16,14 @@ import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
-export type DockSurface = "trajectory" | "terminal" | "browser" | "side-chat" | "files" | "git";
+export type DockSurface =
+  | "trajectory"
+  | "terminal"
+  | "browser"
+  | "side-chat"
+  | "files"
+  | "git"
+  | "pull-request";
 /** "home" is the dock open with nothing chosen yet — the surface picker. */
 export type DockTab = DockSurface | "home";
 export type DockContentMap = Partial<Record<DockSurface, ReactNode>>;
@@ -53,6 +61,7 @@ const SURFACES: DockSurfaceDefinition[] = [
   { id: "side-chat", icon: MessageSquare, titleKey: "sideChat.title", descKey: "sideChat.temporary" },
   { id: "files", icon: FolderTree, titleKey: "dock.files", descKey: "dock.filesDesc" },
   { id: "git", icon: GitBranch, titleKey: "dock.git", descKey: "dock.gitDesc" },
+  { id: "pull-request", icon: GitPullRequest, titleKey: "dock.pullRequest", descKey: "dock.pullRequestDesc" },
 ];
 
 export const DOCK_MIN_WIDTH = 300;
@@ -80,7 +89,7 @@ export function Dock({
   onWidth,
   reservedWidth = 0,
   autoTab,
-  availableSurfaces = ["trajectory", "browser", "terminal", "files", "git"],
+  availableSurfaces = ["trajectory", "browser", "terminal", "files", "git", "pull-request"],
   content = {},
 }: DockProps) {
   const t = useT();

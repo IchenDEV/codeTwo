@@ -36,6 +36,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "../src/taskboard/taskBoard";
+import { continueTaskBoardPrompt } from "../src/taskboard/taskBoardContinuation";
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -50,6 +51,54 @@ class MemoryStorage implements StorageLike {
 }
 
 const BASE_TIME = Date.UTC(2026, 7, 13, 10);
+
+describe("TaskBoard prompt continuation", () => {
+  test("appends to an existing destination draft without clearing it", async () => {
+    const events: string[] = [];
+
+    const inserted = await continueTaskBoardPrompt({
+      target: { paneId: "pane-a", sessionId: "session-a" },
+      prompt: "Review this approach",
+      selectSession: async () => { events.push("selected"); },
+      isTargetActive: () => true,
+      openDocumentMode: () => events.push("document"),
+      insertMarkdown: async (markdown, mode) => { events.push(`${mode}:${markdown}`); },
+      focusEditor: () => events.push("focused"),
+    });
+
+    expect(inserted).toBe(true);
+    expect(events).toEqual([
+      "selected",
+      "document",
+      "append:Review this approach",
+      "focused",
+    ]);
+  });
+
+  test("drops a stale insertion when focus changes during Session loading", async () => {
+    let resolveSelection: (() => void) | null = null;
+    let active = true;
+    const events: string[] = [];
+    const selection = new Promise<void>((resolve) => {
+      resolveSelection = resolve;
+    });
+    const continuation = continueTaskBoardPrompt({
+      target: { paneId: "pane-a", sessionId: "session-a" },
+      prompt: "Do not redirect this",
+      selectSession: () => selection,
+      isTargetActive: () => active,
+      openDocumentMode: () => events.push("document"),
+      insertMarkdown: async () => { events.push("inserted"); },
+      focusEditor: () => events.push("focused"),
+    });
+
+    active = false;
+    resolveSelection?.();
+
+    expect(await continuation).toBe(false);
+    expect(events).toEqual([]);
+  });
+});
 
 function task(
   id: string,

@@ -1,5 +1,6 @@
 import { createReactBlockSpec } from "@blocknote/react";
 import { Badge } from "@/components/ui/badge";
+import { X } from "@/components/ui/icons";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import type { DocBlock } from "../bridge";
@@ -100,7 +101,7 @@ function IssueRefCard({
         className="shrink-0 text-muted-foreground"
         onClick={onRemove}
       >
-        ×
+        <X className="size-3.5" aria-hidden />
       </TooltipButton>
     </div>
   );

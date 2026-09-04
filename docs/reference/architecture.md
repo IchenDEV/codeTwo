@@ -19,7 +19,7 @@ desktop-shell adapter, not a second business runtime.
   server, and desktop host depend on that composition layer. The desktop packages
   `codetwo-desktop-host`, which boots the same graph plus desktop-owned
   automation, device-sync, event, language-server, and remote adapters. Bun owns windows, dialogs,
-  updates, and the narrow JSON-lines process transport.
+  updates, native action adapters, and the narrow JSON-lines process transport.
 
 ## Shape: an internal runtime-module graph
 
@@ -72,6 +72,11 @@ The forbidden edges are part of the design: `codetwo-core` must not depend on
 `codetwo-kernel` or `codetwo-plugins`, and `codetwo-kernel` remains product-agnostic. Shared
 composition belongs in `codetwo-plugins`; a host may additionally provide platform-specific
 Kernel modules, but those modules must not leak back into Core.
+
+Compact host actions follow that boundary without a second plugin model. Bundles reuse the existing
+`ui` contribution and `plugins.invoke_ui` path through the semantic `host.actions` slot. Electrobun
+validates the returned action document and passes it to a two-method adapter; the current macOS
+adapter maps it to AppKit. Neither `codetwo-core` nor the bundle imports or names `NSTouchBar`.
 
 The desktop follows the same rule inside the renderer. `container.ts` owns the shell-facing import
 surface: RPC transport, dialogs, native menus, updates, appshots, pets, and embedded webviews.
