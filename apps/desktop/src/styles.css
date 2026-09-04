@@ -11,6 +11,8 @@
      One curve and four durations, so that a hover and a page mount are recognisably the same app.
      Hand-written CSS layers still consume these aliases. Product TS/TSX uses the named Tailwind
      utilities exposed by the design-system bridge below (`duration-feedback`, `ease-enter`, etc.).
+     Tiling pane geometry uses the separate governed `--ds-motion-pane` role in tokens.css, rescaled
+     by the Window motion preference.
 
        fast    120ms  colour and opacity feedback: hover, press, grabbers. Never moves layout.
        layer   160ms  anchored surfaces: menus, popovers, tooltips.
@@ -670,6 +672,25 @@ html[data-appearance-pointer-cursors="false"]
     --pane-enter-y: 12px;
   }
 
+  /* Pane geometry: splitting, closing, or keyboard-resizing the tiling tree glides every affected
+     pane and divider to its new rectangle instead of snapping, the way a tiling window manager
+     moves windows. The Window motion preference rescales --ds-motion-pane; Reduced Motion and the
+     Instant choice both collapse it to zero. The focus outline eases in at feedback speed. */
+  .pane-geometry-motion {
+    transition:
+      left var(--ds-motion-pane) var(--ease-standard),
+      top var(--ds-motion-pane) var(--ease-standard),
+      width var(--ds-motion-pane) var(--ease-standard),
+      height var(--ds-motion-pane) var(--ease-standard),
+      outline-color var(--motion-fast) var(--ease-standard);
+  }
+  /* A pointer drag owns the geometry 1:1 — animating it would lag behind the cursor. The resize
+     handle only stamps these body classes for pointer drags, so keyboard steps still glide. */
+  body.resizing-h .pane-geometry-motion,
+  body.resizing-v .pane-geometry-motion {
+    transition: none;
+  }
+
   /* ---- floating layers ---------------------------------------------------------------------
      The shadcn components ship `animate-in`/`fade-in-0`-style utilities from a Tailwind plugin
      this project doesn't carry, so every overlay used to pop into place fully formed. These are
@@ -1238,9 +1259,9 @@ html[data-appearance-pointer-cursors="false"]
   }
 }
 
-/* Motion is decoration here — every animation above is an entrance or a hover, so honouring the
-   system preference costs nothing and skipping it would be the kind of thing that makes an app
-   feel careless rather than native. */
+/* Motion is decoration here — every animation above is an entrance, a hover, or a pane gliding to
+   a rectangle it would reach anyway — so honouring the system preference costs nothing and
+   skipping it would be the kind of thing that makes an app feel careless rather than native. */
 html[data-reduce-motion="on"] *,
 html[data-reduce-motion="on"] *::before,
 html[data-reduce-motion="on"] *::after {

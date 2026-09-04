@@ -95,6 +95,7 @@ export function PaneTiles({
             data-pane-entrance={entranceEdge}
             className={cn(
               "overflow-hidden",
+              "pane-geometry-motion",
               entranceEdge && "pane-tile-enter",
               entranceEdge && `pane-tile-enter-${entranceEdge}`,
               focused && multiPane && "outline outline-1 -outline-offset-1 outline-ring",
@@ -112,7 +113,7 @@ export function PaneTiles({
           key={divider.splitId}
           divider={divider}
           containerRef={containerRef}
-          className="group z-10"
+          className="group z-10 pane-geometry-motion"
           onResize={(ratio) => onResizeSplit(divider.splitId, ratio)}
         />
       ))}
