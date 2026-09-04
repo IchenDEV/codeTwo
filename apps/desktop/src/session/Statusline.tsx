@@ -5,8 +5,8 @@ import {
   describeContextWindow,
   formatExactContextTokens,
   formatContextWindowPercentage,
-  type ContextWindow,
 } from "./contextWindow";
+import type { ContextWindow } from "./contextWindow";
 import { ContextBreakdown } from "./ContextBreakdown";
 // Explicit extension: this dir holds both `statusline.ts` (logic) and `Statusline.tsx` (this
 // file), and bun's resolver matches the pair case-insensitively without it.
@@ -27,7 +27,9 @@ import { cn } from "@/lib/utils";
 
 export interface StatuslineUsage {
   costUsd: number | null;
-  /** Output tokens per minute, derived from successive usage polls. */
+  /**
+  Output tokens per minute, derived from successive usage polls.
+  */
   burnRate: number | null;
 }
 
@@ -62,7 +64,9 @@ export const Statusline = ({
       ? t("statusline.burn", { rate: String(Math.round(usage.burnRate)) })
       : null;
   if (!contextWindow || !display) {
-    if (!cost && !burn) return null;
+    if (!cost && !burn) {
+      return null;
+    }
     return (
       <span className="text-metadata text-muted-foreground flex shrink-0 items-center gap-1.5 px-0 py-1 @lg/composer:px-1.5">
         {cost ? <span>{cost}</span> : null}
@@ -71,9 +75,9 @@ export const Statusline = ({
     );
   }
   const exact = t("composer.contextWindowExact", {
-    used: formatExactContextTokens(contextWindow.usedTokens),
     capacity: formatExactContextTokens(contextWindow.contextWindow),
     percentage: formatContextWindowPercentage(contextWindow),
+    used: formatExactContextTokens(contextWindow.usedTokens),
   });
   const tone = contextTone(
     display.percentage !== null ? display.percentage / 100 : null
@@ -100,19 +104,25 @@ export const Statusline = ({
       <span className="@lg/composer:hidden" aria-hidden="true">
         {display.capacity}
       </span>
-      {usage && (cost || burn) ? <span
+      {usage && (cost || burn) ? (
+        <span
           aria-hidden="true"
           className="hidden items-center gap-1.5 @lg/composer:flex"
         >
-          {cost ? <>
+          {cost ? (
+            <>
               <span>·</span>
               <span>{cost}</span>
-            </> : null}
-          {burn ? <>
+            </>
+          ) : null}
+          {burn ? (
+            <>
               <span>·</span>
               <span>{burn}</span>
-            </> : null}
-        </span> : null}
+            </>
+          ) : null}
+        </span>
+      ) : null}
     </>
   );
 
@@ -183,4 +193,4 @@ export const Statusline = ({
       </PopoverContent>
     </Popover>
   );
-}
+};

@@ -1,4 +1,5 @@
-import { forwardRef, type ComponentProps } from "react";
+import { forwardRef } from "react";
+import type { ComponentProps } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -7,7 +8,9 @@ type ControlChipProps = ComponentProps<typeof Button> & {
   readonly tone?: "neutral" | "warning";
 };
 
-/** Compact text control for composer and toolbar status rows. */
+/**
+Compact text control for composer and toolbar status rows.
+*/
 const ControlChip = forwardRef<HTMLButtonElement, ControlChipProps>(
   ({ children, tone = "neutral", className, ...props }, ref) => (
     <Button

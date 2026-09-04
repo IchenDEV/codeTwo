@@ -8,10 +8,10 @@ export interface ScheduleDraft {
   customCron: string;
 }
 
-const DAILY = /^(\d{1,2}) (\d{1,2}) \* \* \*$/;
-const WEEKDAYS = /^(\d{1,2}) (\d{1,2}) \* \* 1-5$/;
-const WEEKLY = /^(\d{1,2}) (\d{1,2}) \* \* ([0-6])$/;
-const HOURLY = /^(\d{1,2}) \* \* \* \*$/;
+const DAILY = /^(\d{1,2}) (\d{1,2}) \* \* \*$/u;
+const WEEKDAYS = /^(\d{1,2}) (\d{1,2}) \* \* 1-5$/u;
+const WEEKLY = /^(\d{1,2}) (\d{1,2}) \* \* ([0-6])$/u;
+const HOURLY = /^(\d{1,2}) \* \* \* \*$/u;
 
 function timeParts(time: string): [number, number] {
   const [hour, minute] = time.split(":").map(Number);
@@ -37,54 +37,54 @@ export function cronFromSchedule(schedule: ScheduleDraft): string {
       return `${minute} ${hour} * * ${Math.min(6, Math.max(0, schedule.weekday))}`;
     }
     case "custom": {
-      return schedule.customCron.trim().replaceAll(/\s+/g, " ");
+      return schedule.customCron.trim().replaceAll(/\s+/gu, " ");
     }
   }
 }
 
 export function scheduleFromCron(cron: string): ScheduleDraft {
-  const normalized = cron.trim().replaceAll(/\s+/g, " ");
+  const normalized = cron.trim().replaceAll(/\s+/gu, " ");
   let match = HOURLY.exec(normalized);
   if (match) {
     return {
       cadence: "hourly",
+      customCron: normalized,
       time: `09:${match[1].padStart(2, "0")}`,
       weekday: 1,
-      customCron: normalized,
     };
   }
   match = WEEKDAYS.exec(normalized);
   if (match) {
     return {
       cadence: "weekdays",
+      customCron: normalized,
       time: `${match[2].padStart(2, "0")}:${match[1].padStart(2, "0")}`,
       weekday: 1,
-      customCron: normalized,
     };
   }
   match = WEEKLY.exec(normalized);
   if (match) {
     return {
       cadence: "weekly",
+      customCron: normalized,
       time: `${match[2].padStart(2, "0")}:${match[1].padStart(2, "0")}`,
       weekday: Number(match[3]),
-      customCron: normalized,
     };
   }
   match = DAILY.exec(normalized);
   if (match) {
     return {
       cadence: "daily",
+      customCron: normalized,
       time: `${match[2].padStart(2, "0")}:${match[1].padStart(2, "0")}`,
       weekday: 1,
-      customCron: normalized,
     };
   }
   return {
     cadence: "custom",
+    customCron: normalized,
     time: "09:00",
     weekday: 1,
-    customCron: normalized,
   };
 }
 

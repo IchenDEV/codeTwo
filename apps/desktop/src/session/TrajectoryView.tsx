@@ -1,11 +1,5 @@
-import {
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { ArrowDown, ChevronDown, ChevronRight } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
@@ -29,38 +23,40 @@ import {
   deriveTrajectory,
   filterTrajectory,
   formatTrajectoryDuration,
-  type TrajectoryKind,
-  type TrajectoryLane,
-  type TrajectoryRecord,
+} from "./trajectory";
+import type {
+  TrajectoryKind,
+  TrajectoryLane,
+  TrajectoryRecord,
 } from "./trajectory";
 
-const KIND_LABEL: Record<TrajectoryKind, StringKey> = {
-  user: "trajectory.kind.user",
+const kindLabel: Record<TrajectoryKind, StringKey> = {
   assistant: "trajectory.kind.assistant",
-  reasoning: "trajectory.kind.reasoning",
-  tool: "trajectory.kind.tool",
+  error: "trajectory.kind.error",
   memory: "trajectory.kind.memory",
   plan: "trajectory.kind.plan",
-  error: "trajectory.kind.error",
+  reasoning: "trajectory.kind.reasoning",
+  tool: "trajectory.kind.tool",
+  user: "trajectory.kind.user",
 };
 
-const LANE_LABEL: Record<TrajectoryLane, StringKey> = {
-  context: "trajectory.lane.context",
+const laneLabel: Record<TrajectoryLane, StringKey> = {
   assistant: "trajectory.lane.assistant",
+  context: "trajectory.lane.context",
   tool: "trajectory.lane.tool",
 };
 
-const KIND_TONE: Record<TrajectoryKind, string> = {
-  user: "bg-primary",
+const kindTone: Record<TrajectoryKind, string> = {
   assistant: "bg-foreground",
-  reasoning: "bg-muted-foreground",
-  tool: "bg-warning",
+  error: "bg-destructive",
   memory: "bg-success",
   plan: "bg-primary/65",
-  error: "bg-destructive",
+  reasoning: "bg-muted-foreground",
+  tool: "bg-warning",
+  user: "bg-primary",
 };
 
-const FILTER_KINDS: Array<TrajectoryKind | "all"> = [
+const filterKinds: Array<TrajectoryKind | "all"> = [
   "all",
   "user",
   "assistant",
@@ -72,24 +68,34 @@ const FILTER_KINDS: Array<TrajectoryKind | "all"> = [
 ];
 
 function safeDetail(value: unknown): { text: string; object: boolean } | null {
-  if (value === undefined || value === null || value === "") return null;
-  const object = typeof value !== "string";
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const isObject = typeof value !== "string";
   let text: string;
   try {
-    text = object ? JSON.stringify(value, null, 2) : String(value);
+    text = isObject ? JSON.stringify(value, null, 2) : String(value);
   } catch {
     text = String(value);
   }
   const limit = 30_000;
   return {
-    object,
+    object: isObject,
     text: text.length > limit ? `${text.slice(0, limit)}\n…` : text,
   };
 }
 
-const DetailBlock = ({ label, value }: { readonly label: string; readonly value: unknown }) => {
+const DetailBlock = ({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: unknown;
+}) => {
   const detail = safeDetail(value);
-  if (!detail) return null;
+  if (!detail) {
+    return null;
+  }
   return (
     <section className="flex flex-col gap-2">
       <h3 className="text-callout text-foreground font-medium">{label}</h3>
@@ -103,7 +109,7 @@ const DetailBlock = ({ label, value }: { readonly label: string; readonly value:
       </pre>
     </section>
   );
-}
+};
 
 interface PackedRecord {
   record: TrajectoryRecord;
@@ -121,7 +127,9 @@ function packLane(records: readonly TrajectoryRecord[]): {
     )
     .map((record) => {
       let track = ends.findIndex((end) => record.startAt >= end);
-      if (track < 0) track = ends.length;
+      if (track < 0) {
+        track = ends.length;
+      }
       ends[track] = Math.max(record.startAt, record.endAt);
       return { record, track };
     });
@@ -170,7 +178,7 @@ const Timeline = ({
           return (
             <div key={lane} className="contents">
               <span className="text-metadata text-muted-foreground self-center pe-3">
-                {t(LANE_LABEL[lane])}
+                {t(laneLabel[lane])}
               </span>
               <div className="trajectory-lane bg-background" style={{ height }}>
                 {packed.records.map(({ record, track }) => {
@@ -179,7 +187,7 @@ const Timeline = ({
                     ((Math.max(record.endAt, record.startAt) - record.startAt) /
                       span) *
                     100;
-                  const selected = record.id === selectedId;
+                  const isSelected = record.id === selectedId;
                   return (
                     <TooltipButton
                       key={record.id}
@@ -189,19 +197,19 @@ const Timeline = ({
                       focusStyle="inset"
                       className={cn(
                         "trajectory-bar",
-                        KIND_TONE[record.kind],
-                        selected
+                        kindTone[record.kind],
+                        isSelected
                           ? "ring-foreground/50 opacity-100 ring-2"
                           : "opacity-60 hover:opacity-90"
                       )}
                       style={{
+                        insetBlockStart: track * 12 + 4,
                         insetInlineStart: `${left}%`,
                         width: `${width}%`,
-                        insetBlockStart: track * 12 + 4,
                       }}
-                      label={`${t(KIND_LABEL[record.kind])}: ${record.summary}`}
+                      label={`${t(kindLabel[record.kind])}: ${record.summary}`}
                       tooltip={`${record.title} · ${formatTrajectoryDuration(record.endAt - record.startAt)}`}
-                      aria-pressed={selected}
+                      aria-pressed={isSelected}
                       onClick={() => onSelect(record)}
                     />
                   );
@@ -213,16 +221,14 @@ const Timeline = ({
       </div>
     </section>
   );
-}
+};
 
-const EventMarker = ({ kind }: { readonly kind: TrajectoryKind }) => {
-  return (
-    <span
-      className={cn("rounded-control size-2 shrink-0", KIND_TONE[kind])}
-      aria-hidden
-    />
-  );
-}
+const EventMarker = ({ kind }: { readonly kind: TrajectoryKind }) => (
+  <span
+    className={cn("rounded-control size-2 shrink-0", kindTone[kind])}
+    aria-hidden
+  />
+);
 
 const LedgerRow = ({
   record,
@@ -250,8 +256,8 @@ const LedgerRow = ({
       )}
       style={
         {
-          contentVisibility: "auto",
           containIntrinsicSize: "36px",
+          contentVisibility: "auto",
         } as CSSProperties
       }
       onClick={onSelect}
@@ -261,7 +267,7 @@ const LedgerRow = ({
       </span>
       <span className="text-callout flex min-w-0 items-center gap-2 px-3 py-2">
         <EventMarker kind={record.kind} />
-        <span className="truncate">{t(KIND_LABEL[record.kind])}</span>
+        <span className="truncate">{t(kindLabel[record.kind])}</span>
       </span>
       <span className="text-callout min-w-0 px-3 py-2">
         <span className="text-foreground block truncate">
@@ -275,7 +281,7 @@ const LedgerRow = ({
       </span>
     </Button>
   );
-}
+};
 
 const Inspector = ({
   record,
@@ -306,8 +312,8 @@ const Inspector = ({
           <p className="text-callout text-muted-foreground mt-1">
             {record.step > 0
               ? t("trajectory.turnStep", {
-                  turn: record.turn,
                   step: record.step,
+                  turn: record.turn,
                 })
               : t("trajectory.turn", { turn: record.turn })}
           </p>
@@ -344,7 +350,7 @@ const Inspector = ({
       </div>
     </aside>
   );
-}
+};
 
 export const TrajectoryView = ({
   turns,
@@ -372,18 +378,15 @@ export const TrajectoryView = ({
   const [now, setNow] = useState(() => Date.now());
   const ledgerRef = useRef<HTMLDivElement | null>(null);
 
-  const running = turns.some((turn) => turn.endedAt === undefined);
-  const records = useMemo(() => deriveTrajectory(turns, now), [now, turns]);
-  const visibleRecords = useMemo(
-    () => filterTrajectory(records, kind, deferredQuery),
-    [deferredQuery, kind, records]
-  );
+  const isRunning = turns.some((turn) => turn.endedAt === undefined);
+  const records = deriveTrajectory(turns, now);
+  const visibleRecords = filterTrajectory(records, kind, deferredQuery);
   const selected =
     visibleRecords.find((record) => record.id === selectedId) ??
     visibleRecords[visibleRecords.length - 1] ??
     null;
   const tailAt = records[records.length - 1]?.endAt ?? 0;
-  const turnsWithRecords = useMemo(() => {
+  const turnsWithRecords = (() => {
     const grouped = new Map<number, TrajectoryRecord[]>();
     for (const record of visibleRecords) {
       const group = grouped.get(record.turn) ?? [];
@@ -391,38 +394,42 @@ export const TrajectoryView = ({
       grouped.set(record.turn, group);
     }
     return [...grouped.entries()];
-  }, [visibleRecords]);
-  const clock = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale, {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        fractionalSecondDigits: 3,
-      }),
-    [locale]
-  );
+  })();
+  const clock = new Intl.DateTimeFormat(locale, {
+    fractionalSecondDigits: 3,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
   const formatClock = (timestamp: number) => clock.format(new Date(timestamp));
 
   useEffect(() => {
     setNow(Date.now());
-    if (!running) return;
+    if (!isRunning) {
+      return;
+    }
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
-  }, [running, turns]);
+  }, [isRunning, turns]);
 
   useEffect(() => {
-    if (!following) return;
+    if (!following) {
+      return;
+    }
     const frame = requestAnimationFrame(() => {
       const ledger = ledgerRef.current;
-      if (ledger) ledger.scrollTop = ledger.scrollHeight;
+      if (ledger) {
+        ledger.scrollTop = ledger.scrollHeight;
+      }
     });
     return () => cancelAnimationFrame(frame);
   }, [following, tailAt]);
 
   useEffect(() => {
     const ledger = ledgerRef.current;
-    if (!following || !ledger || typeof ResizeObserver === "undefined") return;
+    if (!following || !ledger || typeof ResizeObserver === "undefined") {
+      return;
+    }
     const observer = new ResizeObserver(() => {
       ledger.scrollTop = ledger.scrollHeight;
     });
@@ -433,14 +440,19 @@ export const TrajectoryView = ({
   const jumpToLatest = () => {
     setFollowing(true);
     const ledger = ledgerRef.current;
-    if (ledger) ledger.scrollTop = ledger.scrollHeight;
+    if (ledger) {
+      ledger.scrollTop = ledger.scrollHeight;
+    }
   };
 
   const toggleTurn = (turn: number) => {
     setCollapsedTurns((current) => {
       const next = new Set(current);
-      if (next.has(turn)) next.delete(turn);
-      else next.add(turn);
+      if (next.has(turn)) {
+        next.delete(turn);
+      } else {
+        next.add(turn);
+      }
       return next;
     });
   };
@@ -466,16 +478,16 @@ export const TrajectoryView = ({
         >
           <SelectTrigger size="sm" aria-label={t("trajectory.filter")}>
             <SelectValue>
-              {kind === "all" ? t("trajectory.filterAll") : t(KIND_LABEL[kind])}
+              {kind === "all" ? t("trajectory.filterAll") : t(kindLabel[kind])}
             </SelectValue>
           </SelectTrigger>
           <SelectContent position="popper" align="end">
             <SelectGroup>
-              {FILTER_KINDS.map((value) => (
+              {filterKinds.map((value) => (
                 <SelectItem key={value} value={value}>
                   {value === "all"
                     ? t("trajectory.filterAll")
-                    : t(KIND_LABEL[value])}
+                    : t(kindLabel[value])}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -548,7 +560,7 @@ export const TrajectoryView = ({
               </p>
             ) : (
               turnsWithRecords.map(([turn, group]) => {
-                const collapsed = collapsedTurns.has(turn);
+                const isCollapsed = collapsedTurns.has(turn);
                 return (
                   <section
                     key={turn}
@@ -560,10 +572,10 @@ export const TrajectoryView = ({
                       size="row"
                       focusStyle="inset"
                       className="bg-fill-quiet text-metadata text-muted-foreground w-full gap-2 px-3 py-2 font-medium"
-                      aria-expanded={!collapsed}
+                      aria-expanded={!isCollapsed}
                       onClick={() => toggleTurn(turn)}
                     >
-                      {collapsed ? (
+                      {isCollapsed ? (
                         <ChevronRight aria-hidden className="size-3" />
                       ) : (
                         <ChevronDown aria-hidden className="size-3" />
@@ -571,7 +583,7 @@ export const TrajectoryView = ({
                       <span>{t("trajectory.turn", { turn })}</span>
                       <span className="font-mono">{group.length}</span>
                     </Button>
-                    {collapsed
+                    {isCollapsed
                       ? null
                       : group.map((record) => (
                           <LedgerRow
@@ -603,4 +615,4 @@ export const TrajectoryView = ({
       </div>
     </section>
   );
-}
+};

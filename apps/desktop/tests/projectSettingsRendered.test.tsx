@@ -103,11 +103,12 @@ describe("Project settings", () => {
     ).toContain("width: 24px");
     const scheduling = [
       ...view.container.querySelectorAll('[data-slot="setting-toggle"]'),
-    ].find(
-      (row) =>
+    ].find((row) => {
+      return (
         row.querySelector('[data-slot="setting-row-label"]')?.textContent ===
         "Scene schedules"
-    );
+      );
+    });
     expect(scheduling?.querySelector('[data-slot="switch"]')).not.toBeNull();
 
     const name = view.container.querySelector('input[aria-label="Name"]');

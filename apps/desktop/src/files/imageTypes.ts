@@ -1,23 +1,23 @@
 /**
 Extension → MIME. An image the browser can't decode is better refused than shown broken.
 */
-const PREVIEW_IMAGE_TYPES: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
+const previewImageTypes: Record<string, string> = {
   avif: "image/avif",
   bmp: "image/bmp",
-  ico: "image/x-icon",
+  gif: "image/gif",
   icns: "image/x-icns",
+  ico: "image/x-icon",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
   svg: "image/svg+xml",
+  webp: "image/webp",
 };
 
 /**
 ACP image blocks currently use the formats accepted by the core's guarded image reader.
 */
-const AGENT_IMAGE_EXTENSIONS = new Set([
+const agentImageExtensions = new Set([
   "png",
   "jpg",
   "jpeg",
@@ -30,16 +30,10 @@ function extensionOf(path: string): string {
   return path.split(".").pop()?.toLowerCase() ?? "";
 }
 
-/**
-The MIME to preview `path` as, or null when it belongs in the text editor.
-*/
 export function imageTypeOf(path: string): string | null {
-  return PREVIEW_IMAGE_TYPES[extensionOf(path)] ?? null;
+  return previewImageTypes[extensionOf(path)] ?? null;
 }
 
-/**
-Whether an `@` workspace reference should be sent as pixels rather than decoded as text.
-*/
 export function isAgentImagePath(path: string): boolean {
-  return AGENT_IMAGE_EXTENSIONS.has(extensionOf(path));
+  return agentImageExtensions.has(extensionOf(path));
 }

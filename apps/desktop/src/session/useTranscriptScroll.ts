@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { isTranscriptNearEnd, scrollTopAfterPrepend } from "./transcriptScroll";
 import type {
   KeyboardEventHandler,
@@ -27,11 +27,6 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-/**
- * Keep a live transcript at the edge only while the reader is already following it.
- * User scrolling or interacting with the transcript pauses following; prepended history restores
- * the exact content position instead of treating the older page as new output.
- */
 export function useTranscriptScroll(
   sessionId: string | null,
   turns: readonly Turn[]
@@ -41,12 +36,12 @@ export function useTranscriptScroll(
   const pendingPrependReference = useRef<TranscriptScrollAnchor | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
-  const syncJumpVisibility = useCallback((element: HTMLElement | null) => {
+  const syncJumpVisibility = (element: HTMLElement | null) => {
     const isVisible = element ? !isTranscriptNearEnd(element) : false;
     setShowJumpToLatest((current) =>
       current === isVisible ? current : isVisible
     );
-  }, []);
+  };
 
   useLayoutEffect(() => {
     followingReference.current = true;
@@ -83,64 +78,57 @@ export function useTranscriptScroll(
     }
   }, [syncJumpVisibility, turns]);
 
-  const onScroll = useCallback<UIEventHandler<HTMLElement>>((event) => {
+  const onScroll: UIEventHandler<HTMLElement> = (event) => {
     const isFollowing = isTranscriptNearEnd(event.currentTarget);
     followingReference.current = isFollowing;
     setShowJumpToLatest((current) =>
       current === !isFollowing ? current : !isFollowing
     );
-  }, []);
+  };
 
-  const pauseFollowing = useCallback(() => {
+  const pauseFollowing = () => {
     followingReference.current = false;
-  }, []);
+  };
 
-  const onKeyDownCapture = useCallback<KeyboardEventHandler<HTMLElement>>(
-    (event) => {
-      if (["ArrowUp", "Home", "PageUp"].includes(event.key)) {
-        followingReference.current = false;
-      }
-    },
-    []
-  );
+  const onKeyDownCapture: KeyboardEventHandler<HTMLElement> = (event) => {
+    if (["ArrowUp", "Home", "PageUp"].includes(event.key)) {
+      followingReference.current = false;
+    }
+  };
 
-  const jumpToLatest = useCallback(() => {
+  const jumpToLatest = () => {
     followingReference.current = true;
     setShowJumpToLatest(false);
     viewportReference.current?.scrollTo({
       behavior: prefersReducedMotion() ? "auto" : "smooth",
       top: viewportReference.current.scrollHeight,
     });
-  }, []);
+  };
 
-  const capturePrependAnchor =
-    useCallback((): TranscriptScrollAnchor | null => {
-      const element = viewportReference.current;
-      if (!element) {
-        return null;
-      }
-      return {
-        element,
-        scrollHeight: element.scrollHeight,
-        scrollTop: element.scrollTop,
-      };
-    }, []);
+  const capturePrependAnchor = (): TranscriptScrollAnchor | null => {
+    const element = viewportReference.current;
+    if (!element) {
+      return null;
+    }
+    return {
+      element,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    };
+  };
 
-  const prepareForPrepend = useCallback(
-    (anchor: TranscriptScrollAnchor | null) => {
-      pendingPrependReference.current = anchor;
-    },
-    []
-  );
+  const prepareForPrepend = (anchor: TranscriptScrollAnchor | null) => {
+    pendingPrependReference.current = anchor;
+  };
 
   return {
-    viewportRef: viewportReference,
-    showJumpToLatest,
-    onScroll,
-    onPointerDownCapture: pauseFollowing,
-    onKeyDownCapture,
-    jumpToLatest,
     capturePrependAnchor,
+    jumpToLatest,
+    onKeyDownCapture,
+    onPointerDownCapture: pauseFollowing,
+    onScroll,
     prepareForPrepend,
+    showJumpToLatest,
+    viewportRef: viewportReference,
   };
 }

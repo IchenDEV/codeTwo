@@ -1,21 +1,17 @@
-import {
-  Children,
-  createContext,
-  isValidElement,
-  useContext,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { Children, createContext, isValidElement, useContext } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { openExternal, openNativePath, revealNativePath } from "../bridge";
 import {
-  nativeContextMenusAvailable,
+  isNativeContextMenusAvailable,
   showNativeContextMenu,
-  type NativeContextMenuItem,
 } from "../container";
-import { useT, type Translate } from "../i18n";
+import type { NativeContextMenuItem } from "../container";
+import { useT } from "../i18n";
+import type { Translate } from "../i18n";
 import { currentDesktopPlatform } from "../platform";
 import { ChartBlock, parseChartSpec } from "./ChartBlock";
 import { VisualizationFrame } from "./VisualizationFrame";
@@ -54,16 +50,18 @@ function fileTarget(
   hash = ""
 ): Extract<BuiltinLinkTarget, { kind: "file" }> | null {
   let path = decodePath(rawPath);
-  if (!path) return null;
+  if (!path) {
+    return null;
+  }
 
   let line: number | undefined;
   let column: number | undefined;
-  const fragment = /^#L(\d+)(?:C(\d+))?$/i.exec(hash);
+  const fragment = /^#L(\d+)(?:C(\d+))?$/iu.exec(hash);
   if (fragment) {
     line = Number(fragment[1]);
     column = fragment[2] ? Number(fragment[2]) : undefined;
   } else {
-    const suffix = /:(\d+)(?::(\d+))?$/.exec(path);
+    const suffix = /:(\d+)(?::(\d+))?$/u.exec(path);
     if (suffix) {
       line = Number(suffix[1]);
       column = suffix[2] ? Number(suffix[2]) : undefined;
@@ -71,22 +69,27 @@ function fileTarget(
     }
   }
 
-  if (!path || path.endsWith("/")) return null;
+  if (!path || path.endsWith("/")) {
+    return null;
+  }
   if (
     path
       .replaceAll("\\", "/")
       .split("/")
       .some((part) => part === "..")
-  )
+  ) {
     return null;
-  return { kind: "file", path, line, column };
+  }
+  return { column, kind: "file", line, path };
 }
 
 export function parseBuiltinLink(
   uri: string | undefined
 ): BuiltinLinkTarget | null {
   const raw = uri?.trim();
-  if (!raw || raw.startsWith("#")) return null;
+  if (!raw || raw.startsWith("#")) {
+    return null;
+  }
 
   try {
     const parsed = new URL(raw);
@@ -102,9 +105,10 @@ export function parseBuiltinLink(
         !["", "localhost"].includes(parsed.hostname) ||
         parsed.username.length > 0 ||
         parsed.password.length > 0
-      )
+      ) {
         return null;
-      const path = /^\/[A-Za-z]:\//.test(parsed.pathname)
+      }
+      const path = /^\/[A-Za-z]:\//u.test(parsed.pathname)
         ? parsed.pathname.slice(1)
         : parsed.pathname;
       return fileTarget(path, parsed.hash);
@@ -113,8 +117,9 @@ export function parseBuiltinLink(
     // Local paths are intentionally handled below; they are not valid absolute URLs.
   }
 
-  if (/^[A-Za-z][A-Za-z\d+.-]*:/.test(raw) && !/^[A-Za-z]:[\\/]/.test(raw))
+  if (/^[A-Za-z][A-Za-z\d+.-]*:/u.test(raw) && !/^[A-Za-z]:[\\/]/u.test(raw)) {
     return null;
+  }
   const hashIndex = raw.lastIndexOf("#");
   const hash = hashIndex >= 0 ? raw.slice(hashIndex) : "";
   const path = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
@@ -127,26 +132,29 @@ export function workspaceRelativeLinkPath(
 ): string | null {
   const normalizedPath = path.replaceAll("\\", "/");
   const normalizedRoot =
-    workspaceRoot?.replaceAll("\\", "/").replace(/\/+$/, "") ?? "";
-  const absolute =
-    normalizedPath.startsWith("/") || /^[A-Za-z]:\//.test(normalizedPath);
+    workspaceRoot?.replaceAll("\\", "/").replace(/\/+$/u, "") ?? "";
+  const isAbsolute =
+    normalizedPath.startsWith("/") || /^[A-Za-z]:\//u.test(normalizedPath);
 
-  if (!absolute) {
-    const relative = normalizedPath.replace(/^\.\//, "");
+  if (!isAbsolute) {
+    const relative = normalizedPath.replace(/^\.\//u, "");
     if (
       !relative ||
       relative.split("/").some((part) => part === ".." || part === ".")
-    )
+    ) {
       return null;
+    }
     return relative;
   }
-  if (!normalizedRoot) return null;
+  if (!normalizedRoot) {
+    return null;
+  }
 
-  const caseInsensitive = /^[A-Za-z]:\//.test(normalizedPath);
-  const comparablePath = caseInsensitive
+  const isCaseInsensitive = /^[A-Za-z]:\//u.test(normalizedPath);
+  const comparablePath = isCaseInsensitive
     ? normalizedPath.toLowerCase()
     : normalizedPath;
-  const comparableRoot = caseInsensitive
+  const comparableRoot = isCaseInsensitive
     ? normalizedRoot.toLowerCase()
     : normalizedRoot;
   const prefix = `${comparableRoot}/`;
@@ -156,9 +164,11 @@ export function workspaceRelativeLinkPath(
 }
 
 function nativeFilePath(path: string, workspaceRoot?: string | null): string {
-  if (path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)) return path;
+  if (path.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path)) {
+    return path;
+  }
   const relative = workspaceRelativeLinkPath(path, workspaceRoot);
-  const root = workspaceRoot?.replace(/[\\/]+$/, "");
+  const root = workspaceRoot?.replace(/[\\/]+$/u, "");
   return relative && root ? `${root}/${relative}` : path;
 }
 
@@ -172,23 +182,23 @@ export function builtinLinkMenuItems(
       ...(options.canOpenInApp
         ? [
             {
-              type: "item" as const,
-              label: t("link.openInBrowser"),
               action: "open-web-in-app",
+              label: t("link.openInBrowser"),
+              type: "item" as const,
             },
           ]
         : []),
       {
-        type: "item",
-        label: t("link.openInDefaultBrowser"),
         action: "open-web-external",
+        label: t("link.openInDefaultBrowser"),
+        type: "item",
       },
       { type: "separator" },
       {
-        type: "item",
-        label: t("link.copyLink"),
         action: "copy-web-link",
         enabled: options.canCopy,
+        label: t("link.copyLink"),
+        type: "item",
       },
     ];
   }
@@ -198,38 +208,41 @@ export function builtinLinkMenuItems(
     | "link.showInFileExplorer"
     | "link.showInFileManager";
   switch (currentDesktopPlatform()) {
-    case "macos":
+    case "macos": {
       revealKey = "link.revealInFinder";
       break;
-    case "windows":
+    }
+    case "windows": {
       revealKey = "link.showInFileExplorer";
       break;
-    default:
+    }
+    default: {
       revealKey = "link.showInFileManager";
+    }
   }
   return [
     ...(options.canOpenInApp
       ? [
           {
-            type: "item" as const,
-            label: t("link.openFile"),
             action: "open-file-in-app",
+            label: t("link.openFile"),
+            type: "item" as const,
           },
         ]
       : []),
     {
-      type: "item",
-      label: t("link.openInDefaultApp"),
       action: "open-file-default",
+      label: t("link.openInDefaultApp"),
+      type: "item",
     },
     { type: "separator" },
     {
-      type: "item",
-      label: t("link.copyPath"),
       action: "copy-file-path",
       enabled: options.canCopy,
+      label: t("link.copyPath"),
+      type: "item",
     },
-    { type: "item", label: t(revealKey), action: "reveal-file" },
+    { action: "reveal-file", label: t(revealKey), type: "item" },
   ];
 }
 
@@ -245,7 +258,9 @@ const BuiltinLink = ({
   const t = useT();
   const actions = useContext(LinkActionsContext);
   const target = parseBuiltinLink(href);
-  if (!target) return <span>{children}</span>;
+  if (!target) {
+    return <span>{children}</span>;
+  }
 
   const workspacePath =
     target.kind === "file"
@@ -258,48 +273,64 @@ const BuiltinLink = ({
 
   const runAction = (action: BuiltinLinkAction) => {
     switch (action) {
-      case "open-web-in-app":
-        if (target.kind === "web") actions.openWebLink?.(target.url);
+      case "open-web-in-app": {
+        if (target.kind === "web") {
+          actions.openWebLink?.(target.url);
+        }
         break;
-      case "open-web-external":
-        if (target.kind === "web") void openExternal(target.url);
+      }
+      case "open-web-external": {
+        if (target.kind === "web") {
+          void openExternal(target.url);
+        }
         break;
-      case "copy-web-link":
-        if (target.kind === "web")
+      }
+      case "copy-web-link": {
+        if (target.kind === "web") {
           void navigator.clipboard?.writeText(target.url);
+        }
         break;
-      case "open-file-in-app":
-        if (target.kind === "file" && workspacePath)
+      }
+      case "open-file-in-app": {
+        if (target.kind === "file" && workspacePath) {
           actions.openFileLink?.(target);
+        }
         break;
-      case "open-file-default":
+      }
+      case "open-file-default": {
         if (target.kind === "file") {
           void openNativePath(
             nativeFilePath(target.path, actions.workspaceRoot)
           );
         }
         break;
-      case "copy-file-path":
-        if (target.kind === "file")
+      }
+      case "copy-file-path": {
+        if (target.kind === "file") {
           void navigator.clipboard?.writeText(target.path);
+        }
         break;
-      case "reveal-file":
+      }
+      case "reveal-file": {
         if (target.kind === "file") {
           void revealNativePath(
             nativeFilePath(target.path, actions.workspaceRoot)
           );
         }
         break;
+      }
     }
   };
 
   const onContextMenu = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!nativeContextMenusAvailable) return;
+    if (!isNativeContextMenusAvailable) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     const items = builtinLinkMenuItems(target, t, {
-      canOpenInApp,
       canCopy: typeof navigator.clipboard?.writeText === "function",
+      canOpenInApp,
     });
     void showNativeContextMenu(items, (action) =>
       runAction(action as BuiltinLinkAction)
@@ -315,24 +346,40 @@ const BuiltinLink = ({
       className="text-primary decoration-primary/40 hover:decoration-primary underline underline-offset-2"
       onClick={(event) => {
         event.preventDefault();
-        if (target.kind === "web") void openExternal(target.url);
-        else if (workspacePath && actions.openFileLink)
+        if (target.kind === "web") {
+          void openExternal(target.url);
+        } else if (workspacePath && actions.openFileLink) {
           actions.openFileLink(target);
-        else
+        } else {
           void openNativePath(
             nativeFilePath(target.path, actions.workspaceRoot)
           );
+        }
       }}
       onContextMenu={onContextMenu}
     >
       {children}
     </a>
   );
-}
+};
 
 const components: Components = {
-  p: ({ children }) => (
-    <p className="my-2 break-words first:mt-0 last:mb-0">{children}</p>
+  a: ({ href, children }) => <BuiltinLink href={href}>{children}</BuiltinLink>,
+  blockquote: ({ children }) => (
+    <blockquote className="rounded-control bg-fill-quiet text-muted-foreground my-3 px-3 py-2">
+      {children}
+    </blockquote>
+  ),
+  code: ({ className, children }) => (
+    <code
+      className={
+        className
+          ? `${className} text-code font-mono`
+          : "rounded-control bg-fill-quiet text-code text-foreground px-1 py-0.5 font-mono"
+      }
+    >
+      {children}
+    </code>
   ),
   h1: ({ children }) => (
     <h1 className="text-section mt-5 mb-2 font-medium first:mt-0">
@@ -345,61 +392,29 @@ const components: Components = {
   h3: ({ children }) => (
     <h3 className="text-body mt-4 mb-1.5 font-medium first:mt-0">{children}</h3>
   ),
-  ul: ({ children }) => (
-    <ul className="my-2 list-disc space-y-1 ps-5">{children}</ul>
-  ),
-  ol: ({ children }) => (
-    <ol className="my-2 list-decimal space-y-1 ps-5">{children}</ol>
-  ),
-  li: ({ children }) => <li className="ps-0.5">{children}</li>,
-  blockquote: ({ children }) => (
-    <blockquote className="rounded-control bg-fill-quiet text-muted-foreground my-3 px-3 py-2">
-      {children}
-    </blockquote>
-  ),
   hr: () => <div role="separator" className="bg-border my-4 h-px" />,
-  strong: ({ children }) => (
-    <strong className="text-foreground font-medium">{children}</strong>
-  ),
-  a: ({ href, children }) => <BuiltinLink href={href}>{children}</BuiltinLink>,
   img: ({ alt }) => (
     <span className="text-muted-foreground">{alt ?? "Image"}</span>
   ),
-  table: ({ children }) => (
-    <div className="my-3 max-w-full overflow-x-auto">
-      <table className="text-callout w-full border-collapse">{children}</table>
-    </div>
+  li: ({ children }) => <li className="ps-0.5">{children}</li>,
+  ol: ({ children }) => (
+    <ol className="my-2 list-decimal space-y-1 ps-5">{children}</ol>
   ),
-  thead: ({ children }) => (
-    <thead className="text-foreground">{children}</thead>
-  ),
-  th: ({ children }) => (
-    <th className="bg-fill-quiet px-2 py-1.5 text-start font-medium">
-      {children}
-    </th>
-  ),
-  td: ({ children }) => <td className="px-2 py-1.5 align-top">{children}</td>,
-  code: ({ className, children }) => (
-    <code
-      className={
-        className
-          ? `${className} text-code font-mono`
-          : "rounded-control bg-fill-quiet text-code text-foreground px-1 py-0.5 font-mono"
-      }
-    >
-      {children}
-    </code>
+  p: ({ children }) => (
+    <p className="my-2 break-words first:mt-0 last:mb-0">{children}</p>
   ),
   pre: ({ children }) => {
     const nodes = Children.toArray(children);
     const child = nodes.length === 1 ? nodes[0] : null;
     if (isValidElement(child)) {
       const props = child.props as { className?: string; children?: ReactNode };
-      const language = /^language-(.+)$/.exec(props.className ?? "")?.[1];
+      const language = /^language-(.+)$/u.exec(props.className ?? "")?.[1];
       if (language === "chart" || language === "chart-json") {
-        const source = String(props.children ?? "").replace(/\n$/, "");
+        const source = String(props.children ?? "").replace(/\n$/u, "");
         const spec = parseChartSpec(source);
-        if (spec) return <ChartBlock spec={spec} />;
+        if (spec) {
+          return <ChartBlock spec={spec} />;
+        }
       }
     }
     return (
@@ -408,6 +423,26 @@ const components: Components = {
       </pre>
     );
   },
+  strong: ({ children }) => (
+    <strong className="text-foreground font-medium">{children}</strong>
+  ),
+  table: ({ children }) => (
+    <div className="my-3 max-w-full overflow-x-auto">
+      <table className="text-callout w-full border-collapse">{children}</table>
+    </div>
+  ),
+  td: ({ children }) => <td className="px-2 py-1.5 align-top">{children}</td>,
+  th: ({ children }) => (
+    <th className="bg-fill-quiet px-2 py-1.5 text-start font-medium">
+      {children}
+    </th>
+  ),
+  thead: ({ children }) => (
+    <thead className="text-foreground">{children}</thead>
+  ),
+  ul: ({ children }) => (
+    <ul className="my-2 list-disc space-y-1 ps-5">{children}</ul>
+  ),
 };
 
 export const MarkdownContent = ({
@@ -449,4 +484,4 @@ export const MarkdownContent = ({
       </div>
     </LinkActionsContext.Provider>
   );
-}
+};

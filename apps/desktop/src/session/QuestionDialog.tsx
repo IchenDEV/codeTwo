@@ -9,8 +9,8 @@ import {
   selectOption,
   setValue,
   toggleOption,
-  type ElicitationValues,
 } from "./elicitation";
+import type { ElicitationValues } from "./elicitation";
 import type {
   ElicitationAnswer,
   ElicitationField,
@@ -29,7 +29,6 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { useT } from "../i18n";
 
-/** happy-dom and React disagree about controlled inputs; the repo's fields drive them via onInput. */
 function noopChange() {}
 
 const Question = ({
@@ -51,41 +50,45 @@ const Question = ({
     : typeof value === "string"
       ? [value]
       : [];
-  const multi = field.kind === "multi_select";
-  const numeric = field.kind === "number" || field.kind === "integer";
+  const isMulti = field.kind === "multi_select";
+  const isNumeric = field.kind === "number" || field.kind === "integer";
 
   return (
     <section className="flex min-w-0 flex-col gap-2">
-      {field.title ? <h3 className="text-metadata text-muted-foreground font-medium uppercase">
+      {field.title ? (
+        <h3 className="text-metadata text-muted-foreground font-medium uppercase">
           {field.title}
-        </h3> : null}
-      {field.description ? <p className="text-body text-foreground/90">{field.description}</p> : null}
+        </h3>
+      ) : null}
+      {field.description ? (
+        <p className="text-body text-foreground/90">{field.description}</p>
+      ) : null}
 
       {(field.options?.length ?? 0) > 0 ? (
-        multi ? (
+        isMulti ? (
           <div
             role="group"
             aria-label={field.title ?? field.description ?? field.key}
             className="gap-control-group flex flex-col"
           >
             {field.options?.map((option) => {
-              const optionSelected = selected.includes(option.value);
+              const isOptionSelected = selected.includes(option.value);
               return (
                 <ChoiceRow
                   key={option.value}
                   kind="checkbox"
                   label={option.label}
                   description={option.description}
-                  selected={optionSelected}
+                  selected={isOptionSelected}
                   onCheckedChange={(checked) => {
-                    if (checked !== optionSelected) {
+                    if (checked !== isOptionSelected) {
                       onChange(
                         toggleOption(values, form, field.key, option.value)
                       );
                     }
                   }}
                   details={
-                    option.preview && optionSelected ? (
+                    option.preview && isOptionSelected ? (
                       <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
                         {option.preview}
                       </pre>
@@ -104,7 +107,7 @@ const Question = ({
             aria-label={field.title ?? field.description ?? field.key}
           >
             {field.options?.map((option) => {
-              const optionSelected = selected.includes(option.value);
+              const isOptionSelected = selected.includes(option.value);
               return (
                 <ChoiceRow
                   key={option.value}
@@ -112,9 +115,9 @@ const Question = ({
                   value={option.value}
                   label={option.label}
                   description={option.description}
-                  selected={optionSelected}
+                  selected={isOptionSelected}
                   details={
-                    option.preview && optionSelected ? (
+                    option.preview && isOptionSelected ? (
                       <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
                         {option.preview}
                       </pre>
@@ -138,12 +141,12 @@ const Question = ({
       ) : (
         <Input
           aria-label={field.title ?? field.description ?? field.key}
-          type={numeric ? "number" : "text"}
+          type={isNumeric ? "number" : "text"}
           value={value === undefined ? "" : String(value)}
           onChange={noopChange}
           onInput={(event) => {
             const text = event.currentTarget.value;
-            if (!numeric) {
+            if (!isNumeric) {
               onChange(setValue(values, field, text));
               return;
             }
@@ -158,7 +161,8 @@ const Question = ({
         />
       )}
 
-      {custom ? <label className="flex flex-col gap-1">
+      {custom ? (
+        <label className="flex flex-col gap-1">
           <span className="text-metadata text-muted-foreground uppercase">
             {custom.title || t("question.other")}
           </span>
@@ -175,10 +179,11 @@ const Question = ({
               onChange(setValue(values, custom, event.currentTarget.value))
             }
           />
-        </label> : null}
+        </label>
+      ) : null}
     </section>
   );
-}
+};
 
 /**
  * The agent asking the user something (ACP `elicitation/create`): Claude Code's `AskUserQuestion`,
@@ -200,7 +205,7 @@ export const QuestionDialog = ({
   const questions = questionFields(form);
   // With one question the message *is* the question, so repeating it above the options would just
   // read as the same sentence twice.
-  const single = questions.length === 1;
+  const isSingle = questions.length === 1;
 
   return (
     <Dialog
@@ -225,7 +230,7 @@ export const QuestionDialog = ({
             <Question
               key={field.key}
               form={form}
-              field={single ? { ...field, description: null } : field}
+              field={isSingle ? { ...field, description: null } : field}
               values={values}
               onChange={setValues}
             />
@@ -255,4 +260,4 @@ export const QuestionDialog = ({
       </DialogContent>
     </Dialog>
   );
-}
+};

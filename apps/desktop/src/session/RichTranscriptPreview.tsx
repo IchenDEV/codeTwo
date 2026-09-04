@@ -14,141 +14,141 @@ const chart = `\`\`\`chart
 const previewStartedAt = Date.now() - 31_000;
 
 const previewTurn: Turn = {
-  id: 1,
-  transcriptStartSeq: 1,
   accepted: true,
-  streamBoundaryKnown: true,
+  content: [
+    {
+      createdAt: previewStartedAt + 1_000,
+      kind: "text",
+      text: "我先核对转录事件和渲染入口，确认现有流式边界。\n\n",
+    },
+    {
+      createdAt: previewStartedAt + 11_000,
+      kind: "tool",
+      toolId: "inspect-transcript",
+    },
+    {
+      createdAt: previewStartedAt + 13_000,
+      kind: "text",
+      text: `入口已经确认，下面验证图表在真实内容宽度下的排版。\n\n${chart}\n\n`,
+    },
+    {
+      createdAt: previewStartedAt + 21_000,
+      kind: "tool",
+      toolId: "renderer-tests",
+    },
+    {
+      createdAt: previewStartedAt + 22_000,
+      kind: "tool",
+      toolId: "agent-accessibility",
+    },
+    {
+      createdAt: previewStartedAt + 23_000,
+      kind: "tool",
+      toolId: "agent-layout",
+    },
+    {
+      createdAt: previewStartedAt + 24_000,
+      kind: "tool",
+      toolId: "agent-tests",
+    },
+    {
+      createdAt: previewStartedAt + 24_000,
+      kind: "text",
+      text:
+        "完整验证仍在进行，当前结果如下。\n\n" +
+        'visualize{"path":"/__codetwo__/rich-transcript-preview.html","mode":"wide","title":"Release confidence"}',
+    },
+  ],
+  endedAt: previewStartedAt + 25_000,
+  id: 1,
+  observedTextDeltas: 3,
+  observedThoughtDeltas: 0,
+  pendingTextDeltaSkips: 0,
+  pendingThoughtDeltaSkips: 0,
+  plan: [
+    { content: "Inspect the transcript path", status: "completed" },
+    { content: "Run renderer checks", status: "in_progress" },
+    { content: "Report the evidence", status: "pending" },
+  ],
   prompt:
     "检查新的对话渲染：文本、工具调用、图表和交互式可视化应当在同一条流里按顺序出现。",
+  startedAt: previewStartedAt,
+  streamBoundaryKnown: true,
   text:
     `我先核对转录事件和渲染入口，确认现有流式边界。\n\n` +
     `入口已经确认，下面验证图表在真实内容宽度下的排版。\n\n${chart}\n\n` +
     "完整验证仍在进行，当前结果如下。\n\n" +
     'visualize{"path":"/__codetwo__/rich-transcript-preview.html","mode":"wide","title":"Release confidence"}',
   textDeltas: [],
-  observedTextDeltas: 3,
-  observedThoughtDeltas: 0,
-  pendingTextDeltaSkips: 0,
-  pendingThoughtDeltaSkips: 0,
   thoughts: [
     "I should inspect the shared renderer before changing the presentation.",
   ],
   tools: [
     {
-      id: "inspect-transcript",
-      title: "Inspect transcript pipeline",
-      status: "completed",
-      kind: "read",
-      startedAt: previewStartedAt + 4_000,
       endedAt: previewStartedAt + 11_000,
+      id: "inspect-transcript",
+      kind: "read",
       outputs: [
         {
-          type: "text",
           text: "Located the shared turn reducer, transcript projection, and desktop renderer.",
+          type: "text",
         },
       ],
+      startedAt: previewStartedAt + 4_000,
+      status: "completed",
+      title: "Inspect transcript pipeline",
     },
     {
       id: "renderer-tests",
-      title: "Run renderer verification",
-      status: "in_progress",
       kind: "test",
-      startedAt: previewStartedAt + 21_000,
       outputs: [],
+      startedAt: previewStartedAt + 21_000,
+      status: "in_progress",
+      title: "Run renderer verification",
     },
     {
-      id: "agent-accessibility",
-      title: "spawn_agent",
-      status: "in_progress",
-      kind: "agent",
       agentInput: {
         agent_type: "explorer",
-        task_name: "accessibility_review",
         message: "Check the transcript controls and status announcements.",
+        task_name: "accessibility_review",
       },
+      id: "agent-accessibility",
+      kind: "agent",
+      outputs: [],
       startedAt: previewStartedAt + 8_000,
-      outputs: [],
+      status: "in_progress",
+      title: "spawn_agent",
     },
     {
-      id: "agent-layout",
-      title: "spawn_agent",
-      status: "completed",
-      kind: "agent",
       agentInput: {
         agent_type: "worker",
-        task_name: "narrow_layout",
         message: "Verify the transcript at a narrow desktop width.",
+        task_name: "narrow_layout",
       },
-      startedAt: previewStartedAt + 2_000,
       endedAt: previewStartedAt + 18_000,
+      id: "agent-layout",
+      kind: "agent",
       outputs: [],
+      startedAt: previewStartedAt + 2_000,
+      status: "completed",
+      title: "spawn_agent",
     },
     {
-      id: "agent-tests",
-      title: "spawn_agent",
-      status: "failed",
-      kind: "agent",
       agentInput: {
         agent_type: "worker",
-        task_name: "renderer_tests",
         message: "Run the renderer regression suite.",
+        task_name: "renderer_tests",
       },
-      startedAt: previewStartedAt + 3_000,
       endedAt: previewStartedAt + 14_000,
+      id: "agent-tests",
+      kind: "agent",
       outputs: [],
+      startedAt: previewStartedAt + 3_000,
+      status: "failed",
+      title: "spawn_agent",
     },
   ],
-  content: [
-    {
-      kind: "text",
-      text: "我先核对转录事件和渲染入口，确认现有流式边界。\n\n",
-      createdAt: previewStartedAt + 1_000,
-    },
-    {
-      kind: "tool",
-      toolId: "inspect-transcript",
-      createdAt: previewStartedAt + 11_000,
-    },
-    {
-      kind: "text",
-      text: `入口已经确认，下面验证图表在真实内容宽度下的排版。\n\n${chart}\n\n`,
-      createdAt: previewStartedAt + 13_000,
-    },
-    {
-      kind: "tool",
-      toolId: "renderer-tests",
-      createdAt: previewStartedAt + 21_000,
-    },
-    {
-      kind: "tool",
-      toolId: "agent-accessibility",
-      createdAt: previewStartedAt + 22_000,
-    },
-    {
-      kind: "tool",
-      toolId: "agent-layout",
-      createdAt: previewStartedAt + 23_000,
-    },
-    {
-      kind: "tool",
-      toolId: "agent-tests",
-      createdAt: previewStartedAt + 24_000,
-    },
-    {
-      kind: "text",
-      text:
-        "完整验证仍在进行，当前结果如下。\n\n" +
-        'visualize{"path":"/__codetwo__/rich-transcript-preview.html","mode":"wide","title":"Release confidence"}',
-      createdAt: previewStartedAt + 24_000,
-    },
-  ],
-  plan: [
-    { content: "Inspect the transcript path", status: "completed" },
-    { content: "Run renderer checks", status: "in_progress" },
-    { content: "Report the evidence", status: "pending" },
-  ],
-  startedAt: previewStartedAt,
-  endedAt: previewStartedAt + 25_000,
+  transcriptStartSeq: 1,
 };
 const previewTurns = [previewTurn] as const;
 
@@ -166,11 +166,11 @@ export const RichTranscriptPreview = () => {
           projectPath="/tmp/codeTwo"
           projects={[]}
           git={{
-            is_repo: true,
-            branch: "codex/tasks",
             ahead: 0,
             behind: 0,
+            branch: "codex/tasks",
             files: [],
+            is_repo: true,
           }}
           diffStat={{ added: 42, deleted: 8 }}
           onRefresh={() => {}}
@@ -222,4 +222,4 @@ export const RichTranscriptPreview = () => {
       </footer>
     </div>
   );
-}
+};

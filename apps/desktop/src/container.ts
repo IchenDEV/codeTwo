@@ -52,7 +52,7 @@ export {
   onDesktopAppshotFailed,
 } from "./electrobun/client";
 export {
-  nativeContextMenusAvailable,
+  isNativeContextMenusAvailable,
   showNativeContextMenu,
 } from "./electrobun/contextMenu";
 export type {

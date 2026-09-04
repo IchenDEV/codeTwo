@@ -1,4 +1,5 @@
-import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import { useDeferredValue, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   ArrowLeft,
@@ -29,10 +30,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import {
-  StatusBadge,
-  type StatusTone,
-} from "@/components/business/status-badge";
+import { StatusBadge } from "@/components/business/status-badge";
+import type { StatusTone } from "@/components/business/status-badge";
 import { SearchField } from "@/components/business/search-field";
 import { Button } from "@/components/ui/button";
 import { TooltipButton } from "@/components/ui/tooltip";
@@ -72,18 +71,103 @@ import type {
   PluginManagerStatus,
 } from "./types";
 
-const DEFAULT_LABELS: PluginManagerLabels = {
-  title: "Features & plugins",
+const defaultLabels: PluginManagerLabels = {
+  activeResources: "Active resources",
+  advancedJson: "Advanced JSON",
+  affectedPlugins: "Affected plugins",
+  applyScaffold: "Add to project",
+  bundleEnabled: (name, enabled) =>
+    `${name} ${enabled ? "enabled" : "disabled"}.`,
+  bundleInstalled: (result) =>
+    `${result.name}${result.version ? ` ${result.version}` : ""} installed. Review its source and trust requirements before enabling code.`,
+  bundleManagement: "Bundle management",
+  bundleManagementUserOnly:
+    "Installation, trust, and removal are managed in User scope.",
+  bundleTrusted: (name, trusted) =>
+    `${name} ${trusted ? "trusted" : "trust revoked"}.`,
+  bundleUninstalled: (name, keepData) =>
+    `${name} uninstalled${keepData ? "; plugin data was kept" : ""}.`,
+  cancel: "Cancel",
+  changeApplied: (name, state) => `${name} is now ${state}.`,
+  changeSummary: (kind, name, state) =>
+    kind === "component"
+      ? `${state === "disabled" ? "Hide" : "Enable"} ${name} and reconcile its owning plugin.`
+      : `${state === "disabled" ? "Unload" : "Load"} ${name} in the selected scope.`,
+  closeInstaller: "Close GitHub installer",
+  commands: "Commands",
+  componentKind: (kind) => kind,
+  componentList: "Component list",
+  componentUninstalled: "Component uninstalled.",
+  components: "Components",
+  configuration: "Configuration",
+  configurationHint:
+    "Changes are validated by the host before the plugin reloads.",
+  confirm: "Apply change",
+  confirmTitle: "Apply plugin change?",
+  contribution: (_id, fallback) => fallback,
+  contributions: "Contributions",
+  dataOnly: "Data only",
+  definition: "Definition",
+  dependencies: "Dependencies",
   description:
     "Manage optional C2 features, desktop integrations, and installed plugins.",
-  plugins: "Features",
-  components: "Components",
-  mcps: "MCPs",
-  skills: "Skills",
+  diagnostics: "Diagnostics",
+  disabled: "Disabled",
+  enabled: "Enabled",
+  form: "Form",
+  githubHint:
+    "Use owner/repository or a GitHub /tree/ URL. Installation never executes plugin code; trust is granted separately.",
+  githubRepository: "GitHub repository",
+  githubRepositoryRequired: "Enter an owner/repository name or GitHub URL.",
   hooks: "Hooks",
+  identifier: "Identifier",
+  inherit: "Inherit",
+  install: "Install",
+  installFromGithub: "Install from GitHub",
+  installed: "Installed",
+  installedBundle: "Installed bundle",
+  installingPlugin: "Installing…",
+  invalidConfigurationObject: "Configuration must be a JSON object.",
+  keepPluginData: "Keep plugin data for reinstall",
+  managePlugin: "Manage plugin",
+  managedByPlugin:
+    "This resource follows the state and trust of its owning plugin.",
   marketplace: "Marketplace",
-  userScope: "User",
+  marketplaceInstalled: "Marketplace item installed.",
+  mcps: "MCPs",
+  missingCount: (count) => `${count} missing`,
+  missingDependencies: "Missing dependencies",
+  newSkill: "New skill",
+  noDescription: "No description provided.",
+  noResults: "No matching items.",
+  notTrusted: "Not trusted",
+  openMarketplace: "Open marketplace",
+  plugin: "Plugin",
+  pluginList: "Plugin list",
+  plugins: "Features",
+  projectOnly: "Project scope only",
   projectScope: (project) => project.label,
+  projectState: (name) => `${name} project state`,
+  refresh: "Refresh",
+  required: "Required",
+  resetDefaults: "Reset to defaults",
+  resourceList: (tab) =>
+    tab === "mcps"
+      ? "MCP server list"
+      : tab === "skills"
+        ? "Skill list"
+        : "Hook list",
+  restoredLastGood:
+    "Invalid plugin settings were replaced with the last known-good configuration.",
+  reviewSource: "Review source",
+  revokeTrust: "Revoke trust",
+  safeMode:
+    "Plugin safe mode is active. Only the management plane is guaranteed to be available.",
+  saveConfiguration: "Save configuration",
+  saving: "Saving…",
+  scaffoldApplied: (count) => `${count} project files added.`,
+  scaffoldFiles: (count) => `${count} project files`,
+  scope: "Scope",
   search: "Search catalog…",
   searchPlaceholder: (tab) =>
     tab === "plugins"
@@ -95,132 +179,49 @@ const DEFAULT_LABELS: PluginManagerLabels = {
           : tab === "hooks"
             ? "Search hooks…"
             : "Search marketplace…",
-  noResults: "No matching items.",
-  enabled: "Enabled",
-  disabled: "Disabled",
-  inherit: "Inherit",
-  required: "Required",
-  userOnly: "User scope only",
-  projectOnly: "Project scope only",
-  configuration: "Configuration",
-  form: "Form",
-  advancedJson: "Advanced JSON",
-  saveConfiguration: "Save configuration",
-  saving: "Saving…",
-  install: "Install",
-  installed: "Installed",
-  unavailable: "Unavailable",
-  refresh: "Refresh",
-  newSkill: "New skill",
-  openMarketplace: "Open marketplace",
-  use: "Use",
-  applyScaffold: "Add to project",
-  scaffoldFiles: (count) => `${count} project files`,
-  installFromGithub: "Install from GitHub",
-  githubRepository: "GitHub repository",
-  githubHint:
-    "Use owner/repository or a GitHub /tree/ URL. Installation never executes plugin code; trust is granted separately.",
-  closeInstaller: "Close GitHub installer",
-  installingPlugin: "Installing…",
-  bundleInstalled: (result) =>
-    `${result.name}${result.version ? ` ${result.version}` : ""} installed. Review its source and trust requirements before enabling code.`,
-  bundleManagement: "Bundle management",
-  bundleManagementUserOnly:
-    "Installation, trust, and removal are managed in User scope.",
-  reviewSource: "Review source",
-  trustRequired:
-    "This bundle contains executable contributions. Review its source before allowing it to run with your user permissions.",
-  trustBeforeEnabling: "Trust required before enabling",
-  trusted: "Trusted",
-  notTrusted: "Not trusted",
-  trustPlugin: "Trust plugin",
-  revokeTrust: "Revoke trust",
-  contributions: "Contributions",
-  diagnostics: "Diagnostics",
-  uninstall: "Uninstall",
-  uninstallTitle: (pluginName) => `Uninstall ${pluginName}?`,
-  uninstallDescription:
-    "The plugin will stop and its installed files will be removed. Keeping data makes a later reinstall recoverable.",
-  keepPluginData: "Keep plugin data for reinstall",
-  resetDefaults: "Reset to defaults",
-  restoredLastGood:
-    "Invalid plugin settings were replaced with the last known-good configuration.",
-  safeMode:
-    "Plugin safe mode is active. Only the management plane is guaranteed to be available.",
-  dependencies: "Dependencies",
-  missingDependencies: "Missing dependencies",
-  commands: "Commands",
   services: "Services",
-  activeResources: "Active resources",
-  scope: "Scope",
-  pluginList: "Plugin list",
-  componentList: "Component list",
-  resourceList: (tab) =>
-    tab === "mcps"
-      ? "MCP server list"
-      : tab === "skills"
-        ? "Skill list"
-        : "Hook list",
-  projectState: (name) => `${name} project state`,
-  noDescription: "No description provided.",
-  configurationHint:
-    "Changes are validated by the host before the plugin reloads.",
-  plugin: "Plugin",
+  settingsReset: "Plugin settings reset to defaults.",
+  skills: "Skills",
   source: "Source",
-  identifier: "Identifier",
-  definition: "Definition",
-  uiSlot: "UI slot",
-  managedByPlugin:
-    "This resource follows the state and trust of its owning plugin.",
-  managePlugin: "Manage plugin",
-  affectedPlugins: "Affected plugins",
-  missingCount: (count) => `${count} missing`,
+  sourceNames: {
+    builtin: "Built-in feature",
+    bundle: "Plugin bundle",
+    host: "Host feature",
+  },
   status: {
-    disabled: "Disabled",
-    pending: "Pending",
-    loading: "Loading",
     active: "Ready",
-    failed: "Failed",
+    disabled: "Disabled",
     disposed: "Unloaded",
+    failed: "Failed",
+    loading: "Loading",
+    pending: "Pending",
     requires_auth: "Authentication required",
     unsupported: "Unsupported",
   },
-  sourceNames: {
-    builtin: "Built-in feature",
-    host: "Host feature",
-    bundle: "Plugin bundle",
-  },
-  contribution: (_id, fallback) => fallback,
-  componentKind: (kind) => kind,
-  installedBundle: "Installed bundle",
-  dataOnly: "Data only",
-  invalidConfigurationObject: "Configuration must be a JSON object.",
-  githubRepositoryRequired: "Enter an owner/repository name or GitHub URL.",
-  changeApplied: (name, state) => `${name} is now ${state}.`,
-  changeSummary: (kind, name, state) =>
-    kind === "component"
-      ? `${state === "disabled" ? "Hide" : "Enable"} ${name} and reconcile its owning plugin.`
-      : `${state === "disabled" ? "Unload" : "Load"} ${name} in the selected scope.`,
-  marketplaceInstalled: "Marketplace item installed.",
-  componentUninstalled: "Component uninstalled.",
-  scaffoldApplied: (count) => `${count} project files added.`,
-  settingsReset: "Plugin settings reset to defaults.",
-  bundleEnabled: (name, enabled) =>
-    `${name} ${enabled ? "enabled" : "disabled"}.`,
-  bundleTrusted: (name, trusted) =>
-    `${name} ${trusted ? "trusted" : "trust revoked"}.`,
-  bundleUninstalled: (name, keepData) =>
-    `${name} uninstalled${keepData ? "; plugin data was kept" : ""}.`,
-  confirmTitle: "Apply plugin change?",
-  confirm: "Apply change",
-  cancel: "Cancel",
+  title: "Features & plugins",
+  trustBeforeEnabling: "Trust required before enabling",
+  trustPlugin: "Trust plugin",
+  trustRequired:
+    "This bundle contains executable contributions. Review its source before allowing it to run with your user permissions.",
+  trusted: "Trusted",
+  uiSlot: "UI slot",
+  unavailable: "Unavailable",
+  uninstall: "Uninstall",
+  uninstallDescription:
+    "The plugin will stop and its installed files will be removed. Keeping data makes a later reinstall recoverable.",
+  uninstallTitle: (pluginName) => `Uninstall ${pluginName}?`,
+  use: "Use",
+  userOnly: "User scope only",
+  userScope: "User",
 };
 
 function sourceIcon(source: PluginManagerSource) {
-  if (source === "builtin")
+  if (source === "builtin") {
     return <Boxes className="size-4" aria-hidden="true" />;
-  if (source === "host")
+  }
+  if (source === "host") {
     return <MonitorCog className="size-4" aria-hidden="true" />;
+  }
   return <Package className="size-4" aria-hidden="true" />;
 }
 
@@ -233,14 +234,19 @@ function sourceLabel(
 }
 
 function statusDotClass(status: PluginManagerStatus): string {
-  if (status === "active") return "bg-success";
-  if (status === "failed") return "bg-destructive";
+  if (status === "active") {
+    return "bg-success";
+  }
+  if (status === "failed") {
+    return "bg-destructive";
+  }
   if (
     status === "pending" ||
     status === "loading" ||
     status === "requires_auth"
-  )
+  ) {
     return "bg-warning";
+  }
   return "bg-muted-foreground/50";
 }
 
@@ -250,24 +256,26 @@ const CompactStatus = ({
 }: {
   readonly status: PluginManagerStatus;
   readonly labels: PluginManagerLabels;
-}) => {
-  return (
+}) => (
+  <span
+    data-plugin-status={status}
+    className="text-callout text-muted-foreground flex shrink-0 items-center gap-1.5"
+  >
     <span
-      data-plugin-status={status}
-      className="text-callout text-muted-foreground flex shrink-0 items-center gap-1.5"
-    >
-      <span
-        className={cn("size-1.5 rounded-full", statusDotClass(status))}
-        aria-hidden="true"
-      />
-      {labels.status[status]}
-    </span>
-  );
-}
+      className={cn("size-1.5 rounded-full", statusDotClass(status))}
+      aria-hidden="true"
+    />
+    {labels.status[status]}
+  </span>
+);
 
 function statusTone(status: PluginManagerStatus): StatusTone {
-  if (status === "active") return "success";
-  if (status === "failed") return "destructive";
+  if (status === "active") {
+    return "success";
+  }
+  if (status === "failed") {
+    return "destructive";
+  }
   if (
     status === "pending" ||
     status === "loading" ||
@@ -284,21 +292,19 @@ const StatusSummary = ({
 }: {
   readonly state: PluginManagerScopedState;
   readonly labels: PluginManagerLabels;
-}) => {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <StatusBadge tone={statusTone(state.status)}>
-        {labels.status[state.status]}
+}) => (
+  <div className="flex flex-wrap items-center gap-2">
+    <StatusBadge tone={statusTone(state.status)}>
+      {labels.status[state.status]}
+    </StatusBadge>
+    {state.missingDependencies?.length ? (
+      <StatusBadge tone="destructive">
+        <CircleAlert />
+        {labels.missingCount(state.missingDependencies.length)}
       </StatusBadge>
-      {state.missingDependencies?.length ? (
-        <StatusBadge tone="destructive">
-          <CircleAlert />
-          {labels.missingCount(state.missingDependencies.length)}
-        </StatusBadge>
-      ) : null}
-    </div>
-  );
-}
+    ) : null}
+  </div>
+);
 
 function scopeSupportsProject(
   supportedScopes: Array<"user" | "project">
@@ -319,7 +325,9 @@ function resourceTabFor(
   if (kind === "mcp" || kind === "mcp_server" || kind === "mcpserver") {
     return "mcps";
   }
-  if (kind === "hook" || kind === "hooks") return "hooks";
+  if (kind === "hook" || kind === "hooks") {
+    return "hooks";
+  }
   if (
     kind === "skill" ||
     kind === "agent_skill" ||
@@ -333,8 +341,12 @@ function resourceTabFor(
 }
 
 function resourceIcon(tab: PluginResourceTab) {
-  if (tab === "mcps") return <Server className="size-4" aria-hidden="true" />;
-  if (tab === "hooks") return <Webhook className="size-4" aria-hidden="true" />;
+  if (tab === "mcps") {
+    return <Server className="size-4" aria-hidden="true" />;
+  }
+  if (tab === "hooks") {
+    return <Webhook className="size-4" aria-hidden="true" />;
+  }
   return <BookOpen className="size-4" aria-hidden="true" />;
 }
 
@@ -342,7 +354,9 @@ function scopeValue(
   scope: PluginManagerScope,
   projects: PluginManagerProject[]
 ): string {
-  if (scope.kind === "user") return "user";
+  if (scope.kind === "user") {
+    return "user";
+  }
   const index = projects.findIndex(
     (project) => project.path === scope.projectPath
   );
@@ -363,19 +377,19 @@ const ScopeSelector = ({
   const currentProject =
     scope.kind === "project" &&
     !projects.some((project) => project.path === scope.projectPath)
-      ? { path: scope.projectPath, label: scope.projectPath }
+      ? { label: scope.projectPath, path: scope.projectPath }
       : null;
   const items = [
-    { value: "user", label: labels.userScope },
+    { label: labels.userScope, value: "user" },
     ...projects.map((project, index) => ({
-      value: `project:${index}`,
       label: labels.projectScope(project),
+      value: `project:${index}`,
     })),
     ...(currentProject
       ? [
           {
-            value: "project:current",
             label: labels.projectScope(currentProject),
+            value: "project:current",
           },
         ]
       : []),
@@ -400,7 +414,9 @@ const ScopeSelector = ({
           }
           const index = Number(value?.replace("project:", ""));
           const project = projects[index];
-          if (project) onChange({ kind: "project", projectPath: project.path });
+          if (project) {
+            onChange({ kind: "project", projectPath: project.path });
+          }
         }}
       >
         <SelectTrigger id="plugin-manager-scope" size="sm" className="w-36">
@@ -418,7 +434,7 @@ const ScopeSelector = ({
       </Select>
     </Field>
   );
-}
+};
 
 const GithubInstaller = ({
   repository,
@@ -436,83 +452,76 @@ const GithubInstaller = ({
   readonly onRepositoryChange: (repository: string) => void;
   readonly onClose: () => void;
   readonly onSubmit: () => void;
-}) => {
-  return (
-    <form
-      data-plugin-github-installer
-      className="rounded-module bg-fill-quiet flex flex-col gap-3 p-3"
-      aria-busy={busy}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 className="text-dialog font-medium">
-            {labels.installFromGithub}
-          </h2>
-          <p
-            id="plugin-github-hint"
-            className="text-callout text-muted-foreground max-w-2xl"
-          >
-            {labels.githubHint}
-          </p>
-        </div>
-        <TooltipButton
-          label={labels.closeInstaller}
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          disabled={busy}
-          onClick={onClose}
+}) => (
+  <form
+    data-plugin-github-installer
+    className="rounded-module bg-fill-quiet flex flex-col gap-3 p-3"
+    aria-busy={busy}
+    onSubmit={(event) => {
+      event.preventDefault();
+      onSubmit();
+    }}
+  >
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex min-w-0 flex-col gap-1">
+        <h2 className="text-dialog font-medium">{labels.installFromGithub}</h2>
+        <p
+          id="plugin-github-hint"
+          className="text-callout text-muted-foreground max-w-2xl"
         >
-          <X />
-        </TooltipButton>
+          {labels.githubHint}
+        </p>
       </div>
-      <Field>
-        <FieldLabel htmlFor="plugin-github-repository">
-          {labels.githubRepository}
-        </FieldLabel>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            id="plugin-github-repository"
-            value={repository}
-            placeholder="owner/repository"
-            aria-describedby={
-              error
-                ? "plugin-github-hint plugin-github-error"
-                : "plugin-github-hint"
-            }
-            aria-invalid={error ? true : undefined}
-            onChange={(event) => onRepositoryChange(event.currentTarget.value)}
-          />
-          <Button type="submit" className="shrink-0" disabled={busy}>
-            {busy ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <Download data-icon="inline-start" />
-            )}
-            {busy ? labels.installingPlugin : labels.install}
-          </Button>
-        </div>
-        {error ? (
-          <p
-            id="plugin-github-error"
-            role="alert"
-            className="text-body text-destructive flex items-start gap-2"
-          >
-            <CircleAlert
-              className="mt-0.5 size-4 shrink-0"
-              aria-hidden="true"
-            />
-            <span>{error}</span>
-          </p>
-        ) : null}
-      </Field>
-    </form>
-  );
-}
+      <TooltipButton
+        label={labels.closeInstaller}
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        disabled={busy}
+        onClick={onClose}
+      >
+        <X />
+      </TooltipButton>
+    </div>
+    <Field>
+      <FieldLabel htmlFor="plugin-github-repository">
+        {labels.githubRepository}
+      </FieldLabel>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Input
+          id="plugin-github-repository"
+          value={repository}
+          placeholder="owner/repository"
+          aria-describedby={
+            error
+              ? "plugin-github-hint plugin-github-error"
+              : "plugin-github-hint"
+          }
+          aria-invalid={error ? true : undefined}
+          onChange={(event) => onRepositoryChange(event.currentTarget.value)}
+        />
+        <Button type="submit" className="shrink-0" disabled={busy}>
+          {busy ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <Download data-icon="inline-start" />
+          )}
+          {busy ? labels.installingPlugin : labels.install}
+        </Button>
+      </div>
+      {error ? (
+        <p
+          id="plugin-github-error"
+          role="alert"
+          className="text-body text-destructive flex items-start gap-2"
+        >
+          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+        </p>
+      ) : null}
+    </Field>
+  </form>
+);
 
 const StateControl = ({
   id,
@@ -537,7 +546,9 @@ const StateControl = ({
   readonly disabled: boolean;
   readonly onChange: (request: PluginManagerChangeRequest) => void;
 }) => {
-  if (required) return <Badge variant="secondary">{labels.required}</Badge>;
+  if (required) {
+    return <Badge variant="secondary">{labels.required}</Badge>;
+  }
 
   if (scope.kind === "user" && !supportedScopes.includes("user")) {
     return (
@@ -560,9 +571,9 @@ const StateControl = ({
       value: PluginManagerDesiredState;
       label: string;
     }> = [
-      { value: "inherit", label: labels.inherit },
-      { value: "enabled", label: labels.enabled },
-      { value: "disabled", label: labels.disabled },
+      { label: labels.inherit, value: "inherit" },
+      { label: labels.enabled, value: "enabled" },
+      { label: labels.disabled, value: "disabled" },
     ];
     return (
       <Select
@@ -570,13 +581,15 @@ const StateControl = ({
         value={value}
         disabled={disabled}
         onValueChange={(next) => {
-          if (!next || next === value) return;
+          if (!next || next === value) {
+            return;
+          }
           onChange({
-            targetKind: kind,
-            targetId: id,
-            targetName: name,
-            scope,
             desiredState: next,
+            scope,
+            targetId: id,
+            targetKind: kind,
+            targetName: name,
           });
         }}
       >
@@ -602,11 +615,11 @@ const StateControl = ({
         disabled={disabled}
         onCheckedChange={(checked) =>
           onChange({
-            targetKind: kind,
-            targetId: id,
-            targetName: name,
-            scope,
             desiredState: checked === true ? "enabled" : "disabled",
+            scope,
+            targetId: id,
+            targetKind: kind,
+            targetName: name,
           })
         }
       />
@@ -615,10 +628,18 @@ const StateControl = ({
       </FieldLabel>
     </Field>
   );
-}
+};
 
-const DetailList = ({ title, values }: { readonly title: string; readonly values?: string[] }) => {
-  if (!values?.length) return null;
+const DetailList = ({
+  title,
+  values,
+}: {
+  readonly title: string;
+  readonly values?: string[];
+}) => {
+  if (!values?.length) {
+    return null;
+  }
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-metadata text-muted-foreground font-medium">
@@ -633,7 +654,7 @@ const DetailList = ({ title, values }: { readonly title: string; readonly values
       </div>
     </div>
   );
-}
+};
 
 const ScaffoldList = ({
   pluginId,
@@ -648,7 +669,9 @@ const ScaffoldList = ({
   readonly busyAction: string | null;
   readonly onApply?: (pluginId: string, scaffoldId: string) => Promise<void>;
 }) => {
-  if (!scaffolds.length || !onApply) return null;
+  if (!scaffolds.length || !onApply) {
+    return null;
+  }
 
   return (
     <section className="flex flex-col gap-2" aria-label={labels.applyScaffold}>
@@ -693,7 +716,7 @@ const ScaffoldList = ({
       </div>
     </section>
   );
-}
+};
 
 const PluginList = ({
   plugins,
@@ -705,52 +728,50 @@ const PluginList = ({
   readonly selectedId: string | null;
   readonly labels: PluginManagerLabels;
   readonly onSelect: (id: string) => void;
-}) => {
-  return (
-    <div className="flex flex-col gap-0.5" aria-label={labels.pluginList}>
-      {plugins.map((plugin) => {
-        const selected = plugin.id === selectedId;
-        return (
-          <Button
-            key={plugin.id}
-            type="button"
-            variant={selected ? "secondary" : "ghost"}
-            data-selected={selected ? "true" : undefined}
-            className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
-            aria-pressed={selected}
-            onClick={() => onSelect(plugin.id)}
+}) => (
+  <div className="flex flex-col gap-0.5" aria-label={labels.pluginList}>
+    {plugins.map((plugin) => {
+      const isSelected = plugin.id === selectedId;
+      return (
+        <Button
+          key={plugin.id}
+          type="button"
+          variant={isSelected ? "secondary" : "ghost"}
+          data-selected={isSelected ? "true" : undefined}
+          className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
+          aria-pressed={isSelected}
+          onClick={() => onSelect(plugin.id)}
+        >
+          <span
+            className={cn(
+              "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
+              isSelected ? "text-foreground" : "text-muted-foreground"
+            )}
           >
-            <span
-              className={cn(
-                "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
-                selected ? "text-foreground" : "text-muted-foreground"
+            {sourceIcon(plugin.source)}
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {plugin.name}
+              </span>
+              {plugin.bundle?.requiresTrust && !plugin.bundle.trusted ? (
+                <StatusBadge tone="destructive">
+                  {labels.notTrusted}
+                </StatusBadge>
+              ) : (
+                <CompactStatus status={plugin.state.status} labels={labels} />
               )}
-            >
-              {sourceIcon(plugin.source)}
             </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  {plugin.name}
-                </span>
-                {plugin.bundle?.requiresTrust && !plugin.bundle.trusted ? (
-                  <StatusBadge tone="destructive">
-                    {labels.notTrusted}
-                  </StatusBadge>
-                ) : (
-                  <CompactStatus status={plugin.state.status} labels={labels} />
-                )}
-              </span>
-              <span className="text-callout text-muted-foreground truncate">
-                {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
-              </span>
+            <span className="text-callout text-muted-foreground truncate">
+              {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
             </span>
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
+          </span>
+        </Button>
+      );
+    })}
+  </div>
+);
 
 const ResourceList = ({
   resources,
@@ -764,49 +785,44 @@ const ResourceList = ({
   readonly selectedId: string | null;
   readonly labels: PluginManagerLabels;
   readonly onSelect: (id: string) => void;
-}) => {
-  return (
-    <div
-      className="flex flex-col gap-0.5"
-      aria-label={labels.resourceList(tab)}
-    >
-      {resources.map((resource) => {
-        const selected = resource.id === selectedId;
-        return (
-          <Button
-            key={resource.id}
-            type="button"
-            variant={selected ? "secondary" : "ghost"}
-            data-selected={selected ? "true" : undefined}
-            className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
-            aria-pressed={selected}
-            onClick={() => onSelect(resource.id)}
+}) => (
+  <div className="flex flex-col gap-0.5" aria-label={labels.resourceList(tab)}>
+    {resources.map((resource) => {
+      const isSelected = resource.id === selectedId;
+      return (
+        <Button
+          key={resource.id}
+          type="button"
+          variant={isSelected ? "secondary" : "ghost"}
+          data-selected={isSelected ? "true" : undefined}
+          className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
+          aria-pressed={isSelected}
+          onClick={() => onSelect(resource.id)}
+        >
+          <span
+            className={cn(
+              "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
+              isSelected ? "text-foreground" : "text-muted-foreground"
+            )}
           >
-            <span
-              className={cn(
-                "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
-                selected ? "text-foreground" : "text-muted-foreground"
-              )}
-            >
-              {resourceIcon(tab)}
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  {resource.name}
-                </span>
-                <CompactStatus status={resource.state.status} labels={labels} />
+            {resourceIcon(tab)}
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {resource.name}
               </span>
-              <span className="text-callout text-muted-foreground truncate">
-                {resource.pluginName}
-              </span>
+              <CompactStatus status={resource.state.status} labels={labels} />
             </span>
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
+            <span className="text-callout text-muted-foreground truncate">
+              {resource.pluginName}
+            </span>
+          </span>
+        </Button>
+      );
+    })}
+  </div>
+);
 
 const ResourceDetails = ({
   resource,
@@ -825,7 +841,7 @@ const ResourceDetails = ({
   readonly onRequestChange: (request: PluginManagerChangeRequest) => void;
   readonly onManagePlugin: (pluginId: string) => void;
 }) => {
-  const individuallyManageable =
+  const isIndividuallyManageable =
     resource.manageable !== false && resource.state.status !== "unsupported";
   const definition =
     resource.slot && resource.slot !== "composer.skills" ? resource.slot : null;
@@ -848,7 +864,7 @@ const ResourceDetails = ({
           </p>
         </div>
         <div className="shrink-0">
-          {individuallyManageable ? (
+          {isIndividuallyManageable ? (
             <StateControl
               id={resource.id}
               name={resource.name}
@@ -910,7 +926,7 @@ const ResourceDetails = ({
           ) : null}
         </dl>
 
-        {!individuallyManageable ? (
+        {!isIndividuallyManageable ? (
           <section className="rounded-module bg-fill-quiet flex flex-wrap items-center justify-between gap-3 p-3">
             <p className="text-callout text-muted-foreground max-w-2xl">
               {labels.managedByPlugin}
@@ -930,7 +946,7 @@ const ResourceDetails = ({
       </div>
     </article>
   );
-}
+};
 
 const PluginDetails = ({
   plugin,
@@ -954,17 +970,29 @@ const PluginDetails = ({
   readonly busy: boolean;
   readonly busyAction: string | null;
   readonly onRequestChange: (request: PluginManagerChangeRequest) => void;
-  readonly onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
-  readonly onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
-  readonly onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
-  readonly onApplyScaffold?: (pluginId: string, scaffoldId: string) => Promise<void>;
+  readonly onSetBundleEnabled?: (
+    pluginId: string,
+    isEnabled: boolean
+  ) => Promise<void>;
+  readonly onSetBundleTrusted?: (
+    pluginId: string,
+    isTrusted: boolean
+  ) => Promise<void>;
+  readonly onUninstallBundle?: (
+    pluginId: string,
+    isKeepData: boolean
+  ) => Promise<void>;
+  readonly onApplyScaffold?: (
+    pluginId: string,
+    scaffoldId: string
+  ) => Promise<void>;
   readonly onSaveConfig: PluginManagerPageProps["onSaveConfig"];
   readonly onReset?: (pluginId: string, scope: PluginManagerScope) => void;
 }) => {
-  const configurable =
+  const isConfigurable =
     plugin.configurable ??
     (plugin.configSchema !== undefined || plugin.state.config !== undefined);
-  const trustRequired = Boolean(
+  const isTrustRequired = Boolean(
     plugin.bundle?.requiresTrust && !plugin.bundle.trusted
   );
   return (
@@ -988,7 +1016,7 @@ const PluginDetails = ({
           </p>
         </div>
         <div className="shrink-0">
-          {trustRequired ? (
+          {isTrustRequired ? (
             <span
               data-plugin-trust-gate
               className="text-callout text-muted-foreground"
@@ -1032,7 +1060,7 @@ const PluginDetails = ({
         </div>
       </div>
       <div className="mt-8 flex flex-col gap-5">
-        {trustRequired ? null : (
+        {isTrustRequired ? null : (
           <StatusSummary state={plugin.state} labels={labels} />
         )}
         {plugin.state.error ? (
@@ -1100,7 +1128,7 @@ const PluginDetails = ({
             </ul>
           </div>
         ) : null}
-        {configurable ? (
+        {isConfigurable ? (
           <>
             <Separator />
             <section
@@ -1124,7 +1152,7 @@ const PluginDetails = ({
                 schema={plugin.configSchema}
                 labels={labels}
                 onSave={(config) =>
-                  onSaveConfig({ pluginId: plugin.id, scope, config })
+                  onSaveConfig({ config, pluginId: plugin.id, scope })
                 }
               />
             </section>
@@ -1151,7 +1179,7 @@ const PluginDetails = ({
       </footer>
     </article>
   );
-}
+};
 
 const MarketplaceSources = ({
   sources,
@@ -1160,7 +1188,9 @@ const MarketplaceSources = ({
   readonly sources: NonNullable<PluginManagerPageProps["marketplaceSources"]>;
   readonly labels: PluginManagerLabels;
 }) => {
-  if (!sources.length) return null;
+  if (!sources.length) {
+    return null;
+  }
 
   return (
     <section
@@ -1199,7 +1229,7 @@ const MarketplaceSources = ({
       ))}
     </section>
   );
-}
+};
 
 const MarketplaceList = ({
   items,
@@ -1211,45 +1241,43 @@ const MarketplaceList = ({
   readonly selectedId: string | null;
   readonly labels: PluginManagerLabels;
   readonly onSelect: (id: string) => void;
-}) => {
-  return (
-    <div className="flex flex-col gap-0.5" aria-label={labels.marketplace}>
-      {items.map((item) => (
-        <Button
-          key={item.id}
-          type="button"
-          variant="selectable"
-          size="row"
-          focusStyle="inset"
-          data-selected={item.id === selectedId ? "true" : undefined}
-          aria-pressed={item.id === selectedId}
-          onClick={() => onSelect(item.id)}
-          className={cn(
-            "group px-module-inset grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 py-2",
-            item.id === selectedId && "bg-accent text-foreground"
-          )}
-        >
-          <span className="rounded-control bg-fill-quiet text-muted-foreground row-span-2 flex size-8 items-center justify-center">
-            <Store className="size-4" aria-hidden="true" />
-          </span>
-          <span className="text-body min-w-0 truncate font-medium">
-            {item.name}
-          </span>
-          <span className="text-callout text-muted-foreground">
-            {item.installed
-              ? labels.installed
-              : item.version
-                ? `v${item.version}`
-                : ""}
-          </span>
-          <span className="text-callout text-muted-foreground col-start-2 col-end-4 min-w-0 truncate">
-            {[item.kind, item.sourceLabel].filter(Boolean).join(" · ")}
-          </span>
-        </Button>
-      ))}
-    </div>
-  );
-}
+}) => (
+  <div className="flex flex-col gap-0.5" aria-label={labels.marketplace}>
+    {items.map((item) => (
+      <Button
+        key={item.id}
+        type="button"
+        variant="selectable"
+        size="row"
+        focusStyle="inset"
+        data-selected={item.id === selectedId ? "true" : undefined}
+        aria-pressed={item.id === selectedId}
+        onClick={() => onSelect(item.id)}
+        className={cn(
+          "group px-module-inset grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 py-2",
+          item.id === selectedId && "bg-accent text-foreground"
+        )}
+      >
+        <span className="rounded-control bg-fill-quiet text-muted-foreground row-span-2 flex size-8 items-center justify-center">
+          <Store className="size-4" aria-hidden="true" />
+        </span>
+        <span className="text-body min-w-0 truncate font-medium">
+          {item.name}
+        </span>
+        <span className="text-callout text-muted-foreground">
+          {item.installed
+            ? labels.installed
+            : item.version
+              ? `v${item.version}`
+              : ""}
+        </span>
+        <span className="text-callout text-muted-foreground col-start-2 col-end-4 min-w-0 truncate">
+          {[item.kind, item.sourceLabel].filter(Boolean).join(" · ")}
+        </span>
+      </Button>
+    ))}
+  </div>
+);
 
 const MarketplaceDetails = ({
   item,
@@ -1266,11 +1294,11 @@ const MarketplaceDetails = ({
   readonly busyId: string | null;
   readonly onInstall: PluginManagerPageProps["onInstallMarketplaceItem"];
 }) => {
-  const scopeSupported = item.supportedScopes.includes(scope.kind);
-  const disabled =
+  const isScopeSupported = item.supportedScopes.includes(scope.kind);
+  const isDisabled =
     item.installed ||
     !item.installable ||
-    !scopeSupported ||
+    !isScopeSupported ||
     busyId === item.id;
   return (
     <article
@@ -1294,7 +1322,7 @@ const MarketplaceDetails = ({
           type="button"
           size="compact"
           variant={item.installed ? "secondary" : "default"}
-          disabled={disabled}
+          disabled={isDisabled}
           onClick={() => void onInstall({ itemId: item.id, scope })}
         >
           {busyId === item.id ? (
@@ -1304,23 +1332,20 @@ const MarketplaceDetails = ({
           )}
           {item.installed
             ? labels.installed
-            : item.installable && scopeSupported
+            : item.installable && isScopeSupported
               ? labels.install
               : labels.unavailable}
         </Button>
       </div>
       <div className="mt-8 flex flex-col gap-5">
         {item.diagnostic ? (
-          <p
-            role="status"
-            className="text-body text-destructive flex items-start gap-2"
-          >
+          <output className="text-body text-destructive flex items-start gap-2">
             <CircleAlert
               className="mt-0.5 size-4 shrink-0"
               aria-hidden="true"
             />
             <span>{item.diagnostic}</span>
-          </p>
+          </output>
         ) : null}
         <div className="text-body grid grid-cols-[9rem_minmax(0,1fr)] gap-3">
           <span className="text-muted-foreground">{labels.source}</span>
@@ -1340,7 +1365,7 @@ const MarketplaceDetails = ({
       </div>
     </article>
   );
-}
+};
 
 const ChangeConfirmation = ({
   plan,
@@ -1356,83 +1381,81 @@ const ChangeConfirmation = ({
   readonly error: string | null;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
-}) => {
-  return (
-    <AlertDialog
-      open={Boolean(plan)}
-      onOpenChange={(open) => !open && !busy && onCancel()}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{labels.confirmTitle}</AlertDialogTitle>
-          <AlertDialogDescription>{plan?.summary}</AlertDialogDescription>
-        </AlertDialogHeader>
-        {plan?.affectedPlugins?.length ? (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-metadata text-muted-foreground font-medium">
-              {labels.affectedPlugins}
-            </h3>
-            <ul className="text-body flex flex-col gap-1">
-              {plan.affectedPlugins.map((plugin) => (
-                <li key={plugin.id}>
-                  {plugin.name}
-                  {plugin.desiredState ? (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      ·{" "}
-                      {plugin.desiredState === "enabled"
-                        ? labels.enabled
-                        : plugin.desiredState === "disabled"
-                          ? labels.disabled
-                          : labels.inherit}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {plan?.activeResources?.length ? (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-metadata text-muted-foreground font-medium">
-              {labels.activeResources}
-            </h3>
-            <ul className="text-body flex flex-col gap-1">
-              {plan.activeResources.map((resource) => (
-                <li key={resource.id}>{resource.label}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {plan?.warnings?.map((warning) => (
-          <p key={warning} className="text-body text-destructive">
-            {warning}
-          </p>
-        ))}
-        {error ? (
-          <p role="alert" className="text-body text-destructive">
-            {error}
-          </p>
-        ) : null}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy}>{labels.cancel}</AlertDialogCancel>
-          <AlertDialogAction
-            variant={
-              plan?.request.desiredState === "disabled"
-                ? "destructive"
-                : "default"
-            }
-            disabled={busy}
-            onClick={() => onConfirm()}
-          >
-            {busy ? <Spinner data-icon="inline-start" /> : null}
-            {labels.confirm}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
+}) => (
+  <AlertDialog
+    open={Boolean(plan)}
+    onOpenChange={(open) => !open && !busy && onCancel()}
+  >
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{labels.confirmTitle}</AlertDialogTitle>
+        <AlertDialogDescription>{plan?.summary}</AlertDialogDescription>
+      </AlertDialogHeader>
+      {plan?.affectedPlugins?.length ? (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-metadata text-muted-foreground font-medium">
+            {labels.affectedPlugins}
+          </h3>
+          <ul className="text-body flex flex-col gap-1">
+            {plan.affectedPlugins.map((plugin) => (
+              <li key={plugin.id}>
+                {plugin.name}
+                {plugin.desiredState ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    ·{" "}
+                    {plugin.desiredState === "enabled"
+                      ? labels.enabled
+                      : plugin.desiredState === "disabled"
+                        ? labels.disabled
+                        : labels.inherit}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {plan?.activeResources?.length ? (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-metadata text-muted-foreground font-medium">
+            {labels.activeResources}
+          </h3>
+          <ul className="text-body flex flex-col gap-1">
+            {plan.activeResources.map((resource) => (
+              <li key={resource.id}>{resource.label}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {plan?.warnings?.map((warning) => (
+        <p key={warning} className="text-body text-destructive">
+          {warning}
+        </p>
+      ))}
+      {error ? (
+        <p role="alert" className="text-body text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <AlertDialogFooter>
+        <AlertDialogCancel disabled={busy}>{labels.cancel}</AlertDialogCancel>
+        <AlertDialogAction
+          variant={
+            plan?.request.desiredState === "disabled"
+              ? "destructive"
+              : "default"
+          }
+          disabled={busy}
+          onClick={() => onConfirm()}
+        >
+          {busy ? <Spinner data-icon="inline-start" /> : null}
+          {labels.confirm}
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
+);
 
 /**
  * Data-only plugin management surface. It never imports or renders code supplied by a bundle;
@@ -1465,10 +1488,7 @@ export const PluginManagerPage = ({
   onApplyScaffold,
   onResetPlugin,
 }: PluginManagerPageProps) => {
-  const labels = useMemo(
-    () => ({ ...DEFAULT_LABELS, ...labelOverrides }),
-    [labelOverrides]
-  );
+  const labels = { ...defaultLabels, ...labelOverrides };
   const [tab, setTab] = useState(initialTab);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -1494,48 +1514,44 @@ export const PluginManagerPage = ({
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const visiblePlugins = useMemo(
-    () =>
-      plugins.filter((plugin) =>
-        [
-          plugin.name,
-          plugin.description,
-          plugin.author,
-          plugin.category,
-          sourceLabel(plugin.source, labels, plugin.sourceLabel),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery)
-      ),
-    [labels, normalizedQuery, plugins]
+  const visiblePlugins = plugins.filter((plugin) =>
+    [
+      plugin.name,
+      plugin.description,
+      plugin.author,
+      plugin.category,
+      sourceLabel(plugin.source, labels, plugin.sourceLabel),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedQuery)
   );
-  const visibleMarketplace = useMemo(
-    () =>
-      marketplaceItems.filter((item) =>
-        [item.name, item.description, item.kind, item.author, item.sourceLabel]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery)
-      ),
-    [marketplaceItems, normalizedQuery]
+  const visibleMarketplace = marketplaceItems.filter((item) =>
+    [item.name, item.description, item.kind, item.author, item.sourceLabel]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedQuery)
   );
-  const resourcesByTab = useMemo(() => {
+  const resourcesByTab = (() => {
     const grouped: Record<PluginResourceTab, PluginManagerComponent[]> = {
+      hooks: [],
       mcps: [],
       skills: [],
-      hooks: [],
     };
     for (const component of components) {
       const resourceTab = resourceTabFor(component);
-      if (resourceTab) grouped[resourceTab].push(component);
+      if (resourceTab) {
+        grouped[resourceTab].push(component);
+      }
     }
     return grouped;
-  }, [components]);
-  const visibleResources = useMemo(() => {
-    if (!isResourceTab(tab)) return [];
+  })();
+  const visibleResources = (() => {
+    if (!isResourceTab(tab)) {
+      return [];
+    }
     return resourcesByTab[tab].filter((resource) =>
       [
         resource.name,
@@ -1549,7 +1565,7 @@ export const PluginManagerPage = ({
         .toLowerCase()
         .includes(normalizedQuery)
     );
-  }, [normalizedQuery, resourcesByTab, tab]);
+  })();
 
   const selectedPlugin =
     selectedPluginId === null
@@ -1595,7 +1611,9 @@ export const PluginManagerPage = ({
   };
 
   const applyPlan = async () => {
-    if (!pendingPlan || applyingPlan) return;
+    if (!pendingPlan || applyingPlan) {
+      return;
+    }
     setApplyingPlan(true);
     setActionError(null);
     try {
@@ -1631,7 +1649,9 @@ export const PluginManagerPage = ({
   };
 
   const refresh = async () => {
-    if (!onRefreshMarketplace || refreshing) return;
+    if (!onRefreshMarketplace || refreshing) {
+      return;
+    }
     setRefreshing(true);
     setActionError(null);
     setActionNotice(null);
@@ -1648,7 +1668,9 @@ export const PluginManagerPage = ({
     pluginId: string,
     resetScope: PluginManagerScope
   ) => {
-    if (!onResetPlugin) return;
+    if (!onResetPlugin) {
+      return;
+    }
     setBusyTarget(`plugin:${pluginId}`);
     setActionError(null);
     setActionNotice(null);
@@ -1662,7 +1684,7 @@ export const PluginManagerPage = ({
     }
   };
 
-  const runAction = async (
+  const isRunAction = async (
     key: string,
     action: () => Promise<void>,
     success?: string
@@ -1672,7 +1694,9 @@ export const PluginManagerPage = ({
     setActionNotice(null);
     try {
       await action();
-      if (success) setActionNotice(success);
+      if (success) {
+        setActionNotice(success);
+      }
       return true;
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
@@ -1683,12 +1707,16 @@ export const PluginManagerPage = ({
   };
 
   const openMarketplace = async () => {
-    if (!onOpenMarketplace || busyTarget === "marketplace-open") return;
-    await runAction("marketplace-open", onOpenMarketplace);
+    if (!onOpenMarketplace || busyTarget === "marketplace-open") {
+      return;
+    }
+    await isRunAction("marketplace-open", onOpenMarketplace);
   };
 
   const applyScaffold = async (pluginId: string, scaffoldId: string) => {
-    if (!onApplyScaffold) return;
+    if (!onApplyScaffold) {
+      return;
+    }
     const key = `scaffold:${pluginId}:${scaffoldId}`;
     setBusyTarget(key);
     setActionError(null);
@@ -1704,7 +1732,9 @@ export const PluginManagerPage = ({
   };
 
   const importGithub = async () => {
-    if (!onImportGithub || busyTarget === "bundle-import") return;
+    if (!onImportGithub || busyTarget === "bundle-import") {
+      return;
+    }
     const repository = githubRepository.trim();
     if (!repository) {
       setGithubError(labels.githubRepositoryRequired);
@@ -1729,11 +1759,11 @@ export const PluginManagerPage = ({
   };
 
   const tabCounts = {
-    plugins: plugins.length,
-    mcps: resourcesByTab.mcps.length,
-    skills: resourcesByTab.skills.length,
     hooks: resourcesByTab.hooks.length,
     marketplace: marketplaceItems.length,
+    mcps: resourcesByTab.mcps.length,
+    plugins: plugins.length,
+    skills: resourcesByTab.skills.length,
   };
 
   return (
@@ -1877,9 +1907,13 @@ export const PluginManagerPage = ({
             }
             onClick={() => {
               setGithubInstallerOpen(false);
-              if (tab === "plugins") setSelectedPluginId(null);
-              else if (tab === "marketplace") setSelectedMarketplaceId(null);
-              else setSelectedResourceId(null);
+              if (tab === "plugins") {
+                setSelectedPluginId(null);
+              } else if (tab === "marketplace") {
+                setSelectedMarketplaceId(null);
+              } else {
+                setSelectedResourceId(null);
+              }
             }}
           >
             <ArrowLeft className="size-3.5" />
@@ -1969,8 +2003,7 @@ export const PluginManagerPage = ({
             ) : null}
             <div className="mx-auto w-full max-w-5xl px-8 pt-4">
               {recovery && recovery.kind !== "normal" ? (
-                <div
-                  role="status"
+                <output
                   data-plugin-recovery={recovery.kind}
                   className="rounded-control bg-warning/10 text-body mb-4 flex items-start gap-2 border px-3 py-2"
                 >
@@ -1988,7 +2021,7 @@ export const PluginManagerPage = ({
                       </span>
                     ) : null}
                   </span>
-                </div>
+                </output>
               ) : null}
               {actionError && !pendingPlan ? (
                 <p
@@ -2003,8 +2036,7 @@ export const PluginManagerPage = ({
                 </p>
               ) : null}
               {actionNotice ? (
-                <p
-                  role="status"
+                <output
                   aria-live="polite"
                   className="text-body text-success mb-4 flex items-start gap-2"
                 >
@@ -2013,7 +2045,7 @@ export const PluginManagerPage = ({
                     aria-hidden="true"
                   />
                   <span>{actionNotice}</span>
-                </p>
+                </output>
               ) : null}
             </div>
             {tab === "plugins" && selectedPlugin ? (
@@ -2038,7 +2070,7 @@ export const PluginManagerPage = ({
                 onSetBundleEnabled={
                   onSetBundleEnabled
                     ? async (pluginId, enabled) => {
-                        await runAction(
+                        await isRunAction(
                           `bundle-enabled:${pluginId}`,
                           () => onSetBundleEnabled(pluginId, enabled),
                           labels.bundleEnabled(selectedPlugin.name, enabled)
@@ -2049,7 +2081,7 @@ export const PluginManagerPage = ({
                 onSetBundleTrusted={
                   onSetBundleTrusted
                     ? async (pluginId, trusted) => {
-                        await runAction(
+                        await isRunAction(
                           `bundle-trust:${pluginId}`,
                           () => onSetBundleTrusted(pluginId, trusted),
                           labels.bundleTrusted(selectedPlugin.name, trusted)
@@ -2060,7 +2092,7 @@ export const PluginManagerPage = ({
                 onUninstallBundle={
                   onUninstallBundle
                     ? async (pluginId, keepData) => {
-                        const uninstalled = await runAction(
+                        const isUninstalled = await isRunAction(
                           `bundle-uninstall:${pluginId}`,
                           () => onUninstallBundle(pluginId, keepData),
                           labels.bundleUninstalled(
@@ -2068,7 +2100,9 @@ export const PluginManagerPage = ({
                             keepData
                           )
                         );
-                        if (uninstalled) setSelectedPluginId(null);
+                        if (isUninstalled) {
+                          setSelectedPluginId(null);
+                        }
                       }
                     : undefined
                 }
@@ -2140,4 +2174,4 @@ export const PluginManagerPage = ({
       />
     </main>
   );
-}
+};

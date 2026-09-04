@@ -10,9 +10,15 @@ import * as monaco from "monaco-editor";
 
 import { clientForPath, pathToUri } from "./client";
 import type { LspClient } from "./client";
-
-/* eslint-disable @typescript-eslint/no-explicit-any -- the wire format is untyped JSON */
-type Json = any;
+import {
+  arrayField,
+  asJsonObject,
+  booleanField,
+  numberField,
+  objectField,
+  stringField,
+} from "./json";
+import type { JsonObject } from "./json";
 
 const registered = new Set<string>();
 
@@ -20,32 +26,32 @@ function clientFor(model: monaco.editor.ITextModel): LspClient | null {
   return clientForPath(model.uri.path, model.getLanguageId());
 }
 
-function toLspPosition(pos: monaco.Position): Json {
-  return { line: pos.lineNumber - 1, character: pos.column - 1 };
+function toLspPosition(pos: monaco.Position): JsonObject {
+  return { character: pos.column - 1, line: pos.lineNumber - 1 };
 }
 
-function toMonacoRange(r: Json): monaco.IRange {
+function toMonacoRange(value: unknown): monaco.IRange {
+  const range = asJsonObject(value);
+  const start = objectField(range, "start");
+  const end = objectField(range, "end");
   return {
-    startLineNumber: (r?.start?.line ?? 0) + 1,
-    startColumn: (r?.start?.character ?? 0) + 1,
-    endLineNumber: (r?.end?.line ?? 0) + 1,
-    endColumn: (r?.end?.character ?? 0) + 1,
+    endColumn: numberField(end, "character") + 1,
+    endLineNumber: numberField(end, "line") + 1,
+    startColumn: numberField(start, "character") + 1,
+    startLineNumber: numberField(start, "line") + 1,
   };
 }
 
 function documentParameters(
   model: monaco.editor.ITextModel,
   pos: monaco.Position
-): Json {
+): JsonObject {
   return {
-    textDocument: { uri: pathToUri(model.uri.path) },
     position: toLspPosition(pos),
+    textDocument: { uri: pathToUri(model.uri.path) },
   };
 }
 
-/**
-Flush pending edits first: a request against stale server text answers the wrong question.
-*/
 function readyClient(model: monaco.editor.ITextModel): LspClient | null {
   const client = clientFor(model);
   if (!client) {
@@ -84,102 +90,144 @@ const KIND: monaco.languages.CompletionItemKind[] = [
   monaco.languages.CompletionItemKind.TypeParameter,
 ];
 
-function toDocument(d: Json): monaco.IMarkdownString | undefined {
-  if (!d) {
+function toDocument(value: unknown): monaco.IMarkdownString | undefined {
+  if (value == null) {
     return undefined;
   }
-  if (typeof d === "string") {
-    return { value: d };
+  if (typeof value === "string") {
+    return { value };
   }
-  if (typeof d.value === "string") {
-    return { value: d.value };
+  const object = asJsonObject(value);
+  const markdown = stringField(object, "value");
+  if (markdown != null) {
+    return { value: markdown };
   }
   return undefined;
 }
 
 function toCompletion(
-  item: Json,
+  itemValue: unknown,
   fallback: monaco.IRange
 ): monaco.languages.CompletionItem {
+  const item = asJsonObject(itemValue) ?? {};
+  const labelObject = objectField(item, "label");
   const label =
-    typeof item.label === "string" ? item.label : (item.label?.label ?? "");
+    stringField(item, "label") ?? stringField(labelObject, "label") ?? "";
   let range: monaco.languages.CompletionItem["range"] = fallback;
-  let insertText: string = item.insertText ?? label;
-  if (item.textEdit) {
-    insertText = item.textEdit.newText;
+  let insertText = stringField(item, "insertText") ?? label;
+  const textEdit = objectField(item, "textEdit");
+  if (textEdit != null) {
+    insertText = stringField(textEdit, "newText") ?? insertText;
     // InsertReplaceEdit carries two ranges; plain TextEdit carries one.
-    range = item.textEdit.range
-      ? toMonacoRange(item.textEdit.range)
-      : {
-          insert: toMonacoRange(item.textEdit.insert),
-          replace: toMonacoRange(item.textEdit.replace),
-        };
+    const editRange = objectField(textEdit, "range");
+    if (editRange != null) {
+      range = toMonacoRange(editRange);
+    } else {
+      range = {
+        insert: toMonacoRange(objectField(textEdit, "insert")),
+        replace: toMonacoRange(objectField(textEdit, "replace")),
+      };
+    }
   }
+  const additional = arrayField(item, "additionalTextEdits");
   return {
-    label,
-    kind:
-      KIND[(item.kind ?? 1) - 1] ?? monaco.languages.CompletionItemKind.Text,
+    additionalTextEdits: additional?.flatMap((entry) => {
+      const edit = asJsonObject(entry);
+      if (edit == null) {
+        return [];
+      }
+      return [
+        {
+          range: toMonacoRange(objectField(edit, "range")),
+          text: stringField(edit, "newText") ?? "",
+        },
+      ];
+    }),
+    detail: stringField(item, "detail") ?? undefined,
+    documentation: toDocument(item.documentation),
+    filterText: stringField(item, "filterText") ?? undefined,
     insertText,
-    range,
     insertTextRules:
-      item.insertTextFormat === 2
+      numberField(item, "insertTextFormat", 0) === 2
         ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
         : undefined,
-    detail: item.detail,
-    documentation: toDocument(item.documentation),
-    sortText: item.sortText,
-    filterText: item.filterText,
-    preselect: item.preselect,
-    additionalTextEdits: item.additionalTextEdits?.map((e: Json) => ({
-									      range: toMonacoRange(e.range),
-									      text: e.newText,
-									    })),
+    kind:
+      KIND[numberField(item, "kind", 1) - 1] ??
+      monaco.languages.CompletionItemKind.Text,
+    label,
+    preselect: booleanField(item, "preselect") ?? undefined,
+    range,
+    sortText: stringField(item, "sortText") ?? undefined,
   };
 }
 
-function toHoverContents(contents: Json): monaco.IMarkdownString[] {
-  const one = (c: Json): monaco.IMarkdownString | null => {
-    if (!c) {
+function toHoverContents(contents: unknown): monaco.IMarkdownString[] {
+  const one = (value: unknown): monaco.IMarkdownString | null => {
+    if (value == null) {
       return null;
     }
-    if (typeof c === "string") {
-      return c ? { value: c } : null;
+    if (typeof value === "string") {
+      return value !== "" ? { value } : null;
     }
-    if (typeof c.value === "string") {
-      // MarkedString {language, value} wants a fenced block; MarkupContent is already markdown.
-      return c.language
-        ? { value: `\`\`\`${c.language}\n${c.value}\n\`\`\`` }
-        : { value: c.value };
+    const object = asJsonObject(value);
+    const markdown = stringField(object, "value");
+    if (markdown == null) {
+      return null;
     }
-    return null;
+    const language = stringField(object, "language");
+    // MarkedString {language, value} wants a fenced block; MarkupContent is already markdown.
+    return language != null && language !== ""
+      ? { value: `\`\`\`${language}\n${markdown}\n\`\`\`` }
+      : { value: markdown };
   };
   const list = Array.isArray(contents) ? contents : [contents];
   return list.map(one).filter((x): x is monaco.IMarkdownString => x !== null);
 }
 
-function toLocations(res: Json): monaco.languages.Location[] {
-  if (!res) {
+function toLocations(res: unknown): monaco.languages.Location[] {
+  if (res == null) {
     return [];
   }
   const list = Array.isArray(res) ? res : [res];
-  return list.map((l: Json) => ({
-									    uri: monaco.Uri.parse(l.uri ?? l.targetUri),
-									    range: toMonacoRange(l.range ?? l.targetSelectionRange ?? l.targetRange),
-									  }));
+  return list.flatMap((entry) => {
+    const location = asJsonObject(entry);
+    if (location == null) {
+      return [];
+    }
+    const uri =
+      stringField(location, "uri") ?? stringField(location, "targetUri");
+    if (uri == null || uri === "") {
+      return [];
+    }
+    const range =
+      objectField(location, "range") ??
+      objectField(location, "targetSelectionRange") ??
+      objectField(location, "targetRange");
+    return [
+      {
+        range: toMonacoRange(range),
+        uri: monaco.Uri.parse(uri),
+      },
+    ];
+  });
 }
 
-/**
-Wire up every provider for one language id. Idempotent; called when a client becomes ready.
-*/
-export function registerProviders(lang: string, capabilities: Json): void {
+export function registerProviders(
+  lang: string,
+  capabilitiesValue: unknown
+): void {
   if (registered.has(lang)) {
     return;
   }
   registered.add(lang);
+  const capabilities = asJsonObject(capabilitiesValue) ?? {};
+  const completionProvider = objectField(capabilities, "completionProvider");
+  const signatureHelpProvider = objectField(
+    capabilities,
+    "signatureHelpProvider"
+  );
 
   monaco.languages.registerCompletionItemProvider(lang, {
-    triggerCharacters:
-      capabilities?.completionProvider?.triggerCharacters ?? [],
     provideCompletionItems: async (model, position) => {
       const client = readyClient(model);
       if (!client) {
@@ -191,19 +239,28 @@ export function registerProviders(lang: string, capabilities: Json): void {
           context: { triggerKind: 1 },
         })
         .catch(() => null);
-      const items: Json[] = Array.isArray(res) ? res : (res?.items ?? []);
+      const resultObject = asJsonObject(res);
+      const items = Array.isArray(res)
+        ? res
+        : (arrayField(resultObject, "items") ?? []);
       const word = model.getWordUntilPosition(position);
       const fallback: monaco.IRange = {
-        startLineNumber: position.lineNumber,
-        startColumn: word.startColumn,
-        endLineNumber: position.lineNumber,
         endColumn: word.endColumn,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        startLineNumber: position.lineNumber,
       };
       return {
+        incomplete:
+          !Array.isArray(res) &&
+          booleanField(resultObject, "isIncomplete") === true,
         suggestions: items.map((it) => toCompletion(it, fallback)),
-        incomplete: !Array.isArray(res) && !!res?.isIncomplete,
       };
     },
+    triggerCharacters:
+      arrayField(completionProvider, "triggerCharacters")?.filter(
+        (value): value is string => typeof value === "string"
+      ) ?? [],
   });
 
   monaco.languages.registerHoverProvider(lang, {
@@ -215,25 +272,23 @@ export function registerProviders(lang: string, capabilities: Json): void {
       const res = await client
         .request("textDocument/hover", documentParameters(model, position))
         .catch(() => null);
-      if (!res?.contents) {
+      const hover = asJsonObject(res);
+      if (hover?.contents == null) {
         return null;
       }
-      const contents = toHoverContents(res.contents);
+      const contents = toHoverContents(hover.contents);
       if (contents.length === 0) {
         return null;
       }
+      const range = objectField(hover, "range");
       return {
         contents,
-        range: res.range ? toMonacoRange(res.range) : undefined,
+        range: range != null ? toMonacoRange(range) : undefined,
       };
     },
   });
 
   monaco.languages.registerSignatureHelpProvider(lang, {
-    signatureHelpTriggerCharacters: capabilities?.signatureHelpProvider
-      ?.triggerCharacters ?? ["(", ","],
-    signatureHelpRetriggerCharacters:
-      capabilities?.signatureHelpProvider?.retriggerCharacters ?? [],
     provideSignatureHelp: async (model, position) => {
       const client = readyClient(model);
       if (!client) {
@@ -245,25 +300,67 @@ export function registerProviders(lang: string, capabilities: Json): void {
           documentParameters(model, position)
         )
         .catch(() => null);
-      if (!res?.signatures?.length) {
+      const help = asJsonObject(res);
+      const signatures = arrayField(help, "signatures");
+      if (signatures == null || signatures.length === 0) {
         return null;
       }
       return {
-        value: {
-          signatures: res.signatures.map((s: Json) => ({
-									            label: s.label ?? "",
-									            documentation: toDocument(s.documentation),
-									            parameters: (s.parameters ?? []).map((p: Json) => ({
-									              label: p.label,
-									              documentation: toDocument(p.documentation),
-									            })),
-									          })),
-          activeSignature: res.activeSignature ?? 0,
-          activeParameter: res.activeParameter ?? 0,
-        },
         dispose: () => {},
+        value: {
+          activeParameter: numberField(help, "activeParameter"),
+          activeSignature: numberField(help, "activeSignature"),
+          signatures: signatures.flatMap((signatureValue) => {
+            const signature = asJsonObject(signatureValue);
+            if (signature == null) {
+              return [];
+            }
+            const parameters = arrayField(signature, "parameters") ?? [];
+            return [
+              {
+                documentation: toDocument(signature.documentation),
+                label: stringField(signature, "label") ?? "",
+                parameters: parameters.flatMap((parameterValue) => {
+                  const parameter = asJsonObject(parameterValue);
+                  if (parameter == null) {
+                    return [];
+                  }
+                  const labelValue = parameter.label;
+                  let label: string | [number, number] = "";
+                  if (typeof labelValue === "string") {
+                    label = labelValue;
+                  } else if (
+                    Array.isArray(labelValue) &&
+                    labelValue.length === 2 &&
+                    typeof labelValue[0] === "number" &&
+                    typeof labelValue[1] === "number"
+                  ) {
+                    label = [labelValue[0], labelValue[1]];
+                  }
+                  return [
+                    {
+                      documentation: toDocument(parameter.documentation),
+                      label,
+                    },
+                  ];
+                }),
+              },
+            ];
+          }),
+        },
       };
     },
+    signatureHelpRetriggerCharacters:
+      arrayField(signatureHelpProvider, "retriggerCharacters")?.filter(
+        (value): value is string => typeof value === "string"
+      ) ?? [],
+    signatureHelpTriggerCharacters: arrayField(
+      signatureHelpProvider,
+      "triggerCharacters"
+    )?.filter((value): value is string => typeof value === "string") ?? [
+      "(",
+      ",",
+    ],
   });
 
   monaco.languages.registerDefinitionProvider(lang, {
@@ -303,20 +400,28 @@ export function registerProviders(lang: string, capabilities: Json): void {
       }
       const res = await client
         .request("textDocument/formatting", {
-          textDocument: { uri: pathToUri(model.uri.path) },
           options: {
-            tabSize: model.getOptions().tabSize,
             insertSpaces: model.getOptions().insertSpaces,
+            tabSize: model.getOptions().tabSize,
           },
+          textDocument: { uri: pathToUri(model.uri.path) },
         })
         .catch(() => null);
       if (!Array.isArray(res)) {
         return null;
       }
-      return res.map((e: Json) => ({
-										        range: toMonacoRange(e.range),
-										        text: e.newText,
-										      }));
+      return res.flatMap((entry) => {
+        const edit = asJsonObject(entry);
+        if (edit == null) {
+          return [];
+        }
+        return [
+          {
+            range: toMonacoRange(objectField(edit, "range")),
+            text: stringField(edit, "newText") ?? "",
+          },
+        ];
+      });
     },
   });
 }
@@ -328,23 +433,45 @@ const SEVERITY: monaco.MarkerSeverity[] = [
   monaco.MarkerSeverity.Hint,
 ];
 
-/**
-Push one file's published diagnostics onto its model as markers.
-*/
-export function applyDiagnostics(uri: string, diagnostics: Json[]): void {
+export function applyDiagnostics(uri: string, diagnostics: unknown[]): void {
   const model = monaco.editor.getModel(monaco.Uri.parse(uri));
   if (!model) {
     return;
   }
-  const markers: monaco.editor.IMarkerData[] = diagnostics.map((d) => ({
-										    ...toMonacoRange(d.range),
-										    severity: SEVERITY[(d.severity ?? 1) - 1] ?? monaco.MarkerSeverity.Error,
-										    message: String(d.message ?? ""),
-										    code:
-										      typeof d.code === "object" && d.code !== null
-										        ? String(d.code.value ?? "")
-										        : d.code?.toString(),
-										    source: d.source,
-										  }));
+  const markers: monaco.editor.IMarkerData[] = diagnostics.flatMap((entry) => {
+    const diagnostic = asJsonObject(entry);
+    if (diagnostic == null) {
+      return [];
+    }
+    const codeValue = diagnostic.code;
+    let code: string | undefined;
+    if (typeof codeValue === "string") {
+      code = codeValue;
+    } else if (typeof codeValue === "number") {
+      code = String(codeValue);
+    } else {
+      const codeObject = asJsonObject(codeValue);
+      const nested = codeObject?.value;
+      code =
+        typeof nested === "string"
+          ? nested
+          : typeof nested === "number"
+            ? String(nested)
+            : nested != null
+              ? String(nested)
+              : undefined;
+    }
+    return [
+      {
+        ...toMonacoRange(objectField(diagnostic, "range")),
+        code,
+        message: String(stringField(diagnostic, "message") ?? ""),
+        severity:
+          SEVERITY[numberField(diagnostic, "severity", 1) - 1] ??
+          monaco.MarkerSeverity.Error,
+        source: stringField(diagnostic, "source") ?? undefined,
+      },
+    ];
+  });
   monaco.editor.setModelMarkers(model, "codetwo-lsp", markers);
 }

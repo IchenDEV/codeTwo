@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  LONG_PROMPT_MAX_CHARS,
-  LONG_PROMPT_MAX_LINES,
+  longPromptMaxChars,
+  longPromptMaxLines,
   collapsedPrompt,
   isLongPrompt,
 } from "../src/session/promptPreview";
@@ -547,27 +547,27 @@ describe("persisted transcript projection", () => {
 
 describe("long prompt preview", () => {
   test("collapses only after the upstream line or character threshold", () => {
-    expect(isLongPrompt("x".repeat(LONG_PROMPT_MAX_CHARS))).toBe(false);
-    expect(isLongPrompt("x".repeat(LONG_PROMPT_MAX_CHARS + 1))).toBe(true);
+    expect(isLongPrompt("x".repeat(longPromptMaxChars))).toBe(false);
+    expect(isLongPrompt("x".repeat(longPromptMaxChars + 1))).toBe(true);
     expect(
-      isLongPrompt(Array(LONG_PROMPT_MAX_LINES).fill("line").join("\n"))
+      isLongPrompt(Array(longPromptMaxLines).fill("line").join("\n"))
     ).toBe(false);
     expect(
       isLongPrompt(
-        Array(LONG_PROMPT_MAX_LINES + 1)
+        Array(longPromptMaxLines + 1)
           .fill("line")
           .join("\n")
       )
     ).toBe(true);
-    expect(isLongPrompt("😀".repeat(LONG_PROMPT_MAX_CHARS))).toBe(false);
-    expect(isLongPrompt("😀".repeat(LONG_PROMPT_MAX_CHARS + 1))).toBe(true);
+    expect(isLongPrompt("😀".repeat(longPromptMaxChars))).toBe(false);
+    expect(isLongPrompt("😀".repeat(longPromptMaxChars + 1))).toBe(true);
   });
 
   test("bounds the preview by both lines and Unicode code points", () => {
-    const prompt = `${"😀".repeat(LONG_PROMPT_MAX_CHARS + 20)}\n${Array(9).fill("tail").join("\n")}`;
+    const prompt = `${"😀".repeat(longPromptMaxChars + 20)}\n${Array(9).fill("tail").join("\n")}`;
     const preview = collapsedPrompt(prompt);
 
-    expect(Array.from(preview)).toHaveLength(LONG_PROMPT_MAX_CHARS);
+    expect(Array.from(preview)).toHaveLength(longPromptMaxChars);
     expect(preview).not.toContain("tail");
     expect(preview.endsWith("😀")).toBe(true);
   });

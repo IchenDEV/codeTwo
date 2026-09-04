@@ -632,7 +632,6 @@ html[data-appearance-pointer-cursors="false"]
      positioning adapters use this class; feature code never chooses opacity or blur values. */
   .raised-material {
     backdrop-filter: var(--ds-material-raised-backdrop);
-    backdrop-filter: var(--ds-material-raised-backdrop);
     background-color: var(--ds-material-raised-background);
   }
 
@@ -646,7 +645,6 @@ html[data-appearance-pointer-cursors="false"]
 
   @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
     .raised-material {
-      backdrop-filter: none;
       backdrop-filter: none;
       background-color: var(--ds-color-raised);
     }
@@ -1531,12 +1529,6 @@ aside .codetwo-visualize.is-wide {
     currentcolor calc(100% - var(--ds-space-page-section)),
     transparent 100%
   );
-  mask-image: linear-gradient(
-    to bottom,
-    currentcolor 0,
-    currentcolor calc(100% - var(--ds-space-page-section)),
-    transparent 100%
-  );
 }
 
 @media (width <= 900px) {
@@ -1754,13 +1746,11 @@ pre {
 .command-palette-surface {
   height: min(32rem, calc(100dvh - var(--ds-space-page-section)));
   backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
-  backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
   background: color-mix(in oklch, var(--ds-color-modal) 78%, transparent);
 }
 
 @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
   .command-palette-surface {
-    backdrop-filter: none;
     backdrop-filter: none;
     background: var(--ds-color-modal);
   }

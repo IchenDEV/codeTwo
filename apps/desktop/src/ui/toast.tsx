@@ -1,18 +1,14 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { CheckCircle2, CircleAlert, Info, X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type Tone = "info" | "success" | "error";
 
-/** An offer to take it back. See the undo rule in docs/design/system.md. */
+/**
+An offer to take it back. See the undo rule in docs/design/system.md.
+*/
 export interface ToastAction {
   label: string;
   run: () => void;
@@ -29,34 +25,27 @@ const ToastContext = createContext<
   (text: string, tone?: Tone, action?: ToastAction) => void
 >(() => {});
 
-/**
- * Transient feedback. Several actions used to fail silently — a click that hits a disabled
- * provider, a voice button with no recognizer, a commit with nothing staged — which reads as "the
- * button is broken". Anything that can no-op should say so here instead.
- *
- * A recoverable action passes an `action` instead of asking "are you sure?" first: do the thing,
- * say it happened, and offer the way back for as long as the toast is up.
- */
 export function useToast() {
   return useContext(ToastContext);
 }
 
 let nextId = 1;
 
-export const ToastProvider = ({ children }: { readonly children: ReactNode }) => {
+export const ToastProvider = ({
+  children,
+}: {
+  readonly children: ReactNode;
+}) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const push = useCallback(
-    (text: string, tone: Tone = "info", action?: ToastAction) => {
-      const id = nextId++;
-      setToasts((t) => [...t.slice(-3), { id, text, tone, action }]);
-    },
-    []
-  );
+  const push = (text: string, tone: Tone = "info", action?: ToastAction) => {
+    const id = nextId++;
+    setToasts((t) => [...t.slice(-3), { action, id, text, tone }]);
+  };
 
-  const dismiss = useCallback((id: number) => {
+  const dismiss = (id: number) => {
     setToasts((t) => t.filter((x) => x.id !== id));
-  }, []);
+  };
 
   return (
     <ToastContext.Provider value={push}>
@@ -68,9 +57,9 @@ export const ToastProvider = ({ children }: { readonly children: ReactNode }) =>
       </div>
     </ToastContext.Provider>
   );
-}
+};
 
-const ICONS = { info: Info, success: CheckCircle2, error: CircleAlert };
+const ICONS = { error: CircleAlert, info: Info, success: CheckCircle2 };
 
 const ToastRow = ({
   toast,
@@ -102,7 +91,8 @@ const ToastRow = ({
         )}
       />
       <span className="min-w-0 flex-1 break-words">{toast.text}</span>
-      {toast.action ? <Button
+      {toast.action ? (
+        <Button
           type="button"
           variant="ghost"
           size="xs"
@@ -113,7 +103,8 @@ const ToastRow = ({
           className="shrink-0"
         >
           {toast.action.label}
-        </Button> : null}
+        </Button>
+      ) : null}
       <Button
         type="button"
         variant="ghost"
@@ -126,4 +117,4 @@ const ToastRow = ({
       </Button>
     </div>
   );
-}
+};

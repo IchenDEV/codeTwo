@@ -1,8 +1,8 @@
 import type { BinaryFileData } from "./excalidrawAdapter";
 
-export const MEDIA_LIMITS = {
-  maxInputs: 16,
+export const mediaLimits = {
   maxInputBytes: 20 * 1024 * 1024,
+  maxInputs: 16,
   maxOutputBytes: 20 * 1024 * 1024,
 } as const;
 
@@ -96,8 +96,8 @@ function assertOpaqueReference(
     typeof value !== "string" ||
     value.length === 0 ||
     value.length > 160 ||
-    /^(?:data:|blob:|https?:|javascript:)/i.test(value) ||
-    /[\\/\s]/.test(value)
+    /^(?:data:|blob:|https?:|javascript:)/iu.test(value) ||
+    /[\\/\s]/u.test(value)
   ) {
     throw new CanvasMediaError(
       "normalizer-rejected",
@@ -106,10 +106,6 @@ function assertOpaqueReference(
   }
 }
 
-/**
- * The one media intake path used by paste, drop, and the local picker. The normalizer is required;
- * callers cannot accidentally pass raw SVG/GIF/JPEG bytes to Excalidraw.
- */
 export async function intakeCanvasMedia(
   inputs: readonly CanvasMediaInput[],
   options: CanvasMediaIntakeOptions
@@ -120,9 +116,9 @@ export async function intakeCanvasMedia(
       "Canvas media normalizer callback is required"
     );
   }
-  const maxInputs = options.maxInputs ?? MEDIA_LIMITS.maxInputs;
-  const maxInputBytes = options.maxInputBytes ?? MEDIA_LIMITS.maxInputBytes;
-  const maxOutputBytes = options.maxOutputBytes ?? MEDIA_LIMITS.maxOutputBytes;
+  const maxInputs = options.maxInputs ?? mediaLimits.maxInputs;
+  const maxInputBytes = options.maxInputBytes ?? mediaLimits.maxInputBytes;
+  const maxOutputBytes = options.maxOutputBytes ?? mediaLimits.maxOutputBytes;
   if (inputs.length > maxInputs) {
     throw new CanvasMediaError(
       "input-budget",
@@ -171,13 +167,13 @@ export async function intakeCanvasMedia(
     const fileId =
       options.createFileId?.(normalized, index) ?? defaultFileId(index);
     const file: BinaryFileData = {
-      id: fileId as BinaryFileData["id"],
-      mimeType: normalized.mimeType,
+      created: 0,
       dataURL: asDataUrl(
         bytes,
         normalized.mimeType
       ) as BinaryFileData["dataURL"],
-      created: 0,
+      id: fileId as BinaryFileData["id"],
+      mimeType: normalized.mimeType,
       version: 1,
     };
     files.push(file);

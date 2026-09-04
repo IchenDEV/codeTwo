@@ -15,8 +15,10 @@ import {
   stdioServer,
   withProviderToolInstructions,
   withRichResponseInstructions,
-  type AcpMcpServer,
-  type HostToolEvidence,
+} from "../src/electrobun/toolBroker/providerTools";
+import type {
+  AcpMcpServer,
+  HostToolEvidence,
 } from "../src/electrobun/toolBroker/providerTools";
 
 const computerMcp: AcpMcpServer = {

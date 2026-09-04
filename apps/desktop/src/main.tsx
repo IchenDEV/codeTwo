@@ -14,17 +14,18 @@ import "./styles.css";
 document.documentElement.dataset.platform = currentDesktopPlatform();
 
 const searchParams = new URLSearchParams(window.location.search);
-const showDesktopPet =
+const isShowDesktopPet =
   document.querySelector(
     'meta[name="codetwo-surface"][content="desktop-pet"]'
   ) !== null;
-const showDesignSystem =
+const isShowDesignSystem =
   import.meta.env.DEV && searchParams.has("design-system");
-const showPetPreview = import.meta.env.DEV && searchParams.has("pet-preview");
-const showRichTranscript =
+const isShowPetPreview = import.meta.env.DEV && searchParams.has("pet-preview");
+const isShowRichTranscript =
   import.meta.env.DEV && searchParams.has("rich-transcript");
-if (showDesktopPet)
+if (isShowDesktopPet) {
   document.documentElement.classList.add("desktop-pet-window-root");
+}
 
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
@@ -35,7 +36,9 @@ document.addEventListener("contextmenu", (e) => {
   // Base UI needs the un-cancelled event to position an app-owned context menu. Its trigger is a
   // deliberate desktop interaction, not the webview's Reload / Inspect Element menu.
   const appContextMenu = el?.closest?.('[data-slot="context-menu-trigger"]');
-  if (!editable && !appContextMenu) e.preventDefault();
+  if (!editable && !appContextMenu) {
+    e.preventDefault();
+  }
 });
 
 // Electrobun drag regions include their descendants. Mark interactive descendants explicitly so
@@ -43,20 +46,26 @@ document.addEventListener("contextmenu", (e) => {
 const interactiveSelector =
   "button, input, textarea, select, a, summary, [role='button'], [contenteditable='true']";
 const protectInteractiveNode = (node: Node) => {
-  if (!(node instanceof Element)) return;
-  if (node.matches(interactiveSelector))
+  if (!(node instanceof Element)) {
+    return;
+  }
+  if (node.matches(interactiveSelector)) {
     node.classList.add("electrobun-webkit-app-region-no-drag");
+  }
   for (const element of node.querySelectorAll(interactiveSelector)) {
     element.classList.add("electrobun-webkit-app-region-no-drag");
   }
 };
 protectInteractiveNode(document.documentElement);
 new MutationObserver((records) => {
-  for (const record of records)
-    for (const node of record.addedNodes) protectInteractiveNode(node);
+  for (const record of records) {
+    for (const node of record.addedNodes) {
+      protectInteractiveNode(node);
+    }
+  }
 }).observe(document.documentElement, { childList: true, subtree: true });
 
-if (!showDesktopPet && currentDesktopPlatform() === "macos") {
+if (!isShowDesktopPet && currentDesktopPlatform() === "macos") {
   installDesktopTitlebarDoubleClick(document, (error) => {
     console.warn(
       "Could not perform the macOS titlebar double-click action",
@@ -67,14 +76,14 @@ if (!showDesktopPet && currentDesktopPlatform() === "macos") {
 
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
 async function render() {
-  const Root = showDesktopPet
+  const Root = isShowDesktopPet
     ? DesktopPetWindow
-    : showPetPreview
+    : isShowPetPreview
       ? (await import("./pet/PetPreview")).PetPreview
-      : showRichTranscript
+      : isShowRichTranscript
         ? (await import("./session/RichTranscriptPreview"))
             .RichTranscriptPreview
-        : showDesignSystem
+        : isShowDesignSystem
           ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
           : App;
 

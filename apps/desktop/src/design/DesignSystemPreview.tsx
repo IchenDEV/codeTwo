@@ -1,10 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useEffect, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
   AlertTriangle,
   Check,
@@ -167,22 +162,20 @@ const ThemeChoice = ({
   readonly children: ReactNode;
   readonly label: string;
   readonly onClick: () => void;
-}) => {
-  return (
-    <Button
-      aria-label={label}
-      aria-pressed={active}
-      variant="ghost"
-      size="icon-sm"
-      focusStyle="inset"
-      className="ds-theme-choice"
-      onClick={onClick}
-      type="button"
-    >
-      {children}
-    </Button>
-  );
-}
+}) => (
+  <Button
+    aria-label={label}
+    aria-pressed={active}
+    variant="ghost"
+    size="icon-sm"
+    focusStyle="inset"
+    className="ds-theme-choice"
+    onClick={onClick}
+    type="button"
+  >
+    {children}
+  </Button>
+);
 
 const SectionHeading = ({
   eyebrow,
@@ -190,18 +183,16 @@ const SectionHeading = ({
 }: {
   readonly eyebrow: string;
   readonly title: string;
-}) => {
-  return (
-    <header className="ds-section-heading">
-      <span>{eyebrow}</span>
-      <h2>{title}</h2>
-    </header>
-  );
-}
+}) => (
+  <header className="ds-section-heading">
+    <span>{eyebrow}</span>
+    <h2>{title}</h2>
+  </header>
+);
 
 export const DesignSystemPreview = () => {
   const toast = useToast();
-  const systemDark = useSystemDark();
+  const isSystemDark = useSystemDark();
   const appearance = useAppearanceSettings();
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [boldText, setBoldText] = useState(false);
@@ -212,7 +203,7 @@ export const DesignSystemPreview = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [invalidValue, setInvalidValue] = useState("Missing token");
   const resolvedTheme =
-    themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
+    themeMode === "system" ? (isSystemDark ? "dark" : "light") : themeMode;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -245,26 +236,27 @@ export const DesignSystemPreview = () => {
 
     return () => {
       for (const [name, previous] of previousAppearance) {
-        if (previous.value)
+        if (previous.value) {
           root.style.setProperty(name, previous.value, previous.priority);
-        else root.style.removeProperty(name);
+        } else {
+          root.style.removeProperty(name);
+        }
       }
       root.style.colorScheme = previousColorScheme;
-      if (previousTheme === null) root.removeAttribute("data-ds-theme");
-      else root.setAttribute("data-ds-theme", previousTheme);
+      if (previousTheme === null) {
+        root.removeAttribute("data-ds-theme");
+      } else {
+        root.setAttribute("data-ds-theme", previousTheme);
+      }
       root.classList.toggle("dark", wasDark);
     };
   }, [appearance, resolvedTheme]);
 
-  const swatches = useMemo(
-    () =>
-      colorTokens.map(([label, token]) => ({
-        label,
-        token,
-        style: { "--ds-preview-swatch": `var(${token})` } as CSSProperties,
-      })),
-    []
-  );
+  const swatches = colorTokens.map(([label, token]) => ({
+    label,
+    style: { "--ds-preview-swatch": `var(${token})` } as CSSProperties,
+    token,
+  }));
 
   return (
     <div
@@ -651,13 +643,13 @@ export const DesignSystemPreview = () => {
                   label="Provider view"
                   value={selectedBusinessView}
                   options={[
-                    { value: "all", label: "All", count: 4 },
-                    { value: "ready", label: "Ready", count: 2 },
+                    { count: 4, label: "All", value: "all" },
+                    { count: 2, label: "Ready", value: "ready" },
                     {
-                      value: "blocked",
-                      label: "Blocked",
                       count: 1,
                       disabled: true,
+                      label: "Blocked",
+                      value: "blocked",
                     },
                   ]}
                   onValueChange={setSelectedBusinessView}
@@ -997,4 +989,4 @@ export const DesignSystemPreview = () => {
       </main>
     </div>
   );
-}
+};

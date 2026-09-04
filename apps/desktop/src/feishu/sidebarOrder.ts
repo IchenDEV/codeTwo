@@ -1,7 +1,7 @@
 export type FeishuResourceTab = "messages" | "documents" | "bases";
 
-export const FEISHU_SIDEBAR_ORDER_KEY = "codetwo.feishu.sidebarOrder.v1";
-export const FEISHU_RESOURCE_TABS: readonly FeishuResourceTab[] = [
+export const feishuSidebarOrderKey = "codetwo.feishu.sidebarOrder.v1";
+export const feishuResourceTabs: readonly FeishuResourceTab[] = [
   "messages",
   "documents",
   "bases",
@@ -13,24 +13,24 @@ export interface FeishuSidebarOrder {
   resourceOrder: Record<FeishuResourceTab, string[]>;
 }
 
-export const EMPTY_FEISHU_SIDEBAR_ORDER: FeishuSidebarOrder = {
+export const emptyFeishuSidebarOrder: FeishuSidebarOrder = {
+  resourceOrder: { bases: [], documents: [], messages: [] },
+  sectionOrder: [...feishuResourceTabs],
   version: 1,
-  sectionOrder: [...FEISHU_RESOURCE_TABS],
-  resourceOrder: { messages: [], documents: [], bases: [] },
 };
 
 function cloneEmptyOrder(): FeishuSidebarOrder {
   return {
+    resourceOrder: { bases: [], documents: [], messages: [] },
+    sectionOrder: [...feishuResourceTabs],
     version: 1,
-    sectionOrder: [...FEISHU_RESOURCE_TABS],
-    resourceOrder: { messages: [], documents: [], bases: [] },
   };
 }
 
 function isResourceTab(value: unknown): value is FeishuResourceTab {
   return (
     typeof value === "string" &&
-    FEISHU_RESOURCE_TABS.includes(value as FeishuResourceTab)
+    feishuResourceTabs.includes(value as FeishuResourceTab)
   );
 }
 
@@ -59,8 +59,8 @@ export function loadFeishuSidebarOrder(
     return cloneEmptyOrder();
   }
   try {
-    const raw = storage.getItem(FEISHU_SIDEBAR_ORDER_KEY);
-    if (!raw) {
+    const raw = storage.getItem(feishuSidebarOrderKey);
+    if (raw == null || raw === "") {
       return cloneEmptyOrder();
     }
     const value = JSON.parse(raw) as Record<string, unknown>;
@@ -70,21 +70,26 @@ export function loadFeishuSidebarOrder(
     const supplied = Array.isArray(value.sectionOrder)
       ? value.sectionOrder.filter(isResourceTab)
       : [];
-    const sectionOrder = [
-      ...new Set(Iterator.concat(supplied, FEISHU_RESOURCE_TABS)),
-    ] as FeishuResourceTab[];
+    const sectionOrderSet = new Set<FeishuResourceTab>();
+    for (const tab of supplied) {
+      sectionOrderSet.add(tab);
+    }
+    for (const tab of feishuResourceTabs) {
+      sectionOrderSet.add(tab);
+    }
+    const sectionOrder = [...sectionOrderSet] as FeishuResourceTab[];
     const resourceOrder =
-      value.resourceOrder && typeof value.resourceOrder === "object"
+      Boolean(value.resourceOrder) && typeof value.resourceOrder === "object"
         ? (value.resourceOrder as Record<string, unknown>)
         : {};
     return {
-      version: 1,
-      sectionOrder,
       resourceOrder: {
-        messages: cleanIds(resourceOrder.messages),
-        documents: cleanIds(resourceOrder.documents),
         bases: cleanIds(resourceOrder.bases),
+        documents: cleanIds(resourceOrder.documents),
+        messages: cleanIds(resourceOrder.messages),
       },
+      sectionOrder,
+      version: 1,
     };
   } catch {
     return cloneEmptyOrder();
@@ -99,7 +104,7 @@ export function saveFeishuSidebarOrder(
     return;
   }
   try {
-    storage.setItem(FEISHU_SIDEBAR_ORDER_KEY, JSON.stringify(state));
+    storage.setItem(feishuSidebarOrderKey, JSON.stringify(state));
   } catch {
     // Private/full storage keeps the current renderer order without affecting remote resources.
   }

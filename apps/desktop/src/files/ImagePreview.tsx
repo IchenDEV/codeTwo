@@ -6,8 +6,12 @@ import { useT } from "../i18n";
 import { imageTypeOf } from "./imageTypes";
 
 function prettySize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -22,7 +26,13 @@ function prettySize(bytes: number): string {
  * Checkerboard behind the image, because transparent PNGs are most of what a UI project contains
  * and "white logo on white pane" looks like a failed load.
  */
-export const ImagePreview = ({ cwd, path }: { readonly cwd: string; readonly path: string }) => {
+export const ImagePreview = ({
+  cwd,
+  path,
+}: {
+  readonly cwd: string;
+  readonly path: string;
+}) => {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [size, setSize] = useState(0);
@@ -30,7 +40,7 @@ export const ImagePreview = ({ cwd, path }: { readonly cwd: string; readonly pat
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let alive = true;
+    let isAlive = true;
     let objectUrl: string | null = null;
     setUrl(null);
     setDims(null);
@@ -38,7 +48,9 @@ export const ImagePreview = ({ cwd, path }: { readonly cwd: string; readonly pat
 
     readBinary(cwd, path)
       .then((bytes) => {
-        if (!alive) return;
+        if (!isAlive) {
+          return;
+        }
         const type = imageTypeOf(path) ?? "application/octet-stream";
         // Copy into a fresh ArrayBuffer: the IPC buffer may be a view into a larger one.
         objectUrl = URL.createObjectURL(
@@ -47,17 +59,20 @@ export const ImagePreview = ({ cwd, path }: { readonly cwd: string; readonly pat
         setSize(bytes.byteLength);
         setUrl(objectUrl);
       })
-      .catch((e) => alive && setError(String(e)));
+      .catch((e) => isAlive && setError(String(e)));
 
     return () => {
-      alive = false;
+      isAlive = false;
       // Revoking is what actually frees the bytes; without it every tab switch leaks the file.
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
   }, [cwd, path]);
 
-  if (error)
+  if (error) {
     return <p className="text-body text-destructive px-6 py-4">{error}</p>;
+  }
 
   if (!url) {
     return (
@@ -76,8 +91,8 @@ export const ImagePreview = ({ cwd, path }: { readonly cwd: string; readonly pat
           alt={path}
           onLoad={(e) =>
             setDims({
-              w: e.currentTarget.naturalWidth,
               h: e.currentTarget.naturalHeight,
+              w: e.currentTarget.naturalWidth,
             })
           }
           onError={() => setError(t("files.imageFailed"))}
@@ -85,11 +100,13 @@ export const ImagePreview = ({ cwd, path }: { readonly cwd: string; readonly pat
         />
       </div>
       <div className="text-callout text-muted-foreground flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5">
-        {dims ? <span>
+        {dims ? (
+          <span>
             {dims.w} × {dims.h}
-          </span> : null}
+          </span>
+        ) : null}
         <span>{prettySize(size)}</span>
       </div>
     </div>
   );
-}
+};

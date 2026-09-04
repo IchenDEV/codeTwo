@@ -20,7 +20,7 @@ export interface MemoryFilter {
   sort: MemorySort;
 }
 
-export const MEMORY_CATEGORIES = [
+export const memoryCategories = [
   "constraint",
   "preference",
   "fact",

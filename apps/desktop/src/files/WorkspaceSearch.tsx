@@ -1,17 +1,14 @@
-import {
-  useDeferredValue,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 
 import {
   cancelWorkspaceContentSearch,
   searchWorkspaceContents,
-  type WorkspaceContentMatch,
-  type WorkspaceSearchOptions,
-  type WorkspaceSearchResult,
+} from "../bridge";
+import type {
+  WorkspaceContentMatch,
+  WorkspaceSearchOptions,
+  WorkspaceSearchResult,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,26 +21,28 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const DEFAULT_OPTIONS: WorkspaceSearchOptions = {
-  regex: false,
+const defaultOptions: WorkspaceSearchOptions = {
   case_sensitive: false,
+  regex: false,
   whole_word: false,
 };
 
 let nextSearchRequest = 0;
 
 export function workspaceSearchTruncationLabel(reason: string | null): string {
-  if (!reason) return "a resource limit";
+  if (!reason) {
+    return "a resource limit";
+  }
   const labels: Record<string, string> = {
-    result_limit: "the result limit",
-    per_file_limit: "the per-file result limit",
-    stdout_limit: "the output limit",
-    stderr_limit: "the diagnostic-output limit",
-    timeout: "the time limit",
     partial_record: "an interrupted final record",
-    unsupported_path_encoding: "an unsupported path encoding",
+    per_file_limit: "the per-file result limit",
+    result_limit: "the result limit",
+    stderr_limit: "the diagnostic-output limit",
+    stdout_limit: "the output limit",
+    timeout: "the time limit",
     unsafe_or_stale_path: "a path that changed during search",
     unsupported_content_encoding: "an unsupported content encoding",
+    unsupported_path_encoding: "an unsupported path encoding",
   };
   return reason
     .split(",")
@@ -62,7 +61,7 @@ export const WorkspaceSearchModal = ({
 }) => {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [options, setOptions] = useState(DEFAULT_OPTIONS);
+  const [options, setOptions] = useState(defaultOptions);
   const [result, setResult] = useState<WorkspaceSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +70,10 @@ export const WorkspaceSearchModal = ({
   const requestRef = useRef(0);
   const resultRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const queryPending = query !== deferredQuery;
-  const matches = queryPending ? [] : (result?.matches ?? []);
+  const isQueryPending = query !== deferredQuery;
+  const matches = isQueryPending ? [] : (result?.matches ?? []);
   const hasQuery = query.trim().length > 0;
-  const visibleLoading = loading || queryPending;
+  const isVisibleLoading = loading || isQueryPending;
 
   useEffect(() => {
     const request = ++requestRef.current;
@@ -91,36 +90,46 @@ export const WorkspaceSearchModal = ({
     setLoading(true);
     setError(null);
     setResult(null);
-    let started = false;
-    let alive = true;
+    let isStarted = false;
+    let isAlive = true;
     const requestId = `workspace-search-${Date.now()}-${++nextSearchRequest}`;
     const timer = window.setTimeout(() => {
-      started = true;
+      isStarted = true;
       void searchWorkspaceContents(cwd, deferredQuery, options, requestId, 200)
         .then((next) => {
-          if (!alive || request !== requestRef.current) return;
+          if (!isAlive || request !== requestRef.current) {
+            return;
+          }
           setResult(next);
           setActiveIndex(next.matches.length > 0 ? 0 : -1);
         })
         .catch((cause) => {
-          if (!alive || request !== requestRef.current) return;
+          if (!isAlive || request !== requestRef.current) {
+            return;
+          }
           setResult(null);
           setError(String(cause));
         })
         .finally(() => {
-          if (alive && request === requestRef.current) setLoading(false);
+          if (isAlive && request === requestRef.current) {
+            setLoading(false);
+          }
         });
     }, 160);
 
     return () => {
-      alive = false;
+      isAlive = false;
       window.clearTimeout(timer);
-      if (started) void cancelWorkspaceContentSearch(requestId);
+      if (isStarted) {
+        void cancelWorkspaceContentSearch(requestId);
+      }
     };
   }, [cwd, deferredQuery, options]);
 
   const focusResult = (index: number) => {
-    if (matches.length === 0) return;
+    if (matches.length === 0) {
+      return;
+    }
     const next = (index + matches.length) % matches.length;
     setActiveIndex(next);
     resultRefs.current[next]?.focus();
@@ -154,9 +163,11 @@ export const WorkspaceSearchModal = ({
       focusResult(index + 1);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      if (index === 0)
+      if (index === 0) {
         document.getElementById("workspace-content-query")?.focus();
-      else focusResult(index - 1);
+      } else {
+        focusResult(index - 1);
+      }
     }
   };
 
@@ -168,7 +179,7 @@ export const WorkspaceSearchModal = ({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="max-h-dialog-max flex min-h-0 flex-col sm:max-w-3xl"
-        aria-busy={visibleLoading}
+        aria-busy={isVisibleLoading}
         initialFocus={queryInputRef}
       >
         <DialogHeader>
@@ -230,23 +241,28 @@ export const WorkspaceSearchModal = ({
           </div>
         </div>
 
-        <div
+        <output
           id="workspace-search-status"
           className="min-h-control-mini text-metadata text-muted-foreground"
-          role="status"
           aria-live="polite"
         >
           {!hasQuery && "Enter text to search file contents."}
-          {hasQuery && visibleLoading ? "Searching…" : null}
-          {hasQuery && !visibleLoading && !error && result ? <>
+          {hasQuery && isVisibleLoading ? "Searching…" : null}
+          {hasQuery && !isVisibleLoading && !error && result ? (
+            <>
               {matches.length} {matches.length === 1 ? "result" : "results"}.
-              {result.truncated ? ` Results were truncated by ${workspaceSearchTruncationLabel(result.truncation_reason)}.` : null}
-            </> : null}
-        </div>
+              {result.truncated
+                ? ` Results were truncated by ${workspaceSearchTruncationLabel(result.truncation_reason)}.`
+                : null}
+            </>
+          ) : null}
+        </output>
 
-        {error ? <p role="alert" className="text-metadata text-destructive">
+        {error ? (
+          <p role="alert" className="text-metadata text-destructive">
             Search failed: {error}
-          </p> : null}
+          </p>
+        ) : null}
 
         <ScrollArea className="min-h-0 flex-1 pe-3">
           <ul className="space-y-1" aria-label="Workspace search results">
@@ -282,12 +298,14 @@ export const WorkspaceSearchModal = ({
             ))}
           </ul>
           {hasQuery &&
-            !visibleLoading &&
-            !error &&
-            result &&
-            matches.length === 0 ? <p className="text-body text-muted-foreground py-6 text-center">
-                No matching content.
-              </p> : null}
+          !isVisibleLoading &&
+          !error &&
+          result &&
+          matches.length === 0 ? (
+            <p className="text-body text-muted-foreground py-6 text-center">
+              No matching content.
+            </p>
+          ) : null}
         </ScrollArea>
 
         <DialogFooter>
@@ -298,4 +316,4 @@ export const WorkspaceSearchModal = ({
       </DialogContent>
     </Dialog>
   );
-}
+};

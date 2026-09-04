@@ -317,9 +317,9 @@ export interface PluginManagerLabels {
   componentUninstalled: string;
   scaffoldApplied: (count: number) => string;
   settingsReset: string;
-  bundleEnabled: (name: string, enabled: boolean) => string;
-  bundleTrusted: (name: string, trusted: boolean) => string;
-  bundleUninstalled: (name: string, keepData: boolean) => string;
+  bundleEnabled: (name: string, isEnabled: boolean) => string;
+  bundleTrusted: (name: string, isTrusted: boolean) => string;
+  bundleUninstalled: (name: string, isKeepData: boolean) => string;
   confirmTitle: string;
   confirm: string;
   cancel: string;
@@ -353,9 +353,9 @@ export interface PluginManagerPageProps {
   onRefreshMarketplace?: () => Promise<void>;
   onOpenMarketplace?: () => Promise<void>;
   onImportGithub?: (repo: string) => Promise<PluginManagerBundleInstallResult>;
-  onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
-  onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
-  onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
+  onSetBundleEnabled?: (pluginId: string, isEnabled: boolean) => Promise<void>;
+  onSetBundleTrusted?: (pluginId: string, isTrusted: boolean) => Promise<void>;
+  onUninstallBundle?: (pluginId: string, isKeepData: boolean) => Promise<void>;
   onApplyScaffold?: (
     pluginId: string,
     scaffoldId: string

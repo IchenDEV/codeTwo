@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  MODEL_PREFERENCES_STORAGE_KEY,
+  modelPreferencesStorageKey,
   hiddenModelsForProvider,
   loadModelPreferences,
   setModelHidden,
   showAllProviderModels,
-  type ModelPreferencesStorage,
 } from "../src/session/modelPreferences";
+import type { ModelPreferencesStorage } from "../src/session/modelPreferences";
 
 class MemoryStorage implements ModelPreferencesStorage {
   values = new Map<string, string>();
@@ -47,11 +47,11 @@ describe("provider model preferences", () => {
 
   it("fails closed on malformed, stale, or prototype-bearing storage", () => {
     const storage = new MemoryStorage();
-    storage.values.set(MODEL_PREFERENCES_STORAGE_KEY, "not json");
+    storage.values.set(modelPreferencesStorageKey, "not json");
     expect(loadModelPreferences(storage).providers).toEqual({});
 
     storage.values.set(
-      MODEL_PREFERENCES_STORAGE_KEY,
+      modelPreferencesStorageKey,
       JSON.stringify({
         version: 1,
         providers: {

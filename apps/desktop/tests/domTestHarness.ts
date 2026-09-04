@@ -22,7 +22,7 @@ if (typeof dom.Element.prototype.getAnimations !== "function") {
   });
 }
 
-const DOM_KEYS = [
+const domKeys = [
   "window",
   "document",
   "DocumentFragment",
@@ -53,7 +53,7 @@ const DOM_KEYS = [
 let previousGlobals: Record<string, unknown> | null = null;
 
 function installDom(): void {
-  for (const key of DOM_KEYS) {
+  for (const key of domKeys) {
     (globalThis as Record<string, unknown>)[key] = (
       dom as unknown as Record<string, unknown>
     )[key];
@@ -70,7 +70,7 @@ export function activateDom(): void {
   if (!previousGlobals) {
     previousGlobals = Object.fromEntries(
       [
-        ...DOM_KEYS,
+        ...domKeys,
         "getComputedStyle",
         "requestAnimationFrame",
         "cancelAnimationFrame",
@@ -138,7 +138,7 @@ export function button(container: ParentNode, name: string): HTMLButtonElement {
   const result = candidates.find((candidate) => {
     const label =
       candidate.getAttribute("aria-label") ?? candidate.textContent ?? "";
-    return label.replaceAll(/\s+/g, " ").trim() === name;
+    return label.replaceAll(/\s+/gu, " ").trim() === name;
   });
   if (!result) {
     throw new Error(`button not found: ${name}`);

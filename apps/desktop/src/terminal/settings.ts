@@ -14,9 +14,9 @@ export interface TerminalSettings {
   scrollback: number;
 }
 
-const STORAGE_KEY = "codetwo.terminal";
+const storageKey = "codetwo.terminal";
 
-export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
+export const defaultTerminalSettings: TerminalSettings = {
   fontFamily: "",
   fontSize: 13,
   scrollback: 10_000,
@@ -24,29 +24,24 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
 
 function read(): TerminalSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return DEFAULT_TERMINAL_SETTINGS;
+    const raw = localStorage.getItem(storageKey);
+    if (raw == null || raw === "") {
+      return defaultTerminalSettings;
     }
     const parsed = JSON.parse(raw) as Partial<TerminalSettings>;
     return {
       fontFamily:
         typeof parsed.fontFamily === "string" ? parsed.fontFamily : "",
-      fontSize: clamp(
-        parsed.fontSize,
-        8,
-        32,
-        DEFAULT_TERMINAL_SETTINGS.fontSize
-      ),
+      fontSize: clamp(parsed.fontSize, 8, 32, defaultTerminalSettings.fontSize),
       scrollback: clamp(
         parsed.scrollback,
         100,
         200_000,
-        DEFAULT_TERMINAL_SETTINGS.scrollback
+        defaultTerminalSettings.scrollback
       ),
     };
   } catch {
-    return DEFAULT_TERMINAL_SETTINGS;
+    return defaultTerminalSettings;
   }
 }
 
@@ -65,22 +60,22 @@ function clamp(
 const listeners = new Set<() => void>();
 let snapshot = read();
 
-function subscribe(function_: () => void): () => void {
-  listeners.add(function_);
-  return () => listeners.delete(function_);
+function subscribe(functionValue: () => void): () => void {
+  listeners.add(functionValue);
+  return () => listeners.delete(functionValue);
 }
 
 export function setTerminalSettings(patch: Partial<TerminalSettings>): void {
   snapshot = { ...snapshot, ...patch };
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    localStorage.setItem(storageKey, JSON.stringify(snapshot));
   } catch {
     /*
     private mode — the choice just won't survive a restart
     */
   }
-  for (const function_ of listeners) {
-    function_();
+  for (const functionValue of listeners) {
+    functionValue();
   }
 }
 

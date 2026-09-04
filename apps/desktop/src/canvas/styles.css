@@ -156,7 +156,8 @@
   align-items: center;
   gap: var(--canvas-space-control-group);
   inset-block-start: var(--canvas-chrome-offset);
-  inset-inline: var(--canvas-space-module-inset) var(--canvas-space-module-inset);
+  inset-inline: var(--canvas-space-module-inset)
+    var(--canvas-space-module-inset);
 }
 
 .canvas-editor__presets {

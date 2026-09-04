@@ -1,7 +1,7 @@
 import type { CanvasExport } from "../bridge";
 
-export const LONG_PROMPT_MAX_LINES = 8;
-export const LONG_PROMPT_MAX_CHARS = 600;
+export const longPromptMaxLines = 8;
+export const longPromptMaxChars = 600;
 
 /**
  * The current transcript API exposes Canvas history as two internal marker lines. Keep the
@@ -14,13 +14,13 @@ export interface CanvasHistoryMarker {
   textOriginals: string[];
 }
 
-const CANVAS_HISTORY_LINE =
-  /^\s*\[canvas-history\s+([^\s\]@]+)@(\d+)\]\s*(.*)\s*$/;
-const CANVAS_TEXT_LINE = /^\s*canvas-text:\s?(.*)$/;
-const CANVAS_HISTORY_JSON_LINE = /^\s*\[canvas-history-json\s+(.+)\]\s*$/;
+const canvasHistoryLine =
+  /^\s*\[canvas-history\s+([^\s\]@]+)@(\d+)\]\s*(.*)\s*$/u;
+const canvasTextLine = /^\s*canvas-text:\s?(.*)$/u;
+const canvasHistoryJsonLine = /^\s*\[canvas-history-json\s+(.+)\]\s*$/u;
 
 function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
-  const match = CANVAS_HISTORY_JSON_LINE.exec(line);
+  const match = canvasHistoryJsonLine.exec(line);
   if (!match) {
     return null;
   }
@@ -30,7 +30,11 @@ function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
   } catch {
     return null;
   }
-  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+  if (
+    decoded == null ||
+    typeof decoded !== "object" ||
+    Array.isArray(decoded)
+  ) {
     return null;
   }
   const value = decoded as Record<string, unknown>;
@@ -61,8 +65,8 @@ function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
   return {
     id: value.id,
     revision: value.revision as number,
-    title: value.title,
     textOriginals: [...(value.text_originals as string[])],
+    title: value.title,
   };
 }
 
@@ -74,7 +78,7 @@ export function parseCanvasHistoryPrompt(prompt: string): {
   const canvases: CanvasHistoryMarker[] = [];
   let current: CanvasHistoryMarker | null = null;
   let isMarkerTextContext = false;
-  for (const line of prompt.split(/\r?\n/)) {
+  for (const line of prompt.split(/\r?\n/u)) {
     const structured = parseCanvasHistoryJson(line);
     if (structured) {
       canvases.push(structured);
@@ -82,19 +86,19 @@ export function parseCanvasHistoryPrompt(prompt: string): {
       isMarkerTextContext = false;
       continue;
     }
-    const marker = CANVAS_HISTORY_LINE.exec(line);
+    const marker = canvasHistoryLine.exec(line);
     if (marker) {
       current = {
         id: marker[1],
         revision: Number(marker[2]),
-        title: marker[3] || "Canvas",
         textOriginals: [],
+        title: marker[3] || "Canvas",
       };
       canvases.push(current);
       isMarkerTextContext = true;
       continue;
     }
-    const text = CANVAS_TEXT_LINE.exec(line);
+    const text = canvasTextLine.exec(line);
     if (text) {
       if (current && isMarkerTextContext) {
         if (text[1].trim()) {
@@ -114,17 +118,14 @@ export function parseCanvasHistoryPrompt(prompt: string): {
     isMarkerTextContext = false;
   }
   return {
+    canvases,
     visiblePrompt: visible
       .join("\n")
-      .replaceAll(/\n{3,}/g, "\n\n")
+      .replaceAll(/\n{3,}/gu, "\n\n")
       .trim(),
-    canvases,
   };
 }
 
-/**
-Convert a validated bridge export to a browser image without exposing mutable scene state.
-*/
 export function canvasExportDataUrl(item: CanvasExport): string {
   const bytes = Uint8Array.from(item.bytes);
   let binary = "";
@@ -137,23 +138,14 @@ export function canvasExportDataUrl(item: CanvasExport): string {
   return `data:${item.mimeType};base64,${btoa(binary)}`;
 }
 
-/**
-Match t3code's long-message boundary without coupling the transcript card to string policy.
-*/
 export function isLongPrompt(prompt: string): boolean {
   return (
-    [...prompt].length > LONG_PROMPT_MAX_CHARS ||
-    prompt.split(/\r?\n/).length > LONG_PROMPT_MAX_LINES
+    [...prompt].length > longPromptMaxChars ||
+    prompt.split(/\r?\n/u).length > longPromptMaxLines
   );
 }
 
-/**
-Keep the collapsed copy inside both limits and avoid splitting a Unicode surrogate pair.
-*/
 export function collapsedPrompt(prompt: string): string {
-  const lines = prompt
-    .split(/\r?\n/)
-    .slice(0, LONG_PROMPT_MAX_LINES)
-    .join("\n");
-  return [...lines].slice(0, LONG_PROMPT_MAX_CHARS).join("").trimEnd();
+  const lines = prompt.split(/\r?\n/u).slice(0, longPromptMaxLines).join("\n");
+  return [...lines].slice(0, longPromptMaxChars).join("").trimEnd();
 }

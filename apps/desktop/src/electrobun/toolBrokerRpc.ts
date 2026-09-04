@@ -1,13 +1,18 @@
+#!/usr/bin/env bun
+
 import { createInterface } from "node:readline";
 
-import { ToolBroker } from "@codetwo/tool-broker/src/src";
+import { ToolBroker } from "../../../../packages/tool-broker/src";
+import type {
+  AcpMcpServer,
+  ToolPlan,
+} from "../../../../packages/tool-broker/src";
 import {
   detectHostToolEvidence,
   saveAgentBrowserAccess,
   saveBrowserUseSelection,
   saveComputerUseSelection,
 } from "./toolBroker/providerTools";
-import type { AcpMcpServer, ToolPlan } from "@codetwo/tool-broker/src/src";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -25,13 +30,13 @@ function requiredString(value: unknown, name: string): string {
 
 function requiredBoolean(value: unknown, name: string): boolean {
   if (typeof value !== "boolean") {
-    throw new TypeError(`${name} must be a boolean`);
+    throw new Error(`${name} must be a boolean`);
   }
   return value;
 }
 
 function environment(value: unknown): NodeJS.ProcessEnv {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
     return process.env;
   }
   return Object.fromEntries(
@@ -44,18 +49,18 @@ function environment(value: unknown): NodeJS.ProcessEnv {
 function wireServer(server: AcpMcpServer): Record<string, unknown> {
   if ("command" in server) {
     return {
-      name: server.name,
-      command: server.command,
       args: server.args,
+      command: server.command,
       env: server.env.map(({ name, value }) => [name, value]),
-      ...(server.cwd && { cwd: server.cwd }),
+      name: server.name,
+      ...(server.cwd != null && server.cwd !== "" ? { cwd: server.cwd } : {}),
     };
   }
   return {
+    headers: server.headers.map(({ name, value }) => [name, value]),
     name: server.name,
     type: server.type,
     url: server.url,
-    headers: server.headers.map(({ name, value }) => [name, value]),
   };
 }
 
@@ -63,42 +68,46 @@ function wirePlan(plan: ToolPlan): Record<string, unknown> {
   return {
     browser_access_enabled: plan.browserAccessEnabled,
     capabilities: plan.capabilities,
-    native_capabilities: plan.nativeCapabilities,
-    mcp_servers: plan.mcpServers.map(wireServer),
     instructions: plan.instructions,
+    mcp_servers: plan.mcpServers.map(wireServer),
+    native_capabilities: plan.nativeCapabilities,
   };
 }
 
 function wireSettings(
   settings: ReturnType<ToolBroker["catalog"]>
 ): Record<string, unknown> {
-  const encode = (section: typeof settings.computerUse) => ({
-										    selections: section.selections,
-										    backends: section.backends.map((backend) => ({
-										      id: backend.id,
-										      display_name: backend.displayName,
-										      available: backend.available,
-										      reason: backend.reason,
-										      providers: backend.providers,
-										      exclude_providers: backend.excludeProviders,
-										    })),
-										    errors: section.errors,
-										  });
+  const encode = (section: typeof settings.computerUse) => {
+    return {
+      backends: section.backends.map((backend) => {
+        return {
+          available: backend.available,
+          display_name: backend.displayName,
+          exclude_providers: backend.excludeProviders,
+          id: backend.id,
+          providers: backend.providers,
+          reason: backend.reason,
+        };
+      }),
+      errors: section.errors,
+      selections: section.selections,
+    };
+  };
   return {
-    computer_use: encode(settings.computerUse),
     browser_use: {
       ...encode(settings.browserUse),
       access_enabled: settings.browserUse.accessEnabled,
     },
+    computer_use: encode(settings.computerUse),
   };
 }
 
 function handle(request: JsonRpcRequest): unknown {
-  const parameters = request.params ?? {};
-  const dataDir = requiredString(parameters.data_dir, "params.data_dir");
+  const params = request.params ?? {};
+  const dataDirectory = requiredString(params.data_dir, "params.data_dir");
   let evidence = detectHostToolEvidence(
-    environment(parameters.environment),
-    dataDir
+    environment(params.environment),
+    dataDirectory
   );
   const broker = new ToolBroker();
 
@@ -109,21 +118,18 @@ function handle(request: JsonRpcRequest): unknown {
     case "tool.resolve": {
       return wirePlan(
         broker.resolve({
-          providerId: requiredString(
-            parameters.provider_id,
-            "params.provider_id"
-          ),
           context: { evidence },
+          providerId: requiredString(params.provider_id, "params.provider_id"),
         })
       );
     }
     case "tool.snapshot": {
       if (
-        !Array.isArray(parameters.provider_ids) ||
-        parameters.provider_ids.length === 0 ||
-        parameters.provider_ids.some(
+        !Array.isArray(params.provider_ids) ||
+        params.provider_ids.length === 0 ||
+        !params.provider_ids.every(
           (providerId) =>
-            !(typeof providerId === "string" && providerId.length > 0)
+            typeof providerId === "string" && providerId.length > 0
         )
       ) {
         throw new Error("params.provider_ids must be a non-empty string array");
@@ -131,42 +137,39 @@ function handle(request: JsonRpcRequest): unknown {
       return {
         catalog: wireSettings(broker.catalog({ evidence })),
         plans: Object.fromEntries(
-          parameters.provider_ids.map((providerId) => {
-          	return [
-										            providerId,
-										            wirePlan(broker.resolve({ providerId, context: { evidence } })),
-										          ];
+          params.provider_ids.map((providerId) => {
+            return [
+              providerId,
+              wirePlan(broker.resolve({ context: { evidence }, providerId })),
+            ];
           })
         ),
       };
     }
     case "selection.set": {
-      const backendId = requiredString(
-        parameters.backend_id,
-        "params.backend_id"
-      );
-      const kind = requiredString(parameters.kind, "params.kind");
+      const backendId = requiredString(params.backend_id, "params.backend_id");
+      const kind = requiredString(params.kind, "params.kind");
       if (kind === "computer_use") {
-        saveComputerUseSelection(dataDir, backendId, evidence);
+        saveComputerUseSelection(dataDirectory, backendId, evidence);
       } else if (kind === "browser_use") {
-        saveBrowserUseSelection(dataDir, backendId, evidence);
+        saveBrowserUseSelection(dataDirectory, backendId, evidence);
       } else {
         throw new Error(`unsupported selection kind ${JSON.stringify(kind)}`);
       }
       evidence = detectHostToolEvidence(
-        environment(parameters.environment),
-        dataDir
+        environment(params.environment),
+        dataDirectory
       );
       return wireSettings(broker.catalog({ evidence }));
     }
     case "browser_access.set": {
       saveAgentBrowserAccess(
-        dataDir,
-        requiredBoolean(parameters.enabled, "params.enabled")
+        dataDirectory,
+        requiredBoolean(params.enabled, "params.enabled")
       );
       evidence = detectHostToolEvidence(
-        environment(parameters.environment),
-        dataDir
+        environment(params.environment),
+        dataDirectory
       );
       return wireSettings(broker.catalog({ evidence }));
     }
@@ -177,7 +180,7 @@ function handle(request: JsonRpcRequest): unknown {
 }
 
 async function runEmptyMcpServer(): Promise<void> {
-  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  const lines = createInterface({ crlfDelay: Infinity, input: process.stdin });
   for await (const line of lines) {
     if (!line.trim()) {
       continue;
@@ -191,9 +194,9 @@ async function runEmptyMcpServer(): Promise<void> {
     if (!("id" in request)) {
       continue;
     }
-    const { method } = request;
-    const parameters =
-      request.params &&
+    const method = request.method;
+    const params =
+      Boolean(request.params) &&
       typeof request.params === "object" &&
       !Array.isArray(request.params)
         ? (request.params as Record<string, unknown>)
@@ -202,11 +205,11 @@ async function runEmptyMcpServer(): Promise<void> {
     switch (method) {
       case "initialize": {
         result = {
-          protocolVersion:
-            typeof parameters.protocolVersion === "string"
-              ? parameters.protocolVersion
-              : "2024-11-05",
           capabilities: { tools: { listChanged: false } },
+          protocolVersion:
+            typeof params.protocolVersion === "string"
+              ? params.protocolVersion
+              : "2024-11-05",
           serverInfo: { name: "codetwo-browser-access-disabled", version: "1" },
         };
         break;
@@ -230,19 +233,19 @@ async function runEmptyMcpServer(): Promise<void> {
       default: {
         process.stdout.write(
           `${JSON.stringify({
-            jsonrpc: "2.0",
-            id: request.id,
             error: {
-              code: -32_601,
+              code: -32601,
               message: `method not found: ${String(method)}`,
             },
+            id: request.id,
+            jsonrpc: "2.0",
           })}\n`
         );
         continue;
       }
     }
     process.stdout.write(
-      `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`
+      `${JSON.stringify({ id: request.id, jsonrpc: "2.0", result })}\n`
     );
   }
 }
@@ -255,17 +258,17 @@ async function main(): Promise<void> {
       throw new Error("jsonrpc must be 2.0");
     }
     process.stdout.write(
-      `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: handle(request) })}\n`
+      `${JSON.stringify({ id: request.id, jsonrpc: "2.0", result: handle(request) })}\n`
     );
   } catch (error) {
     process.stdout.write(
       `${JSON.stringify({
-        jsonrpc: "2.0",
-        id: request?.id ?? null,
         error: {
-          code: -32_000,
-          message: Error.isError(error) ? error.message : String(error),
+          code: -32000,
+          message: error instanceof Error ? error.message : String(error),
         },
+        id: request?.id ?? null,
+        jsonrpc: "2.0",
       })}\n`
     );
     process.exitCode = 1;

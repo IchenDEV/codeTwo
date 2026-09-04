@@ -1,7 +1,6 @@
-export const SIDEBAR_SECTIONS_STORAGE_KEY = "codetwo.rail.taskSections.v2";
-export const LEGACY_SIDEBAR_SECTIONS_STORAGE_KEY =
-  "codetwo.rail.taskSections.v1";
-export const UNSECTIONED_TASK_ORDER_KEY = "unsectioned";
+export const sidebarSectionsStorageKey = "codetwo.rail.taskSections.v2";
+export const legacySidebarSectionsStorageKey = "codetwo.rail.taskSections.v1";
+export const unsectionedTaskOrderKey = "unsectioned";
 
 export function projectTaskOrderKey(path: string): string {
   return `project:${encodeURIComponent(path)}`;
@@ -20,32 +19,32 @@ export interface SidebarTaskSectionsState {
   taskOrder: Record<string, string[]>;
 }
 
-export const EMPTY_SIDEBAR_TASK_SECTIONS: SidebarTaskSectionsState = {
-  version: 2,
-  sections: [],
+export const emptySidebarTaskSections: SidebarTaskSectionsState = {
   assignments: {},
+  sections: [],
   taskOrder: {},
+  version: 2,
 };
 
 function cleanSectionName(value: string): string {
-  return value.trim().replaceAll(/\s+/g, " ").slice(0, 48);
+  return value.trim().replaceAll(/\s+/gu, " ").slice(0, 48);
 }
 
 function cloneEmptyState(): SidebarTaskSectionsState {
-  return { version: 2, sections: [], assignments: {}, taskOrder: {} };
+  return { assignments: {}, sections: [], taskOrder: {}, version: 2 };
 }
 
 function cleanTaskOrder(
   value: unknown,
   validSectionIds: ReadonlySet<string>
 ): Record<string, string[]> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }
   const result: Record<string, string[]> = {};
   for (const [key, candidate] of Object.entries(value)) {
     if (
-      key !== UNSECTIONED_TASK_ORDER_KEY &&
+      key !== unsectionedTaskOrderKey &&
       !key.startsWith("project:") &&
       !validSectionIds.has(key)
     ) {
@@ -96,7 +95,7 @@ function parseSidebarTaskSections(
   const names = new Set<string>();
   const sections: SidebarTaskSection[] = [];
   for (const candidate of value.sections.slice(0, 100)) {
-    if (!candidate || typeof candidate !== "object") {
+    if (candidate == null || typeof candidate !== "object") {
       continue;
     }
     const row = candidate as Record<string, unknown>;
@@ -114,22 +113,33 @@ function parseSidebarTaskSections(
     }
     ids.add(id);
     names.add(comparableName);
-    sections.push({ id, name, collapsed: row.collapsed === true });
+    sections.push({ collapsed: row.collapsed === true, id, name });
   }
 
   const assignments: Record<string, string> = {};
-  if (value.assignments && typeof value.assignments === "object") {
-    for (const [taskId, sectionId] of Object.entries(value.assignments)) {
-      if (taskId && typeof sectionId === "string" && ids.has(sectionId)) {
+  const rawAssignments = value.assignments;
+  if (
+    rawAssignments != null &&
+    typeof rawAssignments === "object" &&
+    !Array.isArray(rawAssignments)
+  ) {
+    for (const [taskId, sectionId] of Object.entries(
+      rawAssignments as Record<string, unknown>
+    )) {
+      if (
+        taskId !== "" &&
+        typeof sectionId === "string" &&
+        ids.has(sectionId)
+      ) {
         assignments[taskId] = sectionId;
       }
     }
   }
   return {
-    version: 2,
-    sections,
     assignments,
+    sections,
     taskOrder: value.version === 2 ? cleanTaskOrder(value.taskOrder, ids) : {},
+    version: 2,
   };
 }
 
@@ -141,12 +151,12 @@ export function loadSidebarTaskSections(
   }
 
   try {
-    const current = storage.getItem(SIDEBAR_SECTIONS_STORAGE_KEY);
-    if (current) {
+    const current = storage.getItem(sidebarSectionsStorageKey);
+    if (current != null && current !== "") {
       return parseSidebarTaskSections(current) ?? cloneEmptyState();
     }
-    const legacy = storage.getItem(LEGACY_SIDEBAR_SECTIONS_STORAGE_KEY);
-    return legacy
+    const legacy = storage.getItem(legacySidebarSectionsStorageKey);
+    return legacy != null && legacy !== ""
       ? (parseSidebarTaskSections(legacy) ?? cloneEmptyState())
       : cloneEmptyState();
   } catch {
@@ -162,7 +172,7 @@ export function saveSidebarTaskSections(
     return;
   }
   try {
-    storage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(state));
+    storage.setItem(sidebarSectionsStorageKey, JSON.stringify(state));
   } catch {
     // A private or full store makes Sections session-only; Tasks themselves remain untouched.
   }
@@ -183,15 +193,18 @@ export function createSidebarTaskSection(
     return state;
   }
   if (existing) {
-    return taskId ? assignTaskSection(state, taskId, existing.id) : state;
+    return taskId != null && taskId !== ""
+      ? assignTaskSection(state, taskId, existing.id)
+      : state;
   }
 
   return {
     ...state,
-    sections: [...state.sections, { id, name: cleaned, collapsed: false }],
-    assignments: taskId
-      ? { ...state.assignments, [taskId]: id }
-      : state.assignments,
+    assignments:
+      taskId != null && taskId !== ""
+        ? { ...state.assignments, [taskId]: id }
+        : state.assignments,
+    sections: [...state.sections, { collapsed: false, id, name: cleaned }],
   };
 }
 
@@ -226,15 +239,15 @@ export function renameSidebarTaskSection(
 export function setSidebarTaskSectionCollapsed(
   state: SidebarTaskSectionsState,
   id: string,
-  collapsed: boolean
+  isCollapsed: boolean
 ): SidebarTaskSectionsState {
   let isChanged = false;
   const sections = state.sections.map((section) => {
-    if (section.id !== id || section.collapsed === collapsed) {
+    if (section.id !== id || section.collapsed === isCollapsed) {
       return section;
     }
     isChanged = true;
-    return { ...section, collapsed };
+    return { ...section, collapsed: isCollapsed };
   });
   return isChanged ? { ...state, sections } : state;
 }
@@ -274,7 +287,8 @@ export function assignTaskSection(
     return state;
   }
   if (
-    sectionId &&
+    sectionId != null &&
+    sectionId !== "" &&
     state.sections.every((section) => section.id !== sectionId)
   ) {
     return state;
@@ -284,7 +298,7 @@ export function assignTaskSection(
   }
 
   const assignments = { ...state.assignments };
-  if (sectionId) {
+  if (sectionId != null && sectionId !== "") {
     assignments[taskId] = sectionId;
   } else {
     delete assignments[taskId];
@@ -293,7 +307,7 @@ export function assignTaskSection(
 }
 
 function taskOrderKey(sectionId: string | null): string {
-  return sectionId ?? UNSECTIONED_TASK_ORDER_KEY;
+  return sectionId ?? unsectionedTaskOrderKey;
 }
 
 export function sortSidebarTasks<T extends { id: string }>(
@@ -330,7 +344,9 @@ export function moveSidebarTask(
 ): SidebarTaskSectionsState {
   if (
     !taskId ||
-    (sectionId && state.sections.every((section) => section.id !== sectionId))
+    (sectionId != null &&
+      sectionId !== "" &&
+      state.sections.every((section) => section.id !== sectionId))
   ) {
     return state;
   }
@@ -347,7 +363,7 @@ export function moveSidebarTask(
   destination.splice(index, 0, taskId);
 
   const assignments = { ...state.assignments };
-  if (sectionId) {
+  if (sectionId != null && sectionId !== "") {
     assignments[taskId] = sectionId;
   } else {
     delete assignments[taskId];
@@ -377,21 +393,21 @@ export function deleteSidebarTaskSection(
     )
   );
   const taskOrder = { ...state.taskOrder };
-  const currentRoot = taskOrder[UNSECTIONED_TASK_ORDER_KEY] ?? [];
+  const currentRoot = taskOrder[unsectionedTaskOrderKey] ?? [];
   const moved = taskOrder[id] ?? releasedTaskIds;
   const seen = new Set(currentRoot);
-  taskOrder[UNSECTIONED_TASK_ORDER_KEY] = [
+  taskOrder[unsectionedTaskOrderKey] = [
     ...currentRoot,
     ...moved.filter((taskId) => !seen.has(taskId)),
   ];
   delete taskOrder[id];
-  if (taskOrder[UNSECTIONED_TASK_ORDER_KEY].length === 0) {
-    delete taskOrder[UNSECTIONED_TASK_ORDER_KEY];
+  if (taskOrder[unsectionedTaskOrderKey].length === 0) {
+    delete taskOrder[unsectionedTaskOrderKey];
   }
   return {
     ...state,
-    sections: state.sections.filter((section) => section.id !== id),
     assignments,
+    sections: state.sections.filter((section) => section.id !== id),
     taskOrder,
   };
 }

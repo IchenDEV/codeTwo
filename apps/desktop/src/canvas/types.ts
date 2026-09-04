@@ -6,9 +6,9 @@ import type {
   Theme as ExcalidrawTheme,
 } from "./excalidrawAdapter";
 
-export const CANVAS_ENGINE = "@excalidraw/excalidraw" as const;
-export const CANVAS_ENGINE_VERSION = "0.18.1" as const;
-export const CANVAS_SCHEMA_VERSION = 1 as const;
+export const canvasEngine = "@excalidraw/excalidraw" as const;
+export const canvasEngineVersion = "0.18.1" as const;
+export const canvasSchemaVersion = 1 as const;
 
 export type CanvasTheme = ExcalidrawTheme;
 export type CanvasMode = "edit" | "readonly" | "historical";
@@ -16,7 +16,7 @@ export type CanvasMode = "edit" | "readonly" | "historical";
 /**
 The only scene element types that C2 allows to cross a persistence boundary.
 */
-export const ALLOWED_ELEMENT_TYPES = [
+export const allowedElementTypes = [
   "rectangle",
   "ellipse",
   "line",
@@ -26,12 +26,12 @@ export const ALLOWED_ELEMENT_TYPES = [
   "image",
 ] as const;
 
-export type AllowedElementType = (typeof ALLOWED_ELEMENT_TYPES)[number];
+export type AllowedElementType = (typeof allowedElementTypes)[number];
 
 /**
 Toolbar tools are deliberately narrower than Excalidraw's complete tool set.
 */
-export const APPROVED_TOOL_TYPES = [
+export const approvedToolTypes = [
   "selection",
   "hand",
   "freedraw",
@@ -44,9 +44,9 @@ export const APPROVED_TOOL_TYPES = [
   "image",
 ] as const;
 
-export type ApprovedToolType = (typeof APPROVED_TOOL_TYPES)[number];
+export type ApprovedToolType = (typeof approvedToolTypes)[number];
 
-export interface CanvasAssetRef {
+export interface CanvasAssetReference {
   /**
   Opaque app-owned identifier. It must never contain a path, URL, or data URL.
   */
@@ -73,14 +73,14 @@ export interface CanvasAppStateSubset {
  * resolves normalized static assets by opaque refs when rehydrating.
  */
 export interface CanvasEnvelope {
-  engine: typeof CANVAS_ENGINE;
-  engineVersion: typeof CANVAS_ENGINE_VERSION;
-  schemaVersion: typeof CANVAS_SCHEMA_VERSION;
+  engine: typeof canvasEngine;
+  engineVersion: typeof canvasEngineVersion;
+  schemaVersion: typeof canvasSchemaVersion;
   revision: number;
   theme: CanvasTheme;
   elements: readonly ExcalidrawElement[];
   appState: CanvasAppStateSubset;
-  assetRefs: readonly CanvasAssetRef[];
+  assetReferences: readonly CanvasAssetReference[];
 }
 
 export interface CanvasSceneSnapshot {
@@ -99,7 +99,7 @@ export interface NormalizedStaticAsset {
 export interface CanvasCallbacks {
   onChange?: (envelope: CanvasEnvelope) => void;
   onDone?: () => void;
-  onFocusChange?: (focused: boolean) => void;
+  onFocusChange?: (isFocused: boolean) => void;
   onMediaError?: (error: Error) => void;
 }
 
@@ -115,7 +115,7 @@ export interface CanvasEditorProps extends CanvasCallbacks {
   autosaveDebounceMs?: number;
   mediaNormalizer?: import("./media").CanvasMediaNormalizer;
   assetResolver?: (
-    asset: CanvasAssetRef
+    asset: CanvasAssetReference
   ) => Promise<NormalizedStaticAsset | null>;
   /**
   Optional caller-rendered PNG/WebP thumbnail shown while the island is collapsed.

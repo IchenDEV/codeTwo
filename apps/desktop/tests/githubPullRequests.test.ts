@@ -60,10 +60,9 @@ describe("GitHub pull request projections", () => {
 
   test("assigns each pull request to the highest-priority visible group once", () => {
     expect(
-      groupPullRequests(items, "all").map((group) => [
-        group.id,
-        group.items.map((item) => item.id),
-      ])
+      groupPullRequests(items, "all").map((group) => {
+        return [group.id, group.items.map((item) => item.id)];
+      })
     ).toEqual([
       ["review-requested", ["1"]],
       ["reviewed", ["2"]],

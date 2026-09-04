@@ -9,12 +9,8 @@ export interface CodeTwoPetActivity {
   completed: boolean;
 }
 
-const PET_BUBBLE_MAX_CHARACTERS = 160;
+const petBubbleMaxCharacters = 160;
 
-/**
- * Collapse C2's richer session lifecycle into the stable Codex Pet v2 rows.
- * Waiting wins over running because an approval request remains busy at the session level.
- */
 export function petAnimationForActivity(
   activity: CodeTwoPetActivity
 ): CodeTwoPetAnimation {
@@ -33,9 +29,6 @@ export function petAnimationForActivity(
   return "idle";
 }
 
-/**
-Keep the floating bubble glanceable while the transcript remains the canonical response.
-*/
 export function petConversationBubbleForActivity(
   activity: CodeTwoPetActivity,
   assistantText: string
@@ -50,8 +43,8 @@ export function petConversationBubbleForActivity(
   }
 
   const characters = [...normalized];
-  if (characters.length <= PET_BUBBLE_MAX_CHARACTERS) {
+  if (characters.length <= petBubbleMaxCharacters) {
     return normalized;
   }
-  return `…${characters.slice(-(PET_BUBBLE_MAX_CHARACTERS - 1)).join("")}`;
+  return `…${characters.slice(-(petBubbleMaxCharacters - 1)).join("")}`;
 }

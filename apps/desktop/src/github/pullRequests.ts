@@ -15,13 +15,13 @@ export interface PullRequestGroup {
 export function githubPullRequestReference(
   item: GitHubPullRequestSummary
 ): GitHubPullRequestReference {
-  const repo = item.repository.nameWithOwner.trim();
+  const repository = item.repository.nameWithOwner.trim();
   return {
-    provider: "github",
     host: "github.com",
-    repository: repo,
     number: item.number,
-    url: `https://github.com/${repo}/pull/${item.number}`,
+    provider: "github",
+    repository,
+    url: `https://github.com/${repository}/pull/${item.number}`,
   };
 }
 
@@ -70,11 +70,15 @@ export function groupPullRequests(
     return [{ id: "authored", items }];
   }
   const assigned = new Set<string>();
-  const take = (predicate: (item: GitHubPullRequestSummary) => boolean) => items.filter((item) => {
-      if (assigned.has(item.id) || !predicate(item)) return false;
+  const take = (isPredicate: (item: GitHubPullRequestSummary) => boolean) => {
+    return items.filter((item) => {
+      if (assigned.has(item.id) || !isPredicate(item)) {
+        return false;
+      }
       assigned.add(item.id);
       return true;
     });
+  };
   const groups: PullRequestGroup[] = [
     { id: "review-requested", items: take((item) => item.reviewRequested) },
     { id: "reviewed", items: take((item) => item.reviewed) },
@@ -110,7 +114,8 @@ export function pullRequestCheckState(
     return "none";
   }
   if (
-    detail.checks.some((check) => [
+    detail.checks.some((check) => {
+      return [
         "FAILURE",
         "ERROR",
         "CANCELLED",
@@ -118,15 +123,19 @@ export function pullRequestCheckState(
         "ACTION_REQUIRED",
       ].includes(
         check.conclusion.toLocaleUpperCase() || check.status.toLocaleUpperCase()
-      )
+      );
+    })
   ) {
     return "failed";
   }
   if (
-    detail.checks.some((check) => !check.conclusion ||
+    detail.checks.some((check) => {
+      return (
+        !check.conclusion ||
         ["QUEUED", "IN_PROGRESS", "PENDING", "EXPECTED"].includes(
           check.status.toLocaleUpperCase()
         )
+      );
     })
   ) {
     return "pending";

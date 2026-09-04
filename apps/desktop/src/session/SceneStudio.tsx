@@ -7,11 +7,8 @@ import {
   Plus,
 } from "@/components/ui/icons";
 
-import {
-  exportSceneSkillMd,
-  type ProviderInfo,
-  type SkillInfo,
-} from "../bridge";
+import { exportSceneSkillMd } from "../bridge";
+import type { ProviderInfo, SkillInfo } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import { useToast } from "../ui/toast";
 import { PageHeader } from "@/components/business/page-header";
@@ -29,9 +26,11 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { SceneEditor, type SceneEditorRequest } from "./SceneEditor";
+import { SceneEditor } from "./SceneEditor";
+import type { SceneEditorRequest } from "./SceneEditor";
 import { SourceBadge } from "./SceneChip";
-import { sceneTitle, type SceneInfo } from "./scene";
+import { sceneTitle } from "./scene";
+import type { SceneInfo } from "./scene";
 
 const SceneCard = ({
   scene,
@@ -49,13 +48,15 @@ const SceneCard = ({
   const t = useT();
   const { locale } = useLanguage();
   const toast = useToast();
-  const editable = scene.source === "user" || scene.source === "project";
+  const isEditable = scene.source === "user" || scene.source === "project";
   const description =
     scene.localizations[locale]?.description ?? scene.description;
 
   const exportSkill = async () => {
     const markdown = await exportSceneSkillMd(scene.reference);
-    if (markdown === null) return;
+    if (markdown === null) {
+      return;
+    }
     const url = URL.createObjectURL(
       new Blob([markdown], { type: "text/markdown" })
     );
@@ -79,10 +80,14 @@ const SceneCard = ({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-1.5">
-        {scene.execution?.session_mode ? <Badge variant="secondary">
+        {scene.execution?.session_mode ? (
+          <Badge variant="secondary">
             {t(`mode.${scene.execution.session_mode}` as never)}
-          </Badge> : null}
-        {scene.has_brief ? <Badge variant="outline">{t("sceneStudio.taskBrief")}</Badge> : null}
+          </Badge>
+        ) : null}
+        {scene.has_brief ? (
+          <Badge variant="outline">{t("sceneStudio.taskBrief")}</Badge>
+        ) : null}
         {scene.artifacts.length > 0 && (
           <Badge variant="outline">
             {t("sceneStudio.outputs", { count: scene.artifacts.length })}
@@ -104,7 +109,8 @@ const SceneCard = ({
             {t("sceneStudio.use")}
           </Button>
         )}
-        {editable ? <Button
+        {isEditable ? (
+          <Button
             type="button"
             size="sm"
             variant="ghost"
@@ -112,7 +118,8 @@ const SceneCard = ({
           >
             <Pencil data-icon="inline-start" />
             {t("sceneEditor.edit")}
-          </Button> : null}
+          </Button>
+        ) : null}
         <Button
           type="button"
           size="sm"
@@ -135,7 +142,7 @@ const SceneCard = ({
       </CardFooter>
     </Card>
   );
-}
+};
 
 export const SceneStudio = ({
   scenes,
@@ -176,7 +183,9 @@ export const SceneStudio = ({
     description: string,
     items: SceneInfo[]
   ) => {
-    if (items.length === 0) return null;
+    if (items.length === 0) {
+      return null;
+    }
     return (
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
@@ -222,7 +231,8 @@ export const SceneStudio = ({
         <span className="electrobun-webkit-app-region-drag text-body font-medium">
           {t("sceneStudio.title")}
         </span>
-        {request ? <>
+        {request ? (
+          <>
             <span className="electrobun-webkit-app-region-drag text-muted-foreground/50">
               /
             </span>
@@ -233,7 +243,8 @@ export const SceneStudio = ({
                   ? t("sceneEditor.duplicateTitle")
                   : t("sceneEditor.createTitle")}
             </span>
-          </> : null}
+          </>
+        ) : null}
         <div className="electrobun-webkit-app-region-drag flex-1" />
         {!request && (
           <Button
@@ -287,4 +298,4 @@ export const SceneStudio = ({
       )}
     </div>
   );
-}
+};

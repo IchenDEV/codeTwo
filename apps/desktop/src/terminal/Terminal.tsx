@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Terminal, type ITheme } from "@xterm/xterm";
+import { useEffect, useRef, useState } from "react";
+import { Terminal } from "@xterm/xterm";
+import type { ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
@@ -18,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { useTerminalSettings } from "./settings";
 
-const FALLBACK_MONO =
+const fallbackMono =
   'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace';
 
 function cssVar(name: string, fallback = ""): string {
@@ -28,36 +29,30 @@ function cssVar(name: string, fallback = ""): string {
   return value || fallback;
 }
 
-/**
- * The renderer's palette, read from the `--term-*` custom properties.
- *
- * Those are declared in hex precisely so this can hand them straight to xterm — it parses colour
- * strings itself and has no browser to resolve the `oklch()` the rest of the app's tokens use.
- */
 function terminalTheme(): ITheme {
   const ansi = (n: number) => cssVar(`--term-ansi-${n}`);
   return {
     background: cssVar("--term-bg", "#1d2026"),
-    foreground: cssVar("--term-fg", "#c9cfd9"),
+    black: ansi(0),
+    blue: ansi(4),
+    brightBlack: ansi(8),
+    brightBlue: ansi(12),
+    brightCyan: ansi(14),
+    brightGreen: ansi(10),
+    brightMagenta: ansi(13),
+    brightRed: ansi(9),
+    brightWhite: ansi(15),
+    brightYellow: ansi(11),
     cursor: cssVar("--term-cursor", "#79a9f0"),
     cursorAccent: cssVar("--term-bg", "#1d2026"),
-    selectionBackground: cssVar("--term-selection", "#3b6ea566"),
-    black: ansi(0),
-    red: ansi(1),
-    green: ansi(2),
-    yellow: ansi(3),
-    blue: ansi(4),
-    magenta: ansi(5),
     cyan: ansi(6),
+    foreground: cssVar("--term-fg", "#c9cfd9"),
+    green: ansi(2),
+    magenta: ansi(5),
+    red: ansi(1),
+    selectionBackground: cssVar("--term-selection", "#3b6ea566"),
     white: ansi(7),
-    brightBlack: ansi(8),
-    brightRed: ansi(9),
-    brightGreen: ansi(10),
-    brightYellow: ansi(11),
-    brightBlue: ansi(12),
-    brightMagenta: ansi(13),
-    brightCyan: ansi(14),
-    brightWhite: ansi(15),
+    yellow: ansi(3),
   };
 }
 
@@ -76,10 +71,14 @@ export const TerminalPanel = ({
   projectPath,
   tmux = false,
 }: {
-  /** Stable across remounts — see above. */
+  /**
+  Stable across remounts — see above.
+  */
   readonly id: string;
   readonly cwd: string | null;
-  /** Command realm owning this terminal; null denotes the global user graph. */
+  /**
+  Command realm owning this terminal; null denotes the global user graph.
+  */
   readonly projectPath: string | null;
   readonly tmux?: boolean;
 }) => {
@@ -102,7 +101,7 @@ export const TerminalPanel = ({
   // Terminals stay mounted when they're not the visible tab, so they have no layout box — and
   // xterm's fit addon throws on those. The dock's resize event reaches every mounted instance, so
   // this guard is what keeps a panel resize from spraying errors from the hidden ones.
-  const refit = useCallback(() => {
+  const refit = () => {
     const el = boxRef.current;
     const term = termRef.current;
     if (
@@ -120,38 +119,31 @@ export const TerminalPanel = ({
     } catch {
       return false;
     }
-  }, []);
+  };
 
   useEffect(() => {
     const el = boxRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
 
     const term = new Terminal({
-      fontSize: initial.current.fontSize,
-      fontFamily:
-        initial.current.fontFamily || cssVar("--font-mono", FALLBACK_MONO),
-      scrollback: initial.current.scrollback,
-      theme: terminalTheme(),
-      // xterm's defaults date the terminal more than anything else about it. 1.0 line height is
-      // tighter than any editor in this app; a hard block cursor and instant scroll jumps read as
-      // an emulator from a decade ago.
-      lineHeight: 1.3,
+      allowProposedApi: true,
       cursorBlink: true,
+      cursorInactiveStyle: "outline",
       cursorStyle: "bar",
       cursorWidth: 2,
-      // A filled block over the character you're not currently typing in is noise; an outline says
-      // "this terminal is here but not focused" without shouting.
-      cursorInactiveStyle: "outline",
-      smoothScrollDuration: 90,
-      // Font smoothing makes 400 look thin at these sizes on a dark background.
+      drawBoldTextInBrightColors: false,
+      fontFamily:
+        initial.current.fontFamily || cssVar("--font-mono", fallbackMono),
+      fontSize: initial.current.fontSize,
       fontWeight: 450,
       fontWeightBold: 650,
-      // Bold text should be bold, not a different colour — the bright ANSI slots are for programs
-      // that actually asked for them.
-      drawBoldTextInBrightColors: false,
-      // ⌥ as Meta is what every macOS terminal does, and readline is unusable without it.
+      lineHeight: 1.3,
       macOptionIsMeta: true,
-      allowProposedApi: true,
+      scrollback: initial.current.scrollback,
+      smoothScrollDuration: 90,
+      theme: terminalTheme(),
     });
     const fit = new FitAddon();
     const search = new SearchAddon();
@@ -164,7 +156,7 @@ export const TerminalPanel = ({
     searchRef.current = search;
     refit();
 
-    let disposed = false;
+    let isDisposed = false;
     let stopOutput: (() => void) | null = null;
     let stopExit: (() => void) | null = null;
 
@@ -174,34 +166,49 @@ export const TerminalPanel = ({
       let pending: string[] | null = [];
 
       stopOutput = await onPtyOutput((p) => {
-        if (p.id !== id || p.project_path !== projectPath) return;
-        if (pending) pending.push(p.data);
-        else term.write(p.data);
+        if (p.id !== id || p.project_path !== projectPath) {
+          return;
+        }
+        if (pending) {
+          pending.push(p.data);
+        } else {
+          term.write(p.data);
+        }
       });
       stopExit = await onPtyExit((exited) => {
         if (exited.id === id && exited.project_path === projectPath) {
           term.write(`\r\n\x1b[2m${t("terminal.exited")}\x1b[0m\r\n`);
         }
       });
-      if (disposed) return;
+      if (isDisposed) {
+        return;
+      }
 
       const { restore } = await ptySpawn(id, cwd, term.rows, term.cols, {
-        tmuxSession: tmux ? id : null,
         scrollback: initial.current.scrollback,
+        tmuxSession: tmux ? id : null,
       });
-      if (disposed) return;
+      if (isDisposed) {
+        return;
+      }
 
-      if (restore) term.write(restore);
+      if (restore) {
+        term.write(restore);
+      }
       const queued = pending ?? [];
       pending = null;
-      for (const chunk of queued) term.write(chunk);
+      for (const chunk of queued) {
+        term.write(chunk);
+      }
     })();
 
     const dataSub = term.onData((d) => {
       void ptyWrite(id, d);
     });
     const onResize = () => {
-      if (refit()) void ptyResize(id, term.rows, term.cols);
+      if (refit()) {
+        void ptyResize(id, term.rows, term.cols);
+      }
     };
     window.addEventListener("resize", onResize);
 
@@ -212,7 +219,7 @@ export const TerminalPanel = ({
     observer.observe(el);
 
     return () => {
-      disposed = true;
+      isDisposed = true;
       observer.disconnect();
       window.removeEventListener("resize", onResize);
       dataSub.dispose();
@@ -230,11 +237,15 @@ export const TerminalPanel = ({
   // Appearance changes apply to the live terminal — no reason to lose the session over a font.
   useEffect(() => {
     const term = termRef.current;
-    if (!term) return;
+    if (!term) {
+      return;
+    }
     term.options.fontSize = settings.fontSize;
     term.options.fontFamily =
-      settings.fontFamily || cssVar("--font-mono", FALLBACK_MONO);
-    if (refit()) void ptyResize(id, term.rows, term.cols);
+      settings.fontFamily || cssVar("--font-mono", fallbackMono);
+    if (refit()) {
+      void ptyResize(id, term.rows, term.cols);
+    }
   }, [id, refit, settings.fontFamily, settings.fontSize]);
 
   useEffect(() => {
@@ -242,18 +253,22 @@ export const TerminalPanel = ({
     // custom properties now resolve to their other values.
     void scheme;
     const term = termRef.current;
-    if (term) term.options.theme = terminalTheme();
+    if (term) {
+      term.options.theme = terminalTheme();
+    }
   }, [scheme]);
 
-  const find = useCallback(
-    (next: boolean) => {
-      if (!query) return;
-      const search = searchRef.current;
-      if (next) search?.findNext(query);
-      else search?.findPrevious(query);
-    },
-    [query]
-  );
+  const find = (isNext: boolean) => {
+    if (!query) {
+      return;
+    }
+    const search = searchRef.current;
+    if (isNext) {
+      search?.findNext(query);
+    } else {
+      search?.findPrevious(query);
+    }
+  };
 
   return (
     <div
@@ -268,7 +283,8 @@ export const TerminalPanel = ({
         }
       }}
     >
-      {finding ? <>
+      {finding ? (
+        <>
           <div className="bg-muted/40 flex items-center gap-1 px-2 py-1.5">
             <Input
               autoFocus
@@ -282,7 +298,9 @@ export const TerminalPanel = ({
                 });
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") find(!e.shiftKey);
+                if (e.key === "Enter") {
+                  find(!e.shiftKey);
+                }
                 if (e.key === "Escape") {
                   setFinding(false);
                   searchRef.current?.clearDecorations();
@@ -315,11 +333,12 @@ export const TerminalPanel = ({
             </FindButton>
           </div>
           <Separator />
-        </> : null}
+        </>
+      ) : null}
       <div className="terminal" ref={boxRef} />
     </div>
   );
-}
+};
 
 const FindButton = ({
   title,
@@ -329,16 +348,14 @@ const FindButton = ({
   readonly title: string;
   readonly onClick: () => void;
   readonly children: React.ReactNode;
-}) => {
-  return (
-    <TooltipButton
-      label={title}
-      variant="ghost"
-      size="icon-xs"
-      onClick={onClick}
-      className="text-muted-foreground"
-    >
-      {children}
-    </TooltipButton>
-  );
-}
+}) => (
+  <TooltipButton
+    label={title}
+    variant="ghost"
+    size="icon-xs"
+    onClick={onClick}
+    className="text-muted-foreground"
+  >
+    {children}
+  </TooltipButton>
+);

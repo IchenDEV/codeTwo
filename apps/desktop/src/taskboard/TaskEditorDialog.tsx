@@ -1,4 +1,5 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState } from "react";
+import type { FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,15 +27,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useT, type Translate } from "@/i18n";
+import { useT } from "@/i18n";
+import type { Translate } from "@/i18n";
 
-import {
-  PRIORITIES,
-  TASK_STATUSES,
-  type BoardTask,
-  type TaskPriority,
-  type TaskStatus,
-} from "./taskBoard";
+import { PRIORITIES, taskStatuses } from "./taskBoard";
+import type { BoardTask, TaskPriority, TaskStatus } from "./taskBoard";
 
 export interface TaskEditorValue {
   title: string;
@@ -51,38 +48,40 @@ interface TaskEditorDialogProps {
   readonly onSave: (value: TaskEditorValue) => void;
 }
 
-const STATUS_LABEL_KEYS = {
-  todo: "taskboard.status.todo",
+const statusLabelKeys = {
+  done: "taskboard.status.done",
   in_progress: "taskboard.status.inProgress",
   in_review: "taskboard.status.inReview",
-  done: "taskboard.status.done",
+  todo: "taskboard.status.todo",
 } as const;
 
-const PRIORITY_LABEL_KEYS = {
-  none: "taskboard.priority.none",
+const priorityLabelKeys = {
+  high: "taskboard.priority.high",
   low: "taskboard.priority.low",
   medium: "taskboard.priority.medium",
-  high: "taskboard.priority.high",
+  none: "taskboard.priority.none",
   urgent: "taskboard.priority.urgent",
 } as const;
 
 export function taskStatusLabel(t: Translate, status: TaskStatus): string {
-  return t(STATUS_LABEL_KEYS[status]);
+  return t(statusLabelKeys[status]);
 }
 
 export function taskPriorityLabel(
   t: Translate,
   priority: TaskPriority
 ): string {
-  return t(PRIORITY_LABEL_KEYS[priority]);
+  return t(priorityLabelKeys[priority]);
 }
 
 function normalizeLabels(value: string): string[] {
   const labels: string[] = [];
   const seen = new Set<string>();
-  for (const part of value.split(/[,，]/)) {
+  for (const part of value.split(/[,，]/u)) {
     const label = part.trim();
-    if (!label || seen.has(label)) continue;
+    if (!label || seen.has(label)) {
+      continue;
+    }
     seen.add(label);
     labels.push(label);
   }
@@ -112,24 +111,26 @@ export const TaskEditorDialog = ({
   const [labels, setLabels] = useState(task?.labels.join("，") ?? "");
   const [submitted, setSubmitted] = useState(false);
 
-  const titleMissing = submitted && title.trim().length === 0;
+  const isTitleMissing = submitted && title.trim().length === 0;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitted(true);
     const normalizedTitle = title.trim();
-    if (!normalizedTitle) return;
+    if (!normalizedTitle) {
+      return;
+    }
 
     onSave({
-      title: normalizedTitle,
       description: description.trim(),
-      status,
-      priority,
       labels: normalizeLabels(labels),
+      priority,
+      status,
+      title: normalizedTitle,
     });
   };
 
-  const editing = Boolean(task);
+  const isEditing = Boolean(task);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
@@ -137,14 +138,14 @@ export const TaskEditorDialog = ({
         <DialogHeader>
           <DialogTitle>
             {t(
-              editing
+              isEditing
                 ? "taskboard.editor.editTitle"
                 : "taskboard.editor.newTitle"
             )}
           </DialogTitle>
           <DialogDescription>
             {t(
-              editing
+              isEditing
                 ? "taskboard.editor.editDescription"
                 : "taskboard.editor.newDescription"
             )}
@@ -153,7 +154,7 @@ export const TaskEditorDialog = ({
 
         <form id={formId} className="grid gap-4" onSubmit={submit}>
           <FieldGroup>
-            <Field data-invalid={titleMissing || undefined}>
+            <Field data-invalid={isTitleMissing || undefined}>
               <FieldLabel htmlFor={titleId}>
                 {t("taskboard.editor.title")}{" "}
                 <span aria-hidden className="text-destructive">
@@ -164,14 +165,14 @@ export const TaskEditorDialog = ({
                 id={titleId}
                 size="compact"
                 autoFocus
-                aria-invalid={titleMissing || undefined}
-                aria-describedby={titleMissing ? titleErrorId : undefined}
+                aria-invalid={isTitleMissing || undefined}
+                aria-describedby={isTitleMissing ? titleErrorId : undefined}
                 placeholder={t("taskboard.editor.titlePlaceholder")}
                 value={title}
                 onChange={(event) => setTitle(event.currentTarget.value)}
               />
               <FieldError id={titleErrorId}>
-                {titleMissing ? t("taskboard.editor.titleRequired") : null}
+                {isTitleMissing ? t("taskboard.editor.titleRequired") : null}
               </FieldError>
             </Field>
 
@@ -208,7 +209,7 @@ export const TaskEditorDialog = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {TASK_STATUSES.map((value) => (
+                      {taskStatuses.map((value) => (
                         <SelectItem key={value} value={value}>
                           {taskStatusLabel(t, value)}
                         </SelectItem>
@@ -276,10 +277,10 @@ export const TaskEditorDialog = ({
             {t("taskboard.editor.cancel")}
           </Button>
           <Button type="submit" size="compact" form={formId}>
-            {t(editing ? "taskboard.editor.save" : "taskboard.editor.create")}
+            {t(isEditing ? "taskboard.editor.save" : "taskboard.editor.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-}
+};

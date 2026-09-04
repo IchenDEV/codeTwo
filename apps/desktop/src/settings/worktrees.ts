@@ -1,12 +1,9 @@
 import type { WorktreeStatusEntry } from "../bridge";
 
-/**
-"refs/heads/codetwo/x" → "codetwo/x" — rows show the name people type, not the full ref.
-*/
 export function worktreeBranchDisplay(
   branch: string | null | undefined
 ): string | null {
-  if (!branch) {
+  if (branch == null || branch === "") {
     return null;
   }
   return branch.startsWith("refs/heads/")
@@ -16,9 +13,6 @@ export function worktreeBranchDisplay(
 
 export type WorktreeStatusBadge = "archived" | "discarded" | "checkoutMissing";
 
-/**
-Status badges for one row, in display order.
-*/
 export function worktreeStatusBadges(
   entry: WorktreeStatusEntry
 ): WorktreeStatusBadge[] {
@@ -39,13 +33,12 @@ export type WorktreeDiscardRoute =
   | { kind: "session"; session: string }
   | { kind: "orphan"; worktreePath: string };
 
-/**
-Route a row's Discard: a session-claimed checkout goes through its session, the rest by path.
-*/
 export function worktreeDiscardRoute(
   entry: WorktreeStatusEntry
 ): WorktreeDiscardRoute {
-  return entry.kind === "session" && entry.session_id
+  return entry.kind === "session" &&
+    entry.session_id != null &&
+    entry.session_id !== ""
     ? { kind: "session", session: entry.session_id }
     : { kind: "orphan", worktreePath: entry.path };
 }

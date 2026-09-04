@@ -30,8 +30,11 @@ function setValue(
     Object.getPrototypeOf(element),
     "value"
   )?.set;
-  if (setter) setter.call(element, value);
-  else element.value = value;
+  if (setter) {
+    setter.call(element, value);
+  } else {
+    element.value = value;
+  }
   element.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 }
 

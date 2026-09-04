@@ -32,7 +32,7 @@ export interface PaneSplit {
   id: string;
   direction: SplitDirection;
   /**
-  Fraction of the split's main-axis extent given to child `a`, clamped to [MIN_RATIO, 1-MIN_RATIO].
+  Fraction of the split's main-axis extent given to child `a`, clamped to [minRatio, 1-minRatio].
   */
   ratio: number;
   a: PaneNode;
@@ -62,21 +62,15 @@ export interface PaneRect {
 /**
 Minimum fraction either side of a split may occupy, so a pane can never collapse to nothing.
 */
-export const MIN_RATIO = 0.1;
+export const minRatio = 0.1;
 
 const clampRatio = (ratio: number): number =>
-  Math.min(1 - MIN_RATIO, Math.max(MIN_RATIO, ratio));
+  Math.min(1 - minRatio, Math.max(minRatio, ratio));
 
-/**
-A workspace that starts as a single full-window pane.
-*/
 export function singlePaneLayout(paneId: string): PaneLayout {
-  return { root: { kind: "leaf", id: paneId }, focused: paneId };
+  return { focused: paneId, root: { id: paneId, kind: "leaf" } };
 }
 
-/**
-The edge a drag was released on, resolved to the split it should produce.
-*/
 export function splitForEdge(edge: PaneEdge): {
   direction: SplitDirection;
   side: SplitSide;
@@ -97,9 +91,6 @@ export function splitForEdge(edge: PaneEdge): {
   }
 }
 
-/**
-Every leaf id, in visual order (left-to-right, top-to-bottom).
-*/
 export function listPanes(node: PaneNode, out: string[] = []): string[] {
   if (node.kind === "leaf") {
     out.push(node.id);
@@ -117,17 +108,10 @@ export function hasPane(node: PaneNode, paneId: string): boolean {
   return hasPane(node.a, paneId) || hasPane(node.b, paneId);
 }
 
-/**
-The first leaf in visual order within a subtree; the deterministic focus fallback.
-*/
 export function firstLeaf(node: PaneNode): string {
   return node.kind === "leaf" ? node.id : firstLeaf(node.a);
 }
 
-/**
- * Split `targetPaneId` into a new {@link PaneSplit}, placing a fresh leaf (`newPaneId`) on the
- * given side. Focus moves to the new pane. Returns the layout unchanged when the target is absent.
- */
 export function splitPane(
   layout: PaneLayout,
   targetPaneId: string,
@@ -145,26 +129,23 @@ export function splitPane(
       if (node.id !== targetPaneId) {
         return node;
       }
-      const newLeaf: PaneLeaf = { kind: "leaf", id: newPaneId };
+      const newLeaf: PaneLeaf = { id: newPaneId, kind: "leaf" };
       const existing: PaneNode = node;
       return {
-        kind: "split",
-        id: `split:${targetPaneId}:${newPaneId}`,
-        direction,
-        ratio: clampRatio(side === "before" ? 1 - ratio : ratio),
         a: side === "before" ? newLeaf : existing,
         b: side === "before" ? existing : newLeaf,
+        direction,
+        id: `split:${targetPaneId}:${newPaneId}`,
+        kind: "split",
+        ratio: clampRatio(side === "before" ? 1 - ratio : ratio),
       };
     }
     return { ...node, a: replace(node.a), b: replace(node.b) };
   };
 
-  return { root: replace(layout.root), focused: newPaneId };
+  return { focused: newPaneId, root: replace(layout.root) };
 }
 
-/**
-Convenience for the two most common keyboard splits.
-*/
 export function splitFocused(
   layout: PaneLayout,
   edge: PaneEdge,
@@ -204,11 +185,6 @@ function removeLeaf(node: PaneNode, paneId: string): RemoveResult {
   return { changed: false, node };
 }
 
-/**
- * Remove a pane and collapse its parent split into the surviving sibling. Returns the layout
- * unchanged when the pane is absent, and `null` when the last remaining pane is closed (the host
- * decides what an empty workspace means).
- */
 export function closePane(
   layout: PaneLayout,
   paneId: string
@@ -224,12 +200,9 @@ export function closePane(
     layout.focused === paneId || !hasPane(res.node, layout.focused)
       ? firstLeaf(res.node)
       : layout.focused;
-  return { root: res.node, focused };
+  return { focused, root: res.node };
 }
 
-/**
-Move focus to an existing leaf; a no-op for unknown ids.
-*/
 export function focusPane(layout: PaneLayout, paneId: string): PaneLayout {
   if (paneId === layout.focused || !hasPane(layout.root, paneId)) {
     return layout;
@@ -237,9 +210,6 @@ export function focusPane(layout: PaneLayout, paneId: string): PaneLayout {
   return { ...layout, focused: paneId };
 }
 
-/**
-Resize the split with `splitId`, clamping child `a`'s share to keep both sides usable.
-*/
 export function setSplitRatio(
   layout: PaneLayout,
   splitId: string,
@@ -257,12 +227,9 @@ export function setSplitRatio(
   return { ...layout, root: apply(layout.root) };
 }
 
-/**
-Normalized rectangles for every leaf, given the workspace's unit rectangle.
-*/
 export function computePaneRects(
   node: PaneNode,
-  rect: PaneRect = { x: 0, y: 0, w: 1, h: 1 },
+  rect: PaneRect = { h: 1, w: 1, x: 0, y: 0 },
   out = new Map<string, PaneRect>()
 ): Map<string, PaneRect> {
   if (node.kind === "leaf") {
@@ -271,18 +238,18 @@ export function computePaneRects(
   }
   if (node.direction === "row") {
     const wA = rect.w * node.ratio;
-    computePaneRects(node.a, { x: rect.x, y: rect.y, w: wA, h: rect.h }, out);
+    computePaneRects(node.a, { h: rect.h, w: wA, x: rect.x, y: rect.y }, out);
     computePaneRects(
       node.b,
-      { x: rect.x + wA, y: rect.y, w: rect.w - wA, h: rect.h },
+      { h: rect.h, w: rect.w - wA, x: rect.x + wA, y: rect.y },
       out
     );
   } else {
     const hA = rect.h * node.ratio;
-    computePaneRects(node.a, { x: rect.x, y: rect.y, w: rect.w, h: hA }, out);
+    computePaneRects(node.a, { h: hA, w: rect.w, x: rect.x, y: rect.y }, out);
     computePaneRects(
       node.b,
-      { x: rect.x, y: rect.y + hA, w: rect.w, h: rect.h - hA },
+      { h: rect.h - hA, w: rect.w, x: rect.x, y: rect.y + hA },
       out
     );
   }
@@ -302,55 +269,47 @@ export interface DividerRect {
   rect: PaneRect;
 }
 
-/**
-Every split's resize boundary, so the renderer can place a draggable handle on each.
-*/
 export function computeDividers(
   node: PaneNode,
-  rect: PaneRect = { x: 0, y: 0, w: 1, h: 1 },
+  rect: PaneRect = { h: 1, w: 1, x: 0, y: 0 },
   out: DividerRect[] = []
 ): DividerRect[] {
   if (node.kind === "leaf") {
     return out;
   }
   out.push({
-    splitId: node.id,
     direction: node.direction,
     ratio: node.ratio,
     rect,
+    splitId: node.id,
   });
   if (node.direction === "row") {
     const wA = rect.w * node.ratio;
-    computeDividers(node.a, { x: rect.x, y: rect.y, w: wA, h: rect.h }, out);
+    computeDividers(node.a, { h: rect.h, w: wA, x: rect.x, y: rect.y }, out);
     computeDividers(
       node.b,
-      { x: rect.x + wA, y: rect.y, w: rect.w - wA, h: rect.h },
+      { h: rect.h, w: rect.w - wA, x: rect.x + wA, y: rect.y },
       out
     );
   } else {
     const hA = rect.h * node.ratio;
-    computeDividers(node.a, { x: rect.x, y: rect.y, w: rect.w, h: hA }, out);
+    computeDividers(node.a, { h: hA, w: rect.w, x: rect.x, y: rect.y }, out);
     computeDividers(
       node.b,
-      { x: rect.x, y: rect.y + hA, w: rect.w, h: rect.h - hA },
+      { h: rect.h - hA, w: rect.w, x: rect.x, y: rect.y + hA },
       out
     );
   }
   return out;
 }
 
-const rangesOverlap = (
+const isRangesOverlap = (
   aStart: number,
   aLength: number,
   bStart: number,
   bLength: number
 ): boolean => aStart < bStart + bLength && bStart < aStart + aLength;
 
-/**
- * The pane spatially adjacent to the focused one in a given direction, or null when there is none.
- * Candidates must lie on the requested side and overlap the focused pane on the perpendicular axis;
- * the nearest such pane wins.
- */
 export function paneInDirection(
   layout: PaneLayout,
   direction: PaneEdge
@@ -370,52 +329,51 @@ export function paneInDirection(
     }
     const cx = r.x + r.w / 2;
     const cy = r.y + r.h / 2;
-    let isInDir: boolean;
+    let isInDirectory: boolean;
     let isPerp: boolean;
     let distribution: number;
     switch (direction) {
       case "left": {
-        isInDir = cx < fromCx - 1e-6;
-        isPerp = rangesOverlap(from.y, from.h, r.y, r.h);
+        isInDirectory = cx < fromCx - 1e-6;
+        isPerp = isRangesOverlap(from.y, from.h, r.y, r.h);
         distribution = fromCx - cx;
         break;
       }
       case "right": {
-        isInDir = cx > fromCx + 1e-6;
-        isPerp = rangesOverlap(from.y, from.h, r.y, r.h);
+        isInDirectory = cx > fromCx + 1e-6;
+        isPerp = isRangesOverlap(from.y, from.h, r.y, r.h);
         distribution = cx - fromCx;
         break;
       }
       case "top": {
-        isInDir = cy < fromCy - 1e-6;
-        isPerp = rangesOverlap(from.x, from.w, r.x, r.w);
+        isInDirectory = cy < fromCy - 1e-6;
+        isPerp = isRangesOverlap(from.x, from.w, r.x, r.w);
         distribution = fromCy - cy;
         break;
       }
       case "bottom": {
-        isInDir = cy > fromCy + 1e-6;
-        isPerp = rangesOverlap(from.x, from.w, r.x, r.w);
+        isInDirectory = cy > fromCy + 1e-6;
+        isPerp = isRangesOverlap(from.x, from.w, r.x, r.w);
         distribution = cy - fromCy;
         break;
       }
     }
-    if (!isInDir || !isPerp) {
+    if (!isInDirectory || !isPerp) {
       continue;
     }
     if (!best || distribution < best.dist) {
-      best = { id, dist: distribution };
+      best = { dist: distribution, id };
     }
   }
   return best ? best.id : null;
 }
 
-/**
-Move focus to the spatial neighbor in a direction; unchanged when there is none.
-*/
 export function focusInDirection(
   layout: PaneLayout,
   direction: PaneEdge
 ): PaneLayout {
   const target = paneInDirection(layout, direction);
-  return target ? { ...layout, focused: target } : layout;
+  return target != null && target !== ""
+    ? { ...layout, focused: target }
+    : layout;
 }

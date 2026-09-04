@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  FEISHU_SIDEBAR_ORDER_KEY,
+  feishuSidebarOrderKey,
   loadFeishuSidebarOrder,
   moveFeishuResource,
   moveFeishuSection,
@@ -41,14 +41,14 @@ describe("Feishu sidebar ordering", () => {
       }
     );
 
-    expect(values.has(FEISHU_SIDEBAR_ORDER_KEY)).toBe(true);
+    expect(values.has(feishuSidebarOrderKey)).toBe(true);
     expect(
       loadFeishuSidebarOrder({ getItem: (key) => values.get(key) ?? null })
         .sectionOrder
     ).toEqual(["bases", "messages", "documents"]);
 
     values.set(
-      FEISHU_SIDEBAR_ORDER_KEY,
+      feishuSidebarOrderKey,
       JSON.stringify({
         version: 1,
         sectionOrder: ["documents"],

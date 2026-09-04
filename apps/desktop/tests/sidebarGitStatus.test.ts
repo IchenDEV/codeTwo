@@ -85,7 +85,9 @@ describe("sidebar GitHub status", () => {
       [{ path: "/one" }, { path: "/one" }, { path: "/two" }],
       async (path) => {
         calls.push(path);
-        if (path === "/two") throw new Error("offline");
+        if (path === "/two") {
+          throw new Error("offline");
+        }
         return pullRequest({ number: 7 });
       },
       2

@@ -1,13 +1,7 @@
-import {
-  forwardRef,
-  type ForwardRefExoticComponent,
-  type RefAttributes,
-} from "react";
-import {
-  HugeiconsIcon,
-  type HugeiconsIconProps,
-  type IconSvgElement,
-} from "@hugeicons/react";
+import { forwardRef } from "react";
+import type { ForwardRefExoticComponent, RefAttributes } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
 import ActivityData from "@hugeicons/core-free-icons/Activity01Icon";
 import AddSquareIconData from "@hugeicons/core-free-icons/AddSquareIcon";
 import AlertCircleData from "@hugeicons/core-free-icons/AlertCircleIcon";

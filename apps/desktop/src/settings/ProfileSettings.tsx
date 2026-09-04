@@ -1,29 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Lock, Pencil, Share2, UserRound } from "@/components/ui/icons";
 
-import {
-  usageHistory,
-  usageReport,
-  systemProfileAvatar,
-  type SourceUsage,
-  type UsageHistoryReport,
-  type UsageReport,
-} from "../bridge";
+import { usageHistory, usageReport, systemProfileAvatar } from "../bridge";
+import type { SourceUsage, UsageHistoryReport, UsageReport } from "../bridge";
 import { useLanguage } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
-import {
-  fmtTokens,
-  stackHistory,
-  type StackedBucket,
-} from "../usage/usageMath";
+import { fmtTokens, stackHistory } from "../usage/usageMath";
+import type { StackedBucket } from "../usage/usageMath";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-const STORAGE_KEY = "codetwo.profile";
-const ACTIVITY_DAYS = 90;
+const storageKey = "codetwo.profile";
+const activityDays = 90;
 
 export interface ProfileActivitySummary {
   totalTokens: number;
@@ -51,15 +42,15 @@ export function summarizeProfileActivity(
   }
 
   return {
-    totalTokens: totals.reduce((sum, total) => sum + total, 0),
-    peakTokens: Math.max(0, ...totals),
     activeDays: totals.filter((total) => total > 0).length,
-    currentStreak,
-    transcripts: report.transcripts,
     buckets,
+    currentStreak,
+    peakTokens: Math.max(0, ...totals),
     providers: [...history.by_source].sort(
       (left, right) => right.total_tokens - left.total_tokens
     ),
+    totalTokens: totals.reduce((sum, total) => sum + total, 0),
+    transcripts: report.transcripts,
   };
 }
 
@@ -69,31 +60,32 @@ interface ProfileSnapshot {
   bio: string;
 }
 
-const EMPTY_PROFILE: ProfileSnapshot = { name: "", handle: "", bio: "" };
+const emptyProfile: ProfileSnapshot = { bio: "", handle: "", name: "" };
 
 function loadProfile(): ProfileSnapshot {
   try {
     const parsed = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) ?? "null"
+      localStorage.getItem(storageKey) ?? "null"
     ) as Partial<ProfileSnapshot> | null;
     return {
-      name: typeof parsed?.name === "string" ? parsed.name : "",
-      handle: typeof parsed?.handle === "string" ? parsed.handle : "",
       bio: typeof parsed?.bio === "string" ? parsed.bio : "",
+      handle: typeof parsed?.handle === "string" ? parsed.handle : "",
+      name: typeof parsed?.name === "string" ? parsed.name : "",
     };
   } catch {
-    return EMPTY_PROFILE;
+    return emptyProfile;
   }
 }
 
 function profileInitials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length > 1)
+  const words = name.trim().split(/\s+/u).filter(Boolean);
+  if (words.length > 1) {
     return words
       .slice(0, 2)
       .map((word) => Array.from(word)[0])
       .join("")
       .toUpperCase();
+  }
   return Array.from(words[0] ?? "C2")
     .slice(0, 2)
     .join("")
@@ -112,15 +104,18 @@ async function shareProfile(
 
   if (share) {
     try {
-      await share.call(navigator, { title, text });
+      await share.call(navigator, { text, title });
       return "shared";
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError")
+      if (error instanceof DOMException && error.name === "AbortError") {
         return "cancelled";
+      }
     }
   }
 
-  if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+  if (!navigator.clipboard?.writeText) {
+    throw new Error("clipboard unavailable");
+  }
   await navigator.clipboard.writeText(text);
   return "copied";
 }
@@ -153,52 +148,51 @@ export const ProfileSettings = ({
   const [nameInvalid, setNameInvalid] = useState(false);
 
   const displayName = profile.name.trim() || t("profile.defaultName");
-  const handle = profile.handle.trim().replace(/^@+/, "");
+  const handle = profile.handle.trim().replace(/^@+/u, "");
   const bio = profile.bio.trim() || t("profile.defaultBio");
 
-  const loadActivity = useCallback(() => {
+  const loadActivity = () => {
     setLoading(true);
     setLoadFailed(false);
-    void Promise.all([reportLoader(), historyLoader(ACTIVITY_DAYS)])
+    void Promise.all([reportLoader(), historyLoader(activityDays)])
       .then(([report, history]) =>
         setSummary(summarizeProfileActivity(report, history))
       )
       .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
-  }, [historyLoader, reportLoader]);
+  };
 
   useEffect(loadActivity, [loadActivity]);
 
   useEffect(() => {
-    let active = true;
+    let isActive = true;
     void avatarLoader()
       .then((url) => {
-        if (active) setAvatarUrl(url);
+        if (isActive) {
+          setAvatarUrl(url);
+        }
       })
       .catch(() => {});
     return () => {
-      active = false;
+      isActive = false;
     };
   }, [avatarLoader]);
 
-  const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }),
-    [locale]
-  );
-  const numberFormatter = useMemo(
-    () => new Intl.NumberFormat(locale),
-    [locale]
-  );
+  const dateFormatter = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+  });
+  const numberFormatter = new Intl.NumberFormat(locale);
   const leadingCells = summary?.buckets.length
     ? new Date(summary.buckets[0].startMs).getDay()
     : 0;
-  const activityCellCount = summary?.buckets.length || ACTIVITY_DAYS;
+  const activityCellCount = summary?.buckets.length || activityDays;
 
   const save = () => {
     const next = {
-      name: draft.name.trim(),
-      handle: draft.handle.trim().replace(/^@+/, ""),
       bio: draft.bio.trim(),
+      handle: draft.handle.trim().replace(/^@+/u, ""),
+      name: draft.name.trim(),
     };
     if (!next.name) {
       setNameInvalid(true);
@@ -209,7 +203,7 @@ export const ProfileSettings = ({
     setDraft(next);
     setEditing(false);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(storageKey, JSON.stringify(next));
       setStatus(t("profile.saved"));
     } catch {
       setStatus(t("profile.saveSessionOnly"));
@@ -217,13 +211,15 @@ export const ProfileSettings = ({
   };
 
   const shareCurrentProfile = async () => {
-    if (!summary) return;
+    if (!summary) {
+      return;
+    }
     const text = t("profile.shareText", {
-      name: displayName,
-      tokens: fmtTokens(summary.totalTokens),
       days: summary.activeDays,
-      streak: summary.currentStreak,
+      name: displayName,
       sessions: summary.transcripts,
+      streak: summary.currentStreak,
+      tokens: fmtTokens(summary.totalTokens),
     });
     try {
       const result = await share(
@@ -262,7 +258,9 @@ export const ProfileSettings = ({
             >
               {displayName}
             </h1>
-            {handle ? <p className="text-body text-muted-foreground">@{handle}</p> : null}
+            {handle ? (
+              <p className="text-body text-muted-foreground">@{handle}</p>
+            ) : null}
             <p className="profile-bio text-metadata text-muted-foreground">
               {bio}
             </p>
@@ -301,7 +299,8 @@ export const ProfileSettings = ({
         </div>
       </header>
 
-      {editing ? <form
+      {editing ? (
+        <form
           className="profile-editor"
           noValidate
           onSubmit={(event) => {
@@ -324,16 +323,20 @@ export const ProfileSettings = ({
                 onInput={(event) => {
                   const name = event.currentTarget.value;
                   setDraft((current) => ({ ...current, name }));
-                  if (name.trim()) setNameInvalid(false);
+                  if (name.trim()) {
+                    setNameInvalid(false);
+                  }
                 }}
               />
-              {nameInvalid ? <p
+              {nameInvalid ? (
+                <p
                   id="profile-display-name-error"
                   role="alert"
                   className="text-callout text-destructive"
                 >
                   {t("profile.nameRequired")}
-                </p> : null}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="profile-handle">{t("profile.handle")}</Label>
@@ -380,31 +383,38 @@ export const ProfileSettings = ({
               {t("profile.save")}
             </Button>
           </div>
-        </form> : null}
+        </form>
+      ) : null}
 
-      {status ? <p
-          role="status"
+      {status ? (
+        <output
           aria-live="polite"
           className="profile-status text-metadata text-muted-foreground"
         >
           {status}
-        </p> : null}
+        </output>
+      ) : null}
 
-      {loading && !summary ? <div className="py-page-section text-metadata text-muted-foreground flex items-center justify-center gap-2">
+      {loading && !summary ? (
+        <div className="py-page-section text-metadata text-muted-foreground flex items-center justify-center gap-2">
           <Spinner />
           {t("profile.loading")}
-        </div> : null}
+        </div>
+      ) : null}
 
-      {loadFailed && !summary ? <div className="py-page-section flex flex-col items-center gap-3 text-center">
+      {loadFailed && !summary ? (
+        <div className="py-page-section flex flex-col items-center gap-3 text-center">
           <p className="text-metadata text-muted-foreground">
             {t("profile.loadFailed")}
           </p>
           <Button variant="outline" size="sm" onClick={loadActivity}>
             {t("profile.retry")}
           </Button>
-        </div> : null}
+        </div>
+      ) : null}
 
-      {summary ? <section
+      {summary ? (
+        <section
           className="profile-activity-surface"
           aria-labelledby="profile-summary-heading"
         >
@@ -554,7 +564,8 @@ export const ProfileSettings = ({
               </section>
             )}
           </div>
-        </section> : null}
+        </section>
+      ) : null}
     </div>
   );
-}
+};

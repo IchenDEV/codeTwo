@@ -10,7 +10,7 @@ const {
   setAppearanceSettings,
 } = await import("../src/appearance");
 const { CodeTwoPet } = await import("../src/pet/CodeTwoPet");
-const { desktopPetContextMenu, DESKTOP_PET_CLOSE_ACTION } =
+const { desktopPetContextMenu, desktopPetCloseAction } =
   await import("../src/pet/DesktopPet");
 const { PetSettings } = await import("../src/settings/PetSettings");
 
@@ -39,7 +39,9 @@ function findButton(container: HTMLElement, label: string): HTMLButtonElement {
   const button = Array.from(
     container.querySelectorAll<HTMLButtonElement>("button")
   ).find((candidate) => candidate.textContent?.trim() === label);
-  if (!button) throw new Error(`Button not found: ${label}`);
+  if (!button) {
+    throw new Error(`Button not found: ${label}`);
+  }
   return button;
 }
 
@@ -261,7 +263,7 @@ describe("Pet settings", () => {
 
   test("offers closing through the native pet context-menu model", () => {
     expect(desktopPetContextMenu("Close")).toEqual([
-      { type: "item", label: "Close", action: DESKTOP_PET_CLOSE_ACTION },
+      { type: "item", label: "Close", action: desktopPetCloseAction },
     ]);
   });
 });

@@ -229,7 +229,9 @@ describe("SideChatPanel", () => {
       const trigger = view.container.querySelector<HTMLButtonElement>(
         'button[title="Model"]'
       );
-      if (!trigger) throw new Error("model trigger did not render");
+      if (!trigger) {
+        throw new Error("model trigger did not render");
+      }
       click(trigger);
       await flush();
       const nextModel = Array.from(
@@ -237,7 +239,9 @@ describe("SideChatPanel", () => {
           '[data-slot="popover-content"] button'
         )
       ).find((candidate) => candidate.textContent?.includes("GPT Next"));
-      if (!nextModel) throw new Error("alternate model did not render");
+      if (!nextModel) {
+        throw new Error("alternate model did not render");
+      }
       click(nextModel);
       await flush();
       expect(trigger.textContent).toContain("GPT Next");
@@ -282,7 +286,9 @@ describe("SideChatPanel", () => {
       const imageInput =
         view.container.querySelector<HTMLInputElement>('input[type="file"]');
       let imagePickerOpens = 0;
-      if (!imageInput) throw new Error("transient image input did not render");
+      if (!imageInput) {
+        throw new Error("transient image input did not render");
+      }
       imageInput.click = () => {
         imagePickerOpens += 1;
       };
@@ -319,7 +325,9 @@ describe("SideChatPanel", () => {
         '[data-slot="popover-content"] button'
       )
     ).find((candidate) => candidate.textContent?.includes("Full access"));
-    if (!fullAccess) throw new Error("full-access mode did not render");
+    if (!fullAccess) {
+      throw new Error("full-access mode did not render");
+    }
     click(fullAccess);
     await flush();
 
@@ -386,26 +394,31 @@ describe("SideChatPanel", () => {
 
     expect(floatingPanel).not.toBeNull();
     expect(dragHandle).not.toBeNull();
-    if (!floatingPanel || !dragHandle)
+    if (!floatingPanel || !dragHandle) {
       throw new Error("missing Quick Chat drag surface");
+    }
 
-    floatingPanel.getBoundingClientRect = () => ({
-      bottom: 860,
-      height: 720,
-      left: 280,
-      right: 920,
-      top: 140,
-      width: 640,
-      x: 280,
-      y: 140,
-      toJSON: () => ({}),
-    });
+    floatingPanel.getBoundingClientRect = () => {
+      return {
+        bottom: 860,
+        height: 720,
+        left: 280,
+        right: 920,
+        top: 140,
+        width: 640,
+        x: 280,
+        y: 140,
+        toJSON: () => ({}),
+      };
+    };
     dragHandle.setPointerCapture = (pointerId) => {
       capturedPointer = pointerId;
     };
     dragHandle.hasPointerCapture = (pointerId) => capturedPointer === pointerId;
     dragHandle.releasePointerCapture = (pointerId) => {
-      if (capturedPointer === pointerId) capturedPointer = null;
+      if (capturedPointer === pointerId) {
+        capturedPointer = null;
+      }
     };
 
     dragHandle.dispatchEvent(

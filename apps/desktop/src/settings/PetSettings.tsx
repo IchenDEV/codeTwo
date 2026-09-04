@@ -1,19 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle, Check, RefreshCw } from "@/components/ui/icons";
 
-import {
-  setAppearanceSettings,
-  useAppearanceSettings,
-  type PetSize,
-} from "../appearance";
+import { setAppearanceSettings, useAppearanceSettings } from "../appearance";
+import type { PetSize } from "../appearance";
 import { CodeTwoPetSprite } from "../pet/CodeTwoPet";
 import type { CodeTwoPetAnimation } from "../pet/state";
 import {
-  BUILTIN_PET,
+  builtinPet,
   fetchPetShareCatalog,
   petSpritesheetUrl,
-  type PetCatalogItem,
 } from "../pet/store";
+import type { PetCatalogItem } from "../pet/store";
 import { SettingRow } from "@/components/business/setting-row";
 import { SettingsSection } from "@/components/business/settings-section";
 import { SettingToggle } from "@/components/business/setting-toggle";
@@ -39,12 +36,12 @@ const MOODS: CodeTwoPetAnimation[] = [
   "review",
   "failed",
 ];
-const PREVIEW_SIZE = 46;
+const previewSize = 46;
 
 const SIZES: { size: PetSize; labelKey: StringKey }[] = [
-  { size: "small", labelKey: "settings.petSizeSmall" },
-  { size: "medium", labelKey: "settings.petSizeMedium" },
-  { size: "large", labelKey: "settings.petSizeLarge" },
+  { labelKey: "settings.petSizeSmall", size: "small" },
+  { labelKey: "settings.petSizeMedium", size: "medium" },
+  { labelKey: "settings.petSizeLarge", size: "large" },
 ];
 
 export const PetSettings = ({
@@ -65,47 +62,51 @@ export const PetSettings = ({
     SIZES.find(({ size }) => size === settings.petSize) ?? SIZES[1];
 
   useEffect(() => {
-    let active = true;
+    let isActive = true;
     setCatalogState("loading");
     loadCatalog().then(
       (items) => {
-        if (!active) return;
+        if (!isActive) {
+          return;
+        }
         setCatalog(items);
         setCatalogState("ready");
       },
       () => {
-        if (!active) return;
+        if (!isActive) {
+          return;
+        }
         setCatalogState("error");
       }
     );
     return () => {
-      active = false;
+      isActive = false;
     };
   }, [catalogAttempt, loadCatalog]);
 
-  const pets = useMemo(() => {
-    const items = [BUILTIN_PET, ...catalog];
+  const pets = (() => {
+    const items = [builtinPet, ...catalog];
     if (
       settings.petSource === "petshare" &&
       !items.some((item) => item.id === settings.petId)
     ) {
       items.push({
-        id: settings.petId,
-        displayName: settings.petName,
         description: t("settings.petSavedDescription"),
+        displayName: settings.petName,
+        id: settings.petId,
         source: "petshare",
-        spritesheetUrl: petSpritesheetUrl("petshare", settings.petId),
         spriteVersionNumber: 2,
+        spritesheetUrl: petSpritesheetUrl("petshare", settings.petId),
       });
     }
     return items.sort((left, right) => {
-      const leftSelected =
+      const isLeftSelected =
         left.source === settings.petSource && left.id === settings.petId;
-      const rightSelected =
+      const isRightSelected =
         right.source === settings.petSource && right.id === settings.petId;
-      return Number(rightSelected) - Number(leftSelected);
+      return Number(isRightSelected) - Number(isLeftSelected);
     });
-  }, [catalog, settings.petId, settings.petName, settings.petSource, t]);
+  })();
 
   const previewNextMood = () => {
     setPreviewAnimation((current) => {
@@ -116,9 +117,9 @@ export const PetSettings = ({
 
   const selectPet = (pet: PetCatalogItem) => {
     setAppearanceSettings({
-      petSource: pet.source,
       petId: pet.id,
       petName: pet.displayName,
+      petSource: pet.source,
     });
   };
 
@@ -156,7 +157,7 @@ export const PetSettings = ({
       >
         <ul className="pet-catalog" aria-label={t("settings.petPicker")}>
           {pets.map((pet) => {
-            const selected =
+            const isSelected =
               pet.source === settings.petSource && pet.id === settings.petId;
             const description =
               pet.source === "builtin"
@@ -182,7 +183,7 @@ export const PetSettings = ({
                       <CodeTwoPetSprite
                         key={`${pet.source}-${pet.id}-${previewAnimation}`}
                         animation={previewAnimation}
-                        size={PREVIEW_SIZE}
+                        size={previewSize}
                         src={pet.spritesheetUrl}
                         spriteVersionNumber={pet.spriteVersionNumber}
                         playing={false}
@@ -192,7 +193,7 @@ export const PetSettings = ({
                     </div>
                   }
                 >
-                  {selected ? (
+                  {isSelected ? (
                     <span className="pet-selected-status">
                       <Check className="size-3.5" aria-hidden="true" />
                       {t("settings.petSelected")}
@@ -216,10 +217,10 @@ export const PetSettings = ({
           })}
 
           {catalogState === "loading" ? (
-            <li className="pet-catalog-state" role="status">
+            <output className="pet-catalog-state">
               <Spinner />
               {t("settings.petStoreLoading")}
-            </li>
+            </output>
           ) : null}
           {catalogState === "error" ? (
             <li className="pet-catalog-state pet-catalog-error" role="alert">
@@ -282,4 +283,4 @@ export const PetSettings = ({
       </SettingsSection>
     </div>
   );
-}
+};

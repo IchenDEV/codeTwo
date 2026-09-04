@@ -1,9 +1,7 @@
 import { useId } from "react";
 
-import {
-  SettingRow,
-  type SettingRowSurface,
-} from "@/components/business/setting-row";
+import { SettingRow } from "@/components/business/setting-row";
+import type { SettingRowSurface } from "@/components/business/setting-row";
 import { Switch } from "@/components/ui/switch";
 
 interface SettingToggleProps {
@@ -12,7 +10,7 @@ interface SettingToggleProps {
   readonly checked: boolean;
   readonly disabled?: boolean;
   readonly surface?: SettingRowSurface;
-  readonly onCheckedChange: (checked: boolean) => void;
+  readonly onCheckedChange: (isChecked: boolean) => void;
 }
 
 const SettingToggle = ({
@@ -51,6 +49,6 @@ const SettingToggle = ({
       </SettingRow>
     </div>
   );
-}
+};
 
 export { SettingToggle, type SettingToggleProps };

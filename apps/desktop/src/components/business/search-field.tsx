@@ -1,9 +1,5 @@
-import {
-  useId,
-  useRef,
-  type ChangeEventHandler,
-  type ComponentProps,
-} from "react";
+import { useId, useRef } from "react";
+import type { ChangeEventHandler, ComponentProps } from "react";
 import { Search, X } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
@@ -40,7 +36,7 @@ const SearchField = ({
   const generatedId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const id = generatedId;
-  const clearable = onClear !== undefined && value.length > 0;
+  const isClearable = onClear !== undefined && value.length > 0;
 
   return (
     <div
@@ -64,12 +60,12 @@ const SearchField = ({
         value={value}
         onChange={onChange}
         className={cn(
-          clearable ? "ps-page-section pe-page-section" : "ps-page-section",
+          isClearable ? "ps-page-section pe-page-section" : "ps-page-section",
           inputClassName
         )}
         {...inputProps}
       />
-      {clearable ? (
+      {isClearable ? (
         <Button
           type="button"
           variant="ghost"
@@ -86,6 +82,6 @@ const SearchField = ({
       ) : null}
     </div>
   );
-}
+};
 
 export { SearchField, type SearchFieldProps };

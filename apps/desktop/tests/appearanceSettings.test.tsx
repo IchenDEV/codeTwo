@@ -252,14 +252,16 @@ describe("Appearance settings", () => {
   });
 
   test("persists independent profiles and the Codex preference controls", () => {
-    setAppearanceSettings((current) => ({
-      ...current,
-      light: { ...current.light, uiFont: "inter", contrast: 32 },
-      dark: { ...current.dark, codeFont: "monaco", contrast: 71 },
-      pointerCursors: false,
-      reduceMotion: "off",
-      diffMarkers: "symbols",
-    }));
+    setAppearanceSettings((current) => {
+      return {
+        ...current,
+        light: { ...current.light, uiFont: "inter", contrast: 32 },
+        dark: { ...current.dark, codeFont: "monaco", contrast: 71 },
+        pointerCursors: false,
+        reduceMotion: "off",
+        diffMarkers: "symbols",
+      };
+    });
 
     expect(getAppearanceSettings()).toMatchObject({
       light: { uiFont: "inter", contrast: 32 },

@@ -6,262 +6,391 @@ import type {
   PluginManagerStatus,
 } from "./types";
 
-const STATUS_KEYS: Record<PluginManagerStatus, StringKey> = {
-  disabled: "pluginManager.status.disabled",
-  pending: "pluginManager.status.pending",
-  loading: "pluginManager.status.loading",
+const statusKeys: Record<PluginManagerStatus, StringKey> = {
   active: "pluginManager.status.active",
-  failed: "pluginManager.status.failed",
+  disabled: "pluginManager.status.disabled",
   disposed: "pluginManager.status.disposed",
+  failed: "pluginManager.status.failed",
+  loading: "pluginManager.status.loading",
+  pending: "pluginManager.status.pending",
   requires_auth: "pluginManager.status.requiresAuth",
   unsupported: "pluginManager.status.unsupported",
 };
 
-const SOURCE_KEYS: Record<PluginManagerSource, StringKey> = {
+const sourceKeys: Record<PluginManagerSource, StringKey> = {
   builtin: "pluginManager.source.builtin",
-  host: "pluginManager.source.host",
   bundle: "pluginManager.source.bundle",
+  host: "pluginManager.source.host",
 };
 
-const CONTRIBUTION_KEYS: Record<string, StringKey> = {
-  runtime: "pluginManager.contribution.runtime",
-  skills: "pluginManager.contribution.skills",
-  subagents: "pluginManager.contribution.subagents",
-  mcp_servers: "pluginManager.contribution.mcpServers",
+const contributionKeys: Record<string, StringKey> = {
+  apps: "pluginManager.contribution.apps",
   commands: "pluginManager.contribution.commands",
-  runtime_commands: "pluginManager.contribution.runtimeCommands",
+  connectors: "pluginManager.contribution.connectors",
   hooks: "pluginManager.contribution.hooks",
   lsp_servers: "pluginManager.contribution.languageServers",
-  scaffolds: "pluginManager.contribution.scaffolds",
+  mcp_servers: "pluginManager.contribution.mcpServers",
   monitors: "pluginManager.contribution.monitors",
-  apps: "pluginManager.contribution.apps",
-  ui: "pluginManager.contribution.uiActions",
-  connectors: "pluginManager.contribution.connectors",
-  scenes: "pluginManager.contribution.scenes",
   pipelines: "pluginManager.contribution.pipelines",
+  runtime: "pluginManager.contribution.runtime",
+  runtime_commands: "pluginManager.contribution.runtimeCommands",
+  scaffolds: "pluginManager.contribution.scaffolds",
+  scenes: "pluginManager.contribution.scenes",
+  skills: "pluginManager.contribution.skills",
+  subagents: "pluginManager.contribution.subagents",
+  ui: "pluginManager.contribution.uiActions",
 };
 
-const COMPONENT_KIND_KEYS: Record<string, StringKey> = {
-  page: "pluginManager.kind.page",
-  dockSurface: "pluginManager.kind.dockSurface",
-  modal: "pluginManager.kind.modal",
-  composerAction: "pluginManager.kind.composerAction",
-  settingsSection: "pluginManager.kind.settingsSection",
-  sessionSurface: "pluginManager.kind.sessionSurface",
-  editorBlock: "pluginManager.kind.editorBlock",
-  runtime: "pluginManager.kind.runtime",
-  skill: "pluginManager.kind.skill",
+const componentKindKeys: Record<string, StringKey> = {
   agent_skill: "pluginManager.kind.agentSkill",
+  composerAction: "pluginManager.kind.composerAction",
+  dockSurface: "pluginManager.kind.dockSurface",
+  editorBlock: "pluginManager.kind.editorBlock",
   fragment: "pluginManager.kind.fragment",
+  hook: "pluginManager.kind.hook",
   macro: "pluginManager.kind.macro",
   mcp: "pluginManager.kind.mcp",
-  hook: "pluginManager.kind.hook",
+  modal: "pluginManager.kind.modal",
+  page: "pluginManager.kind.page",
+  runtime: "pluginManager.kind.runtime",
+  sessionSurface: "pluginManager.kind.sessionSurface",
+  settingsSection: "pluginManager.kind.settingsSection",
+  skill: "pluginManager.kind.skill",
 };
 
-const PLUGIN_KEYS: Record<string, { name: StringKey; description: StringKey }> =
+const pluginKeys: Record<string, { name: StringKey; description: StringKey }> =
   {
-    core: {
-      name: "pluginManager.plugin.core.name",
-      description: "pluginManager.plugin.core.description",
-    },
-    kernel: {
-      name: "pluginManager.plugin.kernel.name",
-      description: "pluginManager.plugin.kernel.description",
-    },
-    workspace: {
-      name: "pluginManager.plugin.workspace.name",
-      description: "pluginManager.plugin.workspace.description",
-    },
-    "workspace-search": {
-      name: "pluginManager.plugin.workspaceSearch.name",
-      description: "pluginManager.plugin.workspaceSearch.description",
-    },
-    git: {
-      name: "pluginManager.plugin.git.name",
-      description: "pluginManager.plugin.git.description",
-    },
-    terminal: {
-      name: "pluginManager.plugin.terminal.name",
-      description: "pluginManager.plugin.terminal.description",
-    },
-    lsp: {
-      name: "pluginManager.plugin.lsp.name",
-      description: "pluginManager.plugin.lsp.description",
-    },
-    automation: {
-      name: "pluginManager.plugin.automation.name",
-      description: "pluginManager.plugin.automation.description",
-    },
-    artifacts: {
-      name: "pluginManager.plugin.artifacts.name",
-      description: "pluginManager.plugin.artifacts.description",
-    },
-    browser: {
-      name: "pluginManager.plugin.browser.name",
-      description: "pluginManager.plugin.browser.description",
-    },
     "browser-use": {
-      name: "pluginManager.plugin.browserUse.name",
       description: "pluginManager.plugin.browserUse.description",
-    },
-    canvas: {
-      name: "pluginManager.plugin.canvas.name",
-      description: "pluginManager.plugin.canvas.description",
-    },
-    document: {
-      name: "pluginManager.plugin.document.name",
-      description: "pluginManager.plugin.document.description",
-    },
-    issues: {
-      name: "pluginManager.plugin.issues.name",
-      description: "pluginManager.plugin.issues.description",
-    },
-    keymap: {
-      name: "pluginManager.plugin.keymap.name",
-      description: "pluginManager.plugin.keymap.description",
-    },
-    market: {
-      name: "pluginManager.plugin.market.name",
-      description: "pluginManager.plugin.market.description",
-    },
-    memory: {
-      name: "pluginManager.plugin.memory.name",
-      description: "pluginManager.plugin.memory.description",
-    },
-    "device-sync": {
-      name: "pluginManager.plugin.deviceSync.name",
-      description: "pluginManager.plugin.deviceSync.description",
-    },
-    remote: {
-      name: "pluginManager.plugin.remote.name",
-      description: "pluginManager.plugin.remote.description",
-    },
-    scenes: {
-      name: "pluginManager.plugin.scenes.name",
-      description: "pluginManager.plugin.scenes.description",
-    },
-    skills: {
-      name: "pluginManager.plugin.skills.name",
-      description: "pluginManager.plugin.skills.description",
-    },
-    usage: {
-      name: "pluginManager.plugin.usage.name",
-      description: "pluginManager.plugin.usage.description",
-    },
-    cost: {
-      name: "pluginManager.plugin.cost.name",
-      description: "pluginManager.plugin.cost.description",
+      name: "pluginManager.plugin.browserUse.name",
     },
     "computer-use": {
-      name: "pluginManager.plugin.computerUse.name",
       description: "pluginManager.plugin.computerUse.description",
+      name: "pluginManager.plugin.computerUse.name",
+    },
+    "device-sync": {
+      description: "pluginManager.plugin.deviceSync.description",
+      name: "pluginManager.plugin.deviceSync.name",
+    },
+    "workspace-search": {
+      description: "pluginManager.plugin.workspaceSearch.description",
+      name: "pluginManager.plugin.workspaceSearch.name",
+    },
+    artifacts: {
+      description: "pluginManager.plugin.artifacts.description",
+      name: "pluginManager.plugin.artifacts.name",
+    },
+    automation: {
+      description: "pluginManager.plugin.automation.description",
+      name: "pluginManager.plugin.automation.name",
+    },
+    browser: {
+      description: "pluginManager.plugin.browser.description",
+      name: "pluginManager.plugin.browser.name",
+    },
+    canvas: {
+      description: "pluginManager.plugin.canvas.description",
+      name: "pluginManager.plugin.canvas.name",
+    },
+    core: {
+      description: "pluginManager.plugin.core.description",
+      name: "pluginManager.plugin.core.name",
+    },
+    cost: {
+      description: "pluginManager.plugin.cost.description",
+      name: "pluginManager.plugin.cost.name",
+    },
+    document: {
+      description: "pluginManager.plugin.document.description",
+      name: "pluginManager.plugin.document.name",
+    },
+    git: {
+      description: "pluginManager.plugin.git.description",
+      name: "pluginManager.plugin.git.name",
+    },
+    issues: {
+      description: "pluginManager.plugin.issues.description",
+      name: "pluginManager.plugin.issues.name",
+    },
+    kernel: {
+      description: "pluginManager.plugin.kernel.description",
+      name: "pluginManager.plugin.kernel.name",
+    },
+    keymap: {
+      description: "pluginManager.plugin.keymap.description",
+      name: "pluginManager.plugin.keymap.name",
+    },
+    lsp: {
+      description: "pluginManager.plugin.lsp.description",
+      name: "pluginManager.plugin.lsp.name",
+    },
+    market: {
+      description: "pluginManager.plugin.market.description",
+      name: "pluginManager.plugin.market.name",
+    },
+    memory: {
+      description: "pluginManager.plugin.memory.description",
+      name: "pluginManager.plugin.memory.name",
+    },
+    remote: {
+      description: "pluginManager.plugin.remote.description",
+      name: "pluginManager.plugin.remote.name",
+    },
+    scenes: {
+      description: "pluginManager.plugin.scenes.description",
+      name: "pluginManager.plugin.scenes.name",
+    },
+    skills: {
+      description: "pluginManager.plugin.skills.description",
+      name: "pluginManager.plugin.skills.name",
+    },
+    terminal: {
+      description: "pluginManager.plugin.terminal.description",
+      name: "pluginManager.plugin.terminal.name",
+    },
+    usage: {
+      description: "pluginManager.plugin.usage.description",
+      name: "pluginManager.plugin.usage.name",
     },
     voice: {
-      name: "pluginManager.plugin.voice.name",
       description: "pluginManager.plugin.voice.description",
+      name: "pluginManager.plugin.voice.name",
+    },
+    workspace: {
+      description: "pluginManager.plugin.workspace.description",
+      name: "pluginManager.plugin.workspace.name",
     },
   };
 
-const COMPONENT_KEYS: Record<
+const componentKeys: Record<
   string,
   { name: StringKey; description: StringKey }
 > = {
-  "plugin-manager.page": {
-    name: "pluginManager.component.manager.name",
-    description: "pluginManager.component.manager.description",
-  },
   "automation.page": {
-    name: "pluginManager.component.automation.name",
     description: "pluginManager.component.automation.description",
+    name: "pluginManager.component.automation.name",
   },
   "browser.dock": {
-    name: "pluginManager.component.browserDock.name",
     description: "pluginManager.component.browserDock.description",
-  },
-  "terminal.dock": {
-    name: "pluginManager.component.terminalDock.name",
-    description: "pluginManager.component.terminalDock.description",
-  },
-  "git.surface": {
-    name: "pluginManager.component.git.name",
-    description: "pluginManager.component.git.description",
-  },
-  "files.surface": {
-    name: "pluginManager.component.files.name",
-    description: "pluginManager.component.files.description",
-  },
-  "search.modal": {
-    name: "pluginManager.component.search.name",
-    description: "pluginManager.component.search.description",
-  },
-  "issues.modal": {
-    name: "pluginManager.component.issues.name",
-    description: "pluginManager.component.issues.description",
-  },
-  "voice.composer": {
-    name: "pluginManager.component.voice.name",
-    description: "pluginManager.component.voice.description",
-  },
-  "usage.settings": {
-    name: "pluginManager.component.usage.name",
-    description: "pluginManager.component.usage.description",
-  },
-  "memory.settings": {
-    name: "pluginManager.component.memory.name",
-    description: "pluginManager.component.memory.description",
-  },
-  "device-sync.settings": {
-    name: "pluginManager.component.deviceSync.name",
-    description: "pluginManager.component.deviceSync.description",
-  },
-  "scenes.surface": {
-    name: "pluginManager.component.scenes.name",
-    description: "pluginManager.component.scenes.description",
+    name: "pluginManager.component.browserDock.name",
   },
   "canvas.editor": {
-    name: "pluginManager.component.canvas.name",
     description: "pluginManager.component.canvas.description",
+    name: "pluginManager.component.canvas.name",
   },
-  "remote.modal": {
-    name: "pluginManager.component.remote.name",
-    description: "pluginManager.component.remote.description",
+  "device-sync.settings": {
+    description: "pluginManager.component.deviceSync.description",
+    name: "pluginManager.component.deviceSync.name",
+  },
+  "files.surface": {
+    description: "pluginManager.component.files.description",
+    name: "pluginManager.component.files.name",
+  },
+  "git.surface": {
+    description: "pluginManager.component.git.description",
+    name: "pluginManager.component.git.name",
+  },
+  "issues.modal": {
+    description: "pluginManager.component.issues.description",
+    name: "pluginManager.component.issues.name",
   },
   "lsp.runtime": {
-    name: "pluginManager.component.lsp.name",
     description: "pluginManager.component.lsp.description",
+    name: "pluginManager.component.lsp.name",
+  },
+  "memory.settings": {
+    description: "pluginManager.component.memory.description",
+    name: "pluginManager.component.memory.name",
+  },
+  "plugin-manager.page": {
+    description: "pluginManager.component.manager.description",
+    name: "pluginManager.component.manager.name",
+  },
+  "remote.modal": {
+    description: "pluginManager.component.remote.description",
+    name: "pluginManager.component.remote.name",
+  },
+  "scenes.surface": {
+    description: "pluginManager.component.scenes.description",
+    name: "pluginManager.component.scenes.name",
+  },
+  "search.modal": {
+    description: "pluginManager.component.search.description",
+    name: "pluginManager.component.search.name",
+  },
+  "terminal.dock": {
+    description: "pluginManager.component.terminalDock.description",
+    name: "pluginManager.component.terminalDock.name",
+  },
+  "usage.settings": {
+    description: "pluginManager.component.usage.description",
+    name: "pluginManager.component.usage.name",
+  },
+  "voice.composer": {
+    description: "pluginManager.component.voice.description",
+    name: "pluginManager.component.voice.name",
   },
 };
 
-const CATEGORY_KEYS: Record<string, StringKey> = {
-  foundation: "pluginManager.category.foundation",
-  workspace: "pluginManager.category.workspace",
+const categoryKeys: Record<string, StringKey> = {
   automation: "pluginManager.category.automation",
   developer_tools: "pluginManager.category.developerTools",
-  interface: "pluginManager.category.interface",
+  foundation: "pluginManager.category.foundation",
   integration: "pluginManager.category.integration",
+  interface: "pluginManager.category.interface",
   other: "pluginManager.category.other",
+  workspace: "pluginManager.category.workspace",
 };
 
 export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
   const status = Object.fromEntries(
-    Object.entries(STATUS_KEYS).map(([key, value]) => [key, t(value)])
+    Object.entries(statusKeys).map(([key, value]) => [key, t(value)])
   ) as Record<PluginManagerStatus, string>;
   const sourceNames = Object.fromEntries(
-    Object.entries(SOURCE_KEYS).map(([key, value]) => [key, t(value)])
+    Object.entries(sourceKeys).map(([key, value]) => [key, t(value)])
   ) as Record<PluginManagerSource, string>;
   return {
-    title: t("pluginManager.title"),
-    description: t("pluginManager.description"),
-    plugins: t("pluginManager.plugins"),
+    activeResources: t("pluginManager.activeResources"),
+    advancedJson: t("pluginManager.advancedJson"),
+    affectedPlugins: t("pluginManager.affectedPlugins"),
+    applyScaffold: t("pluginHub.applyScaffold"),
+    bundleEnabled: (name, enabled) => {
+      return t(
+        enabled
+          ? "pluginManager.bundleEnabled"
+          : "pluginManager.bundleDisabled",
+        { name }
+      );
+    },
+    bundleInstalled: (result) => {
+      return t("pluginManager.bundleInstalled", {
+        name: result.name,
+        version:
+          result.version != null && result.version !== ""
+            ? ` ${result.version}`
+            : "",
+      });
+    },
+    bundleManagement: t("pluginManager.bundleManagement"),
+    bundleManagementUserOnly: t("pluginManager.bundleManagementUserOnly"),
+    bundleTrusted: (name, trusted) => {
+      return t(
+        trusted
+          ? "pluginManager.bundleTrusted"
+          : "pluginManager.bundleTrustRevoked",
+        { name }
+      );
+    },
+    bundleUninstalled: (name, keepData) => {
+      return t(
+        keepData
+          ? "pluginManager.bundleUninstalledDataKept"
+          : "pluginManager.bundleUninstalled",
+        { name }
+      );
+    },
+    cancel: t("pluginManager.cancel"),
+    changeApplied: (name, state) => {
+      return t("pluginManager.changeApplied", {
+        name,
+        state:
+          state === "enabled"
+            ? t("pluginManager.enabled")
+            : state === "disabled"
+              ? t("pluginManager.disabled")
+              : t("pluginManager.inherit"),
+      });
+    },
+    changeSummary: (kind, name, state) => {
+      return t(
+        kind === "component"
+          ? state === "disabled"
+            ? "pluginManager.componentChangeSummary.disabled"
+            : "pluginManager.componentChangeSummary.enabled"
+          : state === "disabled"
+            ? "pluginManager.pluginChangeSummary.disabled"
+            : "pluginManager.pluginChangeSummary.enabled",
+        { name }
+      );
+    },
+    closeInstaller: t("pluginManager.closeInstaller"),
+    commands: t("pluginManager.commands"),
+    componentKind: (kind) =>
+      componentKindKeys[kind] ? t(componentKindKeys[kind]) : kind,
+    componentList: t("pluginManager.componentList"),
+    componentUninstalled: t("pluginHub.componentUninstalledToast"),
     components: t("pluginManager.components"),
-    mcps: t("pluginManager.mcps"),
-    skills: t("pluginManager.skills"),
+    configuration: t("pluginManager.configuration"),
+    configurationHint: t("pluginManager.configurationHint"),
+    confirm: t("pluginManager.confirm"),
+    confirmTitle: t("pluginManager.confirmTitle"),
+    contribution: (id, fallback) =>
+      contributionKeys[id] ? t(contributionKeys[id]) : fallback,
+    contributions: t("pluginManager.contributions"),
+    dataOnly: t("pluginManager.dataOnly"),
+    definition: t("pluginManager.definition"),
+    dependencies: t("pluginManager.dependencies"),
+    description: t("pluginManager.description"),
+    diagnostics: t("pluginManager.diagnostics"),
+    disabled: t("pluginManager.disabled"),
+    enabled: t("pluginManager.enabled"),
+    form: t("pluginManager.form"),
+    githubHint: t("pluginManager.githubHint"),
+    githubRepository: t("pluginManager.githubRepository"),
+    githubRepositoryRequired: t("pluginManager.githubRepositoryRequired"),
     hooks: t("pluginManager.hooks"),
+    identifier: t("pluginManager.identifier"),
+    inherit: t("pluginManager.inherit"),
+    install: t("pluginManager.install"),
+    installFromGithub: t("pluginManager.installFromGithub"),
+    installed: t("pluginManager.installed"),
+    installedBundle: t("pluginManager.installedBundle"),
+    installingPlugin: t("pluginManager.installingPlugin"),
+    invalidConfigurationObject: t("pluginManager.invalidConfigurationObject"),
+    keepPluginData: t("pluginManager.keepPluginData"),
+    managePlugin: t("pluginManager.managePlugin"),
+    managedByPlugin: t("pluginManager.managedByPlugin"),
     marketplace: t("pluginManager.marketplace"),
-    userScope: t("pluginManager.userScope"),
+    marketplaceInstalled: t("pluginManager.marketplaceInstalled"),
+    mcps: t("pluginManager.mcps"),
+    missingCount: (count) => t("pluginManager.missingCount", { count }),
+    missingDependencies: t("pluginManager.missingDependencies"),
+    newSkill: t("pluginHub.newSkill"),
+    noDescription: t("pluginManager.noDescription"),
+    noResults: t("pluginManager.noResults"),
+    notTrusted: t("pluginManager.notTrusted"),
+    openMarketplace: t("pluginHub.openMarketplace"),
+    plugin: t("pluginManager.plugin"),
+    pluginList: t("pluginManager.pluginList"),
+    plugins: t("pluginManager.plugins"),
+    projectOnly: t("pluginManager.projectOnly"),
     projectScope: (project) => project.label,
+    projectState: (name) => t("pluginManager.projectState", { name }),
+    refresh: t("pluginManager.refresh"),
+    required: t("pluginManager.required"),
+    resetDefaults: t("pluginManager.resetDefaults"),
+    resourceList: (tab) => {
+      return t(
+        tab === "mcps"
+          ? "pluginManager.mcpList"
+          : tab === "skills"
+            ? "pluginManager.skillList"
+            : "pluginManager.hookList"
+      );
+    },
+    restoredLastGood: t("pluginManager.restoredLastGood"),
+    reviewSource: t("pluginManager.reviewSource"),
+    revokeTrust: t("pluginManager.revokeTrust"),
+    safeMode: t("pluginManager.safeMode"),
+    saveConfiguration: t("pluginManager.saveConfiguration"),
+    saving: t("pluginManager.saving"),
+    scaffoldApplied: (count) =>
+      t("pluginHub.scaffoldInstalledToast", { count }),
+    scaffoldFiles: (count) => t("pluginHub.scaffoldFiles", { count }),
+    scope: t("pluginManager.scope"),
     search: t("pluginManager.search"),
-    searchPlaceholder: (tab) => t(
+    searchPlaceholder: (tab) => {
+      return t(
         tab === "plugins"
           ? "pluginManager.searchPlugins"
           : tab === "mcps"
@@ -271,137 +400,27 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
               : tab === "hooks"
                 ? "pluginManager.searchHooks"
                 : "pluginManager.searchMarketplace"
-      ),
-    noResults: t("pluginManager.noResults"),
-    enabled: t("pluginManager.enabled"),
-    disabled: t("pluginManager.disabled"),
-    inherit: t("pluginManager.inherit"),
-    required: t("pluginManager.required"),
-    userOnly: t("pluginManager.userOnly"),
-    projectOnly: t("pluginManager.projectOnly"),
-    configuration: t("pluginManager.configuration"),
-    form: t("pluginManager.form"),
-    advancedJson: t("pluginManager.advancedJson"),
-    saveConfiguration: t("pluginManager.saveConfiguration"),
-    saving: t("pluginManager.saving"),
-    install: t("pluginManager.install"),
-    installed: t("pluginManager.installed"),
-    unavailable: t("pluginManager.unavailable"),
-    refresh: t("pluginManager.refresh"),
-    newSkill: t("pluginHub.newSkill"),
-    openMarketplace: t("pluginHub.openMarketplace"),
-    use: t("pluginHub.use"),
-    applyScaffold: t("pluginHub.applyScaffold"),
-    scaffoldFiles: (count) => t("pluginHub.scaffoldFiles", { count }),
-    installFromGithub: t("pluginManager.installFromGithub"),
-    githubRepository: t("pluginManager.githubRepository"),
-    githubHint: t("pluginManager.githubHint"),
-    closeInstaller: t("pluginManager.closeInstaller"),
-    installingPlugin: t("pluginManager.installingPlugin"),
-    bundleInstalled: (result) => t("pluginManager.bundleInstalled", {
-        name: result.name,
-        version: result.version ? ` ${result.version}` : "",
-      }),
-    bundleManagement: t("pluginManager.bundleManagement"),
-    bundleManagementUserOnly: t("pluginManager.bundleManagementUserOnly"),
-    reviewSource: t("pluginManager.reviewSource"),
-    trustRequired: t("pluginManager.trustRequired"),
-    trustBeforeEnabling: t("pluginManager.trustBeforeEnabling"),
-    trusted: t("pluginManager.trusted"),
-    notTrusted: t("pluginManager.notTrusted"),
-    trustPlugin: t("pluginManager.trustPlugin"),
-    revokeTrust: t("pluginManager.revokeTrust"),
-    contributions: t("pluginManager.contributions"),
-    diagnostics: t("pluginManager.diagnostics"),
-    uninstall: t("pluginManager.uninstall"),
-    uninstallTitle: (name) => t("pluginManager.uninstallTitle", { name }),
-    uninstallDescription: t("pluginManager.uninstallDescription"),
-    keepPluginData: t("pluginManager.keepPluginData"),
-    resetDefaults: t("pluginManager.resetDefaults"),
-    restoredLastGood: t("pluginManager.restoredLastGood"),
-    safeMode: t("pluginManager.safeMode"),
-    dependencies: t("pluginManager.dependencies"),
-    missingDependencies: t("pluginManager.missingDependencies"),
-    commands: t("pluginManager.commands"),
+      );
+    },
     services: t("pluginManager.services"),
-    activeResources: t("pluginManager.activeResources"),
-    scope: t("pluginManager.scope"),
-    pluginList: t("pluginManager.pluginList"),
-    componentList: t("pluginManager.componentList"),
-    resourceList: (tab) => t(
-        tab === "mcps"
-          ? "pluginManager.mcpList"
-          : tab === "skills"
-            ? "pluginManager.skillList"
-            : "pluginManager.hookList"
-      ),
-    projectState: (name) => t("pluginManager.projectState", { name }),
-    noDescription: t("pluginManager.noDescription"),
-    configurationHint: t("pluginManager.configurationHint"),
-    plugin: t("pluginManager.plugin"),
-    source: t("pluginManager.source"),
-    identifier: t("pluginManager.identifier"),
-    definition: t("pluginManager.definition"),
-    uiSlot: t("pluginManager.uiSlot"),
-    managedByPlugin: t("pluginManager.managedByPlugin"),
-    managePlugin: t("pluginManager.managePlugin"),
-    affectedPlugins: t("pluginManager.affectedPlugins"),
-    missingCount: (count) => t("pluginManager.missingCount", { count }),
-    status,
-    sourceNames,
-    contribution: (id, fallback) =>
-      CONTRIBUTION_KEYS[id] ? t(CONTRIBUTION_KEYS[id]) : fallback,
-    componentKind: (kind) =>
-      COMPONENT_KIND_KEYS[kind] ? t(COMPONENT_KIND_KEYS[kind]) : kind,
-    installedBundle: t("pluginManager.installedBundle"),
-    dataOnly: t("pluginManager.dataOnly"),
-    invalidConfigurationObject: t("pluginManager.invalidConfigurationObject"),
-    githubRepositoryRequired: t("pluginManager.githubRepositoryRequired"),
-    changeApplied: (name, state) => t("pluginManager.changeApplied", {
-        name,
-        state:
-          state === "enabled"
-            ? t("pluginManager.enabled")
-            : state === "disabled"
-              ? t("pluginManager.disabled")
-              : t("pluginManager.inherit"),
-      }),
-    changeSummary: (kind, name, state) => t(
-        kind === "component"
-          ? state === "disabled"
-            ? "pluginManager.componentChangeSummary.disabled"
-            : "pluginManager.componentChangeSummary.enabled"
-          : state === "disabled"
-            ? "pluginManager.pluginChangeSummary.disabled"
-            : "pluginManager.pluginChangeSummary.enabled",
-        { name }
-      ),
-    marketplaceInstalled: t("pluginManager.marketplaceInstalled"),
-    componentUninstalled: t("pluginHub.componentUninstalledToast"),
-    scaffoldApplied: (count) =>
-      t("pluginHub.scaffoldInstalledToast", { count }),
     settingsReset: t("pluginManager.settingsReset"),
-    bundleEnabled: (name, enabled) => t(
-        enabled
-          ? "pluginManager.bundleEnabled"
-          : "pluginManager.bundleDisabled",
-        { name }
-      ),
-    bundleTrusted: (name, trusted) => t(
-        trusted
-          ? "pluginManager.bundleTrusted"
-          : "pluginManager.bundleTrustRevoked",
-        { name }
-      ),
-    bundleUninstalled: (name, keepData) => t(
-        keepData
-          ? "pluginManager.bundleUninstalledDataKept"
-          : "pluginManager.bundleUninstalled",
-        { name }
-      ),
-    confirmTitle: t("pluginManager.confirmTitle"),
-    confirm: t("pluginManager.confirm"),
-    cancel: t("pluginManager.cancel"),
+    skills: t("pluginManager.skills"),
+    source: t("pluginManager.source"),
+    sourceNames,
+    status,
+    title: t("pluginManager.title"),
+    trustBeforeEnabling: t("pluginManager.trustBeforeEnabling"),
+    trustPlugin: t("pluginManager.trustPlugin"),
+    trustRequired: t("pluginManager.trustRequired"),
+    trusted: t("pluginManager.trusted"),
+    uiSlot: t("pluginManager.uiSlot"),
+    unavailable: t("pluginManager.unavailable"),
+    uninstall: t("pluginManager.uninstall"),
+    uninstallDescription: t("pluginManager.uninstallDescription"),
+    uninstallTitle: (name) => t("pluginManager.uninstallTitle", { name }),
+    use: t("pluginHub.use"),
+    userOnly: t("pluginManager.userOnly"),
+    userScope: t("pluginManager.userScope"),
   };
 }
 
@@ -410,52 +429,59 @@ export function localizePluginManagerCatalog(
   t: Translate
 ): PluginManagerCatalogModel {
   const pluginName = (id: string, fallback: string) =>
-    PLUGIN_KEYS[id] ? t(PLUGIN_KEYS[id].name) : fallback;
+    Boolean(pluginKeys[id]) ? t(pluginKeys[id].name) : fallback;
   return {
     ...model,
+    components: model.components.map((component) => {
+      const keys = componentKeys[component.id];
+      const isFirstParty = component.source !== "bundle";
+      return {
+        ...component,
+        description:
+          Boolean(keys) && isFirstParty
+            ? t(keys.description)
+            : component.description,
+        name: Boolean(keys) && isFirstParty ? t(keys.name) : component.name,
+        pluginName: isFirstParty
+          ? pluginName(component.pluginId, component.pluginName)
+          : component.pluginName,
+      };
+    }),
     plugins: model.plugins.map((plugin) => {
-      const keys = PLUGIN_KEYS[plugin.id];
-      if (!keys || plugin.source === "bundle") {
+      const keys = pluginKeys[plugin.id];
+      if (keys == null || plugin.source === "bundle") {
         return plugin;
       }
       return {
         ...plugin,
-        name: t(keys.name),
-        description: t(keys.description),
-        category:
-          plugin.category && CATEGORY_KEYS[plugin.category]
-            ? t(CATEGORY_KEYS[plugin.category])
-            : plugin.category,
-        dependencies: plugin.dependencies?.map((dependency) => dependency.endsWith(" (optional)")
-            ? t("pluginManager.optionalDependency", {
-                id: dependency.slice(0, -11),
-              })
-            : dependency
-        ),
         bundle: plugin.bundle
           ? {
               ...plugin.bundle,
-              contributions: plugin.bundle.contributions.map((item) => ({
-										                ...item,
-										                label: CONTRIBUTION_KEYS[item.id]
-										                  ? t(CONTRIBUTION_KEYS[item.id])
-										                  : item.label,
-										              })),
+              contributions: plugin.bundle.contributions.map((item) => {
+                return {
+                  ...item,
+                  label: contributionKeys[item.id]
+                    ? t(contributionKeys[item.id])
+                    : item.label,
+                };
+              }),
             }
           : undefined,
-      };
-    }),
-    components: model.components.map((component) => {
-      const keys = COMPONENT_KEYS[component.id];
-      const isFirstParty = component.source !== "bundle";
-      return {
-        ...component,
-        pluginName: isFirstParty
-          ? pluginName(component.pluginId, component.pluginName)
-          : component.pluginName,
-        name: keys && isFirstParty ? t(keys.name) : component.name,
-        description:
-          keys && isFirstParty ? t(keys.description) : component.description,
+        category:
+          plugin.category != null &&
+          plugin.category !== "" &&
+          categoryKeys[plugin.category]
+            ? t(categoryKeys[plugin.category])
+            : plugin.category,
+        dependencies: plugin.dependencies?.map((dependency) => {
+          return dependency.endsWith(" (optional)")
+            ? t("pluginManager.optionalDependency", {
+                id: dependency.slice(0, -11),
+              })
+            : dependency;
+        }),
+        description: t(keys.description),
+        name: t(keys.name),
       };
     }),
   };

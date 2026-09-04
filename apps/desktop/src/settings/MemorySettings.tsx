@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArchiveRestore,
@@ -40,17 +34,20 @@ import {
   setMemoryCategory,
   setMemoryPinned,
   updateMemory,
-  type MemoryEvidence,
-  type MemoryPolicyValue,
-  type MemoryProjectPolicy,
-  type MemoryRecord,
-  type MemorySettings,
-  type MemoryStats,
-  type MemoryUsage,
-  type Project,
+} from "../bridge";
+import type {
+  MemoryEvidence,
+  MemoryPolicyValue,
+  MemoryProjectPolicy,
+  MemoryRecord,
+  MemorySettings,
+  MemoryStats,
+  MemoryUsage,
+  Project,
 } from "../bridge";
 import { useLanguage, useT } from "../i18n";
-import { en as EN_STRINGS, type StringKey } from "../i18n/strings";
+import { en as EN_STRINGS } from "../i18n/strings";
+import type { StringKey } from "../i18n/strings";
 import { useToast } from "../ui/toast";
 import { PageHeader } from "@/components/business/page-header";
 import { SearchField } from "@/components/business/search-field";
@@ -83,56 +80,54 @@ import {
   filterMemories,
   memoryActivityAt,
   memoryProfile,
-  MEMORY_CATEGORIES,
+  memoryCategories,
   originLabelKey,
-  type MemoryFilter,
-  type MemorySort,
-  type MemoryView,
 } from "./memory-model";
+import type { MemoryFilter, MemorySort, MemoryView } from "./memory-model";
 
 import "./memory-settings.css";
 
-const DEFAULT_SETTINGS: MemorySettings = {
-  enabled: true,
+const defaultSettings: MemorySettings = {
   capture: true,
-  inject: true,
+  enabled: true,
   include_external_context: true,
+  inject: true,
 };
-const EMPTY_STATS: MemoryStats = {
+const emptyStats: MemoryStats = {
+  active: 0,
+  conflicts: 0,
+  forgotten: 0,
   l0: 0,
   l1: 0,
   l2: 0,
   l3: 0,
   pending: 0,
-  active: 0,
   pinned: 0,
   recent: 0,
-  forgotten: 0,
-  conflicts: 0,
 };
-const DEFAULT_POLICY = (projectPath: string): MemoryProjectPolicy => ({
-  project_path: projectPath,
+const defaultPolicy = (projectPath: string): MemoryProjectPolicy => ({
   capture: "inherit",
-  inject: "inherit",
   include_external_context: "inherit",
+  inject: "inherit",
+  project_path: projectPath,
 });
-const DEFAULT_FILTER: MemoryFilter = {
-  query: "",
-  view: "all",
+const defaultFilter: MemoryFilter = {
   category: "all",
   origin: "all",
+  query: "",
   sort: "activity",
+  view: "all",
 };
 
 const VIEWS: { value: MemoryView; key: StringKey }[] = [
-  { value: "all", key: "memory.view.all" },
-  { value: "pinned", key: "memory.view.pinned" },
-  { value: "constraints", key: "memory.view.constraints" },
-  { value: "facts", key: "memory.view.facts" },
-  { value: "episodes", key: "memory.view.episodes" },
-  { value: "recent", key: "memory.view.recent" },
-  { value: "forgotten", key: "memory.view.forgotten" },
-  { value: "conflicts", key: "memory.view.conflicts" },
+  { key: "memory.view.all", value: "all" },
+  { key: "memory.view.pinned", value: "pinned" },
+  { key: "memory.view.constraints", value: "constraints" },
+  { key: "memory.view.facts", value: "facts" },
+  { key: "memory.view.episodes", value: "episodes" },
+  { key: "memory.view.recent", value: "recent" },
+  { key: "memory.view.forgotten", value: "forgotten" },
+  { key: "memory.view.conflicts", value: "conflicts" },
 ];
 
 function translatedDynamic(
@@ -158,23 +153,27 @@ function useNarrowMemoryLayout(): boolean {
 }
 
 function effectivePolicy(
-  globalValue: boolean,
+  isGlobalValue: boolean,
   projectValue: MemoryPolicyValue,
-  masterEnabled: boolean
+  isMasterEnabled: boolean
 ): boolean {
-  if (!masterEnabled) return false;
-  return projectValue === "inherit" ? globalValue : projectValue === "allow";
+  if (!isMasterEnabled) {
+    return false;
+  }
+  return projectValue === "inherit" ? isGlobalValue : projectValue === "allow";
 }
 
 function formatDate(
   locale: string,
   value: number | null,
-  withTime = false
+  isWithTime = false
 ): string {
-  if (value === null) return "—";
+  if (value === null) {
+    return "—";
+  }
   return new Intl.DateTimeFormat(
     locale,
-    withTime
+    isWithTime
       ? { dateStyle: "medium", timeStyle: "short" }
       : { dateStyle: "medium" }
   ).format(new Date(value));
@@ -198,7 +197,9 @@ const PolicySelect = ({
         value={value}
         disabled={disabled}
         onValueChange={(next) => {
-          if (next) onChange(next as MemoryPolicyValue);
+          if (next) {
+            onChange(next as MemoryPolicyValue);
+          }
         }}
       >
         <SelectTrigger
@@ -220,7 +221,7 @@ const PolicySelect = ({
       </Select>
     </SettingRow>
   );
-}
+};
 
 const StatButton = ({
   value,
@@ -234,26 +235,24 @@ const StatButton = ({
   readonly active: boolean;
   readonly warning?: boolean;
   readonly onClick: () => void;
-}) => {
-  return (
-    <Button
-      type="button"
-      variant="selectable"
-      size="row"
-      focusStyle="inset"
-      data-selected={active ? "true" : "false"}
-      className={cn(
-        "memory-stat",
-        active && "is-active",
-        warning && value > 0 && "is-warning"
-      )}
-      onClick={onClick}
-    >
-      <strong className="text-body font-mono tabular-nums">{value}</strong>
-      <span>{label}</span>
-    </Button>
-  );
-}
+}) => (
+  <Button
+    type="button"
+    variant="selectable"
+    size="row"
+    focusStyle="inset"
+    data-selected={active ? "true" : "false"}
+    className={cn(
+      "memory-stat",
+      active && "is-active",
+      warning && value > 0 && "is-warning"
+    )}
+    onClick={onClick}
+  >
+    <strong className="text-body font-mono tabular-nums">{value}</strong>
+    <span>{label}</span>
+  </Button>
+);
 
 const MemoryRow = ({
   memory,
@@ -266,7 +265,7 @@ const MemoryRow = ({
   readonly memory: MemoryRecord;
   readonly selected: boolean;
   readonly checked: boolean;
-  readonly onCheck: (checked: boolean) => void;
+  readonly onCheck: (isChecked: boolean) => void;
   readonly onOpen: () => void;
   readonly onPin: () => void;
 }) => {
@@ -314,10 +313,12 @@ const MemoryRow = ({
         </span>
       </Button>
       <div className="memory-row-signals">
-        {memory.conflict_with_id ? <AlertTriangle
+        {memory.conflict_with_id ? (
+          <AlertTriangle
             aria-label={t("memory.needsAttention")}
             className="text-warning size-3.5"
-          /> : null}
+          />
+        ) : null}
         <TooltipButton
           label={memory.pinned ? t("memory.unpin") : t("memory.pin")}
           variant="ghost"
@@ -337,7 +338,7 @@ const MemoryRow = ({
       </div>
     </article>
   );
-}
+};
 
 type EditorMode = "new" | "edit" | "correct";
 
@@ -353,8 +354,8 @@ const MemoryEditor = ({
   readonly mode: EditorMode;
   readonly record: MemoryRecord | null;
   readonly saving: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-  readonly onSave: (category: string, content: string, pinned: boolean) => void;
+  readonly onOpenChange: (isOpen: boolean) => void;
+  readonly onSave: (category: string, content: string, isPinned: boolean) => void;
 }) => {
   const t = useT();
   const [category, setCategory] = useState("fact");
@@ -362,7 +363,9 @@ const MemoryEditor = ({
   const [pinned, setPinned] = useState(true);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     setCategory(record?.category ?? "fact");
     setContent(record?.content ?? "");
     setPinned(record?.pinned ?? true);
@@ -392,7 +395,9 @@ const MemoryEditor = ({
             <Select
               value={category}
               onValueChange={(value) => {
-                if (value) setCategory(value);
+                if (value) {
+                  setCategory(value);
+                }
               }}
             >
               <SelectTrigger className="w-full justify-between">
@@ -400,7 +405,7 @@ const MemoryEditor = ({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {MEMORY_CATEGORIES.map((value) => (
+                  {memoryCategories.map((value) => (
                     <SelectItem key={value} value={value}>
                       {translatedDynamic(t, "memory.category", value)}
                     </SelectItem>
@@ -443,7 +448,7 @@ const MemoryEditor = ({
       </DialogContent>
     </Dialog>
   );
-}
+};
 
 const DetailPanel = ({
   memory,
@@ -476,13 +481,14 @@ const DetailPanel = ({
 }) => {
   const t = useT();
   const { locale } = useLanguage();
-  if (!memory)
+  if (!memory) {
     return (
       <div className="memory-detail-empty">
         <BrainCircuit className="size-5" />
         <p>{t("memory.selectHint")}</p>
       </div>
     );
+  }
   const conflictReason =
     memory.conflict_reason === "automatic_conflicts_with_user_correction"
       ? t("memory.conflict.autoVsCorrection")
@@ -500,10 +506,12 @@ const DetailPanel = ({
           {!memory.active && (
             <Badge variant="secondary">{t("memory.status.forgotten")}</Badge>
           )}
-          {memory.pinned ? <Badge variant="secondary">
+          {memory.pinned ? (
+            <Badge variant="secondary">
               <Pin className="size-3" />
               {t("memory.pinned")}
-            </Badge> : null}
+            </Badge>
+          ) : null}
         </div>
         <div className="flex items-center gap-1">
           {memory.active ? (
@@ -545,7 +553,9 @@ const DetailPanel = ({
             <Select
               value={memory.category}
               onValueChange={(value) => {
-                if (value) onCategory(value);
+                if (value) {
+                  onCategory(value);
+                }
               }}
             >
               <SelectTrigger
@@ -556,7 +566,7 @@ const DetailPanel = ({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {MEMORY_CATEGORIES.map((value) => (
+                  {memoryCategories.map((value) => (
                     <SelectItem key={value} value={value}>
                       {translatedDynamic(t, "memory.category", value)}
                     </SelectItem>
@@ -583,13 +593,15 @@ const DetailPanel = ({
           </dd>
         </div>
       </dl>
-      {conflictReason ? <aside className="memory-conflict-note">
+      {conflictReason ? (
+        <aside className="memory-conflict-note">
           <AlertTriangle className="size-4 shrink-0" />
           <div>
             <strong>{t("memory.needsAttention")}</strong>
             <p>{conflictReason}</p>
           </div>
-        </aside> : null}
+        </aside>
+      ) : null}
       <div className="memory-detail-actions">
         <Button size="sm" variant="outline" onClick={onEdit}>
           {memory.editable ? t("memory.edit") : t("memory.correct")}
@@ -685,9 +697,11 @@ const DetailPanel = ({
       </section>
     </div>
   );
-}
+};
 
-/** An auditable, project-scoped memory console inside Settings. */
+/**
+An auditable, project-scoped memory console inside Settings.
+*/
 export const MemorySettingsPage = ({
   projectPath,
   projects,
@@ -699,15 +713,15 @@ export const MemorySettingsPage = ({
 }) => {
   const t = useT();
   const toast = useToast();
-  const narrow = useNarrowMemoryLayout();
+  const isNarrow = useNarrowMemoryLayout();
   const [selectedProject, setSelectedProject] = useState(
     projectPath || projects[0]?.path || ""
   );
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [policy, setPolicy] = useState(DEFAULT_POLICY(selectedProject));
-  const [stats, setStats] = useState(EMPTY_STATS);
+  const [settings, setSettings] = useState(defaultSettings);
+  const [policy, setPolicy] = useState(defaultPolicy(selectedProject));
+  const [stats, setStats] = useState(emptyStats);
   const [records, setRecords] = useState<MemoryRecord[]>([]);
-  const [filter, setFilter] = useState(DEFAULT_FILTER);
+  const [filter, setFilter] = useState(defaultFilter);
   const deferredQuery = useDeferredValue(filter.query);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -722,13 +736,15 @@ export const MemorySettingsPage = ({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (projectPath) setSelectedProject(projectPath);
+    if (projectPath) {
+      setSelectedProject(projectPath);
+    }
   }, [projectPath]);
 
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
     if (!selectedProject) {
       setRecords([]);
-      setStats(EMPTY_STATS);
+      setStats(emptyStats);
       setLoading(false);
       return;
     }
@@ -752,7 +768,7 @@ export const MemorySettingsPage = ({
     } finally {
       setLoading(false);
     }
-  }, [selectedProject, toast]);
+  };
 
   useEffect(() => {
     void getMemorySettings()
@@ -766,39 +782,30 @@ export const MemorySettingsPage = ({
     void refresh();
   }, [refresh]);
 
-  const selected = useMemo(
-    () => records.find((record) => record.id === selectedId) ?? null,
-    [records, selectedId]
-  );
-  const profile = useMemo(() => memoryProfile(records), [records]);
-  const visible = useMemo(
-    () => filterMemories(records, { ...filter, query: deferredQuery }),
-    [deferredQuery, filter, records]
-  );
+  const selected = records.find((record) => record.id === selectedId) ?? null;
+  const profile = memoryProfile(records);
+  const visible = filterMemories(records, { ...filter, query: deferredQuery });
 
-  const loadDetail = useCallback(
-    async (memory: MemoryRecord | null, reveal = false) => {
-      if (!memory) {
-        setEvidence([]);
-        setUsages([]);
-        return;
-      }
-      setDetailLoading(true);
-      try {
-        const [nextEvidence, nextUsages] = await Promise.all([
-          getMemoryEvidence(memory.id, reveal),
-          getMemoryUsages(memory.id),
-        ]);
-        setEvidence(nextEvidence);
-        setUsages(nextUsages);
-      } catch (error) {
-        toast(String(error), "error");
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [toast]
-  );
+  const loadDetail = async (memory: MemoryRecord | null, isReveal = false) => {
+    if (!memory) {
+      setEvidence([]);
+      setUsages([]);
+      return;
+    }
+    setDetailLoading(true);
+    try {
+      const [nextEvidence, nextUsages] = await Promise.all([
+        getMemoryEvidence(memory.id, isReveal),
+        getMemoryUsages(memory.id),
+      ]);
+      setEvidence(nextEvidence);
+      setUsages(nextUsages);
+    } catch (error) {
+      toast(String(error), "error");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   useEffect(() => {
     setRevealed(false);
@@ -828,10 +835,10 @@ export const MemorySettingsPage = ({
       items.map((item) => (item.id === id ? { ...item, ...patch } : item))
     );
   const togglePin = async (memory: MemoryRecord) => {
-    const pinned = !memory.pinned;
-    patchRecord(memory.id, { pinned });
+    const isPinned = !memory.pinned;
+    patchRecord(memory.id, { pinned: isPinned });
     try {
-      await setMemoryPinned(memory.id, pinned);
+      await setMemoryPinned(memory.id, isPinned);
       await refresh();
     } catch (error) {
       patchRecord(memory.id, { pinned: memory.pinned });
@@ -865,7 +872,9 @@ export const MemorySettingsPage = ({
     await refresh();
   };
   const removePermanently = async (memory: MemoryRecord) => {
-    if (!(await confirmNative(t("memory.confirmDelete")))) return;
+    if (!(await confirmNative(t("memory.confirmDelete")))) {
+      return;
+    }
     await deleteMemory(memory.id);
     setDetailOpen(false);
     setSelectedId(null);
@@ -873,7 +882,9 @@ export const MemorySettingsPage = ({
     await refresh();
   };
   const updateCategory = async (category: string) => {
-    if (!selected) return;
+    if (!selected) {
+      return;
+    }
     const previous = selected.category;
     patchRecord(selected.id, { category });
     try {
@@ -885,7 +896,9 @@ export const MemorySettingsPage = ({
   };
   const openRecord = (memory: MemoryRecord) => {
     setSelectedId(memory.id);
-    if (narrow) setDetailOpen(true);
+    if (isNarrow) {
+      setDetailOpen(true);
+    }
   };
   const openEditor = (mode: EditorMode) => {
     setEditorMode(mode);
@@ -894,17 +907,20 @@ export const MemorySettingsPage = ({
   const saveEditor = async (
     category: string,
     content: string,
-    pinned: boolean
+    isPinned: boolean
   ) => {
     setSaving(true);
     try {
       let saved: MemoryRecord;
-      if (editorMode === "new")
-        saved = await addMemory(selectedProject, category, content, pinned);
-      else if (!selected) return;
-      else if (editorMode === "edit")
+      if (editorMode === "new") {
+        saved = await addMemory(selectedProject, category, content, isPinned);
+      } else if (!selected) {
+        return;
+      } else if (editorMode === "edit") {
         saved = await updateMemory(selected.id, category, content);
-      else saved = await correctMemory(selected.id, category, content);
+      } else {
+        saved = await correctMemory(selected.id, category, content);
+      }
       setEditorOpen(false);
       await refresh();
       setSelectedId(saved.id);
@@ -925,8 +941,9 @@ export const MemorySettingsPage = ({
       !(await confirmNative(
         t("memory.confirmForget", { count: targets.length })
       ))
-    )
+    ) {
       return;
+    }
     try {
       await Promise.all(
         targets.map((record) =>
@@ -968,28 +985,34 @@ export const MemorySettingsPage = ({
       loading={detailLoading}
       reveal={revealed}
       onReveal={() => {
-        const next = !revealed;
-        setRevealed(next);
-        void loadDetail(selected, next);
+        const isNext = !revealed;
+        setRevealed(isNext);
+        void loadDetail(selected, isNext);
       }}
       onPin={() => {
-        if (selected) void togglePin(selected);
+        if (selected) {
+          void togglePin(selected);
+        }
       }}
       onForget={() => {
-        if (selected) void forget(selected);
+        if (selected) {
+          void forget(selected);
+        }
       }}
       onRestore={() => {
-        if (selected)
+        if (selected) {
           void restore(selected).catch((error) =>
             toast(String(error), "error")
           );
+        }
       }}
       onEdit={() => openEditor(selected?.editable ? "edit" : "correct")}
       onDelete={() => {
-        if (selected)
+        if (selected) {
           void removePermanently(selected).catch((error) =>
             toast(String(error), "error")
           );
+        }
       }}
       onCategory={(category) => {
         void updateCategory(category);
@@ -1008,7 +1031,9 @@ export const MemorySettingsPage = ({
             <Select
               value={selectedProject}
               onValueChange={(value) => {
-                if (value) setSelectedProject(value);
+                if (value) {
+                  setSelectedProject(value);
+                }
               }}
             >
               <SelectTrigger
@@ -1117,7 +1142,8 @@ export const MemorySettingsPage = ({
         </div>
       </details>
 
-      {profile ? <details className="memory-disclosure memory-profile-disclosure">
+      {profile ? (
+        <details className="memory-disclosure memory-profile-disclosure">
           <summary>
             <span className="memory-disclosure-icon">
               <FileClock />
@@ -1132,7 +1158,8 @@ export const MemorySettingsPage = ({
           <div className="memory-profile-body" dir="auto">
             {profile.content}
           </div>
-        </details> : null}
+        </details>
+      ) : null}
 
       {!selectedProject ? (
         <p className="memory-empty-state">{t("memory.noProject")}</p>
@@ -1189,8 +1216,8 @@ export const MemorySettingsPage = ({
               label={t("memory.views")}
               value={filter.view}
               options={VIEWS.map(({ value, key }) => ({
-                value,
                 label: t(key),
+                value,
               }))}
               onValueChange={(view) =>
                 setFilter((current) => ({ ...current, view }))
@@ -1212,8 +1239,9 @@ export const MemorySettingsPage = ({
             <Select
               value={filter.category}
               onValueChange={(category) => {
-                if (category)
+                if (category) {
                   setFilter((current) => ({ ...current, category }));
+                }
               }}
             >
               <SelectTrigger
@@ -1228,7 +1256,7 @@ export const MemorySettingsPage = ({
                   <SelectItem value="all">
                     {t("memory.allCategories")}
                   </SelectItem>
-                  {MEMORY_CATEGORIES.map((value) => (
+                  {memoryCategories.map((value) => (
                     <SelectItem key={value} value={value}>
                       {translatedDynamic(t, "memory.category", value)}
                     </SelectItem>
@@ -1239,7 +1267,9 @@ export const MemorySettingsPage = ({
             <Select
               value={filter.origin}
               onValueChange={(origin) => {
-                if (origin) setFilter((current) => ({ ...current, origin }));
+                if (origin) {
+                  setFilter((current) => ({ ...current, origin }));
+                }
               }}
             >
               <SelectTrigger
@@ -1267,11 +1297,12 @@ export const MemorySettingsPage = ({
             <Select
               value={filter.sort}
               onValueChange={(sort) => {
-                if (sort)
+                if (sort) {
                   setFilter((current) => ({
                     ...current,
                     sort: sort as MemorySort,
                   }));
+                }
               }}
             >
               <SelectTrigger
@@ -1408,7 +1439,10 @@ export const MemorySettingsPage = ({
         </div>
       )}
 
-      <Dialog open={narrow ? detailOpen : null} onOpenChange={setDetailOpen}>
+      <Dialog
+        open={isNarrow ? detailOpen : undefined}
+        onOpenChange={setDetailOpen}
+      >
         <DialogContent
           className="memory-detail-dialog"
           aria-label={t("memory.details")}
@@ -1428,4 +1462,4 @@ export const MemorySettingsPage = ({
       />
     </div>
   );
-}
+};

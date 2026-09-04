@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, RotateCcw } from "@/components/ui/icons";
 
 import {
   checkForAppUpdates,
   getAppUpdateStatus,
   importSessionFiles,
-  type AppUpdateStatus,
-  type KeymapEntry,
-  type SessionImportResult,
 } from "../bridge";
-import { formatCombo, MOD_LABEL } from "../keys";
-import { useLanguage, useT, type LanguagePreference } from "../i18n";
-import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
+import type {
+  AppUpdateStatus,
+  KeymapEntry,
+  SessionImportResult,
+} from "../bridge";
+import { formatCombo, modifierLabel } from "../keys";
+import { useLanguage, useT } from "../i18n";
+import type { LanguagePreference } from "../i18n";
+import { en as EN_STRINGS, LOCALES } from "../i18n/strings";
+import type { StringKey } from "../i18n/strings";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { Button } from "@/components/ui/button";
 import { TooltipButton } from "@/components/ui/tooltip";
@@ -30,7 +34,6 @@ import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
 const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
   {
-    labelKey: "settings.groupPrompt",
     actions: [
       "run",
       "cancel",
@@ -38,21 +41,21 @@ const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
       "focus_editor",
       "toggle_doc_mode",
     ],
+    labelKey: "settings.groupPrompt",
   },
   {
-    labelKey: "settings.groupSessions",
     actions: ["new_session", "prev_session", "next_session"],
+    labelKey: "settings.groupSessions",
   },
   {
-    labelKey: "settings.groupPanels",
     actions: ["toggle_terminal", "toggle_browser", "toggle_git", "close_panel"],
+    labelKey: "settings.groupPanels",
   },
   {
-    labelKey: "settings.groupGit",
     actions: ["refresh_git", "open_source_control"],
+    labelKey: "settings.groupGit",
   },
   {
-    labelKey: "settings.groupOpen",
     actions: [
       "open_command_palette",
       "open_market",
@@ -62,8 +65,9 @@ const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
       "open_usage",
       "open_settings",
     ],
+    labelKey: "settings.groupOpen",
   },
-  { labelKey: "settings.groupModes", actions: ["cycle_permission_mode"] },
+  { actions: ["cycle_permission_mode"], labelKey: "settings.groupModes" },
 ];
 
 export const GeneralSettingsPage = ({
@@ -79,63 +83,78 @@ export const GeneralSettingsPage = ({
   const [update, setUpdate] = useState<AppUpdateStatus | null>(null);
 
   useEffect(() => {
-    let active = true;
+    let isActive = true;
     void statusLoader()
       .then((status) => {
-        if (active) setUpdate(status);
+        if (isActive) {
+          setUpdate(status);
+        }
       })
       .catch((error) => {
-        if (active) setUpdate({ state: "unavailable", message: String(error) });
+        if (isActive) {
+          setUpdate({ message: String(error), state: "unavailable" });
+        }
       });
     return () => {
-      active = false;
+      isActive = false;
     };
   }, [statusLoader]);
 
   useEffect(() => {
-    if (update?.state !== "checking") return;
-    let active = true;
+    if (update?.state !== "checking") {
+      return;
+    }
+    let isActive = true;
     const timer = window.setInterval(() => {
       void statusLoader()
         .then((status) => {
-          if (active) setUpdate(status);
+          if (isActive) {
+            setUpdate(status);
+          }
         })
         .catch((error) => {
-          if (active)
-            setUpdate({ state: "unavailable", message: String(error) });
+          if (isActive) {
+            setUpdate({ message: String(error), state: "unavailable" });
+          }
         });
     }, 1000);
     return () => {
-      active = false;
+      isActive = false;
       window.clearInterval(timer);
     };
   }, [statusLoader, update?.state]);
 
   const updateHint = (() => {
     switch (update?.state) {
-      case "ready":
+      case "ready": {
         return t("settings.updateReady", {
           version: update.currentVersion ?? t("settings.updateUnknownVersion"),
         });
-      case "checking":
+      }
+      case "checking": {
         return t("settings.updateChecking");
-      case "not-configured":
+      }
+      case "not-configured": {
         return t("settings.updateNotConfigured");
-      case "unsupported":
+      }
+      case "unsupported": {
         return t("settings.updateUnsupported");
-      case "unavailable":
+      }
+      case "unavailable": {
         return t("settings.updateUnavailable");
-      default:
+      }
+      default: {
         return t("settings.updateLoading");
+      }
     }
   })();
 
   async function startUpdateCheck() {
-    setUpdate({ state: "checking", currentVersion: update?.currentVersion });
+    setUpdate({ currentVersion: update?.currentVersion, state: "checking" });
     try {
       setUpdate(await checkStarter());
     } catch (error) {
-      setUpdate({ state: "unavailable", message: String(error) });
+      setUpdate({ message: String(error), state: "unavailable" });
     }
   }
 
@@ -224,7 +243,7 @@ export const GeneralSettingsPage = ({
       </Row>
     </Page>
   );
-}
+};
 
 export const ImportSettingsPage = ({
   projectPath,
@@ -233,7 +252,9 @@ export const ImportSettingsPage = ({
   onOpenSession = () => {},
 }: {
   readonly projectPath: string;
-  readonly importer?: (fallbackCwd: string) => Promise<SessionImportResult | null>;
+  readonly importer?: (
+    fallbackCwd: string
+  ) => Promise<SessionImportResult | null>;
   readonly onImported?: () => void | Promise<unknown>;
   readonly onOpenSession?: (sessionId: string) => void;
 }) => {
@@ -247,9 +268,13 @@ export const ImportSettingsPage = ({
     setError(null);
     try {
       const next = await importer(projectPath);
-      if (!next) return;
+      if (!next) {
+        return;
+      }
       setResult(next);
-      if (next.imported > 0) await onImported();
+      if (next.imported > 0) {
+        await onImported();
+      }
     } catch (cause) {
       setError(t("settings.importFailed", { error: String(cause) }));
     } finally {
@@ -281,10 +306,13 @@ export const ImportSettingsPage = ({
             : t("settings.chooseSessionFiles")}
         </Button>
       </Row>
-      {error ? <p role="alert" className="text-metadata text-destructive mt-3">
+      {error ? (
+        <p role="alert" className="text-metadata text-destructive mt-3">
           {error}
-        </p> : null}
-      {result ? <div
+        </p>
+      ) : null}
+      {result ? (
+        <div
           data-session-import-result
           role={result.failed > 0 ? "alert" : "status"}
           aria-live="polite"
@@ -293,9 +321,9 @@ export const ImportSettingsPage = ({
           <div className="min-w-0">
             <p className="text-body font-medium">
               {t("settings.importResult", {
+                failed: result.failed,
                 imported: result.imported,
                 skipped: result.skipped,
-                failed: result.failed,
               })}
             </p>
             <p className="text-metadata text-muted-foreground mt-0.5">
@@ -310,18 +338,21 @@ export const ImportSettingsPage = ({
               </p>
             ))}
           </div>
-          {result.sessions[0] ? <Button
+          {result.sessions[0] ? (
+            <Button
               variant="secondary"
               size="sm"
               className="shrink-0"
               onClick={() => onOpenSession(result.sessions[0].id)}
             >
               {t("settings.openImportedSession")}
-            </Button> : null}
-        </div> : null}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </Page>
   );
-}
+};
 
 export const KeybindingsSettingsPage = ({
   bindings,
@@ -335,34 +366,35 @@ export const KeybindingsSettingsPage = ({
   readonly onReset?: (action: string) => void;
 }) => {
   const t = useT();
-  const byAction = useMemo(
-    () => new Map(bindings.map((binding) => [binding[0], binding])),
-    [bindings]
-  );
-  const conflicts = useMemo(() => {
+  const byAction = new Map(bindings.map((binding) => [binding[0], binding]));
+  const conflicts = (() => {
     const seen = new Map<string, number>();
-    for (const [, key] of bindings) seen.set(key, (seen.get(key) ?? 0) + 1);
+    for (const [, key] of bindings) {
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
     return new Set(
       [...seen.entries()].filter(([, count]) => count > 1).map(([key]) => key)
     );
-  }, [bindings]);
+  })();
   const known = new Set(GROUPS.flatMap((group) => group.actions));
   const groups = [
     ...GROUPS.map((group) => ({
-      title: t(group.labelKey),
       actions: group.actions,
+      title: t(group.labelKey),
     })),
     {
-      title: t("settings.groupOther"),
       actions: bindings
         .map((binding) => binding[0])
         .filter((action) => !known.has(action)),
+      title: t("settings.groupOther"),
     },
   ].filter((group) => group.actions.length > 0);
 
   function renderRow(action: string) {
     const entry = byAction.get(action);
-    if (!entry) return null;
+    if (!entry) {
+      return null;
+    }
     const [, key, coreLabel] = entry;
     const labelKey = `action.${action}` as StringKey;
     const label = labelKey in EN_STRINGS ? t(labelKey) : coreLabel;
@@ -388,7 +420,8 @@ export const KeybindingsSettingsPage = ({
         >
           {capturing === action ? t("settings.capturing") : formatCombo(key)}
         </Button>
-        {onReset ? <TooltipButton
+        {onReset ? (
+          <TooltipButton
             label={t("settings.reset")}
             variant="ghost"
             size="icon"
@@ -396,7 +429,8 @@ export const KeybindingsSettingsPage = ({
             onClick={() => onReset(action)}
           >
             <RotateCcw className="size-3.5" />
-          </TooltipButton> : null}
+          </TooltipButton>
+        ) : null}
       </Row>
     );
   }
@@ -404,7 +438,7 @@ export const KeybindingsSettingsPage = ({
   return (
     <Page
       title={t("settings.keybindings")}
-      description={t("settings.keysHint", { mod: MOD_LABEL })}
+      description={t("settings.keysHint", { mod: modifierLabel })}
     >
       {groups.map((group) => (
         <div key={group.title}>
@@ -414,4 +448,4 @@ export const KeybindingsSettingsPage = ({
       ))}
     </Page>
   );
-}
+};

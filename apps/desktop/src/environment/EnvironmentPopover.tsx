@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Check,
   ChevronDown,
@@ -13,15 +14,11 @@ import {
   Settings,
   SlidersHorizontal,
   SquarePlus,
-  type HugeIcon,
 } from "@/components/ui/icons";
+import type { HugeIcon } from "@/components/ui/icons";
 
-import {
-  getArtifact,
-  type GitStatus,
-  type PlanEntry,
-  type Project,
-} from "../bridge";
+import { getArtifact } from "../bridge";
+import type { GitStatus, PlanEntry, Project } from "../bridge";
 import { useT } from "../i18n";
 import { TaskPlanPanel } from "../session/TaskPlanPanel";
 import type { InteractiveToolPreview } from "../session/toolActivity";
@@ -67,16 +64,20 @@ const EnvironmentRow = ({
       />
       <span className="min-w-0 flex-1">
         <span className="text-body block truncate">{label}</span>
-        {description ? <span className="text-callout text-muted-foreground block truncate">
+        {description ? (
+          <span className="text-callout text-muted-foreground block truncate">
             {description}
-          </span> : null}
+          </span>
+        ) : null}
       </span>
       {detail !== undefined && (
         <span className="text-metadata text-muted-foreground shrink-0">
           {detail}
         </span>
       )}
-      {active ? <span className="bg-primary size-1.5 shrink-0 rounded-full" /> : null}
+      {active ? (
+        <span className="bg-primary size-1.5 shrink-0 rounded-full" />
+      ) : null}
     </>
   );
 
@@ -103,9 +104,13 @@ const EnvironmentRow = ({
       {content}
     </Button>
   );
-}
+};
 
-const ToolPreview = ({ preview }: { readonly preview: InteractiveToolPreview }) => {
+const ToolPreview = ({
+  preview,
+}: {
+  readonly preview: InteractiveToolPreview;
+}) => {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -115,13 +120,15 @@ const ToolPreview = ({ preview }: { readonly preview: InteractiveToolPreview }) 
   const Icon = preview.kind === "browser" ? Globe2 : Monitor;
 
   useEffect(() => {
-    let alive = true;
+    let isAlive = true;
     let objectUrl: string | null = null;
     setUrl(null);
     setFailed(false);
     void getArtifact(preview.artifact.id)
       .then((bytes) => {
-        if (!alive) return;
+        if (!isAlive) {
+          return;
+        }
         objectUrl = URL.createObjectURL(
           new Blob([bytes.slice().buffer as ArrayBuffer], {
             type: preview.artifact.mime_type,
@@ -130,11 +137,15 @@ const ToolPreview = ({ preview }: { readonly preview: InteractiveToolPreview }) 
         setUrl(objectUrl);
       })
       .catch(() => {
-        if (alive) setFailed(true);
+        if (isAlive) {
+          setFailed(true);
+        }
       });
     return () => {
-      alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      isAlive = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
   }, [preview.artifact.id, preview.artifact.mime_type]);
 
@@ -166,8 +177,7 @@ const ToolPreview = ({ preview }: { readonly preview: InteractiveToolPreview }) 
             onError={() => setFailed(true)}
           />
         ) : (
-          <span
-            role="status"
+          <output
             className={cn(
               "text-callout text-muted-foreground flex items-center gap-2 px-3 py-8",
               failed && "text-destructive"
@@ -179,12 +189,12 @@ const ToolPreview = ({ preview }: { readonly preview: InteractiveToolPreview }) 
                 ? "environment.previewUnavailable"
                 : "environment.previewLoading"
             )}
-          </span>
+          </output>
         )}
       </div>
     </figure>
   );
-}
+};
 
 /**
  * The project environment at a glance. It keeps the compact, frequently checked Git facts in a
@@ -223,7 +233,9 @@ export const EnvironmentPopover = ({
   readonly onPinPlanArtifact?: (markdown: string) => void;
   readonly canPinPlan?: boolean;
   readonly preview?: InteractiveToolPreview | null;
-  /** Keeps the mounted session workspace from leaking this portal over another full-page surface. */
+  /**
+  Keeps the mounted session workspace from leaking this portal over another full-page surface.
+  */
   readonly suppressed?: boolean;
 }) => {
   const t = useT();
@@ -232,7 +244,9 @@ export const EnvironmentPopover = ({
   const isRepo = git?.is_repo === true;
 
   useEffect(() => {
-    if (suppressed) setOpen(false);
+    if (suppressed) {
+      setOpen(false);
+    }
   }, [suppressed]);
 
   const changeDetail =
@@ -266,9 +280,13 @@ export const EnvironmentPopover = ({
     <Popover
       open={!suppressed && open}
       onOpenChange={(next) => {
-        if (suppressed) return;
+        if (suppressed) {
+          return;
+        }
         setOpen(next);
-        if (next) onRefresh();
+        if (next) {
+          onRefresh();
+        }
       }}
     >
       <PopoverTrigger
@@ -339,9 +357,11 @@ export const EnvironmentPopover = ({
                 <span className="text-body min-w-0 flex-1 truncate font-medium">
                   {t("environment.local")}
                 </span>
-                {project ? <span className="text-metadata text-muted-foreground max-w-28 truncate">
+                {project ? (
+                  <span className="text-metadata text-muted-foreground max-w-28 truncate">
                     {project}
-                  </span> : null}
+                  </span>
+                ) : null}
                 {projectsOpen ? (
                   <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
                 ) : (
@@ -410,10 +430,12 @@ export const EnvironmentPopover = ({
           canPinPlan={canPinPlan}
         />
 
-        {preview ? <div className="mt-2">
+        {preview ? (
+          <div className="mt-2">
             <ToolPreview key={preview.artifact.id} preview={preview} />
-          </div> : null}
+          </div>
+        ) : null}
       </PopoverContent>
     </Popover>
   );
-}
+};

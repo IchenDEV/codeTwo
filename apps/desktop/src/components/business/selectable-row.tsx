@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from "react";
+import { useId } from "react";
+import type { ReactNode } from "react";
 import { Check } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,6 @@ const SelectableRow = ({
       ) : null}
     </Button>
   );
-}
+};
 
 export { SelectableRow, type SelectableRowProps };

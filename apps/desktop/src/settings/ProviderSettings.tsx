@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Download, RefreshCw } from "@/components/ui/icons";
 
 import {
@@ -6,9 +6,11 @@ import {
   installProvider,
   setProviderEnabled,
   upgradeProvider,
-  type ProviderInfo,
-  type ProviderRuntimeConfiguration,
-  type ProviderRuntimeOverride,
+} from "../bridge";
+import type {
+  ProviderInfo,
+  ProviderRuntimeConfig,
+  ProviderRuntimeOverride,
 } from "../bridge";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { useT } from "../i18n";
@@ -25,11 +27,11 @@ import { SearchField } from "@/components/business/search-field";
 import { cn } from "@/lib/utils";
 import { GroupHeading, Page } from "./SettingsPrimitives";
 
-const CAPABILITY_LABELS = {
-  image_generation: "Image generation",
-  computer_use: "Computer Use",
+const capabilityLabels = {
   chrome_browser: "Browser Use",
   codetwo_browser: "C2 Browser",
+  computer_use: "Computer Use",
+  image_generation: "Image generation",
   sites: "Sites",
 } as const;
 
@@ -38,25 +40,23 @@ type ProviderOperation = {
   action: "install" | "upgrade" | "enable" | "configure" | "refresh";
 };
 
-function runtimeConfiguration(
-  provider: ProviderInfo
-): ProviderRuntimeConfiguration {
+function runtimeConfiguration(provider: ProviderInfo): ProviderRuntimeConfig {
   return (
     provider.configuration ?? {
-      display_name: null,
-      command: null,
       args: null,
-      home_path: null,
+      command: null,
+      display_name: null,
+      effective_args: [],
+      effective_command: "",
+      forwarded_environment: [],
       home_environment:
         provider.id === "codex"
           ? "CODEX_HOME"
           : provider.id === "claude_code"
             ? "CLAUDE_CONFIG_DIR"
             : null,
-      forwarded_environment: [],
+      home_path: null,
       missing_environment: [],
-      effective_command: "",
-      effective_args: [],
     }
   );
 }
@@ -77,11 +77,11 @@ export function providerRuntimeOverrideFromDraft(draft: {
   forwardedEnvironment: string;
 }): ProviderRuntimeOverride {
   return {
-    display_name: draft.displayName.trim() || null,
-    command: draft.command.trim() || null,
     args: draft.argsOverridden ? listFromLines(draft.args) : null,
-    home_path: draft.homePath.trim() || null,
+    command: draft.command.trim() || null,
+    display_name: draft.displayName.trim() || null,
     forwarded_environment: listFromLines(draft.forwardedEnvironment),
+    home_path: draft.homePath.trim() || null,
   };
 }
 
@@ -121,26 +121,22 @@ const ProviderRuntimeEditor = ({
     setForwardedEnvironment(next.forwarded_environment.join("\n"));
   }, [provider]);
 
-  const nextConfiguration = useMemo<ProviderRuntimeOverride>(
-    () =>
-      providerRuntimeOverrideFromDraft({
-        displayName,
-        command,
-        homePath,
-        argsOverridden,
-        args,
-        forwardedEnvironment,
-      }),
-    [args, argsOverridden, command, displayName, forwardedEnvironment, homePath]
-  );
+  const nextConfiguration = providerRuntimeOverrideFromDraft({
+    args,
+    argsOverridden,
+    command,
+    displayName,
+    forwardedEnvironment,
+    homePath,
+  });
   const persistedConfiguration: ProviderRuntimeOverride = {
-    display_name: configuration.display_name,
-    command: configuration.command,
     args: configuration.args,
-    home_path: configuration.home_path,
+    command: configuration.command,
+    display_name: configuration.display_name,
     forwarded_environment: configuration.forwarded_environment,
+    home_path: configuration.home_path,
   };
-  const changed =
+  const isChanged =
     JSON.stringify(nextConfiguration) !==
     JSON.stringify(persistedConfiguration);
 
@@ -196,7 +192,8 @@ const ProviderRuntimeEditor = ({
             {t("settings.providerRuntimeCommandHint")}
           </FieldDescription>
         </Field>
-        {configuration.home_environment ? <Field>
+        {configuration.home_environment ? (
+          <Field>
             <FieldLabel htmlFor={`provider-home-${provider.id}`}>
               {t("settings.providerConfigDirectory")}
             </FieldLabel>
@@ -214,7 +211,8 @@ const ProviderRuntimeEditor = ({
                 variable: configuration.home_environment,
               })}
             </FieldDescription>
-          </Field> : null}
+          </Field>
+        ) : null}
         <Field>
           <div className="flex items-center justify-between gap-3">
             <FieldLabel htmlFor={`provider-args-${provider.id}`}>
@@ -284,7 +282,7 @@ const ProviderRuntimeEditor = ({
           type="button"
           size="sm"
           data-provider-save={provider.id}
-          disabled={disabled || !changed}
+          disabled={disabled || !isChanged}
           onClick={() => void onSave(nextConfiguration)}
         >
           {saving ? <Spinner /> : null}
@@ -293,7 +291,7 @@ const ProviderRuntimeEditor = ({
       </div>
     </div>
   );
-}
+};
 
 const ProviderModels = ({ provider }: { readonly provider: ProviderInfo }) => {
   const t = useT();
@@ -301,7 +299,7 @@ const ProviderModels = ({ provider }: { readonly provider: ProviderInfo }) => {
   const { hidden, setVisible, showAll } = useProviderModelPreferences(
     provider.id
   );
-  const models = useMemo(() => groupModels(provider.models), [provider.models]);
+  const models = groupModels(provider.models);
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filtered = normalizedSearch
     ? models.filter((model) =>
@@ -311,7 +309,9 @@ const ProviderModels = ({ provider }: { readonly provider: ProviderInfo }) => {
       )
     : models;
 
-  if (models.length === 0) return null;
+  if (models.length === 0) {
+    return null;
+  }
   return (
     <div
       data-provider-models={provider.id}
@@ -339,7 +339,7 @@ const ProviderModels = ({ provider }: { readonly provider: ProviderInfo }) => {
       />
       <div className="divide-border/60 divide-y">
         {filtered.map((model) => {
-          const visible = !hidden.has(model.key);
+          const isVisible = !hidden.has(model.key);
           return (
             <div
               key={model.key}
@@ -353,9 +353,9 @@ const ProviderModels = ({ provider }: { readonly provider: ProviderInfo }) => {
                 </p>
               </div>
               <Switch
-                checked={visible}
+                checked={isVisible}
                 aria-label={
-                  visible
+                  isVisible
                     ? t("settings.providerHideModel", { model: model.label })
                     : t("settings.providerShowModel", { model: model.label })
                 }
@@ -375,7 +375,7 @@ const ProviderModels = ({ provider }: { readonly provider: ProviderInfo }) => {
       </p>
     </div>
   );
-}
+};
 
 export const ProviderSettingsPage = ({
   providers,
@@ -391,7 +391,7 @@ export const ProviderSettingsPage = ({
   readonly upgrader?: (provider: string) => Promise<ProviderInfo[]>;
   readonly enabledSaver?: (
     provider: string,
-    enabled: boolean
+    isEnabled: boolean
   ) => Promise<ProviderInfo[]>;
   readonly configurationSaver?: (
     provider: string,
@@ -407,34 +407,41 @@ export const ProviderSettingsPage = ({
   const [error, setError] = useState<{ id: string; text: string } | null>(null);
 
   useEffect(() => {
-    if (!reload) return;
-    let active = true;
-    setOperation({ id: "*", action: "refresh" });
+    if (!reload) {
+      return;
+    }
+    let isActive = true;
+    setOperation({ action: "refresh", id: "*" });
     setError(null);
     void (async () => {
       try {
         await reload();
-        if (active)
+        if (isActive) {
           setMessage({ id: "*", text: t("settings.providerChecked") });
+        }
       } catch (cause) {
-        if (active) {
+        if (isActive) {
           setError({
             id: "*",
             text: t("settings.providerRefreshFailed", { error: String(cause) }),
           });
         }
       } finally {
-        if (active) setOperation(null);
+        if (isActive) {
+          setOperation(null);
+        }
       }
     })();
     return () => {
-      active = false;
+      isActive = false;
     };
   }, [reload, t]);
 
   async function refresh() {
-    if (!reload || operation) return;
-    setOperation({ id: "*", action: "refresh" });
+    if (!reload || operation) {
+      return;
+    }
+    setOperation({ action: "refresh", id: "*" });
     setError(null);
     try {
       await reload();
@@ -450,15 +457,22 @@ export const ProviderSettingsPage = ({
   }
 
   async function runAction(providerId: string, action: "install" | "upgrade") {
-    if (operation) return;
+    if (operation) {
+      return;
+    }
     const candidate = providers.find((item) => item.id === providerId);
-    if (!candidate) return;
-    setOperation({ id: providerId, action });
+    if (!candidate) {
+      return;
+    }
+    setOperation({ action, id: providerId });
     setError(null);
     setMessage(null);
     try {
-      if (action === "install") await installer(providerId);
-      else await upgrader(providerId);
+      if (action === "install") {
+        await installer(providerId);
+      } else {
+        await upgrader(providerId);
+      }
       setMessage({
         id: providerId,
         text:
@@ -481,18 +495,22 @@ export const ProviderSettingsPage = ({
     }
   }
 
-  async function saveEnabled(providerId: string, enabled: boolean) {
-    if (operation) return;
+  async function saveEnabled(providerId: string, isEnabled: boolean) {
+    if (operation) {
+      return;
+    }
     const candidate = providers.find((item) => item.id === providerId);
-    if (!candidate) return;
-    setOperation({ id: providerId, action: "enable" });
+    if (!candidate) {
+      return;
+    }
+    setOperation({ action: "enable", id: providerId });
     setError(null);
     setMessage(null);
     try {
-      await enabledSaver(providerId, enabled);
+      await enabledSaver(providerId, isEnabled);
       setMessage({
         id: providerId,
-        text: enabled
+        text: isEnabled
           ? t("settings.providerEnabledMessage", {
               provider: candidate.display_name,
             })
@@ -515,10 +533,14 @@ export const ProviderSettingsPage = ({
     providerId: string,
     configuration: ProviderRuntimeOverride
   ) {
-    if (operation) return;
+    if (operation) {
+      return;
+    }
     const candidate = providers.find((item) => item.id === providerId);
-    if (!candidate) return;
-    setOperation({ id: providerId, action: "configure" });
+    if (!candidate) {
+      return;
+    }
+    setOperation({ action: "configure", id: providerId });
     setError(null);
     setMessage(null);
     try {
@@ -543,8 +565,11 @@ export const ProviderSettingsPage = ({
   function toggle(providerId: string) {
     setExpanded((current) => {
       const next = new Set(current);
-      if (next.has(providerId)) next.delete(providerId);
-      else next.add(providerId);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
       return next;
     });
   }
@@ -579,23 +604,23 @@ export const ProviderSettingsPage = ({
       )}
       <div className="space-y-1">
         {providers.map((provider) => {
-          const enabled = provider.enabled !== false;
+          const isEnabled = provider.enabled !== false;
           const management = provider.management ?? {
-            installed: provider.available,
-            version: null,
-            latest_version: null,
-            update_available: null,
             check_error: null,
             install_supported: false,
-            upgrade_supported: false,
+            installed: provider.available,
+            latest_version: null,
             launch_mode: provider.available
               ? ("installed" as const)
               : ("unavailable" as const),
+            update_available: null,
+            upgrade_supported: false,
+            version: null,
           };
           const isExpanded = expanded.has(provider.id);
           const activeOperation =
             operation?.id === provider.id ? operation.action : null;
-          const status = !enabled
+          const status = !isEnabled
             ? t("settings.providerDisabled")
             : management.installed
               ? management.version
@@ -627,17 +652,17 @@ export const ProviderSettingsPage = ({
                   <span className="relative shrink-0">
                     <ProviderIcon
                       provider={provider.id}
-                      className={cn("size-5", !enabled && "opacity-40")}
+                      className={cn("size-5", !isEnabled && "opacity-40")}
                     />
                     <span
                       className={cn(
                         "absolute -top-0.5 -right-0.5 size-1.5 rounded-full",
-                        enabled && provider.available && "bg-success",
-                        enabled &&
+                        isEnabled && provider.available && "bg-success",
+                        isEnabled &&
                           !provider.available &&
                           management.launch_mode === "on_demand" &&
                           "bg-warning",
-                        (!enabled ||
+                        (!isEnabled ||
                           management.launch_mode === "unavailable") &&
                           "bg-border"
                       )}
@@ -648,9 +673,11 @@ export const ProviderSettingsPage = ({
                       <span className="text-body truncate font-medium">
                         {provider.display_name}
                       </span>
-                      {management.version ? <span className="text-metadata text-muted-foreground shrink-0 font-mono">
+                      {management.version ? (
+                        <span className="text-metadata text-muted-foreground shrink-0 font-mono">
                           v{management.version}
-                        </span> : null}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="text-callout text-muted-foreground mt-0.5 block truncate">
                       {status}
@@ -663,7 +690,8 @@ export const ProviderSettingsPage = ({
                     )}
                   />
                 </Button>
-                {!management.installed && management.install_supported ? <Button
+                {!management.installed && management.install_supported ? (
+                  <Button
                     data-provider-action={`${provider.id}:install`}
                     variant="secondary"
                     size="xs"
@@ -674,35 +702,38 @@ export const ProviderSettingsPage = ({
                     {activeOperation === "install"
                       ? t("settings.providerInstalling")
                       : t("settings.providerInstall")}
-                  </Button> : null}
+                  </Button>
+                ) : null}
                 {management.installed &&
-                  management.upgrade_supported &&
-                  management.update_available === true ? <Button
-                      data-provider-action={`${provider.id}:upgrade`}
-                      variant="ghost"
-                      size="xs"
-                      disabled={operation !== null}
-                      onClick={() => void runAction(provider.id, "upgrade")}
-                    >
-                      {activeOperation === "upgrade" ? (
-                        <Spinner />
-                      ) : (
-                        <RefreshCw />
-                      )}
-                      {activeOperation === "upgrade"
-                        ? t("settings.providerUpgrading")
-                        : management.latest_version
-                          ? t("settings.providerUpgradeVersion", {
-                              version: management.latest_version,
-                            })
-                          : t("settings.providerUpgrade")}
-                    </Button> : null}
+                management.upgrade_supported &&
+                management.update_available === true ? (
+                  <Button
+                    data-provider-action={`${provider.id}:upgrade`}
+                    variant="ghost"
+                    size="xs"
+                    disabled={operation !== null}
+                    onClick={() => void runAction(provider.id, "upgrade")}
+                  >
+                    {activeOperation === "upgrade" ? (
+                      <Spinner />
+                    ) : (
+                      <RefreshCw />
+                    )}
+                    {activeOperation === "upgrade"
+                      ? t("settings.providerUpgrading")
+                      : management.latest_version
+                        ? t("settings.providerUpgradeVersion", {
+                            version: management.latest_version,
+                          })
+                        : t("settings.providerUpgrade")}
+                  </Button>
+                ) : null}
                 <Switch
                   data-provider-toggle={provider.id}
-                  checked={enabled}
+                  checked={isEnabled}
                   disabled={operation !== null}
                   aria-label={
-                    enabled
+                    isEnabled
                       ? t("settings.providerDisableAria", {
                           provider: provider.display_name,
                         })
@@ -727,7 +758,8 @@ export const ProviderSettingsPage = ({
                   {error?.id === provider.id ? error.text : message?.text}
                 </p>
               )}
-              {isExpanded ? <div
+              {isExpanded ? (
+                <div
                   id={`provider-details-${provider.id}`}
                   className="ml-8 pb-3"
                 >
@@ -740,7 +772,9 @@ export const ProviderSettingsPage = ({
                           ? t("settings.providerOnDemandRuntime")
                           : t("settings.providerUnavailableRuntime")}
                     </span>
-                    {provider.needs_node ? <span>{t("settings.needsNode")}</span> : null}
+                    {provider.needs_node ? (
+                      <span>{t("settings.needsNode")}</span>
+                    ) : null}
                   </div>
                   <ProviderRuntimeEditor
                     provider={provider}
@@ -768,18 +802,26 @@ export const ProviderSettingsPage = ({
                       >
                         <div className="min-w-0">
                           <div className="text-metadata flex flex-wrap items-center gap-1.5 font-medium">
-                            {CAPABILITY_LABELS[capability.id]}
-                            {capability.experimental ? <Badge variant="outline">Experimental</Badge> : null}
-                            {capability.version ? <span className="text-metadata text-muted-foreground font-mono">
+                            {capabilityLabels[capability.id]}
+                            {capability.experimental ? (
+                              <Badge variant="outline">Experimental</Badge>
+                            ) : null}
+                            {capability.version ? (
+                              <span className="text-metadata text-muted-foreground font-mono">
                                 {capability.version}
-                              </span> : null}
+                              </span>
+                            ) : null}
                           </div>
-                          {capability.reason ? <p className="text-callout text-muted-foreground mt-0.5">
+                          {capability.reason ? (
+                            <p className="text-callout text-muted-foreground mt-0.5">
                               {capability.reason}
-                            </p> : null}
-                          {capability.fix ? <p className="text-callout text-foreground/75 mt-0.5">
+                            </p>
+                          ) : null}
+                          {capability.fix ? (
+                            <p className="text-callout text-foreground/75 mt-0.5">
                               {capability.fix}
-                            </p> : null}
+                            </p>
+                          ) : null}
                         </div>
                         <span className="text-callout text-muted-foreground flex shrink-0 items-center gap-1.5 pt-0.5 capitalize">
                           <span
@@ -793,11 +835,12 @@ export const ProviderSettingsPage = ({
                         </span>
                       </div>
                     ))}
-                </div> : null}
+                </div>
+              ) : null}
             </div>
           );
         })}
       </div>
     </Page>
   );
-}
+};

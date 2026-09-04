@@ -1,4 +1,4 @@
-export const TRANSCRIPT_EDGE_THRESHOLD = 48;
+export const transcriptEdgeThreshold = 48;
 
 export interface TranscriptScrollMetrics {
   clientHeight: number;
@@ -22,7 +22,7 @@ export function transcriptDistanceFromEnd({
 
 export function isTranscriptNearEnd(
   metrics: TranscriptScrollMetrics,
-  threshold = TRANSCRIPT_EDGE_THRESHOLD
+  threshold = transcriptEdgeThreshold
 ): boolean {
   return transcriptDistanceFromEnd(metrics) <= threshold;
 }

@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from "react";
+import { useId } from "react";
+import type { ReactNode } from "react";
 
 interface SettingsSectionProps {
   readonly title: ReactNode;
@@ -62,6 +63,6 @@ const SettingsSection = ({
       </div>
     </section>
   );
-}
+};
 
 export { SettingsSection, type SettingsSectionProps };

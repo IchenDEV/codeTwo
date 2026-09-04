@@ -16,19 +16,13 @@ import type {
   SceneArtifactRecord,
 } from "../bridge";
 
-/**
- * The horizontal stage track (docs/reference/scenes.md §UI contract): a pipeline-bound session renders its
- * instance as one chip per stage — done ✓ / current highlighted / pending muted, a ×n loop badge
- * when a stage has been entered more than once, and a lock glyph on confirm-gated stages. A chip
- * expands to a small popover listing the stage's captured artifacts and its sessions.
- */
-
-/** Newest version per artifact key (`list_for_instance` orders versions DESC within a key). */
 function newestPerKey(artifacts: SceneArtifactRecord[]): SceneArtifactRecord[] {
   const seen = new Set<string>();
   const out: SceneArtifactRecord[] = [];
   for (const record of artifacts) {
-    if (seen.has(record.artifact_key)) continue;
+    if (seen.has(record.artifact_key)) {
+      continue;
+    }
     seen.add(record.artifact_key);
     out.push(record);
   }
@@ -97,7 +91,7 @@ const StagePopover = ({
       )}
     </PopoverContent>
   );
-}
+};
 
 export const StageTrack = ({
   detail,
@@ -180,4 +174,4 @@ export const StageTrack = ({
       </div>
     </div>
   );
-}
+};

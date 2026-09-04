@@ -1,34 +1,36 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useState } from "react";
+import type { ReactNode } from "react";
 
-import { LOCALES, type Locale, type StringKey } from "./strings";
+import { LOCALES } from "./strings";
+import type { Locale, StringKey } from "./strings";
 
-/** `system` resolves from the OS language and keeps whatever the OS reports. */
+/**
+`system` resolves from the OS language and keeps whatever the OS reports.
+*/
 export type LanguagePreference = Locale | "system";
 
-const STORAGE_KEY = "codetwo.language";
+const storageKey = "codetwo.language";
 
-/** The closest locale we have to what the OS asked for, falling back to English. */
 export function resolveSystemLocale(): Locale {
   const tags =
     typeof navigator !== "undefined"
       ? (navigator.languages ?? [navigator.language])
       : [];
   for (const tag of tags) {
-    if (!tag) continue;
+    if (!tag) {
+      continue;
+    }
     // Exact first ("zh-CN"), then the base language ("zh" → the first zh-* we ship).
-    if (tag in LOCALES) return tag as Locale;
+    if (tag in LOCALES) {
+      return tag as Locale;
+    }
     const base = tag.split("-")[0];
     const match = (Object.keys(LOCALES) as Locale[]).find(
       (l) => l.split("-")[0] === base
     );
-    if (match) return match;
+    if (match) {
+      return match;
+    }
   }
   return "en";
 }
@@ -36,20 +38,21 @@ export function resolveSystemLocale(): Locale {
 function storedPreference(): LanguagePreference {
   const raw =
     typeof localStorage !== "undefined"
-      ? localStorage.getItem(STORAGE_KEY)
+      ? localStorage.getItem(storageKey)
       : null;
   return raw === "system" || (raw && raw in LOCALES)
     ? (raw as LanguagePreference)
     : "system";
 }
 
-/** Substitute `{name}` placeholders. Missing values are left visible rather than blanked. */
 function interpolate(
   template: string,
   vars?: Record<string, string | number>
 ): string {
-  if (!vars) return template;
-  return template.replace(/\{(\w+)\}/g, (whole, key) =>
+  if (!vars) {
+    return template;
+  }
+  return template.replace(/\{(\w+)\}/gu, (whole, key) =>
     key in vars ? String(vars[key]) : whole
   );
 }
@@ -67,49 +70,53 @@ interface I18nValue {
 }
 
 const I18nContext = createContext<I18nValue>({
-  preference: "system",
   locale: "en",
+  preference: "system",
   setPreference: () => {},
   t: (k) => k,
 });
 
-export const I18nProvider = ({ children }: { readonly children: ReactNode }) => {
+export const I18nProvider = ({
+  children,
+}: {
+  readonly children: ReactNode;
+}) => {
   const [preference, setPreferenceState] =
     useState<LanguagePreference>(storedPreference);
 
   const locale: Locale =
     preference === "system" ? resolveSystemLocale() : preference;
 
-  const t = useMemo<Translate>(() => {
+  const t: Translate = (() => {
     const table = LOCALES[locale].strings;
     return (key, vars) => interpolate(table[key] ?? key, vars);
-  }, [locale]);
+  })();
 
-  const setPreference = useCallback((p: LanguagePreference) => {
+  const setPreference = (p: LanguagePreference) => {
     setPreferenceState(p);
     try {
-      localStorage.setItem(STORAGE_KEY, p);
+      localStorage.setItem(storageKey, p);
     } catch {
-      /* private mode — the choice just won't survive a restart */
+      /*
+      private mode — the choice just won't survive a restart
+      */
     }
     // `lang` drives font fallback and hyphenation; leaving it as "en" makes CJK text render with
     // the wrong face on some systems.
     document.documentElement.lang = p === "system" ? resolveSystemLocale() : p;
-  }, []);
+  };
 
   return (
-    <I18nContext.Provider value={{ preference, locale, setPreference, t }}>
+    <I18nContext.Provider value={{ locale, preference, setPreference, t }}>
       {children}
     </I18nContext.Provider>
   );
-}
+};
 
-/** The translate function. The common case — components only need `t`. */
 export function useT(): Translate {
   return useContext(I18nContext).t;
 }
 
-/** Full language state, for the settings control that changes it. */
 export function useLanguage(): I18nValue {
   return useContext(I18nContext);
 }

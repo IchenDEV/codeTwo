@@ -61,7 +61,8 @@ export const SessionHeaderActions = ({
   const renderOpenMenu = () => (
     <DropdownMenuContent align="end">
       <DropdownMenuGroup>
-        {editorLaunchersAvailable ? <>
+        {editorLaunchersAvailable ? (
+          <>
             <DropdownMenuItem onClick={onOpenCursor}>
               <Box aria-hidden />
               {t("header.cursor")}
@@ -70,11 +71,14 @@ export const SessionHeaderActions = ({
               <Orbit aria-hidden />
               {t("header.antigravity")}
             </DropdownMenuItem>
-          </> : null}
+          </>
+        ) : null}
         <DropdownMenuItem onClick={onOpenFinder}>
           <Folder aria-hidden />
           {fileManagerLabel}
-          {finderHint ? <DropdownMenuShortcut>{finderHint}</DropdownMenuShortcut> : null}
+          {finderHint ? (
+            <DropdownMenuShortcut>{finderHint}</DropdownMenuShortcut>
+          ) : null}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onMoveTask}>
           <Send aria-hidden />
@@ -181,9 +185,11 @@ export const SessionHeaderActions = ({
                     <Play aria-hidden />
                   )}
                   {action.name || action.id}
-                  {action.keybinding ? <DropdownMenuShortcut>
+                  {action.keybinding ? (
+                    <DropdownMenuShortcut>
                       {formatCombo(action.keybinding)}
-                    </DropdownMenuShortcut> : null}
+                    </DropdownMenuShortcut>
+                  ) : null}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
@@ -239,4 +245,4 @@ export const SessionHeaderActions = ({
       </DropdownMenu>
     </div>
   );
-}
+};

@@ -12,7 +12,9 @@ import {
 } from "../src/session/elicitation";
 import type { ElicitationForm } from "../src/bridge";
 
-/** The form the Claude adapter builds for a one-question AskUserQuestion call. */
+/**
+The form the Claude adapter builds for a one-question AskUserQuestion call.
+*/
 const ASK: ElicitationForm = {
   message: "Which auth method?",
   tool_call_id: "tool-1",

@@ -105,7 +105,7 @@ export const PreviewModal = ({
                       >
                         <img
                           src={canvasExportDataUrl(item)}
-                          alt={`${canvas.title || "Canvas"} ${item.kind}${item.index == null ? "" : ` ${item.index + 1}`}`}
+                          alt={`${canvas.title || "Canvas"} ${item.kind}${item.index === null || item.index === undefined ? "" : ` ${item.index + 1}`}`}
                           className="block h-auto w-full"
                         />
                       </figure>
@@ -131,4 +131,4 @@ export const PreviewModal = ({
       </DialogContent>
     </Dialog>
   );
-}
+};

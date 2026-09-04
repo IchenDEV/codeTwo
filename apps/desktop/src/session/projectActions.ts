@@ -26,8 +26,8 @@ export function projectActionId(
     name
       .normalize("NFKD")
       .toLocaleLowerCase()
-      .replaceAll(/[^a-z0-9]+/g, "-")
-      .replaceAll(/^-+|-+$/g, "")
+      .replaceAll(/[^a-z0-9]+/gu, "-")
+      .replaceAll(/^-+|-+$/gu, "")
       .slice(0, 56) || "action";
   const ids = new Set(actions.map((action) => action.id));
   if (!ids.has(stem)) {
@@ -70,15 +70,15 @@ export function projectActionIssue(
   if (draft.keybinding) {
     const builtin = bindings.find(([, key]) => key === draft.keybinding);
     if (builtin) {
-      return { issue: "keybinding_conflict", conflict: builtin[2] };
+      return { conflict: builtin[2], issue: "keybinding_conflict" };
     }
     const action = actions.find(
       (candidate) => candidate.keybinding === draft.keybinding
     );
     if (action) {
       return {
-        issue: "keybinding_conflict",
         conflict: action.name || action.id,
+        issue: "keybinding_conflict",
       };
     }
   }
@@ -86,7 +86,8 @@ export function projectActionIssue(
 }
 
 export function projectActionBindings(actions: ProjectScript[]): KeymapEntry[] {
-  return actions.flatMap((action) => action.keybinding
+  return actions.flatMap((action) => {
+    return action.keybinding
       ? [
           [
             `project_action:${action.id}`,
@@ -94,6 +95,6 @@ export function projectActionBindings(actions: ProjectScript[]): KeymapEntry[] {
             action.name || action.id,
           ] as KeymapEntry,
         ]
-      : []
-  );
+      : [];
+  });
 }

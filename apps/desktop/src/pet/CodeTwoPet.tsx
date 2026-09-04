@@ -3,24 +3,21 @@ import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  useAppearanceSettings,
-  type AppearanceSettings,
-  type PetSize,
-} from "../appearance";
+import { useAppearanceSettings } from "../appearance";
+import type { AppearanceSettings, PetSize } from "../appearance";
 import type { CodeTwoPetAnimation } from "./state";
-import { BUILTIN_PET, petSpritesheetUrl } from "./store";
+import { builtinPet, petSpritesheetUrl } from "./store";
 
 import "@petx/react/styles.css";
 import "./pet.css";
 
-export const PET_SPRITESHEET = BUILTIN_PET.spritesheetUrl;
-export const PET_SIZE_PIXELS: Record<PetSize, number> = {
-  small: 88,
-  medium: 112,
+export const petSpritesheet = builtinPet.spritesheetUrl;
+export const petSizePixels: Record<PetSize, number> = {
   large: 136,
+  medium: 112,
+  small: 88,
 };
-const WAVE_DURATION_MS = 820;
+const waveDurationMs = 820;
 
 export type CodeTwoPetAppearance = Pick<
   AppearanceSettings,
@@ -31,7 +28,7 @@ export const CodeTwoPetSprite = ({
   animation,
   size,
   title,
-  src = PET_SPRITESHEET,
+  src = petSpritesheet,
   spriteVersionNumber = 2,
   playing = true,
   frame,
@@ -43,19 +40,17 @@ export const CodeTwoPetSprite = ({
   readonly spriteVersionNumber?: number;
   readonly playing?: boolean;
   readonly frame?: number;
-}) => {
-  return (
-    <PetX
-      src={src}
-      spriteVersionNumber={spriteVersionNumber}
-      animation={animation}
-      size={size}
-      title={title}
-      playing={playing}
-      frame={frame}
-    />
-  );
-}
+}) => (
+  <PetX
+    src={src}
+    spriteVersionNumber={spriteVersionNumber}
+    animation={animation}
+    size={size}
+    title={title}
+    playing={playing}
+    frame={frame}
+  />
+);
 
 export const CodeTwoPet = ({
   animation,
@@ -74,19 +69,22 @@ export const CodeTwoPet = ({
 
   useEffect(
     () => () => {
-      if (waveTimer.current !== undefined)
+      if (waveTimer.current !== undefined) {
         window.clearTimeout(waveTimer.current);
+      }
     },
     []
   );
 
   const greet = () => {
-    if (waveTimer.current !== undefined) window.clearTimeout(waveTimer.current);
+    if (waveTimer.current !== undefined) {
+      window.clearTimeout(waveTimer.current);
+    }
     setWave((value) => value + 1);
     waveTimer.current = window.setTimeout(() => {
       waveTimer.current = undefined;
       setWave(0);
-    }, WAVE_DURATION_MS);
+    }, waveDurationMs);
   };
 
   const activeAnimation =
@@ -114,11 +112,11 @@ export const CodeTwoPet = ({
         <CodeTwoPetSprite
           key={`${appearance.petSource}-${appearance.petId}-${activeAnimation}-${wave}`}
           animation={activeAnimation}
-          size={PET_SIZE_PIXELS[appearance.petSize]}
+          size={petSizePixels[appearance.petSize]}
           src={spritesheetUrl}
           title={appearance.petName || t("pet.label")}
         />
       </TooltipButton>
     </section>
   );
-}
+};

@@ -1,16 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  MEMORY_PRESET_POLICY,
+  memoryPresetPolicy,
   escalationNeeded,
   nextSceneInRing,
   sceneCollaborationChoice,
   sceneCustomized,
   sceneTitle,
   softApplyPending,
-  type LivePosture,
-  type SceneInfo,
 } from "../src/session/scene";
+import type { LivePosture, SceneInfo } from "../src/session/scene";
 
 function scene(overrides: Partial<SceneInfo> = {}): SceneInfo {
   return {
@@ -58,7 +57,7 @@ describe("sceneCustomized", () => {
     expect(
       sceneCustomized(s, { ...live, memoryRead: "allow", memoryWrite: "deny" })
     ).toBe(true);
-    expect(MEMORY_PRESET_POLICY.learn_only).toEqual({
+    expect(memoryPresetPolicy.learn_only).toEqual({
       read: "deny",
       write: "allow",
     });

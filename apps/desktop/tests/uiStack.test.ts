@@ -4,14 +4,17 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
-const sourceFiles = (directory: string): string[] =>
-  readdirSync(resolve(root, directory), { withFileTypes: true }).flatMap(
+const sourceFiles = (directory: string): string[] => {
+  return readdirSync(resolve(root, directory), { withFileTypes: true }).flatMap(
     (entry) => {
       const relative = `${directory}/${entry.name}`;
-      if (entry.isDirectory()) return sourceFiles(relative);
-      return /\.tsx?$/.test(entry.name) ? [relative] : [];
+      if (entry.isDirectory()) {
+        return sourceFiles(relative);
+      }
+      return /\.tsx?$/u.test(entry.name) ? [relative] : [];
     }
   );
+};
 
 describe("desktop UI stack", () => {
   test("configures shadcn for Base UI", () => {

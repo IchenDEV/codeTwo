@@ -1,6 +1,12 @@
-import { PLUGIN_UI_SLOT_IDS } from "../bridge";
+import { pluginUiSlotIds } from "../bridge";
+import type {
+  PluginConnectorContribution,
+  PluginInfo,
+  PluginLanguageServer,
+  PluginUiContribution,
+  PluginUiSlotId,
+} from "../bridge";
 import { pluginUiComponentId } from "../pluginModel";
-import type {PluginConnectorContribution, PluginInfo, PluginLanguageServer, PluginUiContribution, PluginUiSlotId} from "../bridge";
 import type { PluginManagerComponent, PluginManagerPlugin } from "./types";
 
 export interface ActivePluginUiContribution extends PluginUiContribution {
@@ -31,7 +37,8 @@ function activeBundle(
   }
   const managed = plugins.find((plugin) => plugin.id === `bundle:${bundle.id}`);
   return (
-    managed == null ||
+    managed === null ||
+    managed === undefined ||
     (managed.state.effectiveEnabled && managed.state.status === "active")
   );
 }
@@ -42,7 +49,7 @@ export function activePluginUiContributions(
   components: PluginManagerComponent[] = []
 ): ActivePluginUiContributionsBySlot {
   const bySlot = Object.fromEntries(
-    PLUGIN_UI_SLOT_IDS.map((slot) => [slot, []])
+    pluginUiSlotIds.map((slot) => [slot, []])
   ) as unknown as ActivePluginUiContributionsBySlot;
   const componentById = new Map(
     components.map((component) => [component.id, component])
@@ -82,14 +89,20 @@ export function activePluginLanguageServers(
 ): ActivePluginLanguageServer[] {
   return bundles
     .filter((bundle) => activeBundle(bundle, plugins))
-    .flatMap((bundle) => bundle.lsp_servers.map((server) => ({
-        ...server,
-        pluginId: bundle.id,
-        pluginName: bundle.name,
-      }))
-    )
-    .sort((left, right) => left.pluginId.localeCompare(right.pluginId) ||
+    .flatMap((bundle) => {
+      return bundle.lsp_servers.map((server) => {
+        return {
+          ...server,
+          pluginId: bundle.id,
+          pluginName: bundle.name,
+        };
+      });
+    })
+    .sort((left, right) => {
+      return (
+        left.pluginId.localeCompare(right.pluginId) ||
         left.id.localeCompare(right.id)
+      );
     });
 }
 
@@ -99,12 +112,18 @@ export function activePluginConnectorContributions(
 ): ActivePluginConnectorContribution[] {
   return bundles
     .filter((bundle) => activeBundle(bundle, plugins))
-    .flatMap((bundle) => bundle.connector_contributions.map((contribution) => ({
-        ...contribution,
-        pluginId: bundle.id,
-      }))
-    )
-    .sort((left, right) => left.pluginId.localeCompare(right.pluginId) ||
+    .flatMap((bundle) => {
+      return bundle.connector_contributions.map((contribution) => {
+        return {
+          ...contribution,
+          pluginId: bundle.id,
+        };
+      });
+    })
+    .sort((left, right) => {
+      return (
+        left.pluginId.localeCompare(right.pluginId) ||
         left.id.localeCompare(right.id)
+      );
     });
 }

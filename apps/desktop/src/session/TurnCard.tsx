@@ -20,28 +20,23 @@ import {
   Terminal,
   Wrench,
 } from "@/components/ui/icons";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import {
   agentActivityState,
   deriveAgentRoster,
   isAgentActivityTool,
-  type AgentActivity,
-  type AgentActivityState,
 } from "./agentActivity";
+import type { AgentActivity, AgentActivityState } from "./agentActivity";
 import {
   canvasExportDataUrl,
   collapsedPrompt,
   isLongPrompt,
   parseCanvasHistoryPrompt,
-  type CanvasHistoryMarker,
 } from "./promptPreview";
-import {
-  isRunning,
-  type PromptImage,
-  type ToolEntry,
-  type Turn,
-} from "./turns";
+import type { CanvasHistoryMarker } from "./promptPreview";
+import { isRunning } from "./turns";
+import type { PromptImage, ToolEntry, Turn } from "./turns";
 import {
   canvasGetSnapshot,
   getArtifact,
@@ -49,9 +44,8 @@ import {
   openExternal,
   revealArtifact,
   saveArtifactAs,
-  type ArtifactRef,
-  type CanvasSnapshot,
 } from "../bridge";
+import type { ArtifactReference, CanvasSnapshot } from "../bridge";
 import { StatusBadge } from "@/components/business/status-badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
@@ -70,16 +64,19 @@ import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { useToast } from "@/ui/toast";
-import { MarkdownContent, type BuiltinLinkActions } from "./MarkdownContent";
+import { MarkdownContent } from "./MarkdownContent";
+import type { BuiltinLinkActions } from "./MarkdownContent";
 
-const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
-const SEARCH_TOOL_PATTERN = /\b(?:search|searched|find|found|grep|rg)\b/i;
-const READ_TOOL_PATTERN = /\b(?:read|reading|open|view|inspect)\b/i;
-const COMMAND_TOOL_PATTERN =
-  /\b(?:command|exec|execute|run|shell|terminal|test)\b/i;
+const emptyPromptImages: PromptImage[] = [];
+const searchToolPattern = /\b(?:search|searched|find|found|grep|rg)\b/iu;
+const readToolPattern = /\b(?:read|reading|open|view|inspect)\b/iu;
+const commandToolPattern =
+  /\b(?:command|exec|execute|run|shell|terminal|test)\b/iu;
 
 function duration(t: Turn): string | null {
-  if (!t.endedAt) return null;
+  if (!t.endedAt) {
+    return null;
+  }
   const s = Math.max(0, Math.round((t.endedAt - t.startedAt) / 1000));
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
@@ -94,31 +91,39 @@ const TurnActionButton = ({
   readonly label: string;
   readonly onClick: () => void;
   readonly children: React.ReactNode;
-}) => {
-  return (
-    <TooltipButton
-      label={label}
-      variant="ghost"
-      size="icon-xs"
-      className="text-muted-foreground"
-      onClick={onClick}
-    >
-      {children}
-    </TooltipButton>
-  );
-}
+}) => (
+  <TooltipButton
+    label={label}
+    variant="ghost"
+    size="icon-xs"
+    className="text-muted-foreground"
+    onClick={onClick}
+  >
+    {children}
+  </TooltipButton>
+);
 
 function toolStatusDot(status: string): string {
-  if (status === "completed") return "bg-success";
-  if (status === "failed") return "bg-destructive";
+  if (status === "completed") {
+    return "bg-success";
+  }
+  if (status === "failed") {
+    return "bg-destructive";
+  }
   return "bg-warning";
 }
 
 function toolIcon(tool: ToolEntry) {
   const signal = `${tool.kind ?? ""} ${tool.title}`;
-  if (SEARCH_TOOL_PATTERN.test(signal)) return Search;
-  if (READ_TOOL_PATTERN.test(signal)) return BookOpen;
-  if (COMMAND_TOOL_PATTERN.test(signal)) return Terminal;
+  if (searchToolPattern.test(signal)) {
+    return Search;
+  }
+  if (readToolPattern.test(signal)) {
+    return BookOpen;
+  }
+  if (commandToolPattern.test(signal)) {
+    return Terminal;
+  }
   return Wrench;
 }
 
@@ -127,8 +132,12 @@ function toolHasOutput(tool: ToolEntry): boolean {
 }
 
 function prettySize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -140,10 +149,14 @@ function promptTextWithoutImageMarkers(
   const markers = new Set<string>();
   for (const image of images) {
     markers.add(`[attachment:${image.id}]`);
-    if (image.name) markers.add(`[image:${image.name}]`);
+    if (image.name) {
+      markers.add(`[image:${image.name}]`);
+    }
   }
-  for (const marker of markers) visible = visible.split(marker).join("");
-  return visible.replace(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
+  for (const marker of markers) {
+    visible = visible.split(marker).join("");
+  }
+  return visible.replace(/\n(?:[ \t]*\n){2,}/gu, "\n\n").trim();
 }
 
 const PromptImageThumbnail = ({ image }: { readonly image: PromptImage }) => {
@@ -152,17 +165,23 @@ const PromptImageThumbnail = ({ image }: { readonly image: PromptImage }) => {
   > | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (image.previewDataUrl) return;
-    let alive = true;
+    if (image.previewDataUrl) {
+      return;
+    }
+    let isAlive = true;
     void getPromptImage(image.id)
       .then((capture) => {
-        if (alive) setLoaded(capture);
+        if (isAlive) {
+          setLoaded(capture);
+        }
       })
       .catch(() => {
-        if (alive) setFailed(true);
+        if (isAlive) {
+          setFailed(true);
+        }
       });
     return () => {
-      alive = false;
+      isAlive = false;
     };
   }, [image.id, image.previewDataUrl]);
 
@@ -196,17 +215,16 @@ const PromptImageThumbnail = ({ image }: { readonly image: PromptImage }) => {
           <span className="truncate">{name}</span>
         </div>
       ) : (
-        <div
-          role="status"
+        <output
           aria-label={`Loading ${name}`}
           className="text-muted-foreground px-3 py-8"
         >
           <Spinner />
-        </div>
+        </output>
       )}
     </figure>
   );
-}
+};
 
 export function safeResourceLink(
   uri: string
@@ -220,22 +238,28 @@ export function safeResourceLink(
     ) {
       return null;
     }
-    return { uri: parsed.toString(), host: parsed.host };
+    return { host: parsed.host, uri: parsed.toString() };
   } catch {
     return null;
   }
 }
 
-const ArtifactImage = ({ artifact }: { readonly artifact: ArtifactRef }) => {
+const ArtifactImage = ({
+  artifact,
+}: {
+  readonly artifact: ArtifactReference;
+}) => {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   useEffect(() => {
-    let alive = true;
+    let isAlive = true;
     let objectUrl: string | null = null;
     void getArtifact(artifact.id)
       .then((bytes) => {
-        if (!alive) return;
+        if (!isAlive) {
+          return;
+        }
         objectUrl = URL.createObjectURL(
           new Blob([bytes.slice().buffer as ArrayBuffer], {
             type: artifact.mime_type,
@@ -243,10 +267,12 @@ const ArtifactImage = ({ artifact }: { readonly artifact: ArtifactRef }) => {
         );
         setUrl(objectUrl);
       })
-      .catch(() => alive && setError(true));
+      .catch(() => isAlive && setError(true));
     return () => {
-      alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      isAlive = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
   }, [artifact.id, artifact.mime_type]);
 
@@ -307,11 +333,13 @@ const ArtifactImage = ({ artifact }: { readonly artifact: ArtifactRef }) => {
         >
           <FolderOpen className="size-3.5" />
         </TooltipButton>
-        {actionError ? <span className="text-destructive basis-full">{actionError}</span> : null}
+        {actionError ? (
+          <span className="text-destructive basis-full">{actionError}</span>
+        ) : null}
       </figcaption>
     </figure>
   );
-}
+};
 
 const ToolCallBlock = ({
   tool,
@@ -327,7 +355,9 @@ const ToolCallBlock = ({
     output.type === "image" ? [output.artifact] : []
   );
   const resourceLinks = (tool.outputs ?? []).flatMap((output) => {
-    if (output.type !== "resource_link") return [];
+    if (output.type !== "resource_link") {
+      return [];
+    }
     const safe = safeResourceLink(output.uri);
     return safe ? [{ ...output, ...safe }] : [];
   });
@@ -459,7 +489,7 @@ const ToolCallBlock = ({
       </CollapsibleContent>
     </Collapsible>
   );
-}
+};
 
 const ToolCallGroup = ({ tools }: { readonly tools: ToolEntry[] }) => {
   const t = useT();
@@ -469,19 +499,22 @@ const ToolCallGroup = ({ tools }: { readonly tools: ToolEntry[] }) => {
       status = tool.status;
       break;
     }
-    if (status === "completed" && tool.status !== "completed")
+    if (status === "completed" && tool.status !== "completed") {
       status = tool.status;
+    }
   }
-  const active = status !== "completed" && status !== "failed";
+  const isActive = status !== "completed" && status !== "failed";
   const latest = tools[tools.length - 1];
   const LatestIcon = toolIcon(latest);
   const history = toolHasOutput(latest) ? tools : tools.slice(0, -1);
-  const historyIsLong = history.length > 6;
-  const [open, setOpen] = useState(active);
+  const isHistoryIsLong = history.length > 6;
+  const [open, setOpen] = useState(isActive);
 
   useEffect(() => {
-    if (active) setOpen(true);
-  }, [active, tools.length]);
+    if (isActive) {
+      setOpen(true);
+    }
+  }, [isActive, tools.length]);
 
   return (
     <Collapsible
@@ -513,7 +546,7 @@ const ToolCallGroup = ({ tools }: { readonly tools: ToolEntry[] }) => {
             <CircleAlert className="size-3.5" aria-hidden />
             {status}
           </span>
-        ) : active ? (
+        ) : isActive ? (
           <span
             className={cn(
               "size-1.5 shrink-0 rounded-full",
@@ -531,10 +564,10 @@ const ToolCallGroup = ({ tools }: { readonly tools: ToolEntry[] }) => {
         <div
           className={cn(
             "max-h-56 min-w-0 overflow-y-auto overscroll-contain py-1 ps-5 pe-2",
-            historyIsLong && "tool-call-history--faded pb-8"
+            isHistoryIsLong && "tool-call-history--faded pb-8"
           )}
           data-tool-call-history
-          data-faded={historyIsLong || undefined}
+          data-faded={isHistoryIsLong || undefined}
         >
           {history.map((tool) => (
             <ToolCallBlock key={tool.id} tool={tool} compact />
@@ -543,12 +576,11 @@ const ToolCallGroup = ({ tools }: { readonly tools: ToolEntry[] }) => {
       </CollapsibleContent>
     </Collapsible>
   );
-}
+};
 
 type RenderBlock =
   { kind: "text"; text: string } | { kind: "tools"; tools: ToolEntry[] };
 
-/** Join adjacent streamed chunks and tool runs while retaining their exact event boundaries. */
 function orderedBlocks(turn: Turn): RenderBlock[] {
   const tools = new Map(
     turn.tools
@@ -559,26 +591,37 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
   const blocks: RenderBlock[] = [];
   const appendTool = (tool: ToolEntry) => {
     const tail = blocks[blocks.length - 1];
-    if (tail?.kind === "tools") tail.tools.push(tool);
-    else blocks.push({ kind: "tools", tools: [tool] });
+    if (tail?.kind === "tools") {
+      tail.tools.push(tool);
+    } else {
+      blocks.push({ kind: "tools", tools: [tool] });
+    }
   };
   for (const entry of turn.content ?? []) {
     if (entry.kind === "text") {
       const tail = blocks[blocks.length - 1];
-      if (tail?.kind === "text") tail.text += entry.text;
-      else blocks.push({ kind: "text", text: entry.text });
+      if (tail?.kind === "text") {
+        tail.text += entry.text;
+      } else {
+        blocks.push({ kind: "text", text: entry.text });
+      }
       continue;
     }
     const tool = tools.get(entry.toolId);
-    if (!tool || seenTools.has(tool.id)) continue;
+    if (!tool || seenTools.has(tool.id)) {
+      continue;
+    }
     seenTools.add(tool.id);
     appendTool(tool);
   }
   // Compatibility for turns produced by older renderers and manually constructed fixtures.
-  if (blocks.length === 0 && turn.text)
+  if (blocks.length === 0 && turn.text) {
     blocks.push({ kind: "text", text: turn.text });
+  }
   for (const tool of tools.values()) {
-    if (!seenTools.has(tool.id)) appendTool(tool);
+    if (!seenTools.has(tool.id)) {
+      appendTool(tool);
+    }
   }
   return blocks;
 }
@@ -594,7 +637,9 @@ function downloadCanvasPng(
   const exportItem =
     snapshot?.exports.find((item) => item.kind === "overview") ??
     snapshot?.exports[0];
-  if (!exportItem || typeof document === "undefined") return;
+  if (!exportItem || typeof document === "undefined") {
+    return;
+  }
   const anchor = document.createElement("a");
   anchor.href = canvasExportDataUrl(exportItem);
   anchor.download = `${canvas.id}-${canvas.revision}.png`;
@@ -602,7 +647,9 @@ function downloadCanvasPng(
 }
 
 function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    return;
+  }
   window.dispatchEvent(
     new CustomEvent("codetwo-canvas-duplicate", {
       detail: { id: canvas.id, revision: canvas.revision },
@@ -610,7 +657,9 @@ function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
   );
 }
 
-/** A collapsible group of secondary detail (agents / thinking / plan / memory). */
+/**
+A collapsible group of secondary detail (agents / thinking / plan / memory).
+*/
 const Detail = ({
   icon: Icon,
   label,
@@ -626,7 +675,9 @@ const Detail = ({
   readonly wide?: boolean;
   readonly defaultOpen?: boolean;
 }) => {
-  if (count === 0) return null;
+  if (count === 0) {
+    return null;
+  }
   return (
     <Collapsible
       defaultOpen={defaultOpen}
@@ -645,7 +696,7 @@ const Detail = ({
       <CollapsibleContent className="py-1 ps-4">{children}</CollapsibleContent>
     </Collapsible>
   );
-}
+};
 
 function agentStatusLabel(
   state: AgentActivityState,
@@ -655,7 +706,9 @@ function agentStatusLabel(
 }
 
 function agentElapsed(agent: AgentActivity, now: number): string | null {
-  if (agent.startedAt === undefined) return null;
+  if (agent.startedAt === undefined) {
+    return null;
+  }
   const totalSeconds = Math.max(
     0,
     Math.floor(((agent.endedAt ?? now) - agent.startedAt) / 1000)
@@ -663,8 +716,12 @@ function agentElapsed(agent: AgentActivity, now: number): string | null {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
   return `${seconds}s`;
 }
 
@@ -679,7 +736,7 @@ const AgentStateIcon = ({ state }: { readonly state: AgentActivityState }) => {
     return <CircleAlert className="text-destructive size-4" aria-hidden />;
   }
   return <Clock3 className="text-warning size-4" aria-hidden />;
-}
+};
 
 const AgentRosterSection = ({
   agents,
@@ -691,7 +748,9 @@ const AgentRosterSection = ({
   readonly now: number;
 }) => {
   const t = useT();
-  if (agents.length === 0) return null;
+  if (agents.length === 0) {
+    return null;
+  }
   return (
     <div role="group" aria-label={label}>
       <div className="text-metadata text-muted-foreground flex items-center gap-2 px-2 py-1 font-medium tracking-wide uppercase">
@@ -721,15 +780,19 @@ const AgentRosterSection = ({
                     {agent.role}
                   </span>
                 </div>
-                {agent.task ? <p className="text-callout text-muted-foreground mt-0.5 line-clamp-2">
+                {agent.task ? (
+                  <p className="text-callout text-muted-foreground mt-0.5 line-clamp-2">
                     {agent.task}
-                  </p> : null}
+                  </p>
+                ) : null}
               </div>
               <div className="text-metadata text-muted-foreground shrink-0 text-right">
                 <span className="block" aria-live="polite" aria-atomic="true">
                   {agentStatusLabel(state, t)}
                 </span>
-                {elapsed ? <time className="block tabular-nums">{elapsed}</time> : null}
+                {elapsed ? (
+                  <time className="block tabular-nums">{elapsed}</time>
+                ) : null}
               </div>
             </li>
           );
@@ -737,9 +800,13 @@ const AgentRosterSection = ({
       </ul>
     </div>
   );
-}
+};
 
-const AgentRoster = ({ agents }: { readonly agents: readonly AgentActivity[] }) => {
+const AgentRoster = ({
+  agents,
+}: {
+  readonly agents: readonly AgentActivity[];
+}) => {
   const t = useT();
   const active = agents.filter((agent) => {
     const state = agentActivityState(agent.status);
@@ -751,7 +818,9 @@ const AgentRoster = ({ agents }: { readonly agents: readonly AgentActivity[] }) 
   });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (active.length === 0) return;
+    if (active.length === 0) {
+      return;
+    }
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, [active.length]);
@@ -770,7 +839,7 @@ const AgentRoster = ({ agents }: { readonly agents: readonly AgentActivity[] }) 
       />
     </div>
   );
-}
+};
 
 /**
  * One prompt → response cycle.
@@ -789,11 +858,17 @@ export const TurnCard = memo(function TurnCard({
 }: {
   readonly turn: Turn;
   readonly canvasSnapshotLoader?: typeof canvasGetSnapshot;
-  /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
+  /**
+  Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden.
+  */
   readonly onSaveTemplate?: (promptText: string) => void;
-  /** Native context-menu actions for links rendered inside the assistant response. */
+  /**
+  Native context-menu actions for links rendered inside the assistant response.
+  */
   readonly linkActions?: BuiltinLinkActions;
-  /** Starts a new task whose referenced context ends at this completed turn. */
+  /**
+  Starts a new task whose referenced context ends at this completed turn.
+  */
   readonly onFork?: (turn: Turn) => void;
 }) {
   const t = useT();
@@ -801,34 +876,29 @@ export const TurnCard = memo(function TurnCard({
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [copied, setCopied] = useState<CopyTarget | null>(null);
-  const running = isRunning(turn);
-  const queued = turn.delivery === "queued";
+  const isTurnRunning = isRunning(turn);
+  const isQueued = turn.delivery === "queued";
   const dur = duration(turn);
-  const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
+  const agents = deriveAgentRoster(turn.tools);
   const activeAgentCount = agents.filter((agent) => {
     const state = agentActivityState(agent.status);
     return state === "active" || state === "pending";
   }).length;
-  const blocks = useMemo(
-    () => orderedBlocks(turn),
-    [turn.content, turn.text, turn.tools]
+  const blocks = orderedBlocks(turn);
+  const history = parseCanvasHistoryPrompt(turn.prompt);
+  const promptImages = turn.promptImages ?? emptyPromptImages;
+  const promptText = promptTextWithoutImageMarkers(
+    history.visiblePrompt,
+    promptImages
   );
-  const history = useMemo(
-    () => parseCanvasHistoryPrompt(turn.prompt),
-    [turn.prompt]
-  );
-  const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
-  const promptText = useMemo(
-    () => promptTextWithoutImageMarkers(history.visiblePrompt, promptImages),
-    [history.visiblePrompt, promptImages]
-  );
-  const clock = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }),
-    [locale]
-  );
+  const clock = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   useEffect(() => {
-    if (!copied) return;
+    if (!copied) {
+      return;
+    }
     const timeout = window.setTimeout(() => setCopied(null), 1_500);
     return () => window.clearTimeout(timeout);
   }, [copied]);
@@ -842,16 +912,18 @@ export const TurnCard = memo(function TurnCard({
       .then(() => setCopied(target))
       .catch(() => toast(t("turn.copyFailed"), "error"));
   };
-  const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
+  const historySnapshots = new Map<string, CanvasSnapshot>();
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>(
     {}
   );
   useEffect(() => {
-    let cancelled = false;
+    let isCancelled = false;
     for (const canvas of history.canvases) {
       void canvasSnapshotLoader(canvas.id, canvas.revision)
         .then((snapshot) => {
-          if (cancelled || !snapshot) return;
+          if (isCancelled || !snapshot) {
+            return;
+          }
           historySnapshots.set(canvasKey(canvas), snapshot);
           setSnapshots((current) => ({
             ...current,
@@ -863,26 +935,32 @@ export const TurnCard = memo(function TurnCard({
         });
     }
     return () => {
-      cancelled = true;
+      isCancelled = true;
       historySnapshots.clear();
     };
   }, [canvasSnapshotLoader, history.canvases, historySnapshots]);
   const hasDetail =
     agents.length + turn.thoughts.length + (turn.memory?.items.length ?? 0) > 0;
-  const promptIsLong = isLongPrompt(promptText);
+  const isPromptIsLong = isLongPrompt(promptText);
   const visiblePrompt =
-    promptIsLong && !promptExpanded ? collapsedPrompt(promptText) : promptText;
+    isPromptIsLong && !promptExpanded
+      ? collapsedPrompt(promptText)
+      : promptText;
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
     // conversation advancing rather than the list redrawing.
-    <article aria-busy={running ? !queued : null} className="animate-rise-in py-7">
+    <article
+      aria-busy={isTurnRunning ? !isQueued : undefined}
+      className="animate-rise-in py-7"
+    >
       {/* prompt */}
       <div className="group/prompt flex flex-col items-end">
         <div className="flex items-start justify-end gap-1">
           {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
               button so future turn actions slot in beside "Save as template…". */}
-          {onSaveTemplate ? <DropdownMenu>
+          {onSaveTemplate ? (
+            <DropdownMenu>
               <DropdownMenuTrigger
                 render={
                   <Button
@@ -903,7 +981,8 @@ export const TurnCard = memo(function TurnCard({
                   {t("templateFrom.saveAs")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
-            </DropdownMenu> : null}
+            </DropdownMenu>
+          ) : null}
           <div className="rounded-module bg-secondary text-prose text-secondary-foreground max-w-[86%] px-3.5 py-2">
             {promptImages.length > 0 && (
               <div
@@ -922,13 +1001,18 @@ export const TurnCard = memo(function TurnCard({
                 ))}
               </div>
             )}
-            {visiblePrompt ? <p className="break-words whitespace-pre-wrap">{visiblePrompt}</p> : null}
-            {turn.delivery ? <p className="text-metadata text-muted-foreground mt-1.5 font-medium uppercase">
+            {visiblePrompt ? (
+              <p className="break-words whitespace-pre-wrap">{visiblePrompt}</p>
+            ) : null}
+            {turn.delivery ? (
+              <p className="text-metadata text-muted-foreground mt-1.5 font-medium uppercase">
                 {turn.delivery === "queued"
                   ? t("turn.queued", { position: turn.queuePosition ?? 1 })
                   : t("turn.steered")}
-              </p> : null}
-            {promptIsLong ? <Button
+              </p>
+            ) : null}
+            {isPromptIsLong ? (
+              <Button
                 type="button"
                 variant="ghost"
                 size="compact"
@@ -943,7 +1027,8 @@ export const TurnCard = memo(function TurnCard({
                   <ChevronDown className="size-3" aria-hidden />
                 )}
                 {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
-              </Button> : null}
+              </Button>
+            ) : null}
           </div>
         </div>
         <div
@@ -953,7 +1038,8 @@ export const TurnCard = memo(function TurnCard({
           <time dateTime={new Date(turn.startedAt).toISOString()}>
             {clock.format(turn.startedAt)}
           </time>
-          {promptText ? <TurnActionButton
+          {promptText ? (
+            <TurnActionButton
               label={t(
                 copied === "prompt" ? "turn.copiedPrompt" : "turn.copyPrompt"
               )}
@@ -964,7 +1050,8 @@ export const TurnCard = memo(function TurnCard({
               ) : (
                 <Copy aria-hidden />
               )}
-            </TurnActionButton> : null}
+            </TurnActionButton>
+          ) : null}
         </div>
       </div>
 
@@ -981,11 +1068,13 @@ export const TurnCard = memo(function TurnCard({
                 className="canvas-ui-module bg-fill-quiet text-callout border p-2.5"
               >
                 <div className="flex items-start gap-2">
-                  {thumbnail ? <img
+                  {thumbnail ? (
+                    <img
                       src={canvasExportDataUrl(thumbnail)}
                       alt={`${canvas.title} thumbnail`}
                       className="rounded-control size-14 shrink-0 border object-cover"
-                    /> : null}
+                    />
+                  ) : null}
                   <div className="min-w-0 flex-1">
                     <h3 className="text-foreground truncate font-medium">
                       {canvas.title}
@@ -1039,7 +1128,9 @@ export const TurnCard = memo(function TurnCard({
               <MarkdownContent
                 key={`text-${index}`}
                 text={block.text}
-                streaming={running ? index === blocks.length - 1 : null}
+                streaming={
+                  isTurnRunning ? index === blocks.length - 1 : undefined
+                }
                 linkActions={linkActions}
               />
             ) : block.tools.length === 1 ? (
@@ -1051,8 +1142,8 @@ export const TurnCard = memo(function TurnCard({
         </div>
       ) : null}
 
-      {running && !queued && !turn.text ? <p
-          role="status"
+      {isTurnRunning && !isQueued && !turn.text ? (
+        <output
           aria-live="polite"
           className="text-body text-muted-foreground mt-3.5 flex items-center gap-2"
         >
@@ -1061,19 +1152,23 @@ export const TurnCard = memo(function TurnCard({
             aria-hidden="true"
           />
           {t("turn.working")}
-        </p> : null}
+        </output>
+      ) : null}
 
-      {turn.error ? <p className="rounded-control bg-destructive/10 text-body text-destructive mt-3.5 flex items-start gap-1.5 px-3 py-2">
+      {turn.error ? (
+        <p className="rounded-control bg-destructive/10 text-body text-destructive mt-3.5 flex items-start gap-1.5 px-3 py-2">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
-        </p> : null}
+        </p>
+      ) : null}
 
       {/* secondary detail + outcome, on one quiet line */}
-      {(hasDetail ||
-        dur ||
-        turn.stopReason ||
-        queued ||
-        (running && turn.text)) ? <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      {hasDetail ||
+      dur ||
+      turn.stopReason ||
+      isQueued ||
+      (isTurnRunning && turn.text) ? (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
           <Detail
             icon={Bot}
             label={t("turn.agents")}
@@ -1103,7 +1198,8 @@ export const TurnCard = memo(function TurnCard({
             label={t("turn.memory")}
             count={turn.memory?.items.length ?? 0}
           >
-            {turn.memory ? <div className="text-callout flex flex-col gap-2">
+            {turn.memory ? (
+              <div className="text-callout flex flex-col gap-2">
                 <p className="text-muted-foreground">
                   {t("turn.memoryTokens", {
                     count: new Intl.NumberFormat(locale).format(
@@ -1137,15 +1233,16 @@ export const TurnCard = memo(function TurnCard({
                     );
                   })}
                 </ul>
-              </div> : null}
+              </div>
+            ) : null}
           </Detail>
 
           <span className="ms-auto flex shrink-0 items-center gap-1.5">
-            {queued ? (
+            {isQueued ? (
               <StatusBadge tone="neutral">
                 {t("turn.queued", { position: turn.queuePosition ?? 1 })}
               </StatusBadge>
-            ) : running ? (
+            ) : isTurnRunning ? (
               <StatusBadge tone="neutral">
                 <Spinner className="size-2.5" /> {t("turn.running")}
               </StatusBadge>
@@ -1156,13 +1253,17 @@ export const TurnCard = memo(function TurnCard({
                 <StatusBadge tone="neutral">{turn.stopReason}</StatusBadge>
               )
             )}
-            {dur ? <span className="text-metadata text-muted-foreground font-mono">
+            {dur ? (
+              <span className="text-metadata text-muted-foreground font-mono">
                 {dur}
-              </span> : null}
+              </span>
+            ) : null}
           </span>
-        </div> : null}
+        </div>
+      ) : null}
 
-      {!running && turn.text ? <div
+      {!isTurnRunning && turn.text ? (
+        <div
           data-turn-actions="response"
           className="text-callout text-muted-foreground mt-2 flex min-h-(--ds-control-mini) items-center gap-1"
         >
@@ -1180,18 +1281,21 @@ export const TurnCard = memo(function TurnCard({
               <Copy aria-hidden />
             )}
           </TurnActionButton>
-          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined ? <TurnActionButton
+          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined ? (
+            <TurnActionButton
               label={t("turn.fork")}
               onClick={() => onFork(turn)}
             >
               <GitFork aria-hidden />
-            </TurnActionButton> : null}
+            </TurnActionButton>
+          ) : null}
           <time
             dateTime={new Date(turn.endedAt ?? turn.startedAt).toISOString()}
           >
             {clock.format(turn.endedAt ?? turn.startedAt)}
           </time>
-        </div> : null}
+        </div>
+      ) : null}
     </article>
   );
 });

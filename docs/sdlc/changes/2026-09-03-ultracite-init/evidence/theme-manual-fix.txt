@@ -1,0 +1,30 @@
+Style migration progress (2026-09-04)
+
+House standards:
+- func-style: declaration
+- TSX concise JSX arrows (consistent-arrow-return-style off in tsx/jsx)
+- naming camelCase/PascalCase/snake_case + _unused + quoted wire keys
+- curated abbr Def/Ref/Dir→Definition/Reference/Directory
+- SCREAMING_SNAKE → camelCase
+
+src_errors 3647
+  369 unicorn/consistent-boolean-name
+  223 @typescript-eslint/strict-boolean-expressions
+  200 @typescript-eslint/no-unsafe-member-access
+  128 @typescript-eslint/no-unsafe-type-assertion
+   99 @typescript-eslint/naming-convention
+   88 react-doctor/no-effect-with-fresh-deps
+   83 react-hooks/exhaustive-deps
+   83 unicorn/consistent-arrow-return-style
+   80 @typescript-eslint/no-unsafe-assignment
+   75 react-hooks/todo
+   74 @typescript-eslint/no-unnecessary-condition
+   64 react-hooks/set-state-in-effect
+   61 @typescript-eslint/no-unsafe-call
+   61 react-doctor/only-export-components
+   55 github/no-then
+   53 unicorn/name-replacements
+   52 @typescript-eslint/max-params
+   47 unicorn/try-complexity
+   47 unicorn/prefer-await
+   46 @typescript-eslint/require-await

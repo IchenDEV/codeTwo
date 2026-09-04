@@ -44,7 +44,7 @@ describe("visualization frame", () => {
     await Promise.resolve();
     await flush();
     const iframe = rendered.container.querySelector("iframe");
-    const token = /const token="([^"]+)"/.exec(
+    const token = /const token="([^"]+)"/u.exec(
       iframe?.getAttribute("srcdoc") ?? ""
     )?.[1];
     let detail: unknown;

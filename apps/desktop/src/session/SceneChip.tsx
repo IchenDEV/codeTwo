@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/icons";
 
 import type { SessionConfig } from "./config";
-import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
+import { sceneTitle } from "./scene";
+import type { SceneInfo, SceneSource } from "./scene";
 import { exportSceneSkillMd } from "../bridge";
 import { useToast } from "../ui/toast";
 import { ControlChip as Chip } from "@/components/ui/control-chip";
@@ -38,7 +39,9 @@ import {
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
-/** Source pill naming where the scene came from (builtin / user / project / plugin). */
+/**
+Source pill naming where the scene came from (builtin / user / project / plugin).
+*/
 export const SourceBadge = ({ source }: { readonly source: SceneSource }) => {
   const t = useT();
   return (
@@ -49,7 +52,7 @@ export const SourceBadge = ({ source }: { readonly source: SceneSource }) => {
       {t(`scene.source.${source}` as "scene.source.builtin")}
     </Badge>
   );
-}
+};
 
 /**
  * Scene selection stays distinct from the session configuration row. Manual overrides still mark
@@ -67,7 +70,7 @@ export const SceneChip = ({ config }: { readonly config: SessionConfig }) => {
       : t("scene.auto")
     : sceneLabel;
   const surfaceLabel = t("scene.chip");
-  const partial = config.scenePendingFields.length > 0;
+  const isPartial = config.scenePendingFields.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -80,16 +83,20 @@ export const SceneChip = ({ config }: { readonly config: SessionConfig }) => {
           >
             <Clapperboard className="size-3.5 shrink-0" />
             <span className="max-w-36 truncate">{label}</span>
-            {config.sceneCustomized ? <span
+            {config.sceneCustomized ? (
+              <span
                 className="bg-warning size-1.5 shrink-0 rounded-full"
                 title={t("scene.customized")}
                 aria-label={t("scene.customized")}
-              /> : null}
-            {partial ? <span
+              />
+            ) : null}
+            {isPartial ? (
+              <span
                 className="bg-primary size-1.5 shrink-0 rounded-full"
                 title={t("scene.partial")}
                 aria-label={t("scene.partial")}
-              /> : null}
+              />
+            ) : null}
             <ChevronDown className="size-3 shrink-0 opacity-50" />
           </Chip>
         }
@@ -104,9 +111,15 @@ export const SceneChip = ({ config }: { readonly config: SessionConfig }) => {
             <span className="text-metadata text-muted-foreground min-w-0 flex-1 truncate">
               {surfaceLabel}
             </span>
-            {config.scenesEnabled && active ? <SourceBadge source={active.source} /> : null}
-            {config.autoScene ? <Badge variant="secondary">{t("scene.auto")}</Badge> : null}
-            {config.sceneCustomized ? <StatusBadge tone="warning">{t("scene.customized")}</StatusBadge> : null}
+            {config.scenesEnabled && active ? (
+              <SourceBadge source={active.source} />
+            ) : null}
+            {config.autoScene ? (
+              <Badge variant="secondary">{t("scene.auto")}</Badge>
+            ) : null}
+            {config.sceneCustomized ? (
+              <StatusBadge tone="warning">{t("scene.customized")}</StatusBadge>
+            ) : null}
           </div>
 
           <SelectableRow
@@ -166,7 +179,8 @@ export const SceneChip = ({ config }: { readonly config: SessionConfig }) => {
             {t("sceneEditor.manage")}
           </Button>
 
-          {partial ? <>
+          {isPartial ? (
+            <>
               <Separator className="mx-2 my-1.5 w-auto" />
               <div className="flex items-center gap-1.5 px-2 pt-0.5 pb-1">
                 <span className="text-callout text-muted-foreground min-w-0 flex-1">
@@ -187,14 +201,17 @@ export const SceneChip = ({ config }: { readonly config: SessionConfig }) => {
                   {t("scene.restart")}
                 </Button>
               </div>
-            </> : null}
+            </>
+          ) : null}
         </div>
       </PopoverContent>
     </Popover>
   );
-}
+};
 
-/** Full scene picker dialog: every resolved scene with description and source badge. */
+/**
+Full scene picker dialog: every resolved scene with description and source badge.
+*/
 export const ScenePicker = ({
   scenes,
   active,
@@ -209,7 +226,7 @@ export const ScenePicker = ({
   readonly scenes: SceneInfo[];
   readonly active: SceneInfo | null;
   readonly auto: boolean;
-  readonly onAuto: (enabled: boolean) => void;
+  readonly onAuto: (isEnabled: boolean) => void;
   readonly onScene: (reference: string | null) => void;
   readonly onCreate: () => void;
   readonly onEdit: (scene: SceneInfo) => void;
@@ -223,7 +240,9 @@ export const ScenePicker = ({
   // anchor — deliberately no native save-dialog plumbing for a plain text file.
   const exportSkill = async (scene: SceneInfo) => {
     const md = await exportSceneSkillMd(scene.reference);
-    if (md === null) return;
+    if (md === null) {
+      return;
+    }
     const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -331,7 +350,7 @@ export const ScenePicker = ({
       </DialogContent>
     </Dialog>
   );
-}
+};
 
 /**
  * The escalation confirmation (docs/reference/scenes.md §Security): a scene may never loosen permissions
@@ -359,8 +378,8 @@ export const SceneEscalationDialog = ({
           <DialogTitle>{t("scene.escalationTitle")}</DialogTitle>
           <DialogDescription>
             {t("scene.escalationBody", {
-              scene: sceneLabel,
               from: modeName(from),
+              scene: sceneLabel,
               to: modeName(to),
             })}
           </DialogDescription>
@@ -374,4 +393,4 @@ export const SceneEscalationDialog = ({
       </DialogContent>
     </Dialog>
   );
-}
+};

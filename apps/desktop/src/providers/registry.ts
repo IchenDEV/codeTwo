@@ -1,39 +1,38 @@
 import type { ProviderInfo } from "../bridge";
 
-const DEFAULT_RETRY_DELAYS_MS = [0, 250, 750] as const;
-const DEFAULT_ATTEMPT_TIMEOUT_MS = 7000;
+const defaultRetryDelaysMs = [0, 250, 750] as const;
+const defaultAttemptTimeoutMs = 7000;
 
 async function timeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return await new Promise<T>((resolve, reject) => {
     const timer = globalThis.setTimeout(() => {
       reject(new Error(`Provider detection timed out after ${timeoutMs}ms`));
     }, timeoutMs);
-    promise
-      .catch((error) => {
-        globalThis.clearTimeout(timer);
-        reject(error);
-      })
-      .then((value) => {
+    void promise.then(
+      (value) => {
         globalThis.clearTimeout(timer);
         resolve(value);
-      });
+      },
+      (error: unknown) => {
+        globalThis.clearTimeout(timer);
+        reject(error);
+      }
+    );
   });
 }
 
 async function pause(delayMs: number): Promise<void> {
-  delayMs > 0
-    ? await new Promise((resolve) => globalThis.setTimeout(resolve, delayMs))
-    : await Promise.resolve();
+  if (delayMs > 0) {
+    await new Promise((resolve) => {
+      globalThis.setTimeout(resolve, delayMs);
+    });
+  }
 }
 
-/**
- * Desktop RPC can race the native bridge during first paint. Bound every attempt and retry the
- * fixed provider catalog so one lost startup request cannot leave the picker empty forever.
- */
 export async function loadProviderRegistry(
   load: () => Promise<ProviderInfo[]>,
-  retryDelaysMs: readonly number[] = DEFAULT_RETRY_DELAYS_MS,
-  attemptTimeoutMs = DEFAULT_ATTEMPT_TIMEOUT_MS
+  retryDelaysMs: readonly number[] = defaultRetryDelaysMs,
+  attemptTimeoutMs = defaultAttemptTimeoutMs
 ): Promise<ProviderInfo[]> {
   let lastError: unknown = new Error("Provider detection did not run");
 

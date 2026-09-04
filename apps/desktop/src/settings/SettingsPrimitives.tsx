@@ -14,7 +14,9 @@ type RowProps = {
   readonly children: ReactNode;
 };
 
-/** Shared anatomy for every setting: description on the left, control on the right. */
+/**
+Shared anatomy for every setting: description on the left, control on the right.
+*/
 export const Row = ({
   icon,
   label,
@@ -23,45 +25,45 @@ export const Row = ({
   className,
   controlClassName,
   children,
-}: RowProps) => {
-  return (
-    <SettingRow
-      label={label}
-      description={hint}
-      leading={icon}
-      density={compact ? "compact" : "default"}
-      className={cn("settings-row", className)}
-      controlClassName={cn("settings-row-control", controlClassName)}
-    >
-      {children}
-    </SettingRow>
-  );
-}
+}: RowProps) => (
+  <SettingRow
+    label={label}
+    description={hint}
+    leading={icon}
+    density={compact ? "compact" : "default"}
+    className={cn("settings-row", className)}
+    controlClassName={cn("settings-row-control", controlClassName)}
+  >
+    {children}
+  </SettingRow>
+);
 
-/** Project settings share one trailing control lane so fields and actions stay on the same grid. */
-export const ProjectRow = (props: RowProps) => {
-  return (
-    <SettingRow
-      label={props.label}
-      description={props.hint}
-      leading={props.icon}
-      density={props.compact ? "compact" : "default"}
-      controlSize="wide"
-      className={cn("project-settings-row", props.className)}
-      controlClassName={cn("project-settings-control", props.controlClassName)}
-    >
-      {props.children}
-    </SettingRow>
-  );
-}
+/**
+Project settings share one trailing control lane so fields and actions stay on the same grid.
+*/
+export const ProjectRow = (props: RowProps) => (
+  <SettingRow
+    label={props.label}
+    description={props.hint}
+    leading={props.icon}
+    density={props.compact ? "compact" : "default"}
+    controlSize="wide"
+    className={cn("project-settings-row", props.className)}
+    controlClassName={cn("project-settings-control", props.controlClassName)}
+  >
+    {props.children}
+  </SettingRow>
+);
 
-export const GroupHeading = ({ children }: { readonly children: ReactNode }) => {
-  return (
-    <h3 className="pt-section text-metadata text-muted-foreground font-semibold tracking-wider uppercase">
-      {children}
-    </h3>
-  );
-}
+export const GroupHeading = ({
+  children,
+}: {
+  readonly children: ReactNode;
+}) => (
+  <h3 className="pt-section text-metadata text-muted-foreground font-semibold tracking-wider uppercase">
+    {children}
+  </h3>
+);
 
 export const Page = ({
   title,
@@ -71,10 +73,8 @@ export const Page = ({
   readonly title: string;
   readonly description?: string;
   readonly children: ReactNode;
-}) => {
-  return (
-    <SettingsPanel title={title} description={description}>
-      {children}
-    </SettingsPanel>
-  );
-}
+}) => (
+  <SettingsPanel title={title} description={description}>
+    {children}
+  </SettingsPanel>
+);

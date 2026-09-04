@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { CornerUpLeft, Plus, X } from "@/components/ui/icons";
 
 import { onPtyTitle, ptyDump, ptyKill } from "../bridge";
@@ -9,12 +9,14 @@ import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 import { TerminalPanel } from "./Terminal";
 
-function terminalId(sessionKey: string, slot: number, tmux: boolean): string {
-  return `${sessionKey}-${slot}${tmux ? "-tmux" : ""}`;
+function terminalId(sessionKey: string, slot: number, isTmux: boolean): string {
+  return `${sessionKey}-${slot}${isTmux ? "-tmux" : ""}`;
 }
 
 function terminalLabel(title: string | undefined, slot: number): string {
-  if (!title) return String(slot);
+  if (!title) {
+    return String(slot);
+  }
   return title.split("/").filter(Boolean).pop() ?? title;
 }
 
@@ -25,7 +27,9 @@ type TerminalDockContentProps = {
   readonly onSendText: (text: string) => void;
 };
 
-/** Terminal-specific tabs and lifecycle, rendered inside the generic Dock container. */
+/**
+Terminal-specific tabs and lifecycle, rendered inside the generic Dock container.
+*/
 export const TerminalDockContent = ({
   cwd,
   projectPath,
@@ -44,7 +48,9 @@ export const TerminalDockContent = ({
     setTitles({});
     void (async () => {
       stop = await onPtyTitle(({ id, title, project_path }) => {
-        if (project_path !== projectPath) return;
+        if (project_path !== projectPath) {
+          return;
+        }
         setTitles((current) => ({ ...current, [id]: title }));
       });
     })();
@@ -52,15 +58,19 @@ export const TerminalDockContent = ({
   }, [projectPath]);
 
   const activeId = terminalId(sessionKey, activeSlot, tmux);
-  const sendToAgent = useCallback(async () => {
+  const sendToAgent = async () => {
     const text = (await ptyDump(activeId, true)).trimEnd();
-    if (text) onSendText(text);
-  }, [activeId, onSendText]);
+    if (text) {
+      onSendText(text);
+    }
+  };
 
   function closeSlot(slot: number) {
     const remaining = slots.filter((candidate) => candidate !== slot);
     setSlots(remaining);
-    if (activeSlot === slot && remaining[0]) setActiveSlot(remaining[0]);
+    if (activeSlot === slot && remaining[0]) {
+      setActiveSlot(remaining[0]);
+    }
     void ptyKill(terminalId(sessionKey, slot, false));
     void ptyKill(terminalId(sessionKey, slot, true));
   }
@@ -155,4 +165,4 @@ export const TerminalDockContent = ({
       ))}
     </div>
   );
-}
+};

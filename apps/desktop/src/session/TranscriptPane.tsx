@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from "react";
+import { useRef } from "react";
+import type { ReactNode } from "react";
 import { ArrowDown } from "@/components/ui/icons";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 
@@ -20,20 +21,28 @@ interface TranscriptPaneProps {
   readonly hasEarlier: boolean;
   readonly loadingEarlier: boolean;
   readonly onLoadEarlier: (scroll: TranscriptScrollController) => void;
-  /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
+  /**
+  R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden.
+  */
   readonly onSaveTemplate?: (promptText: string) => void;
   readonly linkActions?: BuiltinLinkActions;
-  /** Durable source session used for scroll restoration. */
+  /**
+  Durable source session used for scroll restoration.
+  */
   readonly sessionId?: string | null;
   readonly onForkTurn?: (turn: Turn) => void;
   readonly onAddSelection: (text: string) => void;
   readonly onExplainSelection: (text: string) => void;
   readonly onAskSelectionInSideChat: (text: string) => void;
-  /** Host-rendered declarative plugin actions above the transcript. */
+  /**
+  Host-rendered declarative plugin actions above the transcript.
+  */
   readonly before?: ReactNode;
 }
 
-/** One transcript renderer shared by the main column and document-mode side panel. */
+/**
+One transcript renderer shared by the main column and document-mode side panel.
+*/
 export const TranscriptPane = ({
   sessionId,
   variant,
@@ -84,13 +93,10 @@ export const TranscriptPane = ({
         >
           {before}
           {loading ? (
-            <p
-              role="status"
-              className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12"
-            >
+            <output className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12">
               <ActivityOrb state="connecting" aria-hidden="true" />
               {t("session.loading")}
-            </p>
+            </output>
           ) : (
             <>
               {hasEarlier ? (
@@ -152,4 +158,4 @@ export const TranscriptPane = ({
       ) : null}
     </Root>
   );
-}
+};

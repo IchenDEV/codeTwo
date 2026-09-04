@@ -1,5 +1,3 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, extname, join } from "node:path";
 import Electrobun, {
   ApplicationMenu,
   BrowserView,
@@ -9,22 +7,9 @@ import Electrobun, {
   Screen,
   Utils,
 } from "electrobun/bun";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, extname, join } from "node:path";
 
-import {
-  nativeContextMenuAction,
-  nativeContextMenuConfig,
-} from "./contextMenuHost";
-import { NativeHost } from "./nativeHost";
-import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
-import { AppshotManager } from "./appshots";
-import { macOSApplicationMenu as macOSAppMenu } from "./applicationMenu";
-import {
-  configureMacOSWindowEffects,
-  performMacOSTitlebarDoubleClick,
-  setMacOSSystemBadgeCount,
-} from "./windowEffects";
-import { workspaceOpenCommand } from "./workspaceOpen";
-import { readSystemProfileAvatar } from "./systemProfile";
 import type {
   CodeTwoRPC,
   DesktopPetState,
@@ -34,6 +19,21 @@ import type {
   SaveDialogOptions,
   WorkspaceOpenTarget,
 } from "./rpc";
+import {
+  nativeContextMenuAction,
+  nativeContextMenuConfig,
+} from "./contextMenuHost";
+import { NativeHost } from "./nativeHost";
+import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
+import { AppshotManager } from "./appshots";
+import { macOSApplicationMenu } from "./applicationMenu";
+import {
+  configureMacOSWindowEffects,
+  performMacOSTitlebarDoubleClick,
+  setMacOSSystemBadgeCount,
+} from "./windowEffects";
+import { workspaceOpenCommand } from "./workspaceOpen";
+import { readSystemProfileAvatar } from "./systemProfile";
 
 function filterExtensions(filters: DialogFilter[] | undefined): string {
   const extensions = filters?.flatMap((filter) => filter.extensions) ?? [];
@@ -43,22 +43,22 @@ function filterExtensions(filters: DialogFilter[] | undefined): string {
 async function openDialog(options: OpenDialogOptions): Promise<string[]> {
   const selected = await Utils.openFileDialog({
     allowedFileTypes: filterExtensions(options.filters),
-    canChooseFiles: !options.directory,
-    canChooseDirectory: options.directory ?? false,
     allowsMultipleSelection: options.multiple ?? false,
+    canChooseDirectory: options.directory ?? false,
+    canChooseFiles: options.directory !== true,
   });
   return selected.filter(Boolean);
 }
 
 async function processText(
   command: string[],
-  environment?: Record<string, string>
+  env?: Record<string, string>
 ): Promise<string | null> {
   try {
     const process = Bun.spawn(command, {
-      stdout: "pipe",
+      env: { ...Bun.env, ...env },
       stderr: "ignore",
-      env: { ...Bun.env, ...environment },
+      stdout: "pipe",
     });
     const output = await new Response(process.stdout).text();
     return (await process.exited) === 0 ? output.trim() || null : null;
@@ -68,8 +68,12 @@ async function processText(
 }
 
 async function saveDialog(options: SaveDialogOptions): Promise<string | null> {
-  const defaultPath = options.defaultPath || "untitled";
-  const title = options.title || "Save";
+  const defaultPath =
+    options.defaultPath != null && options.defaultPath !== ""
+      ? options.defaultPath
+      : "untitled";
+  const title =
+    options.title != null && options.title !== "" ? options.title : "Save";
   if (process.platform === "darwin") {
     const script = [
       "on run argv",
@@ -81,7 +85,7 @@ async function saveDialog(options: SaveDialogOptions): Promise<string | null> {
       "end try",
       "end run",
     ].join("\n");
-    return await processText([
+    return processText([
       "/usr/bin/osascript",
       "-e",
       script,
@@ -103,16 +107,13 @@ async function saveDialog(options: SaveDialogOptions): Promise<string | null> {
       "$dialog.Filter = $env:CODETWO_SAVE_FILTER",
       "if ($dialog.ShowDialog() -eq 'OK') { Write-Output $dialog.FileName }",
     ].join("; ");
-    return await processText(
-      ["powershell.exe", "-NoProfile", "-Command", script],
-      {
-        CODETWO_SAVE_TITLE: title,
-        CODETWO_SAVE_NAME: basename(defaultPath),
-        CODETWO_SAVE_FILTER: filter,
-      }
-    );
+    return processText(["powershell.exe", "-NoProfile", "-Command", script], {
+      CODETWO_SAVE_FILTER: filter,
+      CODETWO_SAVE_NAME: basename(defaultPath),
+      CODETWO_SAVE_TITLE: title,
+    });
   }
-  return await processText([
+  return processText([
     "zenity",
     "--file-selection",
     "--save",
@@ -136,9 +137,9 @@ async function openWorkspace(
 
   try {
     const child = Bun.spawn(command, {
+      stderr: "ignore",
       stdin: "ignore",
       stdout: "ignore",
-      stderr: "ignore",
     });
     return (await child.exited) === 0;
   } catch {
@@ -151,31 +152,31 @@ let isRendererReady = false;
 let rpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
 let desktopPetRpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
 let appshots: AppshotManager;
-const appName = process.env.CODETWO_APP_NAME ?? "C2";
+const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 if (process.platform === "darwin") {
-  ApplicationMenu.setApplicationMenu(macOSAppMenu());
+  ApplicationMenu.setApplicationMenu(macOSApplicationMenu());
 }
-const dataDir =
+const dataDirectory =
   process.env.CODETWO_DATA_DIR ??
   join(
     Utils.paths.appData,
     process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev"
   );
-const desktopPetPositionPath = join(dataDir, "desktop-pet-window.json");
+const desktopPetPositionPath = join(dataDirectory, "desktop-pet-window.json");
 const desktopPetWidth = 184;
-const desktopPetHeights = { small: 156, medium: 180, large: 204 } as const;
+const desktopPetHeights = { large: 204, medium: 180, small: 156 } as const;
 const desktopPetBubbleHeight = 64;
 let desktopPetState: DesktopPetState = {
-  visible: false,
   animation: "idle",
-  bubble: null,
   appearance: {
     petActivityEnabled: true,
-    petSize: "medium",
-    petSource: "builtin",
     petId: "naiwa",
     petName: "Naiwa",
+    petSize: "medium",
+    petSource: "builtin",
   },
+  bubble: null,
+  visible: false,
 };
 let desktopPetWindow: BrowserWindow | null = null;
 let isDesktopPetRendererReady = false;
@@ -184,7 +185,9 @@ let desktopPetProgrammaticPosition: { x: number; y: number } | null = null;
 function desktopPetHeight() {
   return (
     desktopPetHeights[desktopPetState.appearance.petSize] +
-    (desktopPetState.bubble ? desktopPetBubbleHeight : 0)
+    (desktopPetState.bubble != null && desktopPetState.bubble !== ""
+      ? desktopPetBubbleHeight
+      : 0)
   );
 }
 
@@ -206,15 +209,20 @@ function desktopPetFrame() {
     const { x, y } = saved as { x: number; y: number };
     const workArea = Screen.getAllDisplays()
       .map((item) => item.workArea)
-      .find((area) => x >= area.x - desktopPetWidth / 2 &&
+      .find((area) => {
+        return (
+          x >= area.x - desktopPetWidth / 2 &&
           x <= area.x + area.width - desktopPetWidth / 2 &&
           y >= area.y - height / 2 &&
           y <= area.y + area.height - height / 2
+        );
       });
     if (!workArea) {
-      return { ...fallback, width: desktopPetWidth, height };
+      return { ...fallback, height, width: desktopPetWidth };
     }
     return {
+      height,
+      width: desktopPetWidth,
       x: Math.min(
         workArea.x + workArea.width - desktopPetWidth,
         Math.max(workArea.x, x)
@@ -223,11 +231,9 @@ function desktopPetFrame() {
         workArea.y + workArea.height - height,
         Math.max(workArea.y, y)
       ),
-      width: desktopPetWidth,
-      height,
     };
   } catch {
-    return { ...fallback, width: desktopPetWidth, height };
+    return { ...fallback, height, width: desktopPetWidth };
   }
 }
 
@@ -255,9 +261,12 @@ function applyDesktopPetState() {
 
 function persistDesktopPetPosition(x: number, y: number) {
   try {
-    mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+    mkdirSync(dataDirectory, { mode: 0o700, recursive: true });
     const normalizedY =
-      y + (desktopPetState.bubble ? desktopPetBubbleHeight : 0);
+      y +
+      (desktopPetState.bubble != null && desktopPetState.bubble !== ""
+        ? desktopPetBubbleHeight
+        : 0);
     writeFileSync(
       desktopPetPositionPath,
       `${JSON.stringify({ x, y: normalizedY })}\n`,
@@ -274,8 +283,8 @@ const hostExecutable =
     ? "codetwo-desktop-host.exe"
     : "codetwo-desktop-host";
 const host = new NativeHost({
+  dataDirectory,
   executable: join(PATHS.RESOURCES_FOLDER, "app", "bin", hostExecutable),
-  dataDir,
   onEvent: (event) => {
     if (isRendererReady) {
       rpc.send.event(event);
@@ -289,73 +298,19 @@ try {
   await host.start();
 } catch (error) {
   await Utils.showMessageBox({
-    type: "error",
-    title: `${appName} could not start`,
-    message: Error.isError(error) ? error.message : String(error),
     buttons: ["Quit"],
+    message: error instanceof Error ? error.message : String(error),
+    title: `${applicationName} could not start`,
+    type: "error",
   });
   Utils.quit();
   throw error;
 }
 
 rpc = BrowserView.defineRPC<CodeTwoRPC>({
-  maxRequestTime: Infinity,
   handlers: {
+    messages: {},
     requests: {
-      call: async ({
-        name,
-        args,
-        projectPath,
-      }: {
-        name: string;
-        args: unknown;
-        projectPath: string | null;
-      }) => await host.call(name, args, projectPath),
-      dialogOpen: openDialog,
-      dialogSave: saveDialog,
-      confirm: async ({ message, title }) => {
-        const result = await Utils.showMessageBox({
-          type: "warning",
-          title: title ?? appName,
-          message,
-          buttons: ["Cancel", "Continue"],
-          defaultId: 0,
-          cancelId: 0,
-        });
-        return result.response === 1;
-      },
-      contextMenuShow: ({ requestId, items }) => {
-        ContextMenu.showContextMenu(nativeContextMenuConfig(items, requestId));
-      },
-      openExternal: ({ url }) => Utils.openExternal(url),
-      openPath: ({ path }) => Utils.openPath(path),
-      openWorkspace: async ({ path, target }) => await openWorkspace(path, target),
-      showItemInFolder: ({ path }) => {
-        Utils.showItemInFolder(path);
-        return true;
-      },
-      systemBadgeSet: ({ count }) => setMacOSSystemBadgeCount(count),
-      titlebarDoubleClick: () =>
-        performMacOSTitlebarDoubleClick(mainWindow.ptr),
-      systemProfileAvatar: readSystemProfileAvatar,
-      browserZoom: ({ webviewId, factor }) => {
-        BrowserView.getById(webviewId)?.setPageZoom(factor);
-      },
-      desktopPetUpdate: (state) => {
-        desktopPetState = state;
-        applyDesktopPetState();
-      },
-      openDevtools: () => {
-        mainWindow.webview.openDevTools();
-      },
-      updateStatus: getAppUpdateStatus,
-      updateCheck: startAppUpdateCheck,
-      appshotsSettings: () => appshots.getSettings(),
-      appshotsUpdate: (patch) => appshots.updateSettings(patch),
-      appshotsRequestPermissions: ({ kind }) =>
-        appshots.requestPermissions(kind),
-      appshotsOpenPrivacySettings: ({ kind }) =>
-        appshots.openPrivacySettings(kind),
       appshotsCapture: async () => {
         const capture = await appshots.capture();
         rpc.send.appshotCaptured(capture);
@@ -363,27 +318,79 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         return capture;
       },
       appshotsGet: ({ id }) => appshots.getCapture(id),
+      appshotsOpenPrivacySettings: ({ kind }) =>
+        appshots.openPrivacySettings(kind),
+      appshotsRequestPermissions: ({ kind }) =>
+        appshots.requestPermissions(kind),
+      appshotsSettings: () => appshots.getSettings(),
+      appshotsUpdate: (patch) => appshots.updateSettings(patch),
+      browserZoom: ({ webviewId, factor }) => {
+        BrowserView.getById(webviewId)?.setPageZoom(factor);
+      },
+      call: ({
+        name,
+        args,
+        projectPath,
+      }: {
+        name: string;
+        args: unknown;
+        projectPath: string | null;
+      }) => host.call(name, args, projectPath),
+      confirm: async ({ message, title }) => {
+        const result = await Utils.showMessageBox({
+          buttons: ["Cancel", "Continue"],
+          cancelId: 0,
+          defaultId: 0,
+          message,
+          title: title ?? applicationName,
+          type: "warning",
+        });
+        return result.response === 1;
+      },
+      contextMenuShow: ({ requestId, items }) => {
+        ContextMenu.showContextMenu(nativeContextMenuConfig(items, requestId));
+      },
+      desktopPetUpdate: (state) => {
+        desktopPetState = state;
+        applyDesktopPetState();
+      },
+      dialogOpen: openDialog,
+      dialogSave: saveDialog,
+      openDevtools: () => mainWindow.webview.openDevTools(),
+      openExternal: ({ url }) => Utils.openExternal(url),
+      openPath: ({ path }) => Utils.openPath(path),
+      openWorkspace: ({ path, target }) => openWorkspace(path, target),
+      showItemInFolder: ({ path }) => {
+        Utils.showItemInFolder(path);
+        return true;
+      },
+      systemBadgeSet: ({ count }) => setMacOSSystemBadgeCount(count),
+      systemProfileAvatar: readSystemProfileAvatar,
+      titlebarDoubleClick: () =>
+        performMacOSTitlebarDoubleClick(mainWindow.ptr),
+      updateCheck: startAppUpdateCheck,
+      updateStatus: getAppUpdateStatus,
     },
-    messages: {},
   },
+  maxRequestTime: Infinity,
 });
 
 desktopPetRpc = BrowserView.defineRPC<CodeTwoRPC>({
-  maxRequestTime: Infinity,
   handlers: {
+    messages: {},
     requests: {
       contextMenuShow: ({ requestId, items }) => {
         ContextMenu.showContextMenu(nativeContextMenuConfig(items, requestId));
       },
-      desktopPetState: () => desktopPetState,
       desktopPetHide: () => {
         desktopPetState = { ...desktopPetState, visible: false };
         applyDesktopPetState();
         rpc.send.event({ name: "desktop-pet-hidden", payload: null });
       },
+      desktopPetState: () => desktopPetState,
     },
-    messages: {},
   },
+  maxRequestTime: Infinity,
 });
 
 ContextMenu.on("context-menu-clicked", (event) => {
@@ -402,44 +409,44 @@ const display = Screen.getPrimaryDisplay().workArea;
 const width = 1200;
 const height = 800;
 const mainWindow = new BrowserWindow({
-  title: appName,
   frame: {
+    height,
+    width,
     x: Math.max(display.x, display.x + Math.round((display.width - width) / 2)),
     y: Math.max(
       display.y,
       display.y + Math.round((display.height - height) / 2)
     ),
-    width,
-    height,
   },
-  url: "views://main/index.html",
   renderer: "native",
   rpc,
+  sandbox: false,
+  title: applicationName,
   titleBarStyle: "hiddenInset",
   transparent: process.platform === "darwin",
-  sandbox: false,
+  url: "views://main/index.html",
 });
 desktopPetWindow = new BrowserWindow({
-  title: `${appName} Pet`,
+  activate: false,
   frame: desktopPetFrame(),
-  url: "views://main/desktop-pet.html",
+  hidden: true,
+  passthrough: false,
   renderer: "native",
   rpc: desktopPetRpc,
+  sandbox: false,
+  styleMask: {
+    Closable: false,
+    FullSizeContentView: true,
+    Miniaturizable: false,
+    NonactivatingPanel: process.platform === "darwin",
+    Resizable: false,
+    Titled: false,
+    UtilityWindow: true,
+  },
+  title: `${applicationName} Pet`,
   titleBarStyle: "hidden",
   transparent: true,
-  passthrough: false,
-  hidden: true,
-  activate: false,
-  styleMask: {
-    Titled: false,
-    Closable: false,
-    Miniaturizable: false,
-    Resizable: false,
-    FullSizeContentView: true,
-    UtilityWindow: true,
-    NonactivatingPanel: process.platform === "darwin",
-  },
-  sandbox: false,
+  url: "views://main/desktop-pet.html",
 });
 desktopPetWindow.setAlwaysOnTop(true);
 desktopPetWindow.setVisibleOnAllWorkspaces(true);
@@ -462,21 +469,13 @@ desktopPetWindow.on("move", (event) => {
     persistDesktopPetPosition(position.x, position.y);
   }
 });
-mainWindow.on("close", () => {
-  desktopPetWindow?.close();
-});
+mainWindow.on("close", () => desktopPetWindow?.close());
 appshots = new AppshotManager(
-  dataDir,
+  dataDirectory,
   process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev",
-  (capture) => {
-    rpc.send.appshotCaptured(capture);
-  },
-  (message) => {
-    rpc.send.appshotFailed({ message });
-  },
-  () => {
-    mainWindow.show();
-  }
+  (capture) => rpc.send.appshotCaptured(capture),
+  (message) => rpc.send.appshotFailed({ message }),
+  () => mainWindow.show()
 );
 if (process.platform === "darwin") {
   const windowEffectsStatus = configureMacOSWindowEffects(mainWindow.ptr);
@@ -488,9 +487,7 @@ if (process.platform === "darwin") {
   }
   // AppKit can reset standard-window-button frames during its own resize layout pass. Reapply the
   // same fixed position afterward; the 46px titlebar has no runtime geometry to measure.
-  mainWindow.on("resize", () => {
-    mainWindow.setWindowButtonPosition(22, 16);
-  });
+  mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(22, 16));
 }
 
 mainWindow.webview.on("dom-ready", () => {
@@ -513,12 +510,12 @@ Electrobun.events.on(`new-window-open-${mainWindow.webview.id}`, (event) => {
   const url =
     typeof detail === "string"
       ? detail
-      : (typeof detail === "object" &&
+      : typeof detail === "object" &&
           detail !== null &&
           typeof (detail as { url?: unknown }).url === "string"
         ? (detail as { url: string }).url
-        : null);
-  if (url) {
+        : null;
+  if (url != null && url !== "") {
     Utils.openExternal(url);
   }
 });
@@ -531,7 +528,5 @@ Electrobun.events.on("before-quit", (event) => {
   event.response = { allow: false };
   isShuttingDown = true;
   appshots.shutdown();
-  void host.shutdown().finally(() => {
-    Utils.quit();
-  });
+  void host.shutdown().finally(() => Utils.quit());
 });

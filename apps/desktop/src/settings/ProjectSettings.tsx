@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Copy,
   FolderOpen,
@@ -14,10 +14,8 @@ import {
   openNativePath,
   pickProjectIcon,
   setProjectScheduling,
-  type Project,
-  type ProjectWorktreeMode,
-  type ProviderInfo,
 } from "../bridge";
+import type { Project, ProjectWorktreeMode, ProviderInfo } from "../bridge";
 import { useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
 import { ProjectIcon } from "../projects/ProjectIcon";
@@ -37,7 +35,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { GroupHeading, Page, ProjectRow } from "./SettingsPrimitives";
 
-const REASONING_EFFORTS = [
+const reasoningEfforts = [
   "minimal",
   "low",
   "medium",
@@ -78,15 +76,11 @@ export const ProjectSettingsPage = ({
   readonly iconPicker?: () => Promise<string | null>;
   readonly actionsCount?: number;
   readonly onAddAction?: () => void;
-  readonly onModeSavingChange?: (saving: boolean) => void;
+  readonly onModeSavingChange?: (isSaving: boolean) => void;
 }) => {
   const t = useT();
-  const providerNames = useMemo(
-    () =>
-      Object.fromEntries(
-        providers.map((candidate) => [candidate.id, candidate.display_name])
-      ),
-    [providers]
+  const providerNames = Object.fromEntries(
+    providers.map((candidate) => [candidate.id, candidate.display_name])
   );
   const [modeSaving, setModeSaving] = useState(false);
   const [nameDraft, setNameDraft] = useState(project?.name ?? "");
@@ -102,7 +96,9 @@ export const ProjectSettingsPage = ({
   }, [project?.path, project?.name]);
 
   useEffect(() => {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     void getProjectScheduling(project.path).then(setSchedulingEnabled);
   }, [project?.path]);
 
@@ -121,14 +117,18 @@ export const ProjectSettingsPage = ({
   }
 
   async function saveName() {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     const name = nameDraft.trim();
     if (!name) {
       setError(t("settings.projectNameRequired"));
       setNameDraft(project.name);
       return;
     }
-    if (name === project.name) return;
+    if (name === project.name) {
+      return;
+    }
     setProfileSaving(true);
     setError(null);
     try {
@@ -142,9 +142,13 @@ export const ProjectSettingsPage = ({
   }
 
   async function chooseIcon() {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     const source = await iconPicker();
-    if (!source) return;
+    if (!source) {
+      return;
+    }
     setIconSaving(true);
     setError(null);
     try {
@@ -157,7 +161,9 @@ export const ProjectSettingsPage = ({
   }
 
   async function clearIcon() {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     setIconSaving(true);
     setError(null);
     try {
@@ -174,7 +180,9 @@ export const ProjectSettingsPage = ({
     modelId: string | null,
     reasoningEffort: string | null
   ) {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     setAgentSaving(true);
     setError(null);
     try {
@@ -187,13 +195,16 @@ export const ProjectSettingsPage = ({
   }
 
   async function removeProject() {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     if (
       !(await confirmNative(
         t("settings.removeProjectConfirm", { name: project.name })
       ))
-    )
+    ) {
       return;
+    }
     setProfileSaving(true);
     setError(null);
     try {
@@ -229,7 +240,9 @@ export const ProjectSettingsPage = ({
               onInput={(event) => setNameDraft(event.currentTarget.value)}
               onBlur={() => void saveName()}
               onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
                 if (event.key === "Escape") {
                   setNameDraft(project.name);
                   event.currentTarget.blur();
@@ -432,7 +445,7 @@ export const ProjectSettingsPage = ({
                       <SelectItem value="automatic">
                         {t("settings.projectModelDefault")}
                       </SelectItem>
-                      {REASONING_EFFORTS.map((effort) => (
+                      {reasoningEfforts.map((effort) => (
                         <SelectItem key={effort} value={effort}>
                           {t(`effort.${effort}` as StringKey)}
                         </SelectItem>
@@ -494,12 +507,12 @@ export const ProjectSettingsPage = ({
               aria-label={t("settings.scheduling")}
               checked={schedulingEnabled}
               onCheckedChange={(checked) => {
-                const enabled = checked;
-                setSchedulingEnabled(enabled);
+                const isEnabled = checked;
+                setSchedulingEnabled(isEnabled);
                 setError(null);
-                void setProjectScheduling(project.path, enabled).catch(
+                void setProjectScheduling(project.path, isEnabled).catch(
                   (error) => {
-                    setSchedulingEnabled(!enabled);
+                    setSchedulingEnabled(!isEnabled);
                     setError(
                       t("settings.projectSaveFailed", { error: String(error) })
                     );
@@ -548,10 +561,11 @@ export const ProjectSettingsPage = ({
                 onClick={() => {
                   void openNativePath(project.path)
                     .then((opened) => {
-                      if (!opened)
+                      if (!opened) {
                         throw new Error(
                           t("settings.projectPathRevealUnavailable")
                         );
+                      }
                     })
                     .catch((error) => {
                       setError(
@@ -606,4 +620,4 @@ export const ProjectSettingsPage = ({
       )}
     </Page>
   );
-}
+};

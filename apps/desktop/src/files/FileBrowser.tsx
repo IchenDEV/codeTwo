@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AtSign } from "@/components/ui/icons";
 import { listFiles } from "../bridge";
 import { Button } from "@/components/ui/button";
@@ -36,13 +36,13 @@ export const FileBrowserModal = ({
       .catch(() => setLoading(false));
   }, [cwd]);
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     const s = q.trim().toLowerCase();
     return (s ? all.filter((p) => p.toLowerCase().includes(s)) : all).slice(
       0,
       300
     );
-  }, [all, q]);
+  })();
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -57,7 +57,9 @@ export const FileBrowserModal = ({
           onChange={(e) => setQ(e.target.value)}
           autoFocus
         />
-        {loading ? <p className="text-metadata text-muted-foreground">Scanning…</p> : null}
+        {loading ? (
+          <p className="text-metadata text-muted-foreground">Scanning…</p>
+        ) : null}
 
         <ScrollArea className="max-h-[52vh] pr-3">
           <div className="space-y-0.5">
@@ -92,4 +94,4 @@ export const FileBrowserModal = ({
       </DialogContent>
     </Dialog>
   );
-}
+};

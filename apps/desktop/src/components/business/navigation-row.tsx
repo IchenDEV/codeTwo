@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -77,13 +77,15 @@ const NavigationRow = ({
     </Button>
   );
 
-  if (!tooltip) return row;
+  if (!tooltip) {
+    return row;
+  }
   return (
     <Tooltip>
       <TooltipTrigger render={row} />
       <TooltipContent side="right">{tooltip}</TooltipContent>
     </Tooltip>
   );
-}
+};
 
 export { NavigationRow, type NavigationRowProps };

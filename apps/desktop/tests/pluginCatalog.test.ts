@@ -98,10 +98,12 @@ describe("unified plugin catalog adapter", () => {
       new URL("../../../packs/docker/plugin.json", import.meta.url)
     ).json();
     const declared = manifest.extensions["dev.codetwo"].commands.map(
-      ({ id, title }) => ({
-        id,
-        title,
-      })
+      ({ id, title }) => {
+        return {
+          id,
+          title,
+        };
+      }
     );
 
     expect(preview?.standard_version).toBe("1.2.0");

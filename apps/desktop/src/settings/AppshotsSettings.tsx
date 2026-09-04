@@ -7,8 +7,8 @@ import {
   requestAppshotPermissions,
   takeAppshot,
   updateAppshotSettings,
-  type AppshotSettings,
 } from "../bridge";
+import type { AppshotSettings } from "../bridge";
 import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
 import { SettingRow } from "@/components/business/setting-row";
@@ -52,18 +52,21 @@ export const AppshotsSettingsPage = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true;
+    let isActive = true;
     setError(null);
     void loader()
       .then((next) => {
-        if (active) setAppshotSettings(next);
+        if (isActive) {
+          setAppshotSettings(next);
+        }
       })
       .catch((cause) => {
-        if (active)
+        if (isActive) {
           setError(t("settings.appshotsLoadFailed", { error: String(cause) }));
+        }
       });
     return () => {
-      active = false;
+      isActive = false;
     };
   }, [loader, t]);
 
@@ -71,18 +74,21 @@ export const AppshotsSettingsPage = ({
     if (
       !appshotSettings?.available ||
       (appshotSettings.screen_recording && appshotSettings.accessibility)
-    )
+    ) {
       return;
-    let active = true;
+    }
+    let isActive = true;
     const timer = window.setInterval(() => {
       void loader()
         .then((next) => {
-          if (active) setAppshotSettings(next);
+          if (isActive) {
+            setAppshotSettings(next);
+          }
         })
         .catch(() => {});
     }, 1000);
     return () => {
-      active = false;
+      isActive = false;
       window.clearInterval(timer);
     };
   }, [
@@ -171,9 +177,11 @@ export const AppshotsSettingsPage = ({
         </SettingRow>
       </div>
 
-      {error ? <p data-appshots-error className="text-metadata text-destructive pb-2">
+      {error ? (
+        <p data-appshots-error className="text-metadata text-destructive pb-2">
           {error}
-        </p> : null}
+        </p>
+      ) : null}
       {!appshotSettings ? (
         <p className="py-section text-body text-muted-foreground">
           {t("settings.appshotsLoading")}
@@ -193,8 +201,9 @@ export const AppshotsSettingsPage = ({
               value={appshotSettings.hotkey}
               disabled={saving}
               onValueChange={(hotkey) => {
-                if (hotkey)
+                if (hotkey) {
                   void save({ hotkey: hotkey as AppshotSettings["hotkey"] });
+                }
               }}
             >
               <SelectTrigger
@@ -227,10 +236,11 @@ export const AppshotsSettingsPage = ({
               value={appshotSettings.destination}
               disabled={saving}
               onValueChange={(destination) => {
-                if (destination)
+                if (destination) {
                   void save({
                     destination: destination as AppshotSettings["destination"],
                   });
+                }
               }}
             >
               <SelectTrigger
@@ -281,7 +291,7 @@ export const AppshotsSettingsPage = ({
       )}
     </Page>
   );
-}
+};
 
 const PermissionRow = ({
   label,
@@ -318,4 +328,4 @@ const PermissionRow = ({
       </Button>
     </Row>
   );
-}
+};

@@ -1,15 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import type { DocBlock } from "../src/bridge";
+import type { DocumentBlock } from "../src/bridge";
 import {
-  COMPOSER_DRAFT_STORAGE_KEY,
+  composerDraftStorageKey,
   composerDraftScopeKey,
   loadComposerDrafts,
   promoteComposerDraft,
   saveComposerDrafts,
   updateComposerDraft,
-  type ComposerDraftPosture,
-  type ComposerDraftScope,
-  type StorageLike,
+} from "../src/session/composerDrafts";
+import type {
+  ComposerDraftPosture,
+  ComposerDraftScope,
+  StorageLike,
 } from "../src/session/composerDrafts";
 
 class MemoryStorage implements StorageLike {
@@ -46,7 +48,7 @@ const otherProject: ComposerDraftScope = {
   kind: "project",
   projectPath: "/work/b",
 };
-const doc: DocBlock[] = [{ type: "text", text: "Keep this draft" }];
+const doc: DocumentBlock[] = [{ type: "text", text: "Keep this draft" }];
 
 describe("composer drafts", () => {
   test("assigns identity only to invested drafts and keeps it stable", () => {
@@ -161,7 +163,7 @@ describe("composer drafts", () => {
     );
 
     expect(saveComposerDrafts(drafts, storage)).toBe(true);
-    const raw = storage.getItem(COMPOSER_DRAFT_STORAGE_KEY) ?? "";
+    const raw = storage.getItem(composerDraftStorageKey) ?? "";
     expect(raw).not.toContain("preview_data_url");
     const loaded = loadComposerDrafts(storage);
     expect(loaded.warning).toBeNull();
@@ -173,14 +175,14 @@ describe("composer drafts", () => {
   test("rejects corrupt or unavailable storage without throwing", () => {
     const corrupt = new MemoryStorage();
     corrupt.setItem(
-      COMPOSER_DRAFT_STORAGE_KEY,
+      composerDraftStorageKey,
       JSON.stringify({ version: 1, drafts: [{}] })
     );
     expect(loadComposerDrafts(corrupt)).toEqual({
       drafts: new Map(),
       warning: "corrupt",
     });
-    corrupt.setItem(COMPOSER_DRAFT_STORAGE_KEY, "{not-json");
+    corrupt.setItem(composerDraftStorageKey, "{not-json");
     expect(loadComposerDrafts(corrupt).warning).toBe("corrupt");
 
     const unavailable: StorageLike = {
@@ -197,7 +199,7 @@ describe("composer drafts", () => {
 
   test("refuses an oversized snapshot without replacing the last good copy", () => {
     const storage = new MemoryStorage();
-    storage.setItem(COMPOSER_DRAFT_STORAGE_KEY, "last-good-copy");
+    storage.setItem(composerDraftStorageKey, "last-good-copy");
     const drafts = updateComposerDraft(
       new Map(),
       {
@@ -210,6 +212,6 @@ describe("composer drafts", () => {
     );
 
     expect(saveComposerDrafts(drafts, storage)).toBe(false);
-    expect(storage.getItem(COMPOSER_DRAFT_STORAGE_KEY)).toBe("last-good-copy");
+    expect(storage.getItem(composerDraftStorageKey)).toBe("last-good-copy");
   });
 });

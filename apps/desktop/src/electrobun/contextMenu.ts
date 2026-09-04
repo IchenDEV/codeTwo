@@ -7,10 +7,10 @@ const pendingMenus = new Map<string, ActionHandler>();
 let nextRequestId = 0;
 let isListening = false;
 
-export const nativeContextMenusAvailable =
+export const isNativeContextMenusAvailable =
   isElectrobun &&
   typeof navigator !== "undefined" &&
-  /Mac|Win/.test(navigator.platform);
+  /Mac|Win/u.test(navigator.platform);
 
 function ensureActionListener(): void {
   if (isListening) {
@@ -43,7 +43,7 @@ export async function showNativeContextMenu(
   pendingMenus.set(requestId, onAction);
 
   try {
-    await desktopShowContextMenu({ requestId, items });
+    await desktopShowContextMenu({ items, requestId });
   } catch (error) {
     pendingMenus.delete(requestId);
     throw error;

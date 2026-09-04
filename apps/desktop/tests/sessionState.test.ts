@@ -810,11 +810,13 @@ describe("session event isolation", () => {
     const unavailable = (
       kind: "current" | "origin_default",
       reason: string
-    ) => ({
-      kind,
-      resolved: null,
-      unavailable_reason: reason,
-    });
+    ) => {
+      return {
+        kind,
+        resolved: null,
+        unavailable_reason: reason,
+      };
+    };
     const gated = [
       unavailable("current", "not a git repository"),
       unavailable("origin_default", "not a git repository"),

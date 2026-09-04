@@ -8,40 +8,7 @@ import type { ClassValue } from "clsx";
    the @theme bridge whenever its public utility contract changes. */
 const twMerge = extendTailwindMerge({
   extend: {
-    theme: {
-      spacing: [
-        "optical",
-        "inline",
-        "control-group",
-        "module-inset",
-        "surface-inset",
-        "section",
-        "page",
-        "page-section",
-        "control-mini",
-        "control",
-        "control-field",
-        "icon-inline",
-        "icon-list",
-        "icon-control",
-        "menu",
-        "menu-item",
-      ],
-      radius: [
-        "micro",
-        "control",
-        "module",
-        "modal",
-        "card",
-        "composer",
-        "menu",
-        "menu-item",
-      ],
-      shadow: ["surface", "raised", "modal", "menu"],
-      ease: ["enter", "exit"],
-    },
     classGroups: {
-      duration: [{ duration: ["feedback", "layer", "dialog", "page"] }],
       "font-size": [
         {
           text: [
@@ -64,13 +31,43 @@ const twMerge = extendTailwindMerge({
           ],
         },
       ],
+      duration: [{ duration: ["feedback", "layer", "dialog", "page"] }],
+    },
+    theme: {
+      ease: ["enter", "exit"],
+      radius: [
+        "micro",
+        "control",
+        "module",
+        "modal",
+        "card",
+        "composer",
+        "menu",
+        "menu-item",
+      ],
+      shadow: ["surface", "raised", "modal", "menu"],
+      spacing: [
+        "optical",
+        "inline",
+        "control-group",
+        "module-inset",
+        "surface-inset",
+        "section",
+        "page",
+        "page-section",
+        "control-mini",
+        "control",
+        "control-field",
+        "icon-inline",
+        "icon-list",
+        "icon-control",
+        "menu",
+        "menu-item",
+      ],
     },
   },
 });
 
-/**
-Merge conditional class names, with later Tailwind utilities winning.
-*/
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

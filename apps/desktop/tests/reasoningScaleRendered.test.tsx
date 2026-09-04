@@ -64,7 +64,9 @@ describe("ModelPicker", () => {
     expect(effortTrigger?.textContent).toContain("Extra High Effort");
     expect(rendered.container.querySelector('input[type="range"]')).toBeNull();
 
-    if (!effortTrigger) throw new Error("reasoning trigger did not render");
+    if (!effortTrigger) {
+      throw new Error("reasoning trigger did not render");
+    }
     click(effortTrigger);
     await flush();
     const low = Array.from(
@@ -72,7 +74,9 @@ describe("ModelPicker", () => {
         '[data-slot="popover-content"] button'
       )
     ).find((button) => button.textContent?.includes("Low Effort"));
-    if (!low) throw new Error("low effort option did not render");
+    if (!low) {
+      throw new Error("low effort option did not render");
+    }
     click(low);
     await flush();
     expect(selected).toEqual([["reasoning_effort", "low"]]);
@@ -160,11 +164,13 @@ describe("ModelPicker", () => {
     const rendered = mount(
       <I18nProvider>
         <ModelPicker
-          models={Array.from({ length: 40 }, (_, index) => ({
-            id: `model-${index}`,
-            name: `Model ${index}`,
-            description: null,
-          }))}
+          models={Array.from({ length: 40 }, (_, index) => {
+            return {
+              id: `model-${index}`,
+              name: `Model ${index}`,
+              description: null,
+            };
+          })}
           current={null}
           defaultModel={null}
           provider="opencode"
@@ -179,7 +185,9 @@ describe("ModelPicker", () => {
     const trigger = rendered.container.querySelector<HTMLButtonElement>(
       'button[title="Model"]'
     );
-    if (!trigger) throw new Error("model trigger did not render");
+    if (!trigger) {
+      throw new Error("model trigger did not render");
+    }
     click(trigger);
     await flush();
 
@@ -206,8 +214,8 @@ describe("ModelPicker", () => {
       { id: "beta-low", name: "Beta (Low)", description: null },
       { id: "beta-high", name: "Beta (High)", description: null },
     ];
-    const renderPicker = (provider: string) =>
-      mount(
+    const renderPicker = (provider: string) => {
+      return mount(
         <I18nProvider>
           <ModelPicker
             models={models}
@@ -221,19 +229,24 @@ describe("ModelPicker", () => {
           />
         </I18nProvider>
       );
+    };
 
     let rendered = renderPicker("opencode");
     const trigger = rendered.container.querySelector<HTMLButtonElement>(
       'button[title="Model"]'
     );
-    if (!trigger) throw new Error("model trigger did not render");
+    if (!trigger) {
+      throw new Error("model trigger did not render");
+    }
     click(trigger);
     await flush();
 
     const add = dom.document.body.querySelector<HTMLButtonElement>(
       'button[aria-label="Add Beta to favorites"]'
     );
-    if (!add) throw new Error("favorite action did not render");
+    if (!add) {
+      throw new Error("favorite action did not render");
+    }
     click(add);
     await flush();
 
@@ -266,7 +279,9 @@ describe("ModelPicker", () => {
     const reopened = rendered.container.querySelector<HTMLButtonElement>(
       'button[title="Model"]'
     );
-    if (!reopened) throw new Error("remounted model trigger did not render");
+    if (!reopened) {
+      throw new Error("remounted model trigger did not render");
+    }
     click(reopened);
     await flush();
     expect(
@@ -280,8 +295,9 @@ describe("ModelPicker", () => {
     const otherProvider = rendered.container.querySelector<HTMLButtonElement>(
       'button[title="Model"]'
     );
-    if (!otherProvider)
+    if (!otherProvider) {
       throw new Error("other provider model trigger did not render");
+    }
     click(otherProvider);
     await flush();
     expect(
@@ -330,14 +346,17 @@ describe("ModelPicker", () => {
     const trigger = rendered.container.querySelector<HTMLButtonElement>(
       'button[title="Model"]'
     );
-    if (!trigger) throw new Error("config-option model trigger did not render");
+    if (!trigger) {
+      throw new Error("config-option model trigger did not render");
+    }
     click(trigger);
     await flush();
     const favorite = dom.document.body.querySelector<HTMLButtonElement>(
       'button[aria-label="Add Beta to favorites"]'
     );
-    if (!favorite)
+    if (!favorite) {
       throw new Error("config-option favorite action did not render");
+    }
     click(favorite);
     await flush();
     expect(selected).toEqual([]);
@@ -347,7 +366,9 @@ describe("ModelPicker", () => {
         '[data-model-picker-row] [data-slot="selectable-row"]'
       )
     ).find((button) => button.getAttribute("aria-label") === "Beta");
-    if (!beta) throw new Error("favorite model row did not render");
+    if (!beta) {
+      throw new Error("favorite model row did not render");
+    }
     click(beta);
     await flush();
     expect(selected).toEqual([["model", "beta"]]);
@@ -376,7 +397,9 @@ describe("ModelPicker", () => {
       rendered.container.querySelector<HTMLButtonElement>(
         'button[title="模型"]'
       );
-    if (!trigger) throw new Error("localized model trigger did not render");
+    if (!trigger) {
+      throw new Error("localized model trigger did not render");
+    }
     click(trigger);
     await flush();
     expect(
@@ -411,23 +434,28 @@ describe("ModelPicker", () => {
     const trigger = rendered.container.querySelector<HTMLButtonElement>(
       'button[title="Model"]'
     );
-    if (!trigger) throw new Error("model trigger did not render");
+    if (!trigger) {
+      throw new Error("model trigger did not render");
+    }
     expect(hiddenModelsForProvider("opencode")).toEqual(["alpha", "beta"]);
     click(trigger);
     await flush();
 
-    const labels = () =>
-      Array.from(
+    const labels = () => {
+      return Array.from(
         dom.document.body.querySelectorAll(
           '[data-model-picker-row] [data-slot="selectable-row-label"]'
         )
       ).map((label) => label.textContent);
+    };
     expect(labels()).toEqual(["Alpha", "Gamma"]);
 
     const search = dom.document.body.querySelector<HTMLInputElement>(
       'input[aria-label="Search models"]'
     );
-    if (!search) throw new Error("model search did not render");
+    if (!search) {
+      throw new Error("model search did not render");
+    }
     expect(search.getAttribute("placeholder")).toBe("Search models");
     rendered.unmount();
   });

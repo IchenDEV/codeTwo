@@ -45,16 +45,16 @@ describe("composer geometry contract", () => {
     );
     expect(
       composer.match(
-        /"size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"/g
+        /"size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"/gu
       )
     ).toHaveLength(2);
     expect(
       composer.match(
-        /className="size-7 shrink-0 rounded-full(?: text-muted-foreground)?"/g
+        /className="size-7 shrink-0 rounded-full(?: text-muted-foreground)?"/gu
       )
     ).toHaveLength(2);
     expect(composer).toMatch(
-      /variant="ghost"[\s\S]*size="compact"[\s\S]*focusStyle="inset"/
+      /variant="ghost"[\s\S]*size="compact"[\s\S]*focusStyle="inset"/u
     );
     expect(composer).toContain(
       'import { ControlChip as Chip } from "@/components/ui/control-chip";'
@@ -62,7 +62,7 @@ describe("composer geometry contract", () => {
     expect(controlChip).toContain('size="compact"');
     expect(controlChip).toContain('data-slot="control-chip"');
     expect(voiceButton).toContain('className="size-8 shrink-0 rounded-full"');
-    expect(composer).toMatch(/variant="secondary"[\s\S]*onClick=\{onStop\}/);
+    expect(composer).toMatch(/variant="secondary"[\s\S]*onClick=\{onStop\}/u);
     expect(composer).not.toContain('"px-3 pb-2.5 pt-1.5"');
     expect(composer).not.toContain(
       'className="size-8 shrink-0 rounded-(--ds-radius-control) transition-transform active:scale-90"'
@@ -76,7 +76,7 @@ describe("composer multitask contract", () => {
     expect(composer).toContain("<DropdownMenuItem onClick={onMultitask}>");
     expect(composer).toContain('t("composer.multitask")');
     expect(app).toContain("onMultitask={startParallelTask}");
-    expect(app).toMatch(/sessionCreationBaselineSha\(\s*"current"/);
+    expect(app).toMatch(/sessionCreationBaselineSha\(\s*"current"/u);
     expect(app).toContain("parallelTask: true");
     expect(bridge).toContain('call("engine.new_parallel_task"');
     expect(bridge).toContain("task_id: parallelTask.taskId");

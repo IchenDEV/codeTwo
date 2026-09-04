@@ -20,9 +20,6 @@ export interface PlanPluginManagerChangeInput {
   ) => Promise<ManagedPluginChangePlan>;
 }
 
-/**
-Translate one UI request into the host's revision-bound management protocol.
-*/
 export async function planPluginManagerChange({
   request,
   plugins,
@@ -41,39 +38,39 @@ export async function planPluginManagerChange({
   }
 
   const planned = await planChange({
+    component:
+      request.targetKind === "component" ? request.targetId : undefined,
     plugin: targetPlugin.id,
     scope: toManagedPluginScope(request.scope),
     state: request.desiredState,
-    component:
-      request.targetKind === "component" ? request.targetId : undefined,
   });
 
   return {
+    activeResources: planned.active_resources.map((resource) => {
+      return {
+        id: resource.id,
+        kind: resource.kind,
+        label: resource.label,
+      };
+    }),
+    affectedPlugins: planned.affected.map((id) => {
+      return {
+        id,
+        name: plugins.find((plugin) => plugin.id === id)?.name ?? id,
+      };
+    }),
     confirmationId: planned.id,
     graphRevision: planned.graph_revision,
     request,
+    requiresConfirmation:
+      planned.requires_confirmation || request.desiredState === "disabled",
     summary:
       request.targetKind === "component"
         ? `${request.desiredState === "disabled" ? "Hide" : "Enable"} ${request.targetName} and reconcile its owning plugin.`
         : `${request.desiredState === "disabled" ? "Unload" : "Load"} ${request.targetName} in the selected scope.`,
-    // Disables always cross a visible lifecycle boundary, even without a dependent cascade.
-    requiresConfirmation:
-      planned.requires_confirmation || request.desiredState === "disabled",
-    affectedPlugins: planned.affected.map((id) => ({
-										      id,
-										      name: plugins.find((plugin) => plugin.id === id)?.name ?? id,
-										    })),
-    activeResources: planned.active_resources.map((resource) => ({
-										      id: resource.id,
-										      label: resource.label,
-										      kind: resource.kind,
-										    })),
   };
 }
 
-/**
-Apply only the confirmation id issued by the backend plan.
-*/
 export async function applyPluginManagerChange(
   plan: PluginManagerChangePlan,
   applyChange: (id: string) => Promise<ManagedPluginChangeResult>

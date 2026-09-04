@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GitBranch,
   Minus,
@@ -15,11 +15,13 @@ import {
   gitSuggestCommit,
   gitUnstagePaths,
   openExternal,
-  type Checkpoint,
-  type GitDiffResult,
-  type GitDiffScope,
-  type GitFile,
-  type GitStatus,
+} from "../bridge";
+import type {
+  Checkpoint,
+  GitDiffResult,
+  GitDiffScope,
+  GitFile,
+  GitStatus,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { TooltipButton } from "@/components/ui/tooltip";
@@ -54,9 +56,8 @@ import {
   gitPhaseLabel,
   sourceControlStateForCwd,
   uniquePathspecs,
-  type GitPhase,
-  type SourceControlLoadState,
 } from "./state";
+import type { GitPhase, SourceControlLoadState } from "./state";
 
 type DiffSelection =
   | { kind: "working"; scope: GitDiffScope; path: string | null; label: string }
@@ -68,33 +69,27 @@ interface DiffState {
   error: string | null;
 }
 
-const EMPTY_DIFF_STATE: DiffState = {
+const emptyDiffState: DiffState = {
+  error: null,
   loading: false,
   result: null,
-  error: null,
 };
 
-const DEFAULT_DIFF_SELECTION: DiffSelection = {
+const defaultDiffSelection: DiffSelection = {
   kind: "working",
-  scope: "all",
-  path: null,
   label: "All changes",
+  path: null,
+  scope: "all",
 };
 
 const DiffView = ({ state }: { readonly state: DiffState }) => {
-  const preview = useMemo(
-    () => diffPreviewLines(state.result?.text ?? ""),
-    [state.result?.text]
-  );
+  const preview = diffPreviewLines(state.result?.text ?? "");
 
   if (state.loading) {
     return (
-      <p
-        role="status"
-        className="p-surface-inset text-body text-muted-foreground"
-      >
+      <output className="p-surface-inset text-body text-muted-foreground">
         Loading diff…
-      </p>
+      </output>
     );
   }
   if (state.error) {
@@ -114,17 +109,16 @@ const DiffView = ({ state }: { readonly state: DiffState }) => {
 
   return (
     <div>
-      {(state.result.truncated || preview.truncated) ? <div className="sticky top-0 z-10">
-          <p
-            role="status"
-            className="bg-warning/10 px-surface-inset text-metadata text-warning-foreground py-2"
-          >
+      {state.result.truncated || preview.truncated ? (
+        <div className="sticky top-0 z-10">
+          <output className="bg-warning/10 px-surface-inset text-metadata text-warning-foreground py-2">
             {state.result.truncated
               ? `Preview truncated by the ${(state.result.truncation_reason ?? "resource").replaceAll("_", " ")} limit.`
               : "Preview rendering is limited to 4,000 lines."}
-          </p>
+          </output>
           <Separator />
-        </div> : null}
+        </div>
+      ) : null}
       <pre className="diff">
         {preview.lines.map((line, index) => {
           const presentation = diffLinePresentation(line);
@@ -153,7 +147,7 @@ const DiffView = ({ state }: { readonly state: DiffState }) => {
       </pre>
     </div>
   );
-}
+};
 
 const GitFileRow = ({
   file,
@@ -170,9 +164,9 @@ const GitFileRow = ({
   readonly onSelect: () => void;
   readonly onToggleIndex: () => void;
 }) => {
-  const staged = scope === "staged";
+  const isStaged = scope === "staged";
   const displayState = gitFileDisplayState(file, scope);
-  const indexAction = staged ? `Unstage ${file.path}` : `Stage ${file.path}`;
+  const indexAction = isStaged ? `Unstage ${file.path}` : `Stage ${file.path}`;
   return (
     <div className="group rounded-control hover:bg-accent/50 focus-within:bg-accent/50 flex min-w-0 items-center gap-1">
       <TooltipButton
@@ -184,7 +178,7 @@ const GitFileRow = ({
         disabled={disabled}
         onClick={onToggleIndex}
       >
-        {staged ? (
+        {isStaged ? (
           <Minus className="size-3.5" />
         ) : (
           <Plus className="size-3.5" />
@@ -211,14 +205,16 @@ const GitFileRow = ({
         <span
           className={cn(
             "rounded-control text-metadata inline-flex size-4 shrink-0 items-center justify-center font-bold",
-            staged ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
+            isStaged
+              ? "bg-success/15 text-success"
+              : "bg-warning/15 text-warning"
           )}
           aria-hidden="true"
         >
           {displayState.charAt(0).toUpperCase()}
         </span>
         <span className="sr-only">
-          {staged ? "Staged" : "Unstaged"} {displayState}:{" "}
+          {isStaged ? "Staged" : "Unstaged"} {displayState}:{" "}
         </span>
         <span className="text-muted-foreground truncate font-mono">
           {file.path}
@@ -226,7 +222,7 @@ const GitFileRow = ({
       </Button>
     </div>
   );
-}
+};
 
 // Source Control: explicit index ownership, bounded diff viewer, commit/push/PR, and checkpoints.
 export const SourceControlModal = ({
@@ -254,10 +250,9 @@ export const SourceControlModal = ({
   readonly onRefresh: () => void;
   readonly onClose: () => void;
 }) => {
-  const [selection, setSelection] = useState<DiffSelection>(
-    DEFAULT_DIFF_SELECTION
-  );
-  const [diffState, setDiffState] = useState<DiffState>(EMPTY_DIFF_STATE);
+  const [selection, setSelection] =
+    useState<DiffSelection>(defaultDiffSelection);
+  const [diffState, setDiffState] = useState<DiffState>(emptyDiffState);
   const [message, setMessage] = useState("");
   const [messageError, setMessageError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -270,31 +265,22 @@ export const SourceControlModal = ({
   const [sourceControlState, setSourceControlState] =
     useState<SourceControlLoadState>(() => ({
       cwd,
-      loading: true,
-      info: null,
       error: null,
+      info: null,
+      loading: true,
     }));
   const diffRequestRef = useRef(0);
   const suggestionRequestRef = useRef(0);
   const sourceControlRequestRef = useRef(0);
   const cwdRef = useRef(cwd);
   cwdRef.current = cwd;
-  const sections = useMemo(
-    () => gitFileSections(status?.files ?? []),
-    [status?.files]
-  );
-  const stagedPathspecs = useMemo(
-    () => uniquePathspecs(sections.staged),
-    [sections.staged]
-  );
-  const unstagedPathspecs = useMemo(
-    () => uniquePathspecs(sections.unstaged),
-    [sections.unstaged]
-  );
-  const busy = phase !== "idle" || suggesting;
-  const repositoryReady = !statusLoading && status?.is_repo === true;
-  const repositoryBusy = busy || !repositoryReady;
-  const checkpointBusy = repositoryBusy || checkpointsLoading;
+  const sections = gitFileSections(status?.files ?? []);
+  const stagedPathspecs = uniquePathspecs(sections.staged);
+  const unstagedPathspecs = uniquePathspecs(sections.unstaged);
+  const isBusy = phase !== "idle" || suggesting;
+  const isRepositoryReady = !statusLoading && status?.is_repo === true;
+  const isRepositoryBusy = isBusy || !isRepositoryReady;
+  const isCheckpointBusy = isRepositoryBusy || checkpointsLoading;
   const currentSourceControl = sourceControlStateForCwd(
     sourceControlState,
     cwd
@@ -303,15 +289,15 @@ export const SourceControlModal = ({
     currentSourceControl.info,
     currentSourceControl.loading,
     currentSourceControl.error,
-    statusLoading ? null : repositoryReady
+    statusLoading ? null : isRepositoryReady
   );
 
   useEffect(() => {
     suggestionRequestRef.current += 1;
     setSuggesting(false);
     diffRequestRef.current += 1;
-    setSelection(DEFAULT_DIFF_SELECTION);
-    setDiffState(EMPTY_DIFF_STATE);
+    setSelection(defaultDiffSelection);
+    setDiffState(emptyDiffState);
     setMessage("");
     setMessageError(null);
     setActionError(null);
@@ -320,36 +306,36 @@ export const SourceControlModal = ({
     setPrUrl(null);
   }, [cwd]);
 
-  const loadSourceControl = useCallback(async () => {
+  const loadSourceControl = async () => {
     const targetCwd = cwd;
     const request = ++sourceControlRequestRef.current;
     setSourceControlState({
       cwd: targetCwd,
-      loading: true,
-      info: null,
       error: null,
+      info: null,
+      loading: true,
     });
     try {
       const info = await gitSourceControlInfo(targetCwd);
       if (request === sourceControlRequestRef.current) {
         setSourceControlState({
           cwd: targetCwd,
-          loading: false,
-          info,
           error: null,
+          info,
+          loading: false,
         });
       }
     } catch (error) {
       if (request === sourceControlRequestRef.current) {
         setSourceControlState({
           cwd: targetCwd,
-          loading: false,
-          info: null,
           error: String(error),
+          info: null,
+          loading: false,
         });
       }
     }
-  }, [cwd]);
+  };
 
   useEffect(() => {
     void loadSourceControl();
@@ -358,31 +344,28 @@ export const SourceControlModal = ({
     };
   }, [loadSourceControl]);
 
-  const loadDiff = useCallback(
-    async (next: DiffSelection) => {
-      if (next.kind === "working" && !repositoryReady) {
-        diffRequestRef.current += 1;
-        setDiffState(EMPTY_DIFF_STATE);
-        return;
+  const loadDiff = async (next: DiffSelection) => {
+    if (next.kind === "working" && !isRepositoryReady) {
+      diffRequestRef.current += 1;
+      setDiffState(emptyDiffState);
+      return;
+    }
+    const request = ++diffRequestRef.current;
+    setDiffState((current) => ({ ...current, error: null, loading: true }));
+    try {
+      const result =
+        next.kind === "working"
+          ? await gitDiff(cwd, next.path, next.scope)
+          : await gitDiffSince(cwd, next.commit);
+      if (request === diffRequestRef.current) {
+        setDiffState({ error: null, loading: false, result });
       }
-      const request = ++diffRequestRef.current;
-      setDiffState((current) => ({ ...current, loading: true, error: null }));
-      try {
-        const result =
-          next.kind === "working"
-            ? await gitDiff(cwd, next.path, next.scope)
-            : await gitDiffSince(cwd, next.commit);
-        if (request === diffRequestRef.current) {
-          setDiffState({ loading: false, result, error: null });
-        }
-      } catch (error) {
-        if (request === diffRequestRef.current) {
-          setDiffState({ loading: false, result: null, error: String(error) });
-        }
+    } catch (error) {
+      if (request === diffRequestRef.current) {
+        setDiffState({ error: String(error), loading: false, result: null });
       }
-    },
-    [cwd, repositoryReady]
-  );
+    }
+  };
 
   useEffect(() => {
     void loadDiff(selection);
@@ -396,13 +379,18 @@ export const SourceControlModal = ({
     nextPhase: "staging" | "unstaging",
     paths: string[]
   ) => {
-    if (paths.length === 0 || repositoryBusy) return;
+    if (paths.length === 0 || isRepositoryBusy) {
+      return;
+    }
     setPhase(nextPhase);
     setActionError(null);
     setActionStatus(null);
     try {
-      if (nextPhase === "staging") await gitStagePaths(cwd, paths);
-      else await gitUnstagePaths(cwd, paths);
+      if (nextPhase === "staging") {
+        await gitStagePaths(cwd, paths);
+      } else {
+        await gitUnstagePaths(cwd, paths);
+      }
       setActionStatus(nextPhase === "staging" ? "Staged." : "Unstaged.");
       onRefresh();
     } catch (error) {
@@ -415,7 +403,9 @@ export const SourceControlModal = ({
   };
 
   const commit = async () => {
-    if (repositoryBusy) return;
+    if (isRepositoryBusy) {
+      return;
+    }
     const trimmed = message.trim();
     if (!trimmed) {
       setMessageError("Enter a commit message.");
@@ -444,7 +434,9 @@ export const SourceControlModal = ({
   };
 
   const createPr = async () => {
-    if (!changeRequest.canCreate || repositoryBusy) return;
+    if (!changeRequest.canCreate || isRepositoryBusy) {
+      return;
+    }
     const targetCwd = cwd;
     setActionError(null);
     setActionStatus(null);
@@ -452,7 +444,9 @@ export const SourceControlModal = ({
     setPhase("creating_pr");
     try {
       const url = await gitCreatePr(targetCwd, message.trim() || "Update", "");
-      if (cwdRef.current !== targetCwd) return;
+      if (cwdRef.current !== targetCwd) {
+        return;
+      }
       setPrUrl(url);
       setActionStatus(changeRequest.createdLabel);
       onRefresh();
@@ -466,7 +460,9 @@ export const SourceControlModal = ({
   };
 
   const commitAndPush = async () => {
-    if (repositoryBusy) return;
+    if (isRepositoryBusy) {
+      return;
+    }
     const trimmed = message.trim();
     if (!trimmed) {
       setMessageError("Enter a commit message.");
@@ -502,7 +498,9 @@ export const SourceControlModal = ({
   };
 
   const commitAndCreatePr = async () => {
-    if (repositoryBusy || !changeRequest.canCreate) return;
+    if (isRepositoryBusy || !changeRequest.canCreate) {
+      return;
+    }
     const trimmed = message.trim();
     if (!trimmed) {
       setMessageError("Enter a commit message.");
@@ -531,7 +529,9 @@ export const SourceControlModal = ({
     setPhase("creating_pr");
     try {
       const url = await gitCreatePr(targetCwd, trimmed || "Update", "");
-      if (cwdRef.current !== targetCwd) return;
+      if (cwdRef.current !== targetCwd) {
+        return;
+      }
       setPrUrl(url);
       setActionStatus(
         `Committed & ${changeRequest.createdLabel.toLowerCase()}.`
@@ -547,7 +547,9 @@ export const SourceControlModal = ({
   };
 
   const openCreatedChangeRequest = async () => {
-    if (!prUrl) return;
+    if (!prUrl) {
+      return;
+    }
     setActionError(null);
     try {
       await openExternal(prUrl);
@@ -558,7 +560,9 @@ export const SourceControlModal = ({
 
   const openRepository = async () => {
     const url = currentSourceControl.info?.web_url;
-    if (!url) return;
+    if (!url) {
+      return;
+    }
     setActionError(null);
     try {
       await openExternal(url);
@@ -568,13 +572,17 @@ export const SourceControlModal = ({
   };
 
   const suggestMessage = async () => {
-    if (repositoryBusy) return;
+    if (isRepositoryBusy) {
+      return;
+    }
     const request = ++suggestionRequestRef.current;
     setSuggesting(true);
     setActionError(null);
     try {
       const suggestion = await gitSuggestCommit(cwd);
-      if (request !== suggestionRequestRef.current) return;
+      if (request !== suggestionRequestRef.current) {
+        return;
+      }
       setMessage(suggestion);
       setMessageError(null);
     } catch (error) {
@@ -582,12 +590,16 @@ export const SourceControlModal = ({
         setActionError(`Suggestion failed: ${error}`);
       }
     } finally {
-      if (request === suggestionRequestRef.current) setSuggesting(false);
+      if (request === suggestionRequestRef.current) {
+        setSuggesting(false);
+      }
     }
   };
 
   const createCheckpoint = async () => {
-    if (checkpointBusy) return;
+    if (isCheckpointBusy) {
+      return;
+    }
     setPhase("checkpointing");
     setActionError(null);
     try {
@@ -600,7 +612,9 @@ export const SourceControlModal = ({
   };
 
   const revertCheckpoint = async (checkpoint: Checkpoint) => {
-    if (checkpointBusy) return;
+    if (isCheckpointBusy) {
+      return;
+    }
     const label = checkpoint.message || checkpoint.id.slice(0, 8);
     setCheckpointToRevert(null);
     setPhase("reverting");
@@ -616,7 +630,7 @@ export const SourceControlModal = ({
     }
   };
 
-  const selected = (scope: GitDiffScope, path: string | null) =>
+  const isSelected = (scope: GitDiffScope, path: string | null) =>
     selection.kind === "working" &&
     selection.scope === scope &&
     selection.path === path;
@@ -631,7 +645,7 @@ export const SourceControlModal = ({
       <DialogContent
         className="sm:max-w-4xl"
         aria-busy={
-          busy ||
+          isBusy ||
           statusLoading ||
           checkpointsLoading ||
           currentSourceControl.loading
@@ -640,19 +654,21 @@ export const SourceControlModal = ({
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-3">
             Source Control
-            {status?.is_repo ? <span className="text-metadata text-primary flex items-center gap-1 font-semibold">
+            {status?.is_repo ? (
+              <span className="text-metadata text-primary flex items-center gap-1 font-semibold">
                 <GitBranch className="size-3.5" aria-hidden="true" />
                 {status.branch}
                 {status.ahead > 0 && ` ↑${status.ahead}`}
                 {status.behind > 0 && ` ↓${status.behind}`}
-              </span> : null}
+              </span>
+            ) : null}
             <TooltipButton
               label="Refresh source control"
               variant="ghost"
               size="icon"
               className="size-7"
               onClick={refreshSourceControl}
-              disabled={busy || currentSourceControl.loading}
+              disabled={isBusy || currentSourceControl.loading}
             >
               <RefreshCw className="size-3.5" aria-hidden="true" />
             </TooltipButton>
@@ -663,7 +679,8 @@ export const SourceControlModal = ({
           className="text-metadata space-y-1"
           aria-label="Hosted source control"
         >
-          {currentSourceControl.info ? <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+          {currentSourceControl.info ? (
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
               <dt className="text-muted-foreground">Provider</dt>
               <dd>{currentSourceControl.info.provider_name}</dd>
               <dt className="text-muted-foreground">Remote</dt>
@@ -680,7 +697,8 @@ export const SourceControlModal = ({
               >
                 {currentSourceControl.info.host}
               </dd>
-              {currentSourceControl.info.web_url ? <>
+              {currentSourceControl.info.web_url ? (
+                <>
                   <dt className="text-muted-foreground">Repository</dt>
                   <dd className="min-w-0">
                     <Button
@@ -694,8 +712,10 @@ export const SourceControlModal = ({
                       {currentSourceControl.info.web_url}
                     </Button>
                   </dd>
-                </> : null}
-            </dl> : null}
+                </>
+              ) : null}
+            </dl>
+          ) : null}
           <p
             id="source-control-change-request-status"
             role={changeRequest.statusKind === "error" ? "alert" : "status"}
@@ -721,19 +741,19 @@ export const SourceControlModal = ({
               variant="selectable"
               size="row"
               focusStyle="inset"
-              data-selected={selected("all", null) ? "true" : "false"}
+              data-selected={isSelected("all", null) ? "true" : "false"}
               className={cn(
                 "text-metadata w-full px-1.5 py-1",
-                selected("all", null) && "bg-accent text-foreground"
+                isSelected("all", null) && "bg-accent text-foreground"
               )}
-              aria-pressed={selected("all", null)}
-              disabled={repositoryBusy}
+              aria-pressed={isSelected("all", null)}
+              disabled={isRepositoryBusy}
               onClick={() =>
                 selectDiff({
                   kind: "working",
-                  scope: "all",
-                  path: null,
                   label: "All changes",
+                  path: null,
+                  scope: "all",
                 })
               }
             >
@@ -750,7 +770,7 @@ export const SourceControlModal = ({
                   variant="ghost"
                   size="compact"
                   className="text-metadata text-muted-foreground hover:text-primary px-1.5"
-                  disabled={repositoryBusy}
+                  disabled={isRepositoryBusy}
                   onClick={() => void mutateIndex("unstaging", stagedPathspecs)}
                 >
                   Unstage all
@@ -762,14 +782,14 @@ export const SourceControlModal = ({
                 key={`staged:${file.path}`}
                 file={file}
                 scope="staged"
-                selected={selected("staged", file.path)}
-                disabled={repositoryBusy}
+                selected={isSelected("staged", file.path)}
+                disabled={isRepositoryBusy}
                 onSelect={() =>
                   selectDiff({
                     kind: "working",
-                    scope: "staged",
-                    path: file.path,
                     label: file.path,
+                    path: file.path,
+                    scope: "staged",
                   })
                 }
                 onToggleIndex={() =>
@@ -809,7 +829,7 @@ export const SourceControlModal = ({
                     variant="ghost"
                     size="compact"
                     className="text-metadata text-muted-foreground hover:text-primary px-1.5"
-                    disabled={repositoryBusy}
+                    disabled={isRepositoryBusy}
                     onClick={() =>
                       void mutateIndex("staging", unstagedPathspecs)
                     }
@@ -823,14 +843,14 @@ export const SourceControlModal = ({
                 key={`unstaged:${file.path}`}
                 file={file}
                 scope="unstaged"
-                selected={selected("unstaged", file.path)}
-                disabled={repositoryBusy}
+                selected={isSelected("unstaged", file.path)}
+                disabled={isRepositoryBusy}
                 onSelect={() =>
                   selectDiff({
                     kind: "working",
-                    scope: "unstaged",
-                    path: file.path,
                     label: file.path,
+                    path: file.path,
+                    scope: "unstaged",
                   })
                 }
                 onToggleIndex={() =>
@@ -838,9 +858,11 @@ export const SourceControlModal = ({
                 }
               />
             ))}
-            {repositoryReady && sections.unstaged.length === 0 ? <p className="text-metadata text-muted-foreground px-1.5">
+            {isRepositoryReady && sections.unstaged.length === 0 ? (
+              <p className="text-metadata text-muted-foreground px-1.5">
                 Working tree clean
-              </p> : null}
+              </p>
+            ) : null}
             {unstagedPathspecs.length > 256 && (
               <p className="text-metadata text-muted-foreground px-1.5">
                 Stage files individually; one operation is limited to 256
@@ -857,19 +879,16 @@ export const SourceControlModal = ({
                 variant="ghost"
                 size="icon"
                 className="size-7"
-                disabled={checkpointBusy}
+                disabled={isCheckpointBusy}
                 onClick={() => void createCheckpoint()}
               >
                 <Plus className="size-3" aria-hidden="true" />
               </TooltipButton>
             </div>
             {checkpointsLoading ? (
-              <p
-                className="text-metadata text-muted-foreground px-1.5"
-                role="status"
-              >
+              <output className="text-metadata text-muted-foreground px-1.5">
                 Loading this workspace’s checkpoints…
-              </p>
+              </output>
             ) : checkpoints.length === 0 ? (
               <p className="text-metadata text-muted-foreground px-1.5">
                 None yet
@@ -891,11 +910,11 @@ export const SourceControlModal = ({
                   variant="secondary"
                   size="compact"
                   className="text-metadata hover:text-primary px-2"
-                  disabled={checkpointBusy}
+                  disabled={isCheckpointBusy}
                   onClick={() =>
                     selectDiff({
-                      kind: "checkpoint",
                       commit: checkpoint.commit,
+                      kind: "checkpoint",
                       label: checkpoint.message || checkpoint.id.slice(0, 8),
                     })
                   }
@@ -907,7 +926,7 @@ export const SourceControlModal = ({
                   variant="secondary"
                   size="compact"
                   className="text-metadata hover:text-primary px-2"
-                  disabled={checkpointBusy}
+                  disabled={isCheckpointBusy}
                   onClick={() => setCheckpointToRevert(checkpoint)}
                 >
                   Revert
@@ -970,7 +989,7 @@ export const SourceControlModal = ({
               id="source-control-commit-message"
               className="min-w-56 flex-1"
               value={message}
-              disabled={repositoryBusy}
+              disabled={isRepositoryBusy}
               aria-describedby={
                 messageError ? "source-control-message-error" : undefined
               }
@@ -979,17 +998,19 @@ export const SourceControlModal = ({
                 suggestionRequestRef.current += 1;
                 setSuggesting(false);
                 setMessage(event.target.value);
-                if (messageError) setMessageError(null);
+                if (messageError) {
+                  setMessageError(null);
+                }
               }}
               onKeyDown={(event) =>
-                event.key === "Enter" && !repositoryBusy && void commit()
+                event.key === "Enter" && !isRepositoryBusy && void commit()
               }
             />
             <Button
               variant="outline"
               size="sm"
               title="Suggest a message from the staged files"
-              disabled={repositoryBusy}
+              disabled={isRepositoryBusy}
               onClick={() => void suggestMessage()}
             >
               <Sparkles className="size-3.5" aria-hidden="true" />{" "}
@@ -1006,7 +1027,7 @@ export const SourceControlModal = ({
                       : "Commit & Push"
               }
               onClick={() => void commitAndPush()}
-              disabled={repositoryBusy}
+              disabled={isRepositoryBusy}
               size="sm"
               className="min-w-36"
               menuSide="top"
@@ -1016,14 +1037,14 @@ export const SourceControlModal = ({
                   onClick: () => void commit(),
                 },
                 {
+                  disabled: !changeRequest.canCreate,
                   label: `Commit & ${changeRequest.createLabel}`,
                   onClick: () => void commitAndCreatePr(),
-                  disabled: !changeRequest.canCreate,
                 },
                 {
+                  disabled: !changeRequest.canCreate,
                   label: changeRequest.createLabel,
                   onClick: () => void createPr(),
-                  disabled: !changeRequest.canCreate,
                 },
               ]}
             />
@@ -1031,28 +1052,35 @@ export const SourceControlModal = ({
               Done
             </Button>
           </div>
-          {messageError ? <p
+          {messageError ? (
+            <p
               id="source-control-message-error"
               role="alert"
               className="text-metadata text-destructive"
             >
               {messageError}
-            </p> : null}
+            </p>
+          ) : null}
           {phase !== "idle" &&
             phase !== "committing" &&
             phase !== "pushing" &&
             phase !== "creating_pr" && (
-              <p role="status" className="text-metadata text-muted-foreground">
+              <output className="text-metadata text-muted-foreground">
                 {gitPhaseLabel(phase, changeRequest.label)}
-              </p>
+              </output>
             )}
-          {actionError ? <p role="alert" className="text-metadata text-destructive">
+          {actionError ? (
+            <p role="alert" className="text-metadata text-destructive">
               {actionError}
-            </p> : null}
-          {actionStatus ? <p role="status" className="text-metadata text-muted-foreground">
+            </p>
+          ) : null}
+          {actionStatus ? (
+            <output className="text-metadata text-muted-foreground">
               {actionStatus}
-            </p> : null}
-          {prUrl ? <Button
+            </output>
+          ) : null}
+          {prUrl ? (
+            <Button
               type="button"
               variant="link"
               size="compact"
@@ -1061,9 +1089,10 @@ export const SourceControlModal = ({
               aria-label={`Open created ${changeRequest.label}: ${prUrl}`}
             >
               {prUrl}
-            </Button> : null}
+            </Button>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>
   );
-}
+};

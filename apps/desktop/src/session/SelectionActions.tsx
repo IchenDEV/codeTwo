@@ -1,11 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -31,7 +25,9 @@ interface SelectionToolbarProps {
   readonly onAskInSideChat: (text: string) => void;
 }
 
-/** Presentational seam kept independent from Range positioning so its actions stay easy to test. */
+/**
+Presentational seam kept independent from Range positioning so its actions stay easy to test.
+*/
 export const SelectionToolbar = ({
   text,
   onAdd,
@@ -48,19 +44,27 @@ export const SelectionToolbar = ({
         "button:not(:disabled)"
       ) ?? []
     );
-    if (buttons.length === 0) return;
+    if (buttons.length === 0) {
+      return;
+    }
 
     const current = Math.max(
       0,
       buttons.indexOf(document.activeElement as HTMLButtonElement)
     );
     let next: number | null = null;
-    if (event.key === "ArrowRight") next = (current + 1) % buttons.length;
-    else if (event.key === "ArrowLeft")
+    if (event.key === "ArrowRight") {
+      next = (current + 1) % buttons.length;
+    } else if (event.key === "ArrowLeft") {
       next = (current - 1 + buttons.length) % buttons.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = buttons.length - 1;
-    if (next === null) return;
+    } else if (event.key === "Home") {
+      next = 0;
+    } else if (event.key === "End") {
+      next = buttons.length - 1;
+    }
+    if (next === null) {
+      return;
+    }
 
     event.preventDefault();
     setTabStop(next);
@@ -113,23 +117,29 @@ export const SelectionToolbar = ({
       </Button>
     </div>
   );
-}
+};
 
-/** Read a non-empty selection only when it belongs to this transcript. */
 function readSelection(scope: HTMLElement): CapturedSelection | null {
   const selection = window.getSelection();
-  if (!selection || selection.isCollapsed || selection.rangeCount === 0)
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
     return null;
+  }
 
   const text = selection.toString().trim();
-  if (!text) return null;
+  if (!text) {
+    return null;
+  }
 
   const range = selection.getRangeAt(0);
-  if (!scope.contains(range.commonAncestorContainer)) return null;
+  if (!scope.contains(range.commonAncestorContainer)) {
+    return null;
+  }
 
   const rect = range.getBoundingClientRect();
-  if (rect.width <= 0 && rect.height <= 0) return null;
-  return { text, rect };
+  if (rect.width <= 0 && rect.height <= 0) {
+    return null;
+  }
+  return { rect, text };
 }
 
 /**
@@ -147,7 +157,9 @@ export const SelectionActions = ({
 
   useEffect(() => {
     const scope = scopeRef.current;
-    if (!scope) return;
+    if (!scope) {
+      return;
+    }
 
     let timer = 0;
     const capture = () => {
@@ -179,18 +191,16 @@ export const SelectionActions = ({
     };
   }, [scopeRef]);
 
-  const anchor = useMemo(
-    () =>
-      captured
-        ? {
-            getBoundingClientRect: () => captured.rect,
-          }
-        : null,
-    [captured]
-  );
+  const anchor = captured
+    ? {
+        getBoundingClientRect: () => captured.rect,
+      }
+    : null;
 
   const run = (action: (text: string) => void) => {
-    if (!captured) return;
+    if (!captured) {
+      return;
+    }
     action(captured.text);
     window.getSelection()?.removeAllRanges();
     setCaptured(null);
@@ -200,7 +210,9 @@ export const SelectionActions = ({
     <Popover
       open={captured !== null}
       onOpenChange={(open) => {
-        if (!open) setCaptured(null);
+        if (!open) {
+          setCaptured(null);
+        }
       }}
     >
       {captured && anchor ? (
@@ -224,4 +236,4 @@ export const SelectionActions = ({
       ) : null}
     </Popover>
   );
-}
+};

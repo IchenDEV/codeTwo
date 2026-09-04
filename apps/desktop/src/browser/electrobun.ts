@@ -1,6 +1,7 @@
+import type { WebviewEventTypes, WebviewTagElement } from "electrobun/view";
+
 import { desktopSetBrowserZoom, isElectrobun } from "../electrobun/client";
 import annotateSource from "./annotate.js?raw";
-import type { WebviewEventTypes, WebviewTagElement } from "electrobun/view";
 
 export interface EmbeddedBrowserNav {
   label: string;
@@ -37,7 +38,7 @@ interface PageAnnotation {
   styles?: EmbeddedStyleChange[];
 }
 
-interface BrowserEventMap {
+type BrowserEventMap = {
   "browser-registry": EmbeddedBrowserTab[];
   "browser-agent-activity": { tabId: string };
   "browser-download-blocked": { label: string };
@@ -45,18 +46,18 @@ interface BrowserEventMap {
   "browser-nav": EmbeddedBrowserNav;
   "browser-title": { label: string; title: string };
   "browser-popup": EmbeddedBrowserNav;
-}
+};
 
 type BrowserEventName = keyof BrowserEventMap;
 type BrowserListener<K extends BrowserEventName> = (
   payload: BrowserEventMap[K]
 ) => void;
 
-const REGISTRY_KEY = "codetwo.browser.tabs.v1";
+const registryKey = "codetwo.browser.tabs.v1";
 const views = new Map<string, WebviewTagElement>();
 const viewHandlers = new Map<
   string,
-  { name: WebviewEventTypes; listener: (event: CustomEvent) => void }[]
+  Array<{ name: WebviewEventTypes; listener: (event: CustomEvent) => void }>
 >();
 const desired = new Map<
   string,
@@ -76,12 +77,12 @@ const pendingQueries = new Map<
 function defaultRegistry(): EmbeddedBrowserTab[] {
   return [
     {
-      id: "browser-1",
-      url: "about:blank",
-      title: "",
       active: true,
-      lease_session: null,
       agent_active: false,
+      id: "browser-1",
+      lease_session: null,
+      title: "",
+      url: "about:blank",
     },
   ];
 }
@@ -92,28 +93,33 @@ function loadRegistry(): EmbeddedBrowserTab[] {
   }
   try {
     const parsed = JSON.parse(
-      window.localStorage.getItem(REGISTRY_KEY) ?? "[]"
+      window.localStorage.getItem(registryKey) ?? "[]"
     ) as unknown;
     if (!Array.isArray(parsed)) {
       return defaultRegistry();
     }
-    const tabs = parsed.filter((tab): tab is EmbeddedBrowserTab => typeof tab === "object" &&
+    const tabs = parsed.filter((tab): tab is EmbeddedBrowserTab => {
+      return (
+        typeof tab === "object" &&
         tab !== null &&
         typeof (tab as EmbeddedBrowserTab).id === "string" &&
-        /^browser-\d+$/.test((tab as EmbeddedBrowserTab).id) &&
+        /^browser-\d+$/u.test((tab as EmbeddedBrowserTab).id) &&
         typeof (tab as EmbeddedBrowserTab).url === "string"
+      );
     });
     if (tabs.length === 0) {
       return defaultRegistry();
     }
     const active = tabs.findIndex((tab) => tab.active);
-    return tabs.map((tab, index) => ({
-	      ...tab,
-	      title: typeof tab.title === "string" ? tab.title : "",
-	      active: active >= 0 ? index === active : index === 0,
-	      lease_session: null,
-	      agent_active: false,
-	    }));
+    return tabs.map((tab, index) => {
+      return {
+        ...tab,
+        active: active >= 0 ? index === active : index === 0,
+        agent_active: false,
+        lease_session: null,
+        title: typeof tab.title === "string" ? tab.title : "",
+      };
+    });
   } catch {
     return defaultRegistry();
   }
@@ -123,7 +129,7 @@ let registry = loadRegistry();
 
 function persistRegistry(): void {
   try {
-    window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+    window.localStorage.setItem(registryKey, JSON.stringify(registry));
   } catch {
     // A locked-down webview can reject storage; tabs still work for the current process.
   }
@@ -149,7 +155,9 @@ function publishRegistry(): void {
 function patchTab(label: string, patch: Partial<EmbeddedBrowserTab>): void {
   let isChanged = false;
   registry = registry.map((tab) => {
-    if (tab.id !== label) {return tab;}
+    if (tab.id !== label) {
+      return tab;
+    }
     isChanged = true;
     return { ...tab, ...patch };
   });
@@ -255,15 +263,15 @@ function handleHostMessage(label: string, event: CustomEvent): void {
 }
 
 function attach(label: string, view: WebviewTagElement): void {
-  const handlers: {
+  const handlers: Array<{
     name: WebviewEventTypes;
     listener: (event: CustomEvent) => void;
-  }[] = [];
+  }> = [];
   const on = (
     name: WebviewEventTypes,
     listener: (event: CustomEvent) => void
   ) => {
-    handlers.push({ name, listener });
+    handlers.push({ listener, name });
     view.on(name, listener);
   };
   const navigate = (event: CustomEvent) => {
@@ -285,9 +293,7 @@ function attach(label: string, view: WebviewTagElement): void {
       emit("browser-popup", { label, url });
     }
   });
-  on("host-message", (event) => {
-    handleHostMessage(label, event);
-  });
+  on("host-message", (event) => handleHostMessage(label, event));
   viewHandlers.set(label, handlers);
 }
 
@@ -298,9 +304,6 @@ function detach(label: string, view: WebviewTagElement): void {
   viewHandlers.delete(label);
 }
 
-/**
-Connect a React-rendered `<electrobun-webview>` to the browser command surface.
-*/
 export function registerBrowserWebview(
   label: string,
   element: HTMLElement | null
@@ -323,7 +326,7 @@ export function registerBrowserWebview(
   if (state?.visible !== undefined) {
     view.toggleHidden(!state.visible);
   }
-  if (state?.url && view.src !== state.url) {
+  if (state?.url != null && state?.url !== "" && view.src !== state.url) {
     view.loadURL(state.url);
   }
   if (state?.zoom !== undefined && typeof view.webviewId === "number") {
@@ -332,7 +335,7 @@ export function registerBrowserWebview(
 }
 
 export const embeddedBrowserRenderer: "cef" | "native" =
-  typeof navigator !== "undefined" && /Linux/i.test(navigator.userAgent)
+  typeof navigator !== "undefined" && /Linux/iu.test(navigator.userAgent)
     ? "cef"
     : "native";
 
@@ -341,10 +344,10 @@ export function browserSubscribe<K extends BrowserEventName>(
   listener: BrowserListener<K>
 ): () => void {
   const group = listeners.get(name) ?? new Set<(payload: never) => void>();
-  group.add(listener);
+  group.add(listener as (payload: never) => void);
   listeners.set(name, group);
   return () => {
-    group.delete(listener);
+    group.delete(listener as (payload: never) => void);
     if (group.size === 0) {
       listeners.delete(name);
     }
@@ -390,10 +393,10 @@ export function browserReloadLocal(label: string): void {
   views.get(label)?.reload();
 }
 
-export function browserVisibleLocal(label: string, visible: boolean): void {
+export function browserVisibleLocal(label: string, isVisible: boolean): void {
   const state = desired.get(label) ?? {};
-  desired.set(label, { ...state, visible });
-  views.get(label)?.toggleHidden(!visible);
+  desired.set(label, { ...state, visible: isVisible });
+  views.get(label)?.toggleHidden(!isVisible);
 }
 
 export function browserZoomLocal(label: string, factor: number): void {
@@ -413,7 +416,7 @@ export function browserCloseLocal(label: string): void {
   views.get(label)?.toggleHidden(true);
   desired.delete(label);
   const closing = registry.findIndex((tab) => tab.id === label);
-  if (closing === -1) {
+  if (closing < 0) {
     return;
   }
   const wasActive = registry[closing].active;
@@ -449,17 +452,17 @@ export function browserRegistryCreateLocal(url: string): EmbeddedBrowserTab {
     Math.max(
       0,
       ...registry
-        .map((tab) => Number(tab.id.replace(/^browser-/, "")))
+        .map((tab) => Number(tab.id.replace(/^browser-/u, "")))
         .filter(Number.isFinite)
     ) + 1;
   registry = registry.map((tab) => ({ ...tab, active: false }));
   const tab: EmbeddedBrowserTab = {
-    id: `browser-${nextId}`,
-    url,
-    title: "",
     active: true,
-    lease_session: null,
     agent_active: false,
+    id: `browser-${nextId}`,
+    lease_session: null,
+    title: "",
+    url,
   };
   registry.push(tab);
   publishRegistry();
@@ -469,12 +472,14 @@ export function browserRegistryCreateLocal(url: string): EmbeddedBrowserTab {
 export function browserTakeControlLocal(label: string): void {
   let isFound = false;
   registry = registry.map((tab) => {
-    if (tab.id === label) {isFound = true;}
+    if (tab.id === label) {
+      isFound = true;
+    }
     return {
       ...tab,
       active: tab.id === label,
-      lease_session: null,
       agent_active: false,
+      lease_session: null,
     };
   });
   if (isFound) {
@@ -482,11 +487,11 @@ export function browserTakeControlLocal(label: string): void {
   }
 }
 
-export function browserAnnotateLocal(label: string, on: boolean): void {
+export function browserAnnotateLocal(label: string, isOn: boolean): void {
   views
     .get(label)
     ?.executeJavascript(
-      `window.__codetwoAnnotate && window.__codetwoAnnotate.setMode(${JSON.stringify(on)})`
+      `window.__codetwoAnnotate && window.__codetwoAnnotate.setMode(${JSON.stringify(isOn)})`
     );
 }
 
@@ -500,8 +505,8 @@ async function queryPage(label: string, expression: string): Promise<unknown> {
     const timeout = setTimeout(() => {
       pendingQueries.delete(id);
       reject(new Error("browser page query timed out"));
-    }, 3000);
-    pendingQueries.set(id, { label, resolve, reject, timeout });
+    }, 3_000);
+    pendingQueries.set(id, { label, reject, resolve, timeout });
   });
   view.executeJavascript(`void (async () => {
     const post = ${childPost};
@@ -512,7 +517,7 @@ async function queryPage(label: string, expression: string): Promise<unknown> {
       post({ source: "codetwo-browser", kind: "query-response", id: ${JSON.stringify(id)}, error: String(error) });
     }
   })()`);
-  return await result;
+  return result;
 }
 
 export async function browserAnnotationsLocal(
@@ -527,13 +532,18 @@ export async function browserAnnotationsLocal(
     if (!Array.isArray(result)) {
       return [];
     }
-    return (result as PageAnnotation[]).map((annotation) => ({
-	      url,
-	      note: annotation.note ?? "",
-	      selector: annotation.selector ?? null,
-	      selected_text: annotation.text || null,
-	      styles: Array.isArray(annotation.styles) ? annotation.styles : [],
-	    }));
+    return (result as PageAnnotation[]).map((annotation) => {
+      return {
+        note: annotation.note ?? "",
+        selected_text:
+          annotation.text != null && annotation.text !== ""
+            ? annotation.text
+            : null,
+        selector: annotation.selector ?? null,
+        styles: Array.isArray(annotation.styles) ? annotation.styles : [],
+        url,
+      };
+    });
   } catch {
     return [];
   }

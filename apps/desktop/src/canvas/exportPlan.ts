@@ -13,12 +13,12 @@ export interface CanvasExportBudget {
   margin: number;
 }
 
-export const DEFAULT_EXPORT_BUDGET: CanvasExportBudget = {
+export const defaultExportBudget: CanvasExportBudget = {
+  margin: 24,
+  maxBytes: 20 * 1024 * 1024,
   maxImages: 16,
   maxPixels: 32_000_000,
-  maxBytes: 20 * 1024 * 1024,
   tileSize: 2048,
-  margin: 24,
 };
 
 export interface CanvasExportTile {
@@ -57,14 +57,11 @@ function scaledDimension(value: number, maxDimension: number): number {
   return Math.max(1, Math.min(maxDimension, Math.ceil(value)));
 }
 
-/**
-Builds a deterministic overview-first, row-major detail tile plan without rendering.
-*/
 export function planCanvasExportTiles(
   bounds: CanvasExportBounds,
   budget: Partial<CanvasExportBudget> = {}
 ): readonly CanvasExportTile[] {
-  const limits = { ...DEFAULT_EXPORT_BUDGET, ...budget };
+  const limits = { ...defaultExportBudget, ...budget };
   const sourceWidth = Math.max(1, Math.ceil(finite(bounds.maxX - bounds.minX)));
   const sourceHeight = Math.max(
     1,
@@ -84,16 +81,16 @@ export function planCanvasExportTiles(
   );
   const tiles: CanvasExportTile[] = [
     {
-      kind: "overview",
-      row: 0,
       column: 0,
+      height: overviewHeight,
+      kind: "overview",
+      pixels: overviewWidth * overviewHeight,
+      row: 0,
+      sourceHeight,
+      sourceWidth,
       sourceX: 0,
       sourceY: 0,
-      sourceWidth,
-      sourceHeight,
       width: overviewWidth,
-      height: overviewHeight,
-      pixels: overviewWidth * overviewHeight,
     },
   ];
   if (sourceWidth <= limits.tileSize && sourceHeight <= limits.tileSize) {
@@ -126,16 +123,16 @@ export function planCanvasExportTiles(
       const tileWidth = Math.min(limits.tileSize, sourceWidth - sourceX);
       const tileHeight = Math.min(limits.tileSize, sourceHeight - sourceY);
       tiles.push({
-        kind: "detail",
-        row,
         column,
+        height: tileHeight,
+        kind: "detail",
+        pixels: tileWidth * tileHeight,
+        row,
+        sourceHeight: tileHeight,
+        sourceWidth: tileWidth,
         sourceX,
         sourceY,
-        sourceWidth: tileWidth,
-        sourceHeight: tileHeight,
         width: tileWidth,
-        height: tileHeight,
-        pixels: tileWidth * tileHeight,
       });
     }
   }

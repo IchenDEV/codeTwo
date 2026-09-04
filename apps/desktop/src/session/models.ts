@@ -29,27 +29,24 @@ export type Effort = (typeof EFFORTS)[number];
 // paren, "·", ":") — deliberately not "-" or "_", because hyphens join real model names
 // ("gpt-5.1-codex-max" is a model, not "gpt-5.1-codex" at max effort). Longer alternatives come
 // first so "extra high" isn't eaten as "high".
-const EFFORT_RE =
-  /^(.*?)[\s(·:]+(extra[\s-]?high|x[\s-]?high|minimal|medium|low|high|max|ultra)\s*\)?\s*$/i;
+const effortRe =
+  /^(.*?)[\s(·:]+(extra[\s-]?high|x[\s-]?high|minimal|medium|low|high|max|ultra)\s*\)?\s*$/iu;
 
 function normalizeEffort(token: string): Effort {
   const t = token
     .toLowerCase()
-    .replaceAll(/[\s-]+/g, " ")
+    .replaceAll(/[\s-]+/gu, " ")
     .trim();
   return t === "extra high" || t === "x high" || t === "xhigh"
     ? "xhigh"
     : (t as Effort);
 }
 
-/**
-`"GPT-5 Codex (High)"` → base `"GPT-5 Codex"`, effort `"high"`. No suffix → effort null.
-*/
 export function splitEffort(name: string): {
   base: string;
   effort: Effort | null;
 } {
-  const m = EFFORT_RE.exec(name);
+  const m = effortRe.exec(name);
   if (!m) {
     return { base: name.trim(), effort: null };
   }
@@ -76,19 +73,13 @@ export interface ModelFamily {
 
 const rank = (e: Effort | null) => (e === null ? -1 : EFFORTS.indexOf(e));
 
-/**
- * Group by base name, in first-appearance order. A base only becomes an effort family when the
- * adapter really offers a choice — at least two entries with two distinct efforts. Anything short
- * of that stays a standalone row under its full name, so a lone "Codex Max" is never presented as
- * "Codex" at max effort.
- */
 export function groupModels(models: ModelChoice[]): ModelFamily[] {
   const buckets = new Map<string, { label: string; members: ModelVariant[] }>();
   for (const choice of models) {
     const { base, effort } = splitEffort(choice.name);
     const key = base.toLowerCase();
     const bucket = buckets.get(key) ?? { label: base, members: [] };
-    bucket.members.push({ effort, choice });
+    bucket.members.push({ choice, effort });
     buckets.set(key, bucket);
   }
 
@@ -110,7 +101,7 @@ export function groupModels(models: ModelChoice[]): ModelFamily[] {
         families.push({
           key: v.choice.id,
           label: v.choice.name,
-          variants: [{ effort: null, choice: v.choice }],
+          variants: [{ choice: v.choice, effort: null }],
         });
       }
     }
@@ -118,14 +109,11 @@ export function groupModels(models: ModelChoice[]): ModelFamily[] {
   return families;
 }
 
-/**
-The family containing the model id, if the id is one the adapter listed.
-*/
 export function familyOf(
   families: ModelFamily[],
   id: string | null
 ): ModelFamily | null {
-  if (!id) {
+  if (id == null || id === "") {
     return null;
   }
   return (
@@ -133,14 +121,11 @@ export function familyOf(
   );
 }
 
-/**
-The concrete variant behind a model id.
-*/
 export function variantOf(
   families: ModelFamily[],
   id: string | null
 ): ModelVariant | null {
-  if (!id) {
+  if (id == null || id === "") {
     return null;
   }
   for (const f of families) {
@@ -152,10 +137,6 @@ export function variantOf(
   return null;
 }
 
-/**
- * The variant to land on when switching to `family`: keep the effort you had, else the adapter's
- * default if it lives here, else medium, else the family's first (lowest) entry.
- */
 export function pickVariant(
   family: ModelFamily,
   effort: Effort | null,

@@ -9,7 +9,7 @@ export interface SidebarPullRequestStatus {
   state: SidebarPullRequestState;
 }
 
-const FAILED_CHECK_CONCLUSIONS = new Set([
+const failedCheckConclusions = new Set([
   "ACTION_REQUIRED",
   "CANCELLED",
   "ERROR",
@@ -19,7 +19,7 @@ const FAILED_CHECK_CONCLUSIONS = new Set([
   "TIMED_OUT",
 ]);
 
-const SUCCESSFUL_CHECK_CONCLUSIONS = new Set(["NEUTRAL", "SKIPPED", "SUCCESS"]);
+const successfulCheckConclusions = new Set(["NEUTRAL", "SKIPPED", "SUCCESS"]);
 
 export function sidebarPullRequestStatus(
   pullRequest: GitHubPullRequest | null
@@ -31,15 +31,15 @@ export function sidebarPullRequestStatus(
   if (state === "MERGED") {
     return {
       number: pullRequest.number,
-      url: pullRequest.url,
       state: "merged",
+      url: pullRequest.url,
     };
   }
   if (state !== "OPEN") {
     return {
       number: pullRequest.number,
-      url: pullRequest.url,
       state: "closed",
+      url: pullRequest.url,
     };
   }
   if (
@@ -48,19 +48,19 @@ export function sidebarPullRequestStatus(
   ) {
     return {
       number: pullRequest.number,
-      url: pullRequest.url,
       state: "conflicting",
+      url: pullRequest.url,
     };
   }
   if (
     pullRequest.checks.some((check) =>
-      FAILED_CHECK_CONCLUSIONS.has((check.conclusion ?? "").toLocaleUpperCase())
+      failedCheckConclusions.has((check.conclusion ?? "").toLocaleUpperCase())
     )
   ) {
     return {
       number: pullRequest.number,
-      url: pullRequest.url,
       state: "ci_failed",
+      url: pullRequest.url,
     };
   }
   if (
@@ -68,7 +68,7 @@ export function sidebarPullRequestStatus(
       const conclusion = (check.conclusion ?? "").toLocaleUpperCase();
       const status = (check.status ?? "").toLocaleUpperCase();
       return (
-        !SUCCESSFUL_CHECK_CONCLUSIONS.has(conclusion) &&
+        !successfulCheckConclusions.has(conclusion) &&
         (conclusion === "" ||
           status === "IN_PROGRESS" ||
           status === "QUEUED" ||
@@ -78,11 +78,11 @@ export function sidebarPullRequestStatus(
   ) {
     return {
       number: pullRequest.number,
-      url: pullRequest.url,
       state: "ci_running",
+      url: pullRequest.url,
     };
   }
-  return { number: pullRequest.number, url: pullRequest.url, state: "open" };
+  return { number: pullRequest.number, state: "open", url: pullRequest.url };
 }
 
 export interface SidebarGitTarget {

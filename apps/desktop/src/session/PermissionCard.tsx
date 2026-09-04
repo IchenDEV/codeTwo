@@ -2,30 +2,42 @@ import { CircleAlert } from "@/components/ui/icons";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { useT, type Translate } from "../i18n";
+import { useT } from "../i18n";
+import type { Translate } from "../i18n";
 import type { PermissionContext, PermissionContextKind } from "../bridge";
 import type { PermissionQueueItem } from "./sessionEvents";
 
 function contextLabel(kind: PermissionContextKind, t: Translate): string {
   switch (kind) {
-    case "mcp_elicitation":
+    case "mcp_elicitation": {
       return t("permission.kind.externalTool");
-    case "website_access":
+    }
+    case "website_access": {
       return t("permission.kind.websiteAccess");
-    case "sensitive_web_action":
+    }
+    case "sensitive_web_action": {
       return t("permission.kind.sensitiveWebAction");
-    case "computer_use_application":
+    }
+    case "computer_use_application": {
       return t("permission.kind.appControl");
-    case "sites_mutation":
+    }
+    case "sites_mutation": {
       return t("permission.kind.siteChange");
-    case "sites_production":
+    }
+    case "sites_production": {
       return t("permission.kind.productionDeploy");
-    case "acp":
+    }
+    case "acp": {
       return t("permission.kind.command");
+    }
   }
 }
 
-const PermissionDetails = ({ context }: { readonly context: PermissionContext }) => {
+const PermissionDetails = ({
+  context,
+}: {
+  readonly context: PermissionContext;
+}) => {
   const t = useT();
   const details = [
     [t("permission.server"), context.server],
@@ -35,7 +47,9 @@ const PermissionDetails = ({ context }: { readonly context: PermissionContext })
     [t("permission.risk"), context.risk],
   ].filter((detail): detail is [string, string] => Boolean(detail[1]));
 
-  if (context.kind === "acp") return null;
+  if (context.kind === "acp") {
+    return null;
+  }
   return (
     <div className="text-metadata text-muted-foreground space-y-1">
       <p className="text-foreground font-medium">
@@ -49,9 +63,11 @@ const PermissionDetails = ({ context }: { readonly context: PermissionContext })
       <p>{t("permission.requiredEvenFullAccess")}</p>
     </div>
   );
-}
+};
 
-/** A non-modal approval surface anchored to the chat that owns the request. */
+/**
+A non-modal approval surface anchored to the chat that owns the request.
+*/
 export const PermissionCard = ({
   request,
   pendingCount,
@@ -65,7 +81,9 @@ export const PermissionCard = ({
   const [answering, setAnswering] = useState(false);
 
   const answer = async (optionId: string | null) => {
-    if (answering) return;
+    if (answering) {
+      return;
+    }
     setAnswering(true);
     try {
       await onAnswer(optionId);
@@ -111,7 +129,9 @@ export const PermissionCard = ({
               {request.title}
             </pre>
 
-            {request.context ? <PermissionDetails context={request.context} /> : null}
+            {request.context ? (
+              <PermissionDetails context={request.context} />
+            ) : null}
 
             <div className="flex flex-wrap items-center gap-2">
               {request.options.map(([id, label]) => (
@@ -139,4 +159,4 @@ export const PermissionCard = ({
       </section>
     </div>
   );
-}
+};

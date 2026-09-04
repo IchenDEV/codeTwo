@@ -46,21 +46,25 @@ const bundle = {
   scaffolds: [],
   extension_components: [],
   diagnostics: [],
-  runtime_commands: ["review.run", "review.connector"].map((id) => ({
-    id,
-    title: id,
-    description: "",
-    argsSchema: null,
-  })),
-  ui_contributions: uiSlots.map((slot, order) => ({
-    id: `review-${order}`,
-    slot,
-    label: `Review ${order}`,
-    description: "Run the review action.",
-    command: "review.run",
-    input: null,
-    order,
-  })),
+  runtime_commands: ["review.run", "review.connector"].map((id) => {
+    return {
+      id,
+      title: id,
+      description: "",
+      argsSchema: null,
+    };
+  }),
+  ui_contributions: uiSlots.map((slot, order) => {
+    return {
+      id: `review-${order}`,
+      slot,
+      label: `Review ${order}`,
+      description: "Run the review action.",
+      command: "review.run",
+      input: null,
+      order,
+    };
+  }),
   connector_contributions: [
     {
       id: "workspace",

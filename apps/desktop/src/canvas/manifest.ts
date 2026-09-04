@@ -1,5 +1,5 @@
 import { sanitizeElements } from "./serialize";
-import { ALLOWED_ELEMENT_TYPES } from "./types";
+import { allowedElementTypes } from "./types";
 import type { AllowedElementType } from "./types";
 import type { ExcalidrawElement } from "./excalidrawAdapter";
 
@@ -42,25 +42,25 @@ function elementBounds(element: ExcalidrawElement): CanvasManifestGeometry {
     element.points.length > 0
   ) {
     const points = element.points.map(([x, y]) => [
-										      element.x + x,
-										      element.y + y,
-										    ]);
+      element.x + x,
+      element.y + y,
+    ]);
     const xs = points.map(([x]) => x);
     const ys = points.map(([, y]) => y);
     const minX = Math.min(...xs);
     const minY = Math.min(...ys);
     return {
+      height: Math.max(0, Math.max(...ys) - minY),
+      width: Math.max(0, Math.max(...xs) - minX),
       x: minX,
       y: minY,
-      width: Math.max(0, Math.max(...xs) - minX),
-      height: Math.max(0, Math.max(...ys) - minY),
     };
   }
   return {
+    height: Math.max(0, element.height),
+    width: Math.max(0, element.width),
     x: element.x,
     y: element.y,
-    width: Math.max(0, element.width),
-    height: Math.max(0, element.height),
   };
 }
 
@@ -79,10 +79,6 @@ function endpoint(
   };
 }
 
-/**
- * Derives a stable structural summary. It intentionally contains no raw free-draw samples or
- * engine app state so the manifest is safe to send to providers that only need structure.
- */
 export function deriveCanvasManifest(
   elements: readonly unknown[]
 ): CanvasManifest {
@@ -91,7 +87,7 @@ export function deriveCanvasManifest(
     .filter((element) => !element.isDeleted && element.opacity > 0)
     .filter(
       (element): element is ExcalidrawElement & { type: AllowedElementType } =>
-        ALLOWED_ELEMENT_TYPES.includes(element.type as AllowedElementType)
+        allowedElementTypes.includes(element.type as AllowedElementType)
     );
   const allBounds = visible.map(elementBounds);
   const originX =
@@ -103,27 +99,27 @@ export function deriveCanvasManifest(
     const points =
       element.type === "line" || element.type === "arrow" ? element.points : [];
     return {
-      id: element.id,
-      type: element.type,
-      originalText: element.type === "text" ? element.originalText : null,
-      geometry: {
-        x: round(bounds.x - originX),
-        y: round(bounds.y - originY),
-        width: round(bounds.width),
-        height: round(bounds.height),
-      },
-      layer,
+      arrowEnd:
+        element.type === "arrow"
+          ? endpoint(element, points[points.length - 1], originX, originY)
+          : null,
       arrowStart:
         element.type === "arrow"
           ? endpoint(element, points[0], originX, originY)
           : null,
-      arrowEnd:
-        element.type === "arrow"
-          ? endpoint(element, points.at(-1), originX, originY)
-          : null,
+      geometry: {
+        height: round(bounds.height),
+        width: round(bounds.width),
+        x: round(bounds.x - originX),
+        y: round(bounds.y - originY),
+      },
+      id: element.id,
+      layer,
+      originalText: element.type === "text" ? element.originalText : null,
+      type: element.type,
     } satisfies CanvasManifestObject;
   });
-  return { schemaVersion: 1, objects };
+  return { objects, schemaVersion: 1 };
 }
 
 export function serializeCanvasManifest(manifest: CanvasManifest): string {

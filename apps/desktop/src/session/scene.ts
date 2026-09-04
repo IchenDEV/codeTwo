@@ -1,4 +1,4 @@
-import { SESSION_MODES } from "./mode";
+import { sessionModes } from "./mode";
 import type { SessionMode } from "./mode";
 import type { MemoryAccess } from "../bridge";
 
@@ -14,7 +14,7 @@ export type SceneSource = "builtin" | "user" | "project" | "plugin";
 /**
 One typed fill-in slot — shared vocabulary between Macro skills and scene briefs.
 */
-export interface SceneSlotDef {
+export interface SceneSlotDefinition {
   id: string;
   label: string;
   kind: "text" | "multiline" | "select" | "file" | "artifact";
@@ -25,11 +25,11 @@ export interface SceneSlotDef {
 
 export interface SceneBrief {
   template: string;
-  slots?: SceneSlotDef[];
+  slots?: SceneSlotDefinition[];
   clarify?: "multi_choice" | "free_form" | "off";
 }
 
-export interface SceneArtifactDef {
+export interface SceneArtifactDefinition {
   id: string;
   title: string;
   kind:
@@ -145,7 +145,7 @@ export interface SceneDocument {
   execution?: SceneExecution;
   skills?: SceneSkills;
   brief?: SceneBrief;
-  artifacts?: SceneArtifactDef[];
+  artifacts?: SceneArtifactDefinition[];
   exit?: SceneExit;
   hooks?: SceneHook[];
   constraints?: SceneConstraints;
@@ -168,7 +168,7 @@ export interface SceneInfo {
   localizations: Record<string, SceneLocalization>;
   execution?: SceneExecution | null;
   brief?: SceneBrief | null;
-  artifacts: SceneArtifactDef[];
+  artifacts: SceneArtifactDefinition[];
   skills?: SceneSkills | null;
   /**
   Appended for R8's completion banner: exit criteria and next-scene suggestions.
@@ -191,14 +191,14 @@ export type MemoryPresetId =
 /**
 Mirrors core `memory_preset_policy`, in the frontend's (read, write) vocabulary.
 */
-export const MEMORY_PRESET_POLICY: Record<
+export const memoryPresetPolicy: Record<
   MemoryPresetId,
   { read: MemoryAccess; write: MemoryAccess }
 > = {
-  standard: { read: "inherit", write: "inherit" },
-  read_only: { read: "allow", write: "deny" },
-  private: { read: "deny", write: "deny" },
   learn_only: { read: "deny", write: "allow" },
+  private: { read: "deny", write: "deny" },
+  read_only: { read: "allow", write: "deny" },
+  standard: { read: "inherit", write: "inherit" },
 };
 
 /**
@@ -213,19 +213,12 @@ export interface LivePosture {
   model: string | null;
 }
 
-/**
-Display title for the UI locale, falling back to the authored title.
-*/
 export function sceneTitle(scene: SceneInfo, locale: string): string {
   return scene.localizations[locale]?.title ?? scene.title;
 }
 
-/**
- * Has the user overridden any field this scene sets? Unset scene fields mean "inherit" and can
- * never count as customized.
- */
 export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
-  const { execution } = scene;
+  const execution = scene.execution;
   if (!execution) {
     return false;
   }
@@ -236,7 +229,7 @@ export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
     return true;
   }
   if (execution.memory_preset !== undefined) {
-    const preset = MEMORY_PRESET_POLICY[execution.memory_preset];
+    const preset = memoryPresetPolicy[execution.memory_preset];
     if (preset.read !== live.memoryRead || preset.write !== live.memoryWrite) {
       return true;
     }
@@ -264,31 +257,25 @@ export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
   return false;
 }
 
-/**
- * Which scene fields a soft-apply cannot honor (binding matrix, docs/reference/scenes.md §Binding):
- * providers/model/reasoning_effort bind at session creation; worktree is immutable per session.
- * When the live value already matches, the field is not pending.
- */
 export function softApplyPending(
   scene: SceneInfo,
   live: LivePosture | null
 ): string[] {
-  const { execution } = scene;
+  const execution = scene.execution;
   if (!execution) {
     return [];
   }
   const pending: string[] = [];
-  if (
-    execution.providers !== undefined &&
-    execution.providers.length > 0 &&
-    (!live || execution.providers[0] !== live.provider)
-  )
-    {pending.push("providers");}
-  if (
-    execution.model !== undefined &&
-    (!live || live.model === null || execution.model !== live.model)
-  )
-    {pending.push("model");}
+  if (execution.providers !== undefined && execution.providers.length > 0) {
+    if (!live || execution.providers[0] !== live.provider) {
+      pending.push("providers");
+    }
+  }
+  if (execution.model !== undefined) {
+    if (!live || live.model === null || execution.model !== live.model) {
+      pending.push("model");
+    }
+  }
   if (execution.reasoning_effort !== undefined) {
     pending.push("reasoning_effort");
   }
@@ -298,10 +285,6 @@ export function softApplyPending(
   return pending;
 }
 
-/**
- * Does applying this scene loosen permissions? Ordering per `SESSION_MODES` (loosest last).
- * Loosening always needs an explicit user confirmation naming both modes — never silent.
- */
 export function escalationNeeded(
   scene: SceneInfo,
   currentMode: SessionMode
@@ -311,17 +294,13 @@ export function escalationNeeded(
     return null;
   }
   const rank = (m: SessionMode) =>
-    SESSION_MODES.findIndex((entry) => entry.id === m);
+    sessionModes.findIndex((entry) => entry.id === m);
   if (rank(target) > rank(currentMode)) {
     return { from: currentMode, to: target };
   }
   return null;
 }
 
-/**
- * The next scene reference for the cycle shortcut. An empty ring falls back to every resolved
- * scene in listing order. Wraps; null when there is nothing else to cycle to.
- */
 export function nextSceneInRing(
   ring: readonly string[],
   scenes: readonly SceneInfo[],
@@ -345,18 +324,16 @@ export interface EffortOptionLike {
   choices: { id: string; name?: string | null }[];
 }
 
-/**
- * Resolve a scene's `reasoning_effort` against the session's reported config options.
- * The effort config id is provider-specific and unknowable before the session reports it —
- * this is why the binding matrix defers the field; once options arrive, apply it exactly once.
- */
 export function sceneEffortChoice(
   options: readonly EffortOptionLike[],
   effort: string
 ): { configId: string; value: string } | null {
-  const option = options.find((o) => o.category === "thought_level" ||
+  const option = options.find((o) => {
+    return (
+      o.category === "thought_level" ||
       o.id === "effort" ||
       o.id === "reasoning_effort"
+    );
   });
   if (!option) {
     return null;
@@ -369,14 +346,9 @@ export function sceneEffortChoice(
   return choice ? { configId: option.id, value: choice.id } : null;
 }
 
-/**
- * Resolve a scene's plan posture through the provider-owned collaboration-mode selector.
- * There is deliberately no fallback prompt/skill: without this native option the scene leaves
- * `plan_first` pending instead of pretending the provider changed modes.
- */
 export function sceneCollaborationChoice(
   options: readonly EffortOptionLike[],
-  planFirst: boolean
+  isPlanFirst: boolean
 ): { configId: string; value: string } | null {
   const option = options.find(
     (o) => o.category === "collaboration_mode" || o.id === "collaboration_mode"
@@ -384,7 +356,7 @@ export function sceneCollaborationChoice(
   if (!option) {
     return null;
   }
-  const wanted = planFirst ? "plan" : "default";
+  const wanted = isPlanFirst ? "plan" : "default";
   const choice = option.choices.find(
     (candidate) => candidate.id.toLowerCase() === wanted
   );
@@ -398,28 +370,22 @@ export interface SkillLike {
   id: string;
 }
 
-/**
- * Order the `/` picker for the active scene: pinned skills first (in pin order), the rest after.
- * With `suppress_unpinned` and `showAll` false, unpinned skills are hidden behind a "show all"
- * affordance — hiddenCount tells the picker how many wait behind it (spec: the affordance must
- * always remain reachable).
- */
 export function orderSkillsForScene<T extends SkillLike>(
   skills: readonly T[],
   scene: SceneInfo | null,
-  showAll: boolean
+  isShowAll: boolean
 ): { items: T[]; hiddenCount: number } {
   const pinned = scene?.skills?.pinned ?? [];
   if (pinned.length === 0) {
-    return { items: [...skills], hiddenCount: 0 };
+    return { hiddenCount: 0, items: [...skills] };
   }
   const rank = new Map(pinned.map((id, index) => [id, index]));
   const front = [...skills]
     .filter((s) => rank.has(s.id))
     .sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
   const rest = skills.filter((s) => !rank.has(s.id));
-  if (scene?.skills?.suppress_unpinned && !showAll) {
-    return { items: front, hiddenCount: rest.length };
+  if (scene?.skills?.suppress_unpinned === true && !isShowAll) {
+    return { hiddenCount: rest.length, items: front };
   }
-  return { items: [...front, ...rest], hiddenCount: 0 };
+  return { hiddenCount: 0, items: [...front, ...rest] };
 }

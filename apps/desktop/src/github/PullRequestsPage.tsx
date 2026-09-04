@@ -18,23 +18,17 @@ import {
   UserRound,
   X,
 } from "@/components/ui/icons";
-import {
-  Fragment,
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { Fragment, useDeferredValue, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   getGitHubPullRequest,
   listGitHubPullRequests,
   openExternal,
-  type GitHubPullRequestDetail,
-  type GitHubPullRequestSummary,
+} from "../bridge";
+import type {
+  GitHubPullRequestDetail,
+  GitHubPullRequestSummary,
 } from "../bridge";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
@@ -70,10 +64,10 @@ import {
   groupPullRequests,
   pullRequestCheckState,
   shortPullRequestAge,
-  type PullRequestReadiness,
-  type PullRequestView,
 } from "./pullRequests";
-import { taskForPullRequest, type BoardTask } from "../taskboard/taskBoard";
+import type { PullRequestReadiness, PullRequestView } from "./pullRequests";
+import { taskForPullRequest } from "../taskboard/taskBoard";
+import type { BoardTask } from "../taskboard/taskBoard";
 import "./pull-requests.css";
 
 type DetailState =
@@ -115,7 +109,7 @@ function avatar(login: string): ReactNode {
 }
 
 function inlineMarkdown(value: string): ReactNode[] {
-  const parts = value.split(/(`[^`]+`|https?:\/\/[^\s)]+)/g).filter(Boolean);
+  const parts = value.split(/(`[^`]+`|https?:\/\/[^\s)]+)/gu).filter(Boolean);
   return parts.map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
@@ -127,7 +121,7 @@ function inlineMarkdown(value: string): ReactNode[] {
         </code>
       );
     }
-    if (/^https?:\/\//.test(part)) {
+    if (/^https?:\/\//u.test(part)) {
       return (
         <a
           key={index}
@@ -148,7 +142,7 @@ function inlineMarkdown(value: string): ReactNode[] {
 
 const PullRequestBody = ({ body }: { readonly body: string }) => {
   const blocks: ReactNode[] = [];
-  const lines = body.replace(/\r\n/g, "\n").split("\n");
+  const lines = body.replace(/\r\n/gu, "\n").split("\n");
   for (let index = 0; index < lines.length;) {
     const line = lines[index] ?? "";
     if (!line.trim()) {
@@ -170,7 +164,7 @@ const PullRequestBody = ({ body }: { readonly body: string }) => {
       index += 1;
       continue;
     }
-    const heading = /^(#{2,3})\s+(.+)$/.exec(line);
+    const heading = /^(#{2,3})\s+(.+)$/u.exec(line);
     if (heading) {
       const content = inlineMarkdown(heading[2] ?? "");
       blocks.push(
@@ -183,14 +177,16 @@ const PullRequestBody = ({ body }: { readonly body: string }) => {
       index += 1;
       continue;
     }
-    const bullet = /^\s*[-*]\s+(.+)$/.exec(line);
-    const ordered = /^\s*\d+[.)]\s+(.+)$/.exec(line);
+    const bullet = /^\s*[-*]\s+(.+)$/u.exec(line);
+    const ordered = /^\s*\d+[.)]\s+(.+)$/u.exec(line);
     if (bullet || ordered) {
       const items: ReactNode[] = [];
-      const matcher = bullet ? /^\s*[-*]\s+(.+)$/ : /^\s*\d+[.)]\s+(.+)$/;
+      const matcher = bullet ? /^\s*[-*]\s+(.+)$/u : /^\s*\d+[.)]\s+(.+)$/u;
       while (index < lines.length) {
         const match = matcher.exec(lines[index] ?? "");
-        if (!match) break;
+        if (!match) {
+          break;
+        }
         items.push(
           <li key={`item-${index}`}>{inlineMarkdown(match[1] ?? "")}</li>
         );
@@ -210,7 +206,7 @@ const PullRequestBody = ({ body }: { readonly body: string }) => {
     while (
       index < lines.length &&
       (lines[index] ?? "").trim() &&
-      !/^(#{2,3})\s|^\s*[-*]\s|^\s*\d+[.)]\s|^```/.test(lines[index] ?? "")
+      !/^(#{2,3})\s|^\s*[-*]\s|^\s*\d+[.)]\s|^```/u.test(lines[index] ?? "")
     ) {
       paragraph.push((lines[index] ?? "").trim());
       index += 1;
@@ -220,7 +216,7 @@ const PullRequestBody = ({ body }: { readonly body: string }) => {
     );
   }
   return <div className="pull-request-body text-foreground/90">{blocks}</div>;
-}
+};
 
 const PullRequestRow = ({
   item,
@@ -272,7 +268,7 @@ const PullRequestRow = ({
       }
     />
   );
-}
+};
 
 export const PullRequestsPage = ({
   headerLeadingAction,
@@ -317,13 +313,15 @@ export const PullRequestsPage = ({
   const [compactListVisible, setCompactListVisible] = useState(true);
   const requestRef = useRef(0);
 
-  const reload = useCallback(async () => {
+  const reload = async () => {
     const request = ++requestRef.current;
     setLoading(true);
     setError(null);
     try {
       const next = await loadPullRequests();
-      if (request !== requestRef.current) return;
+      if (request !== requestRef.current) {
+        return;
+      }
       setItems(next);
       setSelectedId((current) =>
         current && next.some((item) => item.id === current)
@@ -331,14 +329,18 @@ export const PullRequestsPage = ({
           : (next[0]?.id ?? null)
       );
     } catch (reason) {
-      if (request !== requestRef.current) return;
+      if (request !== requestRef.current) {
+        return;
+      }
       setItems([]);
       setSelectedId(null);
       setError(String(reason));
     } finally {
-      if (request === requestRef.current) setLoading(false);
+      if (request === requestRef.current) {
+        setLoading(false);
+      }
     }
-  }, [loadPullRequests]);
+  };
 
   useEffect(() => {
     void reload();
@@ -353,46 +355,44 @@ export const PullRequestsPage = ({
       setDetailState(null);
       return;
     }
-    let disposed = false;
+    let isDisposed = false;
     const item = selected;
     setDetailState((current) => ({
+      error: null,
       id: item.id,
       loading: true,
       value: current?.id === item.id ? current.value : null,
-      error: null,
     }));
     void loadPullRequest(item)
       .then((value) => {
-        if (!disposed)
-          setDetailState({ id: item.id, loading: false, value, error: null });
+        if (!isDisposed) {
+          setDetailState({ error: null, id: item.id, loading: false, value });
+        }
       })
       .catch((reason) => {
-        if (!disposed)
+        if (!isDisposed) {
           setDetailState({
+            error: String(reason),
             id: item.id,
             loading: false,
             value: null,
-            error: String(reason),
           });
+        }
       });
     return () => {
-      disposed = true;
+      isDisposed = true;
     };
   }, [loadPullRequest, selected]);
 
-  const visible = useMemo(
-    () => filterPullRequests(items, view, readiness, deferredQuery),
-    [deferredQuery, items, readiness, view]
-  );
+  const visible = filterPullRequests(items, view, readiness, deferredQuery);
   useEffect(() => {
-    if (selectedId && visible.some((item) => item.id === selectedId)) return;
+    if (selectedId && visible.some((item) => item.id === selectedId)) {
+      return;
+    }
     setSelectedId(visible[0]?.id ?? null);
     setDetailTab("summary");
   }, [selectedId, visible]);
-  const groups = useMemo(
-    () => groupPullRequests(visible, view),
-    [view, visible]
-  );
+  const groups = groupPullRequests(visible, view);
   const detail = detailState?.id === selectedId ? detailState.value : null;
   const detailReference = detail ? githubPullRequestReference(detail) : null;
   const linkedTask = detailReference
@@ -523,13 +523,10 @@ export const PullRequestsPage = ({
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-3 pb-4">
             {loading && items.length === 0 ? (
-              <div
-                role="status"
-                className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12"
-              >
+              <output className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12">
                 <ActivityOrb state="searching" visualSize={14} />
                 {t("pullRequests.loading")}
-              </div>
+              </output>
             ) : error ? (
               <div
                 role="alert"
@@ -601,7 +598,8 @@ export const PullRequestsPage = ({
               {headerLeadingAction}
             </div>
           ) : null}
-          {selectedId ? <Button
+          {selectedId ? (
+            <Button
               variant="ghost"
               size="icon-xs"
               className="pull-request-back"
@@ -609,7 +607,8 @@ export const PullRequestsPage = ({
               onClick={() => setCompactListVisible(true)}
             >
               <ArrowLeft className="size-3.5" />
-            </Button> : null}
+            </Button>
+          ) : null}
           <Tabs
             value={detailTab}
             onValueChange={(value) => setDetailTab(value as typeof detailTab)}
@@ -627,7 +626,8 @@ export const PullRequestsPage = ({
             </TabsList>
           </Tabs>
           <div className="electrobun-webkit-app-region-drag flex-1" />
-          {detail ? <>
+          {detail ? (
+            <>
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -711,20 +711,18 @@ export const PullRequestsPage = ({
                 <MessageCircle className="size-3.5" />
                 {t("pullRequests.chat")}
               </Button>
-            </> : null}
+            </>
+          ) : null}
         </header>
         {!selected ? (
           <div className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center">
             {t("pullRequests.select")}
           </div>
         ) : detailState?.loading && !detail ? (
-          <div
-            role="status"
-            className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center gap-2"
-          >
+          <output className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center gap-2">
             <ActivityOrb state="searching" visualSize={14} />
             {t("pullRequests.loadingDetail")}
-          </div>
+          </output>
         ) : detailState?.error ? (
           <div
             role="alert"
@@ -764,7 +762,9 @@ export const PullRequestsPage = ({
                       </span>
                     </div>
                   </div>
-                  {detailState?.loading ? <ActivityOrb state="searching" visualSize={14} /> : null}
+                  {detailState?.loading ? (
+                    <ActivityOrb state="searching" visualSize={14} />
+                  ) : null}
                 </div>
                 <div className="mt-8 grid gap-4">
                   <DetailMetric
@@ -908,4 +908,4 @@ export const PullRequestsPage = ({
       </div>
     </section>
   );
-}
+};

@@ -27,10 +27,10 @@ type ProgressProps =
       });
 
 const indicatorToneClasses: Record<ProgressTone, string> = {
+  destructive: "bg-status-destructive",
   primary: "bg-primary",
   success: "bg-status-success",
   warning: "bg-status-warning",
-  destructive: "bg-status-destructive",
 };
 
 const Progress = ({
@@ -97,56 +97,57 @@ const Progress = ({
       </ProgressTrack>
     </ProgressPrimitive.Root>
   );
-}
+};
 
-const ProgressTrack = ({ className, ...props }: ProgressPrimitive.Track.Props) => {
-  return (
-    <ProgressPrimitive.Track
-      data-slot="progress-track"
-      className={cn(
-        "rounded-control relative flex items-center overflow-x-hidden",
-        className
-      )}
-      {...props}
-    />
-  );
-}
+const ProgressTrack = ({
+  className,
+  ...props
+}: ProgressPrimitive.Track.Props) => (
+  <ProgressPrimitive.Track
+    data-slot="progress-track"
+    className={cn(
+      "rounded-control relative flex items-center overflow-x-hidden",
+      className
+    )}
+    {...props}
+  />
+);
 
 const ProgressIndicator = ({
   className,
   ...props
-}: ProgressPrimitive.Indicator.Props) => {
-  return (
-    <ProgressPrimitive.Indicator
-      data-slot="progress-indicator"
-      className={cn("rounded-control h-full transition-all", className)}
-      {...props}
-    />
-  );
-}
+}: ProgressPrimitive.Indicator.Props) => (
+  <ProgressPrimitive.Indicator
+    data-slot="progress-indicator"
+    className={cn("rounded-control h-full transition-all", className)}
+    {...props}
+  />
+);
 
-const ProgressLabel = ({ className, ...props }: ProgressPrimitive.Label.Props) => {
-  return (
-    <ProgressPrimitive.Label
-      data-slot="progress-label"
-      className={cn("text-body font-medium", className)}
-      {...props}
-    />
-  );
-}
+const ProgressLabel = ({
+  className,
+  ...props
+}: ProgressPrimitive.Label.Props) => (
+  <ProgressPrimitive.Label
+    data-slot="progress-label"
+    className={cn("text-body font-medium", className)}
+    {...props}
+  />
+);
 
-const ProgressValue = ({ className, ...props }: ProgressPrimitive.Value.Props) => {
-  return (
-    <ProgressPrimitive.Value
-      data-slot="progress-value"
-      className={cn(
-        "text-body text-muted-foreground ml-auto tabular-nums",
-        className
-      )}
-      {...props}
-    />
-  );
-}
+const ProgressValue = ({
+  className,
+  ...props
+}: ProgressPrimitive.Value.Props) => (
+  <ProgressPrimitive.Value
+    data-slot="progress-value"
+    className={cn(
+      "text-body text-muted-foreground ml-auto tabular-nums",
+      className
+    )}
+    {...props}
+  />
+);
 
 export {
   Progress,

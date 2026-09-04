@@ -3,7 +3,7 @@
  *
  * The host owns rendering and invocation; packages contribute descriptors, never executable UI.
  */
-export const PLUGIN_UI_SLOT_IDS = [
+export const pluginUiSlotIds = [
   "rail.features",
   "session.header",
   "transcript.before",
@@ -11,9 +11,9 @@ export const PLUGIN_UI_SLOT_IDS = [
   "composer.toolbar",
 ] as const;
 
-export type PluginUiSlotId = (typeof PLUGIN_UI_SLOT_IDS)[number];
+export type PluginUiSlotId = (typeof pluginUiSlotIds)[number];
 
-export const PLUGIN_CONNECTOR_CAPABILITIES = [
+export const pluginConnectorCapabilities = [
   "connection",
   "conversations",
   "documents",
@@ -22,7 +22,7 @@ export const PLUGIN_CONNECTOR_CAPABILITIES = [
   "turn_notifications",
 ] as const;
 export type PluginConnectorCapability =
-  (typeof PLUGIN_CONNECTOR_CAPABILITIES)[number];
+  (typeof pluginConnectorCapabilities)[number];
 
 export interface PluginUiContribution {
   id: string;
@@ -51,7 +51,7 @@ export interface PluginRuntimeContribution {
   env: Record<string, string>;
   inject: string[];
   optionalInject: string[];
-  scopeSupport: ("user" | "project")[];
+  scopeSupport: Array<"user" | "project">;
 }
 
 export interface PluginRuntimeCommandContribution {
@@ -83,13 +83,13 @@ export interface C2PluginManifest {
   languageServers: PluginLanguageServerContribution[];
 }
 
-export const AGENT_PLUGIN_SCHEMA =
+export const agentPluginSchema =
   "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-export const C2_PLUGIN_STANDARD_VERSION = "1.2.0";
-export type C2PluginStandardVersion = typeof C2_PLUGIN_STANDARD_VERSION;
+export const c2PluginStandardVersion = "1.2.0";
+export type C2PluginStandardVersion = typeof c2PluginStandardVersion;
 
 function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
@@ -121,7 +121,7 @@ function stringRecord(value: unknown): Record<string, string> {
 
 function safeId(value: string): boolean {
   return (
-    value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/.test(value)
+    value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/u.test(value)
   );
 }
 
@@ -129,7 +129,7 @@ function commandName(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.length <= 128 &&
-    /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/.test(value)
+    /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/u.test(value)
   );
 }
 
@@ -139,7 +139,7 @@ function safeCommand(value: string): boolean {
     !value.includes("${") &&
     !value.startsWith("/") &&
     !value.startsWith("\\") &&
-    !/^[A-Za-z]:[\\/]/.test(value)
+    !/^[A-Za-z]:[\\/]/u.test(value)
   );
 }
 
@@ -167,22 +167,28 @@ export function parsePluginRuntimeContribution(
     typeof raw.command !== "string" ||
     raw.command.trim().length === 0 ||
     !safeCommand(raw.command) ||
-    (raw.protocol != null &&
+    (raw.protocol !== null &&
+      raw.protocol !== undefined &&
       (typeof raw.protocol !== "string" ||
-        !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.protocol))) ||
-    (raw.args != null &&
+        !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(raw.protocol))) ||
+    (raw.args !== null &&
+      raw.args !== undefined &&
       (!Array.isArray(raw.args) ||
         raw.args.some((entry) => typeof entry !== "string"))) ||
-    (raw.env != null &&
+    (raw.env !== null &&
+      raw.env !== undefined &&
       (!isObject(raw.env) ||
         Object.values(raw.env).some((entry) => typeof entry !== "string"))) ||
-    (raw.inject != null &&
+    (raw.inject !== null &&
+      raw.inject !== undefined &&
       (!Array.isArray(raw.inject) ||
         raw.inject.some((entry) => typeof entry !== "string"))) ||
-    (raw.optionalInject != null &&
+    (raw.optionalInject !== null &&
+      raw.optionalInject !== undefined &&
       (!Array.isArray(raw.optionalInject) ||
         raw.optionalInject.some((entry) => typeof entry !== "string"))) ||
-    (raw.scopeSupport != null &&
+    (raw.scopeSupport !== null &&
+      raw.scopeSupport !== undefined &&
       (!Array.isArray(raw.scopeSupport) ||
         raw.scopeSupport.some(
           (entry) => entry !== "user" && entry !== "project"
@@ -200,12 +206,12 @@ export function parsePluginRuntimeContribution(
     normalizedScopes.unshift("user");
   }
   return {
-    protocol: typeof raw.protocol === "string" ? raw.protocol : "1.0.0",
-    command: raw.command.trim(),
     args: strings(raw.args),
+    command: raw.command.trim(),
     env: stringRecord(raw.env),
     inject: strings(raw.inject),
     optionalInject: strings(raw.optionalInject),
+    protocol: typeof raw.protocol === "string" ? raw.protocol : "1.0.0",
     scopeSupport: normalizedScopes,
   };
 }
@@ -231,20 +237,28 @@ export function parsePluginRuntimeCommandContribution(
     return null;
   }
   if (
-    raw.description != null &&
+    raw.description !== null &&
+    raw.description !== undefined &&
     (typeof raw.description !== "string" || raw.description.length > 300)
   ) {
     return null;
   }
-  if (raw.argsSchema != null && !isObject(raw.argsSchema)) {
+  if (
+    raw.argsSchema !== null &&
+    raw.argsSchema !== undefined &&
+    !isObject(raw.argsSchema)
+  ) {
     return null;
   }
   return {
-    id: raw.id,
-    title: raw.title.trim(),
+    argsSchema:
+      raw.argsSchema === null || raw.argsSchema === undefined
+        ? null
+        : raw.argsSchema,
     description:
       typeof raw.description === "string" ? raw.description.trim() : "",
-    argsSchema: raw.argsSchema == null ? null : raw.argsSchema,
+    id: raw.id,
+    title: raw.title.trim(),
   };
 }
 
@@ -270,7 +284,7 @@ export function parsePluginUiContribution(
   }
   if (
     !safeId(String(raw.id ?? "")) ||
-    !PLUGIN_UI_SLOT_IDS.includes(raw.slot as PluginUiSlotId)
+    !pluginUiSlotIds.includes(raw.slot as PluginUiSlotId)
   ) {
     return null;
   }
@@ -282,7 +296,8 @@ export function parsePluginUiContribution(
     return null;
   }
   if (
-    raw.description != null &&
+    raw.description !== null &&
+    raw.description !== undefined &&
     (typeof raw.description !== "string" || raw.description.length > 300)
   ) {
     return null;
@@ -291,7 +306,8 @@ export function parsePluginUiContribution(
     return null;
   }
   if (
-    raw.order != null &&
+    raw.order !== null &&
+    raw.order !== undefined &&
     (typeof raw.order !== "number" ||
       !Number.isInteger(raw.order) ||
       raw.order < -100 ||
@@ -301,14 +317,14 @@ export function parsePluginUiContribution(
   }
   const order = typeof raw.order === "number" ? raw.order : 0;
   return {
-    id: String(raw.id),
-    slot: raw.slot as PluginUiSlotId,
-    label: raw.label.trim(),
+    command: raw.command,
     description:
       typeof raw.description === "string" ? raw.description.trim() : "",
-    command: raw.command,
+    id: String(raw.id),
     input: raw.input ?? null,
+    label: raw.label.trim(),
     order,
+    slot: raw.slot as PluginUiSlotId,
   };
 }
 
@@ -335,19 +351,22 @@ export function parsePluginConnectorContribution(
     return null;
   }
   if (
-    raw.capabilities.some((entry) => typeof entry !== "string" ||
-        !PLUGIN_CONNECTOR_CAPABILITIES.includes(
+    raw.capabilities.some((entry) => {
+      return (
+        typeof entry !== "string" ||
+        !pluginConnectorCapabilities.includes(
           entry as PluginConnectorCapability
         )
+      );
     })
   ) {
     return null;
   }
   return {
+    capabilities: [...new Set(raw.capabilities)] as PluginConnectorCapability[],
+    command: raw.command,
     id: String(raw.id),
     provider: raw.provider,
-    command: raw.command,
-    capabilities: [...new Set(raw.capabilities)] as PluginConnectorCapability[],
   };
 }
 
@@ -370,10 +389,12 @@ export function parsePluginLanguageServerContribution(
     !safeCommand(raw.command) ||
     !Array.isArray(raw.languages) ||
     raw.languages.some((entry) => typeof entry !== "string") ||
-    (raw.args != null &&
+    (raw.args !== null &&
+      raw.args !== undefined &&
       (!Array.isArray(raw.args) ||
         raw.args.some((entry) => typeof entry !== "string"))) ||
-    (raw.env != null &&
+    (raw.env !== null &&
+      raw.env !== undefined &&
       (!isObject(raw.env) ||
         Object.values(raw.env).some((entry) => typeof entry !== "string")))
   ) {
@@ -383,16 +404,16 @@ export function parsePluginLanguageServerContribution(
     ...new Set(
       strings(raw.languages).map((language) => language.toLocaleLowerCase())
     ),
-  ].filter((language) => /^[a-z0-9][a-z0-9+_.-]{0,63}$/.test(language));
+  ].filter((language) => /^[a-z0-9][a-z0-9+_.-]{0,63}$/u.test(language));
   if (languages.length === 0 || languages.length > 16) {
     return null;
   }
   return {
+    args: strings(raw.args),
+    command: raw.command.trim(),
+    env: stringRecord(raw.env),
     id: String(raw.id),
     languages,
-    command: raw.command.trim(),
-    args: strings(raw.args),
-    env: stringRecord(raw.env),
   };
 }
 
@@ -400,27 +421,27 @@ export function parsePluginContributionArray<T>(
   value: unknown,
   parse: (entry: unknown) => T | null,
   label: string,
-  strict: boolean
+  isStrict: boolean
 ): T[] {
-  if (value == null) {
+  if (value === null || value === undefined) {
     return [];
   }
   if (!Array.isArray(value)) {
-    if (strict) {
+    if (isStrict) {
       throw new Error(`${label} must be an array`);
     }
     return [];
   }
   const parsed = value.map(parse);
-  const invalid = parsed.indexOf(null);
-  if (strict && invalid !== -1) {
+  const invalid = parsed.findIndex((entry) => entry === null);
+  if (isStrict && invalid >= 0) {
     throw new Error(`${label}[${invalid}] is invalid`);
   }
   return parsed.filter((entry): entry is T => entry !== null);
 }
 
 export function assertUniquePluginContributionIds(
-  contributions: { id: string }[],
+  contributions: Array<{ id: string }>,
   label: string
 ): void {
   if (
@@ -431,15 +452,12 @@ export function assertUniquePluginContributionIds(
   }
 }
 
-/**
-Validate and normalize the only manifest shape C2 installs.
-*/
 export function parsePluginManifest(value: unknown): C2PluginManifest {
   if (!isObject(value)) {
     throw new Error("plugin.json must contain an object");
   }
   const raw = asObject(value);
-  const rootFields = new Set([
+  const rootFields = [
     "$schema",
     "name",
     "version",
@@ -450,16 +468,16 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     "license",
     "keywords",
     "extensions",
-  ]);
+  ];
   const unknownRootFields = Object.keys(raw).filter(
-    (key) => !rootFields.has(key)
+    (key) => !rootFields.includes(key)
   );
   if (unknownRootFields.length > 0) {
     throw new Error(
       `Unknown Agent Plugins fields: ${unknownRootFields.join(", ")}`
     );
   }
-  if (raw.$schema !== AGENT_PLUGIN_SCHEMA) {
+  if (raw.$schema !== agentPluginSchema) {
     throw new Error(
       `Unsupported Agent Plugins schema: ${String(raw.$schema ?? "")}`
     );
@@ -467,21 +485,29 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   if (
     typeof raw.name !== "string" ||
     raw.name.length > 64 ||
-    !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(raw.name)
+    !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(raw.name)
   ) {
     throw new Error("Agent Plugins name must match the 1.0.0 naming rules");
   }
   if (
     typeof raw.version !== "string" ||
-    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.version)
+    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(raw.version)
   ) {
     throw new Error("C2 plugins require a semantic version");
   }
 
-  if (raw.description != null && typeof raw.description !== "string") {
+  if (
+    raw.description !== null &&
+    raw.description !== undefined &&
+    typeof raw.description !== "string"
+  ) {
     throw new Error("Agent Plugins description must be a string");
   }
-  if (raw.repository != null && typeof raw.repository !== "string") {
+  if (
+    raw.repository !== null &&
+    raw.repository !== undefined &&
+    typeof raw.repository !== "string"
+  ) {
     throw new Error("Agent Plugins repository must be a string");
   }
   for (const field of ["homepage", "license"] as const) {
@@ -490,21 +516,27 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     }
   }
   if (
-    raw.keywords != null &&
+    raw.keywords !== null &&
+    raw.keywords !== undefined &&
     (!Array.isArray(raw.keywords) ||
       raw.keywords.some((keyword) => typeof keyword !== "string"))
   ) {
     throw new Error("Agent Plugins keywords must be an array of strings");
   }
   if (
-    raw.author != null &&
+    raw.author !== null &&
+    raw.author !== undefined &&
     (!isObject(raw.author) ||
       !hasOnlyKeys(raw.author, ["name", "email", "url"]) ||
       Object.values(raw.author).some((entry) => typeof entry !== "string"))
   ) {
     throw new Error("Agent Plugins author must match the 1.0.0 schema");
   }
-  if (raw.extensions != null && !isObject(raw.extensions)) {
+  if (
+    raw.extensions !== null &&
+    raw.extensions !== undefined &&
+    !isObject(raw.extensions)
+  ) {
     throw new Error("Agent Plugins extensions must be an object");
   }
 
@@ -514,7 +546,8 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   }
   const c2Value = extensions["dev.codetwo"];
   if (
-    c2Value == null ||
+    c2Value === null ||
+    c2Value === undefined ||
     typeof c2Value !== "object" ||
     Array.isArray(c2Value)
   ) {
@@ -523,26 +556,29 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   const c2 = asObject(c2Value);
   const standardVersion =
     typeof c2.standardVersion === "string" ? c2.standardVersion : "";
-  if (standardVersion !== C2_PLUGIN_STANDARD_VERSION) {
+  if (standardVersion !== c2PluginStandardVersion) {
     throw new Error(
       `Unsupported C2 plugin standard: ${standardVersion || "missing"}`
     );
   }
-  const unknownFields = Object.keys(c2).filter((key) => ![
-        "standardVersion",
-        "runtime",
-        "commands",
-        "ui",
-        "connectors",
-        "languageServers",
-      ].includes(key)
-  );
+  const unknownFields = Object.keys(c2).filter((key) => {
+    return ![
+      "standardVersion",
+      "runtime",
+      "commands",
+      "ui",
+      "connectors",
+      "languageServers",
+    ].includes(key);
+  });
   if (unknownFields.length > 0) {
     throw new Error(`Unknown C2 plugin fields: ${unknownFields.join(", ")}`);
   }
   const runtime =
-    c2.runtime == null ? null : parsePluginRuntimeContribution(c2.runtime);
-  if (c2.runtime != null && !runtime) {
+    c2.runtime === null || c2.runtime === undefined
+      ? null
+      : parsePluginRuntimeContribution(c2.runtime);
+  if (c2.runtime !== null && c2.runtime !== undefined && !runtime) {
     throw new Error("extensions.dev.codetwo.runtime is invalid");
   }
   const commands = parsePluginContributionArray(
@@ -627,24 +663,21 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   }
   const author = asObject(raw.author);
   return {
-    name: raw.name,
-    version: raw.version,
+    author: typeof author.name === "string" ? author.name : "",
+    commands,
+    connectors,
     description:
       typeof raw.description === "string" ? raw.description.slice(0, 500) : "",
-    author: typeof author.name === "string" ? author.name : "",
-    repository: typeof raw.repository === "string" ? raw.repository : "",
-    standardVersion,
-    runtime,
-    commands,
-    ui,
-    connectors,
     languageServers,
+    name: raw.name,
+    repository: typeof raw.repository === "string" ? raw.repository : "",
+    runtime,
+    standardVersion: standardVersion as C2PluginStandardVersion,
+    ui,
+    version: raw.version,
   };
 }
 
-/**
-Stable policy identity for one UI descriptor owned by an installed package.
-*/
 export function pluginUiComponentId(
   pluginId: string,
   contributionId: string

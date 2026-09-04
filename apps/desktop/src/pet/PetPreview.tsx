@@ -1,7 +1,10 @@
 import { CodeTwoPet } from "./CodeTwoPet";
-import { useAppearanceSettings, type PetSize } from "../appearance";
+import { useAppearanceSettings } from "../appearance";
+import type { PetSize } from "../appearance";
 
-/** Development-only visual fixture for checking the pet at the real app scale. */
+/**
+Development-only visual fixture for checking the pet at the real app scale.
+*/
 export const PetPreview = () => {
   const appearance = useAppearanceSettings();
   const search = new URLSearchParams(window.location.search);
@@ -27,4 +30,4 @@ export const PetPreview = () => {
       />
     </main>
   );
-}
+};

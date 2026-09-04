@@ -17,43 +17,43 @@ const remoteSource = await Bun.file(
 ).text();
 
 const base = {
-  id: "shape-1",
-  x: 10,
-  y: 20,
-  width: 100,
-  height: 40,
   angle: 0,
-  strokeColor: "black",
   backgroundColor: "transparent",
+  boundElements: null,
   fillStyle: "solid",
-  strokeWidth: 2,
-  strokeStyle: "solid",
-  roundness: null,
-  roughness: 2,
-  opacity: 100,
-  seed: 1,
-  version: 1,
-  versionNonce: 1,
+  frameId: null,
+  groupIds: [],
+  height: 40,
+  id: "shape-1",
   index: "a0",
   isDeleted: false,
-  groupIds: [],
-  frameId: null,
-  boundElements: null,
-  updated: 1,
   link: "https://should-be-removed.invalid",
   locked: false,
+  opacity: 100,
+  roughness: 2,
+  roundness: null,
+  seed: 1,
+  strokeColor: "black",
+  strokeStyle: "solid",
+  strokeWidth: 2,
+  updated: 1,
+  version: 1,
+  versionNonce: 1,
+  width: 100,
+  x: 10,
+  y: 20,
 };
 
 describe("canvas serialization allowlist and sanitization", () => {
   test("rejects unsupported elements and normalizes precise roughness defaults", () => {
     const envelope = createEnvelope(
       {
+        appState: {} as never,
         elements: [
           { ...base, type: "rectangle" },
           { ...base, id: "unsupported", type: "diamond" },
           { ...base, id: "frame", type: "frame" },
         ] as never,
-        appState: {} as never,
       },
       4,
       "light"
@@ -64,15 +64,15 @@ describe("canvas serialization allowlist and sanitization", () => {
     expect(envelope.elements[0].link).toBeNull();
     const textEnvelope = createEnvelope(
       {
+        appState: {} as never,
         elements: [
           {
             ...base,
             id: "text-1",
-            type: "text",
             text: "keep data:image/png;base64,AAAA",
+            type: "text",
           },
         ] as never,
-        appState: {} as never,
       },
       4,
       "light"
@@ -86,8 +86,8 @@ describe("canvas serialization allowlist and sanitization", () => {
     ).toEqual({ keep: "ok" });
     const envelope = createEnvelope(
       {
-        elements: [{ ...base, type: "rectangle" }] as never,
         appState: {} as never,
+        elements: [{ ...base, type: "rectangle" }] as never,
       },
       1,
       "light"
@@ -103,35 +103,35 @@ describe("deterministic canvas manifest", () => {
     const scene = [
       {
         ...base,
-        type: "text",
-        text: "Hello",
+        height: 20,
         originalText: "Hello\nworld",
+        text: "Hello",
+        type: "text",
+        width: 50,
         x: 20,
         y: 20,
-        width: 50,
-        height: 20,
       },
       {
         ...base,
-        id: "arrow-1",
-        type: "arrow",
-        x: 0,
-        y: 0,
-        width: 100,
         height: 100,
+        id: "arrow-1",
         points: [
           [0, 0],
           [100, 100],
         ],
+        type: "arrow",
+        width: 100,
+        x: 0,
+        y: 0,
       },
       {
         ...base,
         id: "pen-1",
-        type: "freedraw",
         points: [
           [0, 0],
           [4, 6],
         ],
+        type: "freedraw",
       },
     ] as never;
     const manifest = deriveCanvasManifest(scene);
@@ -160,18 +160,18 @@ describe("media normalizer routing and rejection", () => {
         },
       ],
       {
+        createFileId: (media) => media.ref,
         normalize: async (input) => {
           seen.push(input.mimeType);
           return {
-            ref: `trusted-${input.name}`,
             bytes: new Uint8Array([137, 80]),
+            height: 10,
             mimeType: "image/png",
             name: input.name,
+            ref: `trusted-${input.name}`,
             width: 20,
-            height: 10,
           };
         },
-        createFileId: (media) => media.ref,
         onAsset: () => {},
       }
     );
@@ -189,11 +189,13 @@ describe("media normalizer routing and rejection", () => {
       intakeCanvasMedia(
         [{ bytes: new Uint8Array([1]), mimeType: "image/jpeg" }],
         {
-          normalize: async () => ({
-										            ref: "trusted-svg",
-										            bytes: new Uint8Array([1]),
-										            mimeType: "image/svg+xml" as never,
-										          }),
+          normalize: async () => {
+            return {
+              bytes: new Uint8Array([1]),
+              mimeType: "image/svg+xml" as never,
+              ref: "trusted-svg",
+            };
+          },
           onAsset: () => {},
         }
       )
@@ -206,12 +208,12 @@ describe("media normalizer routing and rejection", () => {
 describe("crop, overview, detail tiling, and hard export budgets", () => {
   test("emits overview first and deterministic row-major detail tiles", () => {
     const tiles = planCanvasExportTiles(
-      { minX: 0, minY: 0, maxX: 5000, maxY: 3000 },
+      { maxX: 5000, maxY: 3000, minX: 0, minY: 0 },
       {
-        tileSize: 2048,
+        maxBytes: 200_000_000,
         maxImages: 20,
         maxPixels: 40_000_000,
-        maxBytes: 200_000_000,
+        tileSize: 2048,
       }
     );
     expect(tiles[0].kind).toBe("overview");
@@ -226,21 +228,24 @@ describe("crop, overview, detail tiling, and hard export budgets", () => {
   });
 
   test("returns explicit image-count and pixel-budget errors", () => {
-    expect(() => planCanvasExportTiles(
-        { minX: 0, minY: 0, maxX: 5000, maxY: 3000 },
-        { tileSize: 512, maxImages: 2 }
-      )
-    ).toThrow(/requires/);
-    expect(() => planCanvasExportTiles(
-        { minX: 0, minY: 0, maxX: 5000, maxY: 3000 },
-        { tileSize: 2048, maxPixels: 1000 }
-      )
-    ).toThrow(/pixels/);
-    expect(() => planCanvasExportTiles(
-        { minX: 0, minY: 0, maxX: 100, maxY: 100 },
+    expect(() => {
+      return planCanvasExportTiles(
+        { maxX: 5000, maxY: 3000, minX: 0, minY: 0 },
+        { maxImages: 2, tileSize: 512 }
+      );
+    }).toThrow(/requires/u);
+    expect(() => {
+      return planCanvasExportTiles(
+        { maxX: 5000, maxY: 3000, minX: 0, minY: 0 },
+        { maxPixels: 1000, tileSize: 2048 }
+      );
+    }).toThrow(/pixels/u);
+    expect(() => {
+      return planCanvasExportTiles(
+        { maxX: 100, maxY: 100, minX: 0, minY: 0 },
         { maxImages: 0 }
-      )
-    ).toThrow(/images/);
+      );
+    }).toThrow(/images/u);
   });
 });
 
@@ -252,6 +257,6 @@ describe("CanvasEditor interaction and Remote island memory-only contract", () =
     expect(remoteSource).toContain(
       "new envelope is kept only in the mounted page memory"
     );
-    expect(remoteSource).not.toMatch(/localStorage|sessionStorage|indexedDB/i);
+    expect(remoteSource).not.toMatch(/localStorage|sessionStorage|indexedDB/iu);
   });
 });

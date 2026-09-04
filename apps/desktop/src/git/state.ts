@@ -20,11 +20,10 @@ export function gitFileSections(files: readonly GitFile[]): {
   };
 }
 
-/**
-A rename is one index operation even though Git needs both literal paths.
-*/
 export function gitFilePathspecs(file: GitFile): string[] {
-  return file.original_path && file.original_path !== file.path
+  return file.original_path != null &&
+    file.original_path !== "" &&
+    file.original_path !== file.path
     ? [file.original_path, file.path]
     : [file.path];
 }
@@ -100,12 +99,6 @@ export interface WorkspaceLoadState<T> {
   value: T;
 }
 
-/**
- * Project a workspace-owned value without ever borrowing the previous workspace's payload.
- *
- * React effects run after paint. Returning an immediate loading projection here closes the render
- * where `cwd` has changed but the new request has not started yet.
- */
 export function workspaceStateForCwd<T>(
   state: WorkspaceLoadState<T>,
   cwd: string,
@@ -117,9 +110,6 @@ export function workspaceStateForCwd<T>(
   return { cwd, loading: true, value: emptyValue };
 }
 
-/**
-Never paint provider metadata fetched for the previous workspace during a cwd switch.
-*/
 export function sourceControlStateForCwd(
   state: SourceControlLoadState,
   cwd: string
@@ -127,30 +117,24 @@ export function sourceControlStateForCwd(
   if (state.cwd === cwd) {
     return state;
   }
-  return { cwd, loading: true, info: null, error: null };
+  return { cwd, error: null, info: null, loading: true };
 }
 
-/**
- * Project the provider adapter contract into honest UI copy and one enablement decision.
- *
- * Push is deliberately absent: it remains a plain Git operation and must not inherit hosted
- * provider/CLI restrictions from change-request creation.
- */
 export function changeRequestPresentation(
   info: SourceControlInfo | null,
-  loading: boolean,
+  isLoading: boolean,
   error: string | null,
   repoAvailable: boolean | null = true
 ): ChangeRequestPresentation {
   const label = info?.change_request_label ?? "change request";
   const base = {
-    label,
     createLabel: `Create ${label}`,
-    creatingLabel: `Creating ${label}…`,
     createdLabel: `${label === "change request" ? "Change request" : label} created.`,
+    creatingLabel: `Creating ${label}…`,
+    label,
   } as const;
 
-  if (repoAvailable === null || loading) {
+  if (repoAvailable === null || isLoading) {
     return {
       ...base,
       canCreate: false,
@@ -167,7 +151,7 @@ export function changeRequestPresentation(
       statusKind: "unavailable",
     };
   }
-  if (error) {
+  if (error != null && error !== "") {
     return {
       ...base,
       canCreate: false,
@@ -192,7 +176,11 @@ export function changeRequestPresentation(
       statusKind: "unavailable",
     };
   }
-  if (info.required_cli && !info.required_cli_available) {
+  if (
+    info.required_cli != null &&
+    info.required_cli !== "" &&
+    !info.required_cli_available
+  ) {
     return {
       ...base,
       canCreate: false,
@@ -203,21 +191,19 @@ export function changeRequestPresentation(
   return {
     ...base,
     canCreate: true,
-    status: info.required_cli
-      ? `${info.provider_name} ${label} creation is available through ${info.required_cli}.`
-      : `${info.provider_name} ${label} creation is available.`,
+    status:
+      info.required_cli != null && info.required_cli !== ""
+        ? `${info.provider_name} ${label} creation is available through ${info.required_cli}.`
+        : `${info.provider_name} ${label} creation is available.`,
     statusKind: "available",
   };
 }
 
-const MAX_RENDERED_DIFF_LINES = 4000;
+const maxRenderedDiffLines = 4000;
 
-/**
-Keep the DOM bounded even when the core's byte-bounded preview contains many tiny lines.
-*/
 export function diffPreviewLines(
   text: string,
-  limit = MAX_RENDERED_DIFF_LINES
+  limit = maxRenderedDiffLines
 ): { lines: string[]; truncated: boolean } {
   const lines = text.split("\n");
   if (lines.length <= limit) {
@@ -234,16 +220,16 @@ export function diffLinePresentation(line: string): {
   content: string;
 } {
   if (line.startsWith("+") && !line.startsWith("+++")) {
-    return { kind: "add", marker: "+", content: line.slice(1) || " " };
+    return { content: line.slice(1) || " ", kind: "add", marker: "+" };
   }
   if (line.startsWith("-") && !line.startsWith("---")) {
-    return { kind: "del", marker: "-", content: line.slice(1) || " " };
+    return { content: line.slice(1) || " ", kind: "del", marker: "-" };
   }
   if (line.startsWith("@@")) {
-    return { kind: "hunk", marker: "", content: line };
+    return { content: line, kind: "hunk", marker: "" };
   }
   if (line.startsWith("diff ") || line.startsWith("index ")) {
-    return { kind: "meta", marker: "", content: line };
+    return { content: line, kind: "meta", marker: "" };
   }
-  return { kind: "context", marker: "", content: line || " " };
+  return { content: line || " ", kind: "context", marker: "" };
 }

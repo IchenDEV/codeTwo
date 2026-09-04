@@ -8,11 +8,11 @@ import {
 } from "./state";
 
 const idle = {
+  awaitingInput: false,
+  completed: false,
+  failed: false,
   loading: false,
   running: false,
-  awaitingInput: false,
-  failed: false,
-  completed: false,
 };
 
 describe("C2 pet session state", () => {
@@ -32,8 +32,8 @@ describe("C2 pet session state", () => {
     expect(
       petAnimationForActivity({
         ...idle,
-        running: true,
         awaitingInput: true,
+        running: true,
       })
     ).toBe("waiting");
     expect(

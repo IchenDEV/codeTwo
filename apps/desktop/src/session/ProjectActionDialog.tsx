@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { MessageSquareText, Play } from "@/components/ui/icons";
 
 import type { KeymapEntry, ProjectScript } from "../bridge";
@@ -24,21 +25,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  projectActionId,
-  projectActionIssue,
-  type ProjectActionDraft,
-} from "./projectActions";
+import { projectActionId, projectActionIssue } from "./projectActions";
+import type { ProjectActionDraft } from "./projectActions";
 
-const EMPTY_ACTION: ProjectActionDraft = {
-  name: "",
-  kind: "command",
+const emptyAction: ProjectActionDraft = {
   command: "",
-  prompt: "",
   keybinding: "",
-  preview_url: "",
-  run_on_worktree_create: false,
+  kind: "command",
+  name: "",
   open_preview: false,
+  preview_url: "",
+  prompt: "",
+  run_on_worktree_create: false,
 };
 
 export const ProjectActionDialog = ({
@@ -51,65 +49,71 @@ export const ProjectActionDialog = ({
   readonly open: boolean;
   readonly actions: ProjectScript[];
   readonly bindings: KeymapEntry[];
-  readonly onOpenChange: (open: boolean) => void;
+  readonly onOpenChange: (isOpen: boolean) => void;
   readonly onSave: (action: ProjectScript) => Promise<void>;
 }) => {
   const t = useT();
-  const [draft, setDraft] = useState<ProjectActionDraft>(EMPTY_ACTION);
+  const [draft, setDraft] = useState<ProjectActionDraft>(emptyAction);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    setDraft(EMPTY_ACTION);
+    if (!open) {
+      return;
+    }
+    setDraft(emptyAction);
     setSubmitted(false);
     setSaving(false);
     setSaveError(null);
   }, [open]);
 
-  const validation = useMemo(
-    () => projectActionIssue(draft, bindings, actions),
-    [actions, bindings, draft]
-  );
+  const validation = projectActionIssue(draft, bindings, actions);
   let validationMessage: string | null = null;
   switch (validation?.issue) {
-    case "name_required":
+    case "name_required": {
       validationMessage = t("actionDialog.nameRequired");
       break;
-    case "command_required":
+    }
+    case "command_required": {
       validationMessage = t("actionDialog.commandRequired");
       break;
-    case "prompt_required":
+    }
+    case "prompt_required": {
       validationMessage = t("actionDialog.promptRequired");
       break;
-    case "preview_invalid":
+    }
+    case "preview_invalid": {
       validationMessage = t("actionDialog.previewInvalid");
       break;
-    case "keybinding_conflict":
+    }
+    case "keybinding_conflict": {
       validationMessage = t("actionDialog.keybindingConflict", {
         name: validation.conflict ?? "",
       });
       break;
+    }
   }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitted(true);
     setSaveError(null);
-    if (validation) return;
+    if (validation) {
+      return;
+    }
     setSaving(true);
     try {
       await onSave({
-        id: projectActionId(draft.name, actions),
-        name: draft.name.trim(),
-        kind: draft.kind,
         command: draft.command.trim(),
-        prompt: draft.prompt.trim(),
+        id: projectActionId(draft.name, actions),
         keybinding: draft.keybinding,
-        preview_url: draft.preview_url.trim(),
-        run_on_worktree_create: draft.run_on_worktree_create,
+        kind: draft.kind,
+        name: draft.name.trim(),
         open_preview: Boolean(draft.preview_url.trim()) && draft.open_preview,
+        preview_url: draft.preview_url.trim(),
+        prompt: draft.prompt.trim(),
+        run_on_worktree_create: draft.run_on_worktree_create,
       });
       onOpenChange(false);
     } catch (error) {
@@ -139,9 +143,9 @@ export const ProjectActionDialog = ({
                   setDraft((current) => ({
                     ...current,
                     kind: kind as ProjectActionDraft["kind"],
+                    open_preview: kind === "command" && current.open_preview,
                     run_on_worktree_create:
                       kind === "command" && current.run_on_worktree_create,
-                    open_preview: kind === "command" && current.open_preview,
                   }))
                 }
               >
@@ -183,7 +187,9 @@ export const ProjectActionDialog = ({
                   value={draft.name}
                   placeholder={t("actionDialog.namePlaceholder")}
                   aria-invalid={
-                    submitted ? validation?.issue === "name_required" : null
+                    submitted
+                      ? validation?.issue === "name_required"
+                      : undefined
                   }
                   onInput={(event) => {
                     const name = event.currentTarget.value;
@@ -204,7 +210,9 @@ export const ProjectActionDialog = ({
                 onKeyDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  if (isModifierOnly(event.nativeEvent)) return;
+                  if (isModifierOnly(event.nativeEvent)) {
+                    return;
+                  }
                   if (event.key === "Backspace" || event.key === "Delete") {
                     setDraft((current) => ({ ...current, keybinding: "" }));
                     return;
@@ -237,7 +245,9 @@ export const ProjectActionDialog = ({
                   value={draft.prompt}
                   placeholder={t("actionDialog.promptPlaceholder")}
                   aria-invalid={
-                    submitted ? validation?.issue === "prompt_required" : null
+                    submitted
+                      ? validation?.issue === "prompt_required"
+                      : undefined
                   }
                   onInput={(event) => {
                     const prompt = event.currentTarget.value;
@@ -260,7 +270,9 @@ export const ProjectActionDialog = ({
                     value={draft.command}
                     placeholder={t("actionDialog.commandPlaceholder")}
                     aria-invalid={
-                      submitted ? validation?.issue === "command_required" : null
+                      submitted
+                        ? validation?.issue === "command_required"
+                        : undefined
                     }
                     onInput={(event) => {
                       const command = event.currentTarget.value;
@@ -279,16 +291,18 @@ export const ProjectActionDialog = ({
                     value={draft.preview_url}
                     placeholder={t("actionDialog.previewPlaceholder")}
                     aria-invalid={
-                      submitted ? validation?.issue === "preview_invalid" : null
+                      submitted
+                        ? validation?.issue === "preview_invalid"
+                        : undefined
                     }
                     onInput={(event) => {
                       const preview_url = event.currentTarget.value;
                       setDraft((current) => ({
                         ...current,
-                        preview_url,
                         open_preview: preview_url
                           ? current.open_preview
                           : false,
+                        preview_url,
                       }));
                     }}
                   />
@@ -321,7 +335,9 @@ export const ProjectActionDialog = ({
             )}
           </FieldGroup>
 
-          {(saveError || (submitted && validationMessage)) ? <FieldError>{saveError ?? validationMessage}</FieldError> : null}
+          {saveError || (submitted && validationMessage) ? (
+            <FieldError>{saveError ?? validationMessage}</FieldError>
+          ) : null}
 
           <DialogFooter className="bg-fill-quiet -mx-6 -mb-6 px-6 py-4">
             <Button
@@ -339,4 +355,4 @@ export const ProjectActionDialog = ({
       </DialogContent>
     </Dialog>
   );
-}
+};

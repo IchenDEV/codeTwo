@@ -15,8 +15,8 @@ const { I18nProvider } = await import("../src/i18n");
 const { SessionHeaderActions } =
   await import("../src/session/SessionHeaderActions");
 const {
-  TOOLTIP_FIRST_OPEN_DELAY,
-  TOOLTIP_INSTANT_PHASE_TIMEOUT,
+  tooltipFirstOpenDelay,
+  tooltipInstantPhaseTimeout,
   TooltipProvider,
 } = await import("../src/components/ui/tooltip");
 
@@ -72,8 +72,8 @@ async function press(element: Element) {
 
 describe("SessionHeaderActions", () => {
   test("uses a deliberate first tooltip delay with an adjacent instant phase", () => {
-    expect(TOOLTIP_FIRST_OPEN_DELAY).toBe(600);
-    expect(TOOLTIP_INSTANT_PHASE_TIMEOUT).toBe(400);
+    expect(tooltipFirstOpenDelay).toBe(600);
+    expect(tooltipInstantPhaseTimeout).toBe(400);
   });
 
   test("keeps accessible names when responsive styling hides action labels", () => {
@@ -161,7 +161,9 @@ describe("SessionHeaderActions", () => {
     const finderItem = Array.from(
       dom.document.body.querySelectorAll('[role="menuitem"]')
     ).find((item) => item.textContent?.includes("Finder"));
-    if (!finderItem) throw new Error("Finder menu item not found");
+    if (!finderItem) {
+      throw new Error("Finder menu item not found");
+    }
     await press(finderItem);
     expect(calls).toEqual(["add", "finder"]);
 
@@ -169,7 +171,9 @@ describe("SessionHeaderActions", () => {
     const moveItem = Array.from(
       dom.document.body.querySelectorAll('[role="menuitem"]')
     ).find((item) => item.textContent?.includes("Move task to device"));
-    if (!moveItem) throw new Error("Move task menu item not found");
+    if (!moveItem) {
+      throw new Error("Move task menu item not found");
+    }
     await press(moveItem);
     expect(calls).toEqual(["add", "finder", "move"]);
 
@@ -180,8 +184,9 @@ describe("SessionHeaderActions", () => {
     const sourceControlItem = Array.from(
       dom.document.body.querySelectorAll('[role="menuitem"]')
     ).find((item) => item.textContent?.includes("Source control"));
-    if (!sourceControlItem)
+    if (!sourceControlItem) {
       throw new Error("Source control menu item not found");
+    }
     await press(sourceControlItem);
     expect(calls).toEqual(["add", "finder", "move", "commit"]);
 
@@ -220,7 +225,9 @@ describe("SessionHeaderActions", () => {
     const fileManagerItem = Array.from(
       dom.document.body.querySelectorAll('[role="menuitem"]')
     ).find((item) => item.textContent?.includes("File manager"));
-    if (!fileManagerItem) throw new Error("File manager menu item not found");
+    if (!fileManagerItem) {
+      throw new Error("File manager menu item not found");
+    }
     await press(fileManagerItem);
     expect(calls).toEqual(["finder"]);
 

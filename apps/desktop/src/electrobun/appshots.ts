@@ -25,24 +25,24 @@ import type {
   AppshotSettings,
 } from "./rpc";
 
-const DEFAULT_SETTINGS = {
-  hotkey: "both-command",
+const defaultSettings = {
   destination: "automatic",
+  hotkey: "both-command",
   play_sound: true,
 } as const satisfies Pick<
   AppshotSettings,
   "hotkey" | "destination" | "play_sound"
 >;
 
-const HOTKEY_ACCELERATORS: Partial<Record<AppshotHotkey, string>> = {
-  "command-shift-2": "CommandOrControl+Shift+2",
+const hotkeyAccelerators: Partial<Record<AppshotHotkey, string>> = {
   "command-option-2": "CommandOrControl+Alt+2",
+  "command-shift-2": "CommandOrControl+Shift+2",
 };
 
 const captureRetentionMs = 7 * 24 * 60 * 60 * 1000;
 const maxStoredCaptures = 40;
 const captureIdPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 type StoredSettings = Pick<
   AppshotSettings,
@@ -63,20 +63,20 @@ function isDestination(value: unknown): value is AppshotDestination {
 
 export function normalizeAppshotSettings(value: unknown): StoredSettings {
   const settings =
-    value && typeof value === "object"
+    Boolean(value) && typeof value === "object"
       ? (value as Record<string, unknown>)
       : {};
   return {
-    hotkey: isHotkey(settings.hotkey)
-      ? settings.hotkey
-      : DEFAULT_SETTINGS.hotkey,
     destination: isDestination(settings.destination)
       ? settings.destination
-      : DEFAULT_SETTINGS.destination,
+      : defaultSettings.destination,
+    hotkey: isHotkey(settings.hotkey)
+      ? settings.hotkey
+      : defaultSettings.hotkey,
     play_sound:
       typeof settings.play_sound === "boolean"
         ? settings.play_sound
-        : DEFAULT_SETTINGS.play_sound,
+        : defaultSettings.play_sound,
   };
 }
 
@@ -90,22 +90,22 @@ export class AppshotManager {
   private capturing = false;
 
   constructor(
-    dataDir: string,
+    dataDirectory: string,
     private readonly bundleIdentifier: string,
     private readonly onCapture: (capture: AppshotCapture) => void,
     private readonly onFailure: (message: string) => void,
     private readonly activate: () => void
   ) {
-    this.settingsPath = join(dataDir, "appshots.json");
-    this.capturesDir = join(dataDir, "appshots");
-    mkdirSync(this.capturesDir, { recursive: true, mode: 0o700 });
+    this.settingsPath = join(dataDirectory, "appshots.json");
+    this.capturesDir = join(dataDirectory, "appshots");
+    mkdirSync(this.capturesDir, { mode: 0o700, recursive: true });
     chmodSync(this.capturesDir, 0o700);
     try {
       this.settings = normalizeAppshotSettings(
         JSON.parse(readFileSync(this.settingsPath, "utf8"))
       );
     } catch {
-      this.settings = { ...DEFAULT_SETTINGS };
+      this.settings = { ...defaultSettings };
     }
     this.cleanupCaptures();
     this.applyHotkey();
@@ -115,10 +115,10 @@ export class AppshotManager {
     const permissions = macOSAppshotPermissions();
     return {
       ...this.settings,
-      available: permissions.available,
-      screen_recording: permissions.screenRecording,
       accessibility: permissions.accessibility,
+      available: permissions.available,
       hotkey_registered: this.hotkeyRegistered(),
+      screen_recording: permissions.screenRecording,
       unavailable_reason: permissions.available
         ? null
         : "Appshots require macOS 14 or later.",
@@ -172,35 +172,35 @@ export class AppshotManager {
       chmodSync(imagePath, 0o600);
       const capturedAt = new Date().toISOString();
       const metadata = {
-        id,
         app_name: result.app_name ?? "Application",
-        window_title: result.window_title ?? "Window",
+        captured_at: capturedAt,
+        height: result.height ?? 0,
+        id,
         text: result.text ?? "",
         text_truncated: result.text_truncated === true,
-        captured_at: capturedAt,
         width: result.width ?? 0,
-        height: result.height ?? 0,
+        window_title: result.window_title ?? "Window",
       };
       writeFileSync(metadataPath, `${JSON.stringify(metadata)}\n`, {
         encoding: "utf8",
         mode: 0o600,
       });
       const capture: AppshotCapture = {
-        id,
         app_name: metadata.app_name,
-        window_title: metadata.window_title,
         captured_at: capturedAt,
+        destination: this.settings.destination,
+        height: result.height ?? 0,
+        id,
+        preview_data_url: `data:image/png;base64,${readFileSync(imagePath).toString("base64")}`,
         text_length: metadata.text.length,
         text_truncated: metadata.text_truncated,
         width: result.width ?? 0,
-        height: result.height ?? 0,
-        preview_data_url: `data:image/png;base64,${readFileSync(imagePath).toString("base64")}`,
-        destination: this.settings.destination,
+        window_title: metadata.window_title,
       };
       if (this.settings.play_sound) {
         const player = Bun.spawn(
           ["/usr/bin/afplay", "/System/Library/Sounds/Glass.aiff"],
-          { stdin: "ignore", stdout: "ignore", stderr: "ignore" }
+          { stderr: "ignore", stdin: "ignore", stdout: "ignore" }
         );
         void player.exited;
       }
@@ -243,24 +243,24 @@ export class AppshotManager {
       typeof value.window_title === "string" ? value.window_title : "Window";
     const text = typeof value.text === "string" ? value.text : "";
     return {
-      id,
-      kind: "appshot",
       app_name: appName,
-      window_title: windowTitle,
       captured_at:
         typeof value.captured_at === "string" ? value.captured_at : "",
+      destination: "current",
+      height:
+        typeof value.height === "number" && Number.isFinite(value.height)
+          ? value.height
+          : 0,
+      id,
+      kind: "appshot",
+      preview_data_url: `data:image/png;base64,${image.toString("base64")}`,
       text_length: text.length,
       text_truncated: value.text_truncated === true,
       width:
         typeof value.width === "number" && Number.isFinite(value.width)
           ? value.width
           : 0,
-      height:
-        typeof value.height === "number" && Number.isFinite(value.height)
-          ? value.height
-          : 0,
-      preview_data_url: `data:image/png;base64,${image.toString("base64")}`,
-      destination: "current",
+      window_title: windowTitle,
     };
   }
 
@@ -299,9 +299,10 @@ export class AppshotManager {
       }, 35);
       return;
     }
-    const accelerator = HOTKEY_ACCELERATORS[this.settings.hotkey];
+    const accelerator = hotkeyAccelerators[this.settings.hotkey];
     if (
-      accelerator &&
+      accelerator != null &&
+      accelerator !== "" &&
       GlobalShortcut.register(accelerator, () => void this.captureFromHotkey())
     ) {
       this.registeredAccelerator = accelerator;
@@ -314,7 +315,10 @@ export class AppshotManager {
     }
     this.pollTimer = null;
     this.dualCommandLatched = false;
-    if (this.registeredAccelerator) {
+    if (
+      this.registeredAccelerator != null &&
+      this.registeredAccelerator !== ""
+    ) {
       GlobalShortcut.unregister(this.registeredAccelerator);
     }
     this.registeredAccelerator = null;
@@ -337,7 +341,7 @@ export class AppshotManager {
       .flatMap((name) => {
         const path = join(this.capturesDir, name);
         try {
-          return [{ name, path, modified: statSync(path).mtimeMs }];
+          return [{ modified: statSync(path).mtimeMs, name, path }];
         } catch {
           return [];
         }

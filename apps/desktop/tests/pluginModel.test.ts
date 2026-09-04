@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  AGENT_PLUGIN_SCHEMA,
+  agentPluginSchema,
   parsePluginManifest,
   pluginUiComponentId,
 } from "../src/pluginModel";
 
 const manifest = {
-  $schema: AGENT_PLUGIN_SCHEMA,
+  $schema: agentPluginSchema,
   name: "review-tools",
   version: "1.2.0",
   description: "Review the active workspace.",
@@ -63,7 +63,7 @@ describe("C2 plugin package model", () => {
   test("accepts data-only C2 plugins and rejects invalid contributions", () => {
     expect(
       parsePluginManifest({
-        $schema: AGENT_PLUGIN_SCHEMA,
+        $schema: agentPluginSchema,
         name: "scene-pack",
         version: "1.0.0",
         extensions: { "dev.codetwo": { standardVersion: "1.2.0" } },
@@ -75,8 +75,8 @@ describe("C2 plugin package model", () => {
       languageServers: [],
     });
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: {
           "dev.codetwo": {
@@ -84,11 +84,11 @@ describe("C2 plugin package model", () => {
             ui: manifest.extensions["dev.codetwo"].ui,
           },
         },
-      })
-    ).toThrow("UI action contributions require");
+      });
+    }).toThrow("UI action contributions require");
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: {
           "dev.codetwo": {
@@ -99,13 +99,13 @@ describe("C2 plugin package model", () => {
             ],
           },
         },
-      })
-    ).toThrow("duplicate ids");
+      });
+    }).toThrow("duplicate ids");
   });
 
   test("rejects old standards and requires declared runtime commands", () => {
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: {
           "dev.codetwo": {
@@ -114,18 +114,18 @@ describe("C2 plugin package model", () => {
             ui: manifest.extensions["dev.codetwo"].ui,
           },
         },
-      })
-    ).toThrow("Unsupported C2 plugin standard");
+      });
+    }).toThrow("Unsupported C2 plugin standard");
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: { "dev.codetwo": { standardVersion: "1.1.0" } },
-      })
-    ).toThrow("Unsupported C2 plugin standard");
+      });
+    }).toThrow("Unsupported C2 plugin standard");
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: {
           "dev.codetwo": {
@@ -133,11 +133,11 @@ describe("C2 plugin package model", () => {
             runtime: manifest.extensions["dev.codetwo"].runtime,
           },
         },
-      })
-    ).toThrow("require extensions.dev.codetwo.commands");
+      });
+    }).toThrow("require extensions.dev.codetwo.commands");
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: {
           "dev.codetwo": {
@@ -150,11 +150,11 @@ describe("C2 plugin package model", () => {
             ],
           },
         },
-      })
-    ).toThrow("commands[0] is invalid");
+      });
+    }).toThrow("commands[0] is invalid");
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: {
           "dev.codetwo": {
@@ -167,8 +167,8 @@ describe("C2 plugin package model", () => {
             ],
           },
         },
-      })
-    ).toThrow("references undeclared runtime command");
+      });
+    }).toThrow("references undeclared runtime command");
   });
 
   test("binds a 1.2 connector to one declared runtime command", () => {
@@ -198,8 +198,8 @@ describe("C2 plugin package model", () => {
       }),
     ]);
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: {
           "dev.codetwo": {
@@ -215,28 +215,28 @@ describe("C2 plugin package model", () => {
             ],
           },
         },
-      })
-    ).toThrow("references undeclared runtime command");
+      });
+    }).toThrow("references undeclared runtime command");
   });
 
   test("rejects bundles outside the supported C2 standards", () => {
-    expect(() =>
-      parsePluginManifest({
-        $schema: AGENT_PLUGIN_SCHEMA,
+    expect(() => {
+      return parsePluginManifest({
+        $schema: agentPluginSchema,
         name: "missing-extension",
         version: "1.0.0",
-      })
-    ).toThrow("require extensions.dev.codetwo");
+      });
+    }).toThrow("require extensions.dev.codetwo");
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: { "dev.codetwo": { standardVersion: "1.3.0" } },
-      })
-    ).toThrow("Unsupported C2 plugin standard");
+      });
+    }).toThrow("Unsupported C2 plugin standard");
 
-    expect(() =>
-      parsePluginManifest({
+    expect(() => {
+      return parsePluginManifest({
         ...manifest,
         extensions: {
           "dev.codetwo": {
@@ -244,7 +244,7 @@ describe("C2 plugin package model", () => {
             runtimePath: "plugin.js",
           },
         },
-      })
-    ).toThrow("Unknown C2 plugin fields");
+      });
+    }).toThrow("Unknown C2 plugin fields");
   });
 });

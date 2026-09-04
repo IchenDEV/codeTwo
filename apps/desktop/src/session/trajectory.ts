@@ -24,7 +24,7 @@ export interface TrajectoryRecord {
 }
 
 function compact(value: string, max = 160): string {
-  const text = value.replaceAll(/\s+/g, " ").trim();
+  const text = value.replaceAll(/\s+/gu, " ").trim();
   if (text.length <= max) {
     return text;
   }
@@ -47,7 +47,9 @@ function toolOutputSummary(outputs: readonly ToolOutput[]): string {
 }
 
 function timeFor(entry: TurnContentEntry, fallback: number): number {
-  return entry.createdAt && entry.createdAt > 0 ? entry.createdAt : fallback;
+  return entry.createdAt != null && entry.createdAt > 0
+    ? entry.createdAt
+    : fallback;
 }
 
 function toolRecord(
@@ -60,31 +62,30 @@ function toolRecord(
 ): TrajectoryRecord {
   const fallback = timeFor(entry, turn.startedAt);
   const startAt =
-    tool.startedAt && tool.startedAt > 0 ? tool.startedAt : fallback;
+    tool.startedAt != null && tool.startedAt > 0 ? tool.startedAt : fallback;
   const isRunning = tool.endedAt === undefined && turn.endedAt === undefined;
   const endAt = Math.max(startAt, tool.endedAt ?? (isRunning ? now : fallback));
   const output = tool.outputs ?? [];
   return {
+    endAt,
     id: `turn:${turn.id}:tool:${tool.id}`,
     index: 0,
+    input: tool.agentInput,
     kind: "tool",
     lane: "tool",
-    turn: turnNumber,
-    step,
-    title: tool.title || tool.kind || "Tool",
-    summary: toolOutputSummary(output) || tool.status,
-    status: tool.status,
-    startAt,
-    endAt,
-    running: isRunning,
-    input: tool.agentInput,
     output,
+    running: isRunning,
+    startAt,
+    status: tool.status,
+    step,
+    summary: toolOutputSummary(output) || tool.status,
+    title:
+      tool.title ||
+      (tool.kind != null && tool.kind !== "" ? tool.kind : "Tool"),
+    turn: turnNumber,
   };
 }
 
-/**
-Build a dense business-event projection. Stream chunks collapse into assistant spans.
-*/
 export function deriveTrajectory(
   turns: readonly Turn[],
   now = Date.now()
@@ -95,71 +96,71 @@ export function deriveTrajectory(
     const turnNumber = turnIndex + 1;
     const turnEnd = Math.max(turn.startedAt, turn.endedAt ?? now);
     records.push({
+      endAt: turn.startedAt,
       id: `turn:${turn.id}:user`,
       index: 0,
+      input: turn.prompt,
       kind: "user",
       lane: "context",
-      turn: turnNumber,
-      step: 0,
-      title: "User",
-      summary: compact(turn.prompt),
-      startAt: turn.startedAt,
-      endAt: turn.startedAt,
       running: false,
-      input: turn.prompt,
+      startAt: turn.startedAt,
+      step: 0,
+      summary: compact(turn.prompt),
+      title: "User",
+      turn: turnNumber,
     });
 
     if (turn.memory) {
       const at =
         turn.memory.created_at > 0 ? turn.memory.created_at : turn.startedAt;
       records.push({
+        endAt: at,
         id: `turn:${turn.id}:memory`,
         index: 0,
         kind: "memory",
         lane: "context",
-        turn: turnNumber,
-        step: 0,
-        title: "Memory context",
-        summary: `${turn.memory.items.length} items · ~${turn.memory.estimated_tokens} tokens`,
-        startAt: at,
-        endAt: at,
-        running: false,
         output: turn.memory,
+        running: false,
+        startAt: at,
+        step: 0,
+        summary: `${turn.memory.items.length} items · ~${turn.memory.estimated_tokens} tokens`,
+        title: "Memory context",
+        turn: turnNumber,
       });
     }
 
     if (turn.thoughts.length > 0) {
       const reasoning = turn.thoughts.join("");
       records.push({
+        endAt: turnEnd,
         id: `turn:${turn.id}:reasoning`,
         index: 0,
         kind: "reasoning",
         lane: "assistant",
-        turn: turnNumber,
-        step: 1,
-        title: "Reasoning",
-        summary: compact(reasoning),
-        startAt: turn.startedAt,
-        endAt: turnEnd,
-        running: turn.endedAt === undefined,
         output: reasoning,
+        running: turn.endedAt === undefined,
+        startAt: turn.startedAt,
+        step: 1,
+        summary: compact(reasoning),
+        title: "Reasoning",
+        turn: turnNumber,
       });
     }
 
     if (turn.plan.length > 0) {
       records.push({
+        endAt: turn.startedAt,
         id: `turn:${turn.id}:plan`,
         index: 0,
         kind: "plan",
         lane: "assistant",
-        turn: turnNumber,
-        step: 1,
-        title: "Plan",
-        summary: compact(turn.plan.map((entry) => entry.content).join(" · ")),
-        startAt: turn.startedAt,
-        endAt: turn.startedAt,
-        running: false,
         output: turn.plan,
+        running: false,
+        startAt: turn.startedAt,
+        step: 1,
+        summary: compact(turn.plan.map((entry) => entry.content).join(" · ")),
+        title: "Plan",
+        turn: turnNumber,
       });
     }
 
@@ -168,28 +169,28 @@ export function deriveTrajectory(
     let assistantSegment = 0;
     let textEntries: Extract<TurnContentEntry, { kind: "text" }>[] = [];
 
-    const flushAssistant = (terminal = false) => {
+    const flushAssistant = (isTerminal = false) => {
       if (textEntries.length === 0) {
         return;
       }
       assistantSegment += 1;
       const text = textEntries.map((entry) => entry.text).join("");
       const startAt = timeFor(textEntries[0], turn.startedAt);
-      const lastAt = timeFor(textEntries.at(-1), startAt);
-      const isRunning = !terminal && turn.endedAt === undefined;
+      const lastAt = timeFor(textEntries[textEntries.length - 1], startAt);
+      const isRunning = !isTerminal && turn.endedAt === undefined;
       records.push({
+        endAt: Math.max(startAt, isRunning ? now : lastAt),
         id: `turn:${turn.id}:assistant:${assistantSegment}`,
         index: 0,
         kind: "assistant",
         lane: "assistant",
-        turn: turnNumber,
-        step,
-        title: "Assistant",
-        summary: compact(text),
-        startAt,
-        endAt: Math.max(startAt, isRunning ? now : lastAt),
-        running: isRunning,
         output: text,
+        running: isRunning,
+        startAt,
+        step,
+        summary: compact(text),
+        title: "Assistant",
+        turn: turnNumber,
       });
       textEntries = [];
     };
@@ -210,36 +211,36 @@ export function deriveTrajectory(
 
     if (turn.content.length === 0 && turn.text.trim()) {
       records.push({
+        endAt: turnEnd,
         id: `turn:${turn.id}:assistant:1`,
         index: 0,
         kind: "assistant",
         lane: "assistant",
-        turn: turnNumber,
-        step,
-        title: "Assistant",
-        summary: compact(turn.text),
-        startAt: turn.startedAt,
-        endAt: turnEnd,
-        running: turn.endedAt === undefined,
         output: turn.text,
+        running: turn.endedAt === undefined,
+        startAt: turn.startedAt,
+        step,
+        summary: compact(turn.text),
+        title: "Assistant",
+        turn: turnNumber,
       });
     }
 
-    if (turn.error) {
+    if (turn.error != null && turn.error !== "") {
       records.push({
+        endAt: turnEnd,
         id: `turn:${turn.id}:error`,
         index: 0,
         kind: "error",
         lane: "assistant",
-        turn: turnNumber,
-        step,
-        title: "Error",
-        summary: compact(turn.error),
-        status: "failed",
-        startAt: turnEnd,
-        endAt: turnEnd,
-        running: false,
         output: turn.error,
+        running: false,
+        startAt: turnEnd,
+        status: "failed",
+        step,
+        summary: compact(turn.error),
+        title: "Error",
+        turn: turnNumber,
       });
     }
   }

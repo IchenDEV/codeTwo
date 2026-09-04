@@ -91,22 +91,26 @@ const DroidMark = mark(
   <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.43-2.56.81-.5a1 1 0 0 0 .37-1.36l-1-1.74a1 1 0 0 0-1.37-.36l-.8.46a8 8 0 0 0-1.44-.84V7a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v1.1a8 8 0 0 0-1.44.84l-.8-.46a1 1 0 0 0-1.37.36l-1 1.74a1 1 0 0 0 .37 1.36l.8.5a8 8 0 0 0 0 1.12l-.8.5a1 1 0 0 0-.37 1.36l1 1.74a1 1 0 0 0 1.37.36l.8-.46c.44.34.92.62 1.44.84V17a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-1.1a8 8 0 0 0 1.44-.84l.8.46a1 1 0 0 0 1.37-.36l1-1.74a1 1 0 0 0-.37-1.36l-.81-.5a8 8 0 0 0 0-1.12Z" />
 );
 
-/** Every provider the core knows. An id without a mark simply renders nothing. */
-export const PROVIDER_MARKS: Record<string, (p: IconProps) => ReactNode> = {
+/**
+Every provider the core knows. An id without a mark simply renders nothing.
+*/
+export const providerMarks: Record<string, (p: IconProps) => ReactNode> = {
+  amp: AmpMark,
   claude_code: ClaudeMark,
   codex: CodexMark,
-  grok: GrokMark,
   cursor: CursorMark,
+  droid: DroidMark,
+  grok: GrokMark,
+  kimi: KimiMark,
   opencode: OpenCodeMark,
   opencode2: OpenCodeMark,
   pi: PiMark,
-  kimi: KimiMark,
   zcode: ZCodeMark,
-  amp: AmpMark,
-  droid: DroidMark,
 };
 
-/** The mark for a provider id, or null when we don't ship one. */
+/**
+The mark for a provider id, or null when we don't ship one.
+*/
 export const ProviderIcon = ({
   provider,
   className,
@@ -114,6 +118,6 @@ export const ProviderIcon = ({
   readonly provider: string;
   readonly className?: string;
 }) => {
-  const Mark = PROVIDER_MARKS[provider];
+  const Mark = providerMarks[provider];
   return Mark ? <Mark className={className} aria-hidden /> : null;
-}
+};

@@ -56,7 +56,11 @@ import type {
 
 // ---- scenes (Agent Scenes 1.0.0; see docs/reference/scenes.md) ---------------------------------------
 
-import type { SceneDocument, SceneInfo, SceneSlotDef } from "./session/scene";
+import type {
+  SceneDocument,
+  SceneInfo,
+  SceneSlotDefinition,
+} from "./session/scene";
 
 // ---- voice → structured brief (R11) --------------------------------------------------------
 
@@ -87,13 +91,13 @@ export async function systemProfileAvatar(): Promise<string | null> {
 }
 
 const browserAppshotSettings: AppshotSettings = {
+  accessibility: false,
   available: false,
-  hotkey: "both-command",
   destination: "automatic",
+  hotkey: "both-command",
+  hotkey_registered: false,
   play_sound: true,
   screen_recording: false,
-  accessibility: false,
-  hotkey_registered: false,
   unavailable_reason: "Appshots require the C2 macOS desktop app.",
 };
 
@@ -132,9 +136,6 @@ export async function takeAppshot(): Promise<AppshotCapture> {
   return await desktopCaptureAppshot();
 }
 
-/**
-Reload an app-owned screen capture while its private retention window is still active.
-*/
 export async function getAppshot(id: string): Promise<AppshotCapture> {
   if (!isInDesktop) {
     throw new Error("Appshots require the C2 macOS desktop app.");
@@ -183,21 +184,23 @@ export async function getDeviceSyncStatus(): Promise<DeviceSyncStatus> {
   return isInDesktop
     ? await call<DeviceSyncStatus>("device_sync.status")
     : {
-        transport: "paired-devices",
-        state: "unsupported",
-        enabled: false,
         available: false,
+        enabled: false,
+        imported: null,
         last_success_at: null,
         message: null,
-        imported: null,
+        state: "unsupported",
+        transport: "paired-devices",
       };
 }
 
 export async function setDeviceSyncEnabled(
-  enabled: boolean
+  isEnabled: boolean
 ): Promise<DeviceSyncStatus> {
   return isInDesktop
-    ? await call<DeviceSyncStatus>("device_sync.set_enabled", { enabled })
+    ? await call<DeviceSyncStatus>("device_sync.set_enabled", {
+        enabled: isEnabled,
+      })
     : await getDeviceSyncStatus();
 }
 
@@ -218,7 +221,7 @@ export interface ProviderInfo {
   models: ModelChoice[];
   capabilities: ProviderCapability[];
   management: ProviderManagementInfo;
-  configuration: ProviderRuntimeConfiguration;
+  configuration: ProviderRuntimeConfig;
 }
 
 export interface ProviderRuntimeOverride {
@@ -229,7 +232,7 @@ export interface ProviderRuntimeOverride {
   forwarded_environment: string[];
 }
 
-export interface ProviderRuntimeConfiguration extends ProviderRuntimeOverride {
+export interface ProviderRuntimeConfig extends ProviderRuntimeOverride {
   home_environment: string | null;
   missing_environment: string[];
   effective_command: string;
@@ -310,17 +313,19 @@ function normalizeComputerUseSettings(
   settings: ComputerUseSettingsWire
 ): ComputerUseSettings {
   return {
-    selections: settings.selections ?? {},
-    backends: (settings.backends ?? []).map((backend) => ({
-						      id: backend.id,
-						      display_name: backend.display_name ?? backend.displayName ?? backend.id,
-						      available: backend.available,
-						      reason: backend.reason ?? null,
-						      providers: backend.providers ?? [],
-						      exclude_providers:
-						        backend.exclude_providers ?? backend.excludeProviders ?? [],
-						    })),
+    backends: (settings.backends ?? []).map((backend) => {
+      return {
+        available: backend.available,
+        display_name: backend.display_name ?? backend.displayName ?? backend.id,
+        exclude_providers:
+          backend.exclude_providers ?? backend.excludeProviders ?? [],
+        id: backend.id,
+        providers: backend.providers ?? [],
+        reason: backend.reason ?? null,
+      };
+    }),
     errors: settings.errors ?? [],
+    selections: settings.selections ?? {},
   };
 }
 
@@ -340,27 +345,27 @@ type ProviderInfoWire = Omit<
   capabilities?: ProviderCapability[] | null;
   enabled?: boolean | null;
   management?: ProviderManagementInfo | null;
-  configuration?: ProviderRuntimeConfiguration | null;
+  configuration?: ProviderRuntimeConfig | null;
 };
 
 function defaultProviderConfig(
   provider: Pick<ProviderInfo, "id">
-): ProviderRuntimeConfiguration {
+): ProviderRuntimeConfig {
   return {
-    display_name: null,
-    command: null,
     args: null,
-    home_path: null,
+    command: null,
+    display_name: null,
+    effective_args: [],
+    effective_command: "",
+    forwarded_environment: [],
     home_environment:
       provider.id === "codex"
         ? "CODEX_HOME"
-        : (provider.id === "claude_code"
+        : provider.id === "claude_code"
           ? "CLAUDE_CONFIG_DIR"
-          : null),
-    forwarded_environment: [],
+          : null,
+    home_path: null,
     missing_environment: [],
-    effective_command: "",
-    effective_args: [],
   };
 }
 
@@ -369,18 +374,18 @@ export function normalizeProviderInfo(
 ): ProviderInfo {
   return {
     ...provider,
-    enabled: provider.enabled ?? true,
     capabilities: provider.capabilities ?? [],
     configuration: provider.configuration ?? defaultProviderConfig(provider),
+    enabled: provider.enabled ?? true,
     management: provider.management ?? {
-      installed: provider.available,
-      version: null,
-      latest_version: null,
-      update_available: null,
       check_error: null,
       install_supported: false,
-      upgrade_supported: false,
+      installed: provider.available,
+      latest_version: null,
       launch_mode: provider.available ? "installed" : "unavailable",
+      update_available: null,
+      upgrade_supported: false,
+      version: null,
     },
   };
 }
@@ -725,7 +730,7 @@ export interface MemoryProjectPolicy {
   include_external_context: MemoryPolicyValue;
 }
 
-export interface MemorySourceRef {
+export interface MemorySourceReference {
   session_id: string;
   part_seq: number;
 }
@@ -738,7 +743,7 @@ export interface MemoryRecord {
   category: string;
   content: string;
   confidence: number;
-  sources: MemorySourceRef[];
+  sources: MemorySourceReference[];
   pinned: boolean;
   active: boolean;
   created_at: number;
@@ -789,7 +794,7 @@ export interface MemoryReceiptItem {
   layer: "L0" | "L1" | "L2" | "L3";
   category: string;
   content: string;
-  source: MemorySourceRef | null;
+  source: MemorySourceReference | null;
   relevance: number | null;
 }
 
@@ -844,8 +849,8 @@ export interface GoalSnapshot {
   time_used_seconds: number;
 }
 
-/// Neutral document shape the editor serializes into; matches core `DocBlock` serde.
-export type DocBlock =
+/// Neutral document shape the editor serializes into; matches core `DocumentBlock` serde.
+export type DocumentBlock =
   | { type: "text"; text: string }
   | { type: "skill"; skill_id: string; params: Record<string, string> }
   | { type: "file"; path: string }
@@ -860,7 +865,7 @@ export type DocBlock =
     }
   | { type: "session"; session_id: string; through_seq?: number }
   // R12: a referenced issue-tracker item with its snapshot embedded at insert time; mirrors core
-  // `DocBlock::Issue`, which re-renders `issues::Issue::to_context` from exactly these fields.
+  // `DocumentBlock::Issue`, which re-renders `issues::Issue::to_context` from exactly these fields.
   | {
       type: "issue";
       source: string;
@@ -871,7 +876,7 @@ export type DocBlock =
     };
 
 /// One-line description of a doc block, used for summaries and browser-mode previews.
-export function describeBlock(b: DocBlock): string {
+export function describeBlock(b: DocumentBlock): string {
   switch (b.type) {
     case "text": {
       return b.text;
@@ -886,10 +891,10 @@ export function describeBlock(b: DocBlock): string {
       return `[img:${b.path}]`;
     }
     case "appshot": {
-      return `[appshot:${b.title || b.id}]`;
+      return `[appshot:${b.title != null && b.title !== "" ? b.title : b.id}]`;
     }
     case "attachment": {
-      return `[image:${b.name || b.id}]`;
+      return `[image:${b.name != null && b.name !== "" ? b.name : b.id}]`;
     }
     case "canvas": {
       return `[canvas:${b.id}@${b.frozen_revision}]`;
@@ -1141,7 +1146,7 @@ export type Part =
     }
   | { kind: "plan"; entries: (PlanEntry | string)[] };
 
-export interface ArtifactRef {
+export interface ArtifactReference {
   id: string;
   mime_type: string;
   bytes: number;
@@ -1152,7 +1157,7 @@ export interface ArtifactRef {
 
 export type ToolOutput =
   | { type: "text"; text: string }
-  | { type: "image"; artifact: ArtifactRef }
+  | { type: "image"; artifact: ArtifactReference }
   | {
       type: "resource_link";
       name: string;
@@ -1204,167 +1209,164 @@ export const isDesktop = isInDesktop;
 
 let callProjectPath: string | null = null;
 
-/**
-Route subsequent extension calls through the active project's command realm.
-*/
 export function setCallProjectPath(path: string | null): void {
   callProjectPath = path;
 }
 
-const BROWSER_DOCKER_CONTAINERS = [
+const browserDockerContainers = [
   {
-    id: "8f4c2e9133ef",
-    name: "api",
-    image: "ghcr.io/codetwo/api:latest",
     command: '"bun run start"',
     createdAt: "2026-08-25 19:21:04 +0800 SGT",
-    runningFor: "22 hours ago",
+    id: "8f4c2e9133ef",
+    image: "ghcr.io/codetwo/api:latest",
+    labels: null,
+    localVolumes: 0,
+    mounts: "",
+    name: "api",
+    networks: "bridge",
     ports: "0.0.0.0:8080->8080/tcp",
+    runningFor: "22 hours ago",
+    size: "12.4kB (virtual 286MB)",
     state: "running",
     status: "Up 22 hours",
-    size: "12.4kB (virtual 286MB)",
-    labels: null,
-    localVolumes: 0,
-    mounts: "",
-    networks: "bridge",
   },
   {
-    id: "b497581dd054",
-    name: "worker",
-    image: "ghcr.io/codetwo/worker:latest",
     command: '"bun run worker"',
     createdAt: "2026-08-24 08:12:01 +0800 SGT",
-    runningFor: "2 days ago",
-    ports: "",
-    state: "exited",
-    status: "Exited (0) 18 hours ago",
-    size: "8.2kB (virtual 284MB)",
+    id: "b497581dd054",
+    image: "ghcr.io/codetwo/worker:latest",
     labels: null,
     localVolumes: 0,
     mounts: "",
+    name: "worker",
     networks: "bridge",
-  },
-  {
-    id: "24c2830d260a",
-    name: "postgres",
-    image: "postgres:16-alpine",
-    command: '"docker-entrypoint.s…"',
-    createdAt: "2026-08-24 08:11:40 +0800 SGT",
+    ports: "",
     runningFor: "2 days ago",
-    ports: "0.0.0.0:5432->5432/tcp",
+    size: "8.2kB (virtual 284MB)",
     state: "exited",
     status: "Exited (0) 18 hours ago",
-    size: "63B (virtual 247MB)",
+  },
+  {
+    command: '"docker-entrypoint.s…"',
+    createdAt: "2026-08-24 08:11:40 +0800 SGT",
+    id: "24c2830d260a",
+    image: "postgres:16-alpine",
     labels: null,
     localVolumes: 1,
     mounts: "codetwo_pgdata",
+    name: "postgres",
     networks: "bridge",
+    ports: "0.0.0.0:5432->5432/tcp",
+    runningFor: "2 days ago",
+    size: "63B (virtual 247MB)",
+    state: "exited",
+    status: "Exited (0) 18 hours ago",
   },
 ];
 
-const BROWSER_DOCKER_IMAGES = [
+const browserDockerImages = [
   {
-    id: "sha256:19a3a8c9d0d8",
-    repository: "ghcr.io/codetwo/api",
-    tag: "latest",
-    digest: "sha256:6ec4ca4b0d1e",
+    containers: 1,
     createdAt: "2026-08-25 18:42:11 +0800 SGT",
     createdSince: "22 hours ago",
-    size: "286MB",
+    digest: "sha256:6ec4ca4b0d1e",
+    id: "sha256:19a3a8c9d0d8",
+    repository: "ghcr.io/codetwo/api",
     sharedSize: "0B",
+    size: "286MB",
+    tag: "latest",
     uniqueSize: "286MB",
-    containers: 1,
   },
   {
-    id: "sha256:f7eb244d02c9",
-    repository: "ghcr.io/codetwo/worker",
-    tag: "latest",
-    digest: "sha256:f79edcb4a1ef",
+    containers: 1,
     createdAt: "2026-08-24 07:55:03 +0800 SGT",
     createdSince: "2 days ago",
-    size: "284MB",
+    digest: "sha256:f79edcb4a1ef",
+    id: "sha256:f7eb244d02c9",
+    repository: "ghcr.io/codetwo/worker",
     sharedSize: "0B",
+    size: "284MB",
+    tag: "latest",
     uniqueSize: "284MB",
-    containers: 1,
   },
   {
-    id: "sha256:34f2dfe3bb89",
-    repository: "postgres",
-    tag: "16-alpine",
-    digest: "sha256:3e89afe3d2c2",
+    containers: 1,
     createdAt: "2026-08-18 05:10:02 +0800 SGT",
     createdSince: "8 days ago",
-    size: "247MB",
+    digest: "sha256:3e89afe3d2c2",
+    id: "sha256:34f2dfe3bb89",
+    repository: "postgres",
     sharedSize: "0B",
+    size: "247MB",
+    tag: "16-alpine",
     uniqueSize: "247MB",
-    containers: 1,
   },
 ];
 
 function browserDockerCall<T>(name: string, rawArguments: unknown): T {
-  const arguments_ =
-    rawArguments &&
+  const argumentsValue =
+    Boolean(rawArguments) &&
     typeof rawArguments === "object" &&
     !Array.isArray(rawArguments)
       ? (rawArguments as Record<string, unknown>)
       : {};
   const container =
-    typeof arguments_.container === "string"
-      ? arguments_.container
+    typeof argumentsValue.container === "string"
+      ? argumentsValue.container
       : "container";
   const image =
-    typeof arguments_.image === "string" ? arguments_.image : "image";
+    typeof argumentsValue.image === "string" ? argumentsValue.image : "image";
   switch (name) {
     case "docker.status": {
       return {
         available: true,
         clientVersion: "29.7.2",
-        serverVersion: "29.7.2",
+        containers: { paused: 0, running: 1, stopped: 20, total: 21 },
         context: "desktop-linux",
         engine: {
-          name: "docker-desktop",
-          operatingSystem: "Docker Desktop",
           architecture: "aarch64",
           cpus: 10,
-          memoryBytes: 8_589_934_592,
           dockerRootDir: "/var/lib/docker",
+          memoryBytes: 8_589_934_592,
+          name: "docker-desktop",
+          operatingSystem: "Docker Desktop",
         },
-        containers: { total: 21, running: 1, paused: 0, stopped: 20 },
         images: 12,
         message:
           "Docker 29.7.2 is running · 1 running · 20 stopped · 12 images",
+        serverVersion: "29.7.2",
       } as T;
     }
     case "docker.containers": {
       return {
-        containers: BROWSER_DOCKER_CONTAINERS,
-        count: BROWSER_DOCKER_CONTAINERS.length,
+        containers: browserDockerContainers,
+        count: browserDockerContainers.length,
+        message: `${browserDockerContainers.length} Docker containers.`,
         truncated: false,
-        message: `${BROWSER_DOCKER_CONTAINERS.length} Docker containers.`,
       } as T;
     }
     case "docker.images": {
       return {
-        images: BROWSER_DOCKER_IMAGES,
-        count: BROWSER_DOCKER_IMAGES.length,
+        count: browserDockerImages.length,
+        images: browserDockerImages,
+        message: `${browserDockerImages.length} Docker images.`,
         truncated: false,
-        message: `${BROWSER_DOCKER_IMAGES.length} Docker images.`,
       } as T;
     }
     case "docker.inspect": {
       return {
         container,
         details: {
-          Id:
-            BROWSER_DOCKER_CONTAINERS.find((item) => item.name === container)
-              ?.id ?? container,
-          Name: `/${container}`,
-          State: { Status: container === "api" ? "running" : "exited" },
           Config: {
-            Image: BROWSER_DOCKER_CONTAINERS.find(
+            Image: browserDockerContainers.find(
               (item) => item.name === container
             )?.image,
           },
+          Id:
+            browserDockerContainers.find((item) => item.name === container)
+              ?.id ?? container,
+          Name: `/${container}`,
+          State: { Status: container === "api" ? "running" : "exited" },
         },
         message: `Inspected ${container}.`,
       } as T;
@@ -1372,33 +1374,33 @@ function browserDockerCall<T>(name: string, rawArguments: unknown): T {
     case "docker.logs": {
       return {
         container,
-        stdout: `[2026-08-26T10:31:04Z] ${container} ready\n[2026-08-26T10:31:08Z] GET /health 200`,
-        stderr: "",
         message: `Read logs from ${container}.`,
+        stderr: "",
+        stdout: `[2026-08-26T10:31:04Z] ${container} ready\n[2026-08-26T10:31:08Z] GET /health 200`,
       } as T;
     }
     case "docker.start":
     case "docker.stop":
     case "docker.restart": {
       return {
-        container,
         action: name.slice("docker.".length),
-        output: container,
+        container,
         message: `${name} ${container}`,
+        output: container,
       } as T;
     }
     case "docker.pull": {
       return {
         image,
-        output: `Downloaded newer image for ${image}`,
         message: `Pulled ${image}.`,
+        output: `Downloaded newer image for ${image}`,
       } as T;
     }
     case "docker.remove_image": {
       return {
         image,
-        output: `Untagged: ${image}`,
         message: `Removed ${image}.`,
+        output: `Untagged: ${image}`,
       } as T;
     }
     default: {
@@ -1411,22 +1413,15 @@ function browserDockerCall<T>(name: string, rawArguments: unknown): T {
 
 // ---- the plugin graph -------------------------------------------------------------------------
 
-/**
- * Call a command through the trusted desktop host — `call("git.status", { cwd })`.
- *
- * This transport carries both internal host commands and extension-contributed commands. It is
- * broader than the public Extension API exposed to child processes. A runtime module that
- * registers `foo.bar` is callable from here without adding another desktop RPC method.
- */
 export async function call<T = unknown>(
   name: string,
-  arguments_?: unknown,
+  argumentsValue?: unknown,
   projectPath: string | null = callProjectPath
 ): Promise<T> {
   if (!isInDesktop) {
-    return browserDockerCall<T>(name, arguments_);
+    return browserDockerCall<T>(name, argumentsValue);
   }
-  return await desktopCall<T>(name, arguments_ ?? null, projectPath);
+  return await desktopCall<T>(name, argumentsValue ?? null, projectPath);
 }
 
 /**
@@ -1461,16 +1456,10 @@ export interface PluginCommand {
   description: string | null;
 }
 
-/**
-Everything currently loaded, why it is in that state, and what it contributed.
-*/
 export async function kernelScopes(): Promise<PluginScope[]> {
   return isInDesktop ? await call<PluginScope[]>("kernel.scopes") : [];
 }
 
-/**
-Every command the running graph offers, with the plugin that owns it.
-*/
 export async function kernelCommands(): Promise<PluginCommand[]> {
   return isInDesktop ? await call<PluginCommand[]>("kernel.commands") : [];
 }
@@ -1605,9 +1594,6 @@ type ManagedPluginChangePlanWire = Omit<ManagedPluginChangePlan, "request"> & {
   };
 };
 
-/**
-Kept public for adapter/contract tests and to make the camelCase-to-serde boundary explicit.
-*/
 export function managedPluginScopeToWire(
   scope: ManagedPluginScope
 ): ManagedPluginScopeWire {
@@ -1636,21 +1622,18 @@ function managedPluginPlanFromWire(
   };
 }
 
-const EMPTY_MANAGED_PLUGIN_CATALOG: ManagedPluginCatalog = {
-  graph_revision: 0,
+const emptyManagedPluginCatalog: ManagedPluginCatalog = {
   config_revision: 0,
-  recovery: { kind: "normal" },
+  graph_revision: 0,
   plugins: [],
+  recovery: { kind: "normal" },
 };
 
-/**
-Read the effective catalog for one user or project scope.
-*/
 export async function pluginCatalog(
   scope: ManagedPluginScope
 ): Promise<ManagedPluginCatalog> {
   if (!isInDesktop) {
-    return EMPTY_MANAGED_PLUGIN_CATALOG;
+    return emptyManagedPluginCatalog;
   }
   return await call<ManagedPluginCatalog>(
     "plugins.catalog",
@@ -1659,9 +1642,6 @@ export async function pluginCatalog(
   );
 }
 
-/**
-Stage a revision-bound change. The returned id is the only value accepted by apply.
-*/
 export async function planPluginChange(
   request: ManagedPluginChangeRequest
 ): Promise<ManagedPluginChangePlan> {
@@ -1673,9 +1653,6 @@ export async function planPluginChange(
   return managedPluginPlanFromWire(wire);
 }
 
-/**
-Apply exactly one previously planned change and wait for the graph to settle.
-*/
 export async function applyPluginChange(
   id: string
 ): Promise<ManagedPluginChangeResult> {
@@ -1686,9 +1663,6 @@ export async function applyPluginChange(
   );
 }
 
-/**
-Clear a plugin's state, configuration, and component overrides in one scope.
-*/
 export async function resetManagedPlugin(
   plugin: string,
   scope: ManagedPluginScope
@@ -1700,10 +1674,6 @@ export async function resetManagedPlugin(
   );
 }
 
-/**
- * Installed bundles that ship a process: which have a ready host adapter, and which are installed
- * but waiting for trust. A ready lazy adapter does not imply that its child process is resident.
- */
 export async function listExtensions(): Promise<{
   ready: string[];
   untrusted: string[];
@@ -1728,11 +1698,11 @@ export interface PluginDeveloperStatus {
   last_reload: PluginReloadRecord | null;
 }
 
-const FALLBACK_PLUGIN_DEVELOPER_STATUS: PluginDeveloperStatus = {
+const fallbackPluginDeveloperStatus: PluginDeveloperStatus = {
   enabled: false,
-  watching: false,
-  plugins_dir: "",
   last_reload: null,
+  plugins_dir: "",
+  watching: false,
 };
 
 export async function getPluginDeveloperStatus(): Promise<PluginDeveloperStatus> {
@@ -1742,18 +1712,18 @@ export async function getPluginDeveloperStatus(): Promise<PluginDeveloperStatus>
         undefined,
         null
       )
-    : { ...FALLBACK_PLUGIN_DEVELOPER_STATUS };
+    : { ...fallbackPluginDeveloperStatus };
 }
 
 export async function setPluginDeveloperMode(
-  enabled: boolean
+  isEnabled: boolean
 ): Promise<PluginDeveloperStatus> {
   if (!isInDesktop) {
     throw new Error("Plugin development requires the C2 desktop app.");
   }
   return await call<PluginDeveloperStatus>(
     "plugins.set_developer_mode",
-    { enabled },
+    { enabled: isEnabled },
     null
   );
 }
@@ -1772,31 +1742,31 @@ export async function reloadDevelopmentPlugins(): Promise<PluginDeveloperStatus>
 const fallbackProvider = (
   id: string,
   display_name: string,
-  needs_node: boolean
+  isNeeds_node: boolean
 ): ProviderInfo => {
-	return {
-						  id,
-						  display_name,
-						  available: false,
-						  enabled: true,
-						  needs_node,
-						  models: [],
-						  capabilities: [],
-						  management: {
-						    installed: false,
-						    version: null,
-						    latest_version: null,
-						    update_available: null,
-						    check_error: null,
-						    install_supported: false,
-						    upgrade_supported: false,
-						    launch_mode: "unavailable",
-						  },
-						  configuration: defaultProviderConfig({ id }),
-						};
+  return {
+    available: false,
+    capabilities: [],
+    configuration: defaultProviderConfig({ id }),
+    display_name,
+    enabled: true,
+    id,
+    management: {
+      check_error: null,
+      install_supported: false,
+      installed: false,
+      latest_version: null,
+      launch_mode: "unavailable",
+      update_available: null,
+      upgrade_supported: false,
+      version: null,
+    },
+    models: [],
+    needs_node: isNeeds_node,
+  };
 };
 
-const FALLBACK_PROVIDERS: ProviderInfo[] = [
+const fallbackProviderCatalog: ProviderInfo[] = [
   fallbackProvider("claude_code", "Claude Code", true),
   fallbackProvider("codex", "Codex", true),
   fallbackProvider("grok", "Grok", false),
@@ -1810,111 +1780,112 @@ const FALLBACK_PROVIDERS: ProviderInfo[] = [
   fallbackProvider("droid", "Droid", false),
 ];
 
-/**
-Stable provider identity while the desktop host is still starting or temporarily unavailable.
-*/
 export function fallbackProviders(): ProviderInfo[] {
-  return FALLBACK_PROVIDERS.map((provider) => ({
-						    ...provider,
-						    models: [...provider.models],
-						    capabilities: [...provider.capabilities],
-						    management: { ...provider.management },
-						    configuration: {
-						      ...provider.configuration,
-						      args: provider.configuration.args
-						        ? [...provider.configuration.args]
-						        : null,
-						      effective_args: [...provider.configuration.effective_args],
-						      forwarded_environment: [...provider.configuration.forwarded_environment],
-						      missing_environment: [...provider.configuration.missing_environment],
-						    },
-						  }));
+  return fallbackProviderCatalog.map((provider) => {
+    return {
+      ...provider,
+      capabilities: [...provider.capabilities],
+      configuration: {
+        ...provider.configuration,
+        args: provider.configuration.args
+          ? [...provider.configuration.args]
+          : null,
+        effective_args: [...provider.configuration.effective_args],
+        forwarded_environment: [
+          ...provider.configuration.forwarded_environment,
+        ],
+        missing_environment: [...provider.configuration.missing_environment],
+      },
+      management: { ...provider.management },
+      models: [...provider.models],
+    };
+  });
 }
 
 export function providerDisplayName(providerId: string): string {
   return (
-    FALLBACK_PROVIDERS.find((provider) => provider.id === providerId)
+    fallbackProviderCatalog.find((provider) => provider.id === providerId)
       ?.display_name ?? providerId
   );
 }
 
-const FALLBACK_SKILLS: SkillInfo[] = [
+const fallbackSkills: SkillInfo[] = [
   {
-    id: "reviewer",
-    name: "Code Reviewer",
     description: "Meticulous reviewer",
     icon: "🔍",
+    id: "reviewer",
     kind: "fragment",
+    name: "Code Reviewer",
     source: null,
   },
   {
-    id: "test-writer",
-    name: "Test Writer",
     description: "Thorough tests",
     icon: "🧪",
+    id: "test-writer",
     kind: "fragment",
+    name: "Test Writer",
     source: null,
   },
   {
-    id: "security-audit",
-    name: "Security Audit",
     description: "Find vulns",
     icon: "🛡️",
+    id: "security-audit",
     kind: "fragment",
+    name: "Security Audit",
     source: null,
   },
   {
-    id: "commit-macro",
-    name: "Commit Message",
     description: "Commit macro",
     icon: "📝",
+    id: "commit-macro",
     kind: "macro",
-    source: null,
-    macro_template:
-      "Write a {{style}} commit message for changes to {{scope}}.",
     macro_slots: [
       {
         id: "style",
-        label: "Style",
         kind: "select",
+        label: "Style",
         options: ["conventional", "descriptive"],
         required: true,
       },
-      { id: "scope", label: "Scope", kind: "text" },
+      { id: "scope", kind: "text", label: "Scope" },
     ],
+    macro_template:
+      "Write a {{style}} commit message for changes to {{scope}}.",
+    name: "Commit Message",
+    source: null,
   },
   {
-    id: "demo:skill:review",
-    name: "Release Review",
     description: "Review a release against its acceptance criteria",
     icon: null,
+    id: "demo:skill:review",
     kind: "agent_skill",
+    name: "Release Review",
     source: "Plugin · Developer Toolkit",
   },
   {
-    id: "demo:agent:research",
-    name: "Researcher",
     description: "Collect primary evidence before implementation",
     icon: null,
+    id: "demo:agent:research",
     kind: "subagent",
+    name: "Researcher",
     source: "Plugin · Developer Toolkit",
   },
   {
-    id: "demo:mcp:docs",
-    name: "docs-search",
     description: "MCP server from Developer Toolkit",
     icon: null,
+    id: "demo:mcp:docs",
     kind: "mcp",
+    name: "docs-search",
     source: "Plugin · Developer Toolkit",
   },
 ];
 
 export async function listProviders(
-  checkUpdates = false
+  isCheckUpdates = false
 ): Promise<ProviderInfo[]> {
   const providers = isInDesktop
     ? await call<ProviderInfoWire[]>("providers.list", {
-        check_updates: checkUpdates,
+        check_updates: isCheckUpdates,
       })
     : fallbackProviders();
   return providers.map(normalizeProviderInfo);
@@ -1922,14 +1893,14 @@ export async function listProviders(
 
 export async function setProviderEnabled(
   provider: string,
-  enabled: boolean
+  isEnabled: boolean
 ): Promise<ProviderInfo[]> {
   if (!isInDesktop) {
     throw new Error("Provider management is available in the C2 desktop app");
   }
   const providers = await call<ProviderInfoWire[]>("providers.set_enabled", {
+    enabled: isEnabled,
     provider,
-    enabled,
   });
   return providers.map(normalizeProviderInfo);
 }
@@ -1944,8 +1915,8 @@ export async function configureProvider(
     );
   }
   const providers = await call<ProviderInfoWire[]>("providers.configure", {
-    provider,
     configuration: config,
+    provider,
   });
   return providers.map(normalizeProviderInfo);
 }
@@ -1977,18 +1948,18 @@ export async function upgradeProvider(
 export async function getComputerUseSettings(): Promise<ComputerUseSettings> {
   if (!isInDesktop) {
     return {
-      selections: {},
       backends: [
         {
-          id: "cua",
-          display_name: "Cua Driver",
           available: false,
-          reason: "Computer Use backends are discovered by the desktop host.",
-          providers: [],
+          display_name: "Cua Driver",
           exclude_providers: [],
+          id: "cua",
+          providers: [],
+          reason: "Computer Use backends are discovered by the desktop host.",
         },
       ],
       errors: [],
+      selections: {},
     };
   }
   return normalizeComputerUseSettings(
@@ -2011,18 +1982,18 @@ export async function getBrowserUseSettings(): Promise<BrowserUseSettings> {
   if (!isInDesktop) {
     return {
       access_enabled: false,
-      selections: {},
       backends: [
         {
-          id: "openai-browser",
-          display_name: "OpenAI Browser / Chrome",
           available: false,
-          reason: "Browser Use backends are discovered by the desktop host.",
-          providers: ["codex"],
+          display_name: "OpenAI Browser / Chrome",
           exclude_providers: [],
+          id: "openai-browser",
+          providers: ["codex"],
+          reason: "Browser Use backends are discovered by the desktop host.",
         },
       ],
       errors: [],
+      selections: {},
     };
   }
   return normalizeBrowserUseSettings(
@@ -2042,13 +2013,15 @@ export async function selectBrowserUseBackend(
 }
 
 export async function setAgentBrowserAccess(
-  enabled: boolean
+  isEnabled: boolean
 ): Promise<BrowserUseSettings> {
   if (!isInDesktop) {
     return await getBrowserUseSettings();
   }
   return normalizeBrowserUseSettings(
-    await call<BrowserUseSettingsWire>("browser_use.set_access", { enabled })
+    await call<BrowserUseSettingsWire>("browser_use.set_access", {
+      enabled: isEnabled,
+    })
   );
 }
 
@@ -2057,7 +2030,7 @@ export async function setAgentBrowserAccess(
 export async function listSkills(cwd?: string): Promise<SkillInfo[]> {
   return isInDesktop
     ? await call<SkillInfo[]>("skills.list", { cwd: cwd ?? null })
-    : FALLBACK_SKILLS;
+    : fallbackSkills;
 }
 
 export async function listSessions(): Promise<SessionInfo[]> {
@@ -2082,9 +2055,6 @@ export interface SessionImportResult {
   errors: { path: string; message: string }[];
 }
 
-/**
-Choose provider-owned transcripts or message databases and let Core parse them read-only.
-*/
 export async function importSessionFiles(
   fallbackCwd: string
 ): Promise<SessionImportResult | null> {
@@ -2093,21 +2063,21 @@ export async function importSessionFiles(
   }
   const paths = await desktopOpenDialog({
     directory: false,
-    multiple: true,
-    title: "Import conversations",
     filters: [
       {
-        name: "Codex, Claude Code, Cursor, or T3 Code",
         extensions: ["jsonl", "vscdb", "sqlite", "db"],
+        name: "Codex, Claude Code, Cursor, or T3 Code",
       },
     ],
+    multiple: true,
+    title: "Import conversations",
   });
   if (paths.length === 0) {
     return null;
   }
   return await call<SessionImportResult>("sessions.import", {
-    paths,
     fallback_cwd: fallbackCwd,
+    paths,
   });
 }
 
@@ -2115,10 +2085,10 @@ export async function getMemorySettings(): Promise<MemorySettings> {
   return isInDesktop
     ? await call<MemorySettings>("memory.settings")
     : {
-        enabled: true,
         capture: true,
-        inject: true,
+        enabled: true,
         include_external_context: true,
+        inject: true,
       };
 }
 
@@ -2138,10 +2108,10 @@ export async function getMemoryProjectPolicy(
         project_path: projectPath,
       })
     : {
-        project_path: projectPath,
         capture: "inherit",
-        inject: "inherit",
         include_external_context: "inherit",
+        inject: "inherit",
+        project_path: projectPath,
       };
 }
 
@@ -2151,8 +2121,8 @@ export async function saveMemoryProjectPolicy(
 ): Promise<void> {
   if (isInDesktop) {
     await call("memory.set_project_policy", {
-      project_path: projectPath,
       policy,
+      project_path: projectPath,
     });
   }
 }
@@ -2163,8 +2133,8 @@ export async function listMemories(
 ): Promise<MemoryRecord[]> {
   return isInDesktop
     ? await call<MemoryRecord[]>("memory.list", {
-        project_path: projectPath,
         limit,
+        project_path: projectPath,
       })
     : [];
 }
@@ -2175,8 +2145,8 @@ export async function listManagedMemories(
 ): Promise<MemoryRecord[]> {
   return isInDesktop
     ? await call<MemoryRecord[]>("memory.manage_list", {
-        project_path: projectPath,
         limit,
+        project_path: projectPath,
       })
     : [];
 }
@@ -2188,9 +2158,9 @@ export async function searchMemories(
 ): Promise<MemoryRecord[]> {
   return isInDesktop
     ? await call<MemoryRecord[]>("memory.search", {
+        limit,
         project_path: projectPath,
         query,
-        limit,
       })
     : [];
 }
@@ -2201,16 +2171,16 @@ export async function getMemoryStats(
   return isInDesktop
     ? await call<MemoryStats>("memory.stats", { project_path: projectPath })
     : {
+        active: 0,
+        conflicts: 0,
+        forgotten: 0,
         l0: 0,
         l1: 0,
         l2: 0,
         l3: 0,
         pending: 0,
-        active: 0,
         pinned: 0,
         recent: 0,
-        forgotten: 0,
-        conflicts: 0,
       };
 }
 
@@ -2218,31 +2188,31 @@ export async function addMemory(
   projectPath: string,
   category: string,
   content: string,
-  pinned = true
+  isPinned = true
 ): Promise<MemoryRecord> {
   return await call<MemoryRecord>("memory.add", {
-    project_path: projectPath,
     category,
     content,
-    pinned,
+    pinned: isPinned,
+    project_path: projectPath,
   });
 }
 
 export async function setMemoryPinned(
   id: string,
-  pinned: boolean
+  isPinned: boolean
 ): Promise<void> {
   if (isInDesktop) {
-    await call("memory.set_pinned", { id, value: pinned });
+    await call("memory.set_pinned", { id, value: isPinned });
   }
 }
 
 export async function setMemoryActive(
   id: string,
-  active: boolean
+  isActive: boolean
 ): Promise<void> {
   if (isInDesktop) {
-    await call("memory.set_active", { id, value: active });
+    await call("memory.set_active", { id, value: isActive });
   }
 }
 
@@ -2251,14 +2221,14 @@ export async function updateMemory(
   category: string,
   content: string
 ): Promise<MemoryRecord> {
-  return await call<MemoryRecord>("memory.update", { id, category, content });
+  return await call<MemoryRecord>("memory.update", { category, content, id });
 }
 
 export async function setMemoryCategory(
   id: string,
   category: string
 ): Promise<MemoryRecord> {
-  return await call<MemoryRecord>("memory.set_category", { id, category });
+  return await call<MemoryRecord>("memory.set_category", { category, id });
 }
 
 export async function correctMemory(
@@ -2266,7 +2236,7 @@ export async function correctMemory(
   category: string,
   content: string
 ): Promise<MemoryRecord> {
-  return await call<MemoryRecord>("memory.correct", { id, category, content });
+  return await call<MemoryRecord>("memory.correct", { category, content, id });
 }
 
 export async function deleteMemory(id: string): Promise<void> {
@@ -2277,10 +2247,10 @@ export async function deleteMemory(id: string): Promise<void> {
 
 export async function getMemoryEvidence(
   id: string,
-  reveal = false
+  isReveal = false
 ): Promise<MemoryEvidence[]> {
   return isInDesktop
-    ? await call<MemoryEvidence[]>("memory.evidence", { id, reveal })
+    ? await call<MemoryEvidence[]>("memory.evidence", { id, reveal: isReveal })
     : [];
 }
 
@@ -2294,7 +2264,7 @@ export async function setSessionMemoryPolicy(
   write: MemoryAccess
 ): Promise<void> {
   if (isInDesktop) {
-    await call("memory.set_session_policy", { session, read, write });
+    await call("memory.set_session_policy", { read, session, write });
   }
 }
 
@@ -2314,7 +2284,7 @@ export async function newSession(
   worktreeBaseSha?: string | null,
   initialPolicy?: ExecutionPolicy | null,
   initialModel?: string | null,
-  transient = false,
+  isTransient = false,
   initialReasoningEffort?: string | null,
   parallelTask?: { taskId: string; goal: string } | null
 ): Promise<void> {
@@ -2327,45 +2297,39 @@ export async function newSession(
       throw new Error("Parallel tasks require an isolated worktree");
     }
     await call("engine.new_parallel_task", {
-      provider,
       cwd,
-      worktree_base: worktreeBase,
-      worktree_base_sha: worktreeBaseSha ?? null,
-      request_id: requestId,
+      goal: parallelTask.goal,
       initial_policy: initialPolicy ?? null,
       model: initialModel ?? null,
+      provider,
       reasoning_effort: initialReasoningEffort ?? null,
+      request_id: requestId,
       task_id: parallelTask.taskId,
-      goal: parallelTask.goal,
+      worktree_base: worktreeBase,
+      worktree_base_sha: worktreeBaseSha ?? null,
     });
     return;
   }
   await call("engine.new_session", {
-    provider,
     cwd,
+    initial_policy: initialPolicy ?? null,
+    model: initialModel ?? null,
+    provider,
+    reasoning_effort: initialReasoningEffort ?? null,
+    request_id: requestId,
+    transient: isTransient,
     use_worktree: worktreeBase !== null,
     worktree_base: worktreeBase,
     worktree_base_sha: worktreeBaseSha ?? null,
-    request_id: requestId,
-    initial_policy: initialPolicy ?? null,
-    model: initialModel ?? null,
-    transient,
-    reasoning_effort: initialReasoningEffort ?? null,
   });
 }
 
-/**
-Stop and forget one app-lifetime side-chat session. Durable sessions are rejected.
-*/
 export async function closeTransientSession(session: string): Promise<boolean> {
   return isInDesktop
     ? await call<boolean>("engine.close_transient_session", { session })
     : true;
 }
 
-/**
-Resolve selectable baselines from local refs only. This command never fetches.
-*/
 export async function listWorktreeBaselines(
   cwd: string
 ): Promise<WorktreeBaselineOption[]> {
@@ -2374,9 +2338,6 @@ export async function listWorktreeBaselines(
     : [];
 }
 
-/**
-Remove a session's isolated checkout and its codetwo/ branch. Repeating is a no-op success.
-*/
 export async function discardSessionWorktree(
   session: string
 ): Promise<DiscardedWorktree> {
@@ -2385,9 +2346,6 @@ export async function discardSessionWorktree(
     : { removed_checkout: false };
 }
 
-/**
-Every checkout under a project's worktree container — session-claimed, orphan, or stale.
-*/
 export async function listProjectWorktrees(
   projectPath: string
 ): Promise<WorktreeStatusEntry[]> {
@@ -2399,9 +2357,9 @@ export async function listProjectWorktrees(
 }
 
 const browserWorktreeSettings: WorktreeSettings = {
-  fetch_upstream: false,
   auto_delete: false,
   auto_delete_limit: 15,
+  fetch_upstream: false,
 };
 
 export async function getWorktreeSettings(): Promise<WorktreeSettings> {
@@ -2418,9 +2376,6 @@ export async function updateWorktreeSettings(
     : { ...settings };
 }
 
-/**
-Remove an unclaimed checkout by path. The core rejects paths a session still claims.
-*/
 export async function discardOrphanWorktree(
   projectPath: string,
   worktreePath: string
@@ -2435,21 +2390,18 @@ export async function discardOrphanWorktree(
 
 export async function submitPrompt(
   session: string,
-  document_: DocBlock[],
+  documentValue: DocumentBlock[],
   requestId: string
 ): Promise<void> {
   if (isInDesktop) {
     await call("engine.prompt", {
-      session,
-      doc: document_,
+      doc: documentValue,
       request_id: requestId,
+      session,
     });
   }
 }
 
-/**
-Connect a durable session early so provider-native modes are available before its next turn.
-*/
 export async function prepareSession(session: string): Promise<void> {
   if (isInDesktop) {
     await call("engine.prepare_session", { session });
@@ -2458,27 +2410,27 @@ export async function prepareSession(session: string): Promise<void> {
 
 export async function queuePrompt(
   session: string,
-  document_: DocBlock[],
+  documentValue: DocumentBlock[],
   requestId: string
 ): Promise<{ position: number }> {
   return isInDesktop
     ? await call<{ position: number }>("engine.queue", {
-        session,
-        doc: document_,
+        doc: documentValue,
         request_id: requestId,
+        session,
       })
     : { position: 0 };
 }
 
 export async function steerPrompt(
   session: string,
-  document_: DocBlock[],
+  documentValue: DocumentBlock[],
   requestId: string
 ): Promise<{ outcome: "injected" | "startedNewTurn" }> {
   return await call("engine.steer", {
-    session,
-    doc: document_,
+    doc: documentValue,
     request_id: requestId,
+    session,
   });
 }
 
@@ -2489,9 +2441,9 @@ export async function controlGoal(
 ): Promise<void> {
   if (isInDesktop) {
     await call("engine.goal", {
-      session,
       action,
       objective: objective ?? null,
+      session,
     });
   }
 }
@@ -2515,9 +2467,12 @@ export async function updateAutomation(
 
 export async function setAutomationEnabled(
   id: string,
-  enabled: boolean
+  isEnabled: boolean
 ): Promise<Automation> {
-  return await call<Automation>("automation.set_enabled", { id, enabled });
+  return await call<Automation>("automation.set_enabled", {
+    enabled: isEnabled,
+    id,
+  });
 }
 
 export async function deleteAutomation(id: string): Promise<boolean> {
@@ -2568,9 +2523,9 @@ export async function answerPermission(
 ): Promise<boolean> {
   if (isInDesktop) {
     return await call<boolean>("engine.answer_permission", {
-      session,
-      request_id: requestId,
       option_id: optionId,
+      request_id: requestId,
+      session,
     });
   }
   return false;
@@ -2583,9 +2538,9 @@ export async function answerElicitation(
 ): Promise<boolean> {
   if (isInDesktop) {
     return await call<boolean>("engine.answer_elicitation", {
-      session,
-      request_id: requestId,
       answer,
+      request_id: requestId,
+      session,
     });
   }
   return false;
@@ -2596,7 +2551,7 @@ export async function setPermissionMode(
   mode: string
 ): Promise<void> {
   if (isInDesktop) {
-    await call("engine.set_permission_mode", { session, mode });
+    await call("engine.set_permission_mode", { mode, session });
   }
 }
 
@@ -2608,58 +2563,51 @@ export async function setExecutionPolicy(
 ): Promise<void> {
   if (isInDesktop) {
     await call("engine.set_execution_policy", {
-      session,
       mode,
-      sandbox,
       request_id: requestId,
+      sandbox,
+      session,
     });
   }
 }
 
 /// One entry in a directory listing, for the file tree in the side dock.
-export interface DirEntry {
+export interface DirectoryEntry {
   name: string;
   path: string;
   is_dir: boolean;
 }
 
-/**
-One directory level. The tree expands lazily, so nothing is capped or silently truncated.
-*/
-export async function listDir(cwd: string, path: string): Promise<DirEntry[]> {
+export async function listDirectory(
+  cwd: string,
+  path: string
+): Promise<DirectoryEntry[]> {
   return isInDesktop
-    ? await call<DirEntry[]>("workspace.list_dir", { cwd, path })
+    ? await call<DirectoryEntry[]>("workspace.list_dir", { cwd, path })
     : [];
 }
 
-/**
-Create an empty file. Rejects paths that already exist rather than overwriting.
-*/
 export async function createFile(cwd: string, path: string): Promise<void> {
   if (isInDesktop) {
     await call("workspace.create_file", { cwd, path });
   }
 }
 
-export async function createDir(cwd: string, path: string): Promise<void> {
+export async function createDirectory(
+  cwd: string,
+  path: string
+): Promise<void> {
   if (isInDesktop) {
     await call("workspace.create_dir", { cwd, path });
   }
 }
 
-/**
-Read a file for the viewer. Rejects binaries and oversized files rather than showing mojibake.
-*/
 export async function readText(cwd: string, path: string): Promise<string> {
   return isInDesktop
     ? await call<string>("workspace.read_text", { cwd, path })
     : "";
 }
 
-/**
- * Raw bytes for the image preview. JSON host results arrive as a number array; the ArrayBuffer
- * branch keeps the wrapper compatible with direct binary transports.
- */
 export async function readBinary(
   cwd: string,
   path: string
@@ -2690,10 +2638,10 @@ export async function saveArtifactAs(
     return false;
   }
   const destination = await desktopSaveDialog({ defaultPath: displayName });
-  if (!destination) {
+  if (destination == null || destination === "") {
     return false;
   }
-  await call("artifacts.save_as", { id, destination });
+  await call("artifacts.save_as", { destination, id });
   return true;
 }
 
@@ -2703,9 +2651,6 @@ export async function revealArtifact(id: string): Promise<void> {
   }
 }
 
-/**
-Load a bounded local visualize fragment; the host validates its canonical root and file type.
-*/
 export async function readVisualization(path: string): Promise<string> {
   if (
     !isInDesktop &&
@@ -2737,11 +2682,14 @@ export async function writeText(
   content: string
 ): Promise<void> {
   if (isInDesktop) {
-    await call("workspace.write_text", { cwd, path, content });
+    await call("workspace.write_text", { content, cwd, path });
   }
 }
 
-function splitNativePath(path: string): { cwd: string; name: string } {
+function splitNativePath(path: string): {
+  cwd: string;
+  name: string;
+} {
   const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   if (separator < 0) {
     return { cwd: ".", name: path };
@@ -2753,9 +2701,6 @@ function splitNativePath(path: string): { cwd: string; name: string } {
   return { cwd, name: path.slice(separator + 1) };
 }
 
-/**
-Native theme picker. `undefined` means the web build should use its hidden file input.
-*/
 export async function pickAppearanceThemeDocument(): Promise<
   string | null | undefined
 > {
@@ -2763,10 +2708,10 @@ export async function pickAppearanceThemeDocument(): Promise<
     return undefined;
   }
   const [selected] = await desktopOpenDialog({
-    multiple: false,
     directory: false,
+    filters: [{ extensions: ["json"], name: "C2 theme" }],
+    multiple: false,
     title: "Import C2 theme",
-    filters: [{ name: "C2 theme", extensions: ["json"] }],
   });
   if (!selected) {
     return null;
@@ -2777,9 +2722,6 @@ export async function pickAppearanceThemeDocument(): Promise<
 
 export type AppearanceThemeSaveResult = "saved" | "cancelled" | "unsupported";
 
-/**
-Saves through the OS dialog on desktop; the web build falls back to a normal JSON download.
-*/
 export async function saveAppearanceThemeDocument(
   suggestedName: string,
   content: string
@@ -2788,9 +2730,9 @@ export async function saveAppearanceThemeDocument(
     return "unsupported";
   }
   const selected = await desktopSaveDialog({
-    title: "Export C2 theme",
     defaultPath: suggestedName,
-    filters: [{ name: "C2 theme", extensions: ["json"] }],
+    filters: [{ extensions: ["json"], name: "C2 theme" }],
+    title: "Export C2 theme",
   });
   if (typeof selected !== "string") {
     return "cancelled";
@@ -2801,24 +2743,21 @@ export async function saveAppearanceThemeDocument(
   } catch {
     // The save panel explicitly confirms replacement. An existing file is therefore expected.
   }
-  await call("workspace.write_text", { cwd, path: name, content });
+  await call("workspace.write_text", { content, cwd, path: name });
   return "saved";
 }
 
 export type DiagnosticsExportResult = "saved" | "cancelled" | "unsupported";
 
-/**
-Save the Core's default-redacted support snapshot through an explicit native save panel.
-*/
 export async function exportRedactedDiagnostics(): Promise<DiagnosticsExportResult> {
   if (!isInDesktop) {
     return "unsupported";
   }
   const date = new Date().toISOString().slice(0, 10);
   const selected = await desktopSaveDialog({
-    title: "Export C2 diagnostics",
     defaultPath: `c2-diagnostics-${date}.json`,
-    filters: [{ name: "C2 diagnostics", extensions: ["json"] }],
+    filters: [{ extensions: ["json"], name: "C2 diagnostics" }],
+    title: "Export C2 diagnostics",
   });
   if (typeof selected !== "string") {
     return "cancelled";
@@ -2831,16 +2770,13 @@ export async function exportRedactedDiagnostics(): Promise<DiagnosticsExportResu
     // The native save panel already asked the user to confirm replacement.
   }
   await call("workspace.write_text", {
+    content: `${JSON.stringify(report, null, 2)}\n`,
     cwd,
     path: name,
-    content: `${JSON.stringify(report, null, 2)}\n`,
   });
   return "saved";
 }
 
-/**
-Rename *and* move — a `to` with a different parent moves it.
-*/
 export async function renamePath(
   cwd: string,
   from: string,
@@ -2867,9 +2803,6 @@ export async function deletePath(cwd: string, path: string): Promise<void> {
   }
 }
 
-/**
-Open the webview inspector on the app's own UI.
-*/
 export async function openDevtools(): Promise<void> {
   if (!isInDesktop) {
     throw new Error("WebView DevTools require the C2 desktop app.");
@@ -2890,20 +2823,17 @@ export interface Rect {
   height: number;
 }
 
-/**
-Create the tab's webview if needed, place it, and load `url`. Safe to call repeatedly.
-*/
 export async function browserOpen(
   label: string,
   url: string,
-  _r: Rect
+  _rect: Rect
 ): Promise<void> {
   if (isInDesktop) {
     browserOpenLocal(label, url);
   }
 }
 
-export async function browserBounds(label: string, _r: Rect): Promise<void> {
+export async function browserBounds(label: string, _rect: Rect): Promise<void> {
   if (isInDesktop) {
     browserBoundsLocal(label);
   }
@@ -2918,9 +2848,6 @@ export async function browserNavigate(
   }
 }
 
-/**
-−1 is back, 1 is forward — the page's own history, not one we keep for it.
-*/
 export async function browserHistory(
   label: string,
   delta: number
@@ -2936,15 +2863,12 @@ export async function browserReload(label: string): Promise<void> {
   }
 }
 
-/**
-Hide, not close: the page keeps its state, which is the point of tabs.
-*/
 export async function browserVisible(
   label: string,
-  visible: boolean
+  isVisible: boolean
 ): Promise<void> {
   if (isInDesktop) {
-    browserVisibleLocal(label, visible);
+    browserVisibleLocal(label, isVisible);
   }
 }
 
@@ -2987,11 +2911,11 @@ export async function browserRegistrySnapshot(): Promise<BrowserTab[]> {
     ? browserRegistrySnapshotLocal()
     : [
         {
-          id: "browser-1",
-          url: "about:blank",
-          title: "",
           active: true,
           agent_active: false,
+          id: "browser-1",
+          title: "",
+          url: "about:blank",
         },
       ];
 }
@@ -3000,11 +2924,11 @@ export async function browserRegistryCreate(url: string): Promise<BrowserTab> {
   return isInDesktop
     ? browserRegistryCreateLocal(url)
     : {
-        id: `browser-${Date.now()}`,
-        url,
-        title: "",
         active: true,
         agent_active: false,
+        id: `browser-${Date.now()}`,
+        title: "",
+        url,
       };
 }
 
@@ -3054,15 +2978,12 @@ export async function onBrowserDownloadBlocked(
 // because the page is a native webview and nothing in our DOM can be drawn on top of it. The app
 // arms it and pulls the results back out; the page can never call in.
 
-/**
-Arm or disarm element picking on the active page.
-*/
 export async function browserAnnotate(
   label: string,
-  on: boolean
+  isOn: boolean
 ): Promise<void> {
   if (isInDesktop) {
-    browserAnnotateLocal(label, on);
+    browserAnnotateLocal(label, isOn);
   }
 }
 
@@ -3077,18 +2998,12 @@ export async function browserAnnotationCount(label: string): Promise<number> {
   return isInDesktop ? await browserAnnotationCountLocal(label) : 0;
 }
 
-/**
-Drop the notes and undo the live style edits they described.
-*/
 export async function browserAnnotationsClear(label: string): Promise<void> {
   if (isInDesktop) {
     browserAnnotationsClearLocal(label);
   }
 }
 
-/**
-A document finished loading — the point at which a fresh annotator exists to re-arm.
-*/
 export async function onBrowserLoad(
   callback: (p: BrowserNav) => void
 ): Promise<() => void> {
@@ -3098,9 +3013,6 @@ export async function onBrowserLoad(
   return browserSubscribe("browser-load", callback);
 }
 
-/**
-The page navigated itself — a link, a redirect, a form post. The address bar follows this.
-*/
 export async function onBrowserNav(
   callback: (p: BrowserNav) => void
 ): Promise<() => void> {
@@ -3119,9 +3031,6 @@ export async function onBrowserTitle(
   return browserSubscribe("browser-title", callback);
 }
 
-/**
-`target="_blank"` / `window.open`, denied natively and reopened here as a tab.
-*/
 export async function onBrowserPopup(
   callback: (p: BrowserNav) => void
 ): Promise<() => void> {
@@ -3131,11 +3040,6 @@ export async function onBrowserPopup(
   return browserSubscribe("browser-popup", callback);
 }
 
-/**
- * Native yes/no dialog. `window.confirm` is a silent always-true stub in wry's WKWebView (no
- * JS-confirm delegate), which turns every "are you sure?" into "yes" — so anything destructive
- * must come through here instead.
- */
 export async function confirmNative(
   message: string,
   title?: string
@@ -3152,9 +3056,6 @@ export async function confirmNative(
   }
 }
 
-/**
-Hand a URL to the system's default browser. Outside desktop, open a plain new tab.
-*/
 export async function openExternal(url: string): Promise<void> {
   if (isInDesktop) {
     await desktopOpenExternal(url);
@@ -3163,9 +3064,6 @@ export async function openExternal(url: string): Promise<void> {
   }
 }
 
-/**
-Open a local path with the operating system (a directory opens in Finder on macOS).
-*/
 export async function openNativePath(path: string): Promise<boolean> {
   if (!isInDesktop) {
     return false;
@@ -3173,9 +3071,6 @@ export async function openNativePath(path: string): Promise<boolean> {
   return await desktopOpenPath(path);
 }
 
-/**
-Reveal a local path in the operating system's file manager.
-*/
 export async function revealNativePath(path: string): Promise<boolean> {
   if (!isInDesktop) {
     return false;
@@ -3183,9 +3078,6 @@ export async function revealNativePath(path: string): Promise<boolean> {
   return await desktopShowItemInFolder(path);
 }
 
-/**
-Open a workspace in one of the desktop destinations offered by the session header.
-*/
 export async function openWorkspace(
   path: string,
   target: WorkspaceOpenTarget
@@ -3201,9 +3093,6 @@ export async function openWorkspace(
 // frames their stdio JSON-RPC; the frontend LSP client in src/lsp speaks the protocol. One server
 // per (binary, project) pair — the key names that pair.
 
-/**
-Spawn (or reuse) a language server for `lang` rooted at `cwd`. Null when none is installed.
-*/
 export async function lspStart(
   cwd: string,
   lang: string
@@ -3213,24 +3102,18 @@ export async function lspStart(
     : null;
 }
 
-/**
-Send one raw JSON-RPC message (already serialized) to the server behind `key`.
-*/
 export async function lspSend(key: string, payload: string): Promise<void> {
   if (isInDesktop) {
     await call("lsp.send", { key, payload });
   }
 }
 
-/**
-Suspend or resume language servers in one explicit project realm without unloading the plugin.
-*/
 export async function lspSetRuntimeEnabled(
-  enabled: boolean,
+  isEnabled: boolean,
   projectPath: string | null
 ): Promise<void> {
   if (isInDesktop) {
-    await call("lsp.set_runtime_enabled", { enabled }, projectPath);
+    await call("lsp.set_runtime_enabled", { enabled: isEnabled }, projectPath);
   }
 }
 
@@ -3248,9 +3131,6 @@ export async function onLspMessage(
   return listenDesktop<LspMessage>("lsp-message", callback);
 }
 
-/**
-The server process died or closed its pipe — the client for `key` is gone.
-*/
 export async function onLspExit(
   callback: (key: string) => void
 ): Promise<() => void> {
@@ -3260,9 +3140,6 @@ export async function onLspExit(
   return listenDesktop<string>("lsp-exit", callback);
 }
 
-/**
-Newest text per session id, for the rail's preview line.
-*/
 export async function sessionPreviews(): Promise<Record<string, string>> {
   if (!isInDesktop) {
     return {};
@@ -3281,15 +3158,12 @@ export interface SessionSearchHit {
   seq: number;
 }
 
-/**
-Bounded full-text search over canonical user prompts and agent output.
-*/
 export async function searchSessions(
   query: string,
   limit = 12
 ): Promise<SessionSearchHit[]> {
   return isInDesktop
-    ? await call<SessionSearchHit[]>("sessions.search", { query, limit })
+    ? await call<SessionSearchHit[]>("sessions.search", { limit, query })
     : [];
 }
 
@@ -3299,10 +3173,6 @@ export async function listProjects(): Promise<Project[]> {
   return isInDesktop ? await call<Project[]>("projects.list") : [];
 }
 
-/**
- * Native folder chooser. Returns null when the user cancels — which is a normal outcome, not an
- * error. Outside desktop there's no picker, so it resolves to null and the caller does nothing.
- */
 export async function pickDirectory(): Promise<string | null> {
   if (!isInDesktop) {
     return null;
@@ -3315,12 +3185,9 @@ export async function pickDirectory(): Promise<string | null> {
   return picked ?? null;
 }
 
-/**
-Returns the resolved absolute path, which is the project's identity.
-*/
 export async function addProject(path: string, name?: string): Promise<string> {
   return isInDesktop
-    ? await call<string>("projects.add", { path, name: name ?? null })
+    ? await call<string>("projects.add", { name: name ?? null, path })
     : path;
 }
 
@@ -3332,7 +3199,7 @@ export async function openProject(path: string): Promise<void> {
 
 export async function renameProject(path: string, name: string): Promise<void> {
   if (isInDesktop) {
-    await call("projects.rename", { path, name });
+    await call("projects.rename", { name, path });
   }
 }
 
@@ -3344,9 +3211,9 @@ export async function setProjectAgentDefaults(
 ): Promise<void> {
   if (isInDesktop) {
     await call("projects.set_agent_defaults", {
+      model,
       path,
       provider,
-      model,
       reasoning_effort: reasoningEffort,
     });
   }
@@ -3358,9 +3225,9 @@ export async function pickProjectIcon(): Promise<string | null> {
   }
   const [picked] = await desktopOpenDialog({
     directory: false,
+    filters: [{ extensions: ["png", "jpg", "jpeg", "webp"], name: "Images" }],
     multiple: false,
     title: "Choose a project icon",
-    filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
   });
   return picked ?? null;
 }
@@ -3388,11 +3255,11 @@ export async function getProjectIcon(
     return null;
   }
   return {
-    mime_type: icon.mime_type,
     bytes:
       icon.bytes instanceof ArrayBuffer
         ? new Uint8Array(icon.bytes)
         : new Uint8Array(icon.bytes),
+    mime_type: icon.mime_type,
   };
 }
 
@@ -3401,7 +3268,7 @@ export async function setProjectWorktreeMode(
   mode: ProjectWorktreeMode | null
 ): Promise<void> {
   if (isInDesktop) {
-    await call("projects.set_worktree_mode", { path, mode });
+    await call("projects.set_worktree_mode", { mode, path });
   }
 }
 
@@ -3411,22 +3278,16 @@ export async function removeProject(path: string): Promise<void> {
   }
 }
 
-/**
-Where a new session should start. Resolved by the core, never `"."` — see `default_cwd`.
-*/
 export async function defaultCwd(): Promise<string> {
   return isInDesktop ? await call<string>("workspace.default_cwd") : ".";
 }
 
 export async function setModel(session: string, model: string): Promise<void> {
   if (isInDesktop) {
-    await call("engine.set_model", { session, model });
+    await call("engine.set_model", { model, session });
   }
 }
 
-/**
-Set an agent-reported config option (model, reasoning effort, …) by its id.
-*/
 export async function setConfigOption(
   session: string,
   configId: string,
@@ -3434,8 +3295,8 @@ export async function setConfigOption(
 ): Promise<void> {
   if (isInDesktop) {
     await call("engine.set_config_option", {
-      session,
       config_id: configId,
+      session,
       value,
     });
   }
@@ -3447,11 +3308,6 @@ export async function cancelTurn(session: string): Promise<void> {
   }
 }
 
-/**
- * Attach to the terminal `id`, creating it if it doesn't exist. Terminals live in the core, so a
- * re-attach returns `restore`: a VT dump to replay into a fresh renderer so the screen and
- * scrollback come back exactly as they were.
- */
 export async function ptySpawn(
   id: string,
   cwd: string | null,
@@ -3463,10 +3319,10 @@ export async function ptySpawn(
     return { created: true, restore: "" };
   }
   return await call<PtyAttach>("terminal.spawn", {
-    id,
-    cwd,
-    rows,
     cols,
+    cwd,
+    id,
+    rows,
     scrollback: options?.scrollback ?? null,
     tmux_session: options?.tmuxSession ?? null,
   });
@@ -3478,7 +3334,7 @@ export async function tmuxAvailable(): Promise<boolean> {
 
 export async function ptyWrite(id: string, data: string): Promise<void> {
   if (isInDesktop) {
-    await call("terminal.write", { id, data });
+    await call("terminal.write", { data, id });
   }
 }
 
@@ -3488,20 +3344,16 @@ export async function ptyResize(
   cols: number
 ): Promise<void> {
   if (isInDesktop) {
-    await call("terminal.resize", { id, rows, cols });
+    await call("terminal.resize", { cols, id, rows });
   }
 }
 
-/**
-Terminal contents as plain text — `all` includes scrollback, otherwise just the visible screen.
-*/
-export async function ptyDump(id: string, all = true): Promise<string> {
-  return isInDesktop ? await call<string>("terminal.dump", { id, all }) : "";
+export async function ptyDump(id: string, isAll = true): Promise<string> {
+  return isInDesktop
+    ? await call<string>("terminal.dump", { all: isAll, id })
+    : "";
 }
 
-/**
-Close a terminal for good, killing its child process. Detaching a renderer does not do this.
-*/
 export async function ptyKill(id: string): Promise<void> {
   if (isInDesktop) {
     await call("terminal.kill", { id });
@@ -3515,9 +3367,9 @@ export async function getTranscriptPage(
 ): Promise<TranscriptPage> {
   return isInDesktop
     ? await call<TranscriptPage>("sessions.transcript", {
-        session,
         before,
         limit,
+        session,
       })
     : { entries: [], next_before: null, snapshot_through: null };
 }
@@ -3627,7 +3479,7 @@ export async function githubReviewPullRequest(
   body: string
 ): Promise<void> {
   if (isInDesktop) {
-    await call("github.review_pr", { cwd, number, action, body });
+    await call("github.review_pr", { action, body, cwd, number });
   }
 }
 
@@ -3644,7 +3496,7 @@ export async function githubMergePullRequest(
 export async function gitStatus(cwd: string): Promise<GitStatus> {
   return isInDesktop
     ? await call<GitStatus>("git.status", { cwd })
-    : { is_repo: false, branch: "", ahead: 0, behind: 0, files: [] };
+    : { ahead: 0, behind: 0, branch: "", files: [], is_repo: false };
 }
 
 export interface Checkpoint {
@@ -3686,12 +3538,12 @@ export interface GitDiffStat {
   truncation_reason: string | null;
 }
 
-const EMPTY_DIFF: GitDiffResult = {
+const emptyDiff: GitDiffResult = {
+  files: 0,
+  returned_bytes: 0,
   text: "",
   truncated: false,
   truncation_reason: null,
-  returned_bytes: 0,
-  files: 0,
 };
 
 export async function gitDiff(
@@ -3701,15 +3553,15 @@ export async function gitDiff(
 ): Promise<GitDiffResult> {
   return isInDesktop
     ? await call<GitDiffResult>("git.diff", { cwd, path, scope })
-    : EMPTY_DIFF;
+    : emptyDiff;
 }
 export async function gitDiffSince(
   cwd: string,
   commit: string
 ): Promise<GitDiffResult> {
   return isInDesktop
-    ? await call<GitDiffResult>("git.diff_since", { cwd, commit })
-    : EMPTY_DIFF;
+    ? await call<GitDiffResult>("git.diff_since", { commit, cwd })
+    : emptyDiff;
 }
 export async function gitDiffStat(cwd: string): Promise<GitDiffStat> {
   return isInDesktop
@@ -3740,7 +3592,7 @@ export async function gitUnstagePaths(
 }
 export async function gitRevert(cwd: string, commit: string): Promise<void> {
   if (isInDesktop) {
-    await call("git.revert", { cwd, commit });
+    await call("git.revert", { commit, cwd });
   }
 }
 export async function gitCommit(cwd: string, message: string): Promise<string> {
@@ -3756,7 +3608,7 @@ export type KeymapEntry = [action: string, key: string, label: string];
 
 // Mirrors `Action::default_key()` in crates/core/src/keymap.rs — keep the two in step. This is only
 // the browser-preview fallback; inside desktop the real keymap (with user overrides) comes from core.
-export const DEFAULT_KEYMAP: KeymapEntry[] = [
+export const defaultKeymap: KeymapEntry[] = [
   ["run", "Mod+Enter", "Run prompt"],
   ["new_session", "Mod+N", "New task"],
   ["cancel", "Mod+.", "Cancel turn"],
@@ -3784,7 +3636,7 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
 ];
 
 export async function getKeymap(): Promise<KeymapEntry[]> {
-  return isInDesktop ? await call<KeymapEntry[]>("keymap.get") : DEFAULT_KEYMAP;
+  return isInDesktop ? await call<KeymapEntry[]>("keymap.get") : defaultKeymap;
 }
 
 export async function setKeymap(action: string, key: string): Promise<void> {
@@ -3825,43 +3677,43 @@ export interface MarketItem {
   installed: boolean;
 }
 
-const FALLBACK_MARKET: MarketItem[] = [
+const fallbackMarket: MarketItem[] = [
   {
-    id: "architect",
-    name: "System Architect",
+    author: "codetwo",
     description: "Design before coding.",
-    author: "codetwo",
-    tags: ["design"],
     icon: "🏛️",
-    kind: "fragment",
+    id: "architect",
     installed: false,
+    kind: "fragment",
+    name: "System Architect",
+    tags: ["design"],
   },
   {
-    id: "test-suite",
-    name: "Test Suite Author",
+    author: "codetwo",
     description: "Thorough deterministic tests.",
-    author: "codetwo",
-    tags: ["testing"],
     icon: "🧪",
-    kind: "fragment",
+    id: "test-suite",
     installed: false,
+    kind: "fragment",
+    name: "Test Suite Author",
+    tags: ["testing"],
   },
   {
-    id: "browser-tool",
-    name: "Browser Tool (MCP)",
-    description: "Give the agent a browser.",
     author: "codetwo",
-    tags: ["mcp", "browser"],
+    description: "Give the agent a browser.",
     icon: "🌐",
-    kind: "mcp",
+    id: "browser-tool",
     installed: false,
+    kind: "mcp",
+    name: "Browser Tool (MCP)",
+    tags: ["mcp", "browser"],
   },
 ];
 
 export async function marketCatalog(): Promise<MarketItem[]> {
   return isInDesktop
     ? await call<MarketItem[]>("market.catalog")
-    : FALLBACK_MARKET;
+    : fallbackMarket;
 }
 
 export async function marketInstall(id: string): Promise<void> {
@@ -3926,7 +3778,7 @@ export interface PluginScaffoldInfo {
   files: number;
 }
 
-export { PLUGIN_UI_SLOT_IDS, pluginUiComponentId } from "./pluginModel";
+export { pluginUiSlotIds, pluginUiComponentId } from "./pluginModel";
 export type {
   PluginRuntimeCommandContribution,
   PluginConnectorCapability,
@@ -4022,50 +3874,50 @@ export interface PluginMarketplace {
   diagnostics: MarketplaceDiagnostic[];
 }
 
-const BROWSER_PLUGIN_MARKETPLACE: PluginMarketplace = {
-  name: "code2-demo-marketplace",
-  display_name: "C2 Marketplace Preview",
+const browserPluginMarketplace: PluginMarketplace = {
   description:
     "A browser-only preview of C2 marketplace source support and diagnostics.",
+  diagnostics: [],
+  display_name: "C2 Marketplace Preview",
   manifest_path: "/demo/marketplace.json",
-  root: "/demo",
+  name: "code2-demo-marketplace",
   plugins: [
     {
-      name: "local-review-suite",
-      display_name: "Local Review Suite",
+      authentication_policy: "none",
+      category: "development",
+      default_enabled: true,
       description:
         "A local plugin bundle that can be installed by the desktop runtime.",
-      version: "2.1.0",
-      category: "development",
-      installation_policy: "allowed",
-      authentication_policy: "none",
-      default_enabled: true,
-      source: { kind: "local", path: "./plugins/local-review-suite" },
-      installable: true,
       diagnostic: null,
+      display_name: "Local Review Suite",
+      installable: true,
+      installation_policy: "allowed",
+      name: "local-review-suite",
+      source: { kind: "local", path: "./plugins/local-review-suite" },
+      version: "2.1.0",
     },
     {
-      name: "npm-observability-demo",
-      display_name: "NPM Observability Demo",
+      authentication_policy: "none",
+      category: "monitoring",
+      default_enabled: false,
       description:
         "Catalog preview for an npm source that is not installable in this release.",
-      version: "0.8.0",
-      category: "monitoring",
+      diagnostic:
+        "npm marketplace sources are recognized but not installable in this release",
+      display_name: "NPM Observability Demo",
+      installable: false,
       installation_policy: "allowed",
-      authentication_policy: "none",
-      default_enabled: false,
+      name: "npm-observability-demo",
       source: {
         kind: "npm",
         package: "@example/observability-plugin",
-        version: "0.8.0",
         registry: null,
+        version: "0.8.0",
       },
-      installable: false,
-      diagnostic:
-        "npm marketplace sources are recognized but not installable in this release",
+      version: "0.8.0",
     },
   ],
-  diagnostics: [],
+  root: "/demo",
 };
 
 export interface ScaffoldInstallResult {
@@ -4080,34 +3932,28 @@ export async function listPlugins(): Promise<PluginInfo[]> {
     ? await call<PluginInfo[]>("plugins.list", undefined, null)
     : [
         {
-          id: "docker-tools-preview",
-          name: "docker-tools",
-          version: "0.1.0",
-          description: "Inspect Docker and manage containers and images.",
           author: "C2",
-          source: "Built-in renderer preview",
-          repository: "https://github.com/IchenDEV/codeTwo",
-          standard_version: "1.2.0",
-          enabled: true,
-          trusted: true,
-          scope: "user",
+          connector_contributions: [],
           counts: {
-            skills: 0,
-            subagents: 0,
-            mcp_servers: 0,
-            scaffolds: 0,
+            apps: 0,
             commands: 0,
-            runtime_commands: 10,
+            connectors: 0,
             hooks: 0,
             lsp_servers: 0,
+            mcp_servers: 0,
             monitors: 0,
-            apps: 0,
-            ui: 0,
-            connectors: 0,
-            scenes: 0,
             pipelines: 0,
             runtime: 1,
+            runtime_commands: 10,
+            scaffolds: 0,
+            scenes: 0,
+            skills: 0,
+            subagents: 0,
+            ui: 0,
           },
+          description: "Inspect Docker and manage containers and images.",
+          diagnostics: [],
+          enabled: true,
           extension_components: [
             {
               kind: "runtime",
@@ -4116,6 +3962,10 @@ export async function listPlugins(): Promise<PluginInfo[]> {
               status: "ready",
             },
           ],
+          id: "docker-tools-preview",
+          lsp_servers: [],
+          name: "docker-tools",
+          repository: "https://github.com/IchenDEV/codeTwo",
           runtime_commands: [
             ["docker.status", "Docker status"],
             ["docker.containers", "List containers"],
@@ -4127,48 +3977,46 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             ["docker.restart", "Restart container"],
             ["docker.pull", "Pull image"],
             ["docker.remove_image", "Remove image"],
-          ].map(([id, title]) => ({
-						            id,
-						            title,
-						            description: "",
-						            argsSchema: null,
-						          })),
-          ui_contributions: [],
-          connector_contributions: [],
-          lsp_servers: [],
-          diagnostics: [],
+          ].map(([id, title]) => {
+            return {
+              argsSchema: null,
+              description: "",
+              id,
+              title,
+            };
+          }),
           scaffolds: [],
+          scope: "user",
+          source: "Built-in renderer preview",
+          standard_version: "1.2.0",
+          trusted: true,
+          ui_contributions: [],
+          version: "0.1.0",
         },
         {
-          id: "developer-toolkit-demo",
-          name: "Developer Toolkit",
-          version: "1.4.0",
-          description:
-            "A complete development workflow with review, research, tools, and starter projects.",
           author: "C2 Community",
-          source: "GitHub · example/developer-toolkit",
-          repository: "https://github.com/example/developer-toolkit",
-          standard_version: "1.2.0",
-          enabled: true,
-          trusted: false,
-          scope: "user",
+          connector_contributions: [],
           counts: {
-            skills: 1,
-            subagents: 1,
-            mcp_servers: 1,
-            scaffolds: 1,
+            apps: 0,
             commands: 1,
+            connectors: 0,
             hooks: 1,
             lsp_servers: 1,
+            mcp_servers: 1,
             monitors: 0,
-            apps: 0,
-            ui: 0,
-            connectors: 0,
-            scenes: 1,
             pipelines: 1,
             runtime: 0,
             runtime_commands: 0,
+            scaffolds: 1,
+            scenes: 1,
+            skills: 1,
+            subagents: 1,
+            ui: 0,
           },
+          description:
+            "A complete development workflow with review, research, tools, and starter projects.",
+          diagnostics: [],
+          enabled: true,
           extension_components: [
             {
               kind: "lsp",
@@ -4183,51 +4031,51 @@ export async function listPlugins(): Promise<PluginInfo[]> {
               status: "unsupported",
             },
           ],
-          diagnostics: [],
-          runtime_commands: [],
-          ui_contributions: [],
-          connector_contributions: [],
+          id: "developer-toolkit-demo",
           lsp_servers: [],
+          name: "Developer Toolkit",
+          repository: "https://github.com/example/developer-toolkit",
+          runtime_commands: [],
           scaffolds: [
             {
-              id: "vite-react-demo",
-              name: "Vite React app",
               description:
                 "TypeScript, tests, and a production-ready project structure",
               files: 12,
+              id: "vite-react-demo",
+              name: "Vite React app",
             },
           ],
+          scope: "user",
+          source: "GitHub · example/developer-toolkit",
+          standard_version: "1.2.0",
+          trusted: false,
+          ui_contributions: [],
+          version: "1.4.0",
         },
         {
-          id: "ui-lsp-demo",
-          name: "UI & LSP Demo",
-          version: "1.0.0",
-          description:
-            "Renderer-only preview of declarative plugin slots and language-server contributions.",
           author: "C2",
-          source: "Built-in preview",
-          repository: "",
-          standard_version: "1.2.0",
-          enabled: true,
-          trusted: true,
-          scope: "user",
+          connector_contributions: [],
           counts: {
-            skills: 0,
-            subagents: 0,
-            mcp_servers: 0,
-            scaffolds: 0,
+            apps: 0,
             commands: 1,
+            connectors: 0,
             hooks: 0,
             lsp_servers: 1,
+            mcp_servers: 0,
             monitors: 0,
-            apps: 0,
-            ui: 5,
-            connectors: 0,
-            scenes: 0,
             pipelines: 0,
             runtime: 1,
             runtime_commands: 1,
+            scaffolds: 0,
+            scenes: 0,
+            skills: 0,
+            subagents: 0,
+            ui: 5,
           },
+          description:
+            "Renderer-only preview of declarative plugin slots and language-server contributions.",
+          diagnostics: [],
+          enabled: true,
           extension_components: [
             {
               kind: "ui",
@@ -4261,81 +4109,84 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             },
             { kind: "lsp", name: "zig", path: "zig", status: "ready" },
           ],
-          ui_contributions: [
-            {
-              id: "review-tools",
-              slot: "rail.features",
-              label: "Review tools",
-              description: "Open the plugin's review workflow.",
-              command: "demo.review",
-              input: { mode: "tools" },
-              order: 0,
-            },
-            {
-              id: "review-workspace",
-              slot: "session.header",
-              label: "Review workspace",
-              description: "Run the plugin's project review command.",
-              command: "demo.review",
-              input: null,
-              order: 0,
-            },
-            {
-              id: "summarize-thread",
-              slot: "transcript.before",
-              label: "Summarize thread",
-              description: "Summarize the current conversation.",
-              command: "demo.review",
-              input: { mode: "summary" },
-              order: 0,
-            },
-            {
-              id: "project-health",
-              slot: "composer.above",
-              label: "Project health",
-              description:
-                "Ask the plugin to inspect this project before starting the next turn.",
-              command: "demo.review",
-              input: { mode: "health" },
-              order: 0,
-            },
-            {
-              id: "insert-context",
-              slot: "composer.toolbar",
-              label: "Insert context",
-              description: "Insert plugin-provided context into this draft.",
-              command: "demo.review",
-              input: { mode: "context" },
-              order: 0,
-            },
-          ],
-          runtime_commands: [
-            {
-              id: "demo.review",
-              title: "Review",
-              description: "Run the demo review action.",
-              argsSchema: null,
-            },
-          ],
-          connector_contributions: [],
+          id: "ui-lsp-demo",
           lsp_servers: [
             {
+              args: [],
+              command: "zls",
+              env: {},
               id: "zig",
               languages: ["zig"],
-              command: "zls",
-              args: [],
-              env: {},
             },
           ],
-          diagnostics: [],
+          name: "UI & LSP Demo",
+          repository: "",
+          runtime_commands: [
+            {
+              argsSchema: null,
+              description: "Run the demo review action.",
+              id: "demo.review",
+              title: "Review",
+            },
+          ],
           scaffolds: [],
+          scope: "user",
+          source: "Built-in preview",
+          standard_version: "1.2.0",
+          trusted: true,
+          ui_contributions: [
+            {
+              command: "demo.review",
+              description: "Open the plugin's review workflow.",
+              id: "review-tools",
+              input: { mode: "tools" },
+              label: "Review tools",
+              order: 0,
+              slot: "rail.features",
+            },
+            {
+              command: "demo.review",
+              description: "Run the plugin's project review command.",
+              id: "review-workspace",
+              input: null,
+              label: "Review workspace",
+              order: 0,
+              slot: "session.header",
+            },
+            {
+              command: "demo.review",
+              description: "Summarize the current conversation.",
+              id: "summarize-thread",
+              input: { mode: "summary" },
+              label: "Summarize thread",
+              order: 0,
+              slot: "transcript.before",
+            },
+            {
+              command: "demo.review",
+              description:
+                "Ask the plugin to inspect this project before starting the next turn.",
+              id: "project-health",
+              input: { mode: "health" },
+              label: "Project health",
+              order: 0,
+              slot: "composer.above",
+            },
+            {
+              command: "demo.review",
+              description: "Insert plugin-provided context into this draft.",
+              id: "insert-context",
+              input: { mode: "context" },
+              label: "Insert context",
+              order: 0,
+              slot: "composer.toolbar",
+            },
+          ],
+          version: "1.0.0",
         },
       ];
 }
 
-/**
-Refresh bundle descriptors after install, trust, lifecycle, or on-disk inventory changes.
-*/
 export async function onPluginsChanged(
   callback: () => void
 ): Promise<() => void> {
@@ -4350,9 +4201,6 @@ export interface PluginConnectorEventEnvelope {
   event: unknown;
 }
 
-/**
-Receive one event from a connector Runtime after the host authenticates its owning bundle.
-*/
 export async function onPluginConnectorEvent(
   callback: (event: PluginConnectorEventEnvelope) => void
 ): Promise<() => void> {
@@ -4365,9 +4213,6 @@ export async function onPluginConnectorEvent(
   );
 }
 
-/**
-Invoke a manifest-declared UI action after the host verifies contribution and command ownership.
-*/
 export async function invokePluginUi(
   pluginId: string,
   contributionId: string,
@@ -4380,17 +4225,14 @@ export async function invokePluginUi(
   return await call(
     "plugins.invoke_ui",
     {
-      plugin_id: pluginId,
-      contribution_id: contributionId,
       context,
+      contribution_id: contributionId,
+      plugin_id: pluginId,
     },
     projectPath
   );
 }
 
-/**
-Invoke one manifest-declared connector operation after runtime ownership checks.
-*/
 export async function invokePluginConnector(
   pluginId: string,
   contributionId: string,
@@ -4404,18 +4246,15 @@ export async function invokePluginConnector(
   return await call(
     "plugins.invoke_connector",
     {
-      plugin_id: pluginId,
       contribution_id: contributionId,
-      operation,
       input,
+      operation,
+      plugin_id: pluginId,
     },
     projectPath
   );
 }
 
-/**
-Install a complete plugin from a GitHub repository or a selected /tree/ path.
-*/
 export async function githubImportPlugin(
   repo: string
 ): Promise<GitHubImportResult> {
@@ -4431,12 +4270,12 @@ export async function githubImportPlugin(
 
 export async function pickPluginMarketplace(): Promise<PluginMarketplace | null> {
   if (!isInDesktop) {
-    return BROWSER_PLUGIN_MARKETPLACE;
+    return browserPluginMarketplace;
   }
   const [selected] = await desktopOpenDialog({
-    multiple: false,
     directory: false,
-    filters: [{ name: "Plugin marketplace", extensions: ["json"] }],
+    filters: [{ extensions: ["json"], name: "Plugin marketplace" }],
+    multiple: false,
   });
   if (!selected) {
     return null;
@@ -4469,37 +4308,37 @@ export async function installMarketplacePlugin(
 
 export async function uninstallPlugin(
   id: string,
-  keepData = false
+  isKeepData = false
 ): Promise<void> {
   if (isInDesktop) {
-    await call("plugins.uninstall", { id, keep_data: keepData }, null);
+    await call("plugins.uninstall", { id, keep_data: isKeepData }, null);
   }
 }
 
 export async function setPluginEnabled(
   id: string,
-  enabled: boolean
+  isEnabled: boolean
 ): Promise<PluginInfo> {
   if (!isInDesktop) {
     throw new Error("Plugin state changes require the C2 desktop app.");
   }
   return await call<PluginInfo>(
     "plugins.set_enabled",
-    { id, value: enabled },
+    { id, value: isEnabled },
     null
   );
 }
 
 export async function setPluginTrusted(
   id: string,
-  trusted: boolean
+  isTrusted: boolean
 ): Promise<PluginInfo> {
   if (!isInDesktop) {
     throw new Error("Plugin trust changes require the C2 desktop app.");
   }
   return await call<PluginInfo>(
     "plugins.set_trusted",
-    { id, value: trusted },
+    { id, value: isTrusted },
     null
   );
 }
@@ -4515,9 +4354,9 @@ export async function applyPluginScaffold(
   return await call<ScaffoldInstallResult>(
     "plugins.apply_scaffold",
     {
+      cwd,
       plugin_id: pluginId,
       scaffold_id: scaffoldId,
-      cwd,
     },
     null
   );
@@ -4561,18 +4400,12 @@ export interface RemoteDevice {
   protocol?: RemoteClientProtocol;
 }
 
-/**
-Turn on network access: serve the live engine on all interfaces (idempotent).
-*/
 export async function startRemote(port?: number): Promise<RemoteStatus | null> {
   return isInDesktop
     ? await call<RemoteStatus>("remote.start", { port: port ?? null })
     : null;
 }
 
-/**
-Turn off network access. Paired devices persist and reconnect next time.
-*/
 export async function stopRemote(): Promise<void> {
   if (isInDesktop) {
     await call("remote.stop");
@@ -4588,9 +4421,6 @@ The wire protocol expected by the client consuming a pairing link.
 */
 export type RemoteClientProtocol = "c2" | "t3" | "legacy";
 
-/**
-Mint a fresh one-time pairing link for an advertised endpoint (URL + optional QR SVG).
-*/
 export async function remotePairingLink(
   endpointId?: string,
   clientProtocol: RemoteClientProtocol = "c2",
@@ -4598,8 +4428,8 @@ export async function remotePairingLink(
 ): Promise<RemotePairingLink | null> {
   return isInDesktop
     ? await call<RemotePairingLink>("remote.pairing_link", {
-        endpoint_id: endpointId ?? null,
         client_protocol: clientProtocol,
+        endpoint_id: endpointId ?? null,
         ttl_secs: ttlSecs ?? null,
       })
     : null;
@@ -4619,8 +4449,8 @@ export async function pairRemoteDevice(
   return await call<{ device: RemoteDevice; sync: DeviceSyncStatus }>(
     "remote.pair_device",
     {
-      url,
       device_name: deviceName ?? null,
+      url,
     }
   );
 }
@@ -4648,9 +4478,9 @@ export async function transferTaskToDevice(
     throw new Error("Task transfer is only available in the desktop app");
   }
   return await call<TaskHandoffResult>("handoff.transfer_pairing", {
-    session,
-    pairing_url: pairingUrl,
     destination,
+    pairing_url: pairingUrl,
+    session,
   });
 }
 
@@ -4681,7 +4511,7 @@ export async function listLinearIssues(
   limit = 30
 ): Promise<Issue[]> {
   return isInDesktop
-    ? await call<Issue[]>("issues.list_linear", { token, limit })
+    ? await call<Issue[]>("issues.list_linear", { limit, token })
     : [];
 }
 export async function issueContext(issue: Issue): Promise<string> {
@@ -4727,7 +4557,7 @@ export interface CanvasObject {
   assetId?: string | null;
 }
 
-export interface CanvasAssetRef {
+export interface CanvasAssetReference {
   id: string;
   mimeType: "image/png" | "image/webp";
   width: number;
@@ -4735,7 +4565,7 @@ export interface CanvasAssetRef {
   sourceName?: string | null;
 }
 
-export interface CanvasStaticAsset extends CanvasAssetRef {
+export interface CanvasStaticAsset extends CanvasAssetReference {
   bytes: number[];
 }
 
@@ -4745,7 +4575,7 @@ export interface CanvasSceneEnvelope {
   schemaVersion: number;
   revision: number;
   theme: CanvasTheme;
-  assets: CanvasAssetRef[];
+  assets: CanvasAssetReference[];
   /**
   Exact opaque Excalidraw scene retained by the core; no active refs are accepted on write.
   */
@@ -4815,19 +4645,19 @@ export async function canvasFeatureState(): Promise<CanvasFeatureState> {
   return isInDesktop
     ? await call<CanvasFeatureState>("canvas.feature_state")
     : await Promise.resolve({
-        feature: "CODETWO_CANVAS_INPUT_V1",
         enabled: false,
+        feature: "CODETWO_CANVAS_INPUT_V1",
         status: "not production-enabled",
       });
 }
 
 function canvasAssetToCore(asset: CanvasStaticAsset): Record<string, unknown> {
   return {
+    bytes: asset.bytes,
+    height: asset.height,
     id: asset.id,
     mime_type: asset.mimeType,
     width: asset.width,
-    height: asset.height,
-    bytes: asset.bytes,
   };
 }
 
@@ -4835,19 +4665,21 @@ function canvasEnvelopeToCore(
   envelope: CanvasSceneEnvelope
 ): Record<string, unknown> {
   return {
+    assets: envelope.assets.map((asset) => {
+      return {
+        height: asset.height,
+        id: asset.id,
+        mime_type: asset.mimeType,
+        source_name: asset.sourceName ?? null,
+        width: asset.width,
+      };
+    }),
     engine: envelope.engine,
     engine_version: envelope.engineVersion,
-    schema_version: envelope.schemaVersion,
     revision: envelope.revision,
-    theme: envelope.theme,
-    assets: envelope.assets.map((asset) => ({
-						      id: asset.id,
-						      mime_type: asset.mimeType,
-						      width: asset.width,
-						      height: asset.height,
-						      source_name: asset.sourceName ?? null,
-						    })),
     scene: envelope.scene,
+    schema_version: envelope.schemaVersion,
+    theme: envelope.theme,
   };
 }
 
@@ -4855,28 +4687,30 @@ function canvasManifestToCore(
   manifest: CanvasManifest
 ): Record<string, unknown> {
   return {
-    objects: manifest.objects.map((object) => ({
-						      id: object.id,
-						      kind: object.kind,
-						      original_text: object.originalText ?? "",
-						      bounds: object.bounds,
-						      layer: object.layer,
-						      arrow_start: object.arrowStart ?? null,
-						      arrow_end: object.arrowEnd ?? null,
-						      asset_id: object.assetId ?? null,
-						    })),
+    objects: manifest.objects.map((object) => {
+      return {
+        arrow_end: object.arrowEnd ?? null,
+        arrow_start: object.arrowStart ?? null,
+        asset_id: object.assetId ?? null,
+        bounds: object.bounds,
+        id: object.id,
+        kind: object.kind,
+        layer: object.layer,
+        original_text: object.originalText ?? "",
+      };
+    }),
   };
 }
 
 function canvasExportToCore(exportItem: CanvasExport): Record<string, unknown> {
   return {
+    bytes: exportItem.bytes,
+    height: exportItem.height,
     id: exportItem.id,
-    kind: exportItem.kind,
     index: exportItem.index ?? null,
+    kind: exportItem.kind,
     mime_type: exportItem.mimeType,
     width: exportItem.width,
-    height: exportItem.height,
-    bytes: exportItem.bytes,
   };
 }
 
@@ -4884,11 +4718,11 @@ function canvasUpdateToCore(
   update: CanvasDraftUpdate
 ): Record<string, unknown> {
   return {
-    title: update.title,
-    theme: update.theme,
+    assets: (update.assets ?? []).map(canvasAssetToCore),
     envelope: canvasEnvelopeToCore(update.envelope),
     manifest: canvasManifestToCore(update.manifest),
-    assets: (update.assets ?? []).map(canvasAssetToCore),
+    theme: update.theme,
+    title: update.title,
   };
 }
 
@@ -4913,8 +4747,8 @@ export async function canvasUpdateDraft(
   update: CanvasDraftUpdate
 ): Promise<CanvasDraft> {
   return await call<CanvasDraft>("canvas.update_draft", {
-    id,
     expected_revision: expectedRevision,
+    id,
     update: canvasUpdateToCore(update),
   });
 }
@@ -4929,9 +4763,6 @@ export async function canvasNormalizeMedia(
   });
 }
 
-/**
-Normalize and store a pasted or selected prompt image in app-private storage.
-*/
 export async function importPromptImage(
   bytes: Uint8Array | number[],
   declaredMime: string | null,
@@ -4944,9 +4775,6 @@ export async function importPromptImage(
   });
 }
 
-/**
-Reload a private prompt image for durable transcript rendering.
-*/
 export async function getPromptImage(id: string): Promise<AppshotCapture> {
   if (!isInDesktop) {
     throw new Error("Prompt images require the desktop app");
@@ -4960,8 +4788,8 @@ export async function canvasFreeze(
   input: CanvasFreezeInput
 ): Promise<CanvasSnapshot> {
   return await call<CanvasSnapshot>("canvas.freeze", {
-    id,
     expected_revision: expectedRevision,
+    id,
     input: canvasFreezeToCore(input),
   });
 }
@@ -4982,9 +4810,9 @@ export async function canvasGetAsset(
   assetId: string
 ): Promise<CanvasStaticAsset | null> {
   return await call<CanvasStaticAsset | null>("canvas.get_asset", {
+    asset_id: assetId,
     id,
     revision,
-    asset_id: assetId,
   });
 }
 
@@ -4994,9 +4822,9 @@ export async function canvasGetExport(
   exportId: string
 ): Promise<CanvasExport | null> {
   return await call<CanvasExport | null>("canvas.get_export", {
+    export_id: exportId,
     id,
     revision,
-    export_id: exportId,
   });
 }
 
@@ -5042,28 +4870,28 @@ export interface CompiledCanvasPreview {
   exports: CanvasExport[];
 }
 
-export async function compileDoc(
-  document_: DocBlock[],
+export async function compileDocument(
+  documentValue: DocumentBlock[],
   cwd?: string | null
 ): Promise<CompiledPreview> {
   if (isInDesktop) {
     return await call<CompiledPreview>("document.compile", {
-      doc: document_,
       cwd: cwd ?? null,
+      doc: documentValue,
     });
   }
   return {
-    prompt: document_.map(describeBlock).join("\n\n"),
-    mcp_servers: [],
     agent_skills: [],
-    subagents: [],
-    files: document_.flatMap((b) => (b.type === "file" ? [b.path] : [])),
-    images: document_.flatMap((b) => (b.type === "image" ? [b.path] : [])),
-    sessions: document_.flatMap((b) =>
+    canvases: [],
+    files: documentValue.flatMap((b) => (b.type === "file" ? [b.path] : [])),
+    images: documentValue.flatMap((b) => (b.type === "image" ? [b.path] : [])),
+    mcp_servers: [],
+    prompt: documentValue.map(describeBlock).join("\n\n"),
+    sessions: documentValue.flatMap((b) =>
       b.type === "session" ? [b.session_id] : []
     ),
+    subagents: [],
     unresolved: [],
-    canvases: [],
   };
 }
 
@@ -5074,7 +4902,7 @@ export async function setSandbox(
   sandbox: Sandbox
 ): Promise<void> {
   if (isInDesktop) {
-    await call("engine.set_sandbox", { session, sandbox });
+    await call("engine.set_sandbox", { sandbox, session });
   }
 }
 
@@ -5179,15 +5007,15 @@ export async function providerQuota(
     });
   }
   return {
-    provider,
-    status: "unsupported",
-    reason: "unsupported_provider",
-    source: null,
-    plan: null,
-    limit_name: null,
-    windows: [],
     credits: null,
     fetched_at_ms: Date.now(),
+    limit_name: null,
+    plan: null,
+    provider,
+    reason: "unsupported_provider",
+    source: null,
+    status: "unsupported",
+    windows: [],
   };
 }
 
@@ -5210,48 +5038,48 @@ export interface UsageReport {
   transcripts: number;
 }
 
-const EMPTY_USAGE: UsageReport = {
-  windows: [
-    {
-      label: "5h session",
-      window_secs: 18_000,
-      input_tokens: 0,
-      cached_tokens: 0,
-      output_tokens: 0,
-      total_tokens: 0,
-      limit: null,
-      fraction: null,
-      resets_in_secs: 0,
-    },
-    {
-      label: "week",
-      window_secs: 604_800,
-      input_tokens: 0,
-      cached_tokens: 0,
-      output_tokens: 0,
-      total_tokens: 0,
-      limit: null,
-      fraction: null,
-      resets_in_secs: 0,
-    },
-    {
-      label: "month",
-      window_secs: 2_592_000,
-      input_tokens: 0,
-      cached_tokens: 0,
-      output_tokens: 0,
-      total_tokens: 0,
-      limit: null,
-      fraction: null,
-      resets_in_secs: 0,
-    },
-  ],
+const emptyUsage: UsageReport = {
   by_source: [],
   transcripts: 0,
+  windows: [
+    {
+      cached_tokens: 0,
+      fraction: null,
+      input_tokens: 0,
+      label: "5h session",
+      limit: null,
+      output_tokens: 0,
+      resets_in_secs: 0,
+      total_tokens: 0,
+      window_secs: 18_000,
+    },
+    {
+      cached_tokens: 0,
+      fraction: null,
+      input_tokens: 0,
+      label: "week",
+      limit: null,
+      output_tokens: 0,
+      resets_in_secs: 0,
+      total_tokens: 0,
+      window_secs: 604_800,
+    },
+    {
+      cached_tokens: 0,
+      fraction: null,
+      input_tokens: 0,
+      label: "month",
+      limit: null,
+      output_tokens: 0,
+      resets_in_secs: 0,
+      total_tokens: 0,
+      window_secs: 2_592_000,
+    },
+  ],
 };
 
 export async function usageReport(): Promise<UsageReport> {
-  return isInDesktop ? await call<UsageReport>("usage.report") : EMPTY_USAGE;
+  return isInDesktop ? await call<UsageReport>("usage.report") : emptyUsage;
 }
 
 /**
@@ -5293,23 +5121,20 @@ export interface UsageHistoryReport {
   by_source: SourceUsage[];
 }
 
-const EMPTY_USAGE_HISTORY: UsageHistoryReport = {
-  history: { bucket_secs: 86_400, bucket_count: 0, start_ms: 0, series: [] },
+const emptyUsageHistory: UsageHistoryReport = {
   by_source: [],
+  history: { bucket_count: 0, bucket_secs: 86_400, series: [], start_ms: 0 },
 };
 
-/**
-Bucketed usage history: `days <= 7` buckets hourly, otherwise daily.
-*/
 export async function usageHistory(days: number): Promise<UsageHistoryReport> {
   return isInDesktop
     ? await call<UsageHistoryReport>("usage.history", { days })
-    : EMPTY_USAGE_HISTORY;
+    : emptyUsageHistory;
 }
 
 // ---- workspace files & rules (G1/G2) ---------------------------------------------------------
 
-const FALLBACK_FILES = ["src/main.rs", "src/lib.rs", "README.md"];
+const fallbackFiles = ["src/main.rs", "src/lib.rs", "README.md"];
 
 export async function listFiles(
   cwd: string,
@@ -5317,9 +5142,9 @@ export async function listFiles(
   limit = 50
 ): Promise<string[]> {
   if (!isInDesktop) {
-    return FALLBACK_FILES.filter((f) => f.includes(query));
+    return fallbackFiles.filter((f) => f.includes(query));
   }
-  return await call<string[]>("workspace.list_files", { cwd, query, limit });
+  return await call<string[]>("workspace.list_files", { cwd, limit, query });
 }
 
 export interface WorkspaceSearchOptions {
@@ -5353,9 +5178,9 @@ export async function searchWorkspaceContents(
   }
   return await call<WorkspaceSearchResult>("workspace.search", {
     cwd,
-    query,
-    options,
     limit,
+    options,
+    query,
     request_id: requestId,
   });
 }
@@ -5364,7 +5189,9 @@ export async function cancelWorkspaceContentSearch(
   requestId: string
 ): Promise<boolean> {
   return isInDesktop
-    ? await call<boolean>("workspace.cancel_search", { request_id: requestId })
+    ? await call<boolean>("workspace.cancel_search", {
+        request_id: requestId,
+      })
     : false;
 }
 
@@ -5384,18 +5211,18 @@ export async function renameSession(
 }
 export async function archiveSession(
   session: string,
-  archived: boolean
+  isArchived: boolean
 ): Promise<void> {
   if (isInDesktop) {
-    await call("sessions.set_archived", { session, value: archived });
+    await call("sessions.set_archived", { session, value: isArchived });
   }
 }
 export async function pinSession(
   session: string,
-  pinned: boolean
+  isPinned: boolean
 ): Promise<void> {
   if (isInDesktop) {
-    await call("sessions.set_pinned", { session, value: pinned });
+    await call("sessions.set_pinned", { session, value: isPinned });
   }
 }
 export async function listArchivedSessions(): Promise<SessionInfo[]> {
@@ -5410,7 +5237,7 @@ export async function gitCreatePr(
   body: string
 ): Promise<string> {
   return isInDesktop
-    ? await call<string>("git.create_pr", { cwd, title, body })
+    ? await call<string>("git.create_pr", { body, cwd, title })
     : "";
 }
 export async function gitSuggestCommit(cwd: string): Promise<string> {
@@ -5479,15 +5306,15 @@ export async function getGitHubPullRequest(
     throw new Error("GitHub pull requests require the desktop host");
   }
   return await call<GitHubPullRequestDetail>("github.pull_request", {
-    url: summary.url,
     summary,
+    url: summary.url,
   });
 }
 
 export async function browserContext(annotation: Annotation): Promise<string> {
   // Mirrors core::browser::Annotation::to_context without requiring a native browser plugin.
   let s = `**Browser context** — ${annotation.url}`;
-  if (annotation.selected_text) {
+  if (annotation.selected_text != null && annotation.selected_text !== "") {
     s += `\n- selected: “${annotation.selected_text}”`;
   }
   if (annotation.note) {
@@ -5535,9 +5362,6 @@ export async function onPtyTitle(
   return listenDesktop<PtyTitle>("pty-title", callback);
 }
 
-/**
-Fires when a terminal's child process exits.
-*/
 export async function onPtyExit(
   callback: (event: PtyExit) => void
 ): Promise<() => void> {
@@ -5567,7 +5391,7 @@ export interface SceneApplyOutcome {
   pinned_skills: string[];
 }
 
-export interface SceneSessionParams {
+export interface SceneSessionParameters {
   provider: string | null;
   model: string | null;
   reasoning_effort: string | null;
@@ -5577,7 +5401,7 @@ export interface SceneSessionParams {
 }
 
 export interface SceneSessionPlanOutcome {
-  params: SceneSessionParams | null;
+  params: SceneSessionParameters | null;
   escalation: SceneEscalation | null;
 }
 
@@ -5610,9 +5434,9 @@ export async function onAutoSceneChanged(
 /// Every scene call degrades on a missing backend command (feature-detect: catch → fallback),
 /// so a frontend running against an older core hides the affordance instead of breaking.
 /**
-Browser-preview stand-ins (same convention as FALLBACK_SKILLS): the five builtin scenes.
+Browser-preview stand-ins (same convention as fallbackSkills): the five builtin scenes.
 */
-const FALLBACK_SCENES: SceneInfo[] = (
+const fallbackScenes: SceneInfo[] = (
   [
     [
       "research",
@@ -5655,23 +5479,25 @@ const FALLBACK_SCENES: SceneInfo[] = (
       "Read-only verification against the original acceptance criteria.",
     ],
   ] as const
-).map(([name, title, zh, icon, mode, description]) => ({
-						  reference: `builtin:${name}`,
-						  name,
-						  title,
-						  description,
-						  icon,
-						  source: "builtin" as const,
-						  keywords: [],
-						  has_brief: true,
-						  localizations: { "zh-CN": { title: zh } },
-						  execution: { session_mode: mode } as SceneInfo["execution"],
-						  artifacts: [],
-						}));
+).map(([name, title, zh, icon, mode, description]) => {
+  return {
+    artifacts: [],
+    description,
+    execution: { session_mode: mode } as SceneInfo["execution"],
+    has_brief: true,
+    icon,
+    keywords: [],
+    localizations: { "zh-CN": { title: zh } },
+    name,
+    reference: `builtin:${name}`,
+    source: "builtin" as const,
+    title,
+  };
+});
 
 export async function listScenes(cwd?: string): Promise<SceneInfo[]> {
   if (!isInDesktop) {
-    return FALLBACK_SCENES;
+    return fallbackScenes;
   }
   return await call<SceneInfo[]>("scenes.list", { cwd: cwd ?? null }).catch(
     () => []
@@ -5701,28 +5527,28 @@ export async function saveScene(
 ): Promise<SceneInfo> {
   if (!isInDesktop) {
     return {
-      reference: `${scope}:${scene.name}`,
-      name: scene.name,
-      title: scene.title,
-      description: scene.description ?? "",
-      icon: scene.icon ?? null,
-      source: scope,
-      plugin_id: null,
-      keywords: scene.keywords ?? [],
-      has_brief: Boolean(scene.brief),
-      localizations: scene.localizations ?? {},
-      execution: scene.execution ?? null,
-      brief: scene.brief ?? null,
       artifacts: scene.artifacts ?? [],
-      skills: scene.skills ?? null,
+      brief: scene.brief ?? null,
+      description: scene.description ?? "",
+      execution: scene.execution ?? null,
       exit: scene.exit ?? null,
+      has_brief: Boolean(scene.brief),
+      icon: scene.icon ?? null,
+      keywords: scene.keywords ?? [],
+      localizations: scene.localizations ?? {},
+      name: scene.name,
+      plugin_id: null,
+      reference: `${scope}:${scene.name}`,
+      skills: scene.skills ?? null,
+      source: scope,
+      title: scene.title,
     };
   }
   return await call<SceneInfo>("scenes.save", {
-    scope,
     cwd,
     previous_name: previousName,
     scene,
+    scope,
   });
 }
 
@@ -5734,48 +5560,50 @@ export async function deleteScene(
   if (!isInDesktop) {
     return;
   }
-  await call("scenes.delete", { scope, cwd, name });
+  await call("scenes.delete", { cwd, name, scope });
 }
 
 export async function applySceneToSession(
   session: string,
   reference: string,
-  confirmEscalation: boolean
+  isConfirmEscalation: boolean
 ): Promise<SceneApplyOutcome | null> {
   if (!isInDesktop) {
     return null;
   }
   return await call<SceneApplyOutcome>("scenes.apply", {
-    session,
+    confirm_escalation: isConfirmEscalation,
     reference,
-    confirm_escalation: confirmEscalation,
+    session,
   }).catch(() => null);
 }
 
 export async function sceneSessionPlan(
   reference: string,
-  confirmEscalation: boolean
+  isConfirmEscalation: boolean
 ): Promise<SceneSessionPlanOutcome | null> {
   if (!isInDesktop) {
     return null;
   }
   return await call<SceneSessionPlanOutcome>("scenes.session_plan", {
+    confirm_escalation: isConfirmEscalation,
     reference,
-    confirm_escalation: confirmEscalation,
   }).catch(() => null);
 }
 
 export async function setSessionScene(
   session: string,
   reference: string | null,
-  customized: boolean
+  isCustomized: boolean
 ): Promise<void> {
   if (!isInDesktop) {
     return;
   }
-  await call("scenes.set_session", { session, reference, customized }).catch(
-    () => {}
-  );
+  await call("scenes.set_session", {
+    customized: isCustomized,
+    reference,
+    session,
+  }).catch(() => {});
 }
 
 export async function getSessionScene(
@@ -5791,12 +5619,12 @@ export async function getSessionScene(
 
 export async function setSessionAutoScene(
   session: string,
-  enabled: boolean
+  isEnabled: boolean
 ): Promise<void> {
   if (!isInDesktop) {
     return;
   }
-  await call("scenes.set_auto", { session, enabled });
+  await call("scenes.set_auto", { enabled: isEnabled, session });
 }
 
 export async function getSessionAutoScene(session: string): Promise<boolean> {
@@ -5822,11 +5650,11 @@ export async function sessionDiffStat(
     return null;
   }
   return await call<GitDiffStat | null>("sessions.diff_stat", { session })
-    .then((stat) =>
-      stat
-        ? { files: stat.files, additions: stat.added, deletions: stat.deleted }
-        : null
-    )
+    .then((stat) => {
+      return stat
+        ? { additions: stat.added, deletions: stat.deleted, files: stat.files }
+        : null;
+    })
     .catch(() => null);
 }
 
@@ -5865,7 +5693,7 @@ export interface SceneArtifactRecord {
   session_id: string;
   pipeline_instance_id: string | null;
   stage_id: string | null;
-  artifact: ArtifactRef;
+  artifact: ArtifactReference;
   version: number;
   pinned: boolean;
   created_at: number;
@@ -5904,9 +5732,9 @@ export async function recordSceneArtifact(
     return null;
   }
   return await call<SceneArtifactRecord>("scene_artifacts.record", {
-    session,
     artifact_key: artifactKey,
     content,
+    session,
   }).catch(() => null);
 }
 
@@ -5919,19 +5747,14 @@ export async function pinSceneArtifact(
     return;
   }
   await call("scene_artifacts.pin", {
-    session,
     artifact_key: artifactKey,
+    session,
     version,
   }).catch(() => {});
 }
 
 // ---- issue write path (R12) -----------------------------------------------------------------
 
-/**
- * Post a delegation comment on a GitHub ("github") or Linear ("linear") issue; resolves to the
- * comment URL. Linear needs the caller-held API token (same source as `listLinearIssues`).
- * Null when unavailable: browser preview, older core, or the comment failed to post.
- */
 export async function commentIssue(
   cwd: string,
   source: string,
@@ -5943,29 +5766,24 @@ export async function commentIssue(
     return null;
   }
   return await call<string>("issues.comment", {
-    cwd,
-    source,
-    id,
     body,
+    cwd,
+    id,
+    source,
     token: token ?? null,
   }).catch(() => null);
 }
 
-/**
- * Heuristically distribute a finished dictation across a scene brief's slots (core-side keyword
- * sectioning; no model call). Null on browser preview, an older core, or any failure — the caller
- * must fall back to inserting the raw transcript so it is never lost.
- */
 export async function structureBrief(
   transcript: string,
-  slots: SceneSlotDef[]
+  slots: SceneSlotDefinition[]
 ): Promise<Record<string, string> | null> {
   if (!isInDesktop) {
     return null;
   }
   return await call<Record<string, string>>("issues.structure_brief", {
-    transcript,
     slots,
+    transcript,
   }).catch(() => null);
 }
 
@@ -5976,13 +5794,9 @@ Heuristic `{{slot-N}}` proposal over a past prompt, as `propose_macro_slots` rep
 */
 export interface ProposedMacro {
   template: string;
-  slots: SceneSlotDef[];
+  slots: SceneSlotDefinition[];
 }
 
-/**
- * Null on browser preview or an older core (missing command) — the template dialog then opens as
- * a plain manual editor over the raw prompt instead of breaking.
- */
 export async function proposeMacroSlots(
   text: string
 ): Promise<ProposedMacro | null> {
@@ -6012,12 +5826,14 @@ export async function dismissSceneBanner(
 /// Enable/disable scene `schedule` hooks for one project (off by default).
 export async function setProjectScheduling(
   path: string,
-  enabled: boolean
+  isEnabled: boolean
 ): Promise<void> {
   if (!isInDesktop) {
     return;
   }
-  await call("scenes.set_scheduling", { path, enabled }).catch(() => {});
+  await call("scenes.set_scheduling", { enabled: isEnabled, path }).catch(
+    () => {}
+  );
 }
 
 // ---- pipeline instances (R9) ----------------------------------------------------------------
@@ -6087,7 +5903,7 @@ export interface PipelineStartOutcome {
 export interface PipelineAdvanceOutcome {
   instance: PipelineInstance;
   applied_scene: SceneApplyOutcome | null;
-  session_plan: SceneSessionParams | null;
+  session_plan: SceneSessionParameters | null;
   escalation: SceneEscalation | null;
   carried: string[];
 }
@@ -6110,8 +5926,8 @@ export async function startPipeline(
     return null;
   }
   return await call<PipelineStartOutcome>("pipelines.start", {
-    reference,
     project_path: projectPath,
+    reference,
     session,
   }).catch(() => null);
 }
@@ -6120,16 +5936,16 @@ export async function advancePipeline(
   instanceId: string,
   toStage: string,
   session: string | null,
-  confirm: boolean
+  isConfirm: boolean
 ): Promise<PipelineAdvanceOutcome | null> {
   if (!isInDesktop) {
     return null;
   }
   return await call<PipelineAdvanceOutcome>("pipelines.advance", {
+    confirm: isConfirm,
     instance_id: instanceId,
-    to_stage: toStage,
     session,
-    confirm,
+    to_stage: toStage,
   }).catch(() => null);
 }
 
@@ -6143,8 +5959,8 @@ export async function bindPipelineSession(
   }
   await call("pipelines.bind_session", {
     instance_id: instanceId,
-    stage_id: stageId,
     session,
+    stage_id: stageId,
   }).catch(() => {});
 }
 
@@ -6170,9 +5986,6 @@ export async function listPipelineInstances(
   }).catch(() => []);
 }
 
-/**
-The active session's pipeline binding — the stage track renders only when this is set.
-*/
 export async function sessionPipeline(
   session: string
 ): Promise<{ instance_id: string; stage_id: string } | null> {
@@ -6215,11 +6028,11 @@ export async function recordIssueDelegation(
     return null;
   }
   return await call<number>("issues.record_delegation", {
-    source,
     issue_id: issueId,
     issue_title: issueTitle,
     scene_ref: sceneReference,
     scene_title: sceneTitle,
+    source,
   }).catch(() => null);
 }
 
@@ -6251,14 +6064,11 @@ export async function listIssueDelegations(
     return [];
   }
   return await call<IssueDelegation[]>("issues.delegations", {
-    source,
     issue_id: issueId,
+    source,
   }).catch(() => []);
 }
 
-/**
-Whether scene `schedule` hooks are enabled for this project (off by default).
-*/
 export async function getProjectScheduling(path: string): Promise<boolean> {
   if (!isInDesktop) {
     return false;
@@ -6266,9 +6076,6 @@ export async function getProjectScheduling(path: string): Promise<boolean> {
   return await call<boolean>("scenes.scheduling", { path }).catch(() => false);
 }
 
-/**
-Lossy SKILL.md export of a scene (docs/reference/scenes.md §Interop); null when it cannot resolve.
-*/
 export async function exportSceneSkillMd(
   reference: string
 ): Promise<string | null> {

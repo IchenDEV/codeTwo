@@ -12,9 +12,9 @@ import {
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { SessionRail } = await import("../src/sidebar/SessionRail");
-const { SIDEBAR_SECTIONS_STORAGE_KEY } =
+const { sidebarSectionsStorageKey } =
   await import("../src/sidebar/sidebarSections");
-const { SIDEBAR_PROJECTS_STORAGE_KEY } =
+const { sidebarProjectsStorageKey } =
   await import("../src/sidebar/sidebarProjects");
 const { ToastProvider } = await import("../src/ui/toast");
 
@@ -267,7 +267,7 @@ describe("SessionRail row layout", () => {
     activateDom();
     disableCanvasDrawing();
     dom.window.localStorage.setItem(
-      SIDEBAR_SECTIONS_STORAGE_KEY,
+      sidebarSectionsStorageKey,
       JSON.stringify({
         version: 1,
         sections: [{ id: "work", name: "Work", collapsed: false }],
@@ -405,7 +405,9 @@ describe("SessionRail row layout", () => {
     let capturedPointer: number | null = null;
 
     expect(grip).toBeTruthy();
-    if (!grip) throw new Error("missing rail resize grip");
+    if (!grip) {
+      throw new Error("missing rail resize grip");
+    }
     expect(grip.tabIndex).toBe(0);
     expect(grip.getAttribute("role")).toBe("separator");
     expect(grip.getAttribute("aria-orientation")).toBe("vertical");
@@ -427,7 +429,9 @@ describe("SessionRail row layout", () => {
     };
     grip.hasPointerCapture = (pointerId) => capturedPointer === pointerId;
     grip.releasePointerCapture = (pointerId) => {
-      if (capturedPointer === pointerId) capturedPointer = null;
+      if (capturedPointer === pointerId) {
+        capturedPointer = null;
+      }
     };
 
     grip.dispatchEvent(
@@ -520,7 +524,7 @@ describe("SessionRail row layout", () => {
         copy
           .querySelectorAll('[role="progressbar"] [role="presentation"]')
           .forEach((node) => node.remove());
-        return copy.textContent?.replace(/\s+/g, " ").trim();
+        return copy.textContent?.replace(/\s+/gu, " ").trim();
       })
     ).toEqual([
       "New task",
@@ -566,7 +570,9 @@ describe("SessionRail row layout", () => {
         ?.getAttribute("class")
     ).toContain("text-muted-foreground");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
-    for (const row of [...rows, ...utilityButtons]) click(row);
+    for (const row of [...rows, ...utilityButtons]) {
+      click(row);
+    }
     expect(opened).toEqual([
       "new",
       "pull-requests",
@@ -688,7 +694,7 @@ describe("SessionRail row layout", () => {
   test("treats a user-created Highlight like every other editable Section", async () => {
     activateDom();
     dom.window.localStorage.setItem(
-      SIDEBAR_SECTIONS_STORAGE_KEY,
+      sidebarSectionsStorageKey,
       JSON.stringify({
         version: 2,
         sections: [{ id: "highlight", name: "Highlight", collapsed: false }],
@@ -697,7 +703,7 @@ describe("SessionRail row layout", () => {
       })
     );
     dom.window.localStorage.setItem(
-      SIDEBAR_PROJECTS_STORAGE_KEY,
+      sidebarProjectsStorageKey,
       JSON.stringify({
         version: 1,
         assignments: { "/tmp/repo": "highlight" },
@@ -862,38 +868,40 @@ describe("SessionRail row layout", () => {
       worktree_path: "/tmp/repo-worktree",
       last_active_at: Date.now() + 1,
     };
-    const loadPullRequest = async (path: string) => ({
-      number: path.endsWith("worktree") ? 84 : 83,
-      title: "Sidebar status",
-      url: `https://github.com/example/repo/pull/${path.endsWith("worktree") ? 84 : 83}`,
-      state: path.endsWith("worktree") ? "MERGED" : "OPEN",
-      is_draft: false,
-      head_ref: "feature",
-      base_ref: "main",
-      additions: 1,
-      deletions: 0,
-      changed_files: 1,
-      body: "",
-      review_decision: null,
-      mergeable: "MERGEABLE",
-      merge_state_status: "CLEAN",
-      author: "author",
-      comments_count: 0,
-      reviews_count: 0,
-      checks: path.endsWith("worktree")
-        ? []
-        : [
-            {
-              name: "test",
-              status: "COMPLETED",
-              conclusion: "FAILURE",
-              details_url: null,
-              workflow_name: null,
-            },
-          ],
-      created_at: "2026-08-31T00:00:00Z",
-      updated_at: "2026-08-31T00:00:00Z",
-    });
+    const loadPullRequest = async (path: string) => {
+      return {
+        number: path.endsWith("worktree") ? 84 : 83,
+        title: "Sidebar status",
+        url: `https://github.com/example/repo/pull/${path.endsWith("worktree") ? 84 : 83}`,
+        state: path.endsWith("worktree") ? "MERGED" : "OPEN",
+        is_draft: false,
+        head_ref: "feature",
+        base_ref: "main",
+        additions: 1,
+        deletions: 0,
+        changed_files: 1,
+        body: "",
+        review_decision: null,
+        mergeable: "MERGEABLE",
+        merge_state_status: "CLEAN",
+        author: "author",
+        comments_count: 0,
+        reviews_count: 0,
+        checks: path.endsWith("worktree")
+          ? []
+          : [
+              {
+                name: "test",
+                status: "COMPLETED",
+                conclusion: "FAILURE",
+                details_url: null,
+                workflow_name: null,
+              },
+            ],
+        created_at: "2026-08-31T00:00:00Z",
+        updated_at: "2026-08-31T00:00:00Z",
+      };
+    };
     const view = renderRail({
       sessions: [regular, isolated],
       previews: {},
@@ -1048,7 +1056,7 @@ describe("SessionRail row layout", () => {
     expect(row?.parentElement?.className).toContain("gap-0.5");
     expect(activeRow?.className).toContain("bg-fill-hover");
     expect(activeRow?.className).toContain("rounded-control");
-    expect(activeRow?.className.split(/\s+/)).not.toContain("bg-accent");
+    expect(activeRow?.className.split(/\s+/u)).not.toContain("bg-accent");
     expect(row?.className).toContain("hover:bg-fill-quiet");
     expect(row?.className).toContain("focus-within:bg-fill-quiet");
     expect(
@@ -1172,9 +1180,9 @@ describe("SessionRail row layout", () => {
     );
 
     expect(list?.getAttribute("data-session-selection")).toBe("instant");
-    expect(activeRow?.className.split(/\s+/)).toContain("bg-fill-hover");
+    expect(activeRow?.className.split(/\s+/u)).toContain("bg-fill-hover");
     expect(activeRow?.className).not.toContain("transition-[background-color");
-    expect(inactiveRow?.className.split(/\s+/)).not.toContain("bg-fill-hover");
+    expect(inactiveRow?.className.split(/\s+/u)).not.toContain("bg-fill-hover");
 
     view.unmount();
   });

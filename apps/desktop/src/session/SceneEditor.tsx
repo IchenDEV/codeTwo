@@ -1,24 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Save, Trash2 } from "@/components/ui/icons";
 
 import {
   deleteScene as bridgeDeleteScene,
   getScene as bridgeGetScene,
   saveScene as bridgeSaveScene,
-  type ProviderInfo,
-  type SceneSaveScope,
-  type SkillInfo,
 } from "../bridge";
+import type { ProviderInfo, SceneSaveScope, SkillInfo } from "../bridge";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  type SceneArtifactDef,
-  type SceneDocument,
-  type SceneExitCriterion,
-  type SceneHook,
-  type SceneInfo,
-  type SceneSlotDef,
+import type {
+  SceneArtifactDefinition,
+  SceneDocument,
+  SceneExitCriterion,
+  SceneHook,
+  SceneInfo,
+  SceneSlotDefinition,
 } from "./scene";
 import {
   createSceneDocument,
@@ -95,10 +93,7 @@ const OptionalSelectField = ({
   readonly inheritLabel: string;
   readonly onChange: (value: string | undefined) => void;
 }) => {
-  const items = useMemo(
-    () => [{ label: inheritLabel, value: null }, ...options],
-    [inheritLabel, options]
-  );
+  const items = [{ label: inheritLabel, value: null }, ...options];
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -125,7 +120,7 @@ const OptionalSelectField = ({
       </Select>
     </Field>
   );
-}
+};
 
 const ListField = ({
   id,
@@ -144,10 +139,10 @@ const ListField = ({
 }) => {
   const shared = {
     id,
-    value: multiline ? (value ?? []).join("\n") : joinSceneList(value),
     onChange: (
       event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
     ) => onChange(splitSceneList(event.currentTarget.value)),
+    value: multiline ? (value ?? []).join("\n") : joinSceneList(value),
   };
   return (
     <Field>
@@ -160,7 +155,7 @@ const ListField = ({
       )}
     </Field>
   );
-}
+};
 
 const SectionIntro = ({
   title,
@@ -168,14 +163,12 @@ const SectionIntro = ({
 }: {
   readonly title: string;
   readonly description: string;
-}) => {
-  return (
-    <div className="flex flex-col gap-1">
-      <h3 className="text-body font-semibold">{title}</h3>
-      <p className="text-callout text-muted-foreground">{description}</p>
-    </div>
-  );
-}
+}) => (
+  <div className="flex flex-col gap-1">
+    <h3 className="text-body font-semibold">{title}</h3>
+    <p className="text-callout text-muted-foreground">{description}</p>
+  </div>
+);
 
 const RemoveButton = ({
   label,
@@ -183,18 +176,11 @@ const RemoveButton = ({
 }: {
   readonly label: string;
   readonly onClick: () => void;
-}) => {
-  return (
-    <TooltipButton
-      label={label}
-      variant="ghost"
-      size="icon-sm"
-      onClick={onClick}
-    >
-      <Trash2 />
-    </TooltipButton>
-  );
-}
+}) => (
+  <TooltipButton label={label} variant="ghost" size="icon-sm" onClick={onClick}>
+    <Trash2 />
+  </TooltipButton>
+);
 
 function addAtEnd<T>(current: readonly T[] | undefined, item: T): T[] {
   return [...(current ?? []), item];
@@ -292,7 +278,7 @@ const InlineFragmentEditor = ({
       )}
     </FieldSet>
   );
-}
+};
 
 const SlotEditor = ({
   scene,
@@ -304,7 +290,7 @@ const SlotEditor = ({
   readonly t: ReturnType<typeof useT>;
 }) => {
   const slots = scene.brief?.slots ?? [];
-  const setSlots = (next: SceneSlotDef[]) =>
+  const setSlots = (next: SceneSlotDefinition[]) =>
     onChange({ ...scene, brief: { ...scene.brief!, slots: next } });
   const kinds: SelectOption[] = [
     "text",
@@ -313,8 +299,8 @@ const SlotEditor = ({
     "file",
     "artifact",
   ].map((value) => ({
-    value,
     label: t(`sceneEditor.slotKind.${value}` as never),
+    value,
   }));
   return (
     <FieldSet>
@@ -328,8 +314,8 @@ const SlotEditor = ({
             setSlots(
               addAtEnd(slots, {
                 id: `slot-${slots.length + 1}`,
-                label: "",
                 kind: "text",
+                label: "",
               })
             )
           }
@@ -379,7 +365,7 @@ const SlotEditor = ({
                     value &&
                     setSlots(
                       updateAt(slots, index, {
-                        kind: value as SceneSlotDef["kind"],
+                        kind: value as SceneSlotDefinition["kind"],
                       })
                     )
                   }
@@ -447,7 +433,7 @@ const SlotEditor = ({
       )}
     </FieldSet>
   );
-}
+};
 
 const ArtifactEditor = ({
   scene,
@@ -459,7 +445,7 @@ const ArtifactEditor = ({
   readonly t: ReturnType<typeof useT>;
 }) => {
   const artifacts = scene.artifacts ?? [];
-  const setArtifacts = (next: SceneArtifactDef[]) =>
+  const setArtifacts = (next: SceneArtifactDefinition[]) =>
     onChange({ ...scene, artifacts: next });
   const kinds = [
     "document",
@@ -471,8 +457,8 @@ const ArtifactEditor = ({
     "link",
     "custom",
   ].map((value) => ({
-    value,
     label: t(`sceneEditor.artifactKind.${value}` as never),
+    value,
   }));
   return (
     <FieldSet>
@@ -486,8 +472,8 @@ const ArtifactEditor = ({
             setArtifacts(
               addAtEnd(artifacts, {
                 id: `artifact-${artifacts.length + 1}`,
-                title: "",
                 kind: "document",
+                title: "",
               })
             )
           }
@@ -539,7 +525,7 @@ const ArtifactEditor = ({
                     value &&
                     setArtifacts(
                       updateAt(artifacts, index, {
-                        kind: value as SceneArtifactDef["kind"],
+                        kind: value as SceneArtifactDefinition["kind"],
                       })
                     )
                   }
@@ -610,7 +596,7 @@ const ArtifactEditor = ({
       )}
     </FieldSet>
   );
-}
+};
 
 const CriterionEditor = ({
   scene,
@@ -631,8 +617,8 @@ const CriterionEditor = ({
     "user_confirm",
     "custom",
   ].map((value) => ({
-    value,
     label: t(`sceneEditor.criterion.${value}` as never),
+    value,
   }));
   return (
     <FieldSet>
@@ -728,7 +714,7 @@ const CriterionEditor = ({
       )}
     </FieldSet>
   );
-}
+};
 
 const HookEditor = ({
   scene,
@@ -749,11 +735,11 @@ const HookEditor = ({
     "tests_failed",
     "schedule",
   ].map((value) => ({
-    value,
     label: t(`sceneEditor.hookEvent.${value}` as never),
+    value,
   }));
   const actions = ["suggest_scene", "suggest_next", "run_macro", "notify"].map(
-    (value) => ({ value, label: t(`sceneEditor.hookAction.${value}` as never) })
+    (value) => ({ label: t(`sceneEditor.hookAction.${value}` as never), value })
   );
   return (
     <FieldSet>
@@ -814,7 +800,9 @@ const HookEditor = ({
                     value &&
                     setHooks(
                       updateAt(hooks, index, {
-                        action: { kind: value as SceneHook["action"]["kind"] },
+                        action: {
+                          kind: value as SceneHook["action"]["kind"],
+                        },
                       })
                     )
                   }
@@ -925,7 +913,7 @@ const HookEditor = ({
       )}
     </FieldSet>
   );
-}
+};
 
 export const SceneEditor = ({
   request,
@@ -977,7 +965,7 @@ export const SceneEditor = ({
       : null;
 
   useEffect(() => {
-    let alive = true;
+    let isAlive = true;
     if (request.kind === "create") {
       const next = createSceneDocument(scenes);
       setDraft(next);
@@ -985,12 +973,14 @@ export const SceneEditor = ({
       setJsonDirty(false);
       setLoading(false);
       return () => {
-        alive = false;
+        isAlive = false;
       };
     }
     setLoading(true);
     void getScene(request.scene.reference).then((detail) => {
-      if (!alive) return;
+      if (!isAlive) {
+        return;
+      }
       if (!detail) {
         setLoadError(true);
         setLoading(false);
@@ -1011,12 +1001,14 @@ export const SceneEditor = ({
       setLoading(false);
     });
     return () => {
-      alive = false;
+      isAlive = false;
     };
   }, [getScene, request]);
 
   useEffect(() => {
-    if (!jsonError && !jsonDirty) setJson(formatSceneJson(draft));
+    if (!jsonError && !jsonDirty) {
+      setJson(formatSceneJson(draft));
+    }
   }, [draft, jsonDirty, jsonError]);
 
   const issues = validateSceneDocument(draft);
@@ -1044,7 +1036,9 @@ export const SceneEditor = ({
   };
 
   const save = async () => {
-    if (issues.length > 0 || jsonError || jsonDirty) return;
+    if (issues.length > 0 || jsonError || jsonDirty) {
+      return;
+    }
     setSaving(true);
     try {
       const saved = await saveScene(scope, cwd || null, originalName, draft);
@@ -1058,7 +1052,9 @@ export const SceneEditor = ({
   };
 
   const remove = async () => {
-    if (!editableOriginal) return;
+    if (!editableOriginal) {
+      return;
+    }
     setDeleting(true);
     try {
       await deleteScene(
@@ -1079,18 +1075,18 @@ export const SceneEditor = ({
 
   const execution = draft.execution ?? {};
   const modeOptions = ["read_only", "ask", "auto_edit", "full_access"].map(
-    (value) => ({ value, label: t(`mode.${value}` as never) })
+    (value) => ({ label: t(`mode.${value}` as never), value })
   );
   const memoryOptions = ["standard", "read_only", "private", "learn_only"].map(
-    (value) => ({ value, label: t(`sceneEditor.memory.${value}` as never) })
+    (value) => ({ label: t(`sceneEditor.memory.${value}` as never), value })
   );
   const worktreeOptions = ["off", "current", "origin_default"].map((value) => ({
-    value,
     label: t(`sceneEditor.worktree.${value}` as never),
+    value,
   }));
   const boolOptions = [
-    { value: "true", label: t("sceneEditor.on") },
-    { value: "false", label: t("sceneEditor.off") },
+    { label: t("sceneEditor.on"), value: "true" },
+    { label: t("sceneEditor.off"), value: "false" },
   ];
   const editorTitle =
     request.kind === "edit"
@@ -1105,13 +1101,10 @@ export const SceneEditor = ({
       aria-label={editorTitle}
     >
       {loading ? (
-        <div
-          className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center gap-2"
-          role="status"
-        >
+        <output className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center gap-2">
           <Spinner />
           {t("sceneEditor.loading")}
-        </div>
+        </output>
       ) : loadError ? (
         <div className="text-body text-destructive flex min-h-0 flex-1 items-center justify-center px-6">
           {t("sceneEditor.loadError")}
@@ -1171,8 +1164,8 @@ export const SceneEditor = ({
                     </FieldDescription>
                     <Select
                       items={[
-                        { value: "user", label: t("scene.source.user") },
-                        { value: "project", label: t("scene.source.project") },
+                        { label: t("scene.source.user"), value: "user" },
+                        { label: t("scene.source.project"), value: "project" },
                       ]}
                       value={scope}
                       disabled={Boolean(editableOriginal)}
@@ -1460,10 +1453,10 @@ export const SceneEditor = ({
                     onChange={setDraft}
                     labels={{
                       add: t("sceneEditor.addInstruction"),
-                      remove: t("sceneEditor.removeInstruction"),
-                      name: t("sceneEditor.instructionName"),
-                      text: t("sceneEditor.inlineInstructions"),
                       empty: t("sceneEditor.instructionsEmpty"),
+                      name: t("sceneEditor.instructionName"),
+                      remove: t("sceneEditor.removeInstruction"),
+                      text: t("sceneEditor.inlineInstructions"),
                     }}
                   />
                   <Separator />
@@ -1529,9 +1522,9 @@ export const SceneEditor = ({
                           brief:
                             checked === true
                               ? {
-                                  template: "",
-                                  slots: [],
                                   clarify: "multi_choice",
+                                  slots: [],
+                                  template: "",
                                 }
                               : undefined,
                         })
@@ -1541,7 +1534,8 @@ export const SceneEditor = ({
                       {t("sceneEditor.enableBrief")}
                     </FieldLabel>
                   </Field>
-                  {draft.brief ? <>
+                  {draft.brief ? (
+                    <>
                       <Field
                         data-invalid={issues.some(
                           (issue) => issue.field === "brief.template"
@@ -1577,8 +1571,8 @@ export const SceneEditor = ({
                         value={draft.brief.clarify}
                         options={["multi_choice", "free_form", "off"].map(
                           (value) => ({
-                            value,
                             label: t(`sceneEditor.clarify.${value}` as never),
+                            value,
                           })
                         )}
                         inheritLabel={t("sceneEditor.inheritDefault")}
@@ -1594,7 +1588,8 @@ export const SceneEditor = ({
                       />
                       <Separator />
                       <SlotEditor scene={draft} onChange={setDraft} t={t} />
-                    </> : null}
+                    </>
+                  ) : null}
                 </FieldGroup>
               </TabsContent>
 
@@ -1672,7 +1667,8 @@ export const SceneEditor = ({
       <Separator />
       <footer className="bg-card/40 flex shrink-0 items-center gap-2 px-8 py-3">
         <div className="min-w-0 flex-1 text-left">
-          {(issueMessages.length > 0 || jsonDirty) && !loading ? <p
+          {(issueMessages.length > 0 || jsonDirty) && !loading ? (
+            <p
               role="alert"
               className="text-callout text-destructive truncate"
               title={
@@ -1687,9 +1683,11 @@ export const SceneEditor = ({
                   ? t("sceneEditor.jsonUnapplied")
                   : issueMessages[0],
               })}
-            </p> : null}
+            </p>
+          ) : null}
         </div>
-        {editableOriginal ? <AlertDialog>
+        {editableOriginal ? (
+          <AlertDialog>
             <AlertDialogTrigger
               render={
                 <Button
@@ -1725,7 +1723,8 @@ export const SceneEditor = ({
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
-          </AlertDialog> : null}
+          </AlertDialog>
+        ) : null}
         <Button type="button" variant="ghost" onClick={onClose}>
           {t("sceneEditor.cancel")}
         </Button>
@@ -1750,4 +1749,4 @@ export const SceneEditor = ({
       </footer>
     </section>
   );
-}
+};

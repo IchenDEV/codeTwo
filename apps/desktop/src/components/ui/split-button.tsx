@@ -20,17 +20,25 @@ type SplitButtonVariant =
 type SplitButtonSize = "default" | "sm" | "compact" | "field";
 
 interface SplitButtonProps {
-  /** Text shown on the primary (left) half. */
+  /**
+  Text shown on the primary (left) half.
+  */
   readonly label: string;
-  /** Handler for the primary button click. */
+  /**
+  Handler for the primary button click.
+  */
   readonly onClick: () => void;
-  /** Alternative actions rendered inside the chevron dropdown. */
+  /**
+  Alternative actions rendered inside the chevron dropdown.
+  */
   readonly actions: SplitButtonAction[];
   readonly variant?: SplitButtonVariant;
   readonly size?: SplitButtonSize;
   readonly disabled?: boolean;
   readonly className?: string;
-  /** Where the dropdown aligns relative to the trigger. */
+  /**
+  Where the dropdown aligns relative to the trigger.
+  */
   readonly menuAlign?: "start" | "center" | "end";
   readonly menuSide?: "top" | "bottom";
 }
@@ -38,9 +46,9 @@ interface SplitButtonProps {
 const separatorClass: Record<SplitButtonVariant, string> = {
   default: "before:bg-primary-foreground/25",
   destructive: "before:bg-destructive-foreground/25",
+  ghost: "before:bg-border",
   outline: "before:bg-border",
   secondary: "before:bg-secondary-foreground/20",
-  ghost: "before:bg-border",
 };
 
 /**
@@ -124,6 +132,6 @@ const SplitButton = ({
       </DropdownMenu>
     </span>
   );
-}
+};
 
 export { SplitButton, type SplitButtonAction, type SplitButtonProps };

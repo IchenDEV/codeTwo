@@ -13,7 +13,7 @@ source: current user request to install and initialize https://www.ultracite.ai/
 inputs: Ultracite setup docs, existing apps/desktop ESLint + Stylelint toolchain
 outputs: Ultracite installed under apps/desktop with ESLint provider configs, preserved project lint constraints, and autofix applied where safe
 scope: docs/sdlc/changes/2026-09-03-ultracite-init, apps/desktop
-next_trigger: review residual non-fixable lint volume after autofix, then decide rule relaxations before merge
+next_trigger: continue thematic manual fixes without full eslint --fix; drive src lint to zero while keeping tsc green
 verification_mode: owner
 verified_by: pending
 verified_at: pending
@@ -74,10 +74,14 @@ runtime product behavior and user data are unaffected.
 - Added a local `.tsx` TypeScript parser override because Ultracite core currently wires the parser for `**/*.ts` only.
 - Wired `lint` / `check` / `fix` to Ultracite while keeping `lint:code` and `lint:styles` helpers.
 - On 2026-09-04, ran `bun run fix` across `apps/desktop` and restored accidentally rewritten generated icon/schema JSON.
+- Thematic manual follow-up: Stylelint BEM/token patterns + CSS duplicate cleanup; house `func-style: declaration` override (prefer `function` over `const x = function x`); unicode regexp flags; safe mechanical passes without full `eslint --fix`.
+- 2026-09-04 continued: boolean local renames (with shorthand expand), corrupted `u`-flag regex repair, naming UPPER_CASE wire keys, `.ts` `arrow-body-style` off, `unicorn/consistent-arrow-return-style` off (Prettier owns wrapping).
+- Boolean theme pass: parameter+local `consistent-boolean-name` renames (wire keys preserved via shorthand expand); `strict-boolean-expressions` mechanical fixes with bang/coalesce repair. Follow-up cleared remaining strict-boolean to 0 and resumed boolean renames after fixing scope-clash false negatives. See `evidence/boolean-pass-2026-09-04.txt`.
+- Unsafe/hooks theme started: LSP `any` → `unknown` helpers (`src/lsp/json.ts`); test-file `no-unsafe-*` house override; Dock width/tab hooks cleanup. See `evidence/unsafe-hooks-pass-2026-09-04.txt`.
 
 ## Verification
 
-Verdict: autofix applied; full-tree clean lint still not claimed.
+Verdict: thematic residual reduction in progress; full-tree clean lint still not claimed.
 
 ### Acceptance evidence
 
@@ -86,7 +90,10 @@ Verdict: autofix applied; full-tree clean lint still not claimed.
 - AC-3: PASS — `bunx ultracite doctor` reported `8 passed, 0 warnings, 0 failed` (see `evidence/ultracite-doctor.txt`).
 - AC-4: PASS — `bun run check` / `bun run fix` load config and report real diagnostics, not config-load failure. `bun script/verify/docs.ts` and `bun script/verify/sdlc.ts --worktree` both passed.
 
-Residual risk: After autofix, `src/` still has about 8200 ESLint issues (dominated by non-fixable `sort-keys`, `func-style`, and React Compiler / type-safety rules) plus ~50 Stylelint naming-pattern issues. Full-tree `bun run lint` / `build:renderer` remain blocked until rules are relaxed or remaining diagnostics are fixed manually. Some files hit ESLint circular-fix warnings. Scripts/tests outside `tsconfig.json` include still produce project-service parse errors.
+Residual risk: Style migration in progress under house standards (`func-style: declaration`,
+TSX concise JSX arrows, Prettier-owned arrow wrapping, nullish `== null`). Boolean themes
+cleared. Unsafe theme reduced (~505 → ~140) via LSP guards + test override; hooks still ~690
+(led by App/Feishu). See `evidence/unsafe-hooks-pass-2026-09-04.txt`.
 
 ## Review and release
 

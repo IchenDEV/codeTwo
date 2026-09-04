@@ -318,11 +318,12 @@ describe("TurnCard rendered activity", () => {
     activateDom();
     disableCanvasDrawing();
     // A leaked key-echo i18n mock can render the trigger label as its raw key; accept both.
-    const MENU_LABELS = ["Turn actions", "templateFrom.menu"];
-    const trigger = (rendered) =>
-      [...rendered.container.querySelectorAll("button")].find((el) =>
-        MENU_LABELS.includes(el.getAttribute("aria-label"))
+    const menuLabels = ["Turn actions", "templateFrom.menu"];
+    const trigger = (rendered) => {
+      return [...rendered.container.querySelectorAll("button")].find((el) =>
+        menuLabels.includes(el.getAttribute("aria-label"))
       );
+    };
 
     const without = mount(<TurnCard turn={runningTurn()} />);
     expect(trigger(without)).toBeUndefined();
@@ -460,13 +461,15 @@ describe("TurnCard rendered activity", () => {
   test("keeps an active tool history open with a bounded Codex-style fade", () => {
     activateDom();
     disableCanvasDrawing();
-    const tools = Array.from({ length: 8 }, (_, index) => ({
-      id: `tool-${index}`,
-      title:
-        index === 7 ? "Searching current styles" : `Read file ${index + 1}`,
-      status: index === 7 ? "in_progress" : "completed",
-      kind: index === 7 ? "search" : "read",
-    }));
+    const tools = Array.from({ length: 8 }, (_, index) => {
+      return {
+        id: `tool-${index}`,
+        title:
+          index === 7 ? "Searching current styles" : `Read file ${index + 1}`,
+        status: index === 7 ? "in_progress" : "completed",
+        kind: index === 7 ? "search" : "read",
+      };
+    });
     const rendered = mount(
       <I18nProvider>
         <TurnCard

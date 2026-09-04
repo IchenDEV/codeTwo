@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { SceneDocument, SceneInfo } from "../src/session/scene";
 import {
-  SCENE_SCHEMA_ID,
+  sceneSchemaId,
   createSceneDocument,
   duplicateSceneDocument,
   formatSceneJson,
@@ -32,7 +32,7 @@ function info(name: string): SceneInfo {
 
 function validScene(): SceneDocument {
   return {
-    $schema: SCENE_SCHEMA_ID,
+    $schema: sceneSchemaId,
     name: "release-review",
     title: "Release review",
     brief: {
@@ -59,7 +59,7 @@ describe("scene editor draft helpers", () => {
     );
     expect(copy.name).toBe("research-copy-2");
     expect(copy.title).toBe("Research copy");
-    expect(copy.$schema).toBe(SCENE_SCHEMA_ID);
+    expect(copy.$schema).toBe(sceneSchemaId);
   });
 
   test("validates nested slots, artifacts, criteria, and hooks", () => {

@@ -11,49 +11,52 @@ const remoteShell = normalizeLineEndings(
     new URL("../../../../crates/server/src/client.html", import.meta.url)
   ).text()
 );
+const shellScriptMatch = /<script>\n([\s\S]*?)\n {4}<\/script>/u.exec(
+  remoteShell
+)?.[1];
 const shellScript =
-  /<script>\n([\s\S]*?)\n {4}<\/script>/.exec(remoteShell)?.[1] || "";
+  shellScriptMatch != null && shellScriptMatch !== "" ? shellScriptMatch : "";
 let restoreRemoteGlobals: (() => void) | null = null;
 
 function response(body, status = 200) {
   return {
-    status,
-    ok: status >= 200 && status < 300,
     json: async () => body,
+    ok: status >= 200 && status < 300,
+    status,
     text: async () => JSON.stringify(body),
   };
 }
 
 function canvasDraft(id = "draft-1", revision = 1) {
   return {
-    id,
-    revision,
-    title: "Canvas",
-    theme: "light",
+    assets: [],
     envelope: {
+      assets: [],
       engine: "@excalidraw/excalidraw",
       engineVersion: "0.18.1",
-      schemaVersion: 1,
       revision,
+      scene: { appState: { activeTool: "selection" }, elements: [] },
+      schemaVersion: 1,
       theme: "light",
-      assets: [],
-      scene: { elements: [], appState: { activeTool: "selection" } },
     },
+    id,
     manifest: { objects: [] },
-    assets: [],
+    revision,
+    theme: "light",
+    title: "Canvas",
   };
 }
 
-async function mountRemoteShell(featureEnabled = true) {
+async function mountRemoteShell(isFeatureEnabled = true) {
   const previousGlobals = {
-    fetch,
     WebSocket,
-    window,
     document,
-    location,
+    fetch,
     history,
-    navigator,
     localStorage,
+    location,
+    navigator,
+    window,
   };
   restoreRemoteGlobals = () => {
     for (const [key, value] of Object.entries(previousGlobals)) {
@@ -67,7 +70,7 @@ async function mountRemoteShell(featureEnabled = true) {
   };
   activateDom();
   dom.document.open();
-  dom.document.write(remoteShell.replace(/<script>[\s\S]*<\/script>/, ""));
+  dom.document.write(remoteShell.replace(/<script>[\s\S]*<\/script>/u, ""));
   dom.document.close();
   dom.window.__CODETWO_REMOTE_TEST__ = true;
   dom.window.localStorage.setItem("codetwo.remote.bearer", "test-bearer");
@@ -79,58 +82,60 @@ async function mountRemoteShell(featureEnabled = true) {
       mountedCanvasOptions = options;
       root.dataset.canvasMounted = "true";
     },
-    unmount(root: HTMLElement) {
-      root.replaceChildren();
-      delete root.dataset.canvasMounted;
-    },
     prepareDraft() {
       const value = mountedCanvasOptions?.value;
-      if (value) {
+      if (Boolean(value)) {
         return {
           envelope: {
             ...value,
-            elements: Array.isArray(value.elements) ? [...value.elements] : [],
             appState: { ...value.appState },
+            elements: Array.isArray(value.elements) ? [...value.elements] : [],
           },
           manifest: { objects: [] },
-          theme: value.theme || "light",
+          theme: Boolean(value.theme) || "light",
         };
       }
       return {
         envelope: {
+          appState: { activeTool: "selection" },
+          assetReferences: [],
+          elements: [],
           engine: "@excalidraw/excalidraw",
           engineVersion: "0.18.1",
-          schemaVersion: 1,
           revision: 1,
+          schemaVersion: 1,
           theme: "light",
-          assetRefs: [],
-          elements: [],
-          appState: { activeTool: "selection" },
         },
         manifest: { objects: [] },
         theme: "light",
       };
     },
+    prepareFreeze: async () => {
+      return {
+        envelope: {
+          appState: { activeTool: "selection" },
+          assetReferences: [],
+          elements: [],
+          engine: "@excalidraw/excalidraw",
+          engineVersion: "0.18.1",
+          revision: 1,
+          schemaVersion: 1,
+          theme: "light",
+        },
+        exports: [],
+        manifest: { objects: [] },
+        theme: "light",
+      };
+    },
     reset(_root: HTMLElement, value: any) {
-      if (mountedCanvasOptions) {
+      if (Boolean(mountedCanvasOptions)) {
         mountedCanvasOptions.value = value;
       }
     },
-    prepareFreeze: async () => ({
-										      envelope: {
-										        engine: "@excalidraw/excalidraw",
-										        engineVersion: "0.18.1",
-										        schemaVersion: 1,
-										        revision: 1,
-										        theme: "light",
-										        assetRefs: [],
-										        elements: [],
-										        appState: { activeTool: "selection" },
-										      },
-										      manifest: { objects: [] },
-										      theme: "light",
-										      exports: [],
-										    }),
+    unmount(root: HTMLElement) {
+      root.replaceChildren();
+      delete root.dataset.canvasMounted;
+    },
   };
   const requests = [];
   (globalThis as any).fetch = async (path, options = {}) => {
@@ -140,7 +145,7 @@ async function mountRemoteShell(featureEnabled = true) {
     }
     if (String(path) === "/api/canvas/feature") {
       return response({
-        enabled: featureEnabled,
+        enabled: isFeatureEnabled,
         status: "not production-enabled",
       });
     }
@@ -181,13 +186,13 @@ async function mountRemoteShell(featureEnabled = true) {
   await new Promise((resolve) => setTimeout(resolve, 5));
   return {
     api: (dom.window as any).__CodeTwoRemoteCanvasTest,
-    requests,
-    socket,
-    queueDraftCreate: (nextResponse: any) =>
-      queuedDraftCreateResponses.push(nextResponse),
     get mountedCanvasOptions() {
       return mountedCanvasOptions;
     },
+    queueDraftCreate: (nextResponse: any) =>
+      queuedDraftCreateResponses.push(nextResponse),
+    requests,
+    socket,
   };
 }
 
@@ -201,14 +206,14 @@ function cleanupRemoteShell() {
 
 function canvasPrompt() {
   return [
-    { type: "text", text: "before" },
+    { text: "before", type: "text" },
     {
-      type: "canvas",
-      id: "draft-1",
       frozen_revision: 3,
+      id: "draft-1",
       pixel_policy: "required",
+      type: "canvas",
     },
-    { type: "text", text: "after" },
+    { text: "after", type: "text" },
   ];
 }
 
@@ -222,7 +227,7 @@ describe("Remote Canvas island draft seam", () => {
   });
 
   test("does not add browser persistence to the Remote entry", () => {
-    expect(source).not.toMatch(/localStorage|sessionStorage|indexedDB/i);
+    expect(source).not.toMatch(/localStorage|sessionStorage|indexedDB/iu);
   });
 
   test("keeps rejected provider recovery explicit and avoids dead mutable-head restoration", () => {
@@ -242,12 +247,12 @@ describe("Remote Canvas island draft seam", () => {
   test("executes strict marker/menu/command behavior in the actual vanilla shell", async () => {
     const { api } = await mountRemoteShell(false);
     const emojiTitle = "😀".repeat(200);
-    const marker = `[canvas-history-json ${JSON.stringify({ version: 1, id: "history-1", revision: 4, title: emojiTitle, text_originals: [] })}]`;
+    const marker = `[canvas-history-json ${JSON.stringify({ id: "history-1", revision: 4, text_originals: [], title: emojiTitle, version: 1 })}]`;
     expect(api.parseCanvasHistoryMarker(marker).title).toBe(emojiTitle);
     expect(api.parseCanvasHistoryMarker(`${marker}x`)).toBeNull();
     const historyTarget = dom.document.createElement("div");
     const escapedTitle = "line\n] bracket";
-    const escapedMarker = `[canvas-history-json ${JSON.stringify({ version: 1, id: "history-2", revision: 1, title: escapedTitle, text_originals: [] })}]`;
+    const escapedMarker = `[canvas-history-json ${JSON.stringify({ id: "history-2", revision: 1, text_originals: [], title: escapedTitle, version: 1 })}]`;
     api.renderPromptWithHistory(escapedMarker, "user", historyTarget);
     expect(
       historyTarget.querySelector(".canvas-history-card b")?.textContent
@@ -257,9 +262,9 @@ describe("Remote Canvas island draft seam", () => {
     api.renderPromptWithHistory(malformed, "user", malformedTarget);
     expect(malformedTarget.textContent).toContain(malformed);
     api.setPromptBlocks([
-      { type: "text", text: "before" },
-      { type: "canvas", id: "draft-1" },
-      { type: "text", text: "after" },
+      { text: "before", type: "text" },
+      { id: "draft-1", type: "canvas" },
+      { text: "after", type: "text" },
     ]);
     expect(
       api
@@ -275,7 +280,7 @@ describe("Remote Canvas island draft seam", () => {
     );
     expect(api.menuCanvasButton.getAttribute("aria-label")).toBe("Canvas");
     api.setCanvasFeature(false);
-    api.setPromptBlocks([{ type: "text", text: "/canvas" }]);
+    api.setPromptBlocks([{ text: "/canvas", type: "text" }]);
     await api.run();
     expect(api.status.textContent).toContain("not production-enabled");
     cleanupRemoteShell();
@@ -285,7 +290,7 @@ describe("Remote Canvas island draft seam", () => {
   test("typed /canvas uses the enabled lazy island and creates an ordered draft", async () => {
     const remote = await mountRemoteShell(true);
     const { api } = remote;
-    api.setPromptBlocks([{ type: "text", text: "/canvas" }]);
+    api.setPromptBlocks([{ text: "/canvas", type: "text" }]);
     await api.run();
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect(api.getPromptBlocks().map((block) => block.type)).toEqual([
@@ -308,17 +313,17 @@ describe("Remote Canvas island draft seam", () => {
     const remote = await mountRemoteShell(true);
     try {
       const { api, socket, requests } = remote;
-      api.setPromptBlocks([{ type: "text", text: "/canvas" }]);
+      api.setPromptBlocks([{ text: "/canvas", type: "text" }]);
       await api.run();
       await new Promise((resolve) => setTimeout(resolve, 5));
       const oldState = api.canvasState("draft-1");
       expect(oldState).not.toBeNull();
       const retainedElement = {
         id: "retained-scene",
+        text: "still in memory",
         type: "text",
         x: 12,
         y: 24,
-        text: "still in memory",
       };
       oldState.envelope.elements = [retainedElement];
       oldState.envelope.appState = {
@@ -334,7 +339,9 @@ describe("Remote Canvas island draft seam", () => {
 
       const trace = requests
         .slice(requestStart)
-        .map(([path, options]) => `${options.method || "GET"} ${path}`);
+        .map(
+          ([path, options]) => `${Boolean(options.method) || "GET"} ${path}`
+        );
       expect(trace).toEqual(["POST /api/canvas/drafts"]);
       expect(
         trace.some(
@@ -356,17 +363,17 @@ describe("Remote Canvas island draft seam", () => {
     const remote = await mountRemoteShell(true);
     try {
       const { api, socket, requests } = remote;
-      api.setPromptBlocks([{ type: "text", text: "/canvas" }]);
+      api.setPromptBlocks([{ text: "/canvas", type: "text" }]);
       await api.run();
       await new Promise((resolve) => setTimeout(resolve, 5));
       const oldState = api.canvasState("draft-1");
       expect(oldState).not.toBeNull();
       const retainedElement = {
         id: "retained-scene",
+        text: "still in memory",
         type: "text",
         x: 12,
         y: 24,
-        text: "still in memory",
       };
       oldState.envelope.elements = [retainedElement];
       oldState.envelope.appState = {
@@ -384,7 +391,9 @@ describe("Remote Canvas island draft seam", () => {
 
       const trace = requests
         .slice(requestStart)
-        .map(([path, options]) => `${options.method || "GET"} ${path}`);
+        .map(
+          ([path, options]) => `${Boolean(options.method) || "GET"} ${path}`
+        );
       expect(trace).toEqual([
         "POST /api/canvas/drafts",
         "POST /api/canvas/drafts/draft-1/tombstone",
@@ -407,11 +416,11 @@ describe("Remote Canvas island draft seam", () => {
     const { api, socket } = await mountRemoteShell(true);
     const sourceBlocks = canvasPrompt();
     const accepted = {
-      session: "session-1",
       doc: sourceBlocks.map((block) => ({ ...block })),
+      session: "session-1",
       sourceBlocks,
     };
-    api.setPromptBlocks([{ type: "text", text: "" }]);
+    api.setPromptBlocks([{ text: "", type: "text" }]);
     socket.readyState = 0;
     expect(
       api.submitPrompt("session-1", accepted.doc, true, sourceBlocks, accepted)
@@ -432,25 +441,25 @@ describe("Remote Canvas island draft seam", () => {
     const { api, socket } = await mountRemoteShell(true);
     const sourceBlocks = canvasPrompt();
     const accepted = {
-      session: "session-1",
       doc: sourceBlocks.map((block) => ({ ...block })),
+      session: "session-1",
       sourceBlocks,
     };
-    api.setPromptBlocks([{ type: "text", text: "" }]);
+    api.setPromptBlocks([{ text: "", type: "text" }]);
     expect(
       api.submitPrompt("session-1", accepted.doc, true, sourceBlocks, accepted)
     ).toBe(true);
     const requestId = socket.sent.at(-1).request_id;
     expect(api.providerRecoverySize()).toBe(1);
     api.handleMessage({
-      kind: "event",
       event: {
         event: "error",
+        message: "provider image rejected",
         request_id: requestId,
         session: "session-1",
-        message: "provider image rejected",
         terminal: true,
       },
+      kind: "event",
     });
     expect(api.providerRecoverySize()).toBe(0);
     expect(
@@ -467,21 +476,21 @@ describe("Remote Canvas island draft seam", () => {
   test("normal rejection restores exact source order without overwriting newer text", async () => {
     const { api, socket } = await mountRemoteShell(true);
     const sourceBlocks = canvasPrompt();
-    api.setPromptBlocks([{ type: "text", text: "" }]);
+    api.setPromptBlocks([{ text: "", type: "text" }]);
     expect(
       api.submitPrompt("session-1", sourceBlocks, true, sourceBlocks)
     ).toBe(true);
     const requestId = socket.sent.at(-1).request_id;
-    api.setPromptBlocks([{ type: "text", text: "newer text" }]);
+    api.setPromptBlocks([{ text: "newer text", type: "text" }]);
     api.handleMessage({
-      kind: "event",
       event: {
         event: "error",
+        message: "prompt rejected",
         request_id: requestId,
         session: "session-1",
-        message: "prompt rejected",
         terminal: true,
       },
+      kind: "event",
     });
     expect(
       api

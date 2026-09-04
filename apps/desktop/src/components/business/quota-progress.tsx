@@ -10,8 +10,12 @@ interface QuotaProgressProps {
 }
 
 function quotaTone(remainingPercent: number): QuotaProgressTone {
-  if (remainingPercent <= 5) return "destructive";
-  if (remainingPercent <= 20) return "warning";
+  if (remainingPercent <= 5) {
+    return "destructive";
+  }
+  if (remainingPercent <= 20) {
+    return "warning";
+  }
   return "success";
 }
 
@@ -51,7 +55,7 @@ const QuotaProgress = ({
       className="block gap-0"
     />
   );
-}
+};
 
 export {
   QuotaProgress,

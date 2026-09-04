@@ -17,19 +17,19 @@ describe("trajectory projection", () => {
     turn.textDeltas = ["Checking.", "Done."];
     turn.tools = [
       {
-        id: "read-1",
-        title: "Read files",
-        status: "completed",
-        startedAt: 2000,
-        endedAt: 4000,
         agentInput: { path: "." },
-        outputs: [{ type: "text", text: "a.ts" }],
+        endedAt: 4000,
+        id: "read-1",
+        outputs: [{ text: "a.ts", type: "text" }],
+        startedAt: 2000,
+        status: "completed",
+        title: "Read files",
       },
     ];
     turn.content = [
-      { kind: "text", text: "Checking.", createdAt: 1500 },
-      { kind: "tool", toolId: "read-1", createdAt: 4000 },
-      { kind: "text", text: "Done.", createdAt: 4500 },
+      { createdAt: 1500, kind: "text", text: "Checking." },
+      { createdAt: 4000, kind: "tool", toolId: "read-1" },
+      { createdAt: 4500, kind: "text", text: "Done." },
     ];
 
     const records = deriveTrajectory([turn], 6000);
@@ -39,11 +39,11 @@ describe("trajectory projection", () => {
       "tool",
       "assistant",
     ]);
-    expect(records[2]).toMatchObject({ startAt: 2000, endAt: 4000, step: 1 });
+    expect(records[2]).toMatchObject({ endAt: 4000, startAt: 2000, step: 1 });
     expect(records[3]).toMatchObject({
-      summary: "Done.",
-      step: 2,
       running: false,
+      step: 2,
+      summary: "Done.",
     });
   });
 
@@ -56,7 +56,7 @@ describe("trajectory projection", () => {
 
     const records = deriveTrajectory([turn]);
     expect(filterTrajectory(records, "error", "failed")).toEqual([
-      expect.objectContaining({ kind: "error", index: 2 }),
+      expect.objectContaining({ index: 2, kind: "error" }),
     ]);
   });
 

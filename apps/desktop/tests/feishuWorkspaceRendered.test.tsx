@@ -408,8 +408,9 @@ describe("FeishuWorkspacePage", () => {
             "# Launch plan\n\n**Approved** for rollout.\n\n- Notify the group\n- Update the tracker\n\n[Open source](https://example.invalid/source)\n\n`release-ready`",
         };
       }
-      if (name === "document.component")
+      if (name === "document.component") {
         throw new Error("Live component unavailable in this test");
+      }
       throw new Error(`unexpected command: ${name}`);
     });
 
@@ -476,7 +477,9 @@ describe("FeishuWorkspacePage", () => {
           warnings: [],
         };
       }
-      if (name === "document.read") return { content: "# Fallback only" };
+      if (name === "document.read") {
+        return { content: "# Fallback only" };
+      }
       if (name === "document.component") {
         return {
           id: "component-view-1",
@@ -491,11 +494,11 @@ describe("FeishuWorkspacePage", () => {
       expect(resourceButton(view.navigationHost, "Launch brief")).not.toBeNull()
     );
     click(resourceButton(view.navigationHost, "Launch brief"));
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.container.querySelector("[data-feishu-document-component] iframe")
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
 
     const iframe = view.container.querySelector(
       "[data-feishu-document-component] iframe"
@@ -566,7 +569,9 @@ describe("FeishuWorkspacePage", () => {
           warnings: [],
         };
       }
-      if (name === "document.read") return { content: "# Fallback only" };
+      if (name === "document.read") {
+        return { content: "# Fallback only" };
+      }
       if (name === "document.component") {
         componentInputs.push(input);
         componentNumber += 1;
@@ -583,11 +588,11 @@ describe("FeishuWorkspacePage", () => {
       expect(resourceButton(view.navigationHost, "Launch brief")).not.toBeNull()
     );
     click(resourceButton(view.navigationHost, "Launch brief"));
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.container.querySelector("iframe")?.getAttribute("src")
-      ).toContain("component-view-1")
-    );
+      ).toContain("component-view-1");
+    });
     const firstFrame = view.container.querySelector("iframe");
     dom.window.dispatchEvent(
       new dom.window.MessageEvent("message", {
@@ -600,11 +605,11 @@ describe("FeishuWorkspacePage", () => {
       })
     );
 
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.container.querySelector("iframe")?.getAttribute("src")
-      ).toContain("component-view-2")
-    );
+      ).toContain("component-view-2");
+    });
     expect(componentInputs).toHaveLength(2);
     expect(componentInputs[0]).toMatchObject({ refreshAuth: false });
     expect(componentInputs[1]).toMatchObject({ refreshAuth: true });
@@ -617,26 +622,32 @@ describe("FeishuWorkspacePage", () => {
     const overview = {
       configured: true,
       problem: "",
-      chats: Array.from({ length: 8 }, (_, index) => ({
-        id: `chat-${index + 1}`,
-        name: `Chat ${index + 1}`,
-        description: `${index + 2} members`,
-        avatarUrl: "",
-        mode: "group",
-        type: "group",
-      })),
-      documents: Array.from({ length: 6 }, (_, index) => ({
-        id: `doc-${index + 1}`,
-        name: `Document ${index + 1}`,
-        type: "docx",
-        url: `https://example.invalid/doc-${index + 1}`,
-      })),
-      bases: Array.from({ length: 5 }, (_, index) => ({
-        id: `base-${index + 1}`,
-        name: `Base ${index + 1}`,
-        type: "bitable",
-        url: `https://example.invalid/base-${index + 1}`,
-      })),
+      chats: Array.from({ length: 8 }, (_, index) => {
+        return {
+          id: `chat-${index + 1}`,
+          name: `Chat ${index + 1}`,
+          description: `${index + 2} members`,
+          avatarUrl: "",
+          mode: "group",
+          type: "group",
+        };
+      }),
+      documents: Array.from({ length: 6 }, (_, index) => {
+        return {
+          id: `doc-${index + 1}`,
+          name: `Document ${index + 1}`,
+          type: "docx",
+          url: `https://example.invalid/doc-${index + 1}`,
+        };
+      }),
+      bases: Array.from({ length: 5 }, (_, index) => {
+        return {
+          id: `base-${index + 1}`,
+          name: `Base ${index + 1}`,
+          type: "bitable",
+          url: `https://example.invalid/base-${index + 1}`,
+        };
+      }),
       warnings: [],
     };
     const callCommand = async (name) => {
@@ -647,7 +658,9 @@ describe("FeishuWorkspacePage", () => {
           needsUserAuthorization: false,
         };
       }
-      if (name === "resources.list") return overview;
+      if (name === "resources.list") {
+        return overview;
+      }
       throw new Error(`unexpected command: ${name}`);
     };
 
@@ -666,13 +679,13 @@ describe("FeishuWorkspacePage", () => {
     expect(contactsToggle?.getAttribute("aria-expanded")).toBe("true");
     click(contactsToggle);
     await flush();
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.navigationHost.querySelector(
           '[data-feishu-resource="messages:chat-1"]'
         )
-      ).toBeNull()
-    );
+      ).toBeNull();
+    });
     expect(
       dom.window.localStorage.getItem("codetwo.feishu.sections.v1")
     ).toContain('"messages":true');
@@ -682,42 +695,42 @@ describe("FeishuWorkspacePage", () => {
       )
     );
     await flush();
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.navigationHost.querySelector(
           '[data-feishu-resource="messages:chat-1"]'
         )
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
 
     click(
       view.navigationHost.querySelector('[data-feishu-show-more="messages"]')
     );
     await flush();
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.navigationHost.querySelector(
           '[data-feishu-resource="messages:chat-8"]'
         )
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     click(view.navigationHost.querySelector('button[aria-label="Pin Chat 8"]'));
     await flush();
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.navigationHost.querySelector('button[aria-label="Unpin Chat 8"]')
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     click(
       view.navigationHost.querySelector('[data-feishu-show-less="messages"]')
     );
     await flush();
 
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.navigationHost.querySelector('[data-feishu-show-more="messages"]')
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     expect(resourceButton(view.navigationHost, "Chat 8")).not.toBeNull();
     expect(
       view.navigationHost
@@ -803,8 +816,9 @@ describe("FeishuWorkspacePage", () => {
           messageLoads += 1;
           return { messages: [], hasMore: false };
         }
-        if (name === "document.subscribe" || name === "table.subscribe")
+        if (name === "document.subscribe" || name === "table.subscribe") {
           return { subscribed: true, problem: "" };
+        }
         throw new Error(`unexpected command: ${name}`);
       },
       {
@@ -887,7 +901,9 @@ describe("FeishuWorkspacePage", () => {
     const opened = [];
     const english = renderFeishu(
       async (name) => {
-        if (name === "connection.status") return partialConnection;
+        if (name === "connection.status") {
+          return partialConnection;
+        }
         throw new Error(`unexpected command: ${name}`);
       },
       {
@@ -917,7 +933,9 @@ describe("FeishuWorkspacePage", () => {
 
     dom.window.localStorage.setItem("codetwo.language", "zh-CN");
     const chinese = renderFeishu(async (name) => {
-      if (name === "connection.status") return partialConnection;
+      if (name === "connection.status") {
+        return partialConnection;
+      }
       throw new Error(`unexpected command: ${name}`);
     });
     await waitFor(() =>
@@ -937,12 +955,13 @@ describe("FeishuWorkspacePage", () => {
     activateDom();
     dom.window.localStorage.setItem("codetwo.language", "en");
     const view = renderFeishu(async (name) => {
-      if (name === "connection.status")
+      if (name === "connection.status") {
         return {
           ...partialConnection,
           authorized: true,
           needsUserAuthorization: false,
         };
+      }
       if (name === "resources.list") {
         return {
           configured: true,
@@ -956,11 +975,11 @@ describe("FeishuWorkspacePage", () => {
       throw new Error(`unexpected command: ${name}`);
     });
 
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         text(view.navigationHost, "Could not load Feishu resources")
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     expect(button(view.navigationHost, "Authorize again")).not.toBeNull();
     expect(
       view.navigationHost.querySelector(

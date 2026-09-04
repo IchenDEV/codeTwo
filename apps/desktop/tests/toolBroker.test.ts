@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  ToolBroker,
-  type BrokerContext,
-} from "../../../packages/tool-broker/src";
+import { ToolBroker } from "../../../packages/tool-broker/src";
+import type { BrokerContext } from "../../../packages/tool-broker/src";
 
 const context: BrokerContext = {
   evidence: {

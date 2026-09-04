@@ -1,11 +1,11 @@
-export const BROWSER_HISTORY_STORAGE_KEY = "codetwo.browser-history:v1";
+export const browserHistoryStorageKey = "codetwo.browser-history:v1";
 
-const HISTORY_VERSION = 1 as const;
-const MAX_PROJECTS = 24;
-const MAX_SITES_PER_PROJECT = 8;
-const MAX_PROJECT_KEY_LENGTH = 4096;
-const MAX_URL_LENGTH = 2048;
-const MAX_TITLE_LENGTH = 120;
+const historyVersion = 1 as const;
+const maxProjects = 24;
+const maxSitesPerProject = 8;
+const maxProjectKeyLength = 4096;
+const maxUrlLength = 2048;
+const maxTitleLength = 120;
 
 export interface RecentSite {
   url: string;
@@ -19,7 +19,7 @@ interface ProjectHistory {
 }
 
 export interface BrowserHistoryState {
-  version: typeof HISTORY_VERSION;
+  version: typeof historyVersion;
   projects: ProjectHistory[];
 }
 
@@ -28,9 +28,9 @@ export interface StorageLike {
   setItem: (key: string, value: string) => void;
 }
 
-export const EMPTY_BROWSER_HISTORY: BrowserHistoryState = {
-  version: HISTORY_VERSION,
+export const emptyBrowserHistory: BrowserHistoryState = {
   projects: [],
+  version: historyVersion,
 };
 
 function cleanProject(value: unknown): string | null {
@@ -38,25 +38,22 @@ function cleanProject(value: unknown): string | null {
     return null;
   }
   const project = value.trim();
-  return project && project.length <= MAX_PROJECT_KEY_LENGTH ? project : null;
+  return project && project.length <= maxProjectKeyLength ? project : null;
 }
 
 function cleanTitle(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
-  const title = value.replaceAll(/\s+/g, " ").trim();
+  const title = value.replaceAll(/\s+/gu, " ").trim();
   if (!title) {
     return null;
   }
-  return title.slice(0, MAX_TITLE_LENGTH);
+  return title.slice(0, maxTitleLength);
 }
 
-/**
-Keep persisted history navigable and never retain credentials or fragments.
-*/
 export function normalizeHistoryUrl(value: unknown): string | null {
-  if (typeof value !== "string" || value.length > MAX_URL_LENGTH) {
+  if (typeof value !== "string" || value.length > maxUrlLength) {
     return null;
   }
   try {
@@ -71,7 +68,7 @@ export function normalizeHistoryUrl(value: unknown): string | null {
       url.hostname = "localhost";
     }
     const normalized = url.toString();
-    return normalized.length <= MAX_URL_LENGTH ? normalized : null;
+    return normalized.length <= maxUrlLength ? normalized : null;
   } catch {
     return null;
   }
@@ -83,37 +80,39 @@ function cleanTimestamp(value: unknown): number | null {
     : null;
 }
 
-/**
-Re-validate every persisted value so malformed or older data never reaches the Browser UI.
-*/
 export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
-  if (!value || typeof value !== "object") {
-    return EMPTY_BROWSER_HISTORY;
+  if (value == null || typeof value !== "object") {
+    return emptyBrowserHistory;
   }
-  if ((value as { version?: unknown }).version !== HISTORY_VERSION) {
-    return EMPTY_BROWSER_HISTORY;
+  if ((value as { version?: unknown }).version !== historyVersion) {
+    return emptyBrowserHistory;
   }
   const rawProjects = (value as { projects?: unknown }).projects;
   if (!Array.isArray(rawProjects)) {
-    return EMPTY_BROWSER_HISTORY;
+    return emptyBrowserHistory;
   }
 
   const projects: ProjectHistory[] = [];
   const seenProjects = new Set<string>();
   for (const rawProject of rawProjects) {
-    if (!rawProject || typeof rawProject !== "object") {
+    if (rawProject == null || typeof rawProject !== "object") {
       continue;
     }
     const project = cleanProject((rawProject as { project?: unknown }).project);
     const rawSites = (rawProject as { sites?: unknown }).sites;
-    if (!project || seenProjects.has(project) || !Array.isArray(rawSites)) {
+    if (
+      project == null ||
+      project === "" ||
+      seenProjects.has(project) ||
+      !Array.isArray(rawSites)
+    ) {
       continue;
     }
 
     const sites: RecentSite[] = [];
     const seenUrls = new Set<string>();
     for (const rawSite of rawSites) {
-      if (!rawSite || typeof rawSite !== "object") {
+      if (rawSite == null || typeof rawSite !== "object") {
         continue;
       }
       const record = rawSite as {
@@ -123,14 +122,19 @@ export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
       };
       const url = normalizeHistoryUrl(record.url);
       const lastVisitedAt = cleanTimestamp(record.last_visited_at);
-      if (!url || !lastVisitedAt || seenUrls.has(url)) {
+      if (
+        url == null ||
+        url === "" ||
+        lastVisitedAt == null ||
+        seenUrls.has(url)
+      ) {
         continue;
       }
       seenUrls.add(url);
       sites.push({
-        url,
-        title: cleanTitle(record.title),
         last_visited_at: lastVisitedAt,
+        title: cleanTitle(record.title),
+        url,
       });
     }
     sites.sort((a, b) => b.last_visited_at - a.last_visited_at);
@@ -138,7 +142,7 @@ export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
       continue;
     }
     seenProjects.add(project);
-    projects.push({ project, sites: sites.slice(0, MAX_SITES_PER_PROJECT) });
+    projects.push({ project, sites: sites.slice(0, maxSitesPerProject) });
   }
 
   projects.sort(
@@ -146,8 +150,8 @@ export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
       (b.sites[0]?.last_visited_at ?? 0) - (a.sites[0]?.last_visited_at ?? 0)
   );
   return {
-    version: HISTORY_VERSION,
-    projects: projects.slice(0, MAX_PROJECTS),
+    projects: projects.slice(0, maxProjects),
+    version: historyVersion,
   };
 }
 
@@ -156,7 +160,7 @@ export function recentSitesForProject(
   project: string | null | undefined
 ): RecentSite[] {
   const key = cleanProject(project);
-  if (!key) {
+  if (key == null || key === "") {
     return [];
   }
   return state.projects.find((entry) => entry.project === key)?.sites ?? [];
@@ -172,26 +176,32 @@ export function recordBrowserVisit(
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
   const timestamp = cleanTimestamp(visitedAt);
-  if (!key || !url || !timestamp) {
+  if (
+    key == null ||
+    key === "" ||
+    url == null ||
+    url === "" ||
+    timestamp == null
+  ) {
     return state;
   }
 
   const current = recentSitesForProject(state, key);
   const previous = current.find((site) => site.url === url);
   const site: RecentSite = {
-    url,
-    title: cleanTitle(rawTitle) ?? previous?.title ?? null,
     last_visited_at: timestamp,
+    title: cleanTitle(rawTitle) ?? previous?.title ?? null,
+    url,
   };
   const sites = [site, ...current.filter((entry) => entry.url !== url)].slice(
     0,
-    MAX_SITES_PER_PROJECT
+    maxSitesPerProject
   );
   const projects = [
     { project: key, sites },
     ...state.projects.filter((entry) => entry.project !== key),
-  ].slice(0, MAX_PROJECTS);
-  return { version: HISTORY_VERSION, projects };
+  ].slice(0, maxProjects);
+  return { projects, version: historyVersion };
 }
 
 export function updateBrowserVisitTitle(
@@ -203,7 +213,14 @@ export function updateBrowserVisitTitle(
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
   const title = cleanTitle(rawTitle);
-  if (!key || !url || !title) {
+  if (
+    key == null ||
+    key === "" ||
+    url == null ||
+    url === "" ||
+    title == null ||
+    title === ""
+  ) {
     return state;
   }
   let isChanged = false;
@@ -230,7 +247,7 @@ export function removeBrowserVisit(
 ): BrowserHistoryState {
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
-  if (!key || !url) {
+  if (key == null || key === "" || url == null || url === "") {
     return state;
   }
   let isChanged = false;
@@ -253,7 +270,7 @@ export function removeBrowserProject(
   project: string
 ): BrowserHistoryState {
   const key = cleanProject(project);
-  if (!key) {
+  if (key == null || key === "") {
     return state;
   }
   const projects = state.projects.filter((entry) => entry.project !== key);
@@ -266,15 +283,15 @@ export function loadBrowserHistory(
   storage: StorageLike | null | undefined
 ): BrowserHistoryState {
   if (!storage) {
-    return EMPTY_BROWSER_HISTORY;
+    return emptyBrowserHistory;
   }
   try {
-    const raw = storage.getItem(BROWSER_HISTORY_STORAGE_KEY);
-    return raw
+    const raw = storage.getItem(browserHistoryStorageKey);
+    return raw != null && raw !== ""
       ? sanitizeBrowserHistory(JSON.parse(raw))
-      : EMPTY_BROWSER_HISTORY;
+      : emptyBrowserHistory;
   } catch {
-    return EMPTY_BROWSER_HISTORY;
+    return emptyBrowserHistory;
   }
 }
 
@@ -286,7 +303,7 @@ export function saveBrowserHistory(
     return;
   }
   try {
-    storage.setItem(BROWSER_HISTORY_STORAGE_KEY, JSON.stringify(state));
+    storage.setItem(browserHistoryStorageKey, JSON.stringify(state));
   } catch {
     // Private browsing, a disabled store, or quota pressure must not break navigation.
   }

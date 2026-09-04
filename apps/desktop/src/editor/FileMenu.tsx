@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import {
   FileCode,
   FileImage,
@@ -7,89 +8,105 @@ import {
   FileType,
   MessageSquare,
   Package,
-  type HugeIcon,
 } from "@/components/ui/icons";
+import type { HugeIcon } from "@/components/ui/icons";
 import type { SuggestionMenuProps } from "@blocknote/react";
 
 import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** One workspace file, split for display. The core ranks these; this only draws them. */
+/**
+One workspace file, split for display. The core ranks these; this only draws them.
+*/
 export interface FileItem {
   kind: "file";
   path: string;
-  /** `src/session/` — dimmed, so the eye lands on the name. Empty at the workspace root. */
+  /**
+  `src/session/` — dimmed, so the eye lands on the name. Empty at the workspace root.
+  */
   dir: string;
   name: string;
-  /** Where the query matched `name`, for highlighting. Null when it matched only the directory. */
+  /**
+  Where the query matched `name`, for highlighting. Null when it matched only the directory.
+  */
   hit: [number, number] | null;
 }
 
-/** One past chat, offered for `@`-mentioning its transcript as context. */
+/**
+One past chat, offered for `@`-mentioning its transcript as context.
+*/
 export interface ChatItem {
   kind: "chat";
   id: string;
   title: string;
-  /** `created_at` in ms — drawn as a short date so same-titled chats stay tellable apart. */
+  /**
+  `created_at` in ms — drawn as a short date so same-titled chats stay tellable apart.
+  */
   when: number;
 }
 
-/** One stored scene artifact, offered for `@`-mentioning its content as context (R4). */
+/**
+One stored scene artifact, offered for `@`-mentioning its content as context (R4).
+*/
 export interface ArtifactAtItem {
   kind: "artifact";
   recordId: number;
   title: string;
-  /** Declared scene-artifact kind ("plan", "report", …) — drawn as the row's right-hand hint. */
+  /**
+  Declared scene-artifact kind ("plan", "report", …) — drawn as the row's right-hand hint.
+  */
   artifactKind: string;
   version: number;
 }
 
-/** Everything the `@` picker can insert: chats, then artifacts, then workspace files. */
+/**
+Everything the `@` picker can insert: chats, then artifacts, then workspace files.
+*/
 export type AtItem = ChatItem | ArtifactAtItem | FileItem;
 
-const BY_EXTENSION: Record<string, HugeIcon> = {
+const byExtension: Record<string, HugeIcon> = {
+  conf: FileType,
+  css: FileCode,
+  gif: FileImage,
+  go: FileCode,
+  html: FileCode,
+  icns: FileImage,
+  ico: FileImage,
+  ini: FileType,
+  jpeg: FileImage,
+  jpg: FileImage,
+  js: FileCode,
+  json: FileJson,
+  jsx: FileCode,
+  lock: FileJson,
+  plist: FileType,
+  png: FileImage,
+  py: FileCode,
+  rb: FileCode,
+  rs: FileCode,
+  sh: FileCode,
+  svg: FileImage,
+  swift: FileCode,
+  toml: FileType,
   ts: FileCode,
   tsx: FileCode,
-  js: FileCode,
-  jsx: FileCode,
-  rs: FileCode,
-  py: FileCode,
-  go: FileCode,
-  rb: FileCode,
-  sh: FileCode,
-  css: FileCode,
-  html: FileCode,
-  swift: FileCode,
-  json: FileJson,
-  lock: FileJson,
-  toml: FileType,
+  webp: FileImage,
   yaml: FileType,
   yml: FileType,
-  plist: FileType,
-  conf: FileType,
-  ini: FileType,
-  png: FileImage,
-  jpg: FileImage,
-  jpeg: FileImage,
-  gif: FileImage,
-  svg: FileImage,
-  webp: FileImage,
-  ico: FileImage,
-  icns: FileImage,
 };
 
-/** A page icon on every row says only "this is a file", which the user already knows. */
 function iconFor(name: string): HugeIcon {
   const dot = name.lastIndexOf(".");
   return (
-    (dot > 0 && BY_EXTENSION[name.slice(dot + 1).toLowerCase()]) || FileText
+    (dot > 0 && byExtension[name.slice(dot + 1).toLowerCase()]) || FileText
   );
 }
 
-/** Split a name around the matched span so the middle can be emphasised. */
 function parts(item: FileItem): [string, string, string] {
-  if (!item.hit) return [item.name, "", ""];
+  if (!item.hit) {
+    return [item.name, "", ""];
+  }
   const [from, to] = item.hit;
   return [
     item.name.slice(0, from),
@@ -99,19 +116,23 @@ function parts(item: FileItem): [string, string, string] {
 }
 
 function itemKey(item: AtItem): string {
-  if (item.kind === "chat") return item.id;
-  if (item.kind === "artifact") return `artifact-${item.recordId}`;
+  if (item.kind === "chat") {
+    return item.id;
+  }
+  if (item.kind === "artifact") {
+    return `artifact-${item.recordId}`;
+  }
   return item.path;
 }
 
-/** Muted group label — only drawn when the list actually mixes chats and files. */
-const GroupLabel = ({ children }: { readonly children: ReactNode }) => {
-  return (
-    <p className="text-metadata text-muted-foreground px-2 pt-1.5 pb-0.5 first:pt-1">
-      {children}
-    </p>
-  );
-}
+/**
+Muted group label — only drawn when the list actually mixes chats and files.
+*/
+const GroupLabel = ({ children }: { readonly children: ReactNode }) => (
+  <p className="text-metadata text-muted-foreground px-2 pt-1.5 pb-0.5 first:pt-1">
+    {children}
+  </p>
+);
 
 /**
  * The `@` picker.
@@ -138,7 +159,9 @@ export const FileMenu = ({
   // Arrow keys are the controller's; it moves `selectedIndex` without knowing this list scrolls.
   // Rows are found by index attribute — group labels between them would break child-position math.
   useEffect(() => {
-    if (selectedIndex === undefined) return;
+    if (selectedIndex === undefined) {
+      return;
+    }
     listRef.current
       ?.querySelector(`[data-row="${selectedIndex}"]`)
       ?.scrollIntoView({ block: "nearest" });
@@ -242,9 +265,11 @@ export const FileMenu = ({
                     <span className="text-primary">{match}</span>
                     {after}
                   </span>
-                  {item.dir ? <span className="text-callout text-muted-foreground/70 min-w-0 flex-1 truncate text-right">
+                  {item.dir ? (
+                    <span className="text-callout text-muted-foreground/70 min-w-0 flex-1 truncate text-right">
                       {item.dir}
-                    </span> : null}
+                    </span>
+                  ) : null}
                 </Button>
               );
             })()
@@ -278,4 +303,4 @@ export const FileMenu = ({
       })}
     </div>
   );
-}
+};

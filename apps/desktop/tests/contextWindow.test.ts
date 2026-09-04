@@ -9,19 +9,21 @@ import {
   formatContextTokens,
   formatContextWindowPercentage,
   updateContextWindow,
-  type ContextWindowBySession,
 } from "../src/session/contextWindow";
+import type { ContextWindowBySession } from "../src/session/contextWindow";
 
 const usage = (
   session: string,
   used_tokens: number,
   context_window: number
-) => ({
-  event: "context_window" as const,
-  session,
-  used_tokens,
-  context_window,
-});
+) => {
+  return {
+    event: "context_window" as const,
+    session,
+    used_tokens,
+    context_window,
+  };
+};
 
 describe("context window projection", () => {
   test("keeps background sessions isolated from the active projection", () => {

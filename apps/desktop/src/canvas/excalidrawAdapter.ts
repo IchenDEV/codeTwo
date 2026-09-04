@@ -20,13 +20,8 @@ export type {
   OrderedExcalidrawElement,
   Theme,
 } from "@excalidraw/excalidraw/element/types";
-export const EXCALIDRAW_CSS = "@excalidraw/excalidraw/index.css";
+export const excalidrawCss = "@excalidraw/excalidraw/index.css";
 
-/**
- * The public 0.18.1 package does not export its image constructor. Keep the
- * tiny constructor here so image placement remains behind this single adapter
- * seam rather than importing Excalidraw internals throughout the editor.
- */
 export function newImageElement(options: {
   type: "image";
   fileId: string;
@@ -54,36 +49,36 @@ export function newImageElement(options: {
       ? runtimeCrypto.randomUUID()
       : `canvas-image-${now}-${Math.random().toString(36).slice(2)}`;
   return {
-    id: randomId,
-    type: "image",
-    x: options.x,
-    y: options.y,
-    width: options.width,
-    height: options.height,
     angle: 0,
-    strokeColor: options.strokeColor,
     backgroundColor: options.backgroundColor,
-    fillStyle: options.fillStyle,
-    strokeWidth: options.strokeWidth,
-    strokeStyle: options.strokeStyle,
-    roughness: options.roughness,
-    roundness: options.roundness,
-    seed: now,
-    version: 1,
-    versionNonce: now,
-    opacity: options.opacity,
-    index: null,
-    isDeleted: false,
-    groupIds: [],
-    frameId: options.frameId,
     boundElements: null,
-    updated: now,
-    link: null,
-    locked: options.locked,
+    crop: null,
     fileId:
       options.fileId as import("@excalidraw/excalidraw/element/types").FileId,
-    status: options.status ?? "saved",
+    fillStyle: options.fillStyle,
+    frameId: options.frameId,
+    groupIds: [],
+    height: options.height,
+    id: randomId,
+    index: null,
+    isDeleted: false,
+    link: null,
+    locked: options.locked,
+    opacity: options.opacity,
+    roughness: options.roughness,
+    roundness: options.roundness,
     scale: [options.scale[0], options.scale[1]],
-    crop: null,
+    seed: now,
+    status: options.status ?? "saved",
+    strokeColor: options.strokeColor,
+    strokeStyle: options.strokeStyle,
+    strokeWidth: options.strokeWidth,
+    type: "image",
+    updated: now,
+    version: 1,
+    versionNonce: now,
+    width: options.width,
+    x: options.x,
+    y: options.y,
   };
 }

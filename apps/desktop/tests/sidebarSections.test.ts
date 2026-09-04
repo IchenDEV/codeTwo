@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  LEGACY_SIDEBAR_SECTIONS_STORAGE_KEY,
-  SIDEBAR_SECTIONS_STORAGE_KEY,
-  UNSECTIONED_TASK_ORDER_KEY,
+  legacySidebarSectionsStorageKey,
+  sidebarSectionsStorageKey,
+  unsectionedTaskOrderKey,
   assignTaskSection,
   createSidebarTaskSection,
   deleteSidebarTaskSection,
@@ -40,7 +40,7 @@ describe("sidebar Task Sections", () => {
   test("migrates v1 Sections without inventing a fixed Highlight group", () => {
     const values = new Map<string, string>([
       [
-        LEGACY_SIDEBAR_SECTIONS_STORAGE_KEY,
+        legacySidebarSectionsStorageKey,
         JSON.stringify({
           version: 1,
           sections: [{ id: "highlight", name: "Highlight", collapsed: false }],
@@ -77,7 +77,7 @@ describe("sidebar Task Sections", () => {
     };
     saveSidebarTaskSections(storage, state);
 
-    expect(values.has(SIDEBAR_SECTIONS_STORAGE_KEY)).toBe(true);
+    expect(values.has(sidebarSectionsStorageKey)).toBe(true);
     expect(loadSidebarTaskSections(storage)).toEqual({
       version: 2,
       sections: [{ id: "work", name: "Deep work", collapsed: true }],
@@ -88,7 +88,7 @@ describe("sidebar Task Sections", () => {
     const deleted = deleteSidebarTaskSection(state, "work");
     expect(deleted.sections).toEqual([]);
     expect(deleted.assignments).toEqual({});
-    expect(deleted.taskOrder[UNSECTIONED_TASK_ORDER_KEY]).toEqual([
+    expect(deleted.taskOrder[unsectionedTaskOrderKey]).toEqual([
       "task-2",
       "task-1",
     ]);
@@ -105,20 +105,20 @@ describe("sidebar Task Sections", () => {
     expect(state.sections.map((section) => section.id)).toEqual(["two", "one"]);
 
     state = moveSidebarTask(state, "older", null, "newer", ["newer", "older"]);
-    expect(state.taskOrder[UNSECTIONED_TASK_ORDER_KEY]).toEqual([
+    expect(state.taskOrder[unsectionedTaskOrderKey]).toEqual([
       "older",
       "newer",
     ]);
     expect(
       sortSidebarTasks(
         [{ id: "brand-new" }, { id: "newer" }, { id: "older" }],
-        state.taskOrder[UNSECTIONED_TASK_ORDER_KEY]
+        state.taskOrder[unsectionedTaskOrderKey]
       ).map((task) => task.id)
     ).toEqual(["brand-new", "older", "newer"]);
 
     state = moveSidebarTask(state, "older", "one", null, []);
     expect(state.assignments.older).toBe("one");
-    expect(state.taskOrder[UNSECTIONED_TASK_ORDER_KEY]).toEqual(["newer"]);
+    expect(state.taskOrder[unsectionedTaskOrderKey]).toEqual(["newer"]);
     expect(state.taskOrder.one).toEqual(["older"]);
   });
 

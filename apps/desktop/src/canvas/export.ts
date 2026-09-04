@@ -1,7 +1,7 @@
 import { sanitizeElements } from "./serialize";
 import { exportToCanvas } from "./excalidrawAdapter";
 import {
-  DEFAULT_EXPORT_BUDGET,
+  defaultExportBudget,
   CanvasExportBudgetError,
   planCanvasExportTiles,
 } from "./exportPlan";
@@ -17,7 +17,7 @@ import type {
 } from "./excalidrawAdapter";
 
 export {
-  DEFAULT_EXPORT_BUDGET,
+  defaultExportBudget,
   CanvasExportBudgetError,
   planCanvasExportTiles,
 } from "./exportPlan";
@@ -35,29 +35,29 @@ function elementBounds(element: ExcalidrawElement): CanvasExportBounds {
     element.points.length > 0
   ) {
     const points = element.points.map(([x, y]) => [
-										      element.x + x,
-										      element.y + y,
-										    ]);
+      element.x + x,
+      element.y + y,
+    ]);
     const xs = points.map(([x]) => x);
     const ys = points.map(([, y]) => y);
     return {
-      minX: Math.min(...xs),
-      minY: Math.min(...ys),
       maxX: Math.max(...xs),
       maxY: Math.max(...ys),
+      minX: Math.min(...xs),
+      minY: Math.min(...ys),
     };
   }
   return {
-    minX: element.x,
-    minY: element.y,
     maxX: element.x + element.width,
     maxY: element.y + element.height,
+    minX: element.x,
+    minY: element.y,
   };
 }
 
 export function getCanvasExportBounds(
   elements: readonly unknown[],
-  margin = DEFAULT_EXPORT_BUDGET.margin
+  margin = defaultExportBudget.margin
 ): CanvasExportBounds | null {
   const visible = sanitizeElements(elements).filter(
     (element) => !element.isDeleted && element.opacity > 0
@@ -67,25 +67,25 @@ export function getCanvasExportBounds(
   }
   const bounds = visible.map(elementBounds);
   return {
-    minX: Math.min(...bounds.map((entry) => entry.minX)) - margin,
-    minY: Math.min(...bounds.map((entry) => entry.minY)) - margin,
     maxX: Math.max(...bounds.map((entry) => entry.maxX)) + margin,
     maxY: Math.max(...bounds.map((entry) => entry.maxY)) + margin,
+    minX: Math.min(...bounds.map((entry) => entry.minX)) - margin,
+    minY: Math.min(...bounds.map((entry) => entry.minY)) - margin,
   };
 }
 
 async function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return await new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => blob
-          ? resolve(blob)
-          : reject(
-              new CanvasExportBudgetError(
-                "canvas-unavailable",
-                "Canvas could not produce a PNG"
-              )
-            ),
-      "image/png"
-    );
+    canvas.toBlob((blob) => {
+      return blob
+        ? resolve(blob)
+        : reject(
+            new CanvasExportBudgetError(
+              "canvas-unavailable",
+              "Canvas could not produce a PNG"
+            )
+          );
+    }, "image/png");
   });
 }
 
@@ -109,17 +109,13 @@ export interface CanvasPngExport {
   blob: Blob;
 }
 
-/**
- * Renders a transparent, cropped PNG overview and deterministic detail tiles. The dot grid is a
- * UI-only Excalidraw concern and is never painted by this export path.
- */
 export async function exportCanvasPng(
   elementsInput: readonly unknown[],
   appState: AppState,
   files: BinaryFiles,
   budget: Partial<CanvasExportBudget> = {}
 ): Promise<readonly CanvasPngExport[]> {
-  const limits = { ...DEFAULT_EXPORT_BUDGET, ...budget };
+  const limits = { ...defaultExportBudget, ...budget };
   const elements = sanitizeElements(elementsInput);
   const bounds = getCanvasExportBounds(elements, 0);
   if (!bounds) {
@@ -129,23 +125,18 @@ export async function exportCanvasPng(
     );
   }
   const rendered = await exportToCanvas({
-    elements: elements as ExcalidrawElement[],
-    // Grid dots are authoring-only chrome. Explicitly disable the engine grid for every export,
-    // even when the live editor is in grid mode, so no UI pixels enter persisted PNGs.
     appState: {
       ...appState,
-      viewBackgroundColor: "transparent",
       gridModeEnabled: false,
       gridSize: 0,
+      viewBackgroundColor: "transparent",
     },
-    files,
-    // The engine applies this exact margin around its crop. The tile plan is
-    // derived from the resulting canvas dimensions below, so negative/positive
-    // scene coordinates cannot drift from tile source rectangles.
+    elements: elements as ExcalidrawElement[],
     exportPadding: limits.margin,
+    files,
   });
   const tiles = planCanvasExportTiles(
-    { minX: 0, minY: 0, maxX: rendered.width, maxY: rendered.height },
+    { maxX: rendered.width, maxY: rendered.height, minX: 0, minY: 0 },
     { ...limits, margin: 0 }
   );
   const source = makeCanvas(rendered.width, rendered.height);
@@ -201,7 +192,7 @@ export async function exportCanvasPng(
         `Canvas export produced ${totalBytes} bytes; limit is ${limits.maxBytes}`
       );
     }
-    results.push({ kind: tile.kind, row: tile.row, column: tile.column, blob });
+    results.push({ blob, column: tile.column, kind: tile.kind, row: tile.row });
   }
   return results;
 }

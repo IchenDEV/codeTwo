@@ -1,5 +1,5 @@
 import type {
-  DocBlock as DocumentBlock,
+  DocumentBlock as DocumentBlock,
   MemoryAccess,
   PermissionMode,
   Sandbox,
@@ -55,19 +55,19 @@ export type ComposerDraftPromotion =
   | { outcome: "moved"; drafts: Map<string, ComposerDraft> }
   | { outcome: "missing" | "conflict"; drafts: Map<string, ComposerDraft> };
 
-export const COMPOSER_DRAFT_STORAGE_KEY = "codetwo.composerDrafts:v1";
-const COMPOSER_DRAFT_VERSION = 1 as const;
-const MAX_DRAFTS = 100;
-const MAX_RAW_BYTES = 4 * 1024 * 1024;
-const MAX_BLOCKS = 2000;
-const MAX_ATTACHMENTS = 64;
+export const composerDraftStorageKey = "codetwo.composerDrafts:v1";
+const composerDraftVersion = 1 as const;
+const maxDrafts = 100;
+const maxRawBytes = 4 * 1024 * 1024;
+const maxBlocks = 2000;
+const maxAttachments = 64;
 
 function serializedBytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
 interface ComposerDraftSnapshot {
-  version: typeof COMPOSER_DRAFT_VERSION;
+  version: typeof composerDraftVersion;
   drafts: ComposerDraft[];
 }
 
@@ -83,7 +83,7 @@ function nullableStringWithin(
 }
 
 function parseScope(value: unknown): ComposerDraftScope | null {
-  if (!value || typeof value !== "object") {
+  if (value == null || typeof value !== "object") {
     return null;
   }
   const scope = value as Record<string, unknown>;
@@ -102,8 +102,8 @@ function parseScope(value: unknown): ComposerDraftScope | null {
   ) {
     return {
       kind: "session",
-      sessionId: scope.sessionId,
       projectPath: scope.projectPath,
+      sessionId: scope.sessionId,
     };
   }
   return null;
@@ -121,38 +121,39 @@ function stringRecord(value: unknown): value is Record<string, string> {
 }
 
 function parseDocumentBlock(value: unknown): DocumentBlock | null {
-  if (!value || typeof value !== "object") {
+  if (value == null || typeof value !== "object") {
     return null;
   }
   const block = value as Record<string, unknown>;
   switch (block.type) {
     case "text": {
       return stringWithin(block.text, 1_048_576)
-        ? { type: "text", text: block.text }
+        ? { text: block.text, type: "text" }
         : null;
     }
     case "skill": {
       return stringWithin(block.skill_id, 512) && stringRecord(block.params)
         ? {
-            type: "skill",
-            skill_id: block.skill_id,
             params: { ...block.params },
+            skill_id: block.skill_id,
+            type: "skill",
           }
         : null;
     }
     case "file":
     case "image": {
       return stringWithin(block.path, 16_384)
-        ? { type: block.type, path: block.path }
+        ? { path: block.path, type: block.type }
         : null;
     }
     case "appshot": {
       return stringWithin(block.id, 256) &&
         (block.title === undefined || stringWithin(block.title, 512))
         ? {
-            type: "appshot",
             id: block.id,
-            ...(block.title && { title: block.title }),
+            type: "appshot",
+            ...(block.title != null &&
+              block.title !== "" && { title: block.title }),
           }
         : null;
     }
@@ -160,9 +161,10 @@ function parseDocumentBlock(value: unknown): DocumentBlock | null {
       return stringWithin(block.id, 256) &&
         (block.name === undefined || stringWithin(block.name, 512))
         ? {
-            type: "attachment",
             id: block.id,
-            ...(block.name && { name: block.name }),
+            type: "attachment",
+            ...(block.name != null &&
+              block.name !== "" && { name: block.name }),
           }
         : null;
     }
@@ -177,9 +179,9 @@ function parseDocumentBlock(value: unknown): DocumentBlock | null {
           pixelPolicy === "required" ||
           pixelPolicy === "structure_only")
         ? {
-            type: "canvas",
-            id: block.id,
             frozen_revision: revision,
+            id: block.id,
+            type: "canvas",
             ...(pixelPolicy && { pixel_policy: pixelPolicy }),
           }
         : null;
@@ -192,8 +194,8 @@ function parseDocumentBlock(value: unknown): DocumentBlock | null {
             Number.isSafeInteger(throughSeq) &&
             throughSeq > 0))
         ? {
-            type: "session",
             session_id: block.session_id,
+            type: "session",
             ...(typeof throughSeq === "number" && { through_seq: throughSeq }),
           }
         : null;
@@ -205,12 +207,12 @@ function parseDocumentBlock(value: unknown): DocumentBlock | null {
         stringWithin(block.url, 16_384) &&
         stringWithin(block.body, 1_048_576)
         ? {
-            type: "issue",
-            source: block.source,
-            id: block.id,
-            title: block.title,
-            url: block.url,
             body: block.body,
+            id: block.id,
+            source: block.source,
+            title: block.title,
+            type: "issue",
+            url: block.url,
           }
         : null;
     }
@@ -221,7 +223,7 @@ function parseDocumentBlock(value: unknown): DocumentBlock | null {
 }
 
 function parseAttachment(value: unknown): ComposerDraftAttachment | null {
-  if (!value || typeof value !== "object") {
+  if (value == null || typeof value !== "object") {
     return null;
   }
   const attachment = value as Record<string, unknown>;
@@ -234,7 +236,7 @@ function parseAttachment(value: unknown): ComposerDraftAttachment | null {
 }
 
 function parsePosture(value: unknown): ComposerDraftPosture | null {
-  if (!value || typeof value !== "object") {
+  if (value == null || typeof value !== "object") {
     return null;
   }
   const posture = value as Record<string, unknown>;
@@ -260,21 +262,21 @@ function parsePosture(value: unknown): ComposerDraftPosture | null {
     return null;
   }
   return {
-    provider: posture.provider,
-    model: posture.model,
-    mode: posture.mode as PermissionMode,
-    sandbox: posture.sandbox as Sandbox,
-    worktreeBase: posture.worktreeBase,
-    planMode: posture.planMode,
+    autoScene: posture.autoScene,
     memoryRead: posture.memoryRead as MemoryAccess,
     memoryWrite: posture.memoryWrite as MemoryAccess,
+    mode: posture.mode as PermissionMode,
+    model: posture.model,
+    planMode: posture.planMode,
+    provider: posture.provider,
+    sandbox: posture.sandbox as Sandbox,
     scene: posture.scene,
-    autoScene: posture.autoScene,
+    worktreeBase: posture.worktreeBase,
   };
 }
 
 function parseDraft(value: unknown): ComposerDraft | null {
-  if (!value || typeof value !== "object") {
+  if (value == null || typeof value !== "object") {
     return null;
   }
   const draft = value as Record<string, unknown>;
@@ -286,26 +288,26 @@ function parseDraft(value: unknown): ComposerDraft | null {
     !scope ||
     !posture ||
     !Array.isArray(draft.doc) ||
-    draft.doc.length > MAX_BLOCKS ||
+    draft.doc.length > maxBlocks ||
     !Array.isArray(draft.attachments) ||
-    draft.attachments.length > MAX_ATTACHMENTS ||
+    draft.attachments.length > maxAttachments ||
     typeof draft.updatedAt !== "number" ||
     !Number.isSafeInteger(draft.updatedAt) ||
     draft.updatedAt < 0
   ) {
     return null;
   }
-  const document_ = draft.doc.map(parseDocumentBlock);
+  const documentValue = draft.doc.map(parseDocumentBlock);
   const attachments = draft.attachments.map(parseAttachment);
-  if (document_.includes(null) || attachments.includes(null)) {
+  if (documentValue.includes(null) || attachments.includes(null)) {
     return null;
   }
   return {
-    id: draft.id,
-    scope,
-    doc: document_ as DocumentBlock[],
     attachments: attachments as ComposerDraftAttachment[],
+    doc: documentValue as DocumentBlock[],
+    id: draft.id,
     posture,
+    scope,
     updatedAt: draft.updatedAt,
   };
 }
@@ -327,10 +329,10 @@ function cloneBlock(block: DocumentBlock): DocumentBlock {
 function cloneDraft(draft: ComposerDraft): ComposerDraft {
   return {
     ...draft,
-    scope: { ...draft.scope },
-    doc: draft.doc.map(cloneBlock),
     attachments: draft.attachments.map((attachment) => ({ ...attachment })),
+    doc: draft.doc.map(cloneBlock),
     posture: { ...draft.posture },
+    scope: { ...draft.scope },
   };
 }
 
@@ -341,10 +343,10 @@ export function composerDraftScopeKey(scope: ComposerDraftScope): string {
 }
 
 export function composerDraftIsInvested(
-  document_: readonly DocumentBlock[],
+  documentValue: readonly DocumentBlock[],
   attachments: readonly ComposerDraftAttachment[]
 ): boolean {
-  return document_.length > 0 || attachments.length > 0;
+  return documentValue.length > 0 || attachments.length > 0;
 }
 
 export function updateComposerDraft(
@@ -361,13 +363,13 @@ export function updateComposerDraft(
   const existing = drafts.get(key);
   next.set(key, {
     ...input,
-    id: existing?.id ?? options.createId?.() ?? crypto.randomUUID(),
-    scope: { ...input.scope },
-    doc: input.doc.slice(0, MAX_BLOCKS).map(cloneBlock),
     attachments: input.attachments
-      .slice(0, MAX_ATTACHMENTS)
+      .slice(0, maxAttachments)
       .map((item) => ({ ...item })),
+    doc: input.doc.slice(0, maxBlocks).map(cloneBlock),
+    id: existing?.id ?? options.createId?.() ?? crypto.randomUUID(),
     posture: { ...input.posture },
+    scope: { ...input.scope },
     updatedAt: options.now ?? Date.now(),
   });
   return next;
@@ -383,16 +385,16 @@ export function promoteComposerDraft(
   const toKey = composerDraftScopeKey(to);
   const source = drafts.get(fromKey);
   if (!source) {
-    return { outcome: "missing", drafts: new Map(drafts) };
+    return { drafts: new Map(drafts), outcome: "missing" };
   }
   const destination = drafts.get(toKey);
   if (destination && destination.id !== source.id) {
-    return { outcome: "conflict", drafts: new Map(drafts) };
+    return { drafts: new Map(drafts), outcome: "conflict" };
   }
   const next = new Map(drafts);
   next.delete(fromKey);
   next.set(toKey, cloneDraft({ ...source, scope: { ...to }, updatedAt: now }));
-  return { outcome: "moved", drafts: next };
+  return { drafts: next, outcome: "moved" };
 }
 
 export function loadComposerDrafts(
@@ -404,26 +406,26 @@ export function loadComposerDrafts(
   }
   let raw: string | null;
   try {
-    raw = resolved.getItem(COMPOSER_DRAFT_STORAGE_KEY);
+    raw = resolved.getItem(composerDraftStorageKey);
   } catch {
     return { drafts: new Map(), warning: "unavailable" };
   }
   if (raw === null) {
     return { drafts: new Map(), warning: null };
   }
-  if (raw.length > MAX_RAW_BYTES || serializedBytes(raw) > MAX_RAW_BYTES) {
+  if (raw.length > maxRawBytes || serializedBytes(raw) > maxRawBytes) {
     return { drafts: new Map(), warning: "corrupt" };
   }
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") {
+    if (parsed == null || typeof parsed !== "object") {
       return { drafts: new Map(), warning: "corrupt" };
     }
     const snapshot = parsed as Record<string, unknown>;
     if (
-      snapshot.version !== COMPOSER_DRAFT_VERSION ||
+      snapshot.version !== composerDraftVersion ||
       !Array.isArray(snapshot.drafts) ||
-      snapshot.drafts.length > MAX_DRAFTS
+      snapshot.drafts.length > maxDrafts
     ) {
       return { drafts: new Map(), warning: "corrupt" };
     }
@@ -463,21 +465,21 @@ export function saveComposerDrafts(
     const records = [...drafts.values()]
       .filter((draft) => composerDraftIsInvested(draft.doc, draft.attachments))
       .sort((left, right) => right.updatedAt - left.updatedAt)
-      .slice(0, MAX_DRAFTS)
+      .slice(0, maxDrafts)
       .map(cloneDraft);
     if (records.length === 0 && resolved.removeItem) {
-      resolved.removeItem(COMPOSER_DRAFT_STORAGE_KEY);
+      resolved.removeItem(composerDraftStorageKey);
       return true;
     }
     const snapshot: ComposerDraftSnapshot = {
-      version: COMPOSER_DRAFT_VERSION,
       drafts: records,
+      version: composerDraftVersion,
     };
     const raw = JSON.stringify(snapshot);
-    if (serializedBytes(raw) > MAX_RAW_BYTES) {
+    if (serializedBytes(raw) > maxRawBytes) {
       return false;
     }
-    resolved.setItem(COMPOSER_DRAFT_STORAGE_KEY, raw);
+    resolved.setItem(composerDraftStorageKey, raw);
     return true;
   } catch {
     return false;

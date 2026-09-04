@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import {
   ArrowLeft,
   BrainCircuit,
@@ -29,20 +30,22 @@ import {
   getWorktreeSettings,
   listProjectWorktrees,
   updateWorktreeSettings,
-  type AppshotSettings,
-  type BrowserUseSettings,
-  type ComputerUseSettings,
-  type AppUpdateStatus,
-  type DeviceSyncStatus,
-  type DiagnosticsExportResult,
-  type KeymapEntry,
-  type Project,
-  type ProjectWorktreeMode,
-  type ProviderInfo,
-  type ProviderRuntimeOverride,
-  type SessionImportResult,
-  type WorktreeSettings,
-  type PluginDeveloperStatus,
+} from "../bridge";
+import type {
+  AppshotSettings,
+  BrowserUseSettings,
+  ComputerUseSettings,
+  AppUpdateStatus,
+  DeviceSyncStatus,
+  DiagnosticsExportResult,
+  KeymapEntry,
+  Project,
+  ProjectWorktreeMode,
+  ProviderInfo,
+  ProviderRuntimeOverride,
+  SessionImportResult,
+  WorktreeSettings,
+  PluginDeveloperStatus,
 } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
@@ -102,53 +105,53 @@ type SettingsNavItem = {
   labelKey: StringKey;
 };
 
-const NAV_GROUPS: {
+const navGroups: {
   id: "personal" | "workspace" | "integrations";
   labelKey: StringKey;
   items: SettingsNavItem[];
 }[] = [
   {
     id: "personal",
-    labelKey: "settings.navPersonal",
     items: [
-      { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
-      { id: "import", icon: Download, labelKey: "settings.import" },
-      { id: "profile", icon: UserRound, labelKey: "profile.title" },
-      { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
-      { id: "pets", icon: PawPrint, labelKey: "settings.pets" },
-      { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
-      { id: "usage", icon: ChartNoAxesColumn, labelKey: "usage.title" },
+      { icon: SlidersHorizontal, id: "general", labelKey: "settings.general" },
+      { icon: Download, id: "import", labelKey: "settings.import" },
+      { icon: UserRound, id: "profile", labelKey: "profile.title" },
+      { icon: Palette, id: "appearance", labelKey: "settings.appearance" },
+      { icon: PawPrint, id: "pets", labelKey: "settings.pets" },
+      { icon: Keyboard, id: "keybindings", labelKey: "settings.keybindings" },
+      { icon: ChartNoAxesColumn, id: "usage", labelKey: "usage.title" },
     ],
+    labelKey: "settings.navPersonal",
   },
   {
     id: "workspace",
-    labelKey: "settings.navWorkspace",
     items: [
-      { id: "project", icon: Folder, labelKey: "settings.project" },
-      { id: "worktrees", icon: GitBranch, labelKey: "settings.worktrees" },
-      { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
-      { id: "sync", icon: RefreshCw, labelKey: "settings.sync" },
+      { icon: Folder, id: "project", labelKey: "settings.project" },
+      { icon: GitBranch, id: "worktrees", labelKey: "settings.worktrees" },
+      { icon: BrainCircuit, id: "memory", labelKey: "memory.title" },
+      { icon: RefreshCw, id: "sync", labelKey: "settings.sync" },
     ],
+    labelKey: "settings.navWorkspace",
   },
   {
     id: "integrations",
-    labelKey: "settings.navIntegrations",
     items: [
-      { id: "providers", icon: Package, labelKey: "settings.providers" },
+      { icon: Package, id: "providers", labelKey: "settings.providers" },
       {
-        id: "computer-use",
         icon: MousePointer2,
+        id: "computer-use",
         labelKey: "settings.computerUse",
       },
-      { id: "appshots", icon: ScanText, labelKey: "settings.appshots" },
-      { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
-      { id: "browser", icon: Globe, labelKey: "settings.browser" },
-      { id: "developer", icon: Wrench, labelKey: "settings.developer" },
+      { icon: ScanText, id: "appshots", labelKey: "settings.appshots" },
+      { icon: Globe, id: "browser-use", labelKey: "settings.browserUse" },
+      { icon: Globe, id: "browser", labelKey: "settings.browser" },
+      { icon: Wrench, id: "developer", labelKey: "settings.developer" },
     ],
+    labelKey: "settings.navIntegrations",
   },
 ];
 
-const EMPTY_PROJECTS: Project[] = [];
+const emptyProjects: Project[] = [];
 
 /**
  * Settings as a full-window page: its own nav rail on the left (General, Memory, Keybindings,
@@ -168,7 +171,7 @@ export const SettingsPage = ({
   provider,
   projectPath,
   project,
-  projects = EMPTY_PROJECTS,
+  projects = emptyProjects,
   onProjectWorktreeMode,
   onProjectRename = async () => {},
   onProjectIcon = async () => {},
@@ -216,13 +219,17 @@ export const SettingsPage = ({
   devtoolsOpener,
   diagnosticsExporter,
 }: {
-  /** Matches the persisted width of the main session rail. */
+  /**
+  Matches the persisted width of the main session rail.
+  */
   readonly sidebarWidth?: number;
   readonly bindings: KeymapEntry[];
   readonly capturing: string | null;
   readonly onCapture: (action: string) => void;
   readonly onReset?: (action: string) => void;
-  /** Restore every shortcut to the shipped default — the header's "Restore defaults" on that tab. */
+  /**
+  Restore every shortcut to the shipped default — the header's "Restore defaults" on that tab.
+  */
   readonly onResetAll?: () => void;
   readonly providers: ProviderInfo[];
   readonly provider: string;
@@ -234,7 +241,10 @@ export const SettingsPage = ({
     mode: ProjectWorktreeMode | null
   ) => Promise<void>;
   readonly onProjectRename?: (path: string, name: string) => Promise<void>;
-  readonly onProjectIcon?: (path: string, source: string | null) => Promise<void>;
+  readonly onProjectIcon?: (
+    path: string,
+    source: string | null
+  ) => Promise<void>;
   readonly onProjectAgentDefaults?: (
     path: string,
     provider: string | null,
@@ -266,10 +276,16 @@ export const SettingsPage = ({
   readonly updateStatusLoader?: () => Promise<AppUpdateStatus>;
   readonly updateCheckStarter?: () => Promise<AppUpdateStatus>;
   readonly computerUseSettingsLoader?: () => Promise<ComputerUseSettings>;
-  readonly computerUseSelectionSaver?: (backend: string) => Promise<ComputerUseSettings>;
+  readonly computerUseSelectionSaver?: (
+    backend: string
+  ) => Promise<ComputerUseSettings>;
   readonly browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
-  readonly browserUseSelectionSaver?: (backend: string) => Promise<BrowserUseSettings>;
-  readonly browserUseAccessSaver?: (enabled: boolean) => Promise<BrowserUseSettings>;
+  readonly browserUseSelectionSaver?: (
+    backend: string
+  ) => Promise<BrowserUseSettings>;
+  readonly browserUseAccessSaver?: (
+    isEnabled: boolean
+  ) => Promise<BrowserUseSettings>;
   readonly appshotSettingsLoader?: () => Promise<AppshotSettings>;
   readonly appshotSettingsSaver?: (
     patch: Partial<
@@ -287,18 +303,20 @@ export const SettingsPage = ({
   readonly providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
   readonly providerEnabledSaver?: (
     provider: string,
-    enabled: boolean
+    isEnabled: boolean
   ) => Promise<ProviderInfo[]>;
   readonly providerConfigurationSaver?: (
     provider: string,
     configuration: ProviderRuntimeOverride
   ) => Promise<ProviderInfo[]>;
   readonly deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
-  readonly deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
+  readonly deviceSyncEnabledSaver?: (
+    isEnabled: boolean
+  ) => Promise<DeviceSyncStatus>;
   readonly deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
   readonly pluginDeveloperStatusLoader?: () => Promise<PluginDeveloperStatus>;
   readonly pluginDeveloperModeSaver?: (
-    enabled: boolean
+    isEnabled: boolean
   ) => Promise<PluginDeveloperStatus>;
   readonly pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
   readonly devtoolsOpener?: () => Promise<void>;
@@ -307,12 +325,8 @@ export const SettingsPage = ({
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const { setPreference: setLanguage } = useLanguage();
-  const providerNames = useMemo(
-    () =>
-      Object.fromEntries(
-        providers.map((candidate) => [candidate.id, candidate.display_name])
-      ),
-    [providers]
+  const providerNames = Object.fromEntries(
+    providers.map((candidate) => [candidate.id, candidate.display_name])
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [projectNavigationLocked, setProjectNavigationLocked] = useState(false);
@@ -372,7 +386,7 @@ export const SettingsPage = ({
           className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pt-2 pb-6"
         >
           <div className="space-y-6">
-            {NAV_GROUPS.map((group) => {
+            {navGroups.map((group) => {
               const items = group.items
                 .filter(({ id }) => memoryEnabled || id !== "memory")
                 .filter(({ id }) => deviceSyncEnabled || id !== "sync");
@@ -480,11 +494,13 @@ export const SettingsPage = ({
               </Page>
             )}
 
-            {tab === "sync" && deviceSyncEnabled ? <DeviceSyncSettingsPage
+            {tab === "sync" && deviceSyncEnabled ? (
+              <DeviceSyncSettingsPage
                 loader={deviceSyncStatusLoader}
                 enabledSaver={deviceSyncEnabledSaver}
                 syncStarter={deviceSyncStarter}
-              /> : null}
+              />
+            ) : null}
 
             {tab === "keybindings" && (
               <KeybindingsSettingsPage
@@ -524,11 +540,13 @@ export const SettingsPage = ({
               />
             )}
 
-            {tab === "memory" && memoryEnabled ? <MemorySettingsPage
+            {tab === "memory" && memoryEnabled ? (
+              <MemorySettingsPage
                 projectPath={projectPath}
                 projects={projects}
                 onOpenSession={onOpenSession}
-              /> : null}
+              />
+            ) : null}
 
             {tab === "usage" && (
               <UsagePanel
@@ -592,4 +610,4 @@ export const SettingsPage = ({
       </main>
     </div>
   );
-}
+};

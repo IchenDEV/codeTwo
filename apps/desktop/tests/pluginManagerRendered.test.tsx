@@ -419,27 +419,31 @@ describe("PluginManagerPage", () => {
       "composer.above",
       "composer.toolbar",
     ];
-    const contributions = slots.map((slot, order) => ({
-      id: `action-${order}`,
-      pluginId: "review-tools",
-      pluginName: "Review Tools",
-      slot,
-      label: `Action ${order}`,
-      description: `Action ${order} description`,
-      command: "review.run",
-      input: null,
-      order,
-    }));
+    const contributions = slots.map((slot, order) => {
+      return {
+        id: `action-${order}`,
+        pluginId: "review-tools",
+        pluginName: "Review Tools",
+        slot,
+        label: `Action ${order}`,
+        description: `Action ${order} description`,
+        command: "review.run",
+        input: null,
+        order,
+      };
+    });
     const view = mount(
       <div>
-        {slots.map((slot, order) => (
-          <PluginUiSlot
-            key={slot}
-            slot={slot}
-            contributions={[contributions[order]]}
-            onInvoke={async (value) => invoked.push(value)}
-          />
-        ))}
+        {slots.map((slot, order) => {
+          return (
+            <PluginUiSlot
+              key={slot}
+              slot={slot}
+              contributions={[contributions[order]]}
+              onInvoke={async (value) => invoked.push(value)}
+            />
+          );
+        })}
       </div>
     );
     await flush();
@@ -714,11 +718,11 @@ describe("PluginManagerPage", () => {
 
   test("maps failed plugin and trusted bundle states independently", async () => {
     activateDom();
-    const trustedPlugins = plugins.map((plugin) =>
-      plugin.id === "review-tools"
+    const trustedPlugins = plugins.map((plugin) => {
+      return plugin.id === "review-tools"
         ? { ...plugin, bundle: { ...plugin.bundle, trusted: true } }
-        : plugin
-    );
+        : plugin;
+    });
     const { view } = renderManager({ plugins: trustedPlugins });
     await flush();
 

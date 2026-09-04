@@ -36,7 +36,7 @@ function envelope(revision = 3) {
       gridStep: 5,
       viewModeEnabled: false,
     },
-    assetRefs: [],
+    assetReferences: [],
   });
 }
 
@@ -49,14 +49,16 @@ function runtime(events: string[], handleRef: any) {
     getAssets: () => [],
     onAsset: () => {},
     onCanvasActivity: () => {},
-    saveDraft: async () => ({
-      id: "canvas",
-      revision: 3,
-      title: "Canvas",
-      theme: "light",
-      envelope: { scene: {} },
-      assets: [],
-    }),
+    saveDraft: async () => {
+      return {
+        id: "canvas",
+        revision: 3,
+        title: "Canvas",
+        theme: "light",
+        envelope: { scene: {} },
+        assets: [],
+      };
+    },
     freezeDraft: async () => ({}),
     onCanvasRemoved: () => events.push("removed"),
     onCanvasRestored: () => events.push("restored"),

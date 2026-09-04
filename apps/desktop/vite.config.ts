@@ -5,7 +5,14 @@ import tailwindcss from "@tailwindcss/vite";
 
 // Electrobun loads this output through `views://`, so asset URLs must stay bundle-relative.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [["babel-plugin-react-compiler", { target: "18" }]],
+      },
+    }),
+    tailwindcss(),
+  ],
   base: "./",
   clearScreen: false,
   resolve: {

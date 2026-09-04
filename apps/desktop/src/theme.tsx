@@ -1,18 +1,11 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
   applyAppearanceSettings,
   setAppearanceSettings,
   useAppearanceSettings,
-  type ColorScheme,
-  type ThemePreference,
 } from "./appearance";
+import type { ColorScheme, ThemePreference } from "./appearance";
 
 export type { ColorScheme, ThemePreference } from "./appearance";
 
@@ -24,9 +17,13 @@ function systemScheme(): ColorScheme {
 }
 
 interface ThemeValue {
-  /** The user's choice, which is what a settings control should show. */
+  /**
+  The user's choice, which is what a settings control should show.
+  */
   preference: ThemePreference;
-  /** The resolved scheme, which is what components should render against. */
+  /**
+  The resolved scheme, which is what components should render against.
+  */
   scheme: ColorScheme;
   setPreference: (p: ThemePreference) => void;
 }
@@ -44,14 +41,20 @@ const ThemeContext = createContext<ThemeValue>({
  * at sunset while the app is open. An explicit light/dark must *stop* listening, or the user's
  * choice would be silently overridden the next time the OS changed its mind.
  */
-export const ThemeProvider = ({ children }: { readonly children: ReactNode }) => {
+export const ThemeProvider = ({
+  children,
+}: {
+  readonly children: ReactNode;
+}) => {
   const appearance = useAppearanceSettings();
   const preference = appearance.preference;
   const [system, setSystem] = useState<ColorScheme>(systemScheme);
 
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!mq) return;
+    if (!mq) {
+      return;
+    }
     const onChange = (e: MediaQueryListEvent) =>
       setSystem(e.matches ? "dark" : "light");
     mq.addEventListener("change", onChange);
@@ -79,22 +82,21 @@ export const ThemeProvider = ({ children }: { readonly children: ReactNode }) =>
     applyAppearanceSettings(document.documentElement, appearance, scheme);
   }, [appearance, scheme]);
 
-  const setPreference = useCallback((p: ThemePreference) => {
+  const setPreference = (p: ThemePreference) => {
     setAppearanceSettings({ preference: p });
-  }, []);
+  };
 
   return (
     <ThemeContext.Provider value={{ preference, scheme, setPreference }}>
       {children}
     </ThemeContext.Provider>
   );
-}
+};
 
 export function useTheme(): ThemeValue {
   return useContext(ThemeContext);
 }
 
-/** The resolved scheme, for components that only need to know what to paint. */
 export function useColorScheme(): ColorScheme {
   return useContext(ThemeContext).scheme;
 }

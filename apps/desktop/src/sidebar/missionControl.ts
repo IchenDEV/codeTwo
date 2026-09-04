@@ -25,11 +25,6 @@ export interface MissionRow {
   contextPct: number | null;
 }
 
-/**
- * One session's mission state, derived exactly the way `SessionRail.sessionRow` does it:
- * awaiting-input and failed come from the core activity projection; running additionally
- * respects the frontend's in-flight set so a just-started turn shows immediately.
- */
 export function missionState(
   session: Pick<SessionInfo, "id" | "activity">,
   runningSessions: ReadonlySet<string>
@@ -47,9 +42,6 @@ export function missionState(
   return "idle";
 }
 
-/**
-Attention rows for the rail badge: sessions waiting on input or sitting on a failure.
-*/
 export function needsMeCount(
   sessions: readonly Pick<SessionInfo, "id" | "activity">[]
 ): number {
@@ -59,10 +51,6 @@ export function needsMeCount(
   }).length;
 }
 
-/**
- * Every session as a mission row, ordered by urgency: what needs me first, then what's still
- * working, then the idle rest — stable within each group, so rows keep their list order.
- */
 export function missionRows(
   sessions: readonly SessionInfo[],
   runningSessions: ReadonlySet<string>,
@@ -73,11 +61,11 @@ export function missionRows(
     const state = missionState(session, runningSessions);
     const window = contextWindows[session.id] ?? null;
     return {
-      session,
-      state,
+      contextPct: window ? contextWindowPercentage(window) : null,
       needsMe: state === "awaiting_input" || state === "failed",
       scene: sceneBySession.get(session.id) ?? null,
-      contextPct: window ? contextWindowPercentage(window) : null,
+      session,
+      state,
     };
   });
   const rank = (row: MissionRow) =>

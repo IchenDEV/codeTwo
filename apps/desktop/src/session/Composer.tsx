@@ -1,12 +1,5 @@
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type MutableRefObject,
-  type ReactNode,
-} from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { MutableRefObject, ReactNode } from "react";
 import {
   ArrowUp,
   BrainCircuit,
@@ -37,31 +30,26 @@ import type { SessionConfig } from "./config";
 import type { SceneInfo } from "./scene";
 import { briefOfferVisible } from "../editor/slotCard";
 import { SceneChip } from "./SceneChip";
-import { SESSION_MODES, sessionMode } from "./mode";
+import { sessionModes, sessionMode } from "./mode";
 import { worktreeGatingReason } from "./sessionEvents";
-import {
-  familyOf,
-  groupModels,
-  pickVariant,
-  variantOf,
-  type Effort,
-} from "./models";
+import { familyOf, groupModels, pickVariant, variantOf } from "./models";
+import type { Effort } from "./models";
 import { useProviderModelFavorites } from "./modelFavorites";
 import { useProviderModelPreferences } from "./modelPreferences";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
-import {
-  fallbackProviders,
-  providerDisplayName,
-  type ConfigOptionInfo,
-  type AppshotCapture,
-  type GoalCapabilityInfo,
-  type GoalSnapshot,
-  type ModelChoice,
+import { fallbackProviders, providerDisplayName } from "../bridge";
+import type {
+  ConfigOptionInfo,
+  AppshotCapture,
+  GoalCapabilityInfo,
+  GoalSnapshot,
+  ModelChoice,
 } from "../bridge";
 import type { ContextWindow } from "./contextWindow";
 // Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
-import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
+import { Statusline } from "./Statusline.tsx";
+import type { StatuslineUsage } from "./Statusline.tsx";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ControlChip as Chip } from "@/components/ui/control-chip";
@@ -92,43 +80,69 @@ import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
 interface ComposerProps {
-  /** The document editor itself. The composer only owns the frame around it. */
+  /**
+  The document editor itself. The composer only owns the frame around it.
+  */
   readonly children: ReactNode;
   readonly config: SessionConfig;
-  /** The checkout bar under the card: execution location on the left, source control on the right. */
+  /**
+  The checkout bar under the card: execution location on the left, source control on the right.
+  */
   readonly checkout?: {
     project: string | null;
     branch: string | null;
     dirty: number;
     onOpen: () => void;
   } | null;
-  /** Empty-thread centre stage: the card narrows to the reference's hero measure. */
+  /**
+  Empty-thread centre stage: the card narrows to the reference's hero measure.
+  */
   readonly hero?: boolean;
-  /** Full-page authoring: the document takes the whole column and the transcript steps aside. */
+  /**
+  Full-page authoring: the document takes the whole column and the transcript steps aside.
+  */
   readonly docMode: boolean;
-  readonly onDocMode: (v: boolean) => void;
-  /** Height of the document area in compact mode, in px — dragged by the grip, persisted. */
+  readonly onDocMode: (isEnabled: boolean) => void;
+  /**
+  Height of the document area in compact mode, in px — dragged by the grip, persisted.
+  */
   readonly height: number;
   readonly onHeight: (n: number) => void;
-  /** The column the composer lives in; bounds the drag so it can't swallow the transcript. */
+  /**
+  The column the composer lives in; bounds the drag so it can't swallow the transcript.
+  */
   readonly boundsRef: React.MutableRefObject<HTMLElement | null>;
-  /** What the agent reported it can run. Empty until a session exists, or if it reports none. */
+  /**
+  What the agent reported it can run. Empty until a session exists, or if it reports none.
+  */
   readonly models: ModelChoice[];
   readonly currentModel: string | null;
-  /** The current session's authoritative provider context usage/capacity, if reported. */
+  /**
+  The current session's authoritative provider context usage/capacity, if reported.
+  */
   readonly contextWindow: ContextWindow | null;
-  /** Per-session cost/burn for the statusline; null until the core's usage command exists. */
+  /**
+  Per-session cost/burn for the statusline; null until the core's usage command exists.
+  */
   readonly usage?: StatuslineUsage | null;
-  /** Present only after the live provider session advertises its native `/compact` command. */
+  /**
+  Present only after the live provider session advertises its native `/compact` command.
+  */
   readonly onCompactContext?: () => void;
-  /** The adapter's own pick at session/new — worth a "Default" badge in the menus. */
+  /**
+  The adapter's own pick at session/new — worth a "Default" badge in the menus.
+  */
   readonly defaultModel: string | null;
   readonly onModel: (id: string) => void;
-  /** Selectors the agent reported as session config options — model and reasoning effort. */
+  /**
+  Selectors the agent reported as session config options — model and reasoning effort.
+  */
   readonly configOptions: ConfigOptionInfo[];
   readonly onConfigOption: (configId: string, value: string) => void;
   readonly running: boolean;
-  /** Session summary is visible while its transcript detail is still loading; sending is gated. */
+  /**
+  Session summary is visible while its transcript detail is still loading; sending is gated.
+  */
   readonly loading: boolean;
   readonly docEmpty: boolean;
   readonly appshots?: AppshotCapture[];
@@ -153,29 +167,41 @@ interface ComposerProps {
   readonly onNewSkill: () => void;
   readonly canvasEnabled: boolean;
   readonly onInsertCanvas: () => void;
-  /** Component-policy gate; false means the voice plugin may already be unloaded. */
+  /**
+  Component-policy gate; false means the voice plugin may already be unloaded.
+  */
   readonly voiceEnabled: boolean;
   readonly onVoiceText: (text: string) => void;
-  /** R11: present only when the active scene has a brief — voice then structures into it. */
+  /**
+  R11: present only when the active scene has a brief — voice then structures into it.
+  */
   readonly onVoiceTranscript?: (full: string) => Promise<void>;
   readonly runHint: string;
   readonly skillHint: string;
   readonly filesHint: string;
-  /** Host-rendered declarative plugin actions in the compact control row. */
+  /**
+  Host-rendered declarative plugin actions in the compact control row.
+  */
   readonly pluginActions?: ReactNode;
-  /** Keys the per-session brief-offer dismissal; null while no session exists yet. */
+  /**
+  Keys the per-session brief-offer dismissal; null while no session exists yet.
+  */
   readonly sessionId?: string | null;
-  /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
+  /**
+  Editor-owned seam that inserts the active scene's brief as a slot card (R5).
+  */
   readonly insertBriefRef?: MutableRefObject<
     ((scene: SceneInfo, values?: Record<string, string>) => void) | null
   >;
 }
 
 function displayGitRef(reference: string | null | undefined): string | null {
-  if (!reference) return null;
+  if (!reference) {
+    return null;
+  }
   return reference
-    .replace(/^refs\/heads\//, "")
-    .replace(/^refs\/remotes\//, "");
+    .replace(/^refs\/heads\//u, "")
+    .replace(/^refs\/remotes\//u, "");
 }
 
 /**
@@ -200,7 +226,7 @@ export const CheckoutBar = ({
     ? (config.activeWorktreeBaseline?.kind ?? null)
     : config.worktreeBase;
   const selected =
-    selectedKind == null
+    selectedKind === null || selectedKind === undefined
       ? null
       : config.worktreeOptions.find((option) => option.kind === selectedKind);
   const selectedRef = displayGitRef(
@@ -210,7 +236,7 @@ export const CheckoutBar = ({
   );
   const modeLabel = config.activeWorktreeUnknown
     ? t("checkout.legacy")
-    : selectedKind == null
+    : selectedKind === null || selectedKind === undefined
       ? t("checkout.project")
       : config.hasSession
         ? t("checkout.sessionWorktree")
@@ -285,7 +311,9 @@ export const CheckoutBar = ({
                 disabled
                 label={
                   selectedRef ??
-                  (selectedKind == null ? projectLabel : modeLabel)
+                  (selectedKind === null || selectedKind === undefined
+                    ? projectLabel
+                    : modeLabel)
                 }
                 accessibilityContext={modeLabel}
                 meta={t("checkout.currentBadge")}
@@ -303,11 +331,15 @@ export const CheckoutBar = ({
           ) : (
             <>
               <SelectableRow
-                selected={config.worktreeBase == null}
+                selected={
+                  config.worktreeBase === null ||
+                  config.worktreeBase === undefined
+                }
                 label={projectLabel}
                 accessibilityContext={t("checkout.project")}
                 meta={
-                  config.worktreeBase == null
+                  config.worktreeBase === null ||
+                  config.worktreeBase === undefined
                     ? t("checkout.currentBadge")
                     : t("checkout.projectBadge")
                 }
@@ -318,12 +350,13 @@ export const CheckoutBar = ({
                 }}
               />
 
-              {WORKTREE_BASELINES.map((kind) => {
+              {worktreeBaselines.map((kind) => {
                 const option = config.worktreeOptions.find(
                   (candidate) => candidate.kind === kind
                 );
-                const unavailable =
-                  !config.worktreeOptionsLoading && option?.resolved == null;
+                const isUnavailable =
+                  !config.worktreeOptionsLoading &&
+                  (option?.resolved === null || option?.resolved === undefined);
                 const detail = config.worktreeOptionsLoading
                   ? t("worktree.resolving")
                   : (option?.resolved?.display ??
@@ -334,7 +367,7 @@ export const CheckoutBar = ({
                   <SelectableRow
                     key={kind}
                     selected={config.worktreeBase === kind}
-                    disabled={unavailable}
+                    disabled={isUnavailable}
                     label={
                       displayGitRef(option?.resolved?.ref) ??
                       (kind === "current"
@@ -347,7 +380,7 @@ export const CheckoutBar = ({
                         : t("checkout.originRef")
                     }
                     meta={
-                      unavailable
+                      isUnavailable
                         ? t("checkout.unavailableBadge")
                         : config.worktreeBase === kind
                           ? t("checkout.currentBadge")
@@ -366,7 +399,8 @@ export const CheckoutBar = ({
         </PopoverContent>
       </Popover>
 
-      {checkout.branch ? <Button
+      {checkout.branch ? (
+        <Button
           type="button"
           variant="ghost"
           size="compact"
@@ -388,21 +422,24 @@ export const CheckoutBar = ({
               {checkout.dirty}
             </span>
           )}
-        </Button> : null}
+        </Button>
+      ) : null}
     </div>
   );
-}
+};
 
-/** Muted section header inside a picker menu — "Model", "Reasoning". */
-const MenuSection = ({ children }: { readonly children: ReactNode }) => {
-  return (
-    <p className="text-metadata text-muted-foreground shrink-0 px-2.5 pt-1.5 pb-1">
-      {children}
-    </p>
-  );
-}
+/**
+Muted section header inside a picker menu — "Model", "Reasoning".
+*/
+const MenuSection = ({ children }: { readonly children: ReactNode }) => (
+  <p className="text-metadata text-muted-foreground shrink-0 px-2.5 pt-1.5 pb-1">
+    {children}
+  </p>
+);
 
-/** The small "Default" pill on the adapter's own pick. */
+/**
+The small "Default" pill on the adapter's own pick.
+*/
 const DefaultBadge = () => {
   const t = useT();
   return (
@@ -410,9 +447,11 @@ const DefaultBadge = () => {
       {t("composer.default")}
     </Badge>
   );
-}
+};
 
-/** One row of a picker menu, normalized so the two data sources below render identically. */
+/**
+One row of a picker menu, normalized so the two data sources below render identically.
+*/
 interface PickerRow {
   key: string;
   label: string;
@@ -476,7 +515,7 @@ const ModelPickerRow = ({
       </Button>
     </div>
   );
-}
+};
 
 /**
  * One chip, one question.
@@ -501,7 +540,9 @@ export const SessionModePicker = ({
   const active = sessionMode(mode, sandbox);
 
   useEffect(() => {
-    if (disabled) setOpen(false);
+    if (disabled) {
+      setOpen(false);
+    }
   }, [disabled]);
 
   return (
@@ -530,7 +571,7 @@ export const SessionModePicker = ({
       />
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.mode")}</MenuSection>
-        {SESSION_MODES.map((m) => (
+        {sessionModes.map((m) => (
           <SelectableRow
             key={m.id}
             selected={m.id === active}
@@ -546,34 +587,36 @@ export const SessionModePicker = ({
       </PopoverContent>
     </Popover>
   );
-}
+};
 
-export const ModePicker = ({ config }: { readonly config: SessionConfig }) => {
-  return (
-    <SessionModePicker
-      mode={config.mode}
-      sandbox={config.sandbox}
-      disabled={config.modeChangeDisabled}
-      onMode={config.onSessionMode}
-    />
-  );
-}
+export const ModePicker = ({ config }: { readonly config: SessionConfig }) => (
+  <SessionModePicker
+    mode={config.mode}
+    sandbox={config.sandbox}
+    disabled={config.modeChangeDisabled}
+    onMode={config.onSessionMode}
+  />
+);
 
-const MEMORY_PRESETS = [
+const memoryPresets = [
   { id: "standard", read: "inherit", write: "inherit" },
   { id: "read_only", read: "allow", write: "deny" },
   { id: "private", read: "deny", write: "deny" },
   { id: "learn_only", read: "deny", write: "allow" },
 ] as const;
 
-export const MemoryPicker = ({ config }: { readonly config: SessionConfig }) => {
+export const MemoryPicker = ({
+  config,
+}: {
+  readonly config: SessionConfig;
+}) => {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active =
-    MEMORY_PRESETS.find(
+    memoryPresets.find(
       (preset) =>
         preset.read === config.memoryRead && preset.write === config.memoryWrite
-    ) ?? MEMORY_PRESETS[0];
+    ) ?? memoryPresets[0];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -593,7 +636,7 @@ export const MemoryPicker = ({ config }: { readonly config: SessionConfig }) => 
       />
       <PopoverContent align="start" side="top" className="w-72 p-1.5">
         <MenuSection>{t("config.memory")}</MenuSection>
-        {MEMORY_PRESETS.map((preset) => (
+        {memoryPresets.map((preset) => (
           <SelectableRow
             key={preset.id}
             selected={preset.id === active.id}
@@ -611,9 +654,11 @@ export const MemoryPicker = ({ config }: { readonly config: SessionConfig }) => 
       </PopoverContent>
     </Popover>
   );
-}
+};
 
-/** A provider-reported collaboration selector. Plan is never synthesized into prompt text. */
+/**
+A provider-reported collaboration selector. Plan is never synthesized into prompt text.
+*/
 export const CollaborationModePicker = ({
   options,
   onChange,
@@ -627,7 +672,9 @@ export const CollaborationModePicker = ({
       candidate.category === "collaboration_mode" ||
       candidate.id === "collaboration_mode"
   );
-  if (!option || option.choices.length < 2) return null;
+  if (!option || option.choices.length < 2) {
+    return null;
+  }
   const current = option.choices.find((choice) => choice.id === option.current);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -659,7 +706,7 @@ export const CollaborationModePicker = ({
       </PopoverContent>
     </Popover>
   );
-}
+};
 
 export const GoalPicker = ({
   capability,
@@ -677,17 +724,21 @@ export const GoalPicker = ({
   const [open, setOpen] = useState(false);
   const [objective, setObjective] = useState("");
   const [pending, setPending] = useState(false);
-  if (!capability) return null;
+  if (!capability) {
+    return null;
+  }
   const run = async (action: "set" | "pause" | "resume" | "clear") => {
     setPending(true);
     try {
       await onGoal(action, action === "set" ? objective.trim() : undefined);
-      if (action === "set") setObjective("");
+      if (action === "set") {
+        setObjective("");
+      }
     } finally {
       setPending(false);
     }
   };
-  const can = (action: string) => capability.actions.includes(action);
+  const isCan = (action: string) => capability.actions.includes(action);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -718,7 +769,7 @@ export const GoalPicker = ({
               </p>
             </div>
             <div className="flex gap-1.5">
-              {goal.status === "paused" && can("resume") ? (
+              {goal.status === "paused" && isCan("resume") ? (
                 <Button
                   size="sm"
                   disabled={pending}
@@ -726,7 +777,7 @@ export const GoalPicker = ({
                 >
                   {t("goal.resume")}
                 </Button>
-              ) : can("pause") ? (
+              ) : isCan("pause") ? (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -736,7 +787,7 @@ export const GoalPicker = ({
                   {t("goal.pause")}
                 </Button>
               ) : null}
-              {can("clear") ? (
+              {isCan("clear") ? (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -748,12 +799,14 @@ export const GoalPicker = ({
               ) : null}
             </div>
           </div>
-        ) : can("set") ? (
+        ) : isCan("set") ? (
           <form
             className="space-y-2"
             onSubmit={(event) => {
               event.preventDefault();
-              if (objective.trim()) void run("set");
+              if (objective.trim()) {
+                void run("set");
+              }
             }}
           >
             <Input
@@ -774,12 +827,18 @@ export const GoalPicker = ({
       </PopoverContent>
     </Popover>
   );
-}
+};
 
-const WORKTREE_BASELINES = ["current", "origin_default"] as const;
+const worktreeBaselines = ["current", "origin_default"] as const;
 
-/** Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit. */
-export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) => {
+/**
+Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit.
+*/
+export const WorktreePicker = ({
+  config,
+}: {
+  readonly config: SessionConfig;
+}) => {
   const t = useT();
   const [open, setOpen] = useState(false);
   // No git repository, no picker: every baseline is unavailable, so the trigger greys out with
@@ -793,26 +852,30 @@ export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) =
   useEffect(() => {
     // A project default (or a leftover draft choice) may still name a baseline; snap it back to
     // Off so the disabled trigger and the state creation would use never disagree.
-    if (gatingReason !== null && config.worktreeBase !== null)
+    if (gatingReason !== null && config.worktreeBase !== null) {
       config.onWorktreeBase(null);
+    }
   }, [gatingReason, config.worktreeBase, config.onWorktreeBase]);
   const selectedKind = config.hasSession
     ? (config.activeWorktreeBaseline?.kind ?? null)
     : config.worktreeBase;
   const selected =
-    selectedKind == null
+    selectedKind === null || selectedKind === undefined
       ? null
       : config.worktreeOptions.find((option) => option.kind === selectedKind);
-  const selectedUnavailable =
+  const isSelectedUnavailable =
     !config.hasSession &&
-    selectedKind != null &&
+    selectedKind !== null &&
+    selectedKind !== undefined &&
     !config.worktreeOptionsLoading &&
-    selected?.resolved == null;
+    (selected?.resolved === null || selected?.resolved === undefined);
   const compactLabel = config.activeWorktreeUnknown
     ? t("worktree.legacyUnknown")
     : config.hasSession && config.activeWorktreeBaseline
       ? config.activeWorktreeBaseline.display
-      : selectedKind == null || gatingReason !== null
+      : selectedKind === null ||
+          selectedKind === undefined ||
+          gatingReason !== null
         ? t("worktree.off")
         : t(`worktree.${selectedKind}` as "worktree.current");
 
@@ -822,7 +885,7 @@ export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) =
         render={
           <Chip
             tone={
-              selectedUnavailable && gatingReason === null
+              isSelectedUnavailable && gatingReason === null
                 ? "warning"
                 : undefined
             }
@@ -831,8 +894,9 @@ export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) =
             aria-expanded={open}
             disabled={gatingReason !== null}
             className={cn(
-              selectedKind != null &&
-                !selectedUnavailable &&
+              selectedKind !== null &&
+                selectedKind !== undefined &&
+                !isSelectedUnavailable &&
                 "text-primary hover:text-primary",
               "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             )}
@@ -852,7 +916,7 @@ export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) =
               label={
                 config.activeWorktreeUnknown
                   ? t("worktree.legacyUnknown")
-                  : selectedKind == null
+                  : selectedKind === null || selectedKind === undefined
                     ? t("worktree.off")
                     : t(`worktree.${selectedKind}` as "worktree.current")
               }
@@ -872,7 +936,10 @@ export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) =
         ) : (
           <>
             <SelectableRow
-              selected={config.worktreeBase == null}
+              selected={
+                config.worktreeBase === null ||
+                config.worktreeBase === undefined
+              }
               label={t("worktree.off")}
               description={t("worktree.offHint")}
               onSelect={() => {
@@ -880,12 +947,13 @@ export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) =
                 setOpen(false);
               }}
             />
-            {WORKTREE_BASELINES.map((kind) => {
+            {worktreeBaselines.map((kind) => {
               const option = config.worktreeOptions.find(
                 (candidate) => candidate.kind === kind
               );
-              const unavailable =
-                !config.worktreeOptionsLoading && option?.resolved == null;
+              const isUnavailable =
+                !config.worktreeOptionsLoading &&
+                (option?.resolved === null || option?.resolved === undefined);
               const detail = config.worktreeOptionsLoading
                 ? t("worktree.resolving")
                 : option?.resolved
@@ -897,7 +965,7 @@ export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) =
                   selected={config.worktreeBase === kind}
                   label={t(`worktree.${kind}` as "worktree.current")}
                   description={detail}
-                  disabled={unavailable}
+                  disabled={isUnavailable}
                   onSelect={() => {
                     config.onWorktreeBase(kind);
                     setOpen(false);
@@ -913,9 +981,13 @@ export const WorktreePicker = ({ config }: { readonly config: SessionConfig }) =
       </PopoverContent>
     </Popover>
   );
-}
+};
 
-export const ProviderPicker = ({ config }: { readonly config: SessionConfig }) => {
+export const ProviderPicker = ({
+  config,
+}: {
+  readonly config: SessionConfig;
+}) => {
   const t = useT();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -930,7 +1002,7 @@ export const ProviderPicker = ({ config }: { readonly config: SessionConfig }) =
   const active = providers.find((p) => p.id === config.provider);
   const activeLabel =
     active?.display_name ?? providerDisplayName(config.provider);
-  const registryReady = config.providersStatus === "ready";
+  const isRegistryReady = config.providersStatus === "ready";
 
   useEffect(() => {
     const openProviderPicker = () => {
@@ -959,10 +1031,12 @@ export const ProviderPicker = ({ config }: { readonly config: SessionConfig }) =
             aria-label={`${t("config.provider")}: ${activeLabel}`}
             aria-busy={config.providersStatus === "loading"}
           >
-            {registryReady && active && !active.available ? <span
+            {isRegistryReady && active && !active.available ? (
+              <span
                 className="bg-warning size-1.5 shrink-0 rounded-full"
                 title={t("composer.cliNotFound")}
-              /> : null}
+              />
+            ) : null}
             <span className="text-foreground/80 max-w-40 truncate">
               {activeLabel}
             </span>
@@ -973,12 +1047,9 @@ export const ProviderPicker = ({ config }: { readonly config: SessionConfig }) =
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.provider")}</MenuSection>
         {config.providersStatus === "loading" && (
-          <p
-            role="status"
-            className="text-callout text-muted-foreground px-2.5 pb-2"
-          >
+          <output className="text-callout text-muted-foreground px-2.5 pb-2">
             {t("config.providersLoading")}
-          </p>
+          </output>
         )}
         {config.providersStatus === "error" && (
           <div className="rounded-control bg-muted/60 px-module-inset text-callout mb-1 flex items-center gap-2 py-2">
@@ -1004,7 +1075,7 @@ export const ProviderPicker = ({ config }: { readonly config: SessionConfig }) =
             // The dot says installed; the line under it says what's missing, so the list itself
             // answers "why can't I use that one?" without a paragraph of warning text.
             description={
-              registryReady && !p.available
+              isRegistryReady && !p.available
                 ? p.enabled === false
                   ? t("settings.providerDisabled")
                   : p.needs_node
@@ -1017,7 +1088,7 @@ export const ProviderPicker = ({ config }: { readonly config: SessionConfig }) =
                 <span
                   className={cn(
                     "size-1.5 shrink-0 rounded-full",
-                    registryReady && p.available ? "bg-success" : "bg-border"
+                    isRegistryReady && p.available ? "bg-success" : "bg-border"
                   )}
                 />
                 {/* The brand mark; dimmed when the CLI isn't installed, like the row's text. */}
@@ -1025,12 +1096,12 @@ export const ProviderPicker = ({ config }: { readonly config: SessionConfig }) =
                   provider={p.id}
                   className={cn(
                     "size-3.5 shrink-0",
-                    registryReady && !p.available && "opacity-40"
+                    isRegistryReady && !p.available && "opacity-40"
                   )}
                 />
               </>
             }
-            disabled={registryReady ? !p.available : null}
+            disabled={isRegistryReady ? !p.available : undefined}
             onSelect={() => {
               config.onProvider(p.id);
               setOpen(false);
@@ -1040,7 +1111,7 @@ export const ProviderPicker = ({ config }: { readonly config: SessionConfig }) =
       </PopoverContent>
     </Popover>
   );
-}
+};
 
 /**
  * The model this turn will run on: a model chip, and an effort chip when the model comes in
@@ -1084,16 +1155,20 @@ export const ModelPicker = ({
   readonly configOptions: ConfigOptionInfo[];
   readonly onConfigOption: (configId: string, value: string) => void;
   readonly hasSession: boolean;
-  /** Keep an explicit model affordance while a host surface is waiting for provider metadata. */
+  /**
+  Keep an explicit model affordance while a host surface is waiting for provider metadata.
+  */
   readonly showWhenUnavailable?: boolean;
-  /** A live turn owns its provider runtime; model and effort changes wait until it ends. */
+  /**
+  A live turn owns its provider runtime; model and effort changes wait until it ends.
+  */
   readonly disabled?: boolean;
 }) => {
   const t = useT();
   const [modelOpen, setModelOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [effortOpen, setEffortOpen] = useState(false);
-  const families = useMemo(() => groupModels(models), [models]);
+  const families = groupModels(models);
   const { favorites, toggle: toggleFavorite } =
     useProviderModelFavorites(provider);
   const { hidden: hiddenModels } = useProviderModelPreferences(provider);
@@ -1103,7 +1178,9 @@ export const ModelPicker = ({
       setEffortOpen(false);
     }
   }, [disabled]);
-  if (!hasSession && models.length === 0 && !showWhenUnavailable) return null;
+  if (!hasSession && models.length === 0 && !showWhenUnavailable) {
+    return null;
+  }
 
   const effortName = (e: Effort | null) =>
     e ? t(`effort.${e}` as "effort.low") : t("composer.default");
@@ -1132,12 +1209,12 @@ export const ModelPicker = ({
       modelOpt.current ||
       t("composer.defaultModel");
     modelRows = modelOpt.choices.map((c) => ({
-      key: c.id,
-      label: c.name,
       detail: c.description,
       isDefault: c.id === defaultModel,
-      selected: c.id === modelOpt.current,
+      key: c.id,
+      label: c.name,
       select: () => onConfigOption(modelOpt.id, c.id),
+      selected: c.id === modelOpt.current,
     }));
   } else {
     // Flat list: regroup by the effort suffix parsed out of each name.
@@ -1148,13 +1225,13 @@ export const ModelPicker = ({
       current ??
       t("composer.defaultModel");
     modelRows = families.map((f) => ({
-      key: f.key,
-      label: f.label,
       detail: f.variants[0]?.choice.description,
       isDefault: f.variants.some((v) => v.choice.id === defaultModel),
-      selected: f === activeFamily,
+      key: f.key,
+      label: f.label,
       select: () =>
         onModel(pickVariant(f, activeVariant?.effort ?? null, defaultModel).id),
+      selected: f === activeFamily,
     }));
   }
 
@@ -1166,21 +1243,21 @@ export const ModelPicker = ({
       effortOpt.choices.find((c) => c.id === effortOpt.current)?.name ||
       effortOpt.current;
     effortRows = effortOpt.choices.map((c) => ({
-      key: c.id,
-      label: c.name,
       detail: c.description,
       isDefault: false,
-      selected: c.id === effortOpt.current,
+      key: c.id,
+      label: c.name,
       select: () => onConfigOption(effortOpt.id, c.id),
+      selected: c.id === effortOpt.current,
     }));
   } else if (activeFamily) {
     effortLabel = effortName(activeVariant?.effort ?? null);
     effortRows = activeFamily.variants.map((v) => ({
+      isDefault: v.choice.id === defaultModel,
       key: v.choice.id,
       label: effortName(v.effort),
-      isDefault: v.choice.id === defaultModel,
-      selected: v.choice.id === current,
       select: () => onModel(v.choice.id),
+      selected: v.choice.id === current,
     }));
   }
 
@@ -1197,8 +1274,9 @@ export const ModelPicker = ({
           .includes(normalizedSearch)
       )
     : visibleModelRows;
-  for (const row of filteredModelRows)
+  for (const row of filteredModelRows) {
     (favorites.has(row.key) ? favoriteRows : regularRows).push(row);
+  }
   const renderModelRow = (row: PickerRow) => (
     <ModelPickerRow
       key={row.key}
@@ -1219,7 +1297,9 @@ export const ModelPicker = ({
         open={modelOpen}
         onOpenChange={(open) => {
           setModelOpen(disabled ? false : open);
-          if (!open) setModelSearch("");
+          if (!open) {
+            setModelSearch("");
+          }
         }}
       >
         <PopoverTrigger
@@ -1329,9 +1409,11 @@ export const ModelPicker = ({
       )}
     </>
   );
-}
+};
 
-/** High-frequency, session-scoped configuration stays one click from the prompt. */
+/**
+High-frequency, session-scoped configuration stays one click from the prompt.
+*/
 export const SessionControls = ({
   config,
   models,
@@ -1351,7 +1433,9 @@ export const SessionControls = ({
   readonly configOptions: ConfigOptionInfo[];
   readonly onConfigOption: (configId: string, value: string) => void;
   readonly modelChangeDisabled?: boolean;
-  /** The checkout bar already owns this choice when it is rendered below the composer. */
+  /**
+  The checkout bar already owns this choice when it is rendered below the composer.
+  */
   readonly showWorktreePicker?: boolean;
 }) => {
   const t = useT();
@@ -1436,7 +1520,7 @@ export const SessionControls = ({
       ) : null}
     </div>
   );
-}
+};
 
 /**
  * The prompt composer.
@@ -1507,21 +1591,23 @@ export const Composer = ({
   const briefDismissedRef = useRef(new Set<string>());
   const [, bumpBriefDismissals] = useState(0);
   const sessionKey = sessionId ?? "draft";
-  const composerEmpty = docEmpty && appshots.length === 0;
+  const isComposerEmpty = docEmpty && appshots.length === 0;
   const activeBrief = config.activeScene?.brief ?? null;
   const insertBrief = () => {
     const scene = config.activeScene;
-    if (scene?.brief) insertBriefRef?.current?.(scene);
+    if (scene?.brief) {
+      insertBriefRef?.current?.(scene);
+    }
   };
   const dismissBrief = () => {
     briefDismissedRef.current.add(sessionKey);
     bumpBriefDismissals((n) => n + 1);
   };
-  const showBriefOffer = briefOfferVisible({
-    docMode,
-    docEmpty: composerEmpty,
-    hasBrief: activeBrief !== null,
+  const isShowBriefOffer = briefOfferVisible({
     dismissed: briefDismissedRef.current.has(sessionKey),
+    docEmpty: isComposerEmpty,
+    docMode,
+    hasBrief: activeBrief !== null,
   });
 
   // Required slot-card fields still empty — published by the editor on document change (same
@@ -1554,10 +1640,10 @@ export const Composer = ({
   const resizeHandle = useResizeHandle({
     axis: "y",
     direction: -1,
-    value: applied,
-    min: 72,
     max: maxHeight,
+    min: 72,
     onResize: onHeight,
+    value: applied,
   });
 
   const controls = (
@@ -1571,7 +1657,9 @@ export const Composer = ({
         onChange={(event) => {
           const files = Array.from(event.currentTarget.files ?? []);
           event.currentTarget.value = "";
-          if (files.length > 0) void onAttachImages(files);
+          if (files.length > 0) {
+            void onAttachImages(files);
+          }
         }}
       />
       <DropdownMenu>
@@ -1592,7 +1680,9 @@ export const Composer = ({
             <DropdownMenuItem onClick={onAttachFile}>
               <FileText />
               {t("composer.mentionFile")}
-              {filesHint ? <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut> : null}
+              {filesHint ? (
+                <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>
+              ) : null}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
               <ImagePlus />
@@ -1601,12 +1691,16 @@ export const Composer = ({
             <DropdownMenuItem onClick={onInsertSkill}>
               <Sparkles />
               {t("composer.insertSkill")}
-              {skillHint ? <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut> : null}
+              {skillHint ? (
+                <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>
+              ) : null}
             </DropdownMenuItem>
-            {canvasEnabled ? <DropdownMenuItem onClick={onInsertCanvas}>
+            {canvasEnabled ? (
+              <DropdownMenuItem onClick={onInsertCanvas}>
                 <PenLine />
                 {t("composer.insertCanvas")}
-              </DropdownMenuItem> : null}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onClick={onInsertIssue}>
               <Ticket />
               {t("composer.pullIssue")}
@@ -1621,10 +1715,12 @@ export const Composer = ({
             </DropdownMenuItem>
             {/* With content already in the document the floating offer stays away; the brief is
                 still one menu entry away while a scene with one is active. */}
-            {activeBrief && !composerEmpty ? <DropdownMenuItem onClick={insertBrief}>
+            {activeBrief && !isComposerEmpty ? (
+              <DropdownMenuItem onClick={insertBrief}>
                 <ListChecks />
                 {t("brief.menuInsert")}
-              </DropdownMenuItem> : null}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuGroup>
           <p className="text-callout text-muted-foreground px-2 pt-1.5 pb-1">
             {t("composer.addHint")}
@@ -1642,11 +1738,11 @@ export const Composer = ({
         contextWindow={contextWindow}
         usage={usage ?? null}
         onCompact={onCompactContext}
-        compactDisabled={running || loading || !composerEmpty}
+        compactDisabled={running || loading || !isComposerEmpty}
         compactDisabledReason={
           running || loading
             ? t("context.compactBusy")
-            : !composerEmpty
+            : !isComposerEmpty
               ? t("context.compactDraft")
               : null
         }
@@ -1719,9 +1815,11 @@ export const Composer = ({
 
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
-      {composerEmpty && !running && !loading && runHint ? <span className="text-callout text-muted-foreground mx-1 hidden shrink-0 whitespace-nowrap @2xl/composer:inline">
+      {isComposerEmpty && !running && !loading && runHint ? (
+        <span className="text-callout text-muted-foreground mx-1 hidden shrink-0 whitespace-nowrap @2xl/composer:inline">
           {t("composer.toSend", { key: runHint })}
-        </span> : null}
+        </span>
+      ) : null}
 
       {running ? (
         <>
@@ -1795,7 +1893,7 @@ export const Composer = ({
             render={
               <Button
                 size="icon"
-                variant={composerEmpty ? "secondary" : "default"}
+                variant={isComposerEmpty ? "secondary" : "default"}
                 className="size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"
                 onClick={onRun}
                 disabled={loading}
@@ -1814,7 +1912,7 @@ export const Composer = ({
           <TooltipContent>
             {loading
               ? t("composer.loadingSession")
-              : composerEmpty
+              : isComposerEmpty
                 ? t("composer.runEmpty")
                 : t("composer.run")}
             {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
@@ -1901,8 +1999,8 @@ export const Composer = ({
                       {appshot.kind === "attachment" ? (
                         <p className="text-callout text-muted-foreground">
                           {t("composer.imageDimensions", {
-                            width: appshot.width,
                             height: appshot.height,
+                            width: appshot.width,
                           })}
                         </p>
                       ) : (
@@ -1947,7 +2045,8 @@ export const Composer = ({
               positioned overlay inside the same tree (see the reconciliation note above) — it
               never auto-inserts, and dismissing it keeps it away for this session. Only rendered
               in doc mode, where the card is `relative`. */}
-          {showBriefOffer && config.activeScene ? <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
+          {isShowBriefOffer && config.activeScene ? (
+            <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
               <div className="raised-material canvas-ui-module shadow-raised pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 px-3 py-2">
                 <ListChecks className="text-muted-foreground size-3.5 shrink-0" />
                 <span className="text-body text-muted-foreground min-w-0 truncate">
@@ -1965,7 +2064,8 @@ export const Composer = ({
                   {t("brief.dismiss")}
                 </Button>
               </div>
-            </div> : null}
+            </div>
+          ) : null}
 
           {/* Expanded, the control rows *float* over the foot of the page as their own raised card.
               In normal flow it sat at the column's bottom edge, where the transcript panel beside
@@ -2009,8 +2109,10 @@ export const Composer = ({
 
         {/* Execution location and source control are adjacent but distinct: changing where a fresh
             session runs must never be confused with inspecting the current branch. */}
-        {!docMode && checkout ? <CheckoutBar config={config} checkout={checkout} /> : null}
+        {!docMode && checkout ? (
+          <CheckoutBar config={config} checkout={checkout} />
+        ) : null}
       </div>
     </section>
   );
-}
+};

@@ -1,13 +1,13 @@
 import {
-  ALLOWED_ELEMENT_TYPES,
-  CANVAS_ENGINE,
-  CANVAS_ENGINE_VERSION,
-  CANVAS_SCHEMA_VERSION,
+  allowedElementTypes,
+  canvasEngine,
+  canvasEngineVersion,
+  canvasSchemaVersion,
 } from "./types";
 import type {
   AllowedElementType,
   CanvasAppStateSubset,
-  CanvasAssetRef as CanvasAssetReference,
+  CanvasAssetReference,
   CanvasEnvelope,
   CanvasSceneSnapshot,
   CanvasTheme,
@@ -22,11 +22,10 @@ import type {
   ExcalidrawTextElement,
 } from "./excalidrawAdapter";
 
-const DATA_URL_RE = /^data:[^;,]+(?:;[^;,]+)*;base64,[a-z0-9+/=\s]+$/i;
-const INLINE_DATA_URL_RE =
-  /data:[^;,\s]+(?:;[^;,\s]+)*;base64,[a-z0-9+/=\s]+/gi;
-const HTTP_URL_RE = /^(?:https?:|javascript:|data:|blob:)/i;
-const COLOR_PRESETS = new Set([
+const dataUrlRe = /^data:[^;,]+(?:;[^;,]+)*;base64,[a-z0-9+/=\s]+$/iu;
+const inlineDataUrlRe = /data:[^;,\s]+(?:;[^;,\s]+)*;base64,[a-z0-9+/=\s]+/giu;
+const httpUrlRe = /^(?:https?:|javascript:|data:|blob:)/iu;
+const colorPresets = new Set([
   "black",
   "white",
   "transparent",
@@ -54,11 +53,11 @@ export class CanvasEnvelopeError extends Error {
 }
 
 export function isDataUrl(value: unknown): value is string {
-  return typeof value === "string" && DATA_URL_RE.test(value);
+  return typeof value === "string" && dataUrlRe.test(value);
 }
 
 export function isExternalUrl(value: unknown): value is string {
-  return typeof value === "string" && HTTP_URL_RE.test(value);
+  return typeof value === "string" && httpUrlRe.test(value);
 }
 
 function finiteNumber(value: unknown, fallback = 0): number {
@@ -85,7 +84,7 @@ function safeColor(value: unknown, fallback: string): string {
     return fallback;
   }
   const normalized = String(value).toLowerCase();
-  return COLOR_PRESETS.has(normalized) ? normalized : fallback;
+  return colorPresets.has(normalized) ? normalized : fallback;
 }
 
 function safePoints(value: unknown): readonly [number, number][] {
@@ -105,42 +104,42 @@ function safePoints(value: unknown): readonly [number, number][] {
 
 function safeText(value: unknown, fallback = ""): string {
   return (typeof value === "string" ? value : fallback)
-    .replaceAll(INLINE_DATA_URL_RE, "")
+    .replace(inlineDataUrlRe, "")
     .slice(0, 100_000);
 }
 
 function safeElementBase(element: ElementRecord, index: number): ElementRecord {
-  const { type } = element;
+  const type = element.type;
   return {
-    id: safeId(element.id, `canvas-element-${index + 1}`),
-    type,
-    x: finiteNumber(element.x),
-    y: finiteNumber(element.y),
-    width: finiteNonNegative(element.width),
-    height: finiteNonNegative(element.height),
     angle: finiteNumber(element.angle),
-    strokeColor: safeColor(element.strokeColor, "black"),
     backgroundColor: safeColor(element.backgroundColor, "transparent"),
+    boundElements: null,
     fillStyle: element.fillStyle === "solid" ? "solid" : "solid",
-    strokeWidth: finiteNonNegative(element.strokeWidth, 2),
+    frameId: null,
+    groupIds: [],
+    height: finiteNonNegative(element.height),
+    id: safeId(element.id, `canvas-element-${index + 1}`),
+    index: typeof element.index === "string" ? element.index : null,
+    isDeleted: Boolean(element.isDeleted),
+    link: null,
+    locked: Boolean(element.locked),
+    opacity: Math.min(100, finiteNonNegative(element.opacity, 100)),
+    roughness: 0,
+    roundness: null,
+    seed: Math.trunc(finiteNumber(element.seed)),
+    strokeColor: safeColor(element.strokeColor, "black"),
     strokeStyle:
       element.strokeStyle === "dashed" || element.strokeStyle === "dotted"
         ? element.strokeStyle
         : "solid",
-    roundness: null,
-    roughness: 0,
-    opacity: Math.min(100, finiteNonNegative(element.opacity, 100)),
-    seed: Math.trunc(finiteNumber(element.seed)),
+    strokeWidth: finiteNonNegative(element.strokeWidth, 2),
+    type,
+    updated: Math.max(0, Math.trunc(finiteNumber(element.updated))),
     version: Math.max(1, Math.trunc(finiteNumber(element.version, 1))),
     versionNonce: Math.trunc(finiteNumber(element.versionNonce)),
-    index: typeof element.index === "string" ? element.index : null,
-    isDeleted: Boolean(element.isDeleted),
-    groupIds: [],
-    frameId: null,
-    boundElements: null,
-    updated: Math.max(0, Math.trunc(finiteNumber(element.updated))),
-    link: null,
-    locked: Boolean(element.locked),
+    width: finiteNonNegative(element.width),
+    x: finiteNumber(element.x),
+    y: finiteNumber(element.y),
   };
 }
 
@@ -148,12 +147,12 @@ function sanitizeElement(
   element: unknown,
   index: number
 ): ExcalidrawElement | null {
-  if (!element || typeof element !== "object") {
+  if (element == null || typeof element !== "object") {
     return null;
   }
   const source = element as ElementRecord;
-  const { type } = source;
-  if (!ALLOWED_ELEMENT_TYPES.includes(type as AllowedElementType)) {
+  const type = source.type;
+  if (!allowedElementTypes.includes(type as AllowedElementType)) {
     return null;
   }
   const base = safeElementBase(source, index);
@@ -168,20 +167,20 @@ function sanitizeElement(
       const points = safePoints(source.points);
       return {
         ...base,
-        type,
-        points,
-        lastCommittedPoint: null,
-        startBinding: null,
-        endBinding: null,
-        startArrowhead: null,
         endArrowhead: type === "arrow" ? "arrow" : null,
-        ...(type === "arrow" && { elbowed: false }),
+        endBinding: null,
+        lastCommittedPoint: null,
+        points,
+        startArrowhead: null,
+        startBinding: null,
+        type,
+        ...(type === "arrow" ? { elbowed: false } : {}),
       } as unknown as ExcalidrawElement;
     }
     case "freedraw": {
       return {
         ...base,
-        type,
+        lastCommittedPoint: null,
         points: safePoints(source.points),
         pressures: Array.isArray(source.pressures)
           ? source.pressures.map((pressure) =>
@@ -189,7 +188,7 @@ function sanitizeElement(
             )
           : [],
         simulatePressure: Boolean(source.simulatePressure),
-        lastCommittedPoint: null,
+        type,
       } as unknown as ExcalidrawElement;
     }
     case "text": {
@@ -197,25 +196,25 @@ function sanitizeElement(
       const originalText = safeText(source.originalText, text);
       return {
         ...base,
-        type,
-        text,
-        originalText,
-        fontSize: Math.min(96, Math.max(8, finiteNumber(source.fontSize, 16))),
-        fontFamily: source.fontFamily === 3 ? 3 : 2,
-        textAlign:
-          source.textAlign === "center" || source.textAlign === "right"
-            ? source.textAlign
-            : "left",
-        verticalAlign:
-          source.verticalAlign === "middle" || source.verticalAlign === "bottom"
-            ? source.verticalAlign
-            : "top",
-        containerId: null,
         autoResize: source.autoResize !== false,
+        containerId: null,
+        fontFamily: source.fontFamily === 3 ? 3 : 2,
+        fontSize: Math.min(96, Math.max(8, finiteNumber(source.fontSize, 16))),
         lineHeight: finiteNumber(
           source.lineHeight,
           1.25
         ) as ExcalidrawTextElement["lineHeight"],
+        originalText,
+        text,
+        textAlign:
+          source.textAlign === "center" || source.textAlign === "right"
+            ? source.textAlign
+            : "left",
+        type,
+        verticalAlign:
+          source.verticalAlign === "middle" || source.verticalAlign === "bottom"
+            ? source.verticalAlign
+            : "top",
       } as ExcalidrawTextElement;
     }
     case "image": {
@@ -225,9 +224,8 @@ function sanitizeElement(
       }
       return {
         ...base,
-        type,
+        crop: null,
         fileId,
-        status: "saved",
         scale:
           Array.isArray(source.scale) && source.scale.length >= 2
             ? [
@@ -235,7 +233,8 @@ function sanitizeElement(
                 finiteNumber(source.scale[1], 1),
               ]
             : [1, 1],
-        crop: null,
+        status: "saved",
+        type,
       } as ExcalidrawImageElement;
     }
     default: {
@@ -244,22 +243,19 @@ function sanitizeElement(
   }
 }
 
-/**
- * Filters and normalizes the scene at every boundary. Unsupported Excalidraw elements are
- * discarded, links/custom data/frames are removed, and free-draw points remain only here in the
- * exact engine scene (the manifest deliberately omits them).
- */
 export function sanitizeElements(
   elements: readonly unknown[]
 ): readonly ExcalidrawElement[] {
   const seen = new Set<string>();
   const result: ExcalidrawElement[] = [];
-  for (const [index, element] of elements.entries()) {
+  elements.forEach((element, index) => {
     const sanitized = sanitizeElement(element, index);
-    if (!sanitized || seen.has(sanitized.id)) {continue;}
+    if (!sanitized || seen.has(sanitized.id)) {
+      return;
+    }
     seen.add(sanitized.id);
     result.push(sanitized);
-  }
+  });
   return result;
 }
 
@@ -274,14 +270,14 @@ export function sanitizeAppState(
         ? finiteNumber((source.zoom as { value?: unknown }).value, 1)
         : 1;
   return {
-    viewBackgroundColor: safeColor(source.viewBackgroundColor, "white"),
-    scrollX: finiteNumber(source.scrollX),
-    scrollY: finiteNumber(source.scrollY),
-    zoom: Math.min(8, Math.max(0.1, zoomValue)),
     gridSize:
       source.gridSize === null ? null : finiteNonNegative(source.gridSize, 20),
     gridStep: Math.max(1, finiteNonNegative(source.gridStep, 5)),
+    scrollX: finiteNumber(source.scrollX),
+    scrollY: finiteNumber(source.scrollY),
+    viewBackgroundColor: safeColor(source.viewBackgroundColor, "white"),
     viewModeEnabled: Boolean(source.viewModeEnabled),
+    zoom: Math.min(8, Math.max(0.1, zoomValue)),
   };
 }
 
@@ -291,44 +287,49 @@ function normalizeAssetReferences(
 ): readonly CanvasAssetReference[] {
   const byFile = new Map(
     existing
-      .filter(
-        (asset) => {
-        	return typeof asset.ref === "string" &&
+      .filter((asset) => {
+        return (
+          typeof asset.ref === "string" &&
           asset.ref.length > 0 &&
           asset.ref.length <= 160 &&
-          !/^(?:data:|blob:|https?:|javascript:)/i.test(asset.ref) &&
-          !/[\\/\s]/.test(asset.ref) &&
+          !/^(?:data:|blob:|https?:|javascript:)/iu.test(asset.ref) &&
+          !/[\\/\s]/u.test(asset.ref) &&
           (asset.mimeType === "image/png" || asset.mimeType === "image/webp") &&
           typeof asset.fileId === "string" &&
-          asset.fileId.length > 0;
-        }
-      )
+          asset.fileId.length > 0
+        );
+      })
       .map((asset) => {
-      	return [
-	        asset.fileId,
-	        {
-	          ref: asset.ref,
-	          fileId: asset.fileId,
-	          mimeType: asset.mimeType,
-	          byteLength: Math.max(0, Math.trunc(finiteNumber(asset.byteLength))),
-	          ...(typeof asset.width === "number" && Number.isFinite(asset.width)
-	            ? { width: Math.max(0, asset.width) }
-	            : {}),
-	          ...(typeof asset.height === "number" && Number.isFinite(asset.height)
-	            ? { height: Math.max(0, asset.height) }
-	            : {}),
-	        } satisfies CanvasAssetReference,
-	      ];
+        return [
+          asset.fileId,
+          {
+            byteLength: Math.max(0, Math.trunc(finiteNumber(asset.byteLength))),
+            fileId: asset.fileId,
+            mimeType: asset.mimeType,
+            ref: asset.ref,
+            ...(typeof asset.width === "number" && Number.isFinite(asset.width)
+              ? { width: Math.max(0, asset.width) }
+              : {}),
+            ...(typeof asset.height === "number" &&
+            Number.isFinite(asset.height)
+              ? { height: Math.max(0, asset.height) }
+              : {}),
+          } satisfies CanvasAssetReference,
+        ];
       })
   );
-  const references: CanvasAssetReference[] = [];
+  const refs: CanvasAssetReference[] = [];
   for (const element of elements) {
-    if (element.type !== "image" || !element.fileId) continue;
-    const existingRef = byFile.get(element.fileId);
-    if (existingRef) references.push(existingRef);
+    if (element.type !== "image" || !element.fileId) {
+      continue;
+    }
+    const existingReference = byFile.get(element.fileId);
+    if (existingReference) {
+      refs.push(existingReference);
+    }
   }
-  const unique = new Map(references.map((asset) => [asset.fileId, asset]));
-  return [...unique.values()].sort((a, b) =>
+  const unique = new Map(refs.map((asset) => [asset.fileId, asset]));
+  return Array.from(unique.values()).sort((a, b) =>
     a.fileId.localeCompare(b.fileId)
   );
 }
@@ -340,15 +341,20 @@ export function createEnvelope(
   existingAssetReferences: readonly CanvasAssetReference[] = []
 ): CanvasEnvelope {
   const sanitizedElements = sanitizeElements(snapshot.elements);
-  const assetReferences = normalizeAssetReferences(sanitizedElements, existingAssetReferences);
+  const assetReferences = normalizeAssetReferences(
+    sanitizedElements,
+    existingAssetReferences
+  );
   const knownImageFiles = new Set(assetReferences.map((asset) => asset.fileId));
   if (
-    sanitizedElements.some(
-      (element) => {
-      	return element.type === "image" &&
-        (element.fileId == null || !knownImageFiles.has(element.fileId));
-      }
-    )
+    sanitizedElements.some((element) => {
+      return (
+        element.type === "image" &&
+        (element.fileId === null ||
+          element.fileId === undefined ||
+          !knownImageFiles.has(element.fileId))
+      );
+    })
   ) {
     throw new CanvasEnvelopeError(
       "invalid-envelope",
@@ -357,14 +363,14 @@ export function createEnvelope(
   }
   const elements = sanitizedElements;
   return {
-    engine: CANVAS_ENGINE,
-    engineVersion: CANVAS_ENGINE_VERSION,
-    schemaVersion: CANVAS_SCHEMA_VERSION,
-    revision: Math.max(0, Math.trunc(revision)),
-    theme,
-    elements,
     appState: sanitizeAppState(snapshot.appState),
-    assetRefs: assetReferences,
+    assetReferences,
+    elements,
+    engine: canvasEngine,
+    engineVersion: canvasEngineVersion,
+    revision: Math.max(0, Math.trunc(revision)),
+    schemaVersion: canvasSchemaVersion,
+    theme,
   };
 }
 
@@ -372,7 +378,7 @@ function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(stableValue);
   }
-  if (!value || typeof value !== "object") {
+  if (value == null || typeof value !== "object") {
     return value;
   }
   return Object.fromEntries(
@@ -382,24 +388,21 @@ function stableValue(value: unknown): unknown {
   );
 }
 
-/**
-Deterministic JSON is useful for autosave change detection and reconnect retries.
-*/
 export function serializeEnvelope(envelope: CanvasEnvelope): string {
   const sanitized = createEnvelope(
     {
-      elements: envelope.elements,
       appState: envelope.appState as unknown as AppState,
+      elements: envelope.elements,
     },
     envelope.revision,
     envelope.theme,
-    envelope.assetRefs
+    envelope.assetReferences
   );
   return JSON.stringify(stableValue(sanitized));
 }
 
 function assertEnvelope(value: unknown): asserts value is CanvasEnvelope {
-  if (!value || typeof value !== "object") {
+  if (value == null || typeof value !== "object") {
     throw new CanvasEnvelopeError(
       "invalid-envelope",
       "Canvas envelope must be an object"
@@ -407,21 +410,24 @@ function assertEnvelope(value: unknown): asserts value is CanvasEnvelope {
   }
   const envelope = value as Partial<CanvasEnvelope>;
   if (
-    envelope.engine !== CANVAS_ENGINE ||
-    envelope.engineVersion !== CANVAS_ENGINE_VERSION
+    envelope.engine !== canvasEngine ||
+    envelope.engineVersion !== canvasEngineVersion
   ) {
     throw new CanvasEnvelopeError(
       "unsupported-engine",
       "Canvas envelope engine/version is not supported"
     );
   }
-  if (envelope.schemaVersion !== CANVAS_SCHEMA_VERSION) {
+  if (envelope.schemaVersion !== canvasSchemaVersion) {
     throw new CanvasEnvelopeError(
       "unsupported-schema",
       "Canvas envelope schema version is not supported"
     );
   }
-  if (!Array.isArray(envelope.elements) || !Array.isArray(envelope.assetRefs)) {
+  if (
+    !Array.isArray(envelope.elements) ||
+    !Array.isArray(envelope.assetReferences)
+  ) {
     throw new CanvasEnvelopeError(
       "invalid-envelope",
       "Canvas envelope scene is incomplete"
@@ -443,11 +449,11 @@ export function deserializeEnvelope(
     );
   }
   assertEnvelope(parsed);
-  const envelope = parsed;
+  const envelope = parsed as CanvasEnvelope;
   const sanitizedElements = sanitizeElements(envelope.elements);
   if (
     sanitizedElements.some((element) =>
-      DATA_URL_RE.exec(JSON.stringify(element))
+      JSON.stringify(element).match(dataUrlRe)
     )
   ) {
     throw new CanvasEnvelopeError(
@@ -455,14 +461,19 @@ export function deserializeEnvelope(
       "Canvas envelope contains an inline data URL"
     );
   }
-  const references = normalizeAssetReferences(
+  const refs = normalizeAssetReferences(
     sanitizedElements,
-    envelope.assetRefs
+    envelope.assetReferences
   );
-  const knownImageFiles = new Set(references.map((asset) => asset.fileId));
+  const knownImageFiles = new Set(refs.map((asset) => asset.fileId));
   if (
-    sanitizedElements.some((element) => element.type === "image" &&
-        (element.fileId == null || !knownImageFiles.has(element.fileId))
+    sanitizedElements.some((element) => {
+      return (
+        element.type === "image" &&
+        (element.fileId === null ||
+          element.fileId === undefined ||
+          !knownImageFiles.has(element.fileId))
+      );
     })
   ) {
     throw new CanvasEnvelopeError(
@@ -472,16 +483,16 @@ export function deserializeEnvelope(
   }
   const elements = sanitizedElements;
   return {
-    engine: CANVAS_ENGINE,
-    engineVersion: CANVAS_ENGINE_VERSION,
-    schemaVersion: CANVAS_SCHEMA_VERSION,
-    revision: Math.max(0, Math.trunc(finiteNumber(envelope.revision))),
-    theme: envelope.theme === "dark" ? "dark" : "light",
-    elements,
     appState: sanitizeAppState(
       envelope.appState as unknown as Partial<AppState>
     ),
-    assetRefs: references,
+    assetReferences: refs,
+    elements,
+    engine: canvasEngine,
+    engineVersion: canvasEngineVersion,
+    revision: Math.max(0, Math.trunc(finiteNumber(envelope.revision))),
+    schemaVersion: canvasSchemaVersion,
+    theme: envelope.theme === "dark" ? "dark" : "light",
   };
 }
 
@@ -505,18 +516,15 @@ async function readBytes(
   return new Uint8Array(await value.arrayBuffer());
 }
 
-/**
-Rehydrate requires caller-provided normalized static assets; no storage or network lookup occurs.
-*/
 export async function rehydrateEnvelope(
   envelopeInput: CanvasEnvelope | string,
   assets: readonly NormalizedStaticAsset[]
 ): Promise<CanvasSceneSnapshot> {
   const envelope = deserializeEnvelope(envelopeInput);
-  const byReference = new Map(assets.map((asset) => [asset.ref, asset]));
+  const byRef = new Map(assets.map((asset) => [asset.ref, asset]));
   const files: BinaryFiles = {};
-  for (const asset of envelope.assetRefs) {
-    const supplied = byReference.get(asset.ref);
+  for (const asset of envelope.assetReferences) {
+    const supplied = byRef.get(asset.ref);
     if (
       !supplied ||
       supplied.fileId !== asset.fileId ||
@@ -526,24 +534,24 @@ export async function rehydrateEnvelope(
     }
     const bytes = await readBytes(supplied.bytes);
     const binaryFile: BinaryFileData = {
-      id: supplied.fileId as BinaryFileData["id"],
-      mimeType: supplied.mimeType,
+      created: 0,
       dataURL: bytesToDataUrl(
         bytes,
         supplied.mimeType
       ) as BinaryFileData["dataURL"],
-      created: 0,
+      id: supplied.fileId as BinaryFileData["id"],
+      mimeType: supplied.mimeType,
       version: 1,
     };
     files[supplied.fileId] = binaryFile;
   }
   return {
-    elements: envelope.elements,
     appState: {
       ...envelope.appState,
-      zoom: { value: envelope.appState.zoom },
       theme: envelope.theme,
+      zoom: { value: envelope.appState.zoom },
     } as AppState,
+    elements: envelope.elements,
     files,
   };
 }
@@ -555,7 +563,7 @@ export function stripDataUrls(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(stripDataUrls).filter((entry) => entry !== undefined);
   }
-  if (!value || typeof value !== "object") {
+  if (value == null || typeof value !== "object") {
     return value;
   }
   return Object.fromEntries(

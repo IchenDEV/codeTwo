@@ -39,12 +39,12 @@ function library() {
       args: [FFIType.ptr],
       returns: FFIType.u32,
     },
-    codetwoSetDockBadgeCount: {
-      args: [FFIType.u32],
-      returns: FFIType.u32,
-    },
     codetwoPerformTitlebarDoubleClick: {
       args: [FFIType.ptr],
+      returns: FFIType.u32,
+    },
+    codetwoSetDockBadgeCount: {
+      args: [FFIType.u32],
       returns: FFIType.u32,
     },
   });
@@ -62,8 +62,8 @@ export function configureMacOSWindowEffects(
     const configuredEffects =
       library().symbols.codetwoConfigureWindowEffects(windowPointer);
     return {
-      shadow: (configuredEffects & 1) !== 0,
       backdrop: (configuredEffects & 2) !== 0,
+      shadow: (configuredEffects & 1) !== 0,
     };
   } catch (error) {
     console.warn("Could not configure the macOS window effects", error);

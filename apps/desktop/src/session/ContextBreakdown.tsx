@@ -11,18 +11,18 @@ import { cn } from "@/lib/utils";
  * Fixed palette for context categories. Color follows the category identity,
  * never its position, so reordering cannot repaint them.
  */
-const CATEGORY_COLORS: Record<string, string> = {
-  system_prompt: "var(--ds-color-text-muted)",
-  tool_definitions: "var(--ds-color-chart-1)",
+const categoryColors: Record<string, string> = {
+  conversation: "var(--ds-color-chart-6)",
+  mcp_dynamic_tools: "var(--ds-color-chart-4)",
   rules: "var(--ds-color-chart-2)",
   skills: "var(--ds-color-chart-3)",
-  mcp_dynamic_tools: "var(--ds-color-chart-4)",
   subagent_definitions: "var(--ds-color-chart-5)",
-  conversation: "var(--ds-color-chart-6)",
+  system_prompt: "var(--ds-color-text-muted)",
+  tool_definitions: "var(--ds-color-chart-1)",
 };
 
 function categoryColor(id: string): string {
-  return CATEGORY_COLORS[id] ?? "var(--ds-color-text-muted)";
+  return categoryColors[id] ?? "var(--ds-color-text-muted)";
 }
 
 const CategoryRow = ({ category }: { readonly category: ContextCategory }) => {
@@ -45,7 +45,7 @@ const CategoryRow = ({ category }: { readonly category: ContextCategory }) => {
       </span>
     </div>
   );
-}
+};
 
 /**
  * A segmented bar that shows how each context category fills the total window.
@@ -58,26 +58,30 @@ const SegmentedBar = ({
   readonly categories: ContextCategory[];
   readonly capacity: number;
 }) => {
-  if (capacity <= 0) return null;
+  if (capacity <= 0) {
+    return null;
+  }
   return (
     <div className="bg-muted/60 flex h-2.5 w-full overflow-hidden rounded-full">
       {categories.map((cat) => {
         const pct = (cat.tokens / capacity) * 100;
-        if (pct < 0.2) return null;
+        if (pct < 0.2) {
+          return null;
+        }
         return (
           <div
             key={cat.id}
             className="h-full transition-[width] duration-(--ds-motion-page)"
             style={{
-              width: `${pct}%`,
               backgroundColor: categoryColor(cat.id),
+              width: `${pct}%`,
             }}
           />
         );
       })}
     </div>
   );
-}
+};
 
 export const ContextBreakdown = ({
   contextWindow,
@@ -108,8 +112,8 @@ export const ContextBreakdown = ({
             {t("context.percentFull", { percent: String(percentLabel) })}
             <span className="ml-3">
               {t("context.tokenSummary", {
-                used: formatContextTokens(contextWindow.usedTokens),
                 capacity: formatContextTokens(contextWindow.contextWindow),
+                used: formatContextTokens(contextWindow.usedTokens),
               })}
             </span>
           </p>
@@ -189,4 +193,4 @@ export const ContextBreakdown = ({
       ) : null}
     </div>
   );
-}
+};

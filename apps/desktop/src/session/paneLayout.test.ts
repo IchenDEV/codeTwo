@@ -8,7 +8,7 @@ import {
   focusPane,
   hasPane,
   listPanes,
-  MIN_RATIO,
+  minRatio,
   paneInDirection,
   setSplitRatio,
   singlePaneLayout,
@@ -28,7 +28,7 @@ const rootSplit = (layout: PaneLayout): PaneSplit => {
 describe("pane layout model", () => {
   test("a fresh workspace is one focused pane", () => {
     const layout = singlePaneLayout("p1");
-    expect(layout.root).toEqual({ kind: "leaf", id: "p1" });
+    expect(layout.root).toEqual({ id: "p1", kind: "leaf" });
     expect(layout.focused).toBe("p1");
     expect(listPanes(layout.root)).toEqual(["p1"]);
   });
@@ -43,8 +43,8 @@ describe("pane layout model", () => {
     );
     const split = rootSplit(layout);
     expect(split.direction).toBe("row");
-    expect(split.a).toEqual({ kind: "leaf", id: "p1" });
-    expect(split.b).toEqual({ kind: "leaf", id: "p2" });
+    expect(split.a).toEqual({ id: "p1", kind: "leaf" });
+    expect(split.b).toEqual({ id: "p2", kind: "leaf" });
     expect(layout.focused).toBe("p2");
   });
 
@@ -58,8 +58,8 @@ describe("pane layout model", () => {
       0.3
     );
     const split = rootSplit(layout);
-    expect(split.a).toEqual({ kind: "leaf", id: "p2" });
-    expect(split.b).toEqual({ kind: "leaf", id: "p1" });
+    expect(split.a).toEqual({ id: "p2", kind: "leaf" });
+    expect(split.b).toEqual({ id: "p1", kind: "leaf" });
     // before-side split keeps the original pane at 0.3, so the new leaf `a` takes 0.7.
     expect(split.ratio).toBeCloseTo(0.7);
   });
@@ -96,7 +96,7 @@ describe("pane layout model", () => {
     );
     const closed = closePane(layout, "p2");
     expect(closed).not.toBeNull();
-    expect(closed!.root).toEqual({ kind: "leaf", id: "p1" });
+    expect(closed!.root).toEqual({ id: "p1", kind: "leaf" });
     expect(closed!.focused).toBe("p1");
   });
 
@@ -141,9 +141,9 @@ describe("pane layout model", () => {
     );
     const splitId = rootSplit(layout).id;
     const tiny = setSplitRatio(layout, splitId, 0.001);
-    expect(rootSplit(tiny).ratio).toBeCloseTo(MIN_RATIO);
+    expect(rootSplit(tiny).ratio).toBeCloseTo(minRatio);
     const huge = setSplitRatio(layout, splitId, 0.999);
-    expect(rootSplit(huge).ratio).toBeCloseTo(1 - MIN_RATIO);
+    expect(rootSplit(huge).ratio).toBeCloseTo(1 - minRatio);
   });
 
   test("computePaneRects tiles the unit square by direction and ratio", () => {
@@ -158,9 +158,9 @@ describe("pane layout model", () => {
     );
     layout = splitPane(layout, "p2", "col", "after", "p3", 0.5);
     const rects = computePaneRects(layout.root);
-    expect(rects.get("p1")).toEqual({ x: 0, y: 0, w: 0.5, h: 1 });
-    expect(rects.get("p2")).toEqual({ x: 0.5, y: 0, w: 0.5, h: 0.5 });
-    expect(rects.get("p3")).toEqual({ x: 0.5, y: 0.5, w: 0.5, h: 0.5 });
+    expect(rects.get("p1")).toEqual({ h: 1, w: 0.5, x: 0, y: 0 });
+    expect(rects.get("p2")).toEqual({ h: 0.5, w: 0.5, x: 0.5, y: 0 });
+    expect(rects.get("p3")).toEqual({ h: 0.5, w: 0.5, x: 0.5, y: 0.5 });
   });
 
   test("computeDividers emits one boundary per split with its rect and ratio", () => {
@@ -178,12 +178,12 @@ describe("pane layout model", () => {
     expect(dividers).toHaveLength(2);
 
     const outer = dividers.find((d) => d.direction === "row");
-    expect(outer?.rect).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(outer?.rect).toEqual({ h: 1, w: 1, x: 0, y: 0 });
     expect(outer?.ratio).toBeCloseTo(0.5);
 
     const inner = dividers.find((d) => d.direction === "col");
     // The inner split lives inside the right half of the workspace.
-    expect(inner?.rect).toEqual({ x: 0.5, y: 0, w: 0.5, h: 1 });
+    expect(inner?.rect).toEqual({ h: 1, w: 0.5, x: 0.5, y: 0 });
     expect(inner?.ratio).toBeCloseTo(0.5);
   });
 

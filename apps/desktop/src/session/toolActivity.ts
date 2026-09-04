@@ -1,5 +1,5 @@
 import type { DockSurface, DockTab } from "../dock/Dock";
-import type { ArtifactRef as ArtifactReference } from "../bridge";
+import type { ArtifactReference as ArtifactReference } from "../bridge";
 import type { ToolEntry, Turn } from "./turns";
 
 /**
@@ -22,13 +22,13 @@ type JsonRecord = Record<string, unknown>;
 /**
 ACP kinds whose whole point is looking, not acting — the dock never follows a read.
 */
-const READ_KINDS = new Set(["read", "search", "fetch", "think"]);
+const readKinds = new Set(["read", "search", "fetch", "think"]);
 
 // Complete-token matches on normalized identifiers, exactly like agentActivity's suffix rule:
 // a whole `git_commit` or `apply_patch` operation is evidence, a substring in prose is not.
-const GIT_TOOL =
-  /(?:^|_)git_(?:commit|branch|merge|status|checkout|rebase|stash|push|pull)(?:_|$)/;
-const GIT_EXACT = new Set([
+const gitTool =
+  /(?:^|_)git_(?:commit|branch|merge|status|checkout|rebase|stash|push|pull)(?:_|$)/u;
+const gitExact = new Set([
   "commit",
   "git_commit",
   "branch",
@@ -40,9 +40,9 @@ const GIT_EXACT = new Set([
   "git_status",
 ]);
 
-const FILE_TOOL =
-  /(?:^|_)(?:apply_patch|str_replace|(?:edit|write|create)_file|file_(?:edit|write|create))(?:_|$)/;
-const FILE_EXACT = new Set([
+const fileTool =
+  /(?:^|_)(?:apply_patch|str_replace|(?:edit|write|create)_file|file_(?:edit|write|create))(?:_|$)/u;
+const fileExact = new Set([
   "edit",
   "write",
   "create",
@@ -55,20 +55,20 @@ const FILE_EXACT = new Set([
   "text_editor",
 ]);
 
-const TERMINAL_TOOL =
-  /(?:^|_)(?:bash|shell|zsh|exec|execute|terminal|cmd)(?:_|$)/;
-const TERMINAL_COMMAND = /(?:^|_)(?:run|exec|shell|execute)_commands?(?:_|$)/;
+const terminalTool =
+  /(?:^|_)(?:bash|shell|zsh|exec|execute|terminal|cmd)(?:_|$)/u;
+const terminalCommand = /(?:^|_)(?:run|exec|shell|execute)_commands?(?:_|$)/u;
 // "Test-run" titles: a runner followed by `test`, or a runner whose only job is running tests.
-const TEST_RUN =
-  /(?:^|_)(?:cargo|npm|pnpm|yarn|bun|go|make|mvn|gradle|python)_tests?(?:_|$)|(?:^|_)(?:pytest|vitest|jest|ctest)(?:_|$)|(?:^|_)run_tests?(?:_|$)/;
+const testRun =
+  /(?:^|_)(?:cargo|npm|pnpm|yarn|bun|go|make|mvn|gradle|python)_tests?(?:_|$)|(?:^|_)(?:pytest|vitest|jest|ctest)(?:_|$)|(?:^|_)run_tests?(?:_|$)/u;
 
 function normalizeIdentifier(value: string | null | undefined): string {
   return (value ?? "")
     .trim()
-    .replaceAll(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replaceAll(/([a-z0-9])([A-Z])/gu, "$1_$2")
     .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "_")
-    .replaceAll(/^_+|_+$/g, "");
+    .replaceAll(/[^a-z0-9]+/gu, "_")
+    .replaceAll(/^_+|_+$/gu, "");
 }
 
 export interface InteractiveToolPreview {
@@ -96,15 +96,12 @@ function interactiveToolKind(
   return null;
 }
 
-/**
-The latest real screen image from Browser/Computer activity in the current agent turn.
-*/
 export function activeInteractivePreview(
   turns: readonly Turn[]
 ): InteractiveToolPreview | null {
   for (let turnIndex = turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
     const turn = turns[turnIndex];
-    if (!turn || turn.endedAt !== undefined) {
+    if (turn == null || turn.endedAt !== undefined) {
       continue;
     }
 
@@ -116,8 +113,11 @@ export function activeInteractivePreview(
       toolIndex -= 1
     ) {
       const tool = turn.tools[toolIndex];
-      const kind = tool && interactiveToolKind(tool);
-      if (tool && kind) {
+      if (tool == null) {
+        continue;
+      }
+      const kind = interactiveToolKind(tool);
+      if (kind != null) {
         activeTool = { kind, title: tool.title };
         break;
       }
@@ -132,7 +132,7 @@ export function activeInteractivePreview(
       toolIndex -= 1
     ) {
       const tool = turn.tools[toolIndex];
-      if (!tool || interactiveToolKind(tool) !== activeTool.kind) {
+      if (tool == null || interactiveToolKind(tool) !== activeTool.kind) {
         continue;
       }
       const outputs = tool.outputs ?? [];
@@ -152,7 +152,7 @@ export function activeInteractivePreview(
 }
 
 function parsedRecord(value: unknown): JsonRecord | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
+  if (Boolean(value) && typeof value === "object" && !Array.isArray(value)) {
     return value as JsonRecord;
   }
   if (typeof value !== "string") {
@@ -164,7 +164,9 @@ function parsedRecord(value: unknown): JsonRecord | null {
   }
   try {
     const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    return Boolean(parsed) &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
       ? (parsed as JsonRecord)
       : null;
   } catch {
@@ -172,9 +174,6 @@ function parsedRecord(value: unknown): JsonRecord | null {
   }
 }
 
-/**
-Providers nest the real arguments one level down as often as not.
-*/
 function inputRecord(value: unknown): JsonRecord | null {
   const outer = parsedRecord(value);
   if (!outer) {
@@ -204,25 +203,20 @@ function filePathFrom(value: unknown): string | undefined {
 }
 
 function isGitTool(id: string): boolean {
-  return id.length > 0 && (GIT_EXACT.has(id) || GIT_TOOL.test(id));
+  return id.length > 0 && (gitExact.has(id) || gitTool.test(id));
 }
 
 function isFileTool(id: string): boolean {
-  return id.length > 0 && (FILE_EXACT.has(id) || FILE_TOOL.test(id));
+  return id.length > 0 && (fileExact.has(id) || fileTool.test(id));
 }
 
 function isTerminalTool(id: string): boolean {
   return (
     id.length > 0 &&
-    (TERMINAL_TOOL.test(id) || TERMINAL_COMMAND.test(id) || TEST_RUN.test(id))
+    (terminalTool.test(id) || terminalCommand.test(id) || testRun.test(id))
   );
 }
 
-/**
- * Which dock surface a tool call lands on, or null when the dock should not move. Conservative on
- * purpose: reads, searches, and anything unrecognized return null — a wrong follow costs the user
- * their place, a missed one costs nothing.
- */
 export function classifyToolSurface(tool: {
   kind?: string | null;
   title: string;
@@ -230,7 +224,7 @@ export function classifyToolSurface(tool: {
 }): ToolSurfaceHint | null {
   const kind = normalizeIdentifier(tool.kind);
   const title = normalizeIdentifier(tool.title);
-  if (READ_KINDS.has(kind)) {
+  if (readKinds.has(kind)) {
     return null;
   }
   // Git before terminal: `git commit` run through a shell tool belongs on the git surface.
@@ -239,7 +233,9 @@ export function classifyToolSurface(tool: {
   }
   if (kind === "edit" || isFileTool(title)) {
     const file = filePathFrom(tool.agentInput);
-    return file ? { surface: "files", file } : { surface: "files" };
+    return file != null && file !== ""
+      ? { file, surface: "files" }
+      : { surface: "files" };
   }
   if (kind === "execute" || isTerminalTool(title)) {
     return { surface: "terminal" };
@@ -263,9 +259,9 @@ export interface FollowState {
 }
 
 export const initialFollowState: FollowState = {
-  manualLatched: false,
   autoTab: null,
   lastSwitchAt: 0,
+  manualLatched: false,
 };
 
 export type FollowEvent =
@@ -277,24 +273,18 @@ export type FollowEvent =
 /**
 Emitted switches must be at least this far apart — the dock is a place, not a slideshow.
 */
-const SWITCH_DEBOUNCE_MS = 2000;
+const switchDebounceMs = 2000;
 
-/**
- * The follow latch. A manual dock action means "I chose this view": it latches immediately and
- * only a run ending (running → idle | failed) or a session switch releases it — `awaiting_input`
- * does not, because the run the user opted out of is still the same run. Auto-follow never opens
- * a closed dock; it records the surface so the UI can badge it, and emits nothing.
- */
 export function followReduce(
   s: FollowState,
   e: FollowEvent
 ): { state: FollowState; setTab?: DockSurface } {
   switch (e.kind) {
     case "manual": {
-      return { state: { ...s, manualLatched: true, autoTab: null } };
+      return { state: { ...s, autoTab: null, manualLatched: true } };
     }
     case "run_ended": {
-      return { state: { ...s, manualLatched: false, autoTab: null } };
+      return { state: { ...s, autoTab: null, manualLatched: false } };
     }
     case "session_switched": {
       return { state: initialFollowState };
@@ -312,12 +302,12 @@ export function followReduce(
       }
       // Debounced attempts leave state untouched so the switch still happens once the window
       // passes — recording the surface here would make the next event a same-surface no-op.
-      if (e.now - s.lastSwitchAt < SWITCH_DEBOUNCE_MS) {
+      if (e.now - s.lastSwitchAt < switchDebounceMs) {
         return { state: s };
       }
       return {
-        state: { manualLatched: false, autoTab: surface, lastSwitchAt: e.now },
         setTab: surface,
+        state: { autoTab: surface, lastSwitchAt: e.now, manualLatched: false },
       };
     }
   }

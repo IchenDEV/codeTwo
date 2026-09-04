@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  DEFAULT_CODE_FONT_SIZE,
-  DEFAULT_UI_FONT_SIZE,
+  defaultCodeFontSize,
+  defaultUiFontSize,
   resolveTypographyProperties,
 } from "../src/design/typography";
 
@@ -10,8 +10,8 @@ describe("Codex-aligned typography engine", () => {
   test("resolves every semantic role and compatibility alias from the default controls", () => {
     expect(
       resolveTypographyProperties({
-        uiFontSize: DEFAULT_UI_FONT_SIZE,
-        codeFontSize: DEFAULT_CODE_FONT_SIZE,
+        uiFontSize: defaultUiFontSize,
+        codeFontSize: defaultCodeFontSize,
       })
     ).toEqual({
       "--ds-type-large-title-size": "28px",

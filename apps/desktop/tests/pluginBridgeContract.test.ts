@@ -72,9 +72,9 @@ describe("plugin bridge contract", () => {
     expect(adapter).toContain(
       'return this.request("call", { name, args, project_path: projectPath })'
     );
-    expect(adapter).toContain("DESKTOP_HOST_PROTOCOL_VERSION = 1");
+    expect(adapter).toContain("desktopHostProtocolVersion = 1");
     expect(host).toContain('"protocol_version": 1');
-    expect(host.match(/if request\.method == "call"/g)).toHaveLength(1);
+    expect(host.match(/if request\.method == "call"/gu)).toHaveLength(1);
     expect(bridge).toContain("model: initialModel ?? null");
     expect(enginePlugin).toContain("model: Option<String>");
     expect(enginePlugin).toContain("model: args.model");
@@ -116,14 +116,14 @@ describe("plugin bridge contract", () => {
       .join("\n");
 
     const used = new Set(
-      [...bridge.matchAll(/\bcall(?:<[^>]+>)?\(\s*"([^"]+)"/g)].map(
+      [...bridge.matchAll(/\bcall(?:<[^>]+>)?\(\s*"([^"]+)"/gu)].map(
         (match) => match[1]
       )
     );
     const registered = new Set(
       [
         ...pluginSources.matchAll(
-          /ctx\.command(?:_described|_with_realm|_extension_public)?\(\s*"([^"]+)"/g
+          /ctx\.command(?:_described|_with_realm|_extension_public)?\(\s*"([^"]+)"/gu
         ),
       ].map((match) => match[1])
     );

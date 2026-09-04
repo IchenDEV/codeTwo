@@ -46,7 +46,7 @@ export interface SessionConfig {
   worktreeOptionsLoading: boolean;
   onWorktreeBase: (v: WorktreeBaselineKind | null) => void;
   planMode: boolean;
-  onPlan: (v: boolean) => void;
+  onPlan: (isEnabled: boolean) => void;
   /**
   Component-policy gate for the memory picker and its persistence calls.
   */
@@ -71,7 +71,7 @@ export interface SessionConfig {
   Agent-owned scene routing for this session. The currently selected scene remains visible.
   */
   autoScene: boolean;
-  onAutoScene: (enabled: boolean) => void;
+  onAutoScene: (isEnabled: boolean) => void;
   onScene: (reference: string | null, strength: "soft" | "full") => void;
   /**
   Opens the complete scene library where scenes can be created, edited, or duplicated.

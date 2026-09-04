@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Save } from "@/components/ui/icons";
 
@@ -43,24 +43,25 @@ interface SimpleObjectSchema extends JsonSchema {
   properties: Record<string, JsonSchema>;
 }
 
-const SUPPORTED_FIELD_TYPES = new Set([
-  "string",
-  "number",
-  "integer",
-  "boolean",
-]);
+const supportedFieldTypes = new Set(["string", "number", "integer", "boolean"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function asSimpleObjectSchema(value: unknown): SimpleObjectSchema | null {
-  if (!isRecord(value) || !isRecord(value.properties)) return null;
-  if (value.type !== undefined && value.type !== "object") return null;
+  if (!isRecord(value) || !isRecord(value.properties)) {
+    return null;
+  }
+  if (value.type !== undefined && value.type !== "object") {
+    return null;
+  }
 
   const properties = value.properties as Record<string, JsonSchema>;
-  const supported = Object.values(properties).every((property) => {
-    if (!isRecord(property)) return false;
+  const isSupported = Object.values(properties).every((property) => {
+    if (!isRecord(property)) {
+      return false;
+    }
     if (Array.isArray(property.enum) && property.enum.length > 0) {
       return property.enum.every(
         (entry) =>
@@ -70,11 +71,11 @@ function asSimpleObjectSchema(value: unknown): SimpleObjectSchema | null {
     }
     return (
       typeof property.type === "string" &&
-      SUPPORTED_FIELD_TYPES.has(property.type)
+      supportedFieldTypes.has(property.type)
     );
   });
 
-  return supported ? ({ ...value, properties } as SimpleObjectSchema) : null;
+  return isSupported ? ({ ...value, properties } as SimpleObjectSchema) : null;
 }
 
 function formatJson(value: unknown): string {
@@ -102,7 +103,9 @@ function updateProperty(
   name: string,
   value: unknown
 ): Record<string, unknown> {
-  if (value !== undefined) return { ...current, [name]: value };
+  if (value !== undefined) {
+    return { ...current, [name]: value };
+  }
   const next = { ...current };
   delete next[name];
   return next;
@@ -126,8 +129,8 @@ const SchemaField = ({
 
   if (schema.enum?.length) {
     const items = schema.enum.map((entry) => ({
-      value: enumKey(entry),
       label: enumLabel(entry),
+      value: enumKey(entry),
     }));
     const selected =
       schema.enum.find((entry) => Object.is(entry, value)) ??
@@ -144,7 +147,9 @@ const SchemaField = ({
           value={enumKey(selected as JsonPrimitive)}
           onValueChange={(key) => {
             const next = schema.enum?.find((entry) => enumKey(entry) === key);
-            if (next !== undefined) onChange(next);
+            if (next !== undefined) {
+              onChange(next);
+            }
           }}
         >
           <SelectTrigger id={id} className="w-full">
@@ -208,7 +213,7 @@ const SchemaField = ({
       />
     </Field>
   );
-}
+};
 
 export const SchemaConfigEditor = ({
   config,
@@ -221,8 +226,8 @@ export const SchemaConfigEditor = ({
   readonly labels: PluginManagerLabels;
   readonly onSave: (config: unknown) => Promise<void>;
 }) => {
-  const simpleSchema = useMemo(() => asSimpleObjectSchema(schema), [schema]);
-  const incomingJson = useMemo(() => formatJson(config), [config]);
+  const simpleSchema = asSimpleObjectSchema(schema);
+  const incomingJson = formatJson(config);
   const [draft, setDraft] = useState<Record<string, unknown>>(() =>
     initialObject(config)
   );
@@ -242,7 +247,9 @@ export const SchemaConfigEditor = ({
   }, [incomingJson]);
 
   useEffect(() => {
-    if (!simpleSchema) setMode("json");
+    if (!simpleSchema) {
+      setMode("json");
+    }
   }, [simpleSchema]);
 
   const changeDraft = (name: string, value: unknown) => {
@@ -252,7 +259,9 @@ export const SchemaConfigEditor = ({
   };
 
   const save = async () => {
-    if (saving) return;
+    if (saving) {
+      return;
+    }
     setJsonError(null);
     setSaveError(null);
     let next: unknown = draft;
@@ -342,8 +351,9 @@ export const SchemaConfigEditor = ({
         } else if (mode === "json") {
           try {
             const parsed = JSON.parse(json);
-            if (!isRecord(parsed))
+            if (!isRecord(parsed)) {
               throw new Error(labels.invalidConfigurationObject);
+            }
             setDraft(parsed);
             setJsonError(null);
           } catch (error) {
@@ -382,4 +392,4 @@ export const SchemaConfigEditor = ({
       </TabsContent>
     </Tabs>
   );
-}
+};

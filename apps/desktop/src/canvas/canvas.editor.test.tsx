@@ -14,15 +14,15 @@ let render: any;
 let screen: any;
 
 const fakeState = {
-  elements: [],
-  files: {},
   appState: {
     scrollX: 0,
     scrollY: 0,
-    zoom: { value: 1 },
     viewBackgroundColor: "white",
     viewModeEnabled: false,
+    zoom: { value: 1 },
   },
+  elements: [],
+  files: {},
 };
 let latestProps: any = null;
 let latestApi: any = null;
@@ -34,77 +34,77 @@ function fakeCanvas(width = 1, height = 1) {
     drawImage: (...args: any[]) => exportDrawCalls.push(args),
   };
   return {
-    width,
-    height,
     getContext: () => context,
+    height,
     toBlob: (callback: (blob: Blob | null) => void) =>
       callback(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" })),
+    width,
   };
 }
 
 function fakeImageElement(options: any) {
   return {
-    id: `fake-image-${fakeState.elements.length + 1}`,
-    type: "image",
-    x: options.x,
-    y: options.y,
-    width: options.width,
-    height: options.height,
     angle: 0,
-    strokeColor: options.strokeColor,
     backgroundColor: options.backgroundColor,
+    boundElements: null,
+    crop: null,
+    fileId: options.fileId,
     fillStyle: options.fillStyle,
-    strokeWidth: options.strokeWidth,
-    strokeStyle: options.strokeStyle,
-    roughness: options.roughness,
-    roundness: null,
-    opacity: options.opacity,
-    seed: 1,
-    version: 1,
-    versionNonce: 1,
+    frameId: null,
+    groupIds: [],
+    height: options.height,
+    id: `fake-image-${fakeState.elements.length + 1}`,
     index: null,
     isDeleted: false,
-    groupIds: [],
-    frameId: null,
-    boundElements: null,
-    updated: 1,
     link: null,
     locked: false,
-    fileId: options.fileId,
-    status: options.status ?? "saved",
+    opacity: options.opacity,
+    roughness: options.roughness,
+    roundness: null,
     scale: [1, 1],
-    crop: null,
+    seed: 1,
+    status: options.status ?? "saved",
+    strokeColor: options.strokeColor,
+    strokeStyle: options.strokeStyle,
+    strokeWidth: options.strokeWidth,
+    type: "image",
+    updated: 1,
+    version: 1,
+    versionNonce: 1,
+    width: options.width,
+    x: options.x,
+    y: options.y,
   };
 }
 
 function fakeRectangleElement(id = "theme-rectangle") {
   return {
-    id,
-    type: "rectangle",
-    x: 4,
-    y: 8,
-    width: 120,
-    height: 60,
     angle: 0,
-    strokeColor: "black",
     backgroundColor: "transparent",
+    boundElements: null,
     fillStyle: "solid",
-    strokeWidth: 2,
-    strokeStyle: "solid",
-    roundness: null,
-    roughness: 0,
-    opacity: 100,
-    seed: 1,
-    version: 1,
-    versionNonce: 1,
+    frameId: null,
+    groupIds: [],
+    height: 60,
+    id,
     index: "a0",
     isDeleted: false,
-    groupIds: [],
-    frameId: null,
-    boundElements: null,
-    updated: 1,
     link: null,
     locked: false,
+    opacity: 100,
+    roughness: 0,
+    roundness: null,
+    seed: 1,
+    strokeColor: "black",
+    strokeStyle: "solid",
+    strokeWidth: 2,
+    type: "rectangle",
+    updated: 1,
+    version: 1,
+    versionNonce: 1,
+    width: 120,
+    x: 4,
+    y: 8,
   };
 }
 
@@ -113,32 +113,35 @@ const FakeExcalidraw = (props: any) => {
   const [rectangleSelected, setRectangleSelected] = useState(false);
   useEffect(() => {
     latestApi = {
-      getAppState: () => fakeState.appState,
-      getSceneElements: () => fakeState.elements,
-      getFiles: () => fakeState.files,
       addFiles: (files: any[]) => {
         Object.assign(
           fakeState.files,
           Object.fromEntries(files.map((file) => [file.id, file]))
         );
       },
+      getAppState: () => fakeState.appState,
+      getFiles: () => fakeState.files,
+      getSceneElements: () => fakeState.elements,
+      refresh: () => undefined,
+      resetScene: ({ elements, appState, files }: any) => {
+        fakeState.elements = elements ?? [];
+        fakeState.appState = { ...fakeState.appState, ...(appState ?? {}) };
+        fakeState.files = files ?? {};
+      },
+      setActiveTool: () => undefined,
       updateScene: ({ elements, appState }: any) => {
-        if (elements) fakeState.elements = elements;
-        if (appState)
+        if (elements) {
+          fakeState.elements = elements;
+        }
+        if (appState) {
           fakeState.appState = { ...fakeState.appState, ...appState };
+        }
         latestProps?.onChange?.(
           fakeState.elements,
           fakeState.appState,
           fakeState.files
         );
       },
-      resetScene: ({ elements, appState, files }: any) => {
-        fakeState.elements = elements ?? [];
-        fakeState.appState = { ...fakeState.appState, ...(appState ?? {}) };
-        fakeState.files = files ?? {};
-      },
-      refresh: () => undefined,
-      setActiveTool: () => undefined,
     };
     props.excalidrawAPI?.(latestApi);
   }, [props]);
@@ -196,16 +199,16 @@ const FakeExcalidraw = (props: any) => {
       ) : null}
     </div>
   );
-}
+};
 
 mock.module("./styles.css", () => ({}));
 mock.module("./excalidrawAdapter", () => ({
   Excalidraw: FakeExcalidraw,
-  newImageElement: fakeImageElement,
   exportToCanvas: async (options: any) => {
     lastExportOptions = options;
     return fakeCanvas(5000, 3000);
   },
+  newImageElement: fakeImageElement,
 }));
 
 let CanvasEditor: any;
@@ -243,9 +246,9 @@ afterEach(() => {
   fakeState.appState = {
     scrollX: 0,
     scrollY: 0,
-    zoom: { value: 1 },
     viewBackgroundColor: "white",
     viewModeEnabled: false,
+    zoom: { value: 1 },
   };
   restoreDom();
 });
@@ -284,7 +287,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
     ]) {
       expect(canvasStyles).toContain(`var(--ds-${token},`);
     }
-    expect(canvasStyles.match(/var\(--ds-[^,)\s]+\)/g) ?? []).toEqual([]);
+    expect(canvasStyles.match(/var\(--ds-[^,)\s]+\)/gu) ?? []).toEqual([]);
     expect(canvasStyles).toContain(
       "--canvas-radius-module: var(--ds-radius-module, 16px);"
     );
@@ -299,7 +302,8 @@ describe("CanvasEditor behavioral interaction contract", () => {
 
   test("keeps C2 chrome in a bounded second row without toolbar overlap", () => {
     const chromeRule =
-      canvasStyles.match(/\.canvas-editor__chrome \{([\s\S]*?)\n\}/)?.[1] ?? "";
+      canvasStyles.match(/\.canvas-editor__chrome \{([\s\S]*?)\n\}/u)?.[1] ??
+      "";
     expect(chromeRule).toContain(
       "inset-block-start: var(--canvas-chrome-offset)"
     );
@@ -325,29 +329,29 @@ describe("CanvasEditor behavioral interaction contract", () => {
     );
     const narrowRule =
       canvasStyles.match(
-        /@media screen and \(max-width: 450px\) \{([\s\S]*?)\n\}/
+        /@media screen and \(max-width: 450px\) \{([\s\S]*?)\n\}/u
       )?.[1] ?? "";
     expect(narrowRule).toContain("--canvas-chrome-offset: 8rem;");
   });
 
   test("edit mode uses the explicit current theme while frozen modes preserve the envelope theme", async () => {
     const value = {
-      engine: "@excalidraw/excalidraw",
-      engineVersion: "0.18.1",
-      schemaVersion: 1,
-      revision: 2,
-      theme: "light",
-      elements: [],
       appState: {
-        viewBackgroundColor: "white",
-        scrollX: 0,
-        scrollY: 0,
-        zoom: 1,
         gridSize: 20,
         gridStep: 5,
+        scrollX: 0,
+        scrollY: 0,
+        viewBackgroundColor: "white",
         viewModeEnabled: false,
+        zoom: 1,
       },
-      assetRefs: [],
+      assetReferences: [],
+      elements: [],
+      engine: "@excalidraw/excalidraw",
+      engineVersion: "0.18.1",
+      revision: 2,
+      schemaVersion: 1,
+      theme: "light",
     };
     const editRef = React.createRef<any>();
     const { container } = render(
@@ -412,22 +416,22 @@ describe("CanvasEditor behavioral interaction contract", () => {
   test("debounces autosave without incrementing the core-owned revision", async () => {
     const onChange = mock(() => undefined);
     const value = {
-      engine: "@excalidraw/excalidraw",
-      engineVersion: "0.18.1",
-      schemaVersion: 1,
-      revision: 7,
-      theme: "light",
-      elements: [],
       appState: {
-        viewBackgroundColor: "white",
-        scrollX: 0,
-        scrollY: 0,
-        zoom: 1,
         gridSize: 20,
         gridStep: 5,
+        scrollX: 0,
+        scrollY: 0,
+        viewBackgroundColor: "white",
         viewModeEnabled: false,
+        zoom: 1,
       },
-      assetRefs: [],
+      assetReferences: [],
+      elements: [],
+      engine: "@excalidraw/excalidraw",
+      engineVersion: "0.18.1",
+      revision: 7,
+      schemaVersion: 1,
+      theme: "light",
     };
     render(
       <CanvasEditor
@@ -449,11 +453,11 @@ describe("CanvasEditor behavioral interaction contract", () => {
 
   test("normalizes an image before addFiles and places an image element", async () => {
     const normalizer = mock(async () => ({
-      ref: "trusted-image-1",
       bytes: new Uint8Array([137, 80, 78, 71]),
-      mimeType: "image/png" as const,
-      width: 80,
       height: 40,
+      mimeType: "image/png" as const,
+      ref: "trusted-image-1",
+      width: 80,
     }));
     const onChange = mock(() => undefined);
     render(
@@ -481,17 +485,19 @@ describe("CanvasEditor behavioral interaction contract", () => {
     ).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange.mock.calls[0][0].assetRefs[0].ref).toBe("trusted-image-1");
+    expect(onChange.mock.calls[0][0].assetReferences[0].ref).toBe(
+      "trusted-image-1"
+    );
     const { deserializeEnvelope, rehydrateEnvelope, serializeEnvelope } =
       await import("./serialize");
     const reopened = await rehydrateEnvelope(
       deserializeEnvelope(serializeEnvelope(onChange.mock.calls[0][0])),
       [
         {
-          ref: "trusted-image-1",
+          bytes: new Uint8Array([137, 80, 78, 71]),
           fileId: "trusted-image-1",
           mimeType: "image/png",
-          bytes: new Uint8Array([137, 80, 78, 71]),
+          ref: "trusted-image-1",
         },
       ]
     );
@@ -570,17 +576,17 @@ describe("CanvasEditor behavioral interaction contract", () => {
     const root = container.firstElementChild as HTMLElement;
     for (const key of ["3", "9", "d", "f", "i", "k", "m"]) {
       const event = new KeyboardEvent("keydown", {
-        key,
         bubbles: true,
         cancelable: true,
+        key,
       });
       root.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(true);
     }
     for (const init of [
-      { key: "k", ctrlKey: true },
+      { ctrlKey: true, key: "k" },
       { key: "f", metaKey: true },
-      { key: "l", ctrlKey: true, shiftKey: true },
+      { ctrlKey: true, key: "l", shiftKey: true },
     ]) {
       const event = new KeyboardEvent("keydown", {
         ...init,
@@ -592,9 +598,9 @@ describe("CanvasEditor behavioral interaction contract", () => {
     }
     for (const key of ["a", "t"]) {
       const event = new KeyboardEvent("keydown", {
-        key,
         bubbles: true,
         cancelable: true,
+        key,
       });
       root.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(false);
@@ -605,26 +611,26 @@ describe("CanvasEditor behavioral interaction contract", () => {
     const root = document.createElement("div");
     document.body.append(root);
     const value = {
-      engine: "@excalidraw/excalidraw",
-      engineVersion: "0.18.1",
-      schemaVersion: 1,
-      revision: 3,
-      theme: "light",
-      elements: [fakeRectangleElement()],
       appState: {
-        viewBackgroundColor: "white",
-        scrollX: 0,
-        scrollY: 0,
-        zoom: 1,
         gridSize: 20,
         gridStep: 5,
+        scrollX: 0,
+        scrollY: 0,
+        viewBackgroundColor: "white",
         viewModeEnabled: false,
+        zoom: 1,
       },
-      assetRefs: [],
+      assetReferences: [],
+      elements: [fakeRectangleElement()],
+      engine: "@excalidraw/excalidraw",
+      engineVersion: "0.18.1",
+      revision: 3,
+      schemaVersion: 1,
+      theme: "light",
     };
     const globalContract = (window as any).CodeTwoCanvasIsland;
     await act(async () => {
-      globalContract.mount(root, { value, theme: "dark" });
+      globalContract.mount(root, { theme: "dark", value });
     });
     expect(root.querySelector('[data-canvas-collapsed="true"]')).toBeTruthy();
     expect(globalContract.prepareDraft(root).envelope.theme).toBe("dark");
@@ -651,36 +657,36 @@ describe("CanvasEditor behavioral interaction contract", () => {
     const { exportCanvasPng, getCanvasExportBounds } = await import("./export");
     const scene = [
       {
-        id: "rectangle-1",
-        type: "rectangle",
-        x: -100,
-        y: 50,
-        width: 5000,
-        height: 3000,
         angle: 0,
-        strokeColor: "black",
         backgroundColor: "transparent",
+        boundElements: null,
         fillStyle: "solid",
-        strokeWidth: 2,
-        strokeStyle: "solid",
-        roundness: null,
-        roughness: 0,
-        opacity: 100,
-        seed: 1,
-        version: 1,
-        versionNonce: 1,
+        frameId: null,
+        groupIds: [],
+        height: 3000,
+        id: "rectangle-1",
         index: "a0",
         isDeleted: false,
-        groupIds: [],
-        frameId: null,
-        boundElements: null,
-        updated: 1,
         link: null,
         locked: false,
+        opacity: 100,
+        roughness: 0,
+        roundness: null,
+        seed: 1,
+        strokeColor: "black",
+        strokeStyle: "solid",
+        strokeWidth: 2,
+        type: "rectangle",
+        updated: 1,
+        version: 1,
+        versionNonce: 1,
+        width: 5000,
+        x: -100,
+        y: 50,
       },
     ];
     const bounds = getCanvasExportBounds(scene as any, 24);
-    expect(bounds).toEqual({ minX: -124, minY: 26, maxX: 4924, maxY: 3074 });
+    expect(bounds).toEqual({ maxX: 4924, maxY: 3074, minX: -124, minY: 26 });
     const originalCreateElement = document.createElement.bind(document);
     (document as any).createElement = (tagName: string) =>
       tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
@@ -732,32 +738,32 @@ describe("CanvasEditor behavioral interaction contract", () => {
       });
     });
     const rectangle = {
-      id: "remote-rectangle",
-      type: "rectangle",
-      x: -4,
-      y: 8,
-      width: 120,
-      height: 60,
       angle: 0,
-      strokeColor: "black",
       backgroundColor: "transparent",
+      boundElements: null,
       fillStyle: "solid",
-      strokeWidth: 2,
-      strokeStyle: "solid",
-      roundness: null,
-      roughness: 0,
-      opacity: 100,
-      seed: 1,
-      version: 1,
-      versionNonce: 1,
+      frameId: null,
+      groupIds: [],
+      height: 60,
+      id: "remote-rectangle",
       index: "a0",
       isDeleted: false,
-      groupIds: [],
-      frameId: null,
-      boundElements: null,
-      updated: 1,
       link: null,
       locked: false,
+      opacity: 100,
+      roughness: 0,
+      roundness: null,
+      seed: 1,
+      strokeColor: "black",
+      strokeStyle: "solid",
+      strokeWidth: 2,
+      type: "rectangle",
+      updated: 1,
+      version: 1,
+      versionNonce: 1,
+      width: 120,
+      x: -4,
+      y: 8,
     };
     await act(async () => {
       latestApi.updateScene({ elements: [rectangle] });
@@ -785,57 +791,57 @@ describe("CanvasEditor behavioral interaction contract", () => {
     const root = document.createElement("div");
     document.body.append(root);
     const image = fakeImageElement({
+      backgroundColor: "transparent",
       fileId: "trusted-image-2",
+      fillStyle: "solid",
+      height: 40,
+      opacity: 100,
+      roughness: 0,
+      status: "saved",
+      strokeColor: "black",
+      strokeStyle: "solid",
+      strokeWidth: 2,
+      width: 80,
       x: 10,
       y: 20,
-      width: 80,
-      height: 40,
-      strokeColor: "black",
-      backgroundColor: "transparent",
-      fillStyle: "solid",
-      strokeWidth: 2,
-      strokeStyle: "solid",
-      roughness: 0,
-      opacity: 100,
-      status: "saved",
     });
     const value = {
-      engine: "@excalidraw/excalidraw",
-      engineVersion: "0.18.1",
-      schemaVersion: 1,
-      revision: 4,
-      theme: "light",
-      elements: [image],
       appState: {
-        viewBackgroundColor: "white",
-        scrollX: 0,
-        scrollY: 0,
-        zoom: 1,
         gridSize: 20,
         gridStep: 5,
+        scrollX: 0,
+        scrollY: 0,
+        viewBackgroundColor: "white",
         viewModeEnabled: false,
+        zoom: 1,
       },
-      assetRefs: [
+      assetReferences: [
         {
-          ref: "trusted-image-2",
-          fileId: "trusted-image-2",
-          mimeType: "image/png",
           byteLength: 4,
-          width: 80,
+          fileId: "trusted-image-2",
           height: 40,
+          mimeType: "image/png",
+          ref: "trusted-image-2",
+          width: 80,
         },
       ],
+      elements: [image],
+      engine: "@excalidraw/excalidraw",
+      engineVersion: "0.18.1",
+      revision: 4,
+      schemaVersion: 1,
+      theme: "light",
     };
     const globalContract = (window as any).CodeTwoCanvasIsland;
     await act(async () => {
       globalContract.mount(root, {
-        value,
         assetResolver: async (asset: any) => ({
-          ref: asset.ref,
+          bytes: new Uint8Array([137, 80, 78, 71]),
           fileId: asset.fileId,
           mimeType: asset.mimeType,
-          bytes: new Uint8Array([137, 80, 78, 71]),
+          ref: asset.ref,
         }),
+        value,
       });
     });
     expect(root.querySelector('[data-canvas-collapsed="true"]')).toBeTruthy();

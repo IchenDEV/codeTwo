@@ -9,18 +9,16 @@ interface StatusBadgeProps {
   readonly children: ReactNode;
 }
 
-const StatusBadge = ({ tone, children }: StatusBadgeProps) => {
-  return (
-    <Badge
-      variant="ghost"
-      size="status"
-      tone={tone}
-      data-slot="status-badge"
-      data-tone={tone}
-    >
-      {children}
-    </Badge>
-  );
-}
+const StatusBadge = ({ tone, children }: StatusBadgeProps) => (
+  <Badge
+    variant="ghost"
+    size="status"
+    tone={tone}
+    data-slot="status-badge"
+    data-tone={tone}
+  >
+    {children}
+  </Badge>
+);
 
 export { StatusBadge, type StatusBadgeProps, type StatusTone };

@@ -18,7 +18,7 @@ export type SessionMode = "read_only" | "ask" | "auto_edit" | "full_access";
 /**
 What each choice resolves to underneath. Ordered as the picker and the cycle shortcut present it: loosest last.
 */
-export const SESSION_MODES: readonly {
+export const sessionModes: readonly {
   id: SessionMode;
   mode: PermissionMode;
   sandbox: Sandbox;
@@ -29,12 +29,6 @@ export const SESSION_MODES: readonly {
   { id: "full_access", mode: "yolo", sandbox: "danger_full_access" },
 ];
 
-/**
- * Which choice a live policy reads as. Sessions predate this control and remote clients still set
- * the axes independently, so this has to name *any* pair, not just the four the picker can produce.
- * Checked restrictive-ceiling-first, mirroring how the engine decides: Read-only rejects reported
- * mutation and unknown tool kinds whatever the approval mode says.
- */
 export function sessionMode(
   mode: PermissionMode,
   sandbox: Sandbox
@@ -51,9 +45,6 @@ export function sessionMode(
   return "ask";
 }
 
-/**
-Restore both axes from the durable session projection when navigation changes sessions.
-*/
 export function sessionExecutionPolicy(
   session:
     Pick<SessionInfo, "permission_mode" | "sandbox_policy"> | null | undefined
@@ -64,40 +55,32 @@ export function sessionExecutionPolicy(
   return { mode: session.permission_mode, sandbox: session.sandbox_policy };
 }
 
-/**
-Replace the durable policy projection for one session without disturbing the other rows.
-*/
 export function withSessionExecutionPolicy<
   T extends Pick<SessionInfo, "id" | "permission_mode" | "sandbox_policy">,
 >(sessions: readonly T[], sessionId: string, policy: ExecutionPolicy): T[] {
-  return sessions.map((session) => session.id === sessionId
+  return sessions.map((session) => {
+    return session.id === sessionId
       ? {
           ...session,
           permission_mode: policy.mode,
           sandbox_policy: policy.sandbox,
         }
-      : session
-  );
+      : session;
+  });
 }
 
-/**
-The picker cannot truthfully change while creation or a durable policy write is pending.
-*/
 export function executionPolicyChangeDisabled(
-  pendingCreation: boolean,
+  isPendingCreation: boolean,
   activeSession: string | null,
   pendingSessions: { has: (session: string) => boolean }
 ): boolean {
   return (
-    pendingCreation ||
+    isPendingCreation ||
     (activeSession !== null && pendingSessions.has(activeSession))
   );
 }
 
-/**
-The next choice along, for the cycle-mode shortcut. Wraps.
-*/
 export function nextSessionMode(current: SessionMode): SessionMode {
-  const index = SESSION_MODES.findIndex((m) => m.id === current);
-  return SESSION_MODES[(index + 1) % SESSION_MODES.length].id;
+  const index = sessionModes.findIndex((m) => m.id === current);
+  return sessionModes[(index + 1) % sessionModes.length].id;
 }

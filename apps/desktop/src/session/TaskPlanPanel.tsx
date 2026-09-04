@@ -14,7 +14,7 @@ import type { Turn } from "./turns";
 
 export type TaskPlanStatus = "pending" | "in_progress" | "completed";
 
-const CHECKBOX_MARKER = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/;
+const checkboxMarker = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/u;
 
 export function taskPlanStatus(entry: PlanEntry): TaskPlanStatus {
   const status = (entry.status ?? "").trim().toLowerCase().replaceAll("-", "_");
@@ -26,14 +26,16 @@ export function taskPlanStatus(entry: PlanEntry): TaskPlanStatus {
   if (["in_progress", "active", "running", "started"].includes(status)) {
     return "in_progress";
   }
-  if (status) return "pending";
-  return CHECKBOX_MARKER.exec(entry.content)?.[1]?.toLowerCase() === "x"
+  if (status) {
+    return "pending";
+  }
+  return checkboxMarker.exec(entry.content)?.[1]?.toLowerCase() === "x"
     ? "completed"
     : "pending";
 }
 
 export function taskPlanLabel(entry: PlanEntry): string {
-  return CHECKBOX_MARKER.exec(entry.content)?.[2] ?? entry.content;
+  return checkboxMarker.exec(entry.content)?.[2] ?? entry.content;
 }
 
 export function planChecklistMarkdown(
@@ -42,9 +44,9 @@ export function planChecklistMarkdown(
   return entries
     .map((entry) => {
       const normalized = typeof entry === "string" ? { content: entry } : entry;
-      const marked = CHECKBOX_MARKER.exec(normalized.content);
+      const marked = checkboxMarker.exec(normalized.content);
       const explicitStatus = "status" in normalized ? normalized.status : null;
-      if (marked && explicitStatus == null) {
+      if (marked && (explicitStatus === null || explicitStatus === undefined)) {
         return `- [${marked[1] === " " ? " " : "x"}] ${marked[2]}`;
       }
       const checked = taskPlanStatus(normalized) === "completed" ? "x" : " ";
@@ -81,7 +83,7 @@ const StatusIcon = ({ status }: { readonly status: TaskPlanStatus }) => {
       aria-label={t("taskPlan.status.pending")}
     />
   );
-}
+};
 
 export const TaskPlanPanel = ({
   turns,
@@ -126,13 +128,12 @@ export const TaskPlanPanel = ({
         <h2 className="text-body min-w-0 flex-1 truncate font-medium">
           {t("taskPlan.title")}
         </h2>
-        <p
-          role="status"
+        <output
           aria-live="polite"
           className="text-metadata text-muted-foreground shrink-0 font-medium tabular-nums"
         >
           {t("taskPlan.step", { current: currentStep, total: entries.length })}
-        </p>
+        </output>
       </div>
       <div className="px-2 pb-1">
         <Progress
@@ -172,8 +173,10 @@ export const TaskPlanPanel = ({
         })}
       </ol>
 
-      {(onOpenPlanAsDocument || (canPinPlan && onPinPlanArtifact)) ? <div className="flex flex-wrap gap-1 px-2 pt-2">
-          {onOpenPlanAsDocument ? <Button
+      {onOpenPlanAsDocument || (canPinPlan && onPinPlanArtifact) ? (
+        <div className="flex flex-wrap gap-1 px-2 pt-2">
+          {onOpenPlanAsDocument ? (
+            <Button
               type="button"
               size="xs"
               variant="secondary"
@@ -182,16 +185,20 @@ export const TaskPlanPanel = ({
               }
             >
               {t("planDoc.open")}
-            </Button> : null}
-          {canPinPlan && onPinPlanArtifact ? <Button
+            </Button>
+          ) : null}
+          {canPinPlan && onPinPlanArtifact ? (
+            <Button
               type="button"
               size="xs"
               variant="ghost"
               onClick={() => onPinPlanArtifact(planChecklistMarkdown(entries))}
             >
               {t("planDoc.pin")}
-            </Button> : null}
-        </div> : null}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
-}
+};

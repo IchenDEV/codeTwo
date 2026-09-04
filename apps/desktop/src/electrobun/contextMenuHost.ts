@@ -2,7 +2,7 @@ import type { ApplicationMenuItemConfig } from "electrobun/bun";
 
 import type { NativeContextMenuAction, NativeContextMenuItem } from "./rpc";
 
-const CONTEXT_MENU_ACTION = "codetwo-context-menu";
+const contextMenuAction = "codetwo-context-menu";
 
 export function nativeContextMenuConfig(
   items: NativeContextMenuItem[],
@@ -14,12 +14,12 @@ export function nativeContextMenuConfig(
     }
 
     return {
-      type: "normal",
-      label: item.label,
-      action: CONTEXT_MENU_ACTION,
-      data: { requestId, action: item.action },
-      enabled: item.enabled,
+      action: contextMenuAction,
       checked: item.checked,
+      data: { action: item.action, requestId },
+      enabled: item.enabled,
+      label: item.label,
+      type: "normal",
       ...(item.submenu && {
         submenu: nativeContextMenuConfig(item.submenu, requestId),
       }),
@@ -40,7 +40,7 @@ export function nativeContextMenuAction(
 
   const { action, data } = eventData as { action?: unknown; data?: unknown };
   if (
-    action !== CONTEXT_MENU_ACTION ||
+    action !== contextMenuAction ||
     typeof data !== "object" ||
     data === null
   ) {
@@ -52,5 +52,5 @@ export function nativeContextMenuAction(
   if (typeof requestId !== "string" || typeof selectedAction !== "string") {
     return null;
   }
-  return { requestId, action: selectedAction };
+  return { action: selectedAction, requestId };
 }

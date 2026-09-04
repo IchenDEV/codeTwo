@@ -18,11 +18,13 @@ import {
   setDeviceSyncEnabled,
   setPluginDeveloperMode,
   syncDeviceDataNow,
-  type BrowserUseSettings,
-  type ComputerUseSettings,
-  type DiagnosticsExportResult,
-  type DeviceSyncStatus,
-  type PluginDeveloperStatus,
+} from "../bridge";
+import type {
+  BrowserUseSettings,
+  ComputerUseSettings,
+  DiagnosticsExportResult,
+  DeviceSyncStatus,
+  PluginDeveloperStatus,
 } from "../bridge";
 import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
@@ -68,7 +70,7 @@ const BackendSettingsPage = ({
   readonly copy: BackendCopy;
   readonly loader: () => Promise<ComputerUseSettings>;
   readonly saver: (backend: string) => Promise<ComputerUseSettings>;
-  readonly accessSaver?: (enabled: boolean) => Promise<BrowserUseSettings>;
+  readonly accessSaver?: (isEnabled: boolean) => Promise<BrowserUseSettings>;
 }) => {
   const [settings, setSettings] = useState<ComputerUseSettings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -77,17 +79,21 @@ const BackendSettingsPage = ({
   copyRef.current = copy;
 
   useEffect(() => {
-    let active = true;
+    let isActive = true;
     setError(null);
     void loader()
       .then((next) => {
-        if (active) setSettings(next);
+        if (isActive) {
+          setSettings(next);
+        }
       })
       .catch((cause) => {
-        if (active) setError(copyRef.current.loadFailed(cause));
+        if (isActive) {
+          setError(copyRef.current.loadFailed(cause));
+        }
       });
     return () => {
-      active = false;
+      isActive = false;
     };
   }, [loader]);
 
@@ -112,12 +118,14 @@ const BackendSettingsPage = ({
     }
   }
 
-  async function saveAccess(enabled: boolean) {
-    if (!accessSaver) return;
+  async function saveAccess(isEnabled: boolean) {
+    if (!accessSaver) {
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      setSettings(await accessSaver(enabled));
+      setSettings(await accessSaver(isEnabled));
     } catch (cause) {
       setError(copy.loadFailed(cause));
     } finally {
@@ -125,13 +133,15 @@ const BackendSettingsPage = ({
     }
   }
 
-  const accessEnabled =
+  const isAccessEnabled =
     (settings as BrowserUseSettings | null)?.access_enabled ?? false;
 
   return (
     <Page title={copy.title} description={copy.description}>
       <p className="text-metadata text-muted-foreground pb-2">{copy.scope}</p>
-      {error ? <p className="text-metadata text-destructive pb-2">{error}</p> : null}
+      {error ? (
+        <p className="text-metadata text-destructive pb-2">{error}</p>
+      ) : null}
       {settings?.errors.map((message) => (
         <p key={message} className="text-metadata text-destructive pb-2">
           {message}
@@ -143,21 +153,27 @@ const BackendSettingsPage = ({
         </p>
       ) : (
         <>
-          {accessSaver ? <Row label={copy.access ?? ""} hint={copy.accessHint}>
+          {accessSaver ? (
+            <Row label={copy.access ?? ""} hint={copy.accessHint}>
               <Switch
                 data-agent-browser-access
                 aria-label={copy.access}
-                checked={accessEnabled}
+                checked={isAccessEnabled}
                 disabled={saving}
                 onCheckedChange={(enabled) => void saveAccess(enabled)}
               />
-            </Row> : null}
+            </Row>
+          ) : null}
           <Row label={copy.backend}>
             <Select
               value={selection}
-              disabled={saving || (accessSaver !== undefined && !accessEnabled)}
+              disabled={
+                saving || (accessSaver !== undefined && !isAccessEnabled)
+              }
               onValueChange={(backend) => {
-                if (backend) void save(backend);
+                if (backend) {
+                  void save(backend);
+                }
               }}
             >
               <SelectTrigger
@@ -218,7 +234,7 @@ const BackendSettingsPage = ({
       )}
     </Page>
   );
-}
+};
 
 export const ComputerUseSettingsPage = ({
   loader = getComputerUseSettings,
@@ -233,23 +249,23 @@ export const ComputerUseSettingsPage = ({
       loader={loader}
       saver={saver}
       copy={{
-        title: t("settings.computerUse"),
-        description: t("settings.computerUseHint"),
-        scope: t("settings.computerUseNewSession"),
-        backend: t("settings.computerUseBackend"),
         automatic: t("settings.computerUseAutomatic"),
-        disabled: t("settings.computerUseDisabled"),
-        backends: t("settings.computerUseBackends"),
-        loading: t("settings.computerUseLoading"),
         available: t("settings.computerUseAvailable"),
-        unavailable: t("settings.computerUseUnavailable"),
+        backend: t("settings.computerUseBackend"),
+        backends: t("settings.computerUseBackends"),
+        description: t("settings.computerUseHint"),
+        disabled: t("settings.computerUseDisabled"),
         loadFailed: (error) =>
           t("settings.computerUseLoadFailed", { error: String(error) }),
+        loading: t("settings.computerUseLoading"),
+        scope: t("settings.computerUseNewSession"),
         testId: "computer-use",
+        title: t("settings.computerUse"),
+        unavailable: t("settings.computerUseUnavailable"),
       }}
     />
   );
-}
+};
 
 export const BrowserUseSettingsPage = ({
   loader = getBrowserUseSettings,
@@ -258,7 +274,7 @@ export const BrowserUseSettingsPage = ({
 }: {
   readonly loader?: () => Promise<BrowserUseSettings>;
   readonly saver?: (backend: string) => Promise<BrowserUseSettings>;
-  readonly accessSaver?: (enabled: boolean) => Promise<BrowserUseSettings>;
+  readonly accessSaver?: (isEnabled: boolean) => Promise<BrowserUseSettings>;
 }) => {
   const t = useT();
   return (
@@ -267,36 +283,37 @@ export const BrowserUseSettingsPage = ({
       saver={saver}
       accessSaver={accessSaver}
       copy={{
-        title: t("settings.browserUse"),
-        description: t("settings.browserUseHint"),
-        scope: t("settings.browserUseNewSession"),
         access: t("settings.agentBrowserAccess"),
         accessHint: t("settings.agentBrowserAccessHint"),
-        backend: t("settings.browserUseBackend"),
         automatic: t("settings.browserUseAutomatic"),
-        disabled: t("settings.browserUseDisabled"),
-        backends: t("settings.browserUseBackends"),
-        loading: t("settings.browserUseLoading"),
         available: t("settings.browserUseAvailable"),
-        unavailable: t("settings.browserUseUnavailable"),
+        backend: t("settings.browserUseBackend"),
+        backends: t("settings.browserUseBackends"),
+        description: t("settings.browserUseHint"),
+        disabled: t("settings.browserUseDisabled"),
         loadFailed: (error) =>
           t("settings.browserUseLoadFailed", { error: String(error) }),
+        loading: t("settings.browserUseLoading"),
+        scope: t("settings.browserUseNewSession"),
         testId: "browser-use",
+        title: t("settings.browserUse"),
+        unavailable: t("settings.browserUseUnavailable"),
       }}
     />
   );
-}
+};
 
 function syncHint(
   t: ReturnType<typeof useT>,
   status: DeviceSyncStatus | null
 ): string {
   switch (status?.state) {
-    case "disabled":
+    case "disabled": {
       return status.available
         ? t("settings.syncReady")
         : t("settings.syncUnavailable");
-    case "ready":
+    }
+    case "ready": {
       return status.last_success_at
         ? t("settings.syncLastSuccess", {
             time: new Intl.DateTimeFormat(undefined, {
@@ -305,22 +322,30 @@ function syncHint(
             }).format(status.last_success_at),
           })
         : t("settings.syncReady");
-    case "syncing":
+    }
+    case "syncing": {
       return t("settings.syncing");
-    case "signed-out":
+    }
+    case "signed-out": {
       return t("settings.syncSignedOut");
-    case "restricted":
+    }
+    case "restricted": {
       return t("settings.syncRestricted");
-    case "unsupported":
+    }
+    case "unsupported": {
       return t("settings.syncUnsupported");
-    case "unavailable":
+    }
+    case "unavailable": {
       return t("settings.syncUnavailable");
-    case "error":
+    }
+    case "error": {
       return status.message || t("settings.syncUnavailable");
-    default:
+    }
+    default: {
       return status?.available
         ? t("settings.syncReady")
         : t("settings.syncLoading");
+    }
   }
 }
 
@@ -330,7 +355,7 @@ export const DeviceSyncSettingsPage = ({
   syncStarter = syncDeviceDataNow,
 }: {
   readonly loader?: () => Promise<DeviceSyncStatus>;
-  readonly enabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
+  readonly enabledSaver?: (isEnabled: boolean) => Promise<DeviceSyncStatus>;
   readonly syncStarter?: () => Promise<DeviceSyncStatus>;
 }) => {
   const t = useT();
@@ -338,42 +363,44 @@ export const DeviceSyncSettingsPage = ({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    let active = true;
+    let isActive = true;
     void loader()
       .then((next) => {
-        if (active) setStatus(next);
+        if (isActive) {
+          setStatus(next);
+        }
       })
       .catch((error) => {
-        if (active) {
+        if (isActive) {
           setStatus({
-            transport: "paired-devices",
-            state: "error",
-            enabled: false,
             available: false,
+            enabled: false,
+            imported: null,
             last_success_at: null,
             message: String(error),
-            imported: null,
+            state: "error",
+            transport: "paired-devices",
           });
         }
       });
     return () => {
-      active = false;
+      isActive = false;
     };
   }, [loader]);
 
-  async function saveEnabled(enabled: boolean) {
+  async function saveEnabled(isEnabled: boolean) {
     setSaving(true);
     try {
-      setStatus(await enabledSaver(enabled));
+      setStatus(await enabledSaver(isEnabled));
     } catch (error) {
       setStatus((current) => ({
-        transport: current?.transport ?? "paired-devices",
-        state: "error",
-        enabled: current?.enabled ?? false,
         available: current?.available ?? false,
+        enabled: current?.enabled ?? false,
+        imported: current?.imported ?? null,
         last_success_at: current?.last_success_at ?? null,
         message: String(error),
-        imported: current?.imported ?? null,
+        state: "error",
+        transport: current?.transport ?? "paired-devices",
       }));
     } finally {
       setSaving(false);
@@ -389,7 +416,7 @@ export const DeviceSyncSettingsPage = ({
     } catch (error) {
       setStatus((current) =>
         current
-          ? { ...current, state: "error", message: String(error) }
+          ? { ...current, message: String(error), state: "error" }
           : current
       );
     }
@@ -432,7 +459,7 @@ export const DeviceSyncSettingsPage = ({
       </p>
     </Page>
   );
-}
+};
 
 export const DeveloperSettingsPage = ({
   loader = getPluginDeveloperStatus,
@@ -442,7 +469,7 @@ export const DeveloperSettingsPage = ({
   diagnosticsExporter = exportRedactedDiagnostics,
 }: {
   readonly loader?: () => Promise<PluginDeveloperStatus>;
-  readonly modeSaver?: (enabled: boolean) => Promise<PluginDeveloperStatus>;
+  readonly modeSaver?: (isEnabled: boolean) => Promise<PluginDeveloperStatus>;
   readonly reloader?: () => Promise<PluginDeveloperStatus>;
   readonly devtoolsOpener?: () => Promise<void>;
   readonly diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
@@ -458,39 +485,43 @@ export const DeveloperSettingsPage = ({
   );
 
   useEffect(() => {
-    let active = true;
+    let isActive = true;
     let unsubscribe = () => {};
     const refresh = () => {
       void loader()
         .then((next) => {
-          if (active) {
+          if (isActive) {
             setStatus(next);
             setError(null);
           }
         })
         .catch((cause) => {
-          if (active)
+          if (isActive) {
             setError(
               t("settings.developerLoadFailed", { error: String(cause) })
             );
+          }
         });
     };
     refresh();
     void onPluginsChanged(refresh).then((stop) => {
-      if (active) unsubscribe = stop;
-      else stop();
+      if (isActive) {
+        unsubscribe = stop;
+      } else {
+        stop();
+      }
     });
     return () => {
-      active = false;
+      isActive = false;
       unsubscribe();
     };
   }, [loader, t]);
 
-  async function saveMode(enabled: boolean) {
+  async function saveMode(isEnabled: boolean) {
     setSaving(true);
     setError(null);
     try {
-      setStatus(await modeSaver(enabled));
+      setStatus(await modeSaver(isEnabled));
     } catch (cause) {
       setError(t("settings.developerSaveFailed", { error: String(cause) }));
     } finally {
@@ -525,10 +556,11 @@ export const DeveloperSettingsPage = ({
     setError(null);
     try {
       const result = await diagnosticsExporter();
-      if (result === "saved")
+      if (result === "saved") {
         setDiagnosticsMessage(t("settings.diagnosticsExported"));
-      else if (result === "unsupported")
+      } else if (result === "unsupported") {
         setError(t("settings.diagnosticsUnsupported"));
+      }
     } catch (cause) {
       setError(t("settings.diagnosticsExportFailed", { error: String(cause) }));
     } finally {
@@ -580,12 +612,14 @@ export const DeveloperSettingsPage = ({
         hint={
           <span aria-live="polite">
             <span className="block">{statusText}</span>
-            {reloadDetail ? <span
+            {reloadDetail ? (
+              <span
                 className="mt-0.5 block"
                 role={reloadRecord?.success ? undefined : "alert"}
               >
                 {reloadDetail}
-              </span> : null}
+              </span>
+            ) : null}
           </span>
         }
       >
@@ -640,23 +674,27 @@ export const DeveloperSettingsPage = ({
             : t("settings.exportDiagnosticsAction")}
         </Button>
       </Row>
-      {error ? <p className="text-metadata text-destructive pt-2" role="alert">
+      {error ? (
+        <p className="text-metadata text-destructive pt-2" role="alert">
           {error}
-        </p> : null}
+        </p>
+      ) : null}
     </Page>
   );
-}
+};
 
 export const BrowserPermissionsSettingsPage = () => {
   const [origins, setOrigins] = useState<string[]>([]);
 
   useEffect(() => {
-    let active = true;
+    let isActive = true;
     void browserPermissions().then((next) => {
-      if (active) setOrigins(next);
+      if (isActive) {
+        setOrigins(next);
+      }
     });
     return () => {
-      active = false;
+      isActive = false;
     };
   }, []);
 
@@ -705,4 +743,4 @@ export const BrowserPermissionsSettingsPage = () => {
       )}
     </Page>
   );
-}
+};

@@ -43,7 +43,7 @@ const { parseCanvasHistoryPrompt } =
 const {
   canvasAcceptedRequestKey,
   canvasIdsToPurgeAfterTurnStart,
-  canvasRetryRefsForTerminal,
+  canvasRetryReferencesForTerminal,
   canvasRetryDocument,
   canvasRetryTargetSession,
   canvasUnmountPlan,
@@ -233,7 +233,9 @@ describe("Desktop Canvas Composer integration seams", () => {
       active += 1;
       maximumActive = Math.max(maximumActive, active);
       savedRevisions.push(envelope.revision);
-      if (savedRevisions.length === 1) await firstGate;
+      if (savedRevisions.length === 1) {
+        await firstGate;
+      }
       active -= 1;
       return {
         ...draft("queue", envelope.revision + 1),
@@ -326,17 +328,17 @@ describe("Desktop Canvas Composer integration seams", () => {
       "session-failed:request-1"
     );
     expect(
-      canvasRetryRefsForTerminal(
+      canvasRetryReferencesForTerminal(
         "error",
         "provider does not support image pixels",
         refs
       )
     ).toEqual(refs);
-    expect(canvasRetryRefsForTerminal("error", "CAS conflict", refs)).toEqual(
+    expect(canvasRetryReferencesForTerminal("error", "CAS conflict", refs)).toEqual(
       []
     );
     expect(
-      canvasRetryRefsForTerminal(
+      canvasRetryReferencesForTerminal(
         "success",
         "provider does not support image pixels",
         refs

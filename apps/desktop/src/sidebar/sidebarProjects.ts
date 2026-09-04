@@ -1,5 +1,5 @@
-export const SIDEBAR_PROJECTS_STORAGE_KEY = "codetwo.rail.projects.v1";
-export const ROOT_PROJECT_ORDER_KEY = "root";
+export const sidebarProjectsStorageKey = "codetwo.rail.projects.v1";
+export const rootProjectOrderKey = "root";
 
 export interface SidebarProjectsState {
   version: 1;
@@ -9,16 +9,16 @@ export interface SidebarProjectsState {
 }
 
 function emptyState(): SidebarProjectsState {
-  return { version: 1, assignments: {}, order: {}, collapsed: {} };
+  return { assignments: {}, collapsed: {}, order: {}, version: 1 };
 }
 
 function cleanPathLists(value: unknown): Record<string, string[]> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }
   const result: Record<string, string[]> = {};
   for (const [key, candidate] of Object.entries(value)) {
-    if (!key || !Array.isArray(candidate)) {
+    if (key === "" || !Array.isArray(candidate)) {
       continue;
     }
     const paths = [
@@ -26,7 +26,7 @@ function cleanPathLists(value: unknown): Record<string, string[]> {
         candidate
           .filter(
             (path): path is string =>
-              typeof path === "string" && Boolean(path.trim())
+              typeof path === "string" && path.trim() !== ""
           )
           .map((path) => path.trim())
       ),
@@ -45,8 +45,8 @@ export function loadSidebarProjects(
     return emptyState();
   }
   try {
-    const raw = storage.getItem(SIDEBAR_PROJECTS_STORAGE_KEY);
-    if (!raw) {
+    const raw = storage.getItem(sidebarProjectsStorageKey);
+    if (raw == null || raw === "") {
       return emptyState();
     }
     const value = JSON.parse(raw) as Record<string, unknown>;
@@ -54,31 +54,31 @@ export function loadSidebarProjects(
       return emptyState();
     }
     const assignments =
-      value.assignments &&
+      value.assignments != null &&
       typeof value.assignments === "object" &&
       !Array.isArray(value.assignments)
         ? (Object.fromEntries(
             Object.entries(value.assignments).filter(
               ([path, sectionId]) =>
-                path && typeof sectionId === "string" && Boolean(sectionId)
+                path !== "" && typeof sectionId === "string" && sectionId !== ""
             )
           ) as Record<string, string>)
         : {};
     const collapsed =
-      value.collapsed &&
+      value.collapsed != null &&
       typeof value.collapsed === "object" &&
       !Array.isArray(value.collapsed)
         ? (Object.fromEntries(
             Object.entries(value.collapsed).filter(
-              ([path, isCollapsed]) => path && isCollapsed === true
+              ([path, isCollapsed]) => path !== "" && isCollapsed === true
             )
           ) as Record<string, boolean>)
         : {};
     return {
-      version: 1,
       assignments,
-      order: cleanPathLists(value.order),
       collapsed,
+      order: cleanPathLists(value.order),
+      version: 1,
     };
   } catch {
     return emptyState();
@@ -93,7 +93,7 @@ export function saveSidebarProjects(
     return;
   }
   try {
-    storage.setItem(SIDEBAR_PROJECTS_STORAGE_KEY, JSON.stringify(state));
+    storage.setItem(sidebarProjectsStorageKey, JSON.stringify(state));
   } catch {
     // A private/full store makes this renderer-only without changing Project or Task data.
   }
@@ -123,7 +123,7 @@ export function sortSidebarProjects<T extends { path: string }>(
 }
 
 function orderKey(sectionId: string | null): string {
-  return sectionId ?? ROOT_PROJECT_ORDER_KEY;
+  return sectionId ?? rootProjectOrderKey;
 }
 
 export function moveSidebarProject(
@@ -148,7 +148,7 @@ export function moveSidebarProject(
   destination.splice(index, 0, path);
 
   const assignments = { ...state.assignments };
-  if (sectionId) {
+  if (sectionId != null && sectionId !== "") {
     assignments[path] = sectionId;
   } else {
     delete assignments[path];
@@ -168,13 +168,13 @@ export function moveSidebarProject(
 export function setSidebarProjectCollapsed(
   state: SidebarProjectsState,
   path: string,
-  collapsed: boolean
+  isCollapsed: boolean
 ): SidebarProjectsState {
-  if ((state.collapsed[path] ?? false) === collapsed) {
+  if ((state.collapsed[path] ?? false) === isCollapsed) {
     return state;
   }
   const next = { ...state.collapsed };
-  if (collapsed) {
+  if (isCollapsed) {
     next[path] = true;
   } else {
     delete next[path];
@@ -189,7 +189,7 @@ export function releaseSidebarSectionProjects(
   const released = Object.entries(state.assignments)
     .filter(([, assigned]) => assigned === sectionId)
     .map(([path]) => path);
-  if (released.length === 0 && !state.order[sectionId]) {
+  if (released.length === 0 && !Boolean(state.order[sectionId])) {
     return state;
   }
   const assignments = Object.fromEntries(
@@ -198,9 +198,16 @@ export function releaseSidebarSectionProjects(
     )
   );
   const order = { ...state.order };
-  const root = order[ROOT_PROJECT_ORDER_KEY] ?? [];
+  const root = order[rootProjectOrderKey] ?? [];
   const moved = order[sectionId] ?? released;
-  order[ROOT_PROJECT_ORDER_KEY] = [...new Set(Iterator.concat(root, moved))];
+  const mergedRoot = new Set<string>();
+  for (const path of root) {
+    mergedRoot.add(path);
+  }
+  for (const path of moved) {
+    mergedRoot.add(path);
+  }
+  order[rootProjectOrderKey] = [...mergedRoot];
   delete order[sectionId];
   return { ...state, assignments, order };
 }

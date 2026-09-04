@@ -1,7 +1,8 @@
 import { FileText, X } from "@/components/ui/icons";
 
 import { FilePanel } from "./FilePanel";
-import { FileViewer, type FileRevealTarget } from "./FileViewer";
+import { FileViewer } from "./FileViewer";
+import type { FileRevealTarget } from "./FileViewer";
 import { dirtyKey, useDirtyPaths } from "./dirty";
 import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,9 @@ type FileDockContentProps = {
   readonly onSendText: (text: string) => void;
 };
 
-/** File tabs, viewer, and tree composed as one content module for the generic Dock container. */
+/**
+File tabs, viewer, and tree composed as one content module for the generic Dock container.
+*/
 export const FileDockContent = ({
   cwd,
   openFiles,
@@ -42,7 +45,7 @@ export const FileDockContent = ({
         <div className="dock-content-tabbar flex shrink-0 items-center gap-0.5 overflow-x-auto px-2">
           {openFiles.map((path) => {
             const name = path.split("/").pop() ?? path;
-            const active = path === activeFile;
+            const isActive = path === activeFile;
             return (
               <Button
                 key={path}
@@ -50,19 +53,21 @@ export const FileDockContent = ({
                 variant="selectable"
                 size="row"
                 focusStyle="inset"
-                data-selected={active ? "true" : "false"}
+                data-selected={isActive ? "true" : "false"}
                 onClick={() => onActiveFile(path)}
                 title={path}
                 className={cn(
                   "group px-module-inset text-metadata relative h-full max-w-48 shrink-0 gap-1.5",
-                  active
+                  isActive
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 <FileText className="size-3.5 shrink-0" />
                 <span className="truncate">{name}</span>
-                {cwd && dirtyPaths.has(dirtyKey(cwd, path)) ? <span className="bg-warning size-1.5 shrink-0 rounded-full" /> : null}
+                {cwd && dirtyPaths.has(dirtyKey(cwd, path)) ? (
+                  <span className="bg-warning size-1.5 shrink-0 rounded-full" />
+                ) : null}
                 <X
                   className="hover:text-destructive size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                   onClick={(event) => {
@@ -70,7 +75,9 @@ export const FileDockContent = ({
                     onCloseFile(path);
                   }}
                 />
-                {active ? <span className="bg-primary absolute inset-x-1.5 -bottom-px h-0.5 rounded-none" /> : null}
+                {isActive ? (
+                  <span className="bg-primary absolute inset-x-1.5 -bottom-px h-0.5 rounded-none" />
+                ) : null}
               </Button>
             );
           })}
@@ -105,4 +112,4 @@ export const FileDockContent = ({
       </div>
     </div>
   );
-}
+};

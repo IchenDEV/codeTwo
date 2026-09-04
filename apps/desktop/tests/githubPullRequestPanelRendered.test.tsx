@@ -75,10 +75,12 @@ describe("GitHubPullRequestPanel", () => {
     const api = {
       sourceControl: async () => sourceControl,
       currentPullRequest: async () => pullRequest,
-      pullRequestDiff: async () => ({
-        text: "diff --git a/src/a.ts b/src/a.ts\n@@ -1 +1 @@\n-old\n+new",
-        truncated: false,
-      }),
+      pullRequestDiff: async () => {
+        return {
+          text: "diff --git a/src/a.ts b/src/a.ts\n@@ -1 +1 @@\n-old\n+new",
+          truncated: false,
+        };
+      },
       review: async (...args) => reviews.push(args),
       merge: async (...args) => merges.push(args),
       open: async (url) => opened.push(url),
@@ -94,11 +96,11 @@ describe("GitHubPullRequestPanel", () => {
       </I18nProvider>
     );
 
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.container.querySelector("[data-github-pr='42']")
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     expect(text(view.container, "feat: review from the dock")).not.toBeNull();
     expect(text(view.container, "All passed")).not.toBeNull();
     expect(
@@ -111,11 +113,11 @@ describe("GitHubPullRequestPanel", () => {
     await waitFor(() => expect(opened).toEqual([pullRequest.url]));
 
     click(button(view.container, "Changes 1"));
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         text(view.container, "diff --git a/src/a.ts b/src/a.ts")
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     const addedLine = view.container.querySelector(".diff-line.add");
     const removedLine = view.container.querySelector(".diff-line.del");
     expect(addedLine?.getAttribute("aria-label")).toBe("Added line: new");
@@ -141,11 +143,11 @@ describe("GitHubPullRequestPanel", () => {
     );
     click(button(view.container, "Merge"));
     expect(merges).toEqual([]);
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         dom.document.body.querySelector('[data-slot="alert-dialog-content"]')
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     click(
       dom.document.body.querySelector('[data-slot="alert-dialog-action"]')!
     );
@@ -169,11 +171,11 @@ describe("GitHubPullRequestPanel", () => {
         <GitHubPullRequestPanel cwd="/repo" branch="codex/no-pr" api={api} />
       </I18nProvider>
     );
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         text(view.container, "No pull request is linked to codex/no-pr.")
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     view.unmount();
   });
 
@@ -197,11 +199,11 @@ describe("GitHubPullRequestPanel", () => {
       </I18nProvider>
     );
 
-    await waitFor(() =>
-      expect(
+    await waitFor(() => {
+      return expect(
         view.container.querySelector("[data-github-pr='42']")
-      ).not.toBeNull()
-    );
+      ).not.toBeNull();
+    });
     expect(
       view.container
         .querySelector('[data-slot="status-badge"]')

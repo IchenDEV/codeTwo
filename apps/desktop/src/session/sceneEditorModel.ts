@@ -8,11 +8,11 @@ import type {
 /**
 Frozen schema id shared by structured and raw-JSON editing.
 */
-export const SCENE_SCHEMA_ID =
+export const sceneSchemaId =
   "https://agent-scenes.org/schemas/1.0.0/scene.schema.json";
 
-const SLUG_PATTERN = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
-const ARTIFACT_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+const slugPattern = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u;
+const artifactPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
 
 export interface SceneDraftIssue {
   field: string;
@@ -22,7 +22,7 @@ export interface SceneDraftIssue {
 
 export function splitSceneList(value: string): string[] {
   return value
-    .split(/[\n,]/)
+    .split(/[\n,]/u)
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
@@ -35,10 +35,10 @@ export function slugSceneName(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replaceAll(/[^a-z0-9.-]+/g, "-")
-    .replaceAll(/-{2,}/g, "-")
-    .replaceAll(/\.{2,}/g, ".")
-    .replaceAll(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
+    .replaceAll(/[^a-z0-9.-]+/gu, "-")
+    .replaceAll(/-{2,}/gu, "-")
+    .replaceAll(/\.{2,}/gu, ".")
+    .replaceAll(/^[^a-z0-9]+|[^a-z0-9]+$/gu, "")
     .slice(0, 64);
 }
 
@@ -51,7 +51,7 @@ function nextAvailableName(
     return seed;
   }
   for (let suffix = 2; suffix < 10_000; suffix += 1) {
-    const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/, "");
+    const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/u, "");
     if (!existing.has(candidate)) {
       return candidate;
     }
@@ -64,19 +64,19 @@ export function createSceneDocument(
 ): SceneDocument {
   const existing = new Set(existingScenes.map((scene) => scene.name));
   return {
-    $schema: SCENE_SCHEMA_ID,
-    name: nextAvailableName("custom-scene", existing),
-    version: "1.0.0",
-    title: "New scene",
+    $schema: sceneSchemaId,
+    artifacts: [],
+    constraints: { guardrails: [], tools: { allow: [], deny: [] } },
     description: "",
+    execution: {},
+    extensions: {},
+    hooks: [],
     keywords: [],
     localizations: {},
-    execution: {},
-    skills: { pinned: [], inline: [], suppress_unpinned: false },
-    artifacts: [],
-    hooks: [],
-    constraints: { guardrails: [], tools: { allow: [], deny: [] } },
-    extensions: {},
+    name: nextAvailableName("custom-scene", existing),
+    skills: { inline: [], pinned: [], suppress_unpinned: false },
+    title: "New scene",
+    version: "1.0.0",
   };
 }
 
@@ -86,7 +86,7 @@ export function duplicateSceneDocument(
 ): SceneDocument {
   const copy = structuredClone(source);
   const existing = new Set(existingScenes.map((scene) => scene.name));
-  copy.$schema = SCENE_SCHEMA_ID;
+  copy.$schema = sceneSchemaId;
   copy.name = nextAvailableName(`${source.name}-copy`, existing);
   copy.title = `${source.title} copy`;
   return copy;
@@ -97,15 +97,15 @@ export function defaultExitCriterion(): SceneExitCriterion {
 }
 
 export function defaultSceneHook(): SceneHook {
-  return { on: "turn_end", action: { kind: "notify", message: "" } };
+  return { action: { kind: "notify", message: "" }, on: "turn_end" };
 }
 
 export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   const issues: SceneDraftIssue[] = [];
-  if (scene.$schema !== SCENE_SCHEMA_ID) {
+  if (scene.$schema !== sceneSchemaId) {
     issues.push({ field: "$schema", key: "sceneEditor.errorSchema" });
   }
-  if (!SLUG_PATTERN.test(scene.name) || scene.name.length > 64) {
+  if (!slugPattern.test(scene.name) || scene.name.length > 64) {
     issues.push({ field: "name", key: "sceneEditor.errorName" });
   }
   if (!scene.title.trim()) {
@@ -123,7 +123,7 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
       });
     }
     for (const [index, slot] of (scene.brief.slots ?? []).entries()) {
-      if (!SLUG_PATTERN.test(slot.id) || slot.id.length > 64) {
+      if (!slugPattern.test(slot.id) || slot.id.length > 64) {
         issues.push({
           field: `brief.slots.${index}.id`,
           key: "sceneEditor.errorSlotId",
@@ -156,7 +156,7 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
 
   const artifactIds = new Set<string>();
   for (const [index, artifact] of (scene.artifacts ?? []).entries()) {
-    if (!ARTIFACT_PATTERN.test(artifact.id) || artifact.id.length > 64) {
+    if (!artifactPattern.test(artifact.id) || artifact.id.length > 64) {
       issues.push({
         field: `artifacts.${index}.id`,
         key: "sceneEditor.errorArtifactId",
@@ -180,13 +180,19 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   }
 
   for (const [index, criterion] of (scene.exit?.criteria ?? []).entries()) {
-    if (criterion.kind === "checklist_complete" && !criterion.artifact) {
+    if (
+      criterion.kind === "checklist_complete" &&
+      (criterion.artifact == null || criterion.artifact === "")
+    ) {
       issues.push({
         field: `exit.criteria.${index}.artifact`,
         key: "sceneEditor.errorChecklistArtifact",
       });
     }
-    if (criterion.kind === "custom" && !criterion.description?.trim()) {
+    if (
+      criterion.kind === "custom" &&
+      (criterion.description?.trim() ?? "") === ""
+    ) {
       issues.push({
         field: `exit.criteria.${index}.description`,
         key: "sceneEditor.errorCustomCriterion",
@@ -197,26 +203,35 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   for (const [index, hook] of (scene.hooks ?? []).entries()) {
     if (
       hook.on === "schedule" &&
-      hook.schedule?.trim().split(/\s+/).length !== 5
+      hook.schedule?.trim().split(/\s+/u).length !== 5
     ) {
       issues.push({
         field: `hooks.${index}.schedule`,
         key: "sceneEditor.errorSchedule",
       });
     }
-    if (hook.action.kind === "suggest_scene" && !hook.action.scene?.trim()) {
+    if (
+      hook.action.kind === "suggest_scene" &&
+      (hook.action.scene?.trim() ?? "") === ""
+    ) {
       issues.push({
         field: `hooks.${index}.action.scene`,
         key: "sceneEditor.errorHookScene",
       });
     }
-    if (hook.action.kind === "run_macro" && !hook.action.macro?.trim()) {
+    if (
+      hook.action.kind === "run_macro" &&
+      (hook.action.macro?.trim() ?? "") === ""
+    ) {
       issues.push({
         field: `hooks.${index}.action.macro`,
         key: "sceneEditor.errorHookMacro",
       });
     }
-    if (hook.action.kind === "notify" && !hook.action.message?.trim()) {
+    if (
+      hook.action.kind === "notify" &&
+      (hook.action.message?.trim() ?? "") === ""
+    ) {
       issues.push({
         field: `hooks.${index}.action.message`,
         key: "sceneEditor.errorHookMessage",
@@ -232,11 +247,11 @@ export function parseSceneJson(value: string): {
 } {
   try {
     const scene = JSON.parse(value) as SceneDocument;
-    return { scene, error: null };
+    return { error: null, scene };
   } catch (error) {
     return {
-      scene: null,
       error: Error.isError(error) ? error.message : String(error),
+      scene: null,
     };
   }
 }

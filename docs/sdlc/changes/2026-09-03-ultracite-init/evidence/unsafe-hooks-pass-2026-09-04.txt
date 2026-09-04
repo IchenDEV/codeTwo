@@ -1,0 +1,19 @@
+timestamp=2026-09-04T06:34:12+00:00
+tsc=clean
+eslint_errors=2487 messages=2515
+    140 no-unsafe-* (was ~505)
+    691 react-hooks+react-doctor (was ~700)
+    108 no-unsafe-type-assertion
+      5 no-unsafe-member-access
+     87 no-effect-with-fresh-deps
+     82 exhaustive-deps
+     63 set-state-in-effect
+
+notes:
+- Added src/lsp/json.ts; migrated providers.ts + client.ts off `any` → unknown guards (LSP prod unsafe ~136 → 0)
+- House: test files turn off no-unsafe-* (fixtures/mocks)
+- Dock.tsx: removed render-time ref writes + fresh maxWidth callback; remaining only-export-components (shared types)
+
+next:
+- Remaining unsafe ~140 mostly type-assertion in canvas/bridge/composerDrafts
+- Hooks bulk still in App.tsx / FeishuWorkspacePage (split + stabilize effect deps)

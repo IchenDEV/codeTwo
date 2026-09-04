@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
-  CORRUPT_BOARD_WARNING,
-  DEFAULT_TASKS,
-  LOAD_BOARD_WARNING,
+  corruptBoardWarning,
+  defaultTasks,
+  loadBoardWarning,
   PRIORITIES,
-  SAVE_BOARD_WARNING,
-  TASKBOARD_SNAPSHOT_VERSION,
-  TASKBOARD_STORAGE_KEY,
-  TASK_PRIORITIES,
-  TASK_BOARD_LANES,
-  TASK_STATUSES,
+  saveBoardWarning,
+  taskboardSnapshotVersion,
+  taskboardStorageKey,
+  taskPriorities,
+  taskBoardLanes,
+  taskStatuses,
   associateTaskPullRequest,
   associateTaskSession,
   boardLabels,
@@ -28,13 +28,15 @@ import {
   taskForPullRequest,
   taskForSession,
   unlinkTaskPullRequest,
-  type BoardFilters,
-  type BoardTask,
-  type GitHubPullRequestReference,
-  type StorageLike,
-  type TaskBoardState,
-  type TaskPriority,
-  type TaskStatus,
+} from "../src/taskboard/taskBoard";
+import type {
+  BoardFilters,
+  BoardTask,
+  GitHubPullRequestReference,
+  StorageLike,
+  TaskBoardState,
+  TaskPriority,
+  TaskStatus,
 } from "../src/taskboard/taskBoard";
 
 class MemoryStorage implements StorageLike {
@@ -49,7 +51,7 @@ class MemoryStorage implements StorageLike {
   }
 }
 
-const BASE_TIME = Date.UTC(2026, 7, 13, 10);
+const baseTime = Date.UTC(2026, 7, 13, 10);
 
 function task(
   id: string,
@@ -65,8 +67,8 @@ function task(
     priority: "none",
     labels: [],
     order,
-    createdAt: BASE_TIME,
-    updatedAt: BASE_TIME,
+    createdAt: baseTime,
+    updatedAt: baseTime,
     sessionIds: [],
     pullRequest: null,
     pullRequestLinkRevision: 0,
@@ -102,17 +104,11 @@ function idsForStatus(board: TaskBoardState, status: TaskStatus): string[] {
 
 describe("task board model constants and creation", () => {
   test("exposes the complete status and priority wire values", () => {
-    expect(TASK_STATUSES).toEqual(["todo", "in_progress", "in_review", "done"]);
-    expect(TASK_BOARD_LANES).toEqual(["queue", "running", "needs_you", "done"]);
-    expect(TASK_PRIORITIES).toEqual([
-      "none",
-      "low",
-      "medium",
-      "high",
-      "urgent",
-    ]);
-    expect(PRIORITIES).toBe(TASK_PRIORITIES);
-    expect(TASKBOARD_STORAGE_KEY).toBe("codetwo.taskboard.v1");
+    expect(taskStatuses).toEqual(["todo", "in_progress", "in_review", "done"]);
+    expect(taskBoardLanes).toEqual(["queue", "running", "needs_you", "done"]);
+    expect(taskPriorities).toEqual(["none", "low", "medium", "high", "urgent"]);
+    expect(PRIORITIES).toBe(taskPriorities);
+    expect(taskboardStorageKey).toBe("codetwo.taskboard.v1");
   });
 
   test("returns deterministic, realistic Chinese seed tasks as fresh objects", () => {
@@ -120,7 +116,7 @@ describe("task board model constants and creation", () => {
     const second = seedTasks();
 
     expect(first).toEqual(second);
-    expect(first).toEqual(DEFAULT_TASKS);
+    expect(first).toEqual(defaultTasks);
     expect(first).not.toBe(second);
     expect(first[0]).not.toBe(second[0]);
     expect(first[0]?.labels).not.toBe(second[0]?.labels);
@@ -128,7 +124,7 @@ describe("task board model constants and creation", () => {
       true
     );
     expect(new Set(first.map((item) => item.status))).toEqual(
-      new Set(TASK_STATUSES)
+      new Set(taskStatuses)
     );
     expect(first).toHaveLength(9);
     expect(countTasksByStatus(first)).toEqual({
@@ -154,7 +150,7 @@ describe("task board model constants and creation", () => {
         labels: [" 前端 ", "", "前端", "体验"],
         sessionIds: [" session-7 ", "session-7", " session-8 "],
       },
-      { id: " task-7 ", now: BASE_TIME }
+      { id: " task-7 ", now: baseTime }
     );
 
     expect(created).toEqual({
@@ -165,8 +161,8 @@ describe("task board model constants and creation", () => {
       priority: "high",
       labels: ["前端", "体验"],
       order: 0,
-      createdAt: BASE_TIME,
-      updatedAt: BASE_TIME,
+      createdAt: baseTime,
+      updatedAt: baseTime,
       sessionIds: ["session-7", "session-8"],
       pullRequest: null,
       pullRequestLinkRevision: 0,
@@ -182,12 +178,12 @@ describe("task board model constants and creation", () => {
       tasks,
       "tracked",
       "session-2",
-      BASE_TIME + 1
+      baseTime + 1
     );
 
     expect(associated?.[0]).toMatchObject({
       status: "in_progress",
-      updatedAt: BASE_TIME + 1,
+      updatedAt: baseTime + 1,
       sessionIds: ["session-1", "session-2"],
     });
     expect(taskForSession(associated ?? [], "session-2")?.id).toBe("tracked");
@@ -209,7 +205,7 @@ describe("task board model constants and creation", () => {
       tasks,
       "target",
       reference,
-      BASE_TIME + 1
+      baseTime + 1
     )!;
 
     expect(taskForPullRequest(linked, reference)?.id).toBe("target");
@@ -235,12 +231,12 @@ describe("task board model constants and creation", () => {
       "target",
       githubPullRequestIdentity(reference),
       1,
-      BASE_TIME + 2
+      baseTime + 2
     );
     expect(unlinked?.[0]).toMatchObject({
       pullRequest: null,
       pullRequestLinkRevision: 2,
-      updatedAt: BASE_TIME + 2,
+      updatedAt: baseTime + 2,
     });
     expect(tasks[0]?.pullRequest).toBeNull();
   });
@@ -305,11 +301,13 @@ describe("task board projection helpers", () => {
   });
 
   test("searches id, title, description, and labels case-insensitively", () => {
-    const filters = (query: string): BoardFilters => ({
-      query,
-      priorities: [],
-      labels: [],
-    });
+    const filters = (query: string): BoardFilters => {
+      return {
+        query,
+        priorities: [],
+        labels: [],
+      };
+    };
     expect(
       filterBoardTasks(tasks, filters("THIRD")).map((item) => item.id)
     ).toEqual(["third"]);
@@ -377,14 +375,14 @@ describe("task board persistence", () => {
     const storage = new MemoryStorage();
     const loaded = loadBoardSnapshot(storage);
     expect(loaded).toEqual(createInitialTaskBoardState());
-    expect(loaded.tasks).not.toBe(DEFAULT_TASKS);
+    expect(loaded.tasks).not.toBe(defaultTasks);
   });
 
   test("round-trips a snapshot and preserves an explicitly saved empty board", () => {
     const storage = new MemoryStorage();
     expect(saveBoardSnapshot([], storage)).toEqual({ ok: true });
-    expect(JSON.parse(storage.values.get(TASKBOARD_STORAGE_KEY)!)).toEqual({
-      version: TASKBOARD_SNAPSHOT_VERSION,
+    expect(JSON.parse(storage.values.get(taskboardStorageKey)!)).toEqual({
+      version: taskboardSnapshotVersion,
       tasks: [],
     });
     expect(loadBoardSnapshot(storage)).toEqual({ tasks: [], warning: null });
@@ -411,15 +409,15 @@ describe("task board persistence", () => {
       "{ definitely not json",
       JSON.stringify({ version: 99, tasks: [] }),
       JSON.stringify({
-        version: TASKBOARD_SNAPSHOT_VERSION,
+        version: taskboardSnapshotVersion,
         tasks: [{ ...malformedTask, status: "blocked" }],
       }),
       JSON.stringify({
-        version: TASKBOARD_SNAPSHOT_VERSION,
+        version: taskboardSnapshotVersion,
         tasks: [malformedTask, malformedTask],
       }),
       JSON.stringify({
-        version: TASKBOARD_SNAPSHOT_VERSION,
+        version: taskboardSnapshotVersion,
         tasks: [
           {
             ...malformedTask,
@@ -429,7 +427,7 @@ describe("task board persistence", () => {
         ],
       }),
       JSON.stringify({
-        version: TASKBOARD_SNAPSHOT_VERSION,
+        version: taskboardSnapshotVersion,
         tasks: [
           {
             ...malformedTask,
@@ -446,7 +444,7 @@ describe("task board persistence", () => {
 
     for (const raw of corruptValues) {
       const loaded = parseBoardSnapshot(raw);
-      expect(loaded.warning).toBe(CORRUPT_BOARD_WARNING);
+      expect(loaded.warning).toBe(corruptBoardWarning);
       expect(loaded.tasks).toEqual(seedTasks());
     }
   });
@@ -458,7 +456,7 @@ describe("task board persistence", () => {
       sessionIds: [" session-1 ", "session-1", " session-2 "],
     });
     const loaded = parseBoardSnapshot(
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [rawTask] })
+      JSON.stringify({ version: taskboardSnapshotVersion, tasks: [rawTask] })
     );
     expect(loaded).toEqual({
       warning: null,
@@ -509,7 +507,7 @@ describe("task board persistence", () => {
     const reference = pullRequest();
     const repaired = parseBoardSnapshot(
       JSON.stringify({
-        version: TASKBOARD_SNAPSHOT_VERSION,
+        version: taskboardSnapshotVersion,
         tasks: [
           task("first-owner", "todo", 0, {
             pullRequest: reference,
@@ -538,14 +536,14 @@ describe("task board persistence", () => {
       setItem: () => undefined,
     };
     const loaded = loadBoardSnapshot(storage);
-    expect(loaded.warning).toBe(LOAD_BOARD_WARNING);
+    expect(loaded.warning).toBe(loadBoardWarning);
     expect(loaded.tasks).toEqual(seedTasks());
   });
 
   test("reports absent and throwing storage writes without throwing", () => {
     expect(saveBoardSnapshot([], null)).toEqual({
       ok: false,
-      warning: SAVE_BOARD_WARNING,
+      warning: saveBoardWarning,
     });
     const storage: StorageLike = {
       getItem: () => null,
@@ -556,7 +554,7 @@ describe("task board persistence", () => {
     expect(() => saveBoardSnapshot([task("unsaved")], storage)).not.toThrow();
     expect(saveBoardSnapshot([task("unsaved")], storage)).toEqual({
       ok: false,
-      warning: SAVE_BOARD_WARNING,
+      warning: saveBoardWarning,
     });
   });
 });
@@ -585,7 +583,7 @@ describe("task board reducer", () => {
     const renamed = {
       ...initial.tasks[0]!,
       title: "Renamed",
-      updatedAt: BASE_TIME + 1,
+      updatedAt: baseTime + 1,
     };
     const sameColumn = boardReducer(initial, { type: "update", task: renamed });
     expect(sameColumn.tasks.find((item) => item.id === "a")?.title).toBe(
@@ -596,7 +594,7 @@ describe("task board reducer", () => {
     const movedEdit = {
       ...renamed,
       status: "in_review" as const,
-      updatedAt: BASE_TIME + 2,
+      updatedAt: baseTime + 2,
     };
     const next = boardReducer(sameColumn, { type: "update", task: movedEdit });
     expect(idsForStatus(next, "todo")).toEqual(["b"]);
@@ -672,25 +670,25 @@ describe("task board reducer", () => {
       id: "b",
       status: "in_review",
       beforeId: "review",
-      now: BASE_TIME + 5_000,
+      now: baseTime + 5_000,
     });
 
     expect(next.tasks.find((item) => item.id === "b")?.updatedAt).toBe(
-      BASE_TIME + 5_000
+      baseTime + 5_000
     );
     expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(
-      BASE_TIME
+      baseTime
     );
     expect(next.tasks.find((item) => item.id === "review")?.updatedAt).toBe(
-      BASE_TIME
+      baseTime
     );
     expect(initial.tasks.find((item) => item.id === "b")?.updatedAt).toBe(
-      BASE_TIME
+      baseTime
     );
   });
 
   test("keeps a moved task timestamp valid and monotonic when the clock rolls back", () => {
-    const createdAt = BASE_TIME + 10_000;
+    const createdAt = baseTime + 10_000;
     const initial = state([
       task("a", "todo", 0, { createdAt, updatedAt: createdAt }),
       task("b", "done", 0),
@@ -700,7 +698,7 @@ describe("task board reducer", () => {
       type: "move",
       id: "a",
       status: "done",
-      now: BASE_TIME,
+      now: baseTime,
     });
 
     expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(

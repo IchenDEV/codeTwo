@@ -18,8 +18,8 @@ const { ToastProvider } = await import("../src/ui/toast");
 const { I18nProvider } = await import("../src/i18n");
 const { Simulate } = await import("react-dom/test-utils");
 const {
-  TASKBOARD_SNAPSHOT_VERSION,
-  TASKBOARD_STORAGE_KEY,
+  taskboardSnapshotVersion,
+  taskboardStorageKey,
   associateTaskPullRequest,
   createBoardTask,
 } = await import("../src/taskboard/taskBoard");
@@ -44,8 +44,9 @@ afterEach(async () => {
   dom.document.body.replaceChildren();
   dom.window.localStorage.clear();
   dom.window.confirm = originalConfirm;
-  if (previousLocalStorage === undefined) delete globalThis.localStorage;
-  else {
+  if (previousLocalStorage === undefined) {
+    delete globalThis.localStorage;
+  } else {
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: previousLocalStorage,
@@ -146,7 +147,7 @@ async function openSelect(trigger) {
 function menuItem(label) {
   return Array.from(
     dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]')
-  ).find((item) => item.textContent?.replace(/\s+/g, " ").trim() === label);
+  ).find((item) => item.textContent?.replace(/\s+/gu, " ").trim() === label);
 }
 
 describe("TaskBoardPage rendered", () => {
@@ -220,18 +221,18 @@ describe("TaskBoardPage rendered", () => {
   test("keeps a large persisted board progressive on first render", async () => {
     installStorage();
     const statuses = ["todo", "in_progress", "in_review", "done"];
-    const tasks = Array.from({ length: 160 }, (_, index) =>
-      createBoardTask(
+    const tasks = Array.from({ length: 160 }, (_, index) => {
+      return createBoardTask(
         {
           title: `Large board task ${index}`,
           status: statuses[index % statuses.length],
         },
         { id: `TASK-LARGE-${index}`, now: 1_700_000_000_000 + index }
-      )
-    );
+      );
+    });
     dom.window.localStorage.setItem(
-      TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks })
+      taskboardStorageKey,
+      JSON.stringify({ version: taskboardSnapshotVersion, tasks })
     );
 
     const view = await renderBoard();
@@ -285,7 +286,7 @@ describe("TaskBoardPage rendered", () => {
     await flush();
 
     const snapshot = JSON.parse(
-      dom.window.localStorage.getItem(TASKBOARD_STORAGE_KEY)
+      dom.window.localStorage.getItem(taskboardStorageKey)
     );
     expect(snapshot.tasks.some((task) => task.title === "完成渲染测试")).toBe(
       true
@@ -299,8 +300,8 @@ describe("TaskBoardPage rendered", () => {
       { id: "TASK-2000", now: 1_700_000_000_000 }
     );
     dom.window.localStorage.setItem(
-      TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [task] })
+      taskboardStorageKey,
+      JSON.stringify({ version: taskboardSnapshotVersion, tasks: [task] })
     );
     const view = await renderBoard();
 
@@ -315,8 +316,8 @@ describe("TaskBoardPage rendered", () => {
       { id: "TASK-2000", now: 1_700_000_000_000 }
     );
     dom.window.localStorage.setItem(
-      TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [task] })
+      taskboardStorageKey,
+      JSON.stringify({ version: taskboardSnapshotVersion, tasks: [task] })
     );
     const started = [];
     const view = await renderBoard({
@@ -348,8 +349,8 @@ describe("TaskBoardPage rendered", () => {
       ),
     ];
     dom.window.localStorage.setItem(
-      TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks })
+      taskboardStorageKey,
+      JSON.stringify({ version: taskboardSnapshotVersion, tasks })
     );
     const opened = [];
     const view = await renderBoard({
@@ -484,7 +485,7 @@ describe("TaskBoardPage rendered", () => {
     const done = view.container.querySelector('[data-task-column="done"]');
     expect(done.textContent).toContain("完善空状态与操作提示");
     const snapshot = JSON.parse(
-      dom.window.localStorage.getItem(TASKBOARD_STORAGE_KEY)
+      dom.window.localStorage.getItem(taskboardStorageKey)
     );
     expect(
       snapshot.tasks.find((task) => task.title === "完善空状态与操作提示")
@@ -520,7 +521,7 @@ describe("TaskBoardPage rendered", () => {
       view.container.querySelector(`[aria-label="任务操作：${taskTitle}"]`)
     ).toBeNull();
     const snapshot = JSON.parse(
-      dom.window.localStorage.getItem(TASKBOARD_STORAGE_KEY)
+      dom.window.localStorage.getItem(taskboardStorageKey)
     );
     expect(snapshot.tasks.some((task) => task.title === taskTitle)).toBe(false);
   });
@@ -536,8 +537,8 @@ describe("TaskBoardPage rendered", () => {
       { id: "TASK-2001", now: 1_700_000_000_000 }
     );
     dom.window.localStorage.setItem(
-      TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [task] })
+      taskboardStorageKey,
+      JSON.stringify({ version: taskboardSnapshotVersion, tasks: [task] })
     );
     const opened = [];
     const view = await renderBoard({
@@ -561,8 +562,8 @@ describe("TaskBoardPage rendered", () => {
       { id: "TASK-2002", now: 1_700_000_000_000 }
     );
     dom.window.localStorage.setItem(
-      TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [task] })
+      taskboardStorageKey,
+      JSON.stringify({ version: taskboardSnapshotVersion, tasks: [task] })
     );
     const started = [];
     const view = await renderBoard({
@@ -593,8 +594,8 @@ describe("TaskBoardPage rendered", () => {
       url: "https://github.com/acme/repo/pull/42",
     });
     dom.window.localStorage.setItem(
-      TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: linked })
+      taskboardStorageKey,
+      JSON.stringify({ version: taskboardSnapshotVersion, tasks: linked })
     );
     const view = await renderBoard();
 
@@ -608,7 +609,7 @@ describe("TaskBoardPage rendered", () => {
       expect(view.container.textContent).not.toContain("acme/repo #42")
     );
     const snapshot = JSON.parse(
-      dom.window.localStorage.getItem(TASKBOARD_STORAGE_KEY)
+      dom.window.localStorage.getItem(taskboardStorageKey)
     );
     expect(snapshot.tasks[0]).toMatchObject({
       pullRequest: null,

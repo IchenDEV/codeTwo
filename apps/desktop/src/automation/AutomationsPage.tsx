@@ -1,10 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ArrowLeft,
   CalendarClock,
@@ -32,26 +27,23 @@ import {
   runAutomationNow,
   setAutomationEnabled,
   updateAutomation,
-  type Automation,
-  type AutomationInput,
-  type AutomationRun,
-  type AutomationRunStatus,
-  type PermissionMode,
-  type Project,
-  type ProviderInfo,
-  type Sandbox,
+} from "../bridge";
+import type {
+  Automation,
+  AutomationInput,
+  AutomationRun,
+  AutomationRunStatus,
+  PermissionMode,
+  Project,
+  ProviderInfo,
+  Sandbox,
 } from "../bridge";
 import { providerLabel } from "../bridge";
 import { useT } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { useToast } from "../ui/toast";
-import {
-  cronFromSchedule,
-  localTimezone,
-  scheduleFromCron,
-  type AutomationCadence,
-  type ScheduleDraft,
-} from "./schedule";
+import { cronFromSchedule, localTimezone, scheduleFromCron } from "./schedule";
+import type { AutomationCadence, ScheduleDraft } from "./schedule";
 import { Button } from "@/components/ui/button";
 import { SearchField } from "@/components/business/search-field";
 import { DetailMetric } from "@/components/business/detail-metric";
@@ -104,13 +96,13 @@ interface Draft {
 
 type AutomationFilter = "all" | "active" | "paused";
 
-const ACTIVE_RUNS = new Set<AutomationRunStatus>([
+const activeRuns = new Set<AutomationRunStatus>([
   "starting",
   "running",
   "needs_attention",
 ]);
-const SPINNING_RUNS = new Set<AutomationRunStatus>(["starting", "running"]);
-const BUILTIN_PROVIDERS = new Set([
+const spinningRuns = new Set<AutomationRunStatus>(["starting", "running"]);
+const builtinProviders = new Set([
   "claude_code",
   "codex",
   "grok",
@@ -121,7 +113,7 @@ const BUILTIN_PROVIDERS = new Set([
   "kimi",
   "zcode",
 ]);
-const WEEKDAY_KEYS = [
+const weekdayKeys = [
   "automations.weekday.0",
   "automations.weekday.1",
   "automations.weekday.2",
@@ -136,7 +128,9 @@ function providerId(provider: Automation["provider"]): string {
 }
 
 function policyFromAutomation(automation: Automation): Draft["policy"] {
-  if (automation.sandbox_policy === "read_only") return "read_only";
+  if (automation.sandbox_policy === "read_only") {
+    return "read_only";
+  }
   return automation.permission_mode === "yolo" ? "automatic" : "ask";
 }
 
@@ -150,35 +144,43 @@ function inputFromDraft(draft: Draft): AutomationInput {
     permissionMode = "yolo";
   }
   return {
+    cron: cronFromSchedule(draft.schedule),
+    enabled: draft.enabled,
     name: draft.name,
-    prompt: draft.prompt,
+    permissionMode,
     projectPath: draft.projectPath,
-    provider: BUILTIN_PROVIDERS.has(draft.provider)
+    prompt: draft.prompt,
+    provider: builtinProviders.has(draft.provider)
       ? draft.provider
       : { custom: draft.provider },
-    cron: cronFromSchedule(draft.schedule),
-    timezone: draft.timezone,
-    enabled: draft.enabled,
-    useWorktree: draft.useWorktree,
-    permissionMode,
     sandboxPolicy,
+    timezone: draft.timezone,
+    useWorktree: draft.useWorktree,
   };
 }
 
 function dateTime(value: number | null): string {
-  if (value === null) return "—";
+  if (value === null) {
+    return "—";
+  }
   return new Intl.DateTimeFormat(undefined, {
-    month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    month: "short",
   }).format(new Date(value));
 }
 
 function runIcon(status: AutomationRunStatus) {
-  if (status === "succeeded") return CheckCircle2;
-  if (status === "failed" || status === "interrupted") return CircleAlert;
-  if (status === "needs_attention") return Clock3;
+  if (status === "succeeded") {
+    return CheckCircle2;
+  }
+  if (status === "failed" || status === "interrupted") {
+    return CircleAlert;
+  }
+  if (status === "needs_attention") {
+    return Clock3;
+  }
   return null;
 }
 
@@ -196,38 +198,36 @@ const AutomationRow = ({
   readonly status: string;
   readonly selected: boolean;
   readonly onSelect: () => void;
-}) => {
-  return (
-    <MasterDetailRow
-      label={automation.name}
-      selected={selected}
-      onSelect={onSelect}
-      className="px-3"
-      leading={
-        <span className="text-muted-foreground relative flex size-6 items-center justify-center">
-          <CalendarClock className="size-4" />
-          <span
-            className={cn(
-              "ring-sidebar absolute right-0 bottom-0 size-1.5 rounded-full ring-2",
-              automation.enabled ? "bg-success" : "bg-muted-foreground"
-            )}
-          />
-        </span>
-      }
-      meta={
-        <StatusBadge tone={automation.enabled ? "success" : "neutral"}>
-          {status}
-        </StatusBadge>
-      }
-      description={
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 flex-1 truncate">{schedule}</span>
-          <span className="truncate">{projectName}</span>
-        </span>
-      }
-    />
-  );
-}
+}) => (
+  <MasterDetailRow
+    label={automation.name}
+    selected={selected}
+    onSelect={onSelect}
+    className="px-3"
+    leading={
+      <span className="text-muted-foreground relative flex size-6 items-center justify-center">
+        <CalendarClock className="size-4" />
+        <span
+          className={cn(
+            "ring-sidebar absolute right-0 bottom-0 size-1.5 rounded-full ring-2",
+            automation.enabled ? "bg-success" : "bg-muted-foreground"
+          )}
+        />
+      </span>
+    }
+    meta={
+      <StatusBadge tone={automation.enabled ? "success" : "neutral"}>
+        {status}
+      </StatusBadge>
+    }
+    description={
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 flex-1 truncate">{schedule}</span>
+        <span className="truncate">{projectName}</span>
+      </span>
+    }
+  />
+);
 
 export const AutomationsPage = ({
   projects,
@@ -261,29 +261,37 @@ export const AutomationsPage = ({
 
   const scheduleLabel = (cron: string): string => {
     const schedule = scheduleFromCron(cron);
-    if (schedule.cadence === "custom") return cron;
+    if (schedule.cadence === "custom") {
+      return cron;
+    }
     if (schedule.cadence === "hourly") {
       return `${t("automations.cadence.hourly")} · :${schedule.time.slice(3)}`;
     }
     if (schedule.cadence === "weekly") {
-      return `${t("automations.cadence.weekly")} · ${t(WEEKDAY_KEYS[schedule.weekday])} ${schedule.time}`;
+      return `${t("automations.cadence.weekly")} · ${t(weekdayKeys[schedule.weekday])} ${schedule.time}`;
     }
     return `${t(`automations.cadence.${schedule.cadence}`)} · ${schedule.time}`;
   };
 
-  const filteredAutomations = useMemo(() => {
+  const filteredAutomations = (() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     return automations.filter((automation) => {
-      if (filter === "active" && !automation.enabled) return false;
-      if (filter === "paused" && automation.enabled) return false;
-      if (normalizedQuery === "") return true;
+      if (filter === "active" && !automation.enabled) {
+        return false;
+      }
+      if (filter === "paused" && automation.enabled) {
+        return false;
+      }
+      if (normalizedQuery === "") {
+        return true;
+      }
       return `${automation.name}\n${automation.prompt}`
         .toLocaleLowerCase()
         .includes(normalizedQuery);
     });
-  }, [automations, filter, query]);
+  })();
 
-  const groups = useMemo(() => {
+  const groups = (() => {
     const active = filteredAutomations.filter(
       (automation) => automation.enabled
     );
@@ -294,8 +302,8 @@ export const AutomationsPage = ({
       { id: "active" as const, items: active },
       { id: "paused" as const, items: paused },
     ].filter((group) => group.items.length > 0);
-  }, [filteredAutomations]);
-  const refresh = useCallback(async () => {
+  })();
+  const refresh = async () => {
     const next = await listAutomations();
     setAutomations(next);
     setSelectedId((current) =>
@@ -304,11 +312,11 @@ export const AutomationsPage = ({
         : (next[0]?.id ?? null)
     );
     setLoading(false);
-  }, []);
+  };
 
-  const refreshRuns = useCallback(async (id: string | null) => {
+  const refreshRuns = async (id: string | null) => {
     setRuns(id ? await listAutomationRuns(id) : []);
-  }, []);
+  };
 
   useEffect(() => {
     void refresh().catch((error) => {
@@ -330,49 +338,54 @@ export const AutomationsPage = ({
   }, [refreshRuns, selectedId]);
 
   useEffect(() => {
-    if (draft) return;
+    if (draft) {
+      return;
+    }
     if (
       selectedId &&
       filteredAutomations.some((automation) => automation.id === selectedId)
-    )
+    ) {
       return;
+    }
     setSelectedId(filteredAutomations[0]?.id ?? null);
     setDetailTab("overview");
   }, [draft, filteredAutomations, selectedId]);
 
   const emptyDraft = (): Draft => ({
+    enabled: true,
     id: null,
     name: "",
-    prompt: "",
+    policy: "automatic",
     projectPath: defaultProject || projects[0]?.path || "",
+    prompt: "",
     provider:
       providers.find(
         (candidate) => candidate.id === defaultProvider && candidate.available
       )?.id ??
       providers.find((candidate) => candidate.available)?.id ??
       defaultProvider,
-    schedule: { cadence: "daily", time: "09:00", weekday: 1, customCron: "" },
+    schedule: { cadence: "daily", customCron: "", time: "09:00", weekday: 1 },
     timezone: localTimezone(),
-    enabled: true,
     useWorktree: true,
-    policy: "automatic",
   });
 
   const editDraft = (automation: Automation): Draft => ({
+    enabled: automation.enabled,
     id: automation.id,
     name: automation.name,
-    prompt: automation.prompt,
+    policy: policyFromAutomation(automation),
     projectPath: automation.project_path,
+    prompt: automation.prompt,
     provider: providerId(automation.provider),
     schedule: scheduleFromCron(automation.cron),
     timezone: automation.timezone,
-    enabled: automation.enabled,
     useWorktree: automation.use_worktree,
-    policy: policyFromAutomation(automation),
   });
 
   const save = async () => {
-    if (!draft) return;
+    if (!draft) {
+      return;
+    }
     setSaving(true);
     try {
       const saved = draft.id
@@ -417,8 +430,9 @@ export const AutomationsPage = ({
       !(await confirmNative(
         t("automations.deleteConfirm", { name: automation.name })
       ))
-    )
+    ) {
       return;
+    }
     try {
       await deleteAutomation(automation.id);
       await refresh();
@@ -430,7 +444,7 @@ export const AutomationsPage = ({
 
   const selected =
     automations.find((automation) => automation.id === selectedId) ?? null;
-  const activeRun = runs.find((run) => ACTIVE_RUNS.has(run.status)) ?? null;
+  const activeRun = runs.find((run) => activeRuns.has(run.status)) ?? null;
   const projectName = (automation: Automation) =>
     projects.find((project) => project.path === automation.project_path)
       ?.name ?? automation.project_path;
@@ -503,8 +517,8 @@ export const AutomationsPage = ({
               label={t("automations.filterLabel")}
               value={filter}
               options={(["all", "active", "paused"] as const).map((value) => ({
-                value,
                 label: t(`automations.filter.${value}`),
+                value,
               }))}
               onValueChange={setFilter}
             />
@@ -524,13 +538,10 @@ export const AutomationsPage = ({
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-3 pb-4" aria-live="polite">
             {loading && automations.length === 0 ? (
-              <div
-                role="status"
-                className="py-section text-body text-muted-foreground flex items-center justify-center gap-2"
-              >
+              <output className="py-section text-body text-muted-foreground flex items-center justify-center gap-2">
                 <Spinner />
                 {t("automations.loading")}
-              </div>
+              </output>
             ) : automations.length === 0 ? (
               <Empty className="py-section">
                 <EmptyHeader>
@@ -616,18 +627,22 @@ export const AutomationsPage = ({
               {headerLeadingAction}
             </div>
           ) : null}
-          {(selectedId || draft) ? <Button
+          {selectedId || draft ? (
+            <Button
               variant="ghost"
               size="icon-xs"
               className="automation-back"
               aria-label={t("automations.backToList")}
               onClick={() => {
-                if (draft) setDraft(null);
+                if (draft) {
+                  setDraft(null);
+                }
                 setCompactListVisible(true);
               }}
             >
               <ArrowLeft className="size-3.5" />
-            </Button> : null}
+            </Button>
+          ) : null}
           {draft ? (
             <span className="text-body font-medium">
               {draft.id
@@ -863,7 +878,7 @@ export const AutomationsPage = ({
                   <div className="flex flex-col gap-1">
                     {runs.map((run) => {
                       const Icon = runIcon(run.status);
-                      const openable = run.session_id !== null;
+                      const isOpenable = run.session_id !== null;
                       return (
                         <Button
                           key={run.id}
@@ -871,13 +886,13 @@ export const AutomationsPage = ({
                           variant="ghost"
                           size="row"
                           focusStyle="inset"
-                          disabled={!openable}
+                          disabled={!isOpenable}
                           className="min-h-control-field bg-fill-quiet grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 disabled:opacity-80"
                           onClick={() =>
                             run.session_id && onOpenSession(run.session_id)
                           }
                         >
-                          {SPINNING_RUNS.has(run.status) ? (
+                          {spinningRuns.has(run.status) ? (
                             <Spinner className="text-primary" />
                           ) : Icon ? (
                             <Icon
@@ -905,7 +920,7 @@ export const AutomationsPage = ({
                               </span>
                             ) : null}
                           </span>
-                          {openable ? (
+                          {isOpenable ? (
                             <span className="text-metadata text-primary">
                               {t("automations.openRun")}
                             </span>
@@ -922,7 +937,7 @@ export const AutomationsPage = ({
       </div>
     </section>
   );
-}
+};
 
 const AutomationEditor = ({
   draft,
@@ -960,7 +975,7 @@ const AutomationEditor = ({
       : draft.policy === "ask"
         ? t("automations.permissions.ask")
         : t("automations.permissions.readOnly");
-  const valid =
+  const isValid =
     draft.name.trim() !== "" &&
     draft.prompt.trim() !== "" &&
     draft.projectPath !== "" &&
@@ -998,7 +1013,9 @@ const AutomationEditor = ({
         className="mt-7 grid gap-5"
         onSubmit={(event) => {
           event.preventDefault();
-          if (valid && !saving) onSave();
+          if (isValid && !saving) {
+            onSave();
+          }
         }}
       >
         <div className="grid gap-2">
@@ -1149,12 +1166,12 @@ const AutomationEditor = ({
             >
               <SelectTrigger className="w-full">
                 <SelectValue>
-                  {t(WEEKDAY_KEYS[draft.schedule.weekday])}
+                  {t(weekdayKeys[draft.schedule.weekday])}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {WEEKDAY_KEYS.map((key, day) => (
+                  {weekdayKeys.map((key, day) => (
                     <SelectItem key={key} value={String(day)}>
                       {t(key)}
                     </SelectItem>
@@ -1223,7 +1240,7 @@ const AutomationEditor = ({
           >
             {t("automations.cancel")}
           </Button>
-          <Button type="submit" size="compact" disabled={!valid || saving}>
+          <Button type="submit" size="compact" disabled={!isValid || saving}>
             {saving ? <Spinner /> : null}
             {saving ? t("automations.saving") : t("automations.save")}
           </Button>
@@ -1231,4 +1248,4 @@ const AutomationEditor = ({
       </form>
     </section>
   );
-}
+};

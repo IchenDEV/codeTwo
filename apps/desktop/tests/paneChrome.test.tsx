@@ -119,14 +119,18 @@ describe("PaneChrome", () => {
     const panel = dom.document.body.querySelector('[role="menuitemcheckbox"]');
     expect(panel?.textContent).toContain("Side panel");
     expect(panel?.getAttribute("data-checked")).not.toBeNull();
-    if (!panel) throw new Error("Side panel menu item not found");
+    if (!panel) {
+      throw new Error("Side panel menu item not found");
+    }
     await press(panel);
     expect(calls).toEqual(["panel"]);
 
     const splitRight = Array.from(
       dom.document.body.querySelectorAll('[role="menuitem"]')
     ).find((item) => item.textContent?.includes("Split right"));
-    if (!splitRight) throw new Error("Split right menu item not found");
+    if (!splitRight) {
+      throw new Error("Split right menu item not found");
+    }
     await press(splitRight);
     expect(calls).toEqual(["panel", "right"]);
     rendered.unmount();
@@ -156,7 +160,9 @@ describe("PaneChrome", () => {
     const closePane = Array.from(
       dom.document.body.querySelectorAll('[role="menuitem"]')
     ).find((item) => item.textContent?.includes("Close pane"));
-    if (!closePane) throw new Error("Close pane menu item not found");
+    if (!closePane) {
+      throw new Error("Close pane menu item not found");
+    }
     await press(closePane);
     expect(calls).toEqual(["close"]);
     rendered.unmount();
@@ -202,12 +208,14 @@ describe("PaneChrome", () => {
     // A fake 1000x500 container so client coordinates map to a known fraction.
     const container = {
       current: {
-        getBoundingClientRect: () => ({
-          left: 0,
-          top: 0,
-          width: 1000,
-          height: 500,
-        }),
+        getBoundingClientRect: () => {
+          return {
+            left: 0,
+            top: 0,
+            width: 1000,
+            height: 500,
+          };
+        },
       },
     };
 

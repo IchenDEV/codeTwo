@@ -7,8 +7,10 @@ const sourceRoot = resolve(import.meta.dir, "../src");
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(directory, entry.name);
-    if (entry.isDirectory()) return sourceFiles(path);
-    return /\.(?:ts|tsx)$/.test(entry.name) ? [path] : [];
+    if (entry.isDirectory()) {
+      return sourceFiles(path);
+    }
+    return /\.(?:ts|tsx)$/u.test(entry.name) ? [path] : [];
   });
 }
 
@@ -29,16 +31,17 @@ describe("desktop container boundary", () => {
         const source = readFileSync(path, "utf8");
         return [
           ...source.matchAll(
-            /\b(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g
+            /\b(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/gu
           ),
         ]
           .map((match) => match[1])
-          .filter(
-            (specifier) =>
+          .filter((specifier) => {
+            return (
               specifier === "electrobun" ||
               specifier.startsWith("electrobun/") ||
-              /(?:^|\/)electrobun(?:\/|$)/.test(specifier)
-          )
+              /(?:^|\/)electrobun(?:\/|$)/u.test(specifier)
+            );
+          })
           .map((specifier) => `${relative(sourceRoot, path)} -> ${specifier}`);
       });
 

@@ -21,15 +21,21 @@ export const PluginUiSlot = ({
 }: {
   readonly slot: PluginUiSlotId;
   readonly contributions: ActivePluginUiContribution[];
-  readonly onInvoke: (contribution: ActivePluginUiContribution) => Promise<void>;
+  readonly onInvoke: (
+    contribution: ActivePluginUiContribution
+  ) => Promise<void>;
   readonly activeCommand?: string;
 }) => {
   const [busy, setBusy] = useState<string | null>(null);
-  if (contributions.length === 0) return null;
+  if (contributions.length === 0) {
+    return null;
+  }
 
   const invoke = async (contribution: ActivePluginUiContribution) => {
     const key = `${contribution.pluginId}:${contribution.id}`;
-    if (busy) return;
+    if (busy) {
+      return;
+    }
     setBusy(key);
     try {
       await onInvoke(contribution);
@@ -48,19 +54,19 @@ export const PluginUiSlot = ({
       >
         {contributions.map((contribution) => {
           const key = `${contribution.pluginId}:${contribution.id}`;
-          const current = contribution.command === activeCommand;
+          const isCurrent = contribution.command === activeCommand;
           return (
             <Button
               key={key}
               type="button"
-              data-selected={current || undefined}
-              aria-current={current ? "page" : undefined}
+              data-selected={isCurrent || undefined}
+              aria-current={isCurrent ? "page" : undefined}
               variant="ghost"
               size="row"
               focusStyle="inset"
               className={cn(
                 "h-control text-foreground/75 w-full gap-2 px-2",
-                current && "bg-fill-rest text-foreground"
+                isCurrent && "bg-fill-rest text-foreground"
               )}
               title={
                 contribution.description ||
@@ -253,4 +259,4 @@ export const PluginUiSlot = ({
 
   const unhandledSlot: never = slot;
   return unhandledSlot;
-}
+};

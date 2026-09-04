@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   CommandDialog,
@@ -18,7 +18,9 @@ export type CommandCategory = "action" | "session" | "setting";
 
 export interface Command {
   id: string;
-  /** Stable entity identity lets a richer async result replace its metadata-only row. */
+  /**
+  Stable entity identity lets a richer async result replace its metadata-only row.
+  */
   identity?: string;
   category?: CommandCategory;
   label: string;
@@ -55,34 +57,32 @@ export const CommandPalette = ({
     }
     setMatches([]);
     setSearchState("pending");
-    let current = true;
+    let isCurrent = true;
     const timeout = window.setTimeout(() => {
       setSearchState("loading");
       void search(value)
         .then((results) => {
-          if (current) {
+          if (isCurrent) {
             setMatches(results);
             setSearchState("success");
           }
         })
         .catch(() => {
-          if (current) {
+          if (isCurrent) {
             setMatches([]);
             setSearchState("error");
           }
         });
     }, 200);
     return () => {
-      current = false;
+      isCurrent = false;
       window.clearTimeout(timeout);
     };
   }, [query, search]);
 
-  const visible = useMemo(() => {
-    return mergeCommandResults(commands, matches);
-  }, [commands, matches]);
+  const visible = mergeCommandResults(commands, matches);
 
-  const groups = useMemo(() => {
+  const groups = (() => {
     const filtered =
       filter === "all"
         ? visible
@@ -97,7 +97,7 @@ export const CommandPalette = ({
         ),
       }))
       .filter((group) => group.commands.length > 0);
-  }, [filter, visible]);
+  })();
 
   const filters = [
     { id: "all" as const, label: t("palette.filterAll") },
@@ -110,8 +110,12 @@ export const CommandPalette = ({
     if (category === "session" && query.trim().length === 0) {
       return t("palette.recentSessions");
     }
-    if (category === "session") return t("palette.sessions");
-    if (category === "setting") return t("palette.settings");
+    if (category === "session") {
+      return t("palette.sessions");
+    }
+    if (category === "setting") {
+      return t("palette.settings");
+    }
     return t("palette.actions");
   };
 
@@ -181,21 +185,24 @@ export const CommandPalette = ({
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{command.label}</span>
-                  {command.detail ? <span className="text-callout text-muted-foreground block truncate">
+                  {command.detail ? (
+                    <span className="text-callout text-muted-foreground block truncate">
                       {command.detail}
-                    </span> : null}
+                    </span>
+                  ) : null}
                 </span>
-                {command.hint ? <CommandShortcut>{command.hint}</CommandShortcut> : null}
+                {command.hint ? (
+                  <CommandShortcut>{command.hint}</CommandShortcut>
+                ) : null}
               </CommandItem>
             ))}
           </CommandGroup>
         ))}
-        {searchStatus && (filter === "all" || filter === "session") ? <p
-            role="status"
-            className="text-callout text-muted-foreground px-3 py-2"
-          >
+        {searchStatus && (filter === "all" || filter === "session") ? (
+          <output className="text-callout text-muted-foreground px-3 py-2">
             {searchStatus}
-          </p> : null}
+          </output>
+        ) : null}
       </CommandList>
       <CommandSeparator className="mx-0" />
       <div className="text-callout text-muted-foreground flex items-center gap-4 px-3 py-2">
@@ -213,4 +220,4 @@ export const CommandPalette = ({
       </div>
     </CommandDialog>
   );
-}
+};

@@ -23,15 +23,19 @@ interface ComponentMessage {
   detail?: string;
 }
 
-const MOUNT_TIMEOUT_MS = 20_000;
+const mountTimeoutMs = 20_000;
 
 function componentLocale(locale: string): "en-US" | "zh-CN" | "ja-JP" {
-  if (locale === "zh-CN" || locale === "ja-JP") return locale;
+  if (locale === "zh-CN" || locale === "ja-JP") {
+    return locale;
+  }
   return "en-US";
 }
 
 function isComponentMessage(value: unknown): value is ComponentMessage {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object") {
+    return false;
+  }
   const candidate = value as Partial<ComponentMessage>;
   return (
     candidate.type === "codetwo-feishu-doc-component" &&
@@ -43,8 +47,8 @@ function isComponentMessage(value: unknown): value is ComponentMessage {
 function readableFailure(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
   return message
-    .replace(/^Error:\s*/i, "")
-    .replace(/^dsh-feishu-docs:\s*/i, "")
+    .replace(/^Error:\s*/iu, "")
+    .replace(/^dsh-feishu-docs:\s*/iu, "")
     .trim();
 }
 
@@ -69,25 +73,29 @@ export const FeishuDocumentView = ({
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
-    let live = true;
+    let isLive = true;
     let activeId = "";
     let authRetries = 0;
     let mountTimer: number | undefined;
 
     const clearMountTimer = () => {
-      if (mountTimer !== undefined) window.clearTimeout(mountTimer);
+      if (mountTimer !== undefined) {
+        window.clearTimeout(mountTimer);
+      }
       mountTimer = undefined;
     };
 
     const fail = (message: string) => {
-      if (!live) return;
+      if (!isLive) {
+        return;
+      }
       clearMountTimer();
       setFailure(message);
       setPhase("failed");
       setView(null);
     };
 
-    const open = async (refreshAuth = false) => {
+    const open = async (isRefreshAuth = false) => {
       clearMountTimer();
       setFailure("");
       setPhase("loading");
@@ -99,16 +107,18 @@ export const FeishuDocumentView = ({
       try {
         const next = await callCommand<ComponentView>("document.component", {
           documentUrl,
-          theme,
           locale: componentLocale(locale),
-          refreshAuth,
+          refreshAuth: isRefreshAuth,
+          theme,
         });
-        if (!live) return;
+        if (!isLive) {
+          return;
+        }
         activeId = next.id;
         setView(next);
         mountTimer = window.setTimeout(
           () => fail(t("feishu.documentComponentTimeout")),
-          MOUNT_TIMEOUT_MS
+          mountTimeoutMs
         );
       } catch (cause) {
         fail(readableFailure(cause));
@@ -119,9 +129,12 @@ export const FeishuDocumentView = ({
       if (
         event.source !== iframeRef.current?.contentWindow ||
         !isComponentMessage(event.data)
-      )
+      ) {
         return;
-      if (event.data.id !== activeId) return;
+      }
+      if (event.data.id !== activeId) {
+        return;
+      }
       if (event.data.state === "ready") {
         clearMountTimer();
         setPhase("ready");
@@ -138,7 +151,7 @@ export const FeishuDocumentView = ({
     window.addEventListener("message", onMessage);
     void open();
     return () => {
-      live = false;
+      isLive = false;
       clearMountTimer();
       window.removeEventListener("message", onMessage);
     };
@@ -179,13 +192,10 @@ export const FeishuDocumentView = ({
             </div>
           </div>
           {markdownLoading ? (
-            <div
-              role="status"
-              className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center"
-            >
+            <output className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center">
               <Spinner />
               {t("feishu.loadingDocument")}
-            </div>
+            </output>
           ) : (
             <div
               data-feishu-document
@@ -218,14 +228,11 @@ export const FeishuDocumentView = ({
         />
       ) : null}
       {phase === "loading" ? (
-        <div
-          role="status"
-          className="gap-module-inset bg-surface text-ui text-muted-foreground absolute inset-0 flex items-center justify-center"
-        >
+        <output className="gap-module-inset bg-surface text-ui text-muted-foreground absolute inset-0 flex items-center justify-center">
           <Spinner />
           {t("feishu.documentComponentLoading")}
-        </div>
+        </output>
       ) : null}
     </div>
   );
-}
+};

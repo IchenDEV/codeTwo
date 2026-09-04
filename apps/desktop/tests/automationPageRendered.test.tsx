@@ -182,12 +182,12 @@ describe("AutomationsPage layout", () => {
     expect(appSource).not.toContain(") : showAutomations ? (");
     expect(appSource).toContain("{showAutomations && (");
     expect(appSource).toMatch(
-      /showTaskBoard\s*\|\|\s*showPluginManager\s*\|\|\s*showAutomations/
+      /showTaskBoard\s*\|\|\s*showPluginManager\s*\|\|\s*showAutomations/u
     );
     const automationsCall =
-      appSource.match(/<AutomationsPage\b[\s\S]*?\n\s*\/>/)?.[0] ?? "";
+      appSource.match(/<AutomationsPage\b[\s\S]*?\n\s*\/>/u)?.[0] ?? "";
     const taskBoardCall =
-      appSource.match(/<TaskBoardPage\b[\s\S]*?\n\s*\/>/)?.[0] ?? "";
+      appSource.match(/<TaskBoardPage\b[\s\S]*?\n\s*\/>/u)?.[0] ?? "";
     expect(automationsCall).toContain("headerLeadingAction=");
     expect(automationsCall).toContain("onAddProject=");
     expect(taskBoardCall).toContain("headerLeadingAction=");

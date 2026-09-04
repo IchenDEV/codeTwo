@@ -30,14 +30,14 @@ describe("desktop interaction performance contracts", () => {
       sideChatSource,
     ]) {
       expect(implementation).not.toMatch(
-        /liquid-gooey|LiquidSelectionGroup|LiquidActionSurface|data-gooey|<Liquid\b|Liquid\./
+        /liquid-gooey|LiquidSelectionGroup|LiquidActionSurface|data-gooey|<Liquid\b|Liquid\./u
       );
     }
 
     expect(packageSource).not.toContain('"liquid-gooey"');
     expect(lockSource).not.toContain('"liquid-gooey"');
     expect(tabsSource).not.toMatch(
-      /MutationObserver|ResizeObserver|getBoundingClientRect|useLiquidIndicator/
+      /MutationObserver|ResizeObserver|getBoundingClientRect|useLiquidIndicator/u
     );
     expect(sessionRailSource).not.toContain("typeof ResizeObserver");
   });
@@ -70,12 +70,12 @@ describe("desktop interaction performance contracts", () => {
     }
 
     const keyframes = styleSource.match(
-      /@keyframes data-page-in\s*\{([\s\S]*?)\n\s*\}/
+      /@keyframes data-page-in\s*\{([\s\S]*?)\n\s*\}/u
     )?.[1];
     expect(keyframes).toContain("opacity:");
     expect(keyframes).not.toContain("transform:");
     expect(styleSource).toMatch(
-      /\.animate-data-page-in\s*\{[\s\S]*animation:\s*data-page-in\s+var\(--motion-slow\)/
+      /\.animate-data-page-in\s*\{[\s\S]*animation:\s*data-page-in\s+var\(--motion-slow\)/u
     );
   });
 
@@ -88,14 +88,14 @@ describe("desktop interaction performance contracts", () => {
       const pageSource = source(path);
       expect(pageSource).toContain("useDeferredValue");
       expect(pageSource).toContain("deferredQuery");
-      expect(pageSource).toMatch(/value=\{query\}/);
+      expect(pageSource).toMatch(/value=\{query\}/u);
     }
   });
 
   test("defers off-screen session-row paint without virtualizing rows out of the DOM", () => {
     expect(sessionRailSource).toContain("session-rail-row");
     expect(styleSource).toMatch(
-      /\.session-rail-row\s*\{[\s\S]*content-visibility:\s*auto;[\s\S]*contain-intrinsic-size:/
+      /\.session-rail-row\s*\{[\s\S]*content-visibility:\s*auto;[\s\S]*contain-intrinsic-size:/u
     );
     expect(sessionRailSource).not.toContain("react-window");
     expect(sessionRailSource).not.toContain("react-virtualized");

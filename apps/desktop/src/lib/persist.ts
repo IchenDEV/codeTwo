@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
 
-/**
- * A number that survives a restart. Used for the layout sizes the user drags (composer height,
- * dock width) — re-dragging them on every launch is exactly the kind of thing an app should
- * remember.
- */
 export function usePersistedNumber(
   key: string,
   fallback: number
@@ -29,18 +24,14 @@ export function usePersistedNumber(
   return [value, setValue];
 }
 
-/**
- * A yes/no that survives a restart. Used for the fold states the user toggles (the archived
- * group in the rail) — reopening them on every launch would undo the point of folding them.
- */
 export function usePersistedBoolean(
   key: string,
-  fallback: boolean
-): [boolean, (b: boolean) => void] {
+  isFallback: boolean
+): [boolean, (isEnabled: boolean) => void] {
   const [value, setValue] = useState(() => {
     const raw =
       typeof localStorage === "undefined" ? null : localStorage.getItem(key);
-    return raw === null ? fallback : raw === "1";
+    return raw === null ? isFallback : raw === "1";
   });
 
   useEffect(() => {

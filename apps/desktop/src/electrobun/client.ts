@@ -17,8 +17,9 @@ const listeners = new Map<string, Set<EventListener>>();
 
 export const isElectrobun =
   typeof window !== "undefined" &&
-  typeof (window as Window & { __electrobunWebviewId?: unknown })
-    .__electrobunWebviewId === "number";
+  typeof (window as unknown as Record<string, unknown>)[
+    "__electrobunWebviewId"
+  ] === "number";
 
 let rpcPromise: Promise<Awaited<ReturnType<typeof createClient>>> | null = null;
 
@@ -31,22 +32,22 @@ function dispatch({ name, payload }: DesktopEvent): void {
 async function createClient() {
   const { Electroview } = await import("electrobun/view");
   const rpc = Electroview.defineRPC<CodeTwoRPC>({
-    maxRequestTime: Infinity,
     handlers: {
-      requests: {},
       messages: {
-        event: dispatch,
-        hostStatus: (status) => {
-          dispatch({ name: "host-status", payload: status });
-        },
         appshotCaptured: (capture) => {
           dispatch({ name: "appshot-captured", payload: capture });
         },
         appshotFailed: (failure) => {
           dispatch({ name: "appshot-failed", payload: failure });
         },
+        event: dispatch,
+        hostStatus: (status) => {
+          dispatch({ name: "host-status", payload: status });
+        },
       },
+      requests: {},
     },
+    maxRequestTime: Infinity,
   });
   new Electroview({ rpc });
   return rpc;
@@ -62,7 +63,7 @@ async function client() {
 
 export async function desktopCall<T>(
   name: string,
-  arguments_: unknown,
+  argumentsValue: unknown,
   projectPath: string | null
 ): Promise<T> {
   const rpc = await client();
@@ -70,8 +71,8 @@ export async function desktopCall<T>(
   // Function.prototype.call instead of Electrobun's proxy method, which sends an undefined RPC
   // method. Use the explicit function form for this one intentionally generic command.
   return (await rpc.request("call", {
+    args: argumentsValue,
     name,
-    args: arguments_,
     projectPath,
   })) as T;
 }
@@ -201,7 +202,7 @@ export async function desktopSetBrowserZoom(
   webviewId: number,
   factor: number
 ): Promise<void> {
-  await (await client()).request.browserZoom({ webviewId, factor });
+  await (await client()).request.browserZoom({ factor, webviewId });
 }
 
 export async function desktopGetPetState(): Promise<DesktopPetState> {

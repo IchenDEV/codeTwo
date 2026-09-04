@@ -14,16 +14,11 @@ const SettingsPanel = ({
   description,
   actions,
   children,
-}: SettingsPanelProps) => {
-  return (
-    <div
-      data-slot="settings-panel"
-      className="gap-section flex min-w-0 flex-col"
-    >
-      <PageHeader title={title} description={description} actions={actions} />
-      {children}
-    </div>
-  );
-}
+}: SettingsPanelProps) => (
+  <div data-slot="settings-panel" className="gap-section flex min-w-0 flex-col">
+    <PageHeader title={title} description={description} actions={actions} />
+    {children}
+  </div>
+);
 
 export { SettingsPanel, type SettingsPanelProps };

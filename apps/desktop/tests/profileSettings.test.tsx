@@ -199,7 +199,7 @@ describe("ProfileSettings", () => {
     expect(
       view.container.querySelectorAll(".profile-activity-cell")
     ).toHaveLength(90);
-    expect(view.container.textContent?.match(/No activity yet/g)).toHaveLength(
+    expect(view.container.textContent?.match(/No activity yet/gu)).toHaveLength(
       1
     );
     expect(view.container.textContent).toContain(

@@ -8,11 +8,11 @@ export type RichTextSegment =
   | { kind: "markdown"; text: string }
   | { kind: "visualization"; reference: VisualizationReference };
 
-const VISUALIZE_START = "visualize";
-const VISUALIZE_END = "";
+const visualizeStart = "visualize";
+const visualizeEnd = "";
 
 function visualizationReference(value: unknown): VisualizationReference | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
   const candidate = value as Record<string, unknown>;
@@ -21,7 +21,8 @@ function visualizationReference(value: unknown): VisualizationReference | null {
     candidate.path.length === 0 ||
     candidate.path.length > 4096 ||
     !candidate.path.toLowerCase().endsWith(".html") ||
-    (!candidate.path.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(candidate.path))
+    (!candidate.path.startsWith("/") &&
+      !/^[A-Za-z]:[\\/]/u.test(candidate.path))
   ) {
     return null;
   }
@@ -42,17 +43,14 @@ function visualizationReference(value: unknown): VisualizationReference | null {
   };
 }
 
-/**
-Split complete visualize directives from streamed Markdown without exposing partial JSON.
-*/
 export function splitRichText(
   source: string,
-  streaming = false
+  isStreaming = false
 ): RichTextSegment[] {
   const output: RichTextSegment[] = [];
   let cursor = 0;
   while (cursor < source.length) {
-    const start = source.indexOf(VISUALIZE_START, cursor);
+    const start = source.indexOf(visualizeStart, cursor);
     if (start === -1) {
       const tail = source.slice(cursor);
       if (tail) {
@@ -63,15 +61,15 @@ export function splitRichText(
     if (start > cursor) {
       output.push({ kind: "markdown", text: source.slice(cursor, start) });
     }
-    const payloadStart = start + VISUALIZE_START.length;
-    const end = source.indexOf(VISUALIZE_END, payloadStart);
+    const payloadStart = start + visualizeStart.length;
+    const end = source.indexOf(visualizeEnd, payloadStart);
     if (end === -1) {
-      if (!streaming) {
+      if (!isStreaming) {
         output.push({ kind: "markdown", text: source.slice(start) });
       }
       break;
     }
-    const literal = source.slice(start, end + VISUALIZE_END.length);
+    const literal = source.slice(start, end + visualizeEnd.length);
     try {
       const reference = visualizationReference(
         JSON.parse(source.slice(payloadStart, end))
@@ -84,12 +82,12 @@ export function splitRichText(
     } catch {
       output.push({ kind: "markdown", text: literal });
     }
-    cursor = end + VISUALIZE_END.length;
+    cursor = end + visualizeEnd.length;
   }
   return output;
 }
 
-export const VISUALIZATION_THEME_VARIABLES = [
+export const visualizationThemeVariables = [
   "--background",
   "--foreground",
   "--card",
@@ -123,10 +121,10 @@ export const VISUALIZATION_THEME_VARIABLES = [
 ] as const;
 
 function safeCssValue(value: string): string {
-  return value.replaceAll(/[;{}]/g, "").trim();
+  return value.replaceAll(/[;{}]/gu, "").trim();
 }
 
-const VISUALIZATION_BASE_CSS = String.raw`
+const visualizationBaseCss = String.raw`
 html,body{margin:0;padding:0;background:var(--background);color:var(--foreground);font:var(--font-size-base)/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:light dark}
 *{box-sizing:border-box}
 body{overflow:hidden}
@@ -171,20 +169,18 @@ svg text{font-family:inherit}
 @media(max-width:420px){.viz-controls{align-items:stretch}.viz-controls>.form-label{width:100%}}
 `;
 
-/**
-Wrap one trusted-by-path, untrusted-by-content fragment in a tightly sandboxed document.
-*/
 export function visualizationDocument(
   fragment: string,
   theme: Readonly<Record<string, string>>,
   token: string
 ): string {
-  const variables = VISUALIZATION_THEME_VARIABLES.map((name) => {
-    const value = safeCssValue(theme[name] ?? "");
-    return value ? `${name}:${value}` : "";
-  })
+  const variables = visualizationThemeVariables
+    .map((name) => {
+      const value = safeCssValue(theme[name] ?? "");
+      return value ? `${name}:${value}` : "";
+    })
     .filter(Boolean)
     .join(";");
-  const safeToken = /^[A-Za-z0-9-]+$/.test(token) ? token : "visualization";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://esm.sh https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://fonts.googleapis.com https://fonts.bunny.net; font-src https://fonts.gstatic.com https://fonts.bunny.net; img-src data: blob:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>:root{--font-size-base:14px;--visualization-radius-control:12px;--visualization-radius-module:16px;${variables}}${VISUALIZATION_BASE_CSS}</style></head><body>${fragment}<script>(()=>{const token=${JSON.stringify(safeToken)};const send=(message)=>parent.postMessage({...message,token},'*');window.openai={sendFollowUpMessage:async(value)=>{send({type:'codetwo-visualize-follow-up',prompt:value?.prompt,title:value?.title});}};document.addEventListener('click',(event)=>{const link=event.target instanceof Element?event.target.closest('a[href]'):null;if(!link)return;event.preventDefault();send({type:'codetwo-visualize-open-link',url:link.href});});const size=()=>send({type:'codetwo-visualize-size',height:Math.ceil(Math.max(document.body.scrollHeight,document.body.offsetHeight))});if(typeof ResizeObserver==='function')new ResizeObserver(size).observe(document.body);document.fonts?.ready?.then(size);addEventListener('load',size);requestAnimationFrame(size);})();</script></body></html>`;
+  const safeToken = /^[A-Za-z0-9-]+$/u.test(token) ? token : "visualization";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://esm.sh https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://fonts.googleapis.com https://fonts.bunny.net; font-src https://fonts.gstatic.com https://fonts.bunny.net; img-src data: blob:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>:root{--font-size-base:14px;--visualization-radius-control:12px;--visualization-radius-module:16px;${variables}}${visualizationBaseCss}</style></head><body>${fragment}<script>(()=>{const token=${JSON.stringify(safeToken)};const send=(message)=>parent.postMessage({...message,token},'*');window.openai={sendFollowUpMessage:async(value)=>{send({type:'codetwo-visualize-follow-up',prompt:value?.prompt,title:value?.title});}};document.addEventListener('click',(event)=>{const link=event.target instanceof Element?event.target.closest('a[href]'):null;if(!link)return;event.preventDefault();send({type:'codetwo-visualize-open-link',url:link.href});});const size=()=>send({type:'codetwo-visualize-size',height:Math.ceil(Math.max(document.body.scrollHeight,document.body.offsetHeight))});if(typeof ResizeObserver==='function')new ResizeObserver(size).observe(document.body);document.fonts?.ready?.then(size);addEventListener('load',size);requestAnimationFrame(size);})();</script></body></html>`;
 }

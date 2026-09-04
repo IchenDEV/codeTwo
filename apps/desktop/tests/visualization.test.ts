@@ -64,7 +64,7 @@ describe("visualize transcript references", () => {
     expect(document).toContain(
       "border-radius:var(--visualization-radius-module)"
     );
-    expect(document).not.toMatch(/border-radius:(?:8px|999px)/);
+    expect(document).not.toMatch(/border-radius:(?:8px|999px)/u);
     expect(document).not.toContain("<script src=");
     expect(document).toContain('<div id="plot">Plot</div>');
     expect(document).toContain("safe-token");

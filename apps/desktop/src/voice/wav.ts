@@ -1,14 +1,3 @@
-/**
- * Recorded audio → 16 kHz mono 16-bit WAV.
- *
- * `MediaRecorder` hands us whatever the webview likes — Opus-in-WebM on Chromium, AAC-in-MP4 in
- * WKWebView — and local transcribers (whisper.cpp above all) read neither. WebAudio decodes both,
- * so we resample here and send the one format they all accept.
- */
-
-/**
-Decode `blob` and re-render it as a single 16 kHz channel.
-*/
 export async function toWav16kMono(blob: Blob): Promise<Uint8Array> {
   const bytes = await blob.arrayBuffer();
   const context = new AudioContext();
@@ -32,9 +21,6 @@ export async function toWav16kMono(blob: Blob): Promise<Uint8Array> {
   return encodeWav(rendered.getChannelData(0), rate);
 }
 
-/**
-Wrap float samples in a canonical 44-byte-header PCM WAV.
-*/
 function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   const bytesPerSample = 2;
   const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
@@ -70,9 +56,6 @@ function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   return new Uint8Array(buffer);
 }
 
-/**
-The first container this webview will actually record, or undefined to take its default.
-*/
 export function preferredRecordingType(): string | undefined {
   const candidates = [
     "audio/webm;codecs=opus",

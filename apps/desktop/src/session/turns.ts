@@ -1,68 +1,60 @@
-import { isAgentActivityTitle } from "./agentActivity";
 import type {
   CoreEvent,
-  DocBlock as DocumentBlock,
+  DocumentBlock,
   MemoryReceipt,
   Part,
   PlanEntry,
   ToolOutput,
   TranscriptEntry,
 } from "../bridge";
+import { isAgentActivityTitle } from "./agentActivity";
 
-/**
-Only an accepted TurnStarted may dispose mutable Composer Canvas heads.
-*/
 export function canvasIdsToPurgeAfterTurnStart(
-  accepted: boolean,
+  isAccepted: boolean,
   canvasIds: readonly string[],
-  editorUnchanged = true
+  isEditorUnchanged = true
 ): string[] {
-  return accepted && editorUnchanged
-    ? [...new Set(canvasIds.filter((id) => id.length > 0))]
+  return isAccepted && isEditorUnchanged
+    ? Array.from(new Set(canvasIds.filter((id) => id.length > 0)))
     : [];
 }
 
-/**
- * Unmounting is the last safe lifecycle boundary for a mutable Composer head.  A live head must
- * be tombstoned before purge; a head already tombstoned by document removal can go straight to
- * purge.  Frozen revisions remain immutable in core and are not represented by this plan.
- */
 export function canvasUnmountPlan(
   hasMutableHead: boolean,
-  alreadyTombstoned: boolean
+  isAlreadyTombstoned: boolean
 ): { tombstone: boolean; purge: boolean } {
-  const isMutable = hasMutableHead || alreadyTombstoned;
+  const isMutable = hasMutableHead || isAlreadyTombstoned;
   return {
-    tombstone: hasMutableHead && !alreadyTombstoned,
     purge: isMutable,
+    tombstone: hasMutableHead && !isAlreadyTombstoned,
   };
 }
 
-export interface CanvasFrozenRef {
+export interface CanvasFrozenReference {
   id: string;
   revision: number;
 }
 
-/**
-Provider-image failures are the only terminal errors that may offer a structure-only retry.
-*/
 export function isCanvasProviderImageError(message: string): boolean {
-  return /provider.*image|image.*unsupported|ProviderImageUnsupported/i.test(
+  return /provider.*image|image.*unsupported|ProviderImageUnsupported/iu.test(
     message
   );
 }
 
-/**
-Correlate the immutable accepted request with its explicit provider retry affordance.
-*/
-export function canvasRetryRefsForTerminal(
+export function canvasRetryReferencesForTerminal(
   kind: "error" | "success",
   message: string | undefined,
-  references: readonly CanvasFrozenRef[]
-): CanvasFrozenRef[] {
-  if (kind !== "error" || !message || !isCanvasProviderImageError(message))
+  refs: readonly CanvasFrozenReference[]
+): CanvasFrozenReference[] {
+  if (
+    kind !== "error" ||
+    message == null ||
+    message === "" ||
+    !isCanvasProviderImageError(message)
+  ) {
     return [];
-  return references.map((reference) => ({ id: reference.id, revision: reference.revision }));
+  }
+  return refs.map((ref) => ({ id: ref.id, revision: ref.revision }));
 }
 
 export function canvasAcceptedRequestKey(
@@ -72,27 +64,24 @@ export function canvasAcceptedRequestKey(
   return `${session}:${requestId}`;
 }
 
-/**
-A provider change after an accepted Canvas failure must stage a fresh session.
-*/
 export function canvasRetryTargetSession(
   activeSession: string | null,
-  forceNewSession: boolean
+  isForceNewSession: boolean
 ): string | null {
-  return forceNewSession ? null : activeSession;
+  return isForceNewSession ? null : activeSession;
 }
 
-/** Replace only Canvas references in a retry document; every non-Canvas block stays ordered and
- * byte-for-byte equivalent so an async provider failure never drops the user's instruction. */
 export function canvasRetryDocument(
-  document_: readonly DocumentBlock[],
-  replacements: ReadonlyMap<string, CanvasFrozenRef>
+  doc: readonly DocumentBlock[],
+  replacements: ReadonlyMap<string, CanvasFrozenReference>
 ): DocumentBlock[] {
-  return document_.map((block) => {
-    if (block.type !== "canvas") {return block;}
+  return doc.map((block) => {
+    if (block.type !== "canvas") {
+      return block;
+    }
     const replacement = replacements.get(block.id);
     return replacement
-      ? { ...block, id: replacement.id, frozen_revision: replacement.revision }
+      ? { ...block, frozen_revision: replacement.revision, id: replacement.id }
       : block;
   });
 }
@@ -116,22 +105,18 @@ export interface ToolEntry {
   lastTranscriptSeq?: number;
 }
 
-/**
-Normalize durable legacy string entries and current structured ACP plan entries once.
-*/
 export function normalizePlanEntries(
   entries: readonly (PlanEntry | string)[]
 ): PlanEntry[] {
   return entries.map((entry) => {
-  	return typeof entry === "string"
+    return typeof entry === "string"
       ? { content: entry, priority: null, status: null }
       : {
           content: entry.content,
           priority: entry.priority ?? null,
           status: entry.status ?? null,
         };
-  }
-  );
+  });
 }
 
 /**
@@ -156,14 +141,14 @@ export interface PromptImage {
   height?: number;
 }
 
-const PROMPT_ATTACHMENT_MARKER =
-  /\[attachment:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi;
+const promptAttachmentMarker =
+  /\[attachment:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/giu;
 
 function promptImagesFromCanonicalText(text: string): PromptImage[] {
-  return Array.from(text.matchAll(PROMPT_ATTACHMENT_MARKER), (match) => {
-  	return {
-	    id: match[1],
-	  };
+  return Array.from(text.matchAll(promptAttachmentMarker), (match) => {
+    return {
+      id: match[1],
+    };
   });
 }
 
@@ -233,43 +218,40 @@ export function newTurn(
   promptImages: PromptImage[] = []
 ): Turn {
   return {
-    id: nextId++,
-    requestId,
     accepted: false,
-    streamBoundaryKnown: false,
-    prompt,
-    promptImages,
-    text: "",
-    textDeltas: [],
+    content: [],
+    id: nextId++,
     observedTextDeltas: 0,
     observedThoughtDeltas: 0,
     pendingTextDeltaSkips: 0,
     pendingThoughtDeltaSkips: 0,
+    plan: [],
+    prompt,
+    promptImages,
+    requestId,
+    startedAt: Date.now(),
+    streamBoundaryKnown: false,
+    text: "",
+    textDeltas: [],
     thoughts: [],
     tools: [],
-    content: [],
-    plan: [],
-    startedAt: Date.now(),
   };
 }
 
-/**
-Immutable Set update used by App for both its synchronous ref and rendered state.
-*/
 export function withRunningSession(
   current: ReadonlySet<string>,
   session: string,
-  running: boolean
+  isRunning: boolean
 ): Set<string> {
   const next = new Set(current);
-  if (running) {next.add(session);}
-  else {next.delete(session);}
+  if (isRunning) {
+    next.add(session);
+  } else {
+    next.delete(session);
+  }
   return next;
 }
 
-/**
-Drop only the optimistic row owned by a cancelled creation request.
-*/
 export function withoutUnacceptedTurn(
   turns: Turn[],
   requestId: string
@@ -277,32 +259,32 @@ export function withoutUnacceptedTurn(
   return turns.filter((turn) => turn.requestId !== requestId || turn.accepted);
 }
 
-/**
-Project the session-level state onto a persisted tail without treating optimism as acceptance.
-*/
 export function transcriptTailState(
-  sessionRunning: boolean,
-  authoritativeTurnKnown: boolean,
+  isSessionRunning: boolean,
+  isAuthoritativeTurnKnown: boolean,
   latestRequestId?: string
 ): { running: boolean; requestId?: string } {
   return {
-    running: sessionRunning && authoritativeTurnKnown,
     requestId:
-      sessionRunning && !authoritativeTurnKnown ? undefined : latestRequestId,
+      isSessionRunning && !isAuthoritativeTurnKnown
+        ? undefined
+        : latestRequestId,
+    running: isSessionRunning && isAuthoritativeTurnKnown,
   };
 }
 
-/**
-Compare the submitted editor revision without depending on object key insertion order.
-*/
 export function sameDocBlocks(
   a: readonly DocumentBlock[],
   b: readonly DocumentBlock[]
 ): boolean {
-  if (a.length !== b.length) {return false;}
+  if (a.length !== b.length) {
+    return false;
+  }
   return a.every((left, index) => {
     const right = b[index];
-    if (!right || left.type !== right.type) {return false;}
+    if (right == null || left.type !== right.type) {
+      return false;
+    }
     switch (left.type) {
       case "text": {
         return right.type === "text" && left.text === right.text;
@@ -327,27 +309,28 @@ export function sameDocBlocks(
         );
       }
       case "skill": {
-        if (right.type !== "skill" || left.skill_id !== right.skill_id)
-          {return false;}
+        if (right.type !== "skill" || left.skill_id !== right.skill_id) {
+          return false;
+        }
         const leftKeys = Object.keys(left.params).sort();
         const rightKeys = Object.keys(right.params).sort();
         return (
           leftKeys.length === rightKeys.length &&
-          leftKeys.every(
-            (key, keyIndex) => {
-            	return key === rightKeys[keyIndex] &&
-              left.params[key] === right.params[key];
-            }
-          )
+          leftKeys.every((key, keyIndex) => {
+            return (
+              key === rightKeys[keyIndex] &&
+              left.params[key] === right.params[key]
+            );
+          })
         );
+      }
+      default: {
+        return false;
       }
     }
   });
 }
 
-/**
-Exact content plus editor revision prevents equal-looking post-submit edits from being erased.
-*/
 export function matchesSubmittedEditorRevision(
   current: readonly DocumentBlock[],
   currentRevision: number,
@@ -359,14 +342,11 @@ export function matchesSubmittedEditorRevision(
   );
 }
 
-/**
-Is this turn still in flight?
-*/
 export function isRunning(t: Turn | undefined): boolean {
   return !!t && t.endedAt === undefined;
 }
 
-interface ToolUpdate {
+type ToolUpdate = {
   id: string;
   title: string;
   status: string;
@@ -376,7 +356,7 @@ interface ToolUpdate {
   transcriptSeq?: number | null;
   startedAt?: number;
   endedAt?: number;
-}
+};
 
 function terminalToolStatus(status: string): boolean {
   return [
@@ -389,37 +369,46 @@ function terminalToolStatus(status: string): boolean {
   ].includes(status.trim().toLowerCase());
 }
 
-/**
-Upsert a streamed/persisted tool call without dropping metadata on status-only updates.
-*/
 function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
   const existing = tools.find((tool) => tool.id === update.id);
   if (
     existing?.lastTranscriptSeq !== undefined &&
-    update.transcriptSeq != null &&
+    update.transcriptSeq !== null &&
+    update.transcriptSeq !== undefined &&
     update.transcriptSeq <= existing.lastTranscriptSeq
   ) {
     return tools;
   }
   const entry: ToolEntry = {
-    ...existing,
-    id: update.id,
-    title: update.title || existing?.title || update.id,
+    ...(existing ?? {}),
     activityTitle:
-      existing?.activityTitle ||
-      (isAgentActivityTitle(update.title) ? update.title : undefined),
-    status: update.status || existing?.status || "pending",
+      existing?.activityTitle != null && existing.activityTitle !== ""
+        ? existing.activityTitle
+        : isAgentActivityTitle(update.title)
+          ? update.title
+          : undefined,
+    endedAt: update.endedAt ?? existing?.endedAt,
+    id: update.id,
     outputs: mergeToolOutputs(existing?.outputs ?? [], update.outputs ?? []),
     startedAt: existing?.startedAt ?? update.startedAt,
-    endedAt: update.endedAt ?? existing?.endedAt,
+    status:
+      update.status ||
+      (existing?.status != null && existing?.status !== ""
+        ? existing?.status
+        : "pending"),
+    title:
+      update.title ||
+      (existing?.title != null && existing?.title !== ""
+        ? existing?.title
+        : update.id),
   };
-  if (update.kind != null) {
+  if (update.kind !== null && update.kind !== undefined) {
     entry.kind = update.kind;
   }
-  if (update.agentInput != null) {
+  if (update.agentInput !== null && update.agentInput !== undefined) {
     entry.agentInput = update.agentInput;
   }
-  if (update.transcriptSeq != null) {
+  if (update.transcriptSeq !== null && update.transcriptSeq !== undefined) {
     entry.lastTranscriptSeq = update.transcriptSeq;
   }
   return existing
@@ -434,7 +423,9 @@ function mergeToolOutputs(
   const output = [...current];
   for (const item of incoming) {
     const isDuplicate = output.some((existing) => {
-      if (existing.type !== item.type) {return false;}
+      if (existing.type !== item.type) {
+        return false;
+      }
       if (item.type === "image" && existing.type === "image") {
         return existing.artifact.id === item.artifact.id;
       }
@@ -465,8 +456,10 @@ function appendTextContent(
     {
       kind: "text" as const,
       text,
-      ...(transcriptSeq != null && { transcriptSeq }),
-      ...(createdAt != null && { createdAt }),
+      ...(transcriptSeq === null || transcriptSeq === undefined
+        ? {}
+        : { transcriptSeq }),
+      ...(createdAt === null || createdAt === undefined ? {} : { createdAt }),
     },
   ];
 }
@@ -487,44 +480,42 @@ function appendToolContent(
     {
       kind: "tool" as const,
       toolId,
-      ...(transcriptSeq != null && { transcriptSeq }),
-      ...(createdAt != null && { createdAt }),
+      ...(transcriptSeq === null || transcriptSeq === undefined
+        ? {}
+        : { transcriptSeq }),
+      ...(createdAt === null || createdAt === undefined ? {} : { createdAt }),
     },
   ];
 }
 
-/**
- * Fold a streamed event into the turn list. Text accumulates into the open turn rather than
- * appending a new row, and tool calls are upserted by id so status updates in place.
- */
 export function applyEvent(
   turns: Turn[],
-  event_: CoreEvent,
+  ev: CoreEvent,
   activeRequestId?: string
 ): Turn[] {
   // Events that don't belong to a turn.
   if (
-    event_.event === "session_created" ||
-    event_.event === "session_title_changed" ||
-    event_.event === "session_activity_changed" ||
-    event_.event === "usage" ||
-    event_.event === "models" ||
-    event_.event === "config_options" ||
-    event_.event === "session_capabilities" ||
-    event_.event === "goal_changed" ||
-    event_.event === "permission_request"
+    ev.event === "session_created" ||
+    ev.event === "session_title_changed" ||
+    ev.event === "session_activity_changed" ||
+    ev.event === "usage" ||
+    ev.event === "models" ||
+    ev.event === "config_options" ||
+    ev.event === "session_capabilities" ||
+    ev.event === "goal_changed" ||
+    ev.event === "permission_request"
   ) {
     return turns;
   }
 
   const requestId =
-    "request_id" in event_ ? (event_.request_id ?? undefined) : undefined;
+    "request_id" in ev ? (ev.request_id ?? undefined) : undefined;
 
   // A start only accepts the optimistic row with the same correlation id. A foreign start owns a
   // separate row, so its output can never bind to a prompt this client lost the core-side race for.
-  if (event_.event === "turn_started") {
+  if (ev.event === "turn_started") {
     let match = -1;
-    if (requestId) {
+    if (requestId != null && requestId !== "") {
       for (let index = turns.length - 1; index >= 0; index -= 1) {
         if (turns[index].requestId === requestId) {
           match = index;
@@ -532,17 +523,22 @@ export function applyEvent(
         }
       }
     } else {
-      const tail = turns.at(-1);
-      if (isRunning(tail) && !tail.requestId) {match = turns.length - 1;}
+      const tail = turns[turns.length - 1];
+      if (
+        (isRunning(tail) && tail.requestId == null) ||
+        tail.requestId === ""
+      ) {
+        match = turns.length - 1;
+      }
     }
     if (match >= 0) {
       const list = [...turns];
       const accepted = {
         ...list[match],
         accepted: true,
-        streamBoundaryKnown: true,
         delivery: undefined,
         queuePosition: undefined,
+        streamBoundaryKnown: true,
       };
       delete accepted.endedAt;
       list[match] = accepted;
@@ -554,43 +550,47 @@ export function applyEvent(
     return [...turns, remote];
   }
 
-  if (event_.event === "prompt_queued") {
-    const match = requestId
-      ? turns.findIndex((turn) => turn.requestId === requestId)
-      : -1;
-    if (match < 0) {return turns;}
+  if (ev.event === "prompt_queued") {
+    const match =
+      requestId != null && requestId !== ""
+        ? turns.findIndex((turn) => turn.requestId === requestId)
+        : -1;
+    if (match < 0) {
+      return turns;
+    }
     const list = [...turns];
     list[match] = {
       ...list[match],
       delivery: "queued",
-      queuePosition: event_.position,
+      queuePosition: ev.position,
     };
     return list;
   }
 
-  if (event_.event === "steer_accepted") {
-    const match = requestId
-      ? turns.findIndex((turn) => turn.requestId === requestId)
-      : -1;
-    if (match < 0) {return turns;}
+  if (ev.event === "steer_accepted") {
+    const match =
+      requestId != null && requestId !== ""
+        ? turns.findIndex((turn) => turn.requestId === requestId)
+        : -1;
+    if (match < 0) {
+      return turns;
+    }
     const list = turns.map((turn, index) => {
-    	return index !== match && isRunning(turn) && turn.accepted
+      return index !== match && isRunning(turn) && turn.accepted
         ? { ...turn, endedAt: Date.now() }
         : turn;
-    }
-    );
+    });
     list[match] = {
       ...list[match],
       accepted: true,
       delivery: "steer",
       streamBoundaryKnown: true,
-      transcriptStartSeq:
-        event_.transcript_seq ?? list[match].transcriptStartSeq,
+      transcriptStartSeq: ev.transcript_seq ?? list[match].transcriptStartSeq,
     };
     return list;
   }
 
-  if (event_.event === "error" && requestId) {
+  if (ev.event === "error" && requestId != null && requestId !== "") {
     let match = -1;
     for (let index = turns.length - 1; index >= 0; index -= 1) {
       if (turns[index].requestId === requestId) {
@@ -600,29 +600,31 @@ export function applyEvent(
     }
     if (match >= 0) {
       const list = [...turns];
-      const current = { ...list[match], error: event_.message };
+      const cur = { ...list[match], error: ev.message };
       // A non-terminal error before acceptance is a correlated rejection (normally `busy`). It
       // ends only that optimistic row; warnings after TurnStarted keep the accepted turn open.
-      if (event_.terminal || !current.accepted) current.endedAt = Date.now();
-      list[match] = current;
+      if (ev.terminal || !cur.accepted) {
+        cur.endedAt = Date.now();
+      }
+      list[match] = cur;
       return list;
     }
     // Correlated errors with no known turn are bounded notices, never activity that can absorb
     // another client's streamed output.
     const notice = newTurn("(session notice)", requestId);
-    notice.error = event_.message;
+    notice.error = ev.message;
     notice.endedAt = Date.now();
     return [...turns, notice];
   }
 
   // A warning emitted while the session is idle is a completed notice, not a phantom running turn.
   if (
-    event_.event === "error" &&
-    !event_.terminal &&
-    !isRunning(turns.at(-1))
+    ev.event === "error" &&
+    !ev.terminal &&
+    !isRunning(turns[turns.length - 1])
   ) {
     const notice = newTurn("(session notice)");
-    notice.error = event_.message;
+    notice.error = ev.message;
     notice.endedAt = Date.now();
     return [...turns, notice];
   }
@@ -630,107 +632,115 @@ export function applyEvent(
   // Backward compatibility for event producers that predate `turn_started`: activity after an
   // ended transcript still starts a fresh remote turn instead of mutating the previous one.
   const list = [...turns];
-  let index_ = -1;
-  if (activeRequestId) {
+  let i = -1;
+  if (activeRequestId != null && activeRequestId !== "") {
     for (let index = list.length - 1; index >= 0; index -= 1) {
       if (isRunning(list[index]) && list[index].requestId === activeRequestId) {
-        index_ = index;
+        i = index;
         break;
       }
     }
-    if (index_ < 0) {
+    if (i < 0) {
       const remote = newTurn("(started elsewhere)", activeRequestId);
       remote.accepted = true;
       list.push(remote);
-      index_ = list.length - 1;
+      i = list.length - 1;
     }
   }
-  if (index_ < 0) {
+  if (i < 0) {
     for (let index = list.length - 1; index >= 0; index -= 1) {
       if (isRunning(list[index]) && list[index].accepted) {
-        index_ = index;
+        i = index;
         break;
       }
     }
   }
-  if (index_ < 0) {
+  if (i < 0) {
     for (let index = list.length - 1; index >= 0; index -= 1) {
       if (isRunning(list[index])) {
-        index_ = index;
+        i = index;
         break;
       }
     }
   }
-  if (index_ < 0) {
+  if (i < 0) {
     const remote = newTurn("(started elsewhere)");
     remote.accepted = true;
     list.push(remote);
-    index_ = list.length - 1;
+    i = list.length - 1;
   }
-  const cur = { ...list[index_] };
+  const cur = { ...list[i] };
   const observedAt = Date.now();
 
-  switch (event_.event) {
-    case "memory_context":
-      cur.memory = event_.receipt;
+  switch (ev.event) {
+    case "memory_context": {
+      cur.memory = ev.receipt;
       break;
-    case "agent_text":
+    }
+    case "agent_text": {
       cur.observedTextDeltas += 1;
       if (cur.pendingTextDeltaSkips > 0) {
         cur.pendingTextDeltaSkips -= 1;
       } else {
-        cur.text += event_.text;
-        cur.textDeltas = [...cur.textDeltas, event_.text];
+        cur.text += ev.text;
+        cur.textDeltas = [...cur.textDeltas, ev.text];
         cur.content = appendTextContent(
           cur.content,
-          event_.text,
-          event_.transcript_seq,
+          ev.text,
+          ev.transcript_seq,
           observedAt
         );
       }
       break;
-    case "agent_thought":
+    }
+    case "agent_thought": {
       cur.observedThoughtDeltas += 1;
       if (cur.pendingThoughtDeltaSkips > 0) {
         cur.pendingThoughtDeltaSkips -= 1;
       } else {
-        cur.thoughts = [...cur.thoughts, event_.text];
+        cur.thoughts = [...cur.thoughts, ev.text];
       }
       break;
+    }
     case "tool_call": {
       cur.tools = upsertTool(cur.tools, {
-        id: event_.id,
-        title: event_.title,
-        status: event_.status,
-        kind: event_.kind,
-        agentInput: event_.agent_input,
-        outputs: event_.outputs,
-        transcriptSeq: event_.transcript_seq,
+        agentInput: ev.agent_input,
+        endedAt: terminalToolStatus(ev.status) ? observedAt : undefined,
+        id: ev.id,
+        kind: ev.kind,
+        outputs: ev.outputs,
         startedAt: observedAt,
-        endedAt: terminalToolStatus(event_.status) ? observedAt : undefined,
+        status: ev.status,
+        title: ev.title,
+        transcriptSeq: ev.transcript_seq,
       });
       cur.content = appendToolContent(
         cur.content,
-        event_.id,
-        event_.transcript_seq,
+        ev.id,
+        ev.transcript_seq,
         observedAt
       );
       break;
     }
-    case "plan":
-      cur.plan = normalizePlanEntries(event_.entries);
+    case "plan": {
+      cur.plan = normalizePlanEntries(ev.entries);
       break;
-    case "turn_ended":
-      cur.stopReason = event_.stop_reason;
+    }
+    case "turn_ended": {
+      cur.stopReason = ev.stop_reason;
       cur.endedAt = Date.now();
       break;
-    case "error":
-      cur.error = event_.message;
-      if (event_.terminal) {cur.endedAt = Date.now();}
+    }
+    case "error": {
+      cur.error = ev.message;
+      if (ev.terminal) {
+        cur.endedAt = Date.now();
+      }
       break;
+    }
   }
 
-  list[index_] = cur;
+  list[i] = cur;
   return list;
 }
 
@@ -738,14 +748,14 @@ function mergeDeltas(
   snapshot: string[],
   live: string[],
   observedLiveCount: number,
-  boundaryKnown: boolean
+  isBoundaryKnown: boolean
 ): { deltas: string[]; pendingSkips: number } {
   // With an explicit TurnStarted boundary, the observed `live` sequence starts at the turn boundary
   // and the persisted snapshot contains a prefix of the same sequence. Counts preserve repeated equal
   // deltas. Persistence can also race ahead of IPC delivery; `pendingSkips` consumes those future
   // replays by position. Without that boundary, append conservatively: duplicating an uncertain
   // delta is safer than deleting distinct model output merely because the text happens to be equal.
-  if (!boundaryKnown) {
+  if (!isBoundaryKnown) {
     return { deltas: [...snapshot, ...live], pendingSkips: 0 };
   }
   return {
@@ -760,7 +770,7 @@ function mergeDeltas(
 function mergeTurnContent(
   snapshot: readonly TurnContentEntry[],
   live: readonly TurnContentEntry[],
-  boundaryKnown: boolean
+  isBoundaryKnown: boolean
 ): TurnContentEntry[] {
   if (snapshot.length === 0) {
     return [...live];
@@ -807,7 +817,7 @@ function mergeTurnContent(
       if (entry.transcriptSeq !== undefined) {
         return false;
       }
-      if (entry.kind === "text" && boundaryKnown && textToSkip > 0) {
+      if (entry.kind === "text" && isBoundaryKnown && textToSkip > 0) {
         textToSkip -= 1;
         return false;
       }
@@ -822,10 +832,10 @@ function mergeTurnContent(
     if (sequenceLess.length === 0) {
       return deduped;
     }
-    return [...deduped, ...mergeTurnContent([], sequenceLess, boundaryKnown)];
+    return [...deduped, ...mergeTurnContent([], sequenceLess, isBoundaryKnown)];
   }
 
-  if (!boundaryKnown) {
+  if (!isBoundaryKnown) {
     return [...snapshot, ...live];
   }
 
@@ -849,13 +859,10 @@ function mergeTurnContent(
   return [...snapshot, ...tail];
 }
 
-/**
-Merge events received during an async transcript read without dropping or duplicating its tail.
-*/
 export function mergeLoadedTurns(
   loaded: Turn[],
   live: Turn[],
-  running: boolean
+  isRunning: boolean
 ): Turn[] {
   if (live.length === 0) {
     return loaded;
@@ -864,14 +871,14 @@ export function mergeLoadedTurns(
     return live;
   }
 
-  const loadedTail = loaded.at(-1);
-  if (!loadedTail.requestId) {
+  const loadedTail = loaded[loaded.length - 1];
+  if (loadedTail.requestId == null || loadedTail.requestId === "") {
     return [...loaded, ...live];
   }
   const liveIndex = live.findIndex(
     (turn) => turn.requestId === loadedTail.requestId
   );
-  if (liveIndex === -1) {
+  if (liveIndex < 0) {
     return [...loaded, ...live];
   }
   const liveTurn = live[liveIndex];
@@ -897,27 +904,27 @@ export function mergeLoadedTurns(
   );
   const merged: Turn = {
     ...loadedTail,
-    requestId: liveTurn.requestId,
     accepted: loadedTail.accepted || liveTurn.accepted,
-    streamBoundaryKnown: liveTurn.streamBoundaryKnown,
-    text: textMerge.deltas.join(""),
-    textDeltas: textMerge.deltas,
-    observedTextDeltas: liveTurn.observedTextDeltas,
-    observedThoughtDeltas: liveTurn.observedThoughtDeltas,
-    pendingTextDeltaSkips: textMerge.pendingSkips,
-    pendingThoughtDeltaSkips: thoughtMerge.pendingSkips,
-    thoughts: thoughtMerge.deltas,
-    tools,
     content: mergeTurnContent(
       loadedTail.content,
       liveTurn.content,
       liveTurn.streamBoundaryKnown
     ),
-    plan: liveTurn.plan.length > 0 ? liveTurn.plan : loadedTail.plan,
+    endedAt: isRunning ? undefined : (liveTurn.endedAt ?? loadedTail.endedAt),
     error: liveTurn.error ?? loadedTail.error,
-    stopReason: liveTurn.stopReason ?? loadedTail.stopReason,
+    observedTextDeltas: liveTurn.observedTextDeltas,
+    observedThoughtDeltas: liveTurn.observedThoughtDeltas,
+    pendingTextDeltaSkips: textMerge.pendingSkips,
+    pendingThoughtDeltaSkips: thoughtMerge.pendingSkips,
+    plan: liveTurn.plan.length > 0 ? liveTurn.plan : loadedTail.plan,
+    requestId: liveTurn.requestId,
     startedAt: Math.min(loadedTail.startedAt, liveTurn.startedAt),
-    endedAt: running ? undefined : (liveTurn.endedAt ?? loadedTail.endedAt),
+    stopReason: liveTurn.stopReason ?? loadedTail.stopReason,
+    streamBoundaryKnown: liveTurn.streamBoundaryKnown,
+    text: textMerge.deltas.join(""),
+    textDeltas: textMerge.deltas,
+    thoughts: thoughtMerge.deltas,
+    tools,
   };
   return [
     ...loaded.slice(0, -1),
@@ -927,12 +934,9 @@ export function mergeLoadedTurns(
   ];
 }
 
-/**
-Rebuild turns from a persisted transcript: each user message starts a new turn.
-*/
 export function turnsFromTranscript(
   entries: readonly (TranscriptEntry | readonly [string, Part])[],
-  lastTurnRunning = false,
+  isLastTurnRunning = false,
   lastTurnRequestId?: string,
   receipts: readonly MemoryReceipt[] = []
 ): Turn[] {
@@ -947,7 +951,7 @@ export function turnsFromTranscript(
     createdAt?: number,
     startedAt?: number
   ) => {
-    const at = createdAt && createdAt > 0 ? createdAt : Date.now();
+    const at = createdAt != null && createdAt > 0 ? createdAt : Date.now();
     if (role === "user" && (part.kind === "text" || part.kind === "prompt")) {
       out.push({
         ...newTurn(
@@ -955,11 +959,11 @@ export function turnsFromTranscript(
           undefined,
           part.kind === "prompt" ? promptImagesFromCanonicalText(part.text) : []
         ),
-        transcriptStartSeq: seq,
         accepted: true,
+        endedAt: at,
         memory: seq === undefined ? undefined : receiptBySeq.get(seq),
         startedAt: at,
-        endedAt: at,
+        transcriptStartSeq: seq,
       });
       return;
     }
@@ -970,45 +974,45 @@ export function turnsFromTranscript(
         endedAt: Date.now(),
       });
     }
-    const current = out.at(-1);
+    const cur = out[out.length - 1];
     switch (part.kind) {
       case "text": {
-        current.text += part.text;
-        current.textDeltas.push(part.text);
-        current.content = appendTextContent(current.content, part.text, seq, at);
+        cur.text += part.text;
+        cur.textDeltas.push(part.text);
+        cur.content = appendTextContent(cur.content, part.text, seq, at);
         break;
       }
       case "prompt": {
-        current.text += part.text;
-        current.textDeltas.push(part.text);
-        current.content = appendTextContent(current.content, part.text, seq, at);
+        cur.text += part.text;
+        cur.textDeltas.push(part.text);
+        cur.content = appendTextContent(cur.content, part.text, seq, at);
         break;
       }
       case "reasoning": {
-        current.thoughts.push(part.text);
+        cur.thoughts.push(part.text);
         break;
       }
       case "tool_call": {
-        current.tools = upsertTool(current.tools, {
-          id: part.id,
-          title: part.title,
-          status: part.status,
-          kind: part.tool_kind,
+        cur.tools = upsertTool(cur.tools, {
           agentInput: part.agent_input,
-          outputs: part.outputs,
-          transcriptSeq: seq,
-          startedAt: startedAt && startedAt > 0 ? startedAt : at,
           endedAt: terminalToolStatus(part.status) ? at : undefined,
+          id: part.id,
+          kind: part.tool_kind,
+          outputs: part.outputs,
+          startedAt: startedAt != null && startedAt > 0 ? startedAt : at,
+          status: part.status,
+          title: part.title,
+          transcriptSeq: seq,
         });
-        current.content = appendToolContent(current.content, part.id, seq, at);
+        cur.content = appendToolContent(cur.content, part.id, seq, at);
         break;
       }
       case "plan": {
-        current.plan = normalizePlanEntries(part.entries);
+        cur.plan = normalizePlanEntries(part.entries);
         break;
       }
     }
-    current.endedAt = Math.max(current.endedAt ?? at, at);
+    cur.endedAt = Math.max(cur.endedAt ?? at, at);
   };
   for (const entry of entries) {
     if ("part" in entry) {
@@ -1023,18 +1027,15 @@ export function turnsFromTranscript(
       push(entry[1], entry[0]);
     }
   }
-  if (out.length > 0 && lastTurnRequestId) {
-    out.at(-1).requestId = lastTurnRequestId;
+  if (out.length > 0 && lastTurnRequestId != null && lastTurnRequestId !== "") {
+    out[out.length - 1].requestId = lastTurnRequestId;
   }
-  if (lastTurnRunning && out.length > 0) {
+  if (isLastTurnRunning && out.length > 0) {
     delete out[out.length - 1].endedAt;
   }
   return out;
 }
 
-/**
-Prepend an older, non-overlapping page without touching the live tail merge machinery.
-*/
 export function prependTranscriptTurns(current: Turn[], older: Turn[]): Turn[] {
   if (older.length === 0) {
     return current;
@@ -1045,8 +1046,11 @@ export function prependTranscriptTurns(current: Turn[], older: Turn[]): Turn[] {
       .filter((seq): seq is number => seq !== undefined)
   );
   return [
-    ...older.filter((turn) => turn.transcriptStartSeq === undefined ||
+    ...older.filter((turn) => {
+      return (
+        turn.transcriptStartSeq === undefined ||
         !durableStarts.has(turn.transcriptStartSeq)
+      );
     }),
     ...current,
   ];

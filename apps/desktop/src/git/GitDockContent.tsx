@@ -14,7 +14,9 @@ type GitDockContentProps = {
   readonly onOpenSourceControl: () => void;
 };
 
-/** Source-control summary rendered inside the generic Dock container. */
+/**
+Source-control summary rendered inside the generic Dock container.
+*/
 export const GitDockContent = ({
   cwd,
   status,
@@ -95,4 +97,4 @@ export const GitDockContent = ({
       </div>
     </ScrollArea>
   );
-}
+};

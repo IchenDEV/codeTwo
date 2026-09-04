@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  BROWSER_HISTORY_STORAGE_KEY,
-  EMPTY_BROWSER_HISTORY,
+  browserHistoryStorageKey,
+  emptyBrowserHistory,
   loadBrowserHistory,
   normalizeHistoryUrl,
   recentSitesForProject,
@@ -11,8 +11,8 @@ import {
   sanitizeBrowserHistory,
   saveBrowserHistory,
   updateBrowserVisitTitle,
-  type StorageLike,
 } from "../src/browser/history";
+import type { StorageLike } from "../src/browser/history";
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -37,7 +37,7 @@ describe("per-project browser history", () => {
 
   test("deduplicates by normalized URL while preserving a useful title", () => {
     let state = recordBrowserVisit(
-      EMPTY_BROWSER_HISTORY,
+      emptyBrowserHistory,
       "/repo/a",
       "http://127.0.0.1:3000/",
       "Dashboard",
@@ -70,7 +70,7 @@ describe("per-project browser history", () => {
 
   test("updates titles without changing recency and removes only the selected project entry", () => {
     let state = recordBrowserVisit(
-      EMPTY_BROWSER_HISTORY,
+      emptyBrowserHistory,
       "/repo/a",
       "https://example.com/",
       null,
@@ -106,7 +106,7 @@ describe("per-project browser history", () => {
   test("sanitizes malformed persisted data and round-trips through a versioned key", () => {
     const storage = new MemoryStorage();
     storage.values.set(
-      BROWSER_HISTORY_STORAGE_KEY,
+      browserHistoryStorageKey,
       JSON.stringify({
         version: 1,
         projects: [
@@ -134,11 +134,11 @@ describe("per-project browser history", () => {
     saveBrowserHistory(storage, loaded);
     expect(
       sanitizeBrowserHistory(
-        JSON.parse(storage.values.get(BROWSER_HISTORY_STORAGE_KEY)!)
+        JSON.parse(storage.values.get(browserHistoryStorageKey)!)
       )
     ).toEqual(loaded);
     expect(sanitizeBrowserHistory({ ...loaded, version: 99 })).toEqual(
-      EMPTY_BROWSER_HISTORY
+      emptyBrowserHistory
     );
   });
 });

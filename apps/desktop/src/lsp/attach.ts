@@ -36,8 +36,8 @@ The current pane's "open this project file" callback — App's tab opener, kept 
 */
 let fileOpener: ((absPath: string) => boolean) | null = null;
 
-export function setFileOpener(callback: (absPath: string) => boolean): void {
-  fileOpener = callback;
+export function setFileOpener(isCallback: (absPath: string) => boolean): void {
+  fileOpener = isCallback;
 }
 
 export function takePendingReveal(
@@ -48,14 +48,9 @@ export function takePendingReveal(
   }
   const at = pendingReveal;
   pendingReveal = null;
-  return { lineNumber: at.lineNumber, column: at.column };
+  return { column: at.column, lineNumber: at.lineNumber };
 }
 
-/**
- * Monaco asks this when navigation targets a model it doesn't have — a definition in another
- * file. Handing the path to the app's tab opener turns "peek failed" into "the file opens, cursor
- * on the symbol", which is the difference between a code viewer and an IDE.
- */
 function ensureOpener(): void {
   if (isOpenerRegistered) {
     return;
@@ -68,10 +63,10 @@ function ensureOpener(): void {
       }
       const pos =
         at && "startLineNumber" in at
-          ? { lineNumber: at.startLineNumber, column: at.startColumn }
-          : (at && "lineNumber" in at
-            ? { lineNumber: at.lineNumber, column: at.column }
-            : { lineNumber: 1, column: 1 });
+          ? { column: at.startColumn, lineNumber: at.startLineNumber }
+          : at && "lineNumber" in at
+            ? { column: at.column, lineNumber: at.lineNumber }
+            : { column: 1, lineNumber: 1 };
       pendingReveal = { absPath: resource.path, ...pos };
       const isOpened = fileOpener(resource.path);
       if (!isOpened) {
@@ -82,11 +77,6 @@ function ensureOpener(): void {
   });
 }
 
-/**
- * With a real typescript-language-server attached, Monaco's single-file TS worker becomes the
- * wrong voice in the room — same-named completions, half-informed hovers. Mute its providers and
- * let the project-aware server speak. (Highlighting is shiki's and unaffected.)
- */
 function muteBuiltinTs(lang: string): void {
   if (lang !== "typescript" && lang !== "javascript") {
     return;
@@ -96,25 +86,22 @@ function muteBuiltinTs(lang: string): void {
       ? monaco.typescript.typescriptDefaults
       : monaco.typescript.javascriptDefaults;
   defaults.setModeConfiguration({
-    completionItems: false,
-    hovers: false,
-    documentSymbols: false,
-    definitions: false,
-    references: false,
-    documentHighlights: false,
-    rename: false,
-    diagnostics: false,
-    documentRangeFormattingEdits: false,
-    signatureHelp: false,
-    onTypeFormattingEdits: false,
     codeActions: false,
+    completionItems: false,
+    definitions: false,
+    diagnostics: false,
+    documentHighlights: false,
+    documentRangeFormattingEdits: false,
+    documentSymbols: false,
+    hovers: false,
     inlayHints: false,
+    onTypeFormattingEdits: false,
+    references: false,
+    rename: false,
+    signatureHelp: false,
   });
 }
 
-/**
-Hook `model` up to its project's language server, if one exists for its language.
-*/
 export async function attachLsp(
   cwd: string,
   model: monaco.editor.ITextModel
@@ -171,9 +158,6 @@ function wireDiagnostics(client: LspClient): void {
   client.onDiagnostics ??= applyDiagnostics;
 }
 
-/**
-Tell the server the file hit disk — rust-analyzer runs its cargo-check pass on this signal.
-*/
 export function notifySaved(
   cwd: string,
   model: monaco.editor.ITextModel

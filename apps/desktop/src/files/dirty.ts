@@ -13,21 +13,21 @@ const subs = new Set<() => void>();
 let snapshot: ReadonlySet<string> = new Set();
 
 export function dirtyKey(cwd: string, path: string): string {
-  return `${cwd.replace(/\/$/, "")}/${path}`;
+  return `${cwd.replace(/\/$/u, "")}/${path}`;
 }
 
-export function markDirty(key: string, value: boolean): void {
-  if (value === dirty.has(key)) {
+export function markDirty(key: string, isValue: boolean): void {
+  if (isValue === dirty.has(key)) {
     return;
   }
-  if (value) {
+  if (isValue) {
     dirty.add(key);
   } else {
     dirty.delete(key);
   }
   snapshot = new Set(dirty);
-  for (const function_ of subs) {
-    function_();
+  for (const functionValue of subs) {
+    functionValue();
   }
 }
 
@@ -37,9 +37,9 @@ export function isDirty(key: string): boolean {
 
 export function useDirtyPaths(): ReadonlySet<string> {
   return useSyncExternalStore(
-    (function_) => {
-      subs.add(function_);
-      return () => subs.delete(function_);
+    (functionValue) => {
+      subs.add(functionValue);
+      return () => subs.delete(functionValue);
     },
     () => snapshot
   );

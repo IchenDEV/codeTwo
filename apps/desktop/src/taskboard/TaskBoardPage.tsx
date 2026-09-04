@@ -1,12 +1,11 @@
 import {
   useDeferredValue,
   useEffect,
-  useMemo,
   useReducer,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
+import type { ReactNode } from "react";
 import {
   CheckCircle2,
   ExternalLink,
@@ -43,16 +42,18 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/ui/toast";
-import { confirmNative, openExternal, type SessionActivity } from "@/bridge";
-import { useLanguage, type Locale, type Translate } from "@/i18n";
+import { confirmNative, openExternal } from "@/bridge";
+import type { SessionActivity } from "@/bridge";
+import { useLanguage } from "@/i18n";
+import type { Locale, Translate } from "@/i18n";
 
 import {
-  CORRUPT_BOARD_WARNING,
-  LOAD_BOARD_WARNING,
+  corruptBoardWarning,
+  loadBoardWarning,
   PRIORITIES,
-  SAVE_BOARD_WARNING,
-  TASK_BOARD_LANES,
-  TASK_STATUSES,
+  saveBoardWarning,
+  taskBoardLanes,
+  taskStatuses,
   boardLabels,
   boardReducer,
   createBoardTask,
@@ -63,19 +64,21 @@ import {
   sortBoardTasks,
   taskBoardLane,
   unlinkTaskPullRequest,
-  type BoardAction,
-  type BoardFilters,
-  type BoardTask,
-  type TaskBoardLane,
-  type TaskPriority,
-  type TaskStatus,
+} from "./taskBoard";
+import type {
+  BoardAction,
+  BoardFilters,
+  BoardTask,
+  TaskBoardLane,
+  TaskPriority,
+  TaskStatus,
 } from "./taskBoard";
 import {
   TaskEditorDialog,
   taskPriorityLabel,
   taskStatusLabel,
-  type TaskEditorValue,
 } from "./TaskEditorDialog";
+import type { TaskEditorValue } from "./TaskEditorDialog";
 
 interface TaskBoardSession {
   id: string;
@@ -113,43 +116,53 @@ interface AttentionDetail {
   action: string;
 }
 
-const LANE_TONES: Record<TaskBoardLane, string> = {
+const laneTones: Record<TaskBoardLane, string> = {
+  done: "text-success",
+  needs_you: "text-warning",
   queue: "text-foreground",
   running: "text-primary",
-  needs_you: "text-warning",
-  done: "text-success",
 };
 
-const PRIORITY_TONES: Record<TaskPriority, string> = {
-  none: "text-muted-foreground",
+const priorityTones: Record<TaskPriority, string> = {
+  high: "text-destructive",
   low: "text-muted-foreground",
   medium: "text-muted-foreground",
-  high: "text-destructive",
+  none: "text-muted-foreground",
   urgent: "text-destructive",
 };
 
-const COLLAPSED_LANE_LIMIT = 3;
+const collapsedLaneLimit = 3;
 
 function formatUpdatedAt(value: number, locale: Locale, t: Translate): string {
   const elapsed = Math.max(0, Date.now() - value);
   const hour = 60 * 60 * 1000;
   const day = 24 * hour;
-  if (elapsed < hour) return t("taskboard.updatedNow");
-  if (elapsed < day)
+  if (elapsed < hour) {
+    return t("taskboard.updatedNow");
+  }
+  if (elapsed < day) {
     return t("taskboard.updatedHours", { count: Math.floor(elapsed / hour) });
-  if (elapsed < day * 7)
+  }
+  if (elapsed < day * 7) {
     return t("taskboard.updatedDays", { count: Math.floor(elapsed / day) });
+  }
   const date = new Intl.DateTimeFormat(locale, {
-    month: "short",
     day: "numeric",
+    month: "short",
   }).format(value);
   return t("taskboard.updatedOn", { date });
 }
 
 function warningText(warning: string, t: Translate): string {
-  if (warning === CORRUPT_BOARD_WARNING) return t("taskboard.warning.corrupt");
-  if (warning === LOAD_BOARD_WARNING) return t("taskboard.warning.load");
-  if (warning === SAVE_BOARD_WARNING) return t("taskboard.warning.save");
+  if (warning === corruptBoardWarning) {
+    return t("taskboard.warning.corrupt");
+  }
+  if (warning === loadBoardWarning) {
+    return t("taskboard.warning.load");
+  }
+  if (warning === saveBoardWarning) {
+    return t("taskboard.warning.save");
+  }
   return warning;
 }
 
@@ -177,9 +190,15 @@ function toggleFilterValue<T extends string>(
 }
 
 function laneLabel(t: Translate, lane: TaskBoardLane): string {
-  if (lane === "queue") return t("taskboard.lane.queue");
-  if (lane === "running") return t("taskboard.lane.running");
-  if (lane === "needs_you") return t("taskboard.lane.needsYou");
+  if (lane === "queue") {
+    return t("taskboard.lane.queue");
+  }
+  if (lane === "running") {
+    return t("taskboard.lane.running");
+  }
+  if (lane === "needs_you") {
+    return t("taskboard.lane.needsYou");
+  }
   return t("taskboard.lane.done");
 }
 
@@ -194,7 +213,9 @@ function latestAvailableSession(
 ): SessionProjection | undefined {
   for (let index = task.sessionIds.length - 1; index >= 0; index -= 1) {
     const session = sessionsById.get(task.sessionIds[index]!);
-    if (session && !session.archived) return session;
+    if (session && !session.archived) {
+      return session;
+    }
   }
   return undefined;
 }
@@ -206,9 +227,9 @@ function projectTasks(
   return tasks.map((task) => {
     const latestSession = latestAvailableSession(task, sessionsById);
     return {
-      task,
       lane: taskBoardLane(task, sessionActivityKind(latestSession)),
       latestSession,
+      task,
     };
   });
 }
@@ -217,12 +238,14 @@ function groupProjectedTasks(
   tasks: readonly ProjectedTask[]
 ): Record<TaskBoardLane, ProjectedTask[]> {
   const grouped: Record<TaskBoardLane, ProjectedTask[]> = {
+    done: [],
+    needs_you: [],
     queue: [],
     running: [],
-    needs_you: [],
-    done: [],
   };
-  for (const task of tasks) grouped[task.lane].push(task);
+  for (const task of tasks) {
+    grouped[task.lane].push(task);
+  }
   return grouped;
 }
 
@@ -233,9 +256,9 @@ function attentionDetail(
 ): AttentionDetail {
   if (task.status === "in_review") {
     return {
-      label: t("taskboard.attention.reviewReady"),
-      description: t("taskboard.attention.reviewReadyDescription"),
       action: t("taskboard.reviewTask"),
+      description: t("taskboard.attention.reviewReadyDescription"),
+      label: t("taskboard.attention.reviewReady"),
     };
   }
   const state = session?.activity?.state;
@@ -243,28 +266,28 @@ function attentionDetail(
     const pending = state.pending[0];
     const isQuestion = pending?.kind === "elicitation";
     return {
+      action: t(
+        isQuestion ? "taskboard.answerTask" : "taskboard.reviewRequest"
+      ),
+      description: pending?.title ?? t("taskboard.attention.inputDescription"),
       label: t(
         isQuestion
           ? "taskboard.attention.answerNeeded"
           : "taskboard.attention.permissionNeeded"
       ),
-      description: pending?.title ?? t("taskboard.attention.inputDescription"),
-      action: t(
-        isQuestion ? "taskboard.answerTask" : "taskboard.reviewRequest"
-      ),
     };
   }
   if (state?.kind === "failed") {
     return {
-      label: t("taskboard.attention.failed"),
-      description: state.message,
       action: t("taskboard.reviewFailure"),
+      description: state.message,
+      label: t("taskboard.attention.failed"),
     };
   }
   return {
-    label: t("taskboard.attention.reviewReady"),
-    description: t("taskboard.attention.reviewReadyDescription"),
     action: t("taskboard.reviewTask"),
+    description: t("taskboard.attention.reviewReadyDescription"),
+    label: t("taskboard.attention.reviewReady"),
   };
 }
 
@@ -380,15 +403,15 @@ const TaskCard = ({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              {TASK_STATUSES.filter((status) => status !== task.status).map(
-                (status) => (
+              {taskStatuses
+                .filter((status) => status !== task.status)
+                .map((status) => (
                   <DropdownMenuItem key={status} onClick={() => onMove(status)}>
                     {t("taskboard.moveTo", {
                       status: taskStatusLabel(t, status),
                     })}
                   </DropdownMenuItem>
-                )
-              )}
+                ))}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -424,7 +447,7 @@ const TaskCard = ({
             <span
               className={cn(
                 "inline-flex items-center gap-1",
-                PRIORITY_TONES[task.priority]
+                priorityTones[task.priority]
               )}
             >
               <Flag aria-hidden className="size-3" />
@@ -497,7 +520,7 @@ const TaskCard = ({
       ) : null}
     </article>
   );
-}
+};
 
 const BoardColumn = ({
   t,
@@ -521,14 +544,14 @@ const BoardColumn = ({
   readonly totalCount: number;
   readonly filtered: boolean;
   readonly expanded: boolean;
-  readonly onExpandedChange: (expanded: boolean) => void;
+  readonly onExpandedChange: (isExpanded: boolean) => void;
   readonly dispatch: (action: BoardAction) => void;
   readonly openEditor: (task: BoardTask | null, status: TaskStatus) => void;
   readonly deleteTask: (task: BoardTask) => void;
   readonly onOpenSession?: (id: string) => void;
   readonly onStartTask?: (task: BoardTask) => void;
 }) => {
-  const visibleTasks = expanded ? tasks : tasks.slice(0, COLLAPSED_LANE_LIMIT);
+  const visibleTasks = expanded ? tasks : tasks.slice(0, collapsedLaneLimit);
   const hiddenCount = Math.max(0, tasks.length - visibleTasks.length);
   const visualCount = filtered ? `${tasks.length}/${totalCount}` : totalCount;
 
@@ -541,7 +564,7 @@ const BoardColumn = ({
       <header className="bg-fill-quiet sticky top-0 z-10 -mx-1 mb-2 flex shrink-0 items-center gap-2 px-1 py-2">
         <h2
           id={`taskboard-column-${lane}`}
-          className={cn("text-dialog font-semibold", LANE_TONES[lane])}
+          className={cn("text-dialog font-semibold", laneTones[lane])}
         >
           {laneLabel(t, lane)}
         </h2>
@@ -550,8 +573,8 @@ const BoardColumn = ({
           aria-label={
             filtered
               ? t("taskboard.visibleCount", {
-                  visible: tasks.length,
                   total: totalCount,
+                  visible: tasks.length,
                 })
               : t("taskboard.taskCount", { count: totalCount })
           }
@@ -571,10 +594,10 @@ const BoardColumn = ({
             onDelete={() => deleteTask(projected.task)}
             onMove={(status) => {
               dispatch({
-                type: "move",
                 id: projected.task.id,
-                status,
                 now: Date.now(),
+                status,
+                type: "move",
               });
             }}
             onOpenSession={onOpenSession}
@@ -583,7 +606,9 @@ const BoardColumn = ({
               projected.task.pullRequest
                 ? () => {
                     const pullRequest = projected.task.pullRequest;
-                    if (!pullRequest) return;
+                    if (!pullRequest) {
+                      return;
+                    }
                     const unlinked = unlinkTaskPullRequest(
                       [projected.task],
                       projected.task.id,
@@ -591,7 +616,9 @@ const BoardColumn = ({
                       projected.task.pullRequestLinkRevision
                     );
                     const updated = unlinked?.[0];
-                    if (updated) dispatch({ type: "update", task: updated });
+                    if (updated) {
+                      dispatch({ task: updated, type: "update" });
+                    }
                   }
                 : undefined
             }
@@ -616,7 +643,7 @@ const BoardColumn = ({
           >
             {t("taskboard.more", { count: hiddenCount })}
           </Button>
-        ) : expanded && tasks.length > COLLAPSED_LANE_LIMIT ? (
+        ) : expanded && tasks.length > collapsedLaneLimit ? (
           <Button
             type="button"
             variant="ghost"
@@ -630,7 +657,7 @@ const BoardColumn = ({
       </div>
     </section>
   );
-}
+};
 
 export const TaskBoardPage = ({
   sessions = [],
@@ -655,7 +682,9 @@ export const TaskBoardPage = ({
   const deferredQuery = useDeferredValue(query);
 
   useEffect(() => {
-    if (state.warning) toast(warningText(state.warning, t), "error");
+    if (state.warning) {
+      toast(warningText(state.warning, t), "error");
+    }
   }, [state.warning, t, toast]);
 
   useEffect(() => {
@@ -664,58 +693,38 @@ export const TaskBoardPage = ({
       return;
     }
     const result = saveBoardSnapshot(state.tasks);
-    if (!result.ok) toast(warningText(result.warning, t), "error");
+    if (!result.ok) {
+      toast(warningText(result.warning, t), "error");
+    }
   }, [state.tasks, t, toast]);
 
-  const filters: BoardFilters = useMemo(
-    () => ({ query: deferredQuery, priorities, labels }),
-    [deferredQuery, labels, priorities]
+  const filters: BoardFilters = { labels, priorities, query: deferredQuery };
+  const visibleTasks = sortBoardTasks(filterBoardTasks(state.tasks, filters));
+  const availableLabels = boardLabels(state.tasks);
+  const sessionsById = new Map(
+    sessions.map(
+      (session) =>
+        [
+          session.id,
+          { ...session, archived: session.archived === true },
+        ] satisfies [string, SessionProjection]
+    )
   );
-  const visibleTasks = useMemo(
-    () => sortBoardTasks(filterBoardTasks(state.tasks, filters)),
-    [filters, state.tasks]
+  const allProjectedTasks = projectTasks(
+    sortBoardTasks(state.tasks),
+    sessionsById
   );
-  const availableLabels = useMemo(
-    () => boardLabels(state.tasks),
-    [state.tasks]
-  );
-  const sessionsById = useMemo(
-    () =>
-      new Map(
-        sessions.map(
-          (session) =>
-            [
-              session.id,
-              { ...session, archived: session.archived === true },
-            ] satisfies [string, SessionProjection]
-        )
-      ),
-    [sessions]
-  );
-  const allProjectedTasks = useMemo(
-    () => projectTasks(sortBoardTasks(state.tasks), sessionsById),
-    [sessionsById, state.tasks]
-  );
-  const visibleProjectedTasks = useMemo(
-    () => projectTasks(visibleTasks, sessionsById),
-    [sessionsById, visibleTasks]
-  );
-  const allTasksByLane = useMemo(
-    () => groupProjectedTasks(allProjectedTasks),
-    [allProjectedTasks]
-  );
-  const visibleTasksByLane = useMemo(
-    () => groupProjectedTasks(visibleProjectedTasks),
-    [visibleProjectedTasks]
-  );
+  const visibleProjectedTasks = projectTasks(visibleTasks, sessionsById);
+  const allTasksByLane = groupProjectedTasks(allProjectedTasks);
+  const visibleTasksByLane = groupProjectedTasks(visibleProjectedTasks);
   const activeFilterCount =
     (query.trim() ? 1 : 0) + priorities.length + labels.length;
-  const filtered = activeFilterCount > 0;
+  const isFiltered = activeFilterCount > 0;
   const attentionCount = allTasksByLane.needs_you.length;
 
   const dispatch = (action: BoardAction) => dispatchBase(action);
   const openEditor = (task: BoardTask | null, initialStatus: TaskStatus) => {
-    setEditor({ task, initialStatus });
+    setEditor({ initialStatus, task });
   };
 
   const clearFilters = () => {
@@ -725,10 +734,11 @@ export const TaskBoardPage = ({
   };
 
   const saveEditor = (value: TaskEditorValue) => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
     if (editor.task) {
       dispatch({
-        type: "update",
         task: {
           ...editor.task,
           ...value,
@@ -738,13 +748,14 @@ export const TaskBoardPage = ({
             editor.task.updatedAt
           ),
         },
+        type: "update",
       });
     } else {
       const task = createBoardTask({
         ...value,
         order: nextColumnOrder(state.tasks, value.status),
       });
-      dispatch({ type: "create", task });
+      dispatch({ task, type: "create" });
       setExpandedLanes((current) => ({ ...current, queue: true }));
       if (filterBoardTasks([task], filters).length === 0) {
         toast(t("taskboard.createdHidden", { title: task.title }), "info", {
@@ -757,11 +768,13 @@ export const TaskBoardPage = ({
   };
 
   const deleteTask = async (task: BoardTask) => {
-    const confirmed = await confirmNative(
+    const isConfirmed = await confirmNative(
       t("taskboard.deleteConfirm", { title: task.title })
     );
-    if (!confirmed) return;
-    dispatch({ type: "delete", id: task.id });
+    if (!isConfirmed) {
+      return;
+    }
+    dispatch({ id: task.id, type: "delete" });
     toast(t("taskboard.deleted", { title: task.title }), "success");
   };
 
@@ -926,7 +939,7 @@ export const TaskBoardPage = ({
           data-task-board-content
           className="flex min-h-full min-w-max gap-4"
         >
-          {TASK_BOARD_LANES.map((lane) => (
+          {taskBoardLanes.map((lane) => (
             <BoardColumn
               key={lane}
               t={t}
@@ -934,7 +947,7 @@ export const TaskBoardPage = ({
               lane={lane}
               tasks={visibleTasksByLane[lane]}
               totalCount={allTasksByLane[lane].length}
-              filtered={filtered}
+              filtered={isFiltered}
               expanded={expandedLanes[lane] === true}
               onExpandedChange={(expanded) => {
                 setExpandedLanes((current) => ({
@@ -963,4 +976,4 @@ export const TaskBoardPage = ({
       ) : null}
     </main>
   );
-}
+};

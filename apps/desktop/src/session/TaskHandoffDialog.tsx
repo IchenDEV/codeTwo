@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { transferTaskToDevice, type TaskHandoffResult } from "../bridge";
+import { transferTaskToDevice } from "../bridge";
+import type { TaskHandoffResult } from "../bridge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,7 +28,9 @@ export const TaskHandoffDialog = ({
   const [error, setError] = useState<string | null>(null);
 
   const transfer = async () => {
-    if (!pairingUrl.trim() || !destination.trim()) return;
+    if (!pairingUrl.trim() || !destination.trim()) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -79,7 +82,9 @@ export const TaskHandoffDialog = ({
               Choose a new folder on the remote device.
             </p>
           </div>
-          {error ? <p className="text-metadata text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="text-metadata text-destructive">{error}</p>
+          ) : null}
         </div>
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={onClose}>
@@ -95,4 +100,4 @@ export const TaskHandoffDialog = ({
       </DialogContent>
     </Dialog>
   );
-}
+};

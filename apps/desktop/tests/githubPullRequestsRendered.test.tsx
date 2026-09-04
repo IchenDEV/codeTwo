@@ -38,8 +38,9 @@ function disableCanvasDrawing() {
 }
 
 afterEach(async () => {
-  for (const view of mounted.splice(0))
+  for (const view of mounted.splice(0)) {
     await reactAct(async () => view.unmount());
+  }
   await flush();
   restoreCanvasContext?.();
   restoreCanvasContext = null;

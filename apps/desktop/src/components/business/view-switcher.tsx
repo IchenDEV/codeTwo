@@ -19,37 +19,35 @@ const ViewSwitcher = <Value extends string>({
   value,
   options,
   onValueChange,
-}: ViewSwitcherProps<Value>) => {
-  return (
-    <div
-      data-slot="view-switcher"
-      role="group"
-      aria-label={label}
-      className="gap-control-group flex max-w-full min-w-0 items-center overflow-x-auto overscroll-x-contain"
-    >
-      {options.map((option) => {
-        const selected = option.value === value;
+}: ViewSwitcherProps<Value>) => (
+  <div
+    data-slot="view-switcher"
+    role="group"
+    aria-label={label}
+    className="gap-control-group flex max-w-full min-w-0 items-center overflow-x-auto overscroll-x-contain"
+  >
+    {options.map((option) => {
+      const isSelected = option.value === value;
 
-        return (
-          <Button
-            key={option.value}
-            type="button"
-            variant="selectable"
-            focusStyle="inset"
-            data-selected={selected ? "true" : "false"}
-            aria-pressed={selected}
-            disabled={option.disabled}
-            onClick={() => onValueChange(option.value)}
-          >
-            <span>{option.label}</span>
-            {option.count !== undefined ? (
-              <span className="tabular-nums">{option.count}</span>
-            ) : null}
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
+      return (
+        <Button
+          key={option.value}
+          type="button"
+          variant="selectable"
+          focusStyle="inset"
+          data-selected={isSelected ? "true" : "false"}
+          aria-pressed={isSelected}
+          disabled={option.disabled}
+          onClick={() => onValueChange(option.value)}
+        >
+          <span>{option.label}</span>
+          {option.count !== undefined ? (
+            <span className="tabular-nums">{option.count}</span>
+          ) : null}
+        </Button>
+      );
+    })}
+  </div>
+);
 
 export { ViewSwitcher, type ViewSwitcherOption, type ViewSwitcherProps };
