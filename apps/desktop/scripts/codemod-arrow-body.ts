@@ -6,11 +6,17 @@ import { readFileSync } from "node:fs";
 
 import { Node, Project, SyntaxKind } from "ts-morph";
 
-type Msg = { ruleId: string | null; line: number };
-type FileResult = { filePath: string; messages: Msg[] };
+interface Msg {
+  ruleId: string | null;
+  line: number;
+}
+interface FileResult {
+  filePath: string;
+  messages: Msg[];
+}
 
 const report = JSON.parse(
-  readFileSync(process.argv[2] ?? "/tmp/eslint-desktop.json", "utf8")
+  readFileSync(process.argv[2] ?? "/tmp/eslint-desktop.json", "utf-8")
 ) as FileResult[];
 
 const project = new Project({ tsConfigFilePath: "tsconfig.json" });

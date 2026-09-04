@@ -91,7 +91,7 @@ describe("sidebar GitHub status", () => {
       2
     );
 
-    expect(calls.sort()).toEqual(["/one", "/two"]);
+    expect(calls.toSorted()).toEqual(["/one", "/two"]);
     expect(statuses.get("/one")).toEqual({
       number: 7,
       url: "https://github.com/example/repo/pull/42",

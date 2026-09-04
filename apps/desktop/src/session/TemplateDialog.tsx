@@ -25,9 +25,10 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   proposeMacroSlots as bridgePropose,
   saveSkill as bridgeSave,
-  type Skill,
 } from "../bridge";
+import type { Skill } from "../bridge";
 import { useT } from "../i18n";
+import { td } from "../i18n/dynamic";
 import type { SceneSlotDef } from "./scene";
 
 /**
@@ -72,7 +73,10 @@ export function splitOptions(raw: string): string[] {
  * and a select must list options. Non-empty result disables Save.
  */
 /** Localizable validation message: a `templateFrom.err*` key plus its interpolation vars. */
-type DraftError = { key: string; vars: Record<string, string | number> };
+interface DraftError {
+  key: string;
+  vars: Record<string, string | number>;
+}
 
 const DRAFT_ERROR_EN: Record<string, string> = {
   "templateFrom.errSlug":
@@ -142,8 +146,8 @@ export function validateMacroDraft(
 function slugName(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-|-$/g, "");
 }
 
 function toRow(slot: SceneSlotDef): SlotRow {
@@ -203,13 +207,15 @@ export function TemplateDialog({
   }, [propose, source]);
 
   const errors = validateMacroDraft(template, slots, (key, vars) =>
-    t(key as never, vars)
+    td(t, key, vars)
   );
 
   // Committing on the native `input` event (slotCard idiom) keeps one write per edit in browsers
   // and in happy-dom, whose own-instance `value` property defeats React's change tracker. The
   // noop onChange only satisfies React's controlled-input contract.
-  const noopChange = () => {};
+  const noopChange = () => {
+    /* empty */
+  };
 
   const updateSlot = (index: number, patch: Partial<SlotRow>) => {
     setSlots((current) =>
@@ -368,8 +374,7 @@ export function TemplateDialog({
                       }))}
                       value={row.kind}
                       onValueChange={(next) =>
-                        next &&
-                        updateSlot(index, { kind: next as SlotRow["kind"] })
+                        next && updateSlot(index, { kind: next })
                       }
                     >
                       <SelectTrigger
@@ -402,7 +407,7 @@ export function TemplateDialog({
                       aria-label={t("templateFrom.required")}
                       checked={row.required}
                       onCheckedChange={(checked) =>
-                        updateSlot(index, { required: checked === true })
+                        updateSlot(index, { required: checked })
                       }
                     />
                     <Input

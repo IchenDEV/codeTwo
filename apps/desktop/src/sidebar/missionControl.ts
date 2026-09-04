@@ -1,8 +1,6 @@
 import type { SessionInfo } from "../bridge";
-import {
-  contextWindowPercentage,
-  type ContextWindowBySession,
-} from "../session/contextWindow";
+import { contextWindowPercentage } from "../session/contextWindow";
+import type { ContextWindowBySession } from "../session/contextWindow";
 import { sessionActivity } from "../session/sessionEvents";
 
 /** The four glanceable states a session can be in, mirroring the rail's row derivation. */
@@ -28,7 +26,7 @@ export function missionState(
   session: Pick<SessionInfo, "id" | "activity">,
   runningSessions: ReadonlySet<string>
 ): MissionState {
-  const kind = sessionActivity(session).state.kind;
+  const { kind } = sessionActivity(session).state;
   if (kind === "awaiting_input") return "awaiting_input";
   if (kind === "failed") return "failed";
   if (runningSessions.has(session.id) || kind === "running") return "running";
@@ -40,7 +38,7 @@ export function needsMeCount(
   sessions: readonly Pick<SessionInfo, "id" | "activity">[]
 ): number {
   return sessions.filter((session) => {
-    const kind = sessionActivity(session).state.kind;
+    const { kind } = sessionActivity(session).state;
     return kind === "awaiting_input" || kind === "failed";
   }).length;
 }
@@ -69,5 +67,5 @@ export function missionRows(
   const rank = (row: MissionRow) =>
     row.needsMe ? 0 : row.state === "running" ? 1 : 2;
   // `Array.prototype.sort` is stable, so equal ranks keep the caller's ordering.
-  return rows.sort((a, b) => rank(a) - rank(b));
+  return rows.toSorted((a, b) => rank(a) - rank(b));
 }

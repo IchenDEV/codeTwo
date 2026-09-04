@@ -1,6 +1,12 @@
+import { isOneOf } from "../lib/jsonValue";
 import type { ExcalidrawElement } from "./excalidrawAdapter";
 import { sanitizeElements } from "./serialize";
-import { ALLOWED_ELEMENT_TYPES, type AllowedElementType } from "./types";
+import { ALLOWED_ELEMENT_TYPES } from "./types";
+import type { AllowedElementType } from "./types";
+
+function isAllowedElementType(type: string): type is AllowedElementType {
+  return isOneOf(type, ALLOWED_ELEMENT_TYPES);
+}
 
 export interface CanvasManifestGeometry {
   x: number;
@@ -88,7 +94,7 @@ export function deriveCanvasManifest(
     .filter((element) => !element.isDeleted && element.opacity > 0)
     .filter(
       (element): element is ExcalidrawElement & { type: AllowedElementType } =>
-        ALLOWED_ELEMENT_TYPES.includes(element.type as AllowedElementType)
+        isAllowedElementType(element.type)
     );
   const allBounds = visible.map(elementBounds);
   const originX =
@@ -116,7 +122,7 @@ export function deriveCanvasManifest(
           : null,
       arrowEnd:
         element.type === "arrow"
-          ? endpoint(element, points[points.length - 1], originX, originY)
+          ? endpoint(element, points.at(-1), originX, originY)
           : null,
     } satisfies CanvasManifestObject;
   });

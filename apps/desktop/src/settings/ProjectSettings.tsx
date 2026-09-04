@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,16 +27,21 @@ import {
   openNativePath,
   pickProjectIcon,
   setProjectScheduling,
-  type Project,
-  type ProjectWorktreeMode,
-  type ProviderInfo,
 } from "../bridge";
+import type { Project, ProjectWorktreeMode, ProviderInfo } from "../bridge";
 import { useT } from "../i18n";
-import type { StringKey } from "../i18n/strings";
+import { td } from "../i18n/dynamic";
+import { isOneOf } from "../lib/jsonValue";
 import { ProjectIcon } from "../projects/ProjectIcon";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { ModelPicker } from "../session/Composer";
 import { GroupHeading, Page, ProjectRow } from "./SettingsPrimitives";
+
+const PROJECT_WORKTREE_MODES = [
+  "local",
+  "current",
+  "origin_default",
+] as const satisfies readonly ProjectWorktreeMode[];
 
 const REASONING_EFFORTS = [
   "minimal",
@@ -52,14 +57,26 @@ export function ProjectSettingsPage({
   project,
   providers,
   onWorktreeMode,
-  onRename = async () => {},
-  onIcon = async () => {},
-  onAgentDefaults = async () => {},
-  onRemove = async () => {},
+  onRename = async () => {
+    /* empty */
+  },
+  onIcon = async () => {
+    /* empty */
+  },
+  onAgentDefaults = async () => {
+    /* empty */
+  },
+  onRemove = async () => {
+    /* empty */
+  },
   iconPicker = pickProjectIcon,
   actionsCount = 0,
-  onAddAction = () => {},
-  onModeSavingChange = () => {},
+  onAddAction = () => {
+    /* empty */
+  },
+  onModeSavingChange = () => {
+    /* empty */
+  },
 }: {
   project: Project | null;
   providers: ProviderInfo[];
@@ -82,12 +99,8 @@ export function ProjectSettingsPage({
   onModeSavingChange?: (saving: boolean) => void;
 }) {
   const t = useT();
-  const providerNames = useMemo(
-    () =>
-      Object.fromEntries(
-        providers.map((candidate) => [candidate.id, candidate.display_name])
-      ),
-    [providers]
+  const providerNames = Object.fromEntries(
+    providers.map((candidate) => [candidate.id, candidate.display_name])
   );
   const [modeSaving, setModeSaving] = useState(false);
   const [nameDraft, setNameDraft] = useState(project?.name ?? "");
@@ -134,9 +147,9 @@ export function ProjectSettingsPage({
     setError(null);
     try {
       await onRename(project.path, name);
-    } catch (cause) {
+    } catch (error) {
       setNameDraft(project.name);
-      setError(t("settings.projectSaveFailed", { error: String(cause) }));
+      setError(t("settings.projectSaveFailed", { error: String(error) }));
     } finally {
       setProfileSaving(false);
     }
@@ -145,13 +158,13 @@ export function ProjectSettingsPage({
   async function chooseIcon() {
     if (!project) return;
     const source = await iconPicker();
-    if (!source) return;
+    if (source == null || source === "") return;
     setIconSaving(true);
     setError(null);
     try {
       await onIcon(project.path, source);
-    } catch (cause) {
-      setError(t("settings.projectIconFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.projectIconFailed", { error: String(error) }));
     } finally {
       setIconSaving(false);
     }
@@ -163,8 +176,8 @@ export function ProjectSettingsPage({
     setError(null);
     try {
       await onIcon(project.path, null);
-    } catch (cause) {
-      setError(t("settings.projectIconFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.projectIconFailed", { error: String(error) }));
     } finally {
       setIconSaving(false);
     }
@@ -180,8 +193,8 @@ export function ProjectSettingsPage({
     setError(null);
     try {
       await onAgentDefaults(project.path, providerId, modelId, reasoningEffort);
-    } catch (cause) {
-      setError(t("settings.projectSaveFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.projectSaveFailed", { error: String(error) }));
     } finally {
       setAgentSaving(false);
     }
@@ -199,18 +212,19 @@ export function ProjectSettingsPage({
     setError(null);
     try {
       await onRemove(project.path);
-    } catch (cause) {
-      setError(t("settings.projectSaveFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.projectSaveFailed", { error: String(error) }));
     } finally {
       setProfileSaving(false);
     }
   }
 
   const projectDefaultProvider = project?.default_provider ?? null;
-  const projectDefaultModels = projectDefaultProvider
-    ? (providers.find((candidate) => candidate.id === projectDefaultProvider)
-        ?.models ?? [])
-    : [];
+  const projectDefaultModels =
+    projectDefaultProvider != null && projectDefaultProvider !== ""
+      ? (providers.find((candidate) => candidate.id === projectDefaultProvider)
+          ?.models ?? [])
+      : [];
   return (
     <Page title={t("settings.project")} description={t("settings.projectHint")}>
       {project ? (
@@ -241,7 +255,7 @@ export function ProjectSettingsPage({
           <ProjectRow
             label={t("settings.projectIcon")}
             hint={
-              project.has_icon
+              project.has_icon === true
                 ? t("settings.projectIconCustom")
                 : t("settings.projectIconAutomatic")
             }
@@ -265,13 +279,13 @@ export function ProjectSettingsPage({
                   className="bg-background/70"
                 />
                 <span className="text-body min-w-0 flex-1 truncate font-medium">
-                  {project.has_icon
+                  {project.has_icon === true
                     ? t("settings.projectIconChange")
                     : t("settings.projectIconChoose")}
                 </span>
                 <ImagePlus className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
               </Button>
-              {project.has_icon ? (
+              {project.has_icon === true ? (
                 <>
                   <span
                     className="bg-foreground/10 my-2 w-px shrink-0"
@@ -291,7 +305,7 @@ export function ProjectSettingsPage({
               ) : null}
             </div>
           </ProjectRow>
-          {error ? (
+          {error != null && error !== "" ? (
             <p className="project-settings-error text-metadata text-destructive pt-1">
               {error}
             </p>
@@ -320,7 +334,8 @@ export function ProjectSettingsPage({
                 className="w-full justify-between"
               >
                 <SelectValue>
-                  {projectDefaultProvider ? (
+                  {projectDefaultProvider != null &&
+                  projectDefaultProvider !== "" ? (
                     <>
                       <ProviderIcon
                         provider={projectDefaultProvider}
@@ -361,7 +376,9 @@ export function ProjectSettingsPage({
             hint={t("settings.projectModelHint")}
           >
             <div className="grid w-full grid-cols-[minmax(0,1fr)_7.5rem] gap-2">
-              {projectDefaultProvider && projectDefaultModels.length > 0 ? (
+              {projectDefaultProvider != null &&
+              projectDefaultProvider !== "" &&
+              projectDefaultModels.length > 0 ? (
                 <div className="rounded-control bg-fill-rest flex min-w-0 items-center px-1">
                   <ModelPicker
                     models={projectDefaultModels}
@@ -376,10 +393,13 @@ export function ProjectSettingsPage({
                       );
                     }}
                     configOptions={[]}
-                    onConfigOption={() => {}}
+                    onConfigOption={() => {
+                      /* empty */
+                    }}
                     hasSession={false}
                   />
-                  {project.default_model ? (
+                  {project.default_model != null &&
+                  project.default_model !== "" ? (
                     <TooltipButton
                       label={t("settings.projectModelReset")}
                       variant="ghost"
@@ -403,7 +423,8 @@ export function ProjectSettingsPage({
                   {t("settings.projectModelDefault")}
                 </span>
               )}
-              {projectDefaultProvider ? (
+              {projectDefaultProvider != null &&
+              projectDefaultProvider !== "" ? (
                 <Select
                   disabled={agentSaving}
                   value={project.default_reasoning_effort ?? "automatic"}
@@ -421,10 +442,9 @@ export function ProjectSettingsPage({
                     className="w-full justify-between"
                   >
                     <SelectValue>
-                      {project.default_reasoning_effort
-                        ? t(
-                            `effort.${project.default_reasoning_effort}` as StringKey
-                          )
+                      {project.default_reasoning_effort != null &&
+                      project.default_reasoning_effort !== ""
+                        ? td(t, `effort.${project.default_reasoning_effort}`)
                         : t("settings.projectModelDefault")}
                     </SelectValue>
                   </SelectTrigger>
@@ -435,7 +455,7 @@ export function ProjectSettingsPage({
                       </SelectItem>
                       {REASONING_EFFORTS.map((effort) => (
                         <SelectItem key={effort} value={effort}>
-                          {t(`effort.${effort}` as StringKey)}
+                          {t(`effort.${effort}`)}
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -452,10 +472,13 @@ export function ProjectSettingsPage({
               disabled={modeSaving}
               value={project.default_worktree_mode ?? "inherit"}
               onValueChange={(value) => {
-                void saveWorktreeMode(
-                  project.path,
-                  value === "inherit" ? null : (value as ProjectWorktreeMode)
-                );
+                const mode =
+                  value === "inherit"
+                    ? null
+                    : isOneOf(value, PROJECT_WORKTREE_MODES)
+                      ? value
+                      : null;
+                void saveWorktreeMode(project.path, mode);
               }}
             >
               <SelectTrigger size="sm" className="w-full justify-between">
@@ -499,7 +522,7 @@ export function ProjectSettingsPage({
                 setSchedulingEnabled(enabled);
                 setError(null);
                 void setProjectScheduling(project.path, enabled).catch(
-                  (error) => {
+                  (error: unknown) => {
                     setSchedulingEnabled(!enabled);
                     setError(
                       t("settings.projectSaveFailed", { error: String(error) })
@@ -530,7 +553,7 @@ export function ProjectSettingsPage({
                 onClick={() => {
                   void navigator.clipboard
                     .writeText(project.path)
-                    .catch((error) => {
+                    .catch((error: unknown) => {
                       setError(
                         t("settings.projectSaveFailed", {
                           error: String(error),
@@ -554,7 +577,7 @@ export function ProjectSettingsPage({
                           t("settings.projectPathRevealUnavailable")
                         );
                     })
-                    .catch((error) => {
+                    .catch((error: unknown) => {
                       setError(
                         t("settings.projectSaveFailed", {
                           error: String(error),

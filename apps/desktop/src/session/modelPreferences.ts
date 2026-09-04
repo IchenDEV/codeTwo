@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 export const MODEL_PREFERENCES_STORAGE_KEY = "codetwo.providerModelPreferences";
 
@@ -62,12 +62,12 @@ export function loadModelPreferences(
   if (!storage) return emptySnapshot();
   try {
     const raw = storage.getItem(MODEL_PREFERENCES_STORAGE_KEY);
-    if (!raw) return emptySnapshot();
+    if (raw == null || raw === "") return emptySnapshot();
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return emptySnapshot();
+    if (parsed == null || typeof parsed !== "object") return emptySnapshot();
     const candidate = parsed as { version?: unknown; providers?: unknown };
     if (candidate.version !== MODEL_PREFERENCES_VERSION) return emptySnapshot();
-    if (!candidate.providers || typeof candidate.providers !== "object")
+    if (candidate.providers == null || typeof candidate.providers !== "object")
       return emptySnapshot();
 
     const providers: Record<string, ProviderModelPreference> = {};
@@ -76,11 +76,11 @@ export function loadModelPreferences(
     ).slice(0, MAX_PROVIDERS)) {
       if (
         !isSafeProviderKey(provider) ||
-        !preference ||
+        preference == null ||
         typeof preference !== "object"
       )
         continue;
-      const hidden = (preference as { hidden?: unknown }).hidden;
+      const { hidden } = preference as { hidden?: unknown };
       if (!Array.isArray(hidden)) continue;
       providers[provider] = {
         hidden: [
@@ -151,8 +151,7 @@ export function useProviderModelPreferences(provider: string) {
   useEffect(() => {
     const syncFromStorage = () => setHidden(hiddenModelsForProvider(provider));
     const syncFromPreference = (event: Event) => {
-      const detail = (event as CustomEvent<ModelPreferencesChangeDetail>)
-        .detail;
+      const { detail } = event as CustomEvent<ModelPreferencesChangeDetail>;
       if (detail?.provider === provider) setHidden(detail.hidden);
     };
     syncFromStorage();
@@ -165,36 +164,27 @@ export function useProviderModelPreferences(provider: string) {
     };
   }, [provider]);
 
-  const publish = useCallback(
-    (next: string[]) => {
-      setHidden(next);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent<ModelPreferencesChangeDetail>(
-            MODEL_PREFERENCES_EVENT,
-            {
-              detail: { provider, hidden: next },
-            }
-          )
-        );
-      }
-    },
-    [provider]
-  );
+  const publish = (next: string[]) => {
+    setHidden(next);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent<ModelPreferencesChangeDetail>(MODEL_PREFERENCES_EVENT, {
+          detail: { provider, hidden: next },
+        })
+      );
+    }
+  };
 
-  const setVisible = useCallback(
-    (model: string, visible: boolean) => {
-      publish(setModelHidden(provider, model, !visible));
-    },
-    [provider, publish]
-  );
+  const setVisible = (model: string, visible: boolean) => {
+    publish(setModelHidden(provider, model, !visible));
+  };
 
-  const showAll = useCallback(() => {
+  const showAll = () => {
     publish(showAllProviderModels(provider));
-  }, [provider, publish]);
+  };
 
   return {
-    hidden: useMemo(() => new Set(hidden), [hidden]),
+    hidden: new Set(hidden),
     setVisible,
     showAll,
   };

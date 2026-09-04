@@ -104,7 +104,7 @@ export async function loadSidebarPullRequests(
   let cursor = 0;
   const worker = async () => {
     while (cursor < paths.length) {
-      const path = paths[cursor++];
+      const path = paths[(cursor += 1)];
       if (!path) continue;
       try {
         result.set(path, sidebarPullRequestStatus(await load(path)));

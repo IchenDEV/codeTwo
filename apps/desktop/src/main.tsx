@@ -31,7 +31,9 @@ const showUiLab = uiLabRoute !== null;
 const uiLabThemeOverride = showUiLab
   ? searchParams.get("theme") === "light" ||
     searchParams.get("theme") === "dark"
-    ? (searchParams.get("theme") as "light" | "dark")
+    ? searchParams.get("theme") === "light"
+      ? "light"
+      : "dark"
     : "system"
   : undefined;
 const uiLabLanguageOverride = showUiLab
@@ -46,7 +48,7 @@ if (showDesktopPet)
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
 // paste / look up) is genuinely the right one.
 document.addEventListener("contextmenu", (e) => {
-  const el = e.target as HTMLElement | null;
+  const el = e.target instanceof HTMLElement ? e.target : null;
   const editable = el?.closest?.("input, textarea, [contenteditable='true']");
   // Base UI needs the un-cancelled event to position an app-owned context menu. Its trigger is a
   // deliberate desktop interaction, not the webview's Reload / Inspect Element menu.
@@ -96,7 +98,7 @@ async function render() {
             ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
             : App;
 
-  ReactDOM.createRoot(document.getElementById("root")!).render(
+  ReactDOM.createRoot(document.querySelector("#root")!).render(
     <React.StrictMode>
       <ThemeProvider preferenceOverride={uiLabThemeOverride}>
         <I18nProvider preferenceOverride={uiLabLanguageOverride}>

@@ -74,7 +74,7 @@ describe("C2 pet session state", () => {
       `${"旧".repeat(12)}${"新".repeat(170)}`
     );
 
-    expect(Array.from(bubble ?? "")).toHaveLength(160);
+    expect([...(bubble ?? "")]).toHaveLength(160);
     expect(bubble?.startsWith("…")).toBe(true);
     expect(bubble?.endsWith("新".repeat(159))).toBe(true);
   });

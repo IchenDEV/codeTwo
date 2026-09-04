@@ -43,24 +43,24 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
         const type = imageTypeOf(path) ?? "application/octet-stream";
         // Copy into a fresh ArrayBuffer: the IPC buffer may be a view into a larger one.
         objectUrl = URL.createObjectURL(
-          new Blob([bytes.slice().buffer as ArrayBuffer], { type })
+          new Blob([Uint8Array.from(bytes).buffer], { type })
         );
         setSize(bytes.byteLength);
         setUrl(objectUrl);
       })
-      .catch((e) => alive && setError(String(e)));
+      .catch((error: unknown) => alive && setError(String(error)));
 
     return () => {
       alive = false;
       // Revoking is what actually frees the bytes; without it every tab switch leaks the file.
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl != null && objectUrl !== "") URL.revokeObjectURL(objectUrl);
     };
   }, [cwd, path]);
 
-  if (error)
+  if (error != null && error !== "")
     return <p className="text-body text-destructive px-6 py-4">{error}</p>;
 
-  if (!url) {
+  if (url == null || url === "") {
     return (
       <p className="text-body text-muted-foreground flex items-center gap-2 px-6 py-4">
         <Spinner className="size-3.5" />

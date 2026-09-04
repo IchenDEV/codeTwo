@@ -10,7 +10,7 @@ let listening = false;
 export const nativeContextMenusAvailable =
   isElectrobun &&
   typeof navigator !== "undefined" &&
-  /Mac|Win/.test(navigator.platform);
+  /Mac|Win/u.test(navigator.platform);
 
 function ensureActionListener(): void {
   if (listening) return;
@@ -35,7 +35,7 @@ export async function showNativeContextMenu(
   // A platform can only present one context menu at a time. Replacing stale callbacks also keeps
   // a dismissed menu from retaining the row it belonged to.
   pendingMenus.clear();
-  const requestId = `context-menu-${Date.now()}-${nextRequestId++}`;
+  const requestId = `context-menu-${Date.now()}-${(nextRequestId += 1)}`;
   pendingMenus.set(requestId, onAction);
 
   try {

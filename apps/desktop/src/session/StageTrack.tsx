@@ -132,9 +132,7 @@ export function StageTrack({
                     }
                     data-testid={`stage-${stage.id}`}
                     data-state={stage.state}
-                    title={t(
-                      `stage.state.${stage.state}` as "stage.state.done"
-                    )}
+                    title={t(`stage.state.${stage.state}`)}
                     className={cn(
                       "gap-control-group max-w-full px-3",
                       stage.state !== "current" && "text-content-muted",

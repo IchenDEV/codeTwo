@@ -32,7 +32,7 @@ function componentLocale(locale: string): "en-US" | "zh-CN" | "ja-JP" {
 }
 
 function isComponentMessage(value: unknown): value is ComponentMessage {
-  if (!value || typeof value !== "object") return false;
+  if (value == null || typeof value !== "object") return false;
   const candidate = value as Partial<ComponentMessage>;
   return (
     candidate.type === "codetwo-feishu-doc-component" &&
@@ -44,8 +44,8 @@ function isComponentMessage(value: unknown): value is ComponentMessage {
 function readableFailure(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
   return message
-    .replace(/^Error:\s*/i, "")
-    .replace(/^dsh-feishu-docs:\s*/i, "")
+    .replace(/^Error:\s*/iu, "")
+    .replace(/^dsh-feishu-docs:\s*/iu, "")
     .trim();
 }
 
@@ -111,8 +111,8 @@ export function FeishuDocumentView({
           () => fail(t("feishu.documentComponentTimeout")),
           MOUNT_TIMEOUT_MS
         );
-      } catch (cause) {
-        fail(readableFailure(cause));
+      } catch (error) {
+        fail(readableFailure(error));
       }
     };
 
@@ -133,7 +133,7 @@ export function FeishuDocumentView({
         void open(true);
         return;
       }
-      fail(event.data.detail || t("feishu.documentComponentUnavailable"));
+      fail(event.data.detail ?? t("feishu.documentComponentUnavailable"));
     };
 
     window.addEventListener("message", onMessage);

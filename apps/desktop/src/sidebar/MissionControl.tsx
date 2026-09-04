@@ -13,25 +13,17 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-import {
-  providerLabel,
-  sessionDiffStat,
-  type SessionDiffStat,
-  type SessionInfo,
-} from "../bridge";
+import { providerLabel, sessionDiffStat } from "../bridge";
+import type { SessionDiffStat, SessionInfo } from "../bridge";
 import { useT } from "../i18n";
+import { td } from "../i18n/dynamic";
 import { ProviderIcon } from "../providers/ProviderIcon";
-import {
-  describeContextWindow,
-  type ContextWindowBySession,
-} from "../session/contextWindow";
+import { describeContextWindow } from "../session/contextWindow";
+import type { ContextWindowBySession } from "../session/contextWindow";
 // Explicit extension: Bun's directory cache is case-insensitive, and `missionControl` without an
 // extension resolves against `MissionControl.tsx` (this file) when both live in one directory.
-import {
-  missionRows,
-  type MissionRow,
-  type MissionState,
-} from "./missionControl.ts";
+import { missionRows } from "./missionControl.ts";
+import type { MissionRow, MissionState } from "./missionControl.ts";
 
 /** The rail's color semantics, one dot per state: amber asks, red failed, primary at work. */
 const DOT_CLASS: Record<MissionState, string> = {
@@ -44,7 +36,7 @@ const DOT_CLASS: Record<MissionState, string> = {
 /** A scene reference like `builtin:develop` reads better as its short name. */
 function sceneLabel(reference: string): string {
   const colon = reference.lastIndexOf(":");
-  return colon >= 0 ? reference.slice(colon + 1) : reference;
+  return colon === -1 ? reference : reference.slice(colon + 1);
 }
 
 /**
@@ -159,13 +151,13 @@ export function MissionControlDialog({
       >
         <span
           className={cn("size-2 shrink-0 rounded-full", DOT_CLASS[r.state])}
-          title={t(`mission.state.${r.state}` as "mission.state.idle")}
-          aria-label={t(`mission.state.${r.state}` as "mission.state.idle")}
+          title={td(t, `mission.state.${r.state}`)}
+          aria-label={td(t, `mission.state.${r.state}`)}
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="text-body min-w-0 truncate">{s.title}</span>
-            {r.scene && (
+            {r.scene != null && r.scene !== "" && (
               <Badge
                 variant="outline"
                 className="text-metadata text-muted-foreground shrink-0"
@@ -180,7 +172,7 @@ export function MissionControlDialog({
               className="size-3 shrink-0 opacity-70"
             />
             <span className="min-w-0 truncate">
-              {t(`mission.state.${r.state}` as "mission.state.idle")}
+              {td(t, `mission.state.${r.state}`)}
             </span>
           </div>
         </div>
@@ -196,7 +188,7 @@ export function MissionControlDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => open == null && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("mission.title")}</DialogTitle>

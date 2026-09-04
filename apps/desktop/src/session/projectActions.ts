@@ -26,8 +26,8 @@ export function projectActionId(
     name
       .normalize("NFKD")
       .toLocaleLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
+      .replaceAll(/[^a-z0-9]+/gu, "-")
+      .replaceAll(/^-+|-+$/gu, "")
       .slice(0, 56) || "action";
   const ids = new Set(actions.map((action) => action.id));
   if (!ids.has(stem)) return stem;

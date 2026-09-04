@@ -15,7 +15,7 @@ import type { Turn } from "./turns";
 
 export type TaskPlanStatus = "pending" | "in_progress" | "completed";
 
-const CHECKBOX_MARKER = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/;
+const CHECKBOX_MARKER = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/u;
 
 export function taskPlanStatus(entry: PlanEntry): TaskPlanStatus {
   const status = (entry.status ?? "").trim().toLowerCase().replaceAll("-", "_");
@@ -55,7 +55,7 @@ export function planChecklistMarkdown(
 }
 
 export function currentTaskPlan(turns: readonly Turn[]): readonly PlanEntry[] {
-  return turns[turns.length - 1]?.plan ?? [];
+  return turns.at(-1)?.plan ?? [];
 }
 
 function StatusIcon({ status }: { status: TaskPlanStatus }) {
@@ -101,11 +101,11 @@ export function TaskPlanPanel({
   const completed = statuses.filter((status) => status === "completed").length;
   const currentIndex = statuses.indexOf("in_progress");
   const currentStep =
-    currentIndex >= 0
-      ? currentIndex + 1
-      : entries.length > 0
+    currentIndex === -1
+      ? entries.length > 0
         ? Math.min(completed + 1, entries.length)
-        : 0;
+        : 0
+      : currentIndex + 1;
   const progress = entries.length > 0 ? (completed / entries.length) * 100 : 0;
 
   if (entries.length === 0) {
@@ -173,7 +173,8 @@ export function TaskPlanPanel({
         })}
       </ol>
 
-      {(onOpenPlanAsDocument || (canPinPlan && onPinPlanArtifact)) && (
+      {(onOpenPlanAsDocument != null ||
+        (canPinPlan && onPinPlanArtifact != null)) && (
         <div className="flex flex-wrap gap-1 px-2 pt-2">
           {onOpenPlanAsDocument && (
             <Button

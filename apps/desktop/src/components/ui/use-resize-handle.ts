@@ -1,10 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  type KeyboardEventHandler,
-  type PointerEventHandler,
-} from "react";
+import { useEffect, useRef } from "react";
+import type { KeyboardEventHandler, PointerEventHandler } from "react";
 
 interface ResizeHandleOptions {
   axis: "x" | "y";
@@ -51,7 +46,7 @@ export function useResizeHandle(options: ResizeHandleOptions) {
   const activeRef = useRef<ActiveResize | null>(null);
   optionsRef.current = options;
 
-  const finish = useCallback((element: HTMLElement, pointerId: number) => {
+  const finish = (element: HTMLElement, pointerId: number) => {
     const active = activeRef.current;
     if (!active || active.pointerId !== pointerId) return;
 
@@ -60,7 +55,7 @@ export function useResizeHandle(options: ResizeHandleOptions) {
     optionsRef.current.onEnd?.();
     if (element.hasPointerCapture(pointerId))
       element.releasePointerCapture(pointerId);
-  }, []);
+  };
 
   useEffect(
     () => () => {
@@ -72,48 +67,42 @@ export function useResizeHandle(options: ResizeHandleOptions) {
     []
   );
 
-  const onPointerDown = useCallback<PointerEventHandler<HTMLElement>>(
-    (event) => {
-      if (
-        event.button !== 0 ||
-        activeRef.current ||
-        optionsRef.current.disabled
-      )
-        return;
-      event.preventDefault();
+  const onPointerDown: PointerEventHandler<HTMLElement> = (event) => {
+    if (
+      event.button !== 0 ||
+      activeRef.current ||
+      optionsRef.current.disabled === true
+    )
+      return;
+    event.preventDefault();
 
-      const current = optionsRef.current;
-      activeRef.current = {
-        axis: current.axis,
-        direction: current.direction ?? 1,
-        pointerId: event.pointerId,
-        start: current.axis === "x" ? event.clientX : event.clientY,
-        startValue: current.value,
-      };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      document.body.classList.add(bodyClassName(current.axis));
-      current.onStart?.();
-    },
-    []
-  );
+    const { current } = optionsRef;
+    activeRef.current = {
+      axis: current.axis,
+      direction: current.direction ?? 1,
+      pointerId: event.pointerId,
+      start: current.axis === "x" ? event.clientX : event.clientY,
+      startValue: current.value,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add(bodyClassName(current.axis));
+    current.onStart?.();
+  };
 
-  const onPointerMove = useCallback<PointerEventHandler<HTMLElement>>(
-    (event) => {
-      const active = activeRef.current;
-      if (!active || active.pointerId !== event.pointerId) return;
-      const current = active.axis === "x" ? event.clientX : event.clientY;
-      const options = optionsRef.current;
-      const next = options.valueFromPointer
-        ? options.valueFromPointer(event)
-        : active.startValue + (current - active.start) * active.direction;
-      options.onResize(clamp(next, options.min, options.max, options.round));
-    },
-    []
-  );
+  const onPointerMove: PointerEventHandler<HTMLElement> = (event) => {
+    const active = activeRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    const current = active.axis === "x" ? event.clientX : event.clientY;
+    const options = optionsRef.current;
+    const next = options.valueFromPointer
+      ? options.valueFromPointer(event)
+      : active.startValue + (current - active.start) * active.direction;
+    options.onResize(clamp(next, options.min, options.max, options.round));
+  };
 
-  const onKeyDown = useCallback<KeyboardEventHandler<HTMLElement>>((event) => {
-    const current = optionsRef.current;
-    if (current.disabled) return;
+  const onKeyDown: KeyboardEventHandler<HTMLElement> = (event) => {
+    const { current } = optionsRef;
+    if (current.disabled === true) return;
     const backward = current.axis === "x" ? "ArrowLeft" : "ArrowUp";
     const forward = current.axis === "x" ? "ArrowRight" : "ArrowDown";
     let next: number;
@@ -132,27 +121,21 @@ export function useResizeHandle(options: ResizeHandleOptions) {
     current.onStart?.();
     current.onResize(clamp(next, current.min, current.max, current.round));
     current.onEnd?.();
-  }, []);
+  };
 
-  const onPointerUp = useCallback<PointerEventHandler<HTMLElement>>(
-    (event) => finish(event.currentTarget, event.pointerId),
-    [finish]
-  );
+  const onPointerUp: PointerEventHandler<HTMLElement> = (event) =>
+    finish(event.currentTarget, event.pointerId);
 
-  const onPointerCancel = useCallback<PointerEventHandler<HTMLElement>>(
-    (event) => finish(event.currentTarget, event.pointerId),
-    [finish]
-  );
+  const onPointerCancel: PointerEventHandler<HTMLElement> = (event) =>
+    finish(event.currentTarget, event.pointerId);
 
-  const onLostPointerCapture = useCallback<PointerEventHandler<HTMLElement>>(
-    (event) => finish(event.currentTarget, event.pointerId),
-    [finish]
-  );
+  const onLostPointerCapture: PointerEventHandler<HTMLElement> = (event) =>
+    finish(event.currentTarget, event.pointerId);
 
   return {
     role: "separator" as const,
-    tabIndex: options.disabled ? -1 : 0,
-    "aria-disabled": options.disabled || undefined,
+    tabIndex: options.disabled === true ? -1 : 0,
+    "aria-disabled": options.disabled ?? undefined,
     "aria-orientation":
       options.axis === "x" ? ("vertical" as const) : ("horizontal" as const),
     "aria-valuemin": options.min,

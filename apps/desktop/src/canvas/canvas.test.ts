@@ -4,7 +4,8 @@ import { describe, expect, test } from "bun:test";
 
 import { planCanvasExportTiles } from "./exportPlan";
 import { deriveCanvasManifest } from "./manifest";
-import { CanvasMediaError, intakeCanvasMedia } from "./media";
+import type { CanvasMediaError } from "./media";
+import { intakeCanvasMedia } from "./media";
 import {
   createEnvelope,
   deserializeEnvelope,
@@ -13,7 +14,7 @@ import {
 } from "./serialize";
 
 const remoteSource = await Bun.file(
-  new URL("./remote-entry.tsx", import.meta.url)
+  new URL("remote-entry.tsx", import.meta.url)
 ).text();
 
 const base = {
@@ -172,7 +173,7 @@ describe("media normalizer routing and rejection", () => {
           };
         },
         createFileId: (media) => media.ref,
-        onAsset: () => undefined,
+        onAsset: () => {},
       }
     );
     expect(seen).toEqual(["image/svg+xml", "image/gif"]);
@@ -185,7 +186,7 @@ describe("media normalizer routing and rejection", () => {
   });
 
   test("rejects a normalizer result that is not PNG or WebP", async () => {
-    await expect(
+    expect(
       intakeCanvasMedia(
         [{ bytes: new Uint8Array([1]), mimeType: "image/jpeg" }],
         {
@@ -194,7 +195,7 @@ describe("media normalizer routing and rejection", () => {
             bytes: new Uint8Array([1]),
             mimeType: "image/svg+xml" as never,
           }),
-          onAsset: () => undefined,
+          onAsset: () => {},
         }
       )
     ).rejects.toMatchObject<Partial<CanvasMediaError>>({
@@ -231,19 +232,19 @@ describe("crop, overview, detail tiling, and hard export budgets", () => {
         { minX: 0, minY: 0, maxX: 5000, maxY: 3000 },
         { tileSize: 512, maxImages: 2 }
       )
-    ).toThrow(/requires/);
+    ).toThrow(/requires/u);
     expect(() =>
       planCanvasExportTiles(
         { minX: 0, minY: 0, maxX: 5000, maxY: 3000 },
         { tileSize: 2048, maxPixels: 1000 }
       )
-    ).toThrow(/pixels/);
+    ).toThrow(/pixels/u);
     expect(() =>
       planCanvasExportTiles(
         { minX: 0, minY: 0, maxX: 100, maxY: 100 },
         { maxImages: 0 }
       )
-    ).toThrow(/images/);
+    ).toThrow(/images/u);
   });
 });
 
@@ -255,6 +256,6 @@ describe("CanvasEditor interaction and Remote island memory-only contract", () =
     expect(remoteSource).toContain(
       "new envelope is kept only in the mounted page memory"
     );
-    expect(remoteSource).not.toMatch(/localStorage|sessionStorage|indexedDB/i);
+    expect(remoteSource).not.toMatch(/localStorage|sessionStorage|indexedDB/iu);
   });
 });

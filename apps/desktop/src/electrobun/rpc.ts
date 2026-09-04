@@ -111,7 +111,7 @@ export interface AppshotCapture {
   destination: AppshotDestination;
 }
 
-export type CodeTwoRPC = {
+export interface CodeTwoRPC {
   bun: RPCSchema<{
     requests: {
       call: {
@@ -174,4 +174,4 @@ export type CodeTwoRPC = {
       appshotFailed: { message: string };
     };
   }>;
-};
+}

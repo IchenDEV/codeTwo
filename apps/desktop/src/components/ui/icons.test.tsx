@@ -4,11 +4,10 @@ import { createRef } from "react";
 
 import { activateDom, dom, mount } from "../../../tests/domTestHarness";
 import * as iconExports from "./icons";
-import type { AppIcon } from "./icons";
 
 activateDom();
 
-const icons = Object.entries(iconExports) as Array<[string, AppIcon]>;
+const icons = Object.entries(iconExports);
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -39,9 +38,7 @@ describe("rounded icon adapter", () => {
       expect(svg.getAttribute("width")).toBe("1em");
       expect(svg.getAttribute("height")).toBe("1em");
       expect(svg.classList.contains("adapter-icon")).toBe(true);
-      expect(svg.getAttribute("aria-label")).toBe(
-        svg.getAttribute("data-icon-name")
-      );
+      expect(svg.getAttribute("aria-label")).toBe(svg.dataset.iconName ?? null);
     }
 
     view.unmount();

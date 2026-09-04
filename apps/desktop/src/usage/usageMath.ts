@@ -3,7 +3,7 @@ import type { UsageHistory } from "../bridge";
 /** Compact token labels for the usage panel ("1.2M", "3.4k"). */
 export function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
 
@@ -44,7 +44,7 @@ export function stackHistory(history: UsageHistory): {
   const bucketMs = history.bucket_secs * 1000;
   const buckets: StackedBucket[] = [];
   let max = 0;
-  for (let i = 0; i < history.bucket_count; i++) {
+  for (let i = 0; i < history.bucket_count; i += 1) {
     const parts = history.series
       .map((s) => ({ source: s.source, value: s.totals[i] ?? 0 }))
       .filter((p) => p.value > 0);

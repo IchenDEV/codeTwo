@@ -22,16 +22,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { TooltipButton } from "@/components/ui/tooltip";
 
-import {
-  exportSceneSkillMd,
-  type ProviderInfo,
-  type SkillInfo,
-} from "../bridge";
+import { exportSceneSkillMd } from "../bridge";
+import type { ProviderInfo, SkillInfo } from "../bridge";
 import { useLanguage, useT } from "../i18n";
+import { td } from "../i18n/dynamic";
 import { useToast } from "../ui/toast";
-import { sceneTitle, type SceneInfo } from "./scene";
+import { sceneTitle } from "./scene";
+import type { SceneInfo } from "./scene";
 import { SourceBadge } from "./SceneChip";
-import { SceneEditor, type SceneEditorRequest } from "./SceneEditor";
+import { SceneEditor } from "./SceneEditor";
+import type { SceneEditorRequest } from "./SceneEditor";
 
 function SceneCard({
   scene,
@@ -81,7 +81,7 @@ function SceneCard({
       <CardContent className="flex flex-wrap items-center gap-1.5">
         {scene.execution?.session_mode && (
           <Badge variant="secondary">
-            {t(`mode.${scene.execution.session_mode}` as never)}
+            {td(t, `mode.${scene.execution.session_mode}`)}
           </Badge>
         )}
         {scene.has_brief && (

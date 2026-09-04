@@ -1,8 +1,9 @@
-import { type CSSProperties, type RefObject } from "react";
+import type { CSSProperties, RefObject } from "react";
 
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
 
-import { MIN_RATIO, type DividerRect } from "./paneLayout";
+import { MIN_RATIO } from "./paneLayout";
+import type { DividerRect } from "./paneLayout";
 
 const percent = (value: number): string => `${value * 100}%`;
 

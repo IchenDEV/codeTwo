@@ -1,10 +1,9 @@
-import {
-  PLUGIN_UI_SLOT_IDS,
-  type PluginConnectorContribution,
-  type PluginInfo,
-  type PluginLanguageServer,
-  type PluginUiContribution,
-  type PluginUiSlotId,
+import type {
+  PluginConnectorContribution,
+  PluginInfo,
+  PluginLanguageServer,
+  PluginUiContribution,
+  PluginUiSlotId,
 } from "../bridge";
 import { pluginUiComponentId } from "../pluginModel";
 import type { PluginManagerComponent, PluginManagerPlugin } from "./types";
@@ -45,9 +44,14 @@ export function activePluginUiContributions(
   plugins: PluginManagerPlugin[],
   components: PluginManagerComponent[] = []
 ): ActivePluginUiContributionsBySlot {
-  const bySlot = Object.fromEntries(
-    PLUGIN_UI_SLOT_IDS.map((slot) => [slot, []])
-  ) as unknown as ActivePluginUiContributionsBySlot;
+  const bySlot: ActivePluginUiContributionsBySlot = {
+    "rail.features": [],
+    "session.header": [],
+    "transcript.before": [],
+    "composer.above": [],
+    "composer.toolbar": [],
+    "host.actions": [],
+  };
   const componentById = new Map(
     components.map((component) => [component.id, component])
   );
@@ -92,9 +96,9 @@ export function activePluginLanguageServers(
         pluginName: bundle.name,
       }))
     )
-    .sort(
+    .toSorted(
       (left, right) =>
-        left.pluginId.localeCompare(right.pluginId) ||
+        left.pluginId.localeCompare(right.pluginId) ??
         left.id.localeCompare(right.id)
     );
 }
@@ -111,9 +115,9 @@ export function activePluginConnectorContributions(
         pluginId: bundle.id,
       }))
     )
-    .sort(
+    .toSorted(
       (left, right) =>
-        left.pluginId.localeCompare(right.pluginId) ||
+        left.pluginId.localeCompare(right.pluginId) ??
         left.id.localeCompare(right.id)
     );
 }

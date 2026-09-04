@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SearchField } from "@/components/business/search-field";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +16,11 @@ import {
   installProvider,
   setProviderEnabled,
   upgradeProvider,
-  type ProviderInfo,
-  type ProviderRuntimeConfiguration,
-  type ProviderRuntimeOverride,
+} from "../bridge";
+import type {
+  ProviderInfo,
+  ProviderRuntimeConfiguration,
+  ProviderRuntimeOverride,
 } from "../bridge";
 import { useT } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
@@ -34,10 +36,10 @@ const CAPABILITY_LABELS = {
   sites: "Sites",
 } as const;
 
-type ProviderOperation = {
+interface ProviderOperation {
   id: string;
   action: "install" | "upgrade" | "enable" | "configure" | "refresh";
-};
+}
 
 function runtimeConfiguration(
   provider: ProviderInfo
@@ -122,18 +124,14 @@ function ProviderRuntimeEditor({
     setForwardedEnvironment(next.forwarded_environment.join("\n"));
   }, [provider]);
 
-  const nextConfiguration = useMemo<ProviderRuntimeOverride>(
-    () =>
-      providerRuntimeOverrideFromDraft({
-        displayName,
-        command,
-        homePath,
-        argsOverridden,
-        args,
-        forwardedEnvironment,
-      }),
-    [args, argsOverridden, command, displayName, forwardedEnvironment, homePath]
-  );
+  const nextConfiguration = providerRuntimeOverrideFromDraft({
+    displayName,
+    command,
+    homePath,
+    argsOverridden,
+    args,
+    forwardedEnvironment,
+  });
   const persistedConfiguration: ProviderRuntimeOverride = {
     display_name: configuration.display_name,
     command: configuration.command,
@@ -197,27 +195,28 @@ function ProviderRuntimeEditor({
             {t("settings.providerRuntimeCommandHint")}
           </FieldDescription>
         </Field>
-        {configuration.home_environment && (
-          <Field>
-            <FieldLabel htmlFor={`provider-home-${provider.id}`}>
-              {t("settings.providerConfigDirectory")}
-            </FieldLabel>
-            <Input
-              id={`provider-home-${provider.id}`}
-              size="compact"
-              value={homePath}
-              placeholder={`~/.${provider.id === "codex" ? "codex" : "claude"}`}
-              disabled={disabled}
-              spellCheck={false}
-              onChange={(event) => setHomePath(event.target.value)}
-            />
-            <FieldDescription>
-              {t("settings.providerConfigDirectoryHint", {
-                variable: configuration.home_environment,
-              })}
-            </FieldDescription>
-          </Field>
-        )}
+        {configuration.home_environment != null &&
+          configuration.home_environment !== "" && (
+            <Field>
+              <FieldLabel htmlFor={`provider-home-${provider.id}`}>
+                {t("settings.providerConfigDirectory")}
+              </FieldLabel>
+              <Input
+                id={`provider-home-${provider.id}`}
+                size="compact"
+                value={homePath}
+                placeholder={`~/.${provider.id === "codex" ? "codex" : "claude"}`}
+                disabled={disabled}
+                spellCheck={false}
+                onChange={(event) => setHomePath(event.target.value)}
+              />
+              <FieldDescription>
+                {t("settings.providerConfigDirectoryHint", {
+                  variable: configuration.home_environment,
+                })}
+              </FieldDescription>
+            </Field>
+          )}
         <Field>
           <div className="flex items-center justify-between gap-3">
             <FieldLabel htmlFor={`provider-args-${provider.id}`}>
@@ -304,7 +303,7 @@ function ProviderModels({ provider }: { provider: ProviderInfo }) {
   const { hidden, setVisible, showAll } = useProviderModelPreferences(
     provider.id
   );
-  const models = useMemo(() => groupModels(provider.models), [provider.models]);
+  const models = groupModels(provider.models);
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filtered = normalizedSearch
     ? models.filter((model) =>
@@ -419,11 +418,11 @@ export function ProviderSettingsPage({
         await reload();
         if (active)
           setMessage({ id: "*", text: t("settings.providerChecked") });
-      } catch (cause) {
+      } catch (error) {
         if (active) {
           setError({
             id: "*",
-            text: t("settings.providerRefreshFailed", { error: String(cause) }),
+            text: t("settings.providerRefreshFailed", { error: String(error) }),
           });
         }
       } finally {
@@ -442,10 +441,10 @@ export function ProviderSettingsPage({
     try {
       await reload();
       setMessage({ id: "*", text: t("settings.providerChecked") });
-    } catch (cause) {
+    } catch (error) {
       setError({
         id: "*",
-        text: t("settings.providerRefreshFailed", { error: String(cause) }),
+        text: t("settings.providerRefreshFailed", { error: String(error) }),
       });
     } finally {
       setOperation(null);
@@ -474,10 +473,10 @@ export function ProviderSettingsPage({
               }),
       });
       await reload?.();
-    } catch (cause) {
+    } catch (error) {
       setError({
         id: providerId,
-        text: t("settings.providerActionFailed", { error: String(cause) }),
+        text: t("settings.providerActionFailed", { error: String(error) }),
       });
     } finally {
       setOperation(null);
@@ -504,10 +503,10 @@ export function ProviderSettingsPage({
             }),
       });
       await reload?.();
-    } catch (cause) {
+    } catch (error) {
       setError({
         id: providerId,
-        text: t("settings.providerActionFailed", { error: String(cause) }),
+        text: t("settings.providerActionFailed", { error: String(error) }),
       });
     } finally {
       setOperation(null);
@@ -533,10 +532,10 @@ export function ProviderSettingsPage({
         }),
       });
       await reload?.();
-    } catch (cause) {
+    } catch (error) {
       setError({
         id: providerId,
-        text: t("settings.providerActionFailed", { error: String(cause) }),
+        text: t("settings.providerActionFailed", { error: String(error) }),
       });
     } finally {
       setOperation(null);
@@ -582,7 +581,7 @@ export function ProviderSettingsPage({
       )}
       <div className="space-y-1">
         {providers.map((provider) => {
-          const enabled = provider.enabled !== false;
+          const { enabled } = provider;
           const management = provider.management ?? {
             installed: provider.available,
             version: null,
@@ -598,17 +597,17 @@ export function ProviderSettingsPage({
           const isExpanded = expanded.has(provider.id);
           const activeOperation =
             operation?.id === provider.id ? operation.action : null;
-          const status = !enabled
-            ? t("settings.providerDisabled")
-            : management.installed
-              ? management.version
+          const status = enabled
+            ? management.installed
+              ? management.version != null && management.version !== ""
                 ? t("settings.providerInstalledVersion", {
                     version: management.version,
                   })
                 : t("settings.installed")
               : management.launch_mode === "on_demand"
                 ? t("settings.providerReadyOnDemand")
-                : t("settings.notInstalled");
+                : t("settings.notInstalled")
+            : t("settings.providerDisabled");
           return (
             <div
               key={provider.id}
@@ -651,11 +650,12 @@ export function ProviderSettingsPage({
                       <span className="text-body truncate font-medium">
                         {provider.display_name}
                       </span>
-                      {management.version && (
-                        <span className="text-metadata text-muted-foreground shrink-0 font-mono">
-                          v{management.version}
-                        </span>
-                      )}
+                      {management.version != null &&
+                        management.version !== "" && (
+                          <span className="text-metadata text-muted-foreground shrink-0 font-mono">
+                            v{management.version}
+                          </span>
+                        )}
                     </span>
                     <span className="text-callout text-muted-foreground mt-0.5 block truncate">
                       {status}
@@ -699,7 +699,8 @@ export function ProviderSettingsPage({
                       )}
                       {activeOperation === "upgrade"
                         ? t("settings.providerUpgrading")
-                        : management.latest_version
+                        : management.latest_version != null &&
+                            management.latest_version !== ""
                           ? t("settings.providerUpgradeVersion", {
                               version: management.latest_version,
                             })
@@ -758,8 +759,8 @@ export function ProviderSettingsPage({
                     provider={provider}
                     disabled={operation !== null}
                     saving={activeOperation === "configure"}
-                    onSave={(configuration) =>
-                      saveConfiguration(provider.id, configuration)
+                    onSave={async (configuration) =>
+                      await saveConfiguration(provider.id, configuration)
                     }
                   />
                   <ProviderModels provider={provider} />
@@ -784,18 +785,20 @@ export function ProviderSettingsPage({
                             {capability.experimental && (
                               <Badge variant="outline">Experimental</Badge>
                             )}
-                            {capability.version && (
-                              <span className="text-metadata text-muted-foreground font-mono">
-                                {capability.version}
-                              </span>
-                            )}
+                            {capability.version != null &&
+                              capability.version !== "" && (
+                                <span className="text-metadata text-muted-foreground font-mono">
+                                  {capability.version}
+                                </span>
+                              )}
                           </div>
-                          {capability.reason && (
-                            <p className="text-callout text-muted-foreground mt-0.5">
-                              {capability.reason}
-                            </p>
-                          )}
-                          {capability.fix && (
+                          {capability.reason != null &&
+                            capability.reason !== "" && (
+                              <p className="text-callout text-muted-foreground mt-0.5">
+                                {capability.reason}
+                              </p>
+                            )}
+                          {capability.fix != null && capability.fix !== "" && (
                             <p className="text-callout text-foreground/75 mt-0.5">
                               {capability.fix}
                             </p>

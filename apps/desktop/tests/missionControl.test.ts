@@ -40,9 +40,9 @@ function session(
     acp_session_id: null,
     memory_read: "inherit",
     memory_write: "inherit",
-    created_at: ++counter,
+    created_at: (counter += 1),
     ...(activityKind === null ? {} : { activity: { revision: 1, state } }),
-  } as SessionInfo;
+  };
 }
 
 const none = new Set<string>();

@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,8 +21,8 @@ import {
   Settings,
   SlidersHorizontal,
   SquarePlus,
-  type AppIcon,
 } from "@/components/ui/icons";
+import type { AppIcon } from "@/components/ui/icons";
 import {
   Popover,
   PopoverContent,
@@ -30,12 +31,8 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-import {
-  getArtifact,
-  type GitStatus,
-  type PlanEntry,
-  type Project,
-} from "../bridge";
+import { getArtifact } from "../bridge";
+import type { GitStatus, PlanEntry, Project } from "../bridge";
 import { GitSyncStatus } from "../git/GitSyncStatus";
 import { useT } from "../i18n";
 import { TaskPlanPanel } from "../session/TaskPlanPanel";
@@ -64,12 +61,12 @@ function EnvironmentRow({
       <Icon
         className={cn(
           "text-muted-foreground size-4 shrink-0",
-          description && "mt-0.5 self-start"
+          description != null && description !== "" && "mt-0.5 self-start"
         )}
       />
       <span className="min-w-0 flex-1">
         <span className="text-body block truncate">{label}</span>
-        {description && (
+        {description != null && description !== "" && (
           <span className="text-callout text-muted-foreground block truncate">
             {description}
           </span>
@@ -102,7 +99,9 @@ function EnvironmentRow({
       aria-pressed={active || undefined}
       disabled={disabled}
       onClick={onClick}
-      className={description ? "items-start" : undefined}
+      className={
+        description != null && description !== "" ? "items-start" : undefined
+      }
     >
       {content}
     </Button>
@@ -127,7 +126,7 @@ function ToolPreview({ preview }: { preview: InteractiveToolPreview }) {
       .then((bytes) => {
         if (!alive) return;
         objectUrl = URL.createObjectURL(
-          new Blob([bytes.slice().buffer as ArrayBuffer], {
+          new Blob([Uint8Array.from(bytes).buffer], {
             type: preview.artifact.mime_type,
           })
         );
@@ -138,7 +137,7 @@ function ToolPreview({ preview }: { preview: InteractiveToolPreview }) {
       });
     return () => {
       alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl != null && objectUrl !== "") URL.revokeObjectURL(objectUrl);
     };
   }, [preview.artifact.id, preview.artifact.mime_type]);
 
@@ -160,7 +159,7 @@ function ToolPreview({ preview }: { preview: InteractiveToolPreview }) {
         </span>
       </figcaption>
       <div className="image-checker flex min-h-32 items-center justify-center">
-        {url && !failed ? (
+        {url != null && url !== "" && !failed ? (
           <img
             src={url}
             alt={t("environment.livePreview", { tool: label })}
@@ -342,7 +341,7 @@ export function EnvironmentPopover({
                 <span className="text-body min-w-0 flex-1 truncate font-medium">
                   {t("environment.local")}
                 </span>
-                {project && (
+                {project != null && project !== "" && (
                   <span className="text-metadata text-muted-foreground max-w-28 truncate">
                     {project}
                   </span>

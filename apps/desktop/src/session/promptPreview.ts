@@ -1,4 +1,5 @@
 import type { CanvasExport } from "../bridge";
+import { asJsonObject, isStringArray } from "../lib/jsonValue";
 
 export const LONG_PROMPT_MAX_LINES = 8;
 export const LONG_PROMPT_MAX_CHARS = 600;
@@ -15,12 +16,12 @@ export interface CanvasHistoryMarker {
 }
 
 const CANVAS_HISTORY_LINE =
-  /^\s*\[canvas-history\s+([^\s\]@]+)@(\d+)\]\s*(.*)\s*$/;
-const CANVAS_TEXT_LINE = /^\s*canvas-text:\s?(.*)$/;
-const CANVAS_HISTORY_JSON_LINE = /^\s*\[canvas-history-json\s+(.+)\]\s*$/;
+  /^\s*\[canvas-history\s+([^\s\]@]+)@(\d+)\]\s*(.*)\s*$/u;
+const CANVAS_TEXT_LINE = /^\s*canvas-text:\s?(.*)$/u;
+const CANVAS_HISTORY_JSON_LINE = /^\s*\[canvas-history-json\s+(.+)\]\s*$/u;
 
 function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
-  const match = line.match(CANVAS_HISTORY_JSON_LINE);
+  const match = CANVAS_HISTORY_JSON_LINE.exec(line);
   if (!match) return null;
   let decoded: unknown;
   try {
@@ -28,29 +29,32 @@ function parseCanvasHistoryJson(line: string): CanvasHistoryMarker | null {
   } catch {
     return null;
   }
-  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
+  if (decoded == null || typeof decoded !== "object" || Array.isArray(decoded))
     return null;
-  const value = decoded as Record<string, unknown>;
+  const value = asJsonObject(decoded);
+  if (value == null) return null;
   if (value.version !== 1) return null;
   if (typeof value.id !== "string" || value.id.trim().length === 0) return null;
-  if (!Number.isSafeInteger(value.revision) || (value.revision as number) <= 0)
+  if (
+    typeof value.revision !== "number" ||
+    !Number.isSafeInteger(value.revision) ||
+    value.revision <= 0
+  )
     return null;
-  if (typeof value.title !== "string" || Array.from(value.title).length > 200)
+  if (typeof value.title !== "string" || [...value.title].length > 200)
     return null;
   if (
-    !Array.isArray(value.text_originals) ||
+    !isStringArray(value.text_originals) ||
     value.text_originals.length > 64 ||
-    !value.text_originals.every(
-      (text) => typeof text === "string" && Array.from(text).length <= 2_000
-    )
+    !value.text_originals.every((text) => [...text].length <= 2000)
   ) {
     return null;
   }
   return {
     id: value.id,
-    revision: value.revision as number,
+    revision: value.revision,
     title: value.title,
-    textOriginals: [...(value.text_originals as string[])],
+    textOriginals: [...value.text_originals],
   };
 }
 
@@ -62,7 +66,7 @@ export function parseCanvasHistoryPrompt(prompt: string): {
   const canvases: CanvasHistoryMarker[] = [];
   let current: CanvasHistoryMarker | null = null;
   let markerTextContext = false;
-  for (const line of prompt.split(/\r?\n/)) {
+  for (const line of prompt.split(/\r?\n/u)) {
     const structured = parseCanvasHistoryJson(line);
     if (structured) {
       canvases.push(structured);
@@ -70,7 +74,7 @@ export function parseCanvasHistoryPrompt(prompt: string): {
       markerTextContext = false;
       continue;
     }
-    const marker = line.match(CANVAS_HISTORY_LINE);
+    const marker = CANVAS_HISTORY_LINE.exec(line);
     if (marker) {
       current = {
         id: marker[1],
@@ -82,7 +86,7 @@ export function parseCanvasHistoryPrompt(prompt: string): {
       markerTextContext = true;
       continue;
     }
-    const text = line.match(CANVAS_TEXT_LINE);
+    const text = CANVAS_TEXT_LINE.exec(line);
     if (text) {
       if (current && markerTextContext) {
         if (text[1].trim()) current.textOriginals.push(text[1].trim());
@@ -102,7 +106,7 @@ export function parseCanvasHistoryPrompt(prompt: string): {
   return {
     visiblePrompt: visible
       .join("\n")
-      .replace(/\n{3,}/g, "\n\n")
+      .replaceAll(/\n{3,}/gu, "\n\n")
       .trim(),
     canvases,
   };
@@ -112,7 +116,7 @@ export function parseCanvasHistoryPrompt(prompt: string): {
 export function canvasExportDataUrl(item: CanvasExport): string {
   const bytes = Uint8Array.from(item.bytes);
   let binary = "";
-  const chunkSize = 0x8000;
+  const chunkSize = 0x80_00;
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
     binary += String.fromCharCode(
       ...bytes.subarray(offset, offset + chunkSize)
@@ -124,16 +128,16 @@ export function canvasExportDataUrl(item: CanvasExport): string {
 /** Match t3code's long-message boundary without coupling the transcript card to string policy. */
 export function isLongPrompt(prompt: string): boolean {
   return (
-    Array.from(prompt).length > LONG_PROMPT_MAX_CHARS ||
-    prompt.split(/\r?\n/).length > LONG_PROMPT_MAX_LINES
+    [...prompt].length > LONG_PROMPT_MAX_CHARS ||
+    prompt.split(/\r?\n/u).length > LONG_PROMPT_MAX_LINES
   );
 }
 
 /** Keep the collapsed copy inside both limits and avoid splitting a Unicode surrogate pair. */
 export function collapsedPrompt(prompt: string): string {
   const lines = prompt
-    .split(/\r?\n/)
+    .split(/\r?\n/u)
     .slice(0, LONG_PROMPT_MAX_LINES)
     .join("\n");
-  return Array.from(lines).slice(0, LONG_PROMPT_MAX_CHARS).join("").trimEnd();
+  return [...lines].slice(0, LONG_PROMPT_MAX_CHARS).join("").trimEnd();
 }

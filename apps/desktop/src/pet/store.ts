@@ -23,7 +23,7 @@ export const PETSHARE_ORIGIN = "https://petshare.idevlab.dev";
 export const PETSHARE_CATALOG_URL = `${PETSHARE_ORIGIN}/pets.json`;
 const MAX_CATALOG_ITEMS = 200;
 const CATALOG_TIMEOUT_MS = 10_000;
-const PET_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
+const PET_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/u;
 
 export const BUILTIN_PET: PetCatalogItem = {
   id: "naiwa",
@@ -53,7 +53,7 @@ function isExactPetShareUrl(value: unknown, path: string): value is string {
 
 function safeCatalogText(value: unknown, maxLength: number): string | null {
   if (typeof value !== "string") return null;
-  const text = value.trim().replace(/\s+/g, " ");
+  const text = value.trim().replaceAll(/\s+/gu, " ");
   return text && text.length <= maxLength ? text : null;
 }
 
@@ -64,7 +64,7 @@ export function parsePetShareCatalog(value: unknown): PetCatalogItem[] {
 
   const seen = new Set<string>();
   return value.map((raw) => {
-    if (!raw || typeof raw !== "object")
+    if (raw == null || typeof raw !== "object")
       throw new Error("Invalid pet catalog item");
     const item = raw as PetShareCatalogEntry;
     const id =
@@ -74,9 +74,12 @@ export function parsePetShareCatalog(value: unknown): PetCatalogItem[] {
     const displayName = safeCatalogText(item.displayName, 80);
     const description = safeCatalogText(item.description, 240);
     if (
-      !id ||
-      !displayName ||
-      !description ||
+      id == null ||
+      id === "" ||
+      displayName == null ||
+      displayName === "" ||
+      description == null ||
+      description === "" ||
       item.spriteVersionNumber !== 2 ||
       seen.has(id)
     ) {

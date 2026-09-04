@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -66,18 +66,18 @@ function NavigationRow({
       >
         {label}
       </span>
-      {meta ? (
+      {meta == null ? null : (
         <span
           data-slot="navigation-row-meta"
           className="gap-control-group flex shrink-0 items-center"
         >
           {meta}
         </span>
-      ) : null}
+      )}
     </Button>
   );
 
-  if (!tooltip) return row;
+  if (tooltip == null || tooltip === "") return row;
   return (
     <Tooltip>
       <TooltipTrigger render={row} />

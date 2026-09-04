@@ -72,7 +72,7 @@ describe("ProfileSettings", () => {
   test("derives honest activity statistics from local usage buckets", () => {
     const summary = summarizeProfileActivity(report, history);
 
-    expect(summary.totalTokens).toBe(1_100);
+    expect(summary.totalTokens).toBe(1100);
     expect(summary.peakTokens).toBe(500);
     expect(summary.activeDays).toBe(4);
     expect(summary.currentStreak).toBe(4);
@@ -201,7 +201,7 @@ describe("ProfileSettings", () => {
     expect(
       view.container.querySelectorAll(".profile-activity-cell")
     ).toHaveLength(90);
-    expect(view.container.textContent?.match(/No activity yet/g)).toHaveLength(
+    expect(view.container.textContent?.match(/No activity yet/gu)).toHaveLength(
       1
     );
     expect(view.container.textContent).toContain(

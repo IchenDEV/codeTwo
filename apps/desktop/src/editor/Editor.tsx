@@ -6,15 +6,10 @@ import {
   SuggestionMenuController,
   getDefaultReactSlashMenuItems,
   useCreateBlockNote,
-  type DefaultReactSuggestionItem,
 } from "@blocknote/react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  type MutableRefObject,
-} from "react";
+import type { DefaultReactSuggestionItem } from "@blocknote/react";
+import { useEffect, useRef } from "react";
+import type { MutableRefObject } from "react";
 
 import { Bot, Server, Sparkles } from "@/components/ui/icons";
 
@@ -22,13 +17,15 @@ import {
   listArchivedSessions,
   listFiles,
   listSessions,
-  type Annotation,
-  type CanvasDraft,
-  type CanvasPixelPolicy,
-  type DocBlock,
-  type Issue,
-  type SkillInfo,
   listSceneArtifacts,
+} from "../bridge";
+import type {
+  Annotation,
+  CanvasDraft,
+  CanvasPixelPolicy,
+  DocBlock,
+  Issue,
+  SkillInfo,
 } from "../bridge";
 import { useT } from "../i18n";
 import { orderSkillsForScene } from "../session/scene";
@@ -38,16 +35,11 @@ import {
   canvasBlockPropsFromDraft,
   docToBlocks,
   schema,
-  type CanvasBlockRuntime,
-  type CodeTwoEditor,
 } from "../skillInline";
+import type { CanvasBlockRuntime, CodeTwoEditor } from "../skillInline";
 import { useColorScheme } from "../theme";
-import {
-  FileMenu,
-  type AtItem,
-  type ChatItem,
-  type FileItem,
-} from "./FileMenu";
+import { FileMenu } from "./FileMenu";
+import type { AtItem, ChatItem, FileItem } from "./FileMenu";
 import { issueContextMarkdown } from "./issueBlock";
 import {
   focusSlotCardField,
@@ -215,7 +207,7 @@ function sceneSkillItems(
     scene,
     showAllRef.current
   );
-  const pinnedSet = new Set(sceneSkills?.pinned ?? []);
+  const pinnedSet = new Set(sceneSkills?.pinned);
   const rendered = skillItems(editor, items).map((item, index) =>
     pinnedSet.has(items[index].id) ? { ...item, group: "Scene" } : item
   );
@@ -236,15 +228,14 @@ function sceneSkillItems(
 
 /** A collision-safe BlockNote id so the just-inserted card's first field can be focused. */
 function freshSlotCardId(): string {
-  return `slotcard-${Date.now().toString(36)}-${Math.floor(Math.random() * 0xffffff).toString(36)}`;
+  return `slotcard-${Date.now().toString(36)}-${Math.floor(Math.random() * 0xff_ff_ff).toString(36)}`;
 }
 
 /** Insert a macro slot card after the caret block and move focus into its first field. */
 function insertSlotCardForSkill(editor: CodeTwoEditor, skill: SkillInfo): void {
   const anchor =
-    editor.getTextCursorPosition().block ??
-    editor.document[editor.document.length - 1];
-  if (!anchor) return;
+    editor.getTextCursorPosition().block ?? editor.document.at(-1)!;
+  if (anchor == null) return;
   const id = freshSlotCardId();
   editor.insertBlocks(
     [
@@ -276,7 +267,7 @@ function canvasSlashItem(onInsert: () => void): DefaultReactSuggestionItem {
     group: "C2 components",
     icon: <Sparkles className="size-3.5" />,
     onItemClick: () => {
-      void onInsert();
+      onInsert();
     },
   };
 }
@@ -292,13 +283,13 @@ async function fileMenuItems(cwd: string, query: string): Promise<FileItem[]> {
   const q = query.toLowerCase();
   return paths.map((path) => {
     const cut = path.lastIndexOf("/");
-    const name = cut < 0 ? path : path.slice(cut + 1);
+    const name = cut === -1 ? path : path.slice(cut + 1);
     const at = q ? name.toLowerCase().indexOf(q) : -1;
     return {
       kind: "file" as const,
       path,
       name,
-      dir: cut < 0 ? "" : path.slice(0, cut + 1),
+      dir: cut === -1 ? "" : path.slice(0, cut + 1),
       hit: at < 0 ? null : ([at, at + q.length] as [number, number]),
     };
   });
@@ -319,7 +310,7 @@ async function chatMenuItems(
   ]);
   const q = query.toLowerCase();
   return [...active, ...archived]
-    .sort(
+    .toSorted(
       (a, b) =>
         (b.last_active_at ?? b.created_at) - (a.last_active_at ?? a.created_at)
     )
@@ -398,180 +389,184 @@ export function DocEditor({
     editable.setAttribute("aria-multiline", "true");
   }, [t]);
 
-  const insertCanvasDraft = useCallback(
-    (draft: CanvasDraft, options: CanvasInsertOptions = {}) => {
-      if (!canvasEnabled) return;
-      const last = editor.document[editor.document.length - 1];
-      if (!last) return;
-      editor.insertBlocks(
-        [
-          {
-            type: "canvas",
-            props: canvasBlockPropsFromDraft(draft, {
-              pixelPolicy: options.pixelPolicy ?? "required",
-              deliveryError: options.deliveryError,
-              deliveryErrorKind: options.deliveryErrorKind,
-            }),
-          },
-          { type: "paragraph", content: "" },
-        ],
-        last,
-        "after"
-      );
-      onEmptyChange(false);
-    },
-    [canvasEnabled, editor, onEmptyChange]
-  );
-
-  const restoreCanvasDocument = useCallback(
-    (
-      doc: readonly DocBlock[],
-      drafts: ReadonlyMap<string, CanvasDraft>,
-      options: CanvasInsertOptions = {}
-    ) => {
-      if (!canvasEnabled && doc.some((block) => block.type === "canvas")) {
-        throw new Error(
-          "Canvas drafts cannot be restored while Canvas is disabled"
-        );
-      }
-      const blocks = doc.flatMap<unknown>((block) => {
-        switch (block.type) {
-          case "text":
-            return [{ type: "paragraph", content: block.text }];
-          case "canvas": {
-            const draft = drafts.get(block.id);
-            if (!draft)
-              throw new Error(`Canvas retry draft ${block.id} is missing`);
-            return [
-              {
-                type: "canvas",
-                props: canvasBlockPropsFromDraft(draft, {
-                  pixelPolicy: block.pixel_policy ?? "required",
-                  deliveryError: options.deliveryError,
-                  deliveryErrorKind: options.deliveryErrorKind,
-                }),
-              },
-            ];
-          }
-          case "skill": {
-            const skill = skills.find(
-              (candidate) => candidate.id === block.skill_id
-            );
-            if (skill?.macro_template && Object.keys(block.params).length > 0) {
-              return [
-                {
-                  type: "slotCard",
-                  props: {
-                    mode: "macro",
-                    skillId: block.skill_id,
-                    title: skill.name,
-                    icon: skill.icon ?? "",
-                    template: skill.macro_template,
-                    slots: JSON.stringify(
-                      normalizeSlots(skill.macro_slots ?? [])
-                    ),
-                    values: JSON.stringify(block.params),
-                  },
-                },
-              ];
-            }
-            return [
-              {
-                type: "paragraph",
-                content: [
-                  {
-                    type: "skill",
-                    props: {
-                      skillId: block.skill_id,
-                      name: skill?.name ?? block.skill_id,
-                      icon: skill?.icon ?? "",
-                    },
-                  },
-                  " ",
-                ],
-              },
-            ];
-          }
-          case "file":
-            return [
-              {
-                type: "paragraph",
-                content: [
-                  { type: "fileMention", props: { path: block.path } },
-                  " ",
-                ],
-              },
-            ];
-          case "image":
-            return [
-              {
-                type: "image",
-                props: {
-                  url: block.path,
-                  name: block.path,
-                  caption: "",
-                  showPreview: true,
-                },
-              },
-            ];
-          case "appshot":
-          case "attachment":
-            // Private prompt images live in the Composer attachment strip, not BlockNote.
-            return [];
-          case "session":
-            return [
-              {
-                type: "paragraph",
-                content: [
-                  {
-                    type: "sessionMention",
-                    props: {
-                      sessionId: block.session_id,
-                      throughSeq: block.through_seq ?? 0,
-                    },
-                  },
-                  " ",
-                ],
-              },
-            ];
-          case "issue":
-            // Rebuild the embedded context the same way the core compile arm does (state "open"),
-            // so a recovered issue card serializes back to the identical `DocBlock::Issue`.
-            return [
-              {
-                type: "issueRef",
-                props: {
-                  source: block.source,
-                  issueId: block.id,
-                  title: block.title,
-                  url: block.url,
-                  state: "open",
-                  context: issueContextMarkdown(block),
-                  delegatedScene: "",
-                },
-              },
-            ];
-        }
-      });
-      // If the user typed after the accepted turn, append the recovered prompt to preserve that
-      // newer content. There is deliberately no synthetic separator block: every visible block
-      // must remain part of the exact prompt rather than silently mutating it with a UI label.
-      const recovered = [
-        ...blocks,
+  const insertCanvasDraft = (
+    draft: CanvasDraft,
+    options: CanvasInsertOptions = {}
+  ) => {
+    if (!canvasEnabled) return;
+    const last = editor.document.at(-1)!;
+    if (last == null) return;
+    editor.insertBlocks(
+      [
+        {
+          type: "canvas",
+          props: canvasBlockPropsFromDraft(draft, {
+            pixelPolicy: options.pixelPolicy ?? "required",
+            deliveryError: options.deliveryError,
+            deliveryErrorKind: options.deliveryErrorKind,
+          }),
+        },
         { type: "paragraph", content: "" },
-      ] as never;
-      if (options.mode !== "replace" && docToBlocks(editor).length > 0) {
-        const anchor = editor.document[editor.document.length - 1];
-        if (anchor) editor.insertBlocks(recovered, anchor, "after");
-      } else {
-        editor.replaceBlocks(editor.document, recovered);
+      ],
+      last,
+      "after"
+    );
+    onEmptyChange(false);
+  };
+
+  const restoreCanvasDocument = (
+    doc: readonly DocBlock[],
+    drafts: ReadonlyMap<string, CanvasDraft>,
+    options: CanvasInsertOptions = {}
+  ) => {
+    if (!canvasEnabled && doc.some((block) => block.type === "canvas")) {
+      throw new Error(
+        "Canvas drafts cannot be restored while Canvas is disabled"
+      );
+    }
+    const blocks = doc.flatMap<unknown>((block) => {
+      switch (block.type) {
+        case "text": {
+          return [{ type: "paragraph", content: block.text }];
+        }
+        case "canvas": {
+          const draft = drafts.get(block.id);
+          if (!draft)
+            throw new Error(`Canvas retry draft ${block.id} is missing`);
+          return [
+            {
+              type: "canvas",
+              props: canvasBlockPropsFromDraft(draft, {
+                pixelPolicy: block.pixel_policy ?? "required",
+                deliveryError: options.deliveryError,
+                deliveryErrorKind: options.deliveryErrorKind,
+              }),
+            },
+          ];
+        }
+        case "skill": {
+          const skill = skills.find(
+            (candidate) => candidate.id === block.skill_id
+          );
+          if (
+            skill?.macro_template != null &&
+            skill?.macro_template !== "" &&
+            Object.keys(block.params).length > 0
+          ) {
+            return [
+              {
+                type: "slotCard",
+                props: {
+                  mode: "macro",
+                  skillId: block.skill_id,
+                  title: skill.name,
+                  icon: skill.icon ?? "",
+                  template: skill.macro_template,
+                  slots: JSON.stringify(
+                    normalizeSlots(skill.macro_slots ?? [])
+                  ),
+                  values: JSON.stringify(block.params),
+                },
+              },
+            ];
+          }
+          return [
+            {
+              type: "paragraph",
+              content: [
+                {
+                  type: "skill",
+                  props: {
+                    skillId: block.skill_id,
+                    name: skill?.name ?? block.skill_id,
+                    icon: skill?.icon ?? "",
+                  },
+                },
+                " ",
+              ],
+            },
+          ];
+        }
+        case "file": {
+          return [
+            {
+              type: "paragraph",
+              content: [
+                { type: "fileMention", props: { path: block.path } },
+                " ",
+              ],
+            },
+          ];
+        }
+        case "image": {
+          return [
+            {
+              type: "image",
+              props: {
+                url: block.path,
+                name: block.path,
+                caption: "",
+                showPreview: true,
+              },
+            },
+          ];
+        }
+        case "appshot":
+        case "attachment": {
+          // Private prompt images live in the Composer attachment strip, not BlockNote.
+          return [];
+        }
+        case "session": {
+          return [
+            {
+              type: "paragraph",
+              content: [
+                {
+                  type: "sessionMention",
+                  props: {
+                    sessionId: block.session_id,
+                    throughSeq: block.through_seq ?? 0,
+                  },
+                },
+                " ",
+              ],
+            },
+          ];
+        }
+        case "issue": {
+          // Rebuild the embedded context the same way the core compile arm does (state "open"),
+          // so a recovered issue card serializes back to the identical `DocBlock::Issue`.
+          return [
+            {
+              type: "issueRef",
+              props: {
+                source: block.source,
+                issueId: block.id,
+                title: block.title,
+                url: block.url,
+                state: "open",
+                context: issueContextMarkdown(block),
+                delegatedScene: "",
+              },
+            },
+          ];
+        }
       }
-      const restored = docToBlocks(editor);
-      onEmptyChange(restored.length === 0);
-      onDocumentChange?.(restored);
-    },
-    [canvasEnabled, editor, onDocumentChange, onEmptyChange, skills]
-  );
+    });
+    // If the user typed after the accepted turn, append the recovered prompt to preserve that
+    // newer content. There is deliberately no synthetic separator block: every visible block
+    // must remain part of the exact prompt rather than silently mutating it with a UI label.
+    const recovered = [...blocks, { type: "paragraph", content: "" }] as never;
+    if (options.mode !== "replace" && docToBlocks(editor).length > 0) {
+      const anchor = editor.document.at(-1)!;
+      if (anchor != null) editor.insertBlocks(recovered, anchor, "after");
+    } else {
+      editor.replaceBlocks(editor.document, recovered);
+    }
+    const restored = docToBlocks(editor);
+    onEmptyChange(restored.length === 0);
+    onDocumentChange?.(restored);
+  };
 
   const canvasHandles = useRef(
     new Map<string, import("../skillInline").CanvasBlockHandle>()
@@ -584,7 +579,7 @@ export function DocEditor({
   // The Composer owns persistence, while the editor owns the live BlockNote node handles needed
   // for a send-time freeze. Wrap the runtime registration so those handles stay scoped to this
   // editor instance and are removed when a block unmounts.
-  const editorCanvasRuntime = useMemo<CanvasBlockRuntime | null>(() => {
+  const editorCanvasRuntime: CanvasBlockRuntime | null = (() => {
     if (!canvasRuntime) return null;
     return {
       ...canvasRuntime,
@@ -607,27 +602,24 @@ export function DocEditor({
         };
       },
     };
-  }, [canvasRuntime, scheme]);
+  })();
 
   // A provider rejection can arrive before TurnStarted (or directly from submit), after the
   // Composer's document is still live. Keep the recovery non-destructive: route only the ids in
   // that submitted document to matching mounted handles. The wrapped runtime callback still owns
   // its base toast/telemetry behavior and is invoked exactly once per matching id.
-  const routeCanvasDeliveryError = useCallback(
-    (
-      doc: readonly DocBlock[],
-      message: string,
-      kind: "provider_image" | "other"
-    ) => {
-      if (!editorCanvasRuntime) return;
-      for (const block of doc) {
-        if (block.type === "canvas") {
-          editorCanvasRuntime.onCanvasDeliveryError(block.id, message, kind);
-        }
+  const routeCanvasDeliveryError = (
+    doc: readonly DocBlock[],
+    message: string,
+    kind: "provider_image" | "other"
+  ) => {
+    if (!editorCanvasRuntime) return;
+    for (const block of doc) {
+      if (block.type === "canvas") {
+        editorCanvasRuntime.onCanvasDeliveryError(block.id, message, kind);
       }
-    },
-    [editorCanvasRuntime]
-  );
+    }
+  };
 
   useEffect(() => {
     if (!canvasDeliveryErrorRef) return;
@@ -639,12 +631,12 @@ export function DocEditor({
     };
   }, [canvasDeliveryErrorRef, routeCanvasDeliveryError]);
 
-  const observeDocument = useCallback(() => {
+  const observeDocument = () => {
     const currentIds = new Set<string>();
     for (const block of editor.document) {
       if (block.type !== "canvas") continue;
       const props = block.props as { id?: string };
-      if (props.id) currentIds.add(props.id);
+      if (props.id != null && props.id !== "") currentIds.add(props.id);
     }
     for (const id of previousCanvasIds.current) {
       if (currentIds.has(id)) {
@@ -684,14 +676,14 @@ export function DocEditor({
         new CustomEvent("codetwo-required-slots", { detail: unfilled })
       );
     }
-  }, [editor, editorCanvasRuntime, onDocumentChange, onEmptyChange]);
+  };
 
   useEffect(() => {
     getBlocksRef.current = () => docToBlocks(editor);
     insertTextRef.current = (text: string) => {
       const doc = editor.document;
-      const last = doc[doc.length - 1];
-      if (last) {
+      const last = doc.at(-1)!;
+      if (last != null) {
         editor.insertBlocks(
           [{ type: "paragraph", content: text }],
           last,
@@ -701,8 +693,8 @@ export function DocEditor({
     };
     insertAnnotationRef.current = (a: Annotation, context: string) => {
       const doc = editor.document;
-      const last = doc[doc.length - 1];
-      if (!last) return;
+      const last = doc.at(-1)!;
+      if (last == null) return;
       editor.insertBlocks(
         [
           {
@@ -731,7 +723,7 @@ export function DocEditor({
     if (insertSessionRef)
       insertSessionRef.current = ({ id, title, throughSeq }) => {
         const first = editor.document[0];
-        if (!first) return;
+        if (first == null) return;
         editor.insertBlocks(
           [
             {
@@ -765,10 +757,10 @@ export function DocEditor({
         const blocks = await editor.tryParseMarkdownToBlocks(markdown);
         if (blocks.length === 0) return;
         if (mode === "replace") {
-          editor.replaceBlocks(editor.document, blocks as never);
+          editor.replaceBlocks(editor.document, blocks);
         } else {
-          const last = editor.document[editor.document.length - 1];
-          if (last) editor.insertBlocks(blocks as never, last, "after");
+          const last = editor.document.at(-1)!;
+          if (last != null) editor.insertBlocks(blocks, last, "after");
         }
         onEmptyChange(false);
       };
@@ -802,10 +794,10 @@ export function DocEditor({
         scene: SceneInfo,
         values: Record<string, string> = {}
       ) => {
-        const brief = scene.brief;
+        const { brief } = scene;
         if (!brief) return;
         const first = editor.document[0];
-        if (!first) return;
+        if (first == null) return;
         const id = freshSlotCardId();
         editor.insertBlocks(
           [
@@ -835,8 +827,8 @@ export function DocEditor({
         context: string,
         delegatedScene = ""
       ) => {
-        const last = editor.document[editor.document.length - 1];
-        if (!last) return;
+        const last = editor.document.at(-1)!;
+        if (last == null) return;
         editor.insertBlocks(
           [
             {
@@ -868,7 +860,7 @@ export function DocEditor({
       const frozen = new Map<string, number>();
       for (const block of editor.document) {
         if (block.type !== "canvas") continue;
-        const id = String((block.props as { id?: string }).id ?? "");
+        const id = (block.props as { id?: string }).id ?? "";
         if (!id) continue;
         const handle = canvasHandles.current.get(id);
         if (!handle) throw new Error(`Canvas ${id} is not ready`);
@@ -940,7 +932,8 @@ export function DocEditor({
   // Stored scene artifacts for the active session, filtered by title (R4 cleanup: the spec's
   // "@-menu Artifacts section"). Degrades to nothing without a session or on an older core.
   const artifactMenuItems = async (query: string, session: string | null) => {
-    if (!session) return [] as import("./FileMenu").ArtifactAtItem[];
+    if (session == null || session === "")
+      return [] as import("./FileMenu").ArtifactAtItem[];
     const records = await listSceneArtifacts(session);
     const needle = query.toLowerCase();
     return records
@@ -970,7 +963,7 @@ export function DocEditor({
       data-composer-editor
       onPasteCapture={(event) => {
         if (!onPasteImages) return;
-        const files = Array.from(event.clipboardData.files).filter((file) =>
+        const files = [...event.clipboardData.files].filter((file) =>
           file.type.startsWith("image/")
         );
         if (files.length === 0) return;
@@ -986,7 +979,7 @@ export function DocEditor({
           onChange={observeDocument}
         >
           <SuggestionMenuController
-            triggerCharacter={"/"}
+            triggerCharacter="/"
             getItems={async (query) =>
               filterSuggestionItems(
                 [
@@ -999,7 +992,9 @@ export function DocEditor({
                   ...(canvasEnabled
                     ? [
                         canvasSlashItem(
-                          () => insertCanvasRef.current?.() ?? Promise.resolve()
+                          async () =>
+                            await (insertCanvasRef.current?.() ??
+                              Promise.resolve())
                         ),
                       ]
                     : []),
@@ -1019,7 +1014,7 @@ export function DocEditor({
           {/* The type argument is explicit because the controller infers its item type from `getItems`,
             and an inline lambda lets it fall back to BlockNote's default item instead. */}
           <SuggestionMenuController<typeof getAtItems>
-            triggerCharacter={"@"}
+            triggerCharacter="@"
             getItems={getAtItems}
             suggestionMenuComponent={FileMenu}
             onItemClick={(item) => {

@@ -3,6 +3,8 @@
  *
  * The host owns rendering and invocation; packages contribute descriptors, never executable UI.
  */
+import { asJsonObject, isOneOf } from "./lib/jsonValue";
+
 export const PLUGIN_UI_SLOT_IDS = [
   "rail.features",
   "session.header",
@@ -50,7 +52,7 @@ export interface PluginRuntimeContribution {
   env: Record<string, string>;
   inject: string[];
   optionalInject: string[];
-  scopeSupport: Array<"user" | "project">;
+  scopeSupport: ("user" | "project")[];
 }
 
 export interface PluginRuntimeCommandContribution {
@@ -88,9 +90,7 @@ export const C2_PLUGIN_STANDARD_VERSION = "1.2.0";
 export type C2PluginStandardVersion = typeof C2_PLUGIN_STANDARD_VERSION;
 
 function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return asJsonObject(value) ?? {};
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -120,7 +120,7 @@ function stringRecord(value: unknown): Record<string, string> {
 
 function safeId(value: string): boolean {
   return (
-    value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/.test(value)
+    value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/u.test(value)
   );
 }
 
@@ -128,7 +128,7 @@ function commandName(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.length <= 128 &&
-    /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/.test(value)
+    /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/u.test(value)
   );
 }
 
@@ -138,7 +138,7 @@ function safeCommand(value: string): boolean {
     !value.includes("${") &&
     !value.startsWith("/") &&
     !value.startsWith("\\") &&
-    !/^[A-Za-z]:[\\/]/.test(value)
+    !/^[A-Za-z]:[\\/]/u.test(value)
   );
 }
 
@@ -165,7 +165,7 @@ export function parsePluginRuntimeContribution(
     !safeCommand(raw.command) ||
     (raw.protocol != null &&
       (typeof raw.protocol !== "string" ||
-        !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.protocol))) ||
+        !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(raw.protocol))) ||
     (raw.args != null &&
       (!Array.isArray(raw.args) ||
         raw.args.some((entry) => typeof entry !== "string"))) ||
@@ -229,7 +229,7 @@ export function parsePluginRuntimeCommandContribution(
     title: raw.title.trim(),
     description:
       typeof raw.description === "string" ? raw.description.trim() : "",
-    argsSchema: raw.argsSchema == null ? null : raw.argsSchema,
+    argsSchema: raw.argsSchema ?? null,
   };
 }
 
@@ -251,10 +251,7 @@ export function parsePluginUiContribution(
   ) {
     return null;
   }
-  if (
-    !safeId(String(raw.id ?? "")) ||
-    !PLUGIN_UI_SLOT_IDS.includes(raw.slot as PluginUiSlotId)
-  ) {
+  if (!safeId(String(raw.id ?? "")) || !isOneOf(raw.slot, PLUGIN_UI_SLOT_IDS)) {
     return null;
   }
   if (
@@ -282,7 +279,7 @@ export function parsePluginUiContribution(
   const order = typeof raw.order === "number" ? raw.order : 0;
   return {
     id: String(raw.id),
-    slot: raw.slot as PluginUiSlotId,
+    slot: raw.slot,
     label: raw.label.trim(),
     description:
       typeof raw.description === "string" ? raw.description.trim() : "",
@@ -304,21 +301,16 @@ export function parsePluginConnectorContribution(
   if (!commandName(raw.command)) return null;
   if (!Array.isArray(raw.capabilities) || raw.capabilities.length === 0)
     return null;
-  if (
-    raw.capabilities.some(
-      (entry) =>
-        typeof entry !== "string" ||
-        !PLUGIN_CONNECTOR_CAPABILITIES.includes(
-          entry as PluginConnectorCapability
-        )
-    )
-  )
-    return null;
+  const capabilities: PluginConnectorCapability[] = [];
+  for (const entry of raw.capabilities) {
+    if (!isOneOf(entry, PLUGIN_CONNECTOR_CAPABILITIES)) return null;
+    capabilities.push(entry);
+  }
   return {
     id: String(raw.id),
     provider: raw.provider,
     command: raw.command,
-    capabilities: [...new Set(raw.capabilities)] as PluginConnectorCapability[],
+    capabilities: [...new Set(capabilities)],
   };
 }
 
@@ -348,7 +340,7 @@ export function parsePluginLanguageServerContribution(
     ...new Set(
       strings(raw.languages).map((language) => language.toLocaleLowerCase())
     ),
-  ].filter((language) => /^[a-z0-9][a-z0-9+_.-]{0,63}$/.test(language));
+  ].filter((language) => /^[a-z0-9][a-z0-9+_.-]{0,63}$/u.test(language));
   if (languages.length === 0 || languages.length > 16) return null;
   return {
     id: String(raw.id),
@@ -372,13 +364,13 @@ export function parsePluginContributionArray<T>(
   }
   const parsed = value.map(parse);
   const invalid = parsed.findIndex((entry) => entry === null);
-  if (strict && invalid >= 0)
+  if (strict && invalid !== -1)
     throw new Error(`${label}[${invalid}] is invalid`);
   return parsed.filter((entry): entry is T => entry !== null);
 }
 
 export function assertUniquePluginContributionIds(
-  contributions: Array<{ id: string }>,
+  contributions: { id: string }[],
   label: string
 ): void {
   if (
@@ -393,7 +385,7 @@ export function assertUniquePluginContributionIds(
 export function parsePluginManifest(value: unknown): C2PluginManifest {
   if (!isObject(value)) throw new Error("plugin.json must contain an object");
   const raw = asObject(value);
-  const rootFields = [
+  const rootFields = new Set([
     "$schema",
     "name",
     "version",
@@ -404,9 +396,9 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     "license",
     "keywords",
     "extensions",
-  ];
+  ]);
   const unknownRootFields = Object.keys(raw).filter(
-    (key) => !rootFields.includes(key)
+    (key) => !rootFields.has(key)
   );
   if (unknownRootFields.length > 0) {
     throw new Error(
@@ -421,12 +413,12 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   if (
     typeof raw.name !== "string" ||
     raw.name.length > 64 ||
-    !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(raw.name)
+    !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u.test(raw.name)
   )
     throw new Error("Agent Plugins name must match the 1.0.0 naming rules");
   if (
     typeof raw.version !== "string" ||
-    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.version)
+    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(raw.version)
   ) {
     throw new Error("C2 plugins require a semantic version");
   }
@@ -584,7 +576,7 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
       typeof raw.description === "string" ? raw.description.slice(0, 500) : "",
     author: typeof author.name === "string" ? author.name : "",
     repository: typeof raw.repository === "string" ? raw.repository : "",
-    standardVersion: standardVersion as C2PluginStandardVersion,
+    standardVersion,
     runtime,
     commands,
     ui,

@@ -17,7 +17,7 @@ export async function toWav16kMono(blob: Blob): Promise<Uint8Array> {
     void ctx.close();
   }
 
-  const rate = 16000;
+  const rate = 16_000;
   const frames = Math.max(1, Math.round(decoded.duration * rate));
   // The three-argument form: Safari never gained the options-object constructor.
   const offline = new OfflineAudioContext(1, frames, rate);
@@ -36,7 +36,7 @@ function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
   const view = new DataView(buffer);
   const ascii = (offset: number, text: string) => {
-    for (let i = 0; i < text.length; i++)
+    for (let i = 0; i < text.length; i += 1)
       view.setUint8(offset + i, text.charCodeAt(i));
   };
 
@@ -54,11 +54,11 @@ function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   ascii(36, "data");
   view.setUint32(40, samples.length * bytesPerSample, true);
 
-  for (let i = 0; i < samples.length; i++) {
+  for (let i = 0; i < samples.length; i += 1) {
     const clamped = Math.max(-1, Math.min(1, samples[i]));
     view.setInt16(
       44 + i * bytesPerSample,
-      clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff,
+      clamped < 0 ? clamped * 0x80_00 : clamped * 0x7f_ff,
       true
     );
   }

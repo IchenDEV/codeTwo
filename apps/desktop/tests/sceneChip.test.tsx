@@ -235,7 +235,7 @@ describe("SceneChip", () => {
       dom.document.body.querySelector('[data-slot="popover-content"]')
         ?.className
     ).toContain("max-h-(--available-height)");
-    const detail = Array.from(dom.document.body.querySelectorAll("span")).find(
+    const detail = [...dom.document.body.querySelectorAll("span")].find(
       (node) => node.textContent === "Plan-first implementation"
     );
     expect(detail?.classList.contains("whitespace-normal")).toBe(true);
@@ -385,17 +385,18 @@ describe("SceneChip", () => {
     const grok = picker?.querySelector<HTMLButtonElement>(
       'button[aria-label="Grok"]'
     );
-    if (!grok) throw new Error("Grok Provider switcher item did not render");
+    if (grok == null)
+      throw new Error("Grok Provider switcher item did not render");
     click(grok);
     await flush();
 
     expect(providerChanges).toEqual([]);
-    const grokModel = Array.from(
-      picker?.querySelectorAll<HTMLButtonElement>(
+    const grokModel = [
+      ...(picker?.querySelectorAll<HTMLButtonElement>(
         '[data-model-picker-row] [data-slot="selectable-row"]'
-      ) ?? []
-    ).find((row) => row.textContent?.includes("Grok 4.6"));
-    if (!grokModel)
+      ) ?? []),
+    ].find((row) => row.textContent?.includes("Grok 4.6"));
+    if (grokModel == null)
       throw new Error("Grok model did not render after switching Provider");
     click(grokModel);
     await flush();
@@ -458,7 +459,7 @@ describe("SceneChip", () => {
     const pi = picker?.querySelector<HTMLButtonElement>(
       'button[aria-label="Pi"]'
     );
-    if (!pi) throw new Error("Pi Provider switcher item did not render");
+    if (pi == null) throw new Error("Pi Provider switcher item did not render");
     click(pi);
     await flush();
 
@@ -534,9 +535,11 @@ describe("SceneChip", () => {
     expect(dom.document.body.textContent).toContain(
       "Agent chooses and switches scenes as the task changes"
     );
-    const autoOption = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="popover-content"] button')
-    ).find((candidate) => candidate.textContent?.includes("Auto scene"));
+    const autoOption = [
+      ...dom.document.body.querySelectorAll(
+        '[data-slot="popover-content"] button'
+      ),
+    ].find((candidate) => candidate.textContent?.includes("Auto scene"));
     expect(autoOption).toBeTruthy();
     await reactAct(async () => {
       autoOption?.dispatchEvent(
@@ -573,9 +576,8 @@ describe("SceneChip", () => {
     });
     await flush();
     expect(
-      dom.document.body
-        .querySelector('[data-slot="status-badge"]')
-        ?.getAttribute("data-tone")
+      dom.document.body.querySelector('[data-slot="status-badge"]')?.dataset
+        .tone
     ).toBe("warning");
     rendered.unmount();
   });

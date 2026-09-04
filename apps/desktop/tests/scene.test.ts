@@ -8,9 +8,8 @@ import {
   sceneCustomized,
   sceneTitle,
   softApplyPending,
-  type LivePosture,
-  type SceneInfo,
 } from "../src/session/scene";
+import type { LivePosture, SceneInfo } from "../src/session/scene";
 
 function scene(overrides: Partial<SceneInfo> = {}): SceneInfo {
   return {

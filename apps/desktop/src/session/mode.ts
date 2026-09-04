@@ -15,6 +15,28 @@ import type {
  */
 export type SessionMode = "read_only" | "ask" | "auto_edit" | "full_access";
 
+const SESSION_MODE_IDS: readonly SessionMode[] = [
+  "read_only",
+  "ask",
+  "auto_edit",
+  "full_access",
+];
+
+export function isSessionMode(value: unknown): value is SessionMode {
+  return (
+    typeof value === "string" &&
+    (SESSION_MODE_IDS as readonly string[]).includes(value)
+  );
+}
+
+/** Narrow a host-reported mode string; unknown values fall back rather than assert. */
+export function toSessionMode(
+  value: unknown,
+  fallback: SessionMode = "ask"
+): SessionMode {
+  return isSessionMode(value) ? value : fallback;
+}
+
 /** What each choice resolves to underneath. Ordered as the picker and the cycle shortcut present it: loosest last. */
 export const SESSION_MODES: readonly {
   id: SessionMode;

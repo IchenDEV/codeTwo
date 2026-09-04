@@ -1,21 +1,17 @@
-import {
-  Children,
-  createContext,
-  isValidElement,
-  useContext,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { Children, createContext, isValidElement, useContext } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { openExternal, openNativePath, revealNativePath } from "../bridge";
 import {
   nativeContextMenusAvailable,
   showNativeContextMenu,
-  type NativeContextMenuItem,
 } from "../container";
-import { useT, type Translate } from "../i18n";
+import type { NativeContextMenuItem } from "../container";
+import { useT } from "../i18n";
+import type { Translate } from "../i18n";
 import { currentDesktopPlatform } from "../platform";
 import { ChartBlock, parseChartSpec } from "./ChartBlock";
 import { splitRichText } from "./visualization";
@@ -54,16 +50,16 @@ function fileTarget(
   hash = ""
 ): Extract<BuiltinLinkTarget, { kind: "file" }> | null {
   let path = decodePath(rawPath);
-  if (!path) return null;
+  if (path == null || path === "") return null;
 
   let line: number | undefined;
   let column: number | undefined;
-  const fragment = /^#L(\d+)(?:C(\d+))?$/i.exec(hash);
+  const fragment = /^#L(\d+)(?:C(\d+))?$/iu.exec(hash);
   if (fragment) {
     line = Number(fragment[1]);
     column = fragment[2] ? Number(fragment[2]) : undefined;
   } else {
-    const suffix = /:(\d+)(?::(\d+))?$/.exec(path);
+    const suffix = /:(\d+)(?::(\d+))?$/u.exec(path);
     if (suffix) {
       line = Number(suffix[1]);
       column = suffix[2] ? Number(suffix[2]) : undefined;
@@ -86,7 +82,7 @@ export function parseBuiltinLink(
   uri: string | undefined
 ): BuiltinLinkTarget | null {
   const raw = uri?.trim();
-  if (!raw || raw.startsWith("#")) return null;
+  if (raw == null || raw === "" || raw.startsWith("#")) return null;
 
   try {
     const parsed = new URL(raw);
@@ -104,7 +100,7 @@ export function parseBuiltinLink(
         parsed.password.length > 0
       )
         return null;
-      const path = /^\/[A-Za-z]:\//.test(parsed.pathname)
+      const path = /^\/[A-Za-z]:\//u.test(parsed.pathname)
         ? parsed.pathname.slice(1)
         : parsed.pathname;
       return fileTarget(path, parsed.hash);
@@ -113,11 +109,11 @@ export function parseBuiltinLink(
     // Local paths are intentionally handled below; they are not valid absolute URLs.
   }
 
-  if (/^[A-Za-z][A-Za-z\d+.-]*:/.test(raw) && !/^[A-Za-z]:[\\/]/.test(raw))
+  if (/^[A-Za-z][A-Za-z\d+.-]*:/u.test(raw) && !/^[A-Za-z]:[\\/]/u.test(raw))
     return null;
   const hashIndex = raw.lastIndexOf("#");
-  const hash = hashIndex >= 0 ? raw.slice(hashIndex) : "";
-  const path = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
+  const hash = hashIndex === -1 ? "" : raw.slice(hashIndex);
+  const path = hashIndex === -1 ? raw : raw.slice(0, hashIndex);
   return fileTarget(path, hash);
 }
 
@@ -127,12 +123,12 @@ export function workspaceRelativeLinkPath(
 ): string | null {
   const normalizedPath = path.replaceAll("\\", "/");
   const normalizedRoot =
-    workspaceRoot?.replaceAll("\\", "/").replace(/\/+$/, "") ?? "";
+    workspaceRoot?.replaceAll("\\", "/").replace(/\/+$/u, "") ?? "";
   const absolute =
-    normalizedPath.startsWith("/") || /^[A-Za-z]:\//.test(normalizedPath);
+    normalizedPath.startsWith("/") || /^[A-Za-z]:\//u.test(normalizedPath);
 
   if (!absolute) {
-    const relative = normalizedPath.replace(/^\.\//, "");
+    const relative = normalizedPath.replace(/^\.\//u, "");
     if (
       !relative ||
       relative.split("/").some((part) => part === ".." || part === ".")
@@ -142,7 +138,7 @@ export function workspaceRelativeLinkPath(
   }
   if (!normalizedRoot) return null;
 
-  const caseInsensitive = /^[A-Za-z]:\//.test(normalizedPath);
+  const caseInsensitive = /^[A-Za-z]:\//u.test(normalizedPath);
   const comparablePath = caseInsensitive
     ? normalizedPath.toLowerCase()
     : normalizedPath;
@@ -156,10 +152,12 @@ export function workspaceRelativeLinkPath(
 }
 
 function nativeFilePath(path: string, workspaceRoot?: string | null): string {
-  if (path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)) return path;
+  if (path.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path)) return path;
   const relative = workspaceRelativeLinkPath(path, workspaceRoot);
-  const root = workspaceRoot?.replace(/[\\/]+$/, "");
-  return relative && root ? `${root}/${relative}` : path;
+  const root = workspaceRoot?.replace(/[\\/]+$/u, "");
+  return relative != null && relative !== "" && root != null && root !== ""
+    ? `${root}/${relative}`
+    : path;
 }
 
 export function builtinLinkMenuItems(
@@ -198,14 +196,20 @@ export function builtinLinkMenuItems(
     | "link.showInFileExplorer"
     | "link.showInFileManager";
   switch (currentDesktopPlatform()) {
-    case "macos":
+    case "macos": {
       revealKey = "link.revealInFinder";
       break;
-    case "windows":
+    }
+    case "windows": {
       revealKey = "link.showInFileExplorer";
       break;
-    default:
+    }
+    case "linux": {
+      throw new Error('Not implemented yet: "linux" case');
+    }
+    default: {
       revealKey = "link.showInFileManager";
+    }
   }
   return [
     ...(options.canOpenInApp
@@ -258,38 +262,49 @@ function BuiltinLink({
 
   const runAction = (action: BuiltinLinkAction) => {
     switch (action) {
-      case "open-web-in-app":
+      case "open-web-in-app": {
         if (target.kind === "web") actions.openWebLink?.(target.url);
         break;
-      case "open-web-external":
+      }
+      case "open-web-external": {
         if (target.kind === "web") void openExternal(target.url);
         break;
-      case "copy-web-link":
+      }
+      case "copy-web-link": {
         if (target.kind === "web")
           void navigator.clipboard?.writeText(target.url);
         break;
-      case "open-file-in-app":
-        if (target.kind === "file" && workspacePath)
+      }
+      case "open-file-in-app": {
+        if (
+          target.kind === "file" &&
+          workspacePath != null &&
+          workspacePath !== ""
+        )
           actions.openFileLink?.(target);
         break;
-      case "open-file-default":
+      }
+      case "open-file-default": {
         if (target.kind === "file") {
           void openNativePath(
             nativeFilePath(target.path, actions.workspaceRoot)
           );
         }
         break;
-      case "copy-file-path":
+      }
+      case "copy-file-path": {
         if (target.kind === "file")
           void navigator.clipboard?.writeText(target.path);
         break;
-      case "reveal-file":
+      }
+      case "reveal-file": {
         if (target.kind === "file") {
           void revealNativePath(
             nativeFilePath(target.path, actions.workspaceRoot)
           );
         }
         break;
+      }
     }
   };
 
@@ -303,7 +318,7 @@ function BuiltinLink({
     });
     void showNativeContextMenu(items, (action) =>
       runAction(action as BuiltinLinkAction)
-    ).catch((error) =>
+    ).catch((error: unknown) =>
       console.error("Could not show the native link menu", error)
     );
   };
@@ -316,7 +331,11 @@ function BuiltinLink({
       onClick={(event) => {
         event.preventDefault();
         if (target.kind === "web") void openExternal(target.url);
-        else if (workspacePath && actions.openFileLink)
+        else if (
+          workspacePath != null &&
+          workspacePath !== "" &&
+          actions.openFileLink
+        )
           actions.openFileLink(target);
         else
           void openNativePath(
@@ -382,7 +401,7 @@ const components: Components = {
   code: ({ className, children }) => (
     <code
       className={
-        className
+        className != null && className !== ""
           ? `${className} text-code font-mono`
           : "rounded-control bg-fill-quiet text-code text-foreground px-1 py-0.5 font-mono"
       }
@@ -395,9 +414,9 @@ const components: Components = {
     const child = nodes.length === 1 ? nodes[0] : null;
     if (isValidElement(child)) {
       const props = child.props as { className?: string; children?: ReactNode };
-      const language = /^language-(.+)$/.exec(props.className ?? "")?.[1];
+      const language = /^language-(.+)$/u.exec(props.className ?? "")?.[1];
       if (language === "chart" || language === "chart-json") {
-        const source = String(props.children ?? "").replace(/\n$/, "");
+        const source = String(props.children ?? "").replace(/\n$/u, "");
         const spec = parseChartSpec(source);
         if (spec) return <ChartBlock spec={spec} />;
       }

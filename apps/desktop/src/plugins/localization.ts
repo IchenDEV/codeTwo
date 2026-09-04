@@ -243,12 +243,21 @@ const CATEGORY_KEYS: Record<string, StringKey> = {
 };
 
 export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
-  const status = Object.fromEntries(
-    Object.entries(STATUS_KEYS).map(([key, value]) => [key, t(value)])
-  ) as Record<PluginManagerStatus, string>;
-  const sourceNames = Object.fromEntries(
-    Object.entries(SOURCE_KEYS).map(([key, value]) => [key, t(value)])
-  ) as Record<PluginManagerSource, string>;
+  const status: Record<PluginManagerStatus, string> = {
+    disabled: t(STATUS_KEYS.disabled),
+    pending: t(STATUS_KEYS.pending),
+    loading: t(STATUS_KEYS.loading),
+    active: t(STATUS_KEYS.active),
+    failed: t(STATUS_KEYS.failed),
+    disposed: t(STATUS_KEYS.disposed),
+    requires_auth: t(STATUS_KEYS.requires_auth),
+    unsupported: t(STATUS_KEYS.unsupported),
+  };
+  const sourceNames: Record<PluginManagerSource, string> = {
+    builtin: t(SOURCE_KEYS.builtin),
+    host: t(SOURCE_KEYS.host),
+    bundle: t(SOURCE_KEYS.bundle),
+  };
   return {
     title: t("pluginManager.title"),
     description: t("pluginManager.description"),
@@ -302,7 +311,10 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
     bundleInstalled: (result) =>
       t("pluginManager.bundleInstalled", {
         name: result.name,
-        version: result.version ? ` ${result.version}` : "",
+        version:
+          result.version != null && result.version !== ""
+            ? ` ${result.version}`
+            : "",
       }),
     bundleManagement: t("pluginManager.bundleManagement"),
     bundleManagementUserOnly: t("pluginManager.bundleManagementUserOnly"),
@@ -418,18 +430,20 @@ export function localizePluginManagerCatalog(
   t: Translate
 ): PluginManagerCatalogModel {
   const pluginName = (id: string, fallback: string) =>
-    PLUGIN_KEYS[id] ? t(PLUGIN_KEYS[id].name) : fallback;
+    PLUGIN_KEYS[id] == null ? fallback : t(PLUGIN_KEYS[id].name);
   return {
     ...model,
     plugins: model.plugins.map((plugin) => {
       const keys = PLUGIN_KEYS[plugin.id];
-      if (!keys || plugin.source === "bundle") return plugin;
+      if (keys == null || plugin.source === "bundle") return plugin;
       return {
         ...plugin,
         name: t(keys.name),
         description: t(keys.description),
         category:
-          plugin.category && CATEGORY_KEYS[plugin.category]
+          plugin.category != null &&
+          plugin.category !== "" &&
+          CATEGORY_KEYS[plugin.category]
             ? t(CATEGORY_KEYS[plugin.category])
             : plugin.category,
         dependencies: plugin.dependencies?.map((dependency) =>
@@ -460,9 +474,11 @@ export function localizePluginManagerCatalog(
         pluginName: firstParty
           ? pluginName(component.pluginId, component.pluginName)
           : component.pluginName,
-        name: keys && firstParty ? t(keys.name) : component.name,
+        name: keys != null && firstParty ? t(keys.name) : component.name,
         description:
-          keys && firstParty ? t(keys.description) : component.description,
+          keys != null && firstParty
+            ? t(keys.description)
+            : component.description,
       };
     }),
   };

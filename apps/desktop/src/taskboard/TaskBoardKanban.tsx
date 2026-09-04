@@ -5,12 +5,8 @@ import { cn } from "@/lib/utils";
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus";
 
 import { TaskActionsMenu } from "./TaskActionsMenu";
-import {
-  TASK_BOARD_LANES,
-  type BoardTask,
-  type TaskBoardLane,
-  type TaskStatus,
-} from "./taskBoard";
+import { TASK_BOARD_LANES } from "./taskBoard";
+import type { BoardTask, TaskBoardLane, TaskStatus } from "./taskBoard";
 import { taskPriorityLabel } from "./TaskEditorDialog";
 import {
   formatUpdatedAt,
@@ -111,9 +107,9 @@ function TaskBoardCard({
         data-task-card-meta
         className="text-metadata text-muted-foreground mt-2 flex max-w-full min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 overflow-hidden"
       >
-        {task.priority !== "none" ? (
+        {task.priority === "none" ? null : (
           <span>{taskPriorityLabel(t, task.priority)}</span>
-        ) : null}
+        )}
         {sessions.length > 0 ? (
           <span>{t("taskboard.sessionCount", { count: sessions.length })}</span>
         ) : null}

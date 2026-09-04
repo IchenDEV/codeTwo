@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  createWebCoreTransport,
-  type WebCoreTransportDependencies,
-} from "../src/coreTransport";
+import { createWebCoreTransport } from "../src/coreTransport";
+import type { WebCoreTransportDependencies } from "../src/coreTransport";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -35,7 +33,7 @@ class FakeSocket {
 }
 
 function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
+  return Response.json(value, {
     status,
     headers: { "Content-Type": "application/json" },
   });
@@ -57,7 +55,7 @@ function dependencies(
   fetcher: WebCoreTransportDependencies["fetch"],
   storage = new MemoryStorage()
 ) {
-  const sockets: Array<{ url: string; socket: FakeSocket }> = [];
+  const sockets: { url: string; socket: FakeSocket }[] = [];
   let fragmentClears = 0;
   const value: WebCoreTransportDependencies = {
     clearPairingFragment: () => {
@@ -90,7 +88,7 @@ function dependencies(
 
 describe("paired Web Core transport", () => {
   test("pairs once and keeps independent command calls concurrent", async () => {
-    const requests: Array<{ input: string; init?: RequestInit }> = [];
+    const requests: { input: string; init?: RequestInit }[] = [];
     const storage = new MemoryStorage();
     storage.setItem("codetwo.remote.bearer", "stale-bearer");
     let releasePairing!: () => void;
@@ -116,7 +114,7 @@ describe("paired Web Core transport", () => {
     ).toHaveLength(1);
     releasePairing();
 
-    await expect(Promise.all([first, second])).resolves.toEqual([
+    expect(Promise.all([first, second])).resolves.toEqual([
       "sessions.list",
       "projects.list",
     ]);
@@ -136,7 +134,7 @@ describe("paired Web Core transport", () => {
   test("uses a fresh ticket whenever the shared engine event stream reconnects", async () => {
     const storage = new MemoryStorage();
     storage.setItem("codetwo.remote.bearer", "saved-bearer");
-    const requests: Array<{ input: string; init?: RequestInit }> = [];
+    const requests: { input: string; init?: RequestInit }[] = [];
     let ticketRequests = 0;
     const setup = dependencies(async (input, init) => {
       requests.push({ input, init });
@@ -199,7 +197,7 @@ describe("paired Web Core transport", () => {
     setup.value.location.hash = "";
     const transport = createWebCoreTransport(setup.value);
 
-    await expect(transport.call("sessions.list", null, null)).rejects.toThrow(
+    expect(transport.call("sessions.list", null, null)).rejects.toThrow(
       "not paired"
     );
   });

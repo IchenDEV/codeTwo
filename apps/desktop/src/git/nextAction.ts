@@ -113,11 +113,13 @@ function checkTone(
 
 function canCreateChangeRequest(input: GitNextActionInput): boolean {
   const info = input.sourceControl;
-  return Boolean(
+  return (
     input.taskWorktree &&
     !input.pullRequest &&
-    info?.create_change_request_supported &&
-    (!info.required_cli || info.required_cli_available)
+    info?.create_change_request_supported === true &&
+    (info.required_cli == null ||
+      info.required_cli === "" ||
+      info.required_cli_available)
   );
 }
 
@@ -126,7 +128,7 @@ function alternativesFor(
   primary: GitNextActionItem
 ): GitNextActionItem[] {
   const candidates: GitNextActionItem[] = [];
-  if (input.status?.is_repo)
+  if (input.status?.is_repo === true)
     candidates.push(action("source_control", "source_control"));
   if ((input.status?.ahead ?? 0) > 0) candidates.push(action("push", "push"));
   if (input.pullRequest)
@@ -166,7 +168,8 @@ export function resolveGitNextAction(
     reason: GitNextActionReason
   ): GitNextActionProjection => ({
     primary,
-    alternatives: primary.disabled ? [] : alternativesFor(input, primary),
+    alternatives:
+      primary.disabled === true ? [] : alternativesFor(input, primary),
     reason,
     changeRequestLabel,
   });
@@ -193,14 +196,14 @@ export function resolveGitNextAction(
     });
   }
 
-  const pullRequest = input.pullRequest;
+  const { pullRequest } = input;
   if (!pullRequest) {
     if (canCreateChangeRequest(input)) {
       return finish(action("create_change_request", "source_control"), {
         id: "create_change_request",
       });
     }
-    if (input.forgeError) {
+    if (input.forgeError != null && input.forgeError !== "") {
       return finish(action("source_control", "source_control"), {
         id: "forge_degraded",
       });
@@ -287,20 +290,25 @@ export function runGitNextAction(
   handlers: GitNextActionHandlers
 ): void {
   switch (item.destination) {
-    case "source_control":
+    case "source_control": {
       handlers.openSourceControl();
       break;
-    case "push":
+    }
+    case "push": {
       handlers.push();
       break;
-    case "pull_request":
+    }
+    case "pull_request": {
       handlers.openPullRequest();
       break;
-    case "cleanup":
+    }
+    case "cleanup": {
       handlers.cleanupWorktree();
       break;
-    case "none":
+    }
+    case "none": {
       break;
+    }
   }
 }
 
@@ -310,38 +318,54 @@ export function gitNextActionLabel(
   changeRequestLabel: GitNextActionProjection["changeRequestLabel"]
 ): string {
   switch (item.id) {
-    case "checking":
+    case "checking": {
       return t("git.next.checking");
-    case "unavailable":
+    }
+    case "unavailable": {
       return t("git.next.unavailable");
-    case "up_to_date":
+    }
+    case "up_to_date": {
       return t("git.next.upToDate");
-    case "source_control":
+    }
+    case "source_control": {
       return t("action.open_source_control");
-    case "review_changes":
+    }
+    case "review_changes": {
       return t("git.next.reviewChanges");
-    case "push":
+    }
+    case "push": {
       return t("header.push");
-    case "create_change_request":
+    }
+    case "create_change_request": {
       return t("git.next.createChangeRequest", { label: changeRequestLabel });
-    case "resolve_conflicts":
+    }
+    case "resolve_conflicts": {
       return t("git.next.resolveConflicts");
-    case "review_failed_checks":
+    }
+    case "review_failed_checks": {
       return t("git.next.reviewFailedChecks");
-    case "address_review":
+    }
+    case "address_review": {
       return t("git.next.addressReview");
-    case "view_checks":
+    }
+    case "view_checks": {
       return t("git.next.viewChecks");
-    case "review_remote_updates":
+    }
+    case "review_remote_updates": {
       return t("git.next.reviewRemoteUpdates");
-    case "review_draft":
+    }
+    case "review_draft": {
       return t("git.next.reviewDraft");
-    case "view_pull_request":
+    }
+    case "view_pull_request": {
       return t("git.next.viewChangeRequest", { label: changeRequestLabel });
-    case "merge_pull_request":
+    }
+    case "merge_pull_request": {
       return t("git.next.mergeChangeRequest", { label: changeRequestLabel });
-    case "cleanup_worktree":
+    }
+    case "cleanup_worktree": {
       return t("git.next.cleanupWorktree");
+    }
   }
 }
 
@@ -349,45 +373,63 @@ export function gitNextActionReason(
   t: Translate,
   projection: GitNextActionProjection
 ): string {
-  const reason = projection.reason;
+  const { reason } = projection;
   switch (reason.id) {
-    case "checking":
+    case "checking": {
       return t("git.next.reason.checking");
-    case "not_repository":
+    }
+    case "not_repository": {
       return t("git.next.reason.notRepository");
-    case "local_changes":
+    }
+    case "local_changes": {
       return t("git.next.reason.localChanges", { count: reason.count });
-    case "ahead":
+    }
+    case "ahead": {
       return t("git.next.reason.ahead", { count: reason.count });
-    case "create_change_request":
+    }
+    case "create_change_request": {
       return t("git.next.reason.createChangeRequest", {
         label: projection.changeRequestLabel,
       });
-    case "conflicts":
+    }
+    case "conflicts": {
       return t("git.next.reason.conflicts");
-    case "failed_checks":
+    }
+    case "failed_checks": {
       return t("git.next.reason.failedChecks", { count: reason.count });
-    case "requested_changes":
+    }
+    case "requested_changes": {
       return t("git.next.reason.requestedChanges");
-    case "pending_checks":
+    }
+    case "pending_checks": {
       return t("git.next.reason.pendingChecks", { count: reason.count });
-    case "behind":
+    }
+    case "behind": {
       return t("git.next.reason.behind", { count: reason.count });
-    case "draft":
+    }
+    case "draft": {
       return t("git.next.reason.draft");
-    case "awaiting_review":
+    }
+    case "awaiting_review": {
       return t("git.next.reason.awaitingReview");
-    case "merge_ready":
+    }
+    case "merge_ready": {
       return t("git.next.reason.mergeReady");
-    case "merged":
+    }
+    case "merged": {
       return t("git.next.reason.merged");
-    case "closed":
+    }
+    case "closed": {
       return t("git.next.reason.closed");
-    case "pull_request":
+    }
+    case "pull_request": {
       return t("git.next.reason.pullRequest");
-    case "forge_degraded":
+    }
+    case "forge_degraded": {
       return t("git.next.reason.forgeDegraded");
-    case "clean":
+    }
+    case "clean": {
       return t("git.next.reason.clean");
+    }
   }
 }

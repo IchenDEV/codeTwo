@@ -39,7 +39,7 @@ const previewTurn: Turn = {
       title: "Inspect transcript pipeline",
       status: "completed",
       kind: "read",
-      startedAt: previewStartedAt + 4_000,
+      startedAt: previewStartedAt + 4000,
       endedAt: previewStartedAt + 11_000,
       outputs: [
         {
@@ -66,7 +66,7 @@ const previewTurn: Turn = {
         task_name: "accessibility_review",
         message: "Check the transcript controls and status announcements.",
       },
-      startedAt: previewStartedAt + 8_000,
+      startedAt: previewStartedAt + 8000,
       outputs: [],
     },
     {
@@ -79,7 +79,7 @@ const previewTurn: Turn = {
         task_name: "narrow_layout",
         message: "Verify the transcript at a narrow desktop width.",
       },
-      startedAt: previewStartedAt + 2_000,
+      startedAt: previewStartedAt + 2000,
       endedAt: previewStartedAt + 18_000,
       outputs: [],
     },
@@ -93,7 +93,7 @@ const previewTurn: Turn = {
         task_name: "renderer_tests",
         message: "Run the renderer regression suite.",
       },
-      startedAt: previewStartedAt + 3_000,
+      startedAt: previewStartedAt + 3000,
       endedAt: previewStartedAt + 14_000,
       outputs: [],
     },
@@ -102,7 +102,7 @@ const previewTurn: Turn = {
     {
       kind: "text",
       text: "我先核对转录事件和渲染入口，确认现有流式边界。\n\n",
-      createdAt: previewStartedAt + 1_000,
+      createdAt: previewStartedAt + 1000,
     },
     {
       kind: "tool",
@@ -173,13 +173,25 @@ export function RichTranscriptPreview() {
             files: [],
           }}
           diffStat={{ added: 42, deleted: 8 }}
-          onRefresh={() => {}}
-          onSelectProject={() => {}}
-          onAddProject={() => {}}
-          onOpenSourceControl={() => {}}
-          onOpenSettings={() => {}}
+          onRefresh={() => {
+            /* empty */
+          }}
+          onSelectProject={() => {
+            /* empty */
+          }}
+          onAddProject={() => {
+            /* empty */
+          }}
+          onOpenSourceControl={() => {
+            /* empty */
+          }}
+          onOpenSettings={() => {
+            /* empty */
+          }}
           turns={previewTurns}
-          onOpenPlanAsDocument={() => {}}
+          onOpenPlanAsDocument={() => {
+            /* empty */
+          }}
         />
         <Button
           type="button"
@@ -194,10 +206,12 @@ export function RichTranscriptPreview() {
         {trajectory ? (
           <TrajectoryView
             turns={previewTurns}
-            usage={{ input_tokens: 12_480, output_tokens: 3_206 }}
+            usage={{ input_tokens: 12_480, output_tokens: 3206 }}
             hasEarlier={false}
             loadingEarlier={false}
-            onLoadEarlier={() => {}}
+            onLoadEarlier={() => {
+              /* empty */
+            }}
           />
         ) : (
           <TranscriptPane
@@ -207,11 +221,21 @@ export function RichTranscriptPreview() {
             loading={false}
             hasEarlier={false}
             loadingEarlier={false}
-            onLoadEarlier={() => {}}
-            onForkTurn={() => {}}
-            onAddSelection={() => {}}
-            onExplainSelection={() => {}}
-            onAskSelectionInSideChat={() => {}}
+            onLoadEarlier={() => {
+              /* empty */
+            }}
+            onForkTurn={() => {
+              /* empty */
+            }}
+            onAddSelection={() => {
+              /* empty */
+            }}
+            onExplainSelection={() => {
+              /* empty */
+            }}
+            onAskSelectionInSideChat={() => {
+              /* empty */
+            }}
           />
         )}
       </main>

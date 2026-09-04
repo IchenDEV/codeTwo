@@ -46,7 +46,7 @@ function filterExtensions(filters: DialogFilter[] | undefined): string {
 async function openDialog(options: OpenDialogOptions): Promise<string[]> {
   const selected = await Utils.openFileDialog({
     allowedFileTypes: filterExtensions(options.filters),
-    canChooseFiles: !options.directory,
+    canChooseFiles: options.directory !== true,
     canChooseDirectory: options.directory ?? false,
     allowsMultipleSelection: options.multiple ?? false,
   });
@@ -71,8 +71,8 @@ async function processText(
 }
 
 async function saveDialog(options: SaveDialogOptions): Promise<string | null> {
-  const defaultPath = options.defaultPath || "untitled";
-  const title = options.title || "Save";
+  const defaultPath = options.defaultPath ?? "untitled";
+  const title = options.title ?? "Save";
   if (process.platform === "darwin") {
     const script = [
       "on run argv",
@@ -84,7 +84,7 @@ async function saveDialog(options: SaveDialogOptions): Promise<string | null> {
       "end try",
       "end run",
     ].join("\n");
-    return processText([
+    return await processText([
       "/usr/bin/osascript",
       "-e",
       script,
@@ -106,13 +106,16 @@ async function saveDialog(options: SaveDialogOptions): Promise<string | null> {
       "$dialog.Filter = $env:CODETWO_SAVE_FILTER",
       "if ($dialog.ShowDialog() -eq 'OK') { Write-Output $dialog.FileName }",
     ].join("; ");
-    return processText(["powershell.exe", "-NoProfile", "-Command", script], {
-      CODETWO_SAVE_TITLE: title,
-      CODETWO_SAVE_NAME: basename(defaultPath),
-      CODETWO_SAVE_FILTER: filter,
-    });
+    return await processText(
+      ["powershell.exe", "-NoProfile", "-Command", script],
+      {
+        CODETWO_SAVE_TITLE: title,
+        CODETWO_SAVE_NAME: basename(defaultPath),
+        CODETWO_SAVE_FILTER: filter,
+      }
+    );
   }
-  return processText([
+  return await processText([
     "zenity",
     "--file-selection",
     "--save",
@@ -181,7 +184,9 @@ let desktopPetProgrammaticPosition: { x: number; y: number } | null = null;
 function desktopPetHeight() {
   return (
     desktopPetHeights[desktopPetState.appearance.petSize] +
-    (desktopPetState.bubble ? desktopPetBubbleHeight : 0)
+    (desktopPetState.bubble != null && desktopPetState.bubble !== ""
+      ? desktopPetBubbleHeight
+      : 0)
   );
 }
 
@@ -193,7 +198,7 @@ function desktopPetFrame() {
     y: display.y + display.height - height - 24,
   };
   try {
-    const saved = JSON.parse(readFileSync(desktopPetPositionPath, "utf8")) as {
+    const saved = JSON.parse(readFileSync(desktopPetPositionPath, "utf-8")) as {
       x?: unknown;
       y?: unknown;
     };
@@ -249,7 +254,10 @@ function persistDesktopPetPosition(x: number, y: number) {
   try {
     mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     const normalizedY =
-      y + (desktopPetState.bubble ? desktopPetBubbleHeight : 0);
+      y +
+      (desktopPetState.bubble != null && desktopPetState.bubble !== ""
+        ? desktopPetBubbleHeight
+        : 0);
     writeFileSync(
       desktopPetPositionPath,
       `${JSON.stringify({ x, y: normalizedY })}\n`,
@@ -292,7 +300,7 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
   maxRequestTime: Infinity,
   handlers: {
     requests: {
-      call: ({
+      call: async ({
         name,
         args,
         projectPath,
@@ -300,7 +308,7 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         name: string;
         args: unknown;
         projectPath: string | null;
-      }) => host.call(name, args, projectPath),
+      }) => await host.call(name, args, projectPath),
       dialogOpen: openDialog,
       dialogSave: saveDialog,
       confirm: async ({ message, title }) => {
@@ -319,7 +327,8 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
       },
       openExternal: ({ url }) => Utils.openExternal(url),
       openPath: ({ path }) => Utils.openPath(path),
-      openWorkspace: ({ path, target }) => openWorkspace(path, target),
+      openWorkspace: async ({ path, target }) =>
+        await openWorkspace(path, target),
       showItemInFolder: ({ path }) => {
         Utils.showItemInFolder(path);
         return true;
@@ -471,7 +480,8 @@ if (process.platform === "darwin") {
   );
   if (touchBar) {
     pluginHostActions = new PluginHostActionController(
-      (name, args, projectPath) => host.call(name, args, projectPath),
+      async (name, args, projectPath) =>
+        await host.call(name, args, projectPath),
       touchBar
     );
     void pluginHostActions.start();
@@ -504,7 +514,7 @@ Electrobun.events.on(`new-window-open-${mainWindow.webview.id}`, (event) => {
           typeof (detail as { url?: unknown }).url === "string"
         ? (detail as { url: string }).url
         : null;
-  if (url) Utils.openExternal(url);
+  if (url != null && url !== "") Utils.openExternal(url);
 });
 
 let shuttingDown = false;

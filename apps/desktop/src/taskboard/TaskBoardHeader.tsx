@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/popover";
 import type { Translate } from "@/i18n";
 
-import { PRIORITIES, type TaskPriority } from "./taskBoard";
+import { PRIORITIES } from "./taskBoard";
+import type { TaskPriority } from "./taskBoard";
 import { taskPriorityLabel } from "./TaskEditorDialog";
 import type { TaskBoardView } from "./workspaceTypes";
 

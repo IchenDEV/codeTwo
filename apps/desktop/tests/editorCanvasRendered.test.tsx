@@ -31,7 +31,7 @@ function newFakeEditor() {
     insertBlocks(blocks: any[], reference: any) {
       const index = editor.document.indexOf(reference);
       editor.document.splice(
-        index < 0 ? editor.document.length : index + 1,
+        index === -1 ? editor.document.length : index + 1,
         0,
         ...blocks
       );
@@ -40,7 +40,7 @@ function newFakeEditor() {
     replaceBlocks(blocks: any[], replacement: any[]) {
       const first = editor.document.indexOf(blocks[0]);
       editor.document.splice(
-        first < 0 ? 0 : first,
+        first === -1 ? 0 : first,
         blocks.length,
         ...replacement
       );
@@ -71,11 +71,11 @@ const realFileMenu = await import("../src/editor/FileMenu");
 const realTheme = await import("../src/theme");
 const realBridge = await import("../src/bridge");
 
-mock.module("@blocknote/core", () => ({
+void mock.module("@blocknote/core", () => ({
   ...realCore,
   filterSuggestionItems: (items: any[]) => items,
 }));
-mock.module("@blocknote/mantine", () => ({
+void mock.module("@blocknote/mantine", () => ({
   ...realMantine,
   BlockNoteView: (props: any) => {
     const runtime = React.useContext(mockedCanvasRuntimeContext);
@@ -97,17 +97,17 @@ mock.module("@blocknote/mantine", () => ({
     );
   },
 }));
-mock.module("@blocknote/react", () => ({
+void mock.module("@blocknote/react", () => ({
   ...realReact,
   SuggestionMenuController: () => null,
   getDefaultReactSlashMenuItems: () => [],
   useCreateBlockNote: () => {
-    if (!fakeEditor) fakeEditor = newFakeEditor();
+    fakeEditor ??= newFakeEditor();
     createCount += 1;
     return fakeEditor;
   },
 }));
-mock.module("../src/skillInline", () => ({
+void mock.module("../src/skillInline", () => ({
   ...realSkillInline,
   CanvasBlockRuntimeContext: mockedCanvasRuntimeContext,
   canvasBlockPropsFromDraft: (draft: any, options: any = {}) => ({
@@ -158,10 +158,10 @@ mock.module("../src/skillInline", () => ({
                 .map((inline: any) => inline.text ?? "")
                 .join("")
             : "";
-      if (text) return [{ type: "text", text }];
+      if (text != null) return [{ type: "text", text }];
       if (Array.isArray(block.content)) {
         const inline = block.content.find(
-          (item: any) => item?.type && item.type !== "text"
+          (item: any) => item?.type != null && item.type !== "text"
         );
         if (inline?.type === "skill")
           return [
@@ -175,15 +175,15 @@ mock.module("../src/skillInline", () => ({
       return [];
     }),
 }));
-mock.module("../src/editor/FileMenu", () => ({
+void mock.module("../src/editor/FileMenu", () => ({
   ...realFileMenu,
   FileMenu: () => null,
 }));
-mock.module("../src/theme", () => ({
+void mock.module("../src/theme", () => ({
   ...realTheme,
   useColorScheme: () => editorScheme,
 }));
-mock.module("../src/bridge", () => ({
+void mock.module("../src/bridge", () => ({
   ...realBridge,
   listArchivedSessions: async () => [],
   listFiles: async () => [],

@@ -1,10 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { DetailMetric } from "@/components/business/detail-metric";
 import { MasterDetailRow } from "@/components/business/master-detail-row";
@@ -68,26 +63,23 @@ import {
   runAutomationNow,
   setAutomationEnabled,
   updateAutomation,
-  type Automation,
-  type AutomationInput,
-  type AutomationRun,
-  type AutomationRunStatus,
-  type PermissionMode,
-  type Project,
-  type ProviderInfo,
-  type Sandbox,
+  providerLabel,
 } from "../bridge";
-import { providerLabel } from "../bridge";
+import type {
+  Automation,
+  AutomationInput,
+  AutomationRun,
+  AutomationRunStatus,
+  PermissionMode,
+  Project,
+  ProviderInfo,
+  Sandbox,
+} from "../bridge";
 import { useT } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { useToast } from "../ui/toast";
-import {
-  cronFromSchedule,
-  localTimezone,
-  scheduleFromCron,
-  type AutomationCadence,
-  type ScheduleDraft,
-} from "./schedule";
+import { cronFromSchedule, localTimezone, scheduleFromCron } from "./schedule";
+import type { ScheduleDraft } from "./schedule";
 
 import "./automations.css";
 
@@ -273,7 +265,7 @@ export function AutomationsPage({
     return `${t(`automations.cadence.${schedule.cadence}`)} · ${schedule.time}`;
   };
 
-  const filteredAutomations = useMemo(() => {
+  const filteredAutomations = (() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     return automations.filter((automation) => {
       if (filter === "active" && !automation.enabled) return false;
@@ -283,9 +275,9 @@ export function AutomationsPage({
         .toLocaleLowerCase()
         .includes(normalizedQuery);
     });
-  }, [automations, filter, query]);
+  })();
 
-  const groups = useMemo(() => {
+  const groups = (() => {
     const active = filteredAutomations.filter(
       (automation) => automation.enabled
     );
@@ -296,24 +288,26 @@ export function AutomationsPage({
       { id: "active" as const, items: active },
       { id: "paused" as const, items: paused },
     ].filter((group) => group.items.length > 0);
-  }, [filteredAutomations]);
-  const refresh = useCallback(async () => {
+  })();
+  const refresh = async () => {
     const next = await listAutomations();
     setAutomations(next);
     setSelectedId((current) =>
-      current && next.some((automation) => automation.id === current)
+      current != null &&
+      current !== "" &&
+      next.some((automation) => automation.id === current)
         ? current
         : (next[0]?.id ?? null)
     );
     setLoading(false);
-  }, []);
+  };
 
-  const refreshRuns = useCallback(async (id: string | null) => {
-    setRuns(id ? await listAutomationRuns(id) : []);
-  }, []);
+  const refreshRuns = async (id: string | null) => {
+    setRuns(id != null && id !== "" ? await listAutomationRuns(id) : []);
+  };
 
   useEffect(() => {
-    void refresh().catch((error) => {
+    void refresh().catch((error: unknown) => {
       setLoading(false);
       toast(t("automations.loadFailed", { error: String(error) }), "error");
     });
@@ -334,7 +328,8 @@ export function AutomationsPage({
   useEffect(() => {
     if (draft) return;
     if (
-      selectedId &&
+      selectedId != null &&
+      selectedId !== "" &&
       filteredAutomations.some((automation) => automation.id === selectedId)
     )
       return;
@@ -377,14 +372,19 @@ export function AutomationsPage({
     if (!draft) return;
     setSaving(true);
     try {
-      const saved = draft.id
-        ? await updateAutomation(draft.id, inputFromDraft(draft))
-        : await createAutomation(inputFromDraft(draft));
+      const saved =
+        draft.id != null && draft.id !== ""
+          ? await updateAutomation(draft.id, inputFromDraft(draft))
+          : await createAutomation(inputFromDraft(draft));
       setDraft(null);
       await refresh();
       setSelectedId(saved.id);
       toast(
-        t(draft.id ? "automations.updated" : "automations.created"),
+        t(
+          draft.id != null && draft.id !== ""
+            ? "automations.updated"
+            : "automations.created"
+        ),
         "success"
       );
     } catch (error) {
@@ -465,16 +465,16 @@ export function AutomationsPage({
           data-automation-list-header
           className={cn(
             "electrobun-webkit-app-region-drag h-layout-titlebar flex shrink-0 items-center gap-2 pr-3",
-            headerLeadingAction
-              ? "window-controls-safe-main"
-              : "pl-page-section"
+            headerLeadingAction == null
+              ? "pl-page-section"
+              : "window-controls-safe-main"
           )}
         >
-          {headerLeadingAction ? (
+          {headerLeadingAction == null ? null : (
             <div data-automation-leading-action className="shrink-0">
               {headerLeadingAction}
             </div>
-          ) : null}
+          )}
           <h1 className="text-dialog shrink-0 font-semibold">
             {t("automations.title")}
           </h1>
@@ -540,11 +540,11 @@ export function AutomationsPage({
                     <CalendarClock />
                   </EmptyMedia>
                   <EmptyTitle>{t("automations.empty")}</EmptyTitle>
-                  {!hasProjects ? (
+                  {hasProjects ? null : (
                     <EmptyDescription>
                       {t("automations.projectRequired")}
                     </EmptyDescription>
-                  ) : null}
+                  )}
                 </EmptyHeader>
                 <EmptyContent>
                   <Button
@@ -607,18 +607,20 @@ export function AutomationsPage({
           data-automation-detail-header
           className={cn(
             "electrobun-webkit-app-region-drag h-layout-titlebar flex shrink-0 items-center gap-2 pr-4",
-            headerLeadingAction ? "window-controls-safe-compact-main" : "pl-4"
+            headerLeadingAction == null
+              ? "pl-4"
+              : "window-controls-safe-compact-main"
           )}
         >
-          {headerLeadingAction ? (
+          {headerLeadingAction == null ? null : (
             <div
               data-automation-detail-leading-action
               className="window-controls-compact-leading-action shrink-0"
             >
               {headerLeadingAction}
             </div>
-          ) : null}
-          {(selectedId || draft) && (
+          )}
+          {(selectedId ?? draft) != null && (
             <Button
               variant="ghost"
               size="icon-xs"
@@ -634,7 +636,7 @@ export function AutomationsPage({
           )}
           {draft ? (
             <span className="text-body font-medium">
-              {draft.id
+              {draft.id != null && draft.id !== ""
                 ? t("automations.editTitle")
                 : t("automations.createTitle")}
             </span>
@@ -747,14 +749,7 @@ export function AutomationsPage({
               onSave={() => void save()}
             />
           </ScrollArea>
-        ) : !selected ? (
-          <div className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-            <div>
-              <CalendarClock className="mx-auto mb-3 size-4" />
-              <p>{t("automations.select")}</p>
-            </div>
-          </div>
-        ) : (
+        ) : selected ? (
           <ScrollArea className="min-h-0 flex-1">
             {detailTab === "overview" ? (
               <article className="mx-auto w-full max-w-5xl px-8 pt-5 pb-12">
@@ -878,7 +873,9 @@ export function AutomationsPage({
                           disabled={!openable}
                           className="min-h-control-field bg-fill-quiet grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 disabled:opacity-80"
                           onClick={() =>
-                            run.session_id && onOpenSession(run.session_id)
+                            run.session_id != null &&
+                            run.session_id !== "" &&
+                            onOpenSession(run.session_id)
                           }
                         >
                           {SPINNING_RUNS.has(run.status) ? (
@@ -903,7 +900,7 @@ export function AutomationsPage({
                             <span className="text-callout text-muted-foreground block">
                               {dateTime(run.started_at)}
                             </span>
-                            {run.error ? (
+                            {run.error != null && run.error !== "" ? (
                               <span className="text-metadata text-destructive mt-1 block">
                                 {run.error}
                               </span>
@@ -922,6 +919,13 @@ export function AutomationsPage({
               </div>
             )}
           </ScrollArea>
+        ) : (
+          <div className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center px-6 text-center">
+            <div>
+              <CalendarClock className="mx-auto mb-3 size-4" />
+              <p>{t("automations.select")}</p>
+            </div>
+          </div>
         )}
       </div>
     </section>
@@ -982,7 +986,9 @@ function AutomationEditor({
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-page font-semibold">
-            {draft.id ? draft.name : t("automations.createTitle")}
+            {draft.id != null && draft.id !== ""
+              ? draft.name
+              : t("automations.createTitle")}
           </h1>
           <p className="text-prose text-muted-foreground mt-2 max-w-2xl">
             {t("automations.formHint")}
@@ -1030,7 +1036,9 @@ function AutomationEditor({
             <Label>{t("automations.project")}</Label>
             <Select
               value={draft.projectPath}
-              onValueChange={(value) => value && update("projectPath", value)}
+              onValueChange={(value) =>
+                value != null && value !== "" && update("projectPath", value)
+              }
             >
               <SelectTrigger className="w-full">
                 <SelectValue>{selectedProject}</SelectValue>
@@ -1050,7 +1058,9 @@ function AutomationEditor({
             <Label>{t("automations.agent")}</Label>
             <Select
               value={draft.provider}
-              onValueChange={(value) => value && update("provider", value)}
+              onValueChange={(value) =>
+                value != null && value !== "" && update("provider", value)
+              }
             >
               <SelectTrigger className="w-full">
                 <SelectValue>{selectedProvider}</SelectValue>
@@ -1081,7 +1091,7 @@ function AutomationEditor({
             <Select
               value={draft.schedule.cadence}
               onValueChange={(value) =>
-                value && updateSchedule("cadence", value as AutomationCadence)
+                value && updateSchedule("cadence", value)
               }
             >
               <SelectTrigger className="w-full">
@@ -1177,9 +1187,7 @@ function AutomationEditor({
             <Label>{t("automations.permissions")}</Label>
             <Select
               value={draft.policy}
-              onValueChange={(value) =>
-                value && update("policy", value as Draft["policy"])
-              }
+              onValueChange={(value) => value && update("policy", value)}
             >
               <SelectTrigger className="w-full">
                 <SelectValue>{selectedPolicy}</SelectValue>
@@ -1203,9 +1211,7 @@ function AutomationEditor({
             <Label className="items-start">
               <Checkbox
                 checked={draft.useWorktree}
-                onCheckedChange={(checked) =>
-                  update("useWorktree", checked === true)
-                }
+                onCheckedChange={(checked) => update("useWorktree", checked)}
               />
               <span>
                 {t("automations.useWorktree")}

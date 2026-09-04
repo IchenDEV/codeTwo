@@ -25,7 +25,7 @@ const ISSUE = {
 };
 
 const realBridge = await import("../src/bridge");
-mock.module("../src/bridge", () => ({
+void mock.module("../src/bridge", () => ({
   ...realBridge,
   listGithubIssues: async () => [ISSUE],
 }));
@@ -121,9 +121,9 @@ async function openDelegateMenu() {
 }
 
 function menuItems() {
-  return Array.from(
-    dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]')
-  );
+  return [
+    ...dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'),
+  ];
 }
 
 describe("IssuesModal delegation", () => {
@@ -165,6 +165,6 @@ describe("IssuesModal delegation", () => {
     expect(items[0].textContent).toMatch(
       /No scenes available|issueDeleg\.noScenes/
     );
-    expect(items[0].getAttribute("data-disabled")).not.toBeNull();
+    expect(items[0].dataset.disabled).not.toBeNull();
   });
 });

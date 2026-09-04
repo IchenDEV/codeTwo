@@ -1,10 +1,5 @@
-import {
-  useDeferredValue,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +15,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   cancelWorkspaceContentSearch,
   searchWorkspaceContents,
-  type WorkspaceContentMatch,
-  type WorkspaceSearchOptions,
-  type WorkspaceSearchResult,
+} from "../bridge";
+import type {
+  WorkspaceContentMatch,
+  WorkspaceSearchOptions,
+  WorkspaceSearchResult,
 } from "../bridge";
 
 const DEFAULT_OPTIONS: WorkspaceSearchOptions = {
@@ -34,7 +31,7 @@ const DEFAULT_OPTIONS: WorkspaceSearchOptions = {
 let nextSearchRequest = 0;
 
 export function workspaceSearchTruncationLabel(reason: string | null): string {
-  if (!reason) return "a resource limit";
+  if (reason == null || reason === "") return "a resource limit";
   const labels: Record<string, string> = {
     result_limit: "the result limit",
     per_file_limit: "the per-file result limit",
@@ -70,7 +67,7 @@ export function WorkspaceSearchModal({
   const [activeIndex, setActiveIndex] = useState(-1);
   const queryInputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
-  const resultRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const resultRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const queryPending = query !== deferredQuery;
   const matches = queryPending ? [] : (result?.matches ?? []);
@@ -78,7 +75,7 @@ export function WorkspaceSearchModal({
   const visibleLoading = loading || queryPending;
 
   useEffect(() => {
-    const request = ++requestRef.current;
+    const request = (requestRef.current += 1);
     setActiveIndex(-1);
     resultRefs.current = [];
 
@@ -94,7 +91,7 @@ export function WorkspaceSearchModal({
     setResult(null);
     let started = false;
     let alive = true;
-    const requestId = `workspace-search-${Date.now()}-${++nextSearchRequest}`;
+    const requestId = `workspace-search-${Date.now()}-${(nextSearchRequest += 1)}`;
     const timer = window.setTimeout(() => {
       started = true;
       void searchWorkspaceContents(cwd, deferredQuery, options, requestId, 200)
@@ -103,10 +100,10 @@ export function WorkspaceSearchModal({
           setResult(next);
           setActiveIndex(next.matches.length > 0 ? 0 : -1);
         })
-        .catch((cause) => {
+        .catch((error: unknown) => {
           if (!alive || request !== requestRef.current) return;
           setResult(null);
-          setError(String(cause));
+          setError(String(error));
         })
         .finally(() => {
           if (alive && request === requestRef.current) setLoading(false);
@@ -135,11 +132,11 @@ export function WorkspaceSearchModal({
   const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" && matches.length > 0) {
       event.preventDefault();
-      focusResult(activeIndex < 0 ? 0 : activeIndex);
+      focusResult(Math.max(0, activeIndex));
     } else if (
       event.key === "Enter" &&
       activeIndex >= 0 &&
-      matches[activeIndex]
+      matches[activeIndex] != null
     ) {
       event.preventDefault();
       openResult(matches[activeIndex]);
@@ -156,7 +153,11 @@ export function WorkspaceSearchModal({
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       if (index === 0)
-        document.getElementById("workspace-content-query")?.focus();
+        (
+          document.querySelector(
+            "#workspace-content-query"
+          ) as HTMLElement | null
+        )?.focus();
       else focusResult(index - 1);
     }
   };
@@ -239,16 +240,19 @@ export function WorkspaceSearchModal({
         >
           {!hasQuery && "Enter text to search file contents."}
           {hasQuery && visibleLoading && "Searching…"}
-          {hasQuery && !visibleLoading && !error && result && (
-            <>
-              {matches.length} {matches.length === 1 ? "result" : "results"}.
-              {result.truncated &&
-                ` Results were truncated by ${workspaceSearchTruncationLabel(result.truncation_reason)}.`}
-            </>
-          )}
+          {hasQuery &&
+            !visibleLoading &&
+            (error == null || error === "") &&
+            result && (
+              <>
+                {matches.length} {matches.length === 1 ? "result" : "results"}.
+                {result.truncated &&
+                  ` Results were truncated by ${workspaceSearchTruncationLabel(result.truncation_reason)}.`}
+              </>
+            )}
         </div>
 
-        {error && (
+        {error != null && error !== "" && (
           <p role="alert" className="text-metadata text-destructive">
             Search failed: {error}
           </p>
@@ -287,15 +291,12 @@ export function WorkspaceSearchModal({
               </li>
             ))}
           </ul>
-          {hasQuery &&
-            !visibleLoading &&
-            !error &&
-            result &&
-            matches.length === 0 && (
+          {(hasQuery && !visibleLoading && error == null) ||
+            (error === "" && result && matches.length === 0 && (
               <p className="text-body text-muted-foreground py-6 text-center">
                 No matching content.
               </p>
-            )}
+            ))}
         </ScrollArea>
 
         <DialogFooter>

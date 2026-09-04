@@ -35,9 +35,11 @@ import { cn } from "@/lib/utils";
 
 import { exportSceneSkillMd } from "../bridge";
 import { useLanguage, useT } from "../i18n";
+import { td } from "../i18n/dynamic";
 import { useToast } from "../ui/toast";
 import type { SessionConfig } from "./config";
-import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
+import { sceneTitle } from "./scene";
+import type { SceneInfo, SceneSource } from "./scene";
 
 /** Source pill naming where the scene came from (builtin / user / project / plugin). */
 export function SourceBadge({ source }: { source: SceneSource }) {
@@ -47,7 +49,7 @@ export function SourceBadge({ source }: { source: SceneSource }) {
       variant="outline"
       className="text-metadata text-muted-foreground shrink-0"
     >
-      {t(`scene.source.${source}` as "scene.source.builtin")}
+      {t(`scene.source.${source}`)}
     </Badge>
   );
 }
@@ -77,7 +79,9 @@ export function SceneChip({ config }: { config: SessionConfig }) {
           <Chip
             title={surfaceLabel}
             aria-label={`${surfaceLabel}: ${label}`}
-            className={cn((active || config.autoScene) && "text-foreground")}
+            className={cn(
+              (active ?? config.autoScene) != null && "text-foreground"
+            )}
           >
             <Clapperboard className="size-3.5 shrink-0" />
             <span className="max-w-36 truncate">{label}</span>
@@ -364,7 +368,7 @@ export function SceneEscalationDialog({
   onCancel: () => void;
 }) {
   const t = useT();
-  const modeName = (m: string) => t(`mode.${m}` as "mode.ask");
+  const modeName = (m: string) => td(t, `mode.${m}`);
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-w-sm">

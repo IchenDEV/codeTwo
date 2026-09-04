@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   AlertDialog,
@@ -43,19 +43,18 @@ import {
   deleteScene as bridgeDeleteScene,
   getScene as bridgeGetScene,
   saveScene as bridgeSaveScene,
-  type ProviderInfo,
-  type SceneSaveScope,
-  type SkillInfo,
 } from "../bridge";
+import type { ProviderInfo, SceneSaveScope, SkillInfo } from "../bridge";
 import { useT } from "../i18n";
+import { td } from "../i18n/dynamic";
 import { useToast } from "../ui/toast";
-import {
-  type SceneArtifactDef,
-  type SceneDocument,
-  type SceneExitCriterion,
-  type SceneHook,
-  type SceneInfo,
-  type SceneSlotDef,
+import type {
+  SceneArtifactDef,
+  SceneDocument,
+  SceneExitCriterion,
+  SceneHook,
+  SceneInfo,
+  SceneSlotDef,
 } from "./scene";
 import {
   createSceneDocument,
@@ -74,12 +73,12 @@ export type SceneEditorRequest =
   | { kind: "edit"; scene: SceneInfo }
   | { kind: "duplicate"; scene: SceneInfo };
 
-interface SelectOption {
+interface SelectOption<T extends string = string> {
   label: string;
-  value: string;
+  value: T;
 }
 
-function OptionalSelectField({
+function OptionalSelectField<T extends string>({
   id,
   label,
   description,
@@ -91,25 +90,29 @@ function OptionalSelectField({
   id: string;
   label: string;
   description?: string;
-  value?: string;
-  options: SelectOption[];
+  value?: T;
+  options: readonly SelectOption<T>[];
   inheritLabel: string;
-  onChange: (value: string | undefined) => void;
+  onChange: (value: T | undefined) => void;
 }) {
-  const items = useMemo(
-    () => [{ label: inheritLabel, value: null }, ...options],
-    [inheritLabel, options]
-  );
+  const items = [{ label: inheritLabel, value: null }, ...options];
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      {description && <FieldDescription>{description}</FieldDescription>}
+      {description != null && description !== "" && (
+        <FieldDescription>{description}</FieldDescription>
+      )}
       <Select
         items={items}
         value={value ?? null}
-        onValueChange={(next) =>
-          onChange(typeof next === "string" ? next : undefined)
-        }
+        onValueChange={(next) => {
+          if (typeof next !== "string") {
+            onChange(undefined);
+            return;
+          }
+          const match = options.find((option) => option.value === next);
+          onChange(match?.value);
+        }}
       >
         <SelectTrigger id={id} className="w-full">
           <SelectValue />
@@ -153,7 +156,9 @@ function ListField({
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      {description && <FieldDescription>{description}</FieldDescription>}
+      {description != null && description !== "" && (
+        <FieldDescription>{description}</FieldDescription>
+      )}
       {multiline ? (
         <Textarea {...shared} className="min-h-24" />
       ) : (
@@ -315,7 +320,7 @@ function SlotEditor({
     "artifact",
   ].map((value) => ({
     value,
-    label: t(`sceneEditor.slotKind.${value}` as never),
+    label: td(t, `sceneEditor.slotKind.${value}`),
   }));
   return (
     <FieldSet>
@@ -380,7 +385,7 @@ function SlotEditor({
                     value &&
                     setSlots(
                       updateAt(slots, index, {
-                        kind: value as SceneSlotDef["kind"],
+                        kind: value,
                       })
                     )
                   }
@@ -430,9 +435,7 @@ function SlotEditor({
                   <Checkbox
                     checked={slot.required ?? false}
                     onCheckedChange={(checked) =>
-                      setSlots(
-                        updateAt(slots, index, { required: checked === true })
-                      )
+                      setSlots(updateAt(slots, index, { required: checked }))
                     }
                   />
                   {t("sceneEditor.required")}
@@ -473,7 +476,7 @@ function ArtifactEditor({
     "custom",
   ].map((value) => ({
     value,
-    label: t(`sceneEditor.artifactKind.${value}` as never),
+    label: td(t, `sceneEditor.artifactKind.${value}`),
   }));
   return (
     <FieldSet>
@@ -540,7 +543,7 @@ function ArtifactEditor({
                     value &&
                     setArtifacts(
                       updateAt(artifacts, index, {
-                        kind: value as SceneArtifactDef["kind"],
+                        kind: value,
                       })
                     )
                   }
@@ -567,7 +570,7 @@ function ArtifactEditor({
                     onCheckedChange={(checked) =>
                       setArtifacts(
                         updateAt(artifacts, index, {
-                          required: checked === true,
+                          required: checked,
                         })
                       )
                     }
@@ -633,7 +636,7 @@ function CriterionEditor({
     "custom",
   ].map((value) => ({
     value,
-    label: t(`sceneEditor.criterion.${value}` as never),
+    label: td(t, `sceneEditor.criterion.${value}`),
   }));
   return (
     <FieldSet>
@@ -669,7 +672,7 @@ function CriterionEditor({
                   value &&
                   setCriteria(
                     updateAt(criteria, index, {
-                      kind: value as SceneExitCriterion["kind"],
+                      kind: value,
                     })
                   )
                 }
@@ -751,10 +754,10 @@ function HookEditor({
     "schedule",
   ].map((value) => ({
     value,
-    label: t(`sceneEditor.hookEvent.${value}` as never),
+    label: td(t, `sceneEditor.hookEvent.${value}`),
   }));
   const actions = ["suggest_scene", "suggest_next", "run_macro", "notify"].map(
-    (value) => ({ value, label: t(`sceneEditor.hookAction.${value}` as never) })
+    (value) => ({ value, label: td(t, `sceneEditor.hookAction.${value}`) })
   );
   return (
     <FieldSet>
@@ -786,10 +789,7 @@ function HookEditor({
                   items={events}
                   value={hook.on}
                   onValueChange={(value) =>
-                    value &&
-                    setHooks(
-                      updateAt(hooks, index, { on: value as SceneHook["on"] })
-                    )
+                    value && setHooks(updateAt(hooks, index, { on: value }))
                   }
                 >
                   <SelectTrigger
@@ -815,7 +815,7 @@ function HookEditor({
                     value &&
                     setHooks(
                       updateAt(hooks, index, {
-                        action: { kind: value as SceneHook["action"]["kind"] },
+                        action: { kind: value },
                       })
                     )
                   }
@@ -1017,13 +1017,12 @@ export function SceneEditor({
   }, [getScene, request]);
 
   useEffect(() => {
-    if (!jsonError && !jsonDirty) setJson(formatSceneJson(draft));
+    if ((jsonError == null || jsonError === "") && !jsonDirty)
+      setJson(formatSceneJson(draft));
   }, [draft, jsonDirty, jsonError]);
 
   const issues = validateSceneDocument(draft);
-  const issueMessages = issues.map((issue) =>
-    t(issue.key as never, issue.vars)
-  );
+  const issueMessages = issues.map((issue) => td(t, issue.key, issue.vars));
   const providerHint = providers
     .map((provider) => `${provider.id} (${provider.display_name})`)
     .join(", ");
@@ -1045,7 +1044,12 @@ export function SceneEditor({
   };
 
   const save = async () => {
-    if (issues.length > 0 || jsonError || jsonDirty) return;
+    if (
+      issues.length > 0 ||
+      (jsonError != null && jsonError !== "") ||
+      jsonDirty
+    )
+      return;
     setSaving(true);
     try {
       const saved = await saveScene(scope, cwd || null, originalName, draft);
@@ -1060,13 +1064,15 @@ export function SceneEditor({
 
   const remove = async () => {
     if (!editableOriginal) return;
+    const saveScope =
+      editableOriginal.source === "user" ||
+      editableOriginal.source === "project"
+        ? editableOriginal.source
+        : null;
+    if (saveScope == null) return;
     setDeleting(true);
     try {
-      await deleteScene(
-        editableOriginal.source as SceneSaveScope,
-        cwd || null,
-        editableOriginal.name
-      );
+      await deleteScene(saveScope, cwd || null, editableOriginal.name);
       onDeleted(editableOriginal.reference);
       toast(
         t("sceneEditor.deleted", { name: editableOriginal.title }),
@@ -1079,16 +1085,18 @@ export function SceneEditor({
   };
 
   const execution = draft.execution ?? {};
-  const modeOptions = ["read_only", "ask", "auto_edit", "full_access"].map(
-    (value) => ({ value, label: t(`mode.${value}` as never) })
+  const modeOptions = (
+    ["read_only", "ask", "auto_edit", "full_access"] as const
+  ).map((value) => ({ value, label: td(t, `mode.${value}`) }));
+  const memoryOptions = (
+    ["standard", "read_only", "private", "learn_only"] as const
+  ).map((value) => ({ value, label: td(t, `sceneEditor.memory.${value}`) }));
+  const worktreeOptions = (["off", "current", "origin_default"] as const).map(
+    (value) => ({
+      value,
+      label: td(t, `sceneEditor.worktree.${value}`),
+    })
   );
-  const memoryOptions = ["standard", "read_only", "private", "learn_only"].map(
-    (value) => ({ value, label: t(`sceneEditor.memory.${value}` as never) })
-  );
-  const worktreeOptions = ["off", "current", "origin_default"].map((value) => ({
-    value,
-    label: t(`sceneEditor.worktree.${value}` as never),
-  }));
   const boolOptions = [
     { value: "true", label: t("sceneEditor.on") },
     { value: "false", label: t("sceneEditor.off") },
@@ -1145,7 +1153,7 @@ export function SceneEditor({
                   ] as const
                 ).map((tab) => (
                   <TabsTrigger key={tab} value={tab}>
-                    {t(`sceneEditor.tab.${tab}` as never)}
+                    {td(t, `sceneEditor.tab.${tab}`)}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -1177,9 +1185,7 @@ export function SceneEditor({
                       ]}
                       value={scope}
                       disabled={Boolean(editableOriginal)}
-                      onValueChange={(value) =>
-                        value && setScope(value as SceneSaveScope)
-                      }
+                      onValueChange={(value) => value && setScope(value)}
                     >
                       <SelectTrigger id="scene-scope" className="w-full">
                         <SelectValue />
@@ -1446,7 +1452,7 @@ export function SceneEditor({
                           ...draft,
                           skills: {
                             ...draft.skills,
-                            suppress_unpinned: checked === true,
+                            suppress_unpinned: checked,
                           },
                         })
                       }
@@ -1527,14 +1533,13 @@ export function SceneEditor({
                       onCheckedChange={(checked) =>
                         setDraft({
                           ...draft,
-                          brief:
-                            checked === true
-                              ? {
-                                  template: "",
-                                  slots: [],
-                                  clarify: "multi_choice",
-                                }
-                              : undefined,
+                          brief: checked
+                            ? {
+                                template: "",
+                                slots: [],
+                                clarify: "multi_choice",
+                              }
+                            : undefined,
                         })
                       }
                     />
@@ -1577,12 +1582,12 @@ export function SceneEditor({
                         id="scene-clarify"
                         label={t("sceneEditor.clarify")}
                         value={draft.brief.clarify}
-                        options={["multi_choice", "free_form", "off"].map(
-                          (value) => ({
-                            value,
-                            label: t(`sceneEditor.clarify.${value}` as never),
-                          })
-                        )}
+                        options={(
+                          ["multi_choice", "free_form", "off"] as const
+                        ).map((value) => ({
+                          value,
+                          label: td(t, `sceneEditor.clarify.${value}`),
+                        }))}
                         inheritLabel={t("sceneEditor.inheritDefault")}
                         onChange={(clarify) =>
                           setDraft({
@@ -1660,7 +1665,9 @@ export function SceneEditor({
                         setJsonDirty(true);
                       }}
                     />
-                    {jsonError && <FieldError>{jsonError}</FieldError>}
+                    {jsonError != null && jsonError !== "" && (
+                      <FieldError>{jsonError}</FieldError>
+                    )}
                   </Field>
                   <Button type="button" variant="outline" onClick={applyJson}>
                     {t("sceneEditor.applyJson")}

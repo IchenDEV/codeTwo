@@ -1,10 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { applyAppearanceSettings, useAppearanceSettings } from "@/appearance";
 import { ChoiceRow } from "@/components/business/choice-row";
@@ -96,6 +91,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cssVars } from "@/lib/cssVars";
 import { useToast } from "@/ui/toast";
 
 import "./preview.css";
@@ -224,14 +220,14 @@ export function DesignSystemPreview({
 
   useEffect(() => {
     const root = document.documentElement;
-    const previousTheme = root.getAttribute("data-ds-theme");
+    const previousTheme = root.dataset.dsTheme;
     const wasDark = root.classList.contains("dark");
     const previousColorScheme = root.style.colorScheme;
     const previewStyle = document.createElement("div");
 
     applyAppearanceSettings(previewStyle, appearance, resolvedTheme);
     const previousAppearance = new Map(
-      Array.from(previewStyle.style).map((name) => [
+      [...previewStyle.style].map((name) => [
         name,
         {
           priority: root.style.getPropertyPriority(name),
@@ -240,7 +236,7 @@ export function DesignSystemPreview({
       ])
     );
 
-    root.setAttribute("data-ds-theme", resolvedTheme);
+    root.dataset.dsTheme = resolvedTheme;
     root.classList.toggle("dark", resolvedTheme === "dark");
     root.style.colorScheme = resolvedTheme;
     for (const name of previewStyle.style) {
@@ -258,21 +254,17 @@ export function DesignSystemPreview({
         else root.style.removeProperty(name);
       }
       root.style.colorScheme = previousColorScheme;
-      if (previousTheme === null) root.removeAttribute("data-ds-theme");
-      else root.setAttribute("data-ds-theme", previousTheme);
+      if (previousTheme === null) delete root.dataset.dsTheme;
+      else root.dataset.dsTheme = previousTheme;
       root.classList.toggle("dark", wasDark);
     };
   }, [appearance, resolvedTheme]);
 
-  const swatches = useMemo(
-    () =>
-      colorTokens.map(([label, token]) => ({
-        label,
-        token,
-        style: { "--ds-preview-swatch": `var(${token})` } as CSSProperties,
-      })),
-    []
-  );
+  const swatches = colorTokens.map(([label, token]) => ({
+    label,
+    token,
+    style: cssVars({ "--ds-preview-swatch": `var(${token})` }),
+  }));
 
   return (
     <div
@@ -575,7 +567,9 @@ export function DesignSystemPreview({
                 <span className="ds-specimen-label">Rows & status</span>
                 <Select
                   value={selectedProvider}
-                  onValueChange={(value) => value && setSelectedProvider(value)}
+                  onValueChange={(value) =>
+                    value != null && value !== "" && setSelectedProvider(value)
+                  }
                 >
                   <SelectTrigger
                     aria-label="Current provider"
@@ -699,7 +693,9 @@ export function DesignSystemPreview({
                     disabled
                     label="Unavailable provider"
                     description="This deliberately long description checks wrapping without widening a compact picker or hiding the reason the provider is unavailable."
-                    onSelect={() => {}}
+                    onSelect={() => {
+                      /* empty */
+                    }}
                   />
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -756,13 +752,17 @@ export function DesignSystemPreview({
                   description="Disabled labels and controls share one state."
                   checked={false}
                   disabled
-                  onCheckedChange={() => {}}
+                  onCheckedChange={() => {
+                    /* empty */
+                  }}
                 />
                 <LoadFeedback
                   state="error"
                   message="Provider catalog is unavailable."
                   retryLabel="Retry"
-                  onRetry={() => {}}
+                  onRetry={() => {
+                    /* empty */
+                  }}
                 />
                 <p>Domain states map to semantic tones inside each feature.</p>
               </Card>
@@ -990,7 +990,7 @@ export function DesignSystemPreview({
                   <Checkbox
                     checked={boldText}
                     id="preview-bold-text"
-                    onCheckedChange={(checked) => setBoldText(checked === true)}
+                    onCheckedChange={(checked) => setBoldText(checked)}
                   />
                   <FieldLabel htmlFor="preview-bold-text">
                     Simulate bold text

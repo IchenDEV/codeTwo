@@ -17,13 +17,13 @@ const STORAGE_KEY = "codetwo.terminal";
 export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   fontFamily: "",
   fontSize: 13,
-  scrollback: 10000,
+  scrollback: 10_000,
 };
 
 function read(): TerminalSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_TERMINAL_SETTINGS;
+    if (raw == null || raw === "") return DEFAULT_TERMINAL_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<TerminalSettings>;
     return {
       fontFamily:
@@ -37,7 +37,7 @@ function read(): TerminalSettings {
       scrollback: clamp(
         parsed.scrollback,
         100,
-        200000,
+        200_000,
         DEFAULT_TERMINAL_SETTINGS.scrollback
       ),
     };

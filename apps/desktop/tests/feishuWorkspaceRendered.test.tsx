@@ -61,7 +61,7 @@ function renderFeishu(callCommand, overrides = {}) {
 
 function resourceButton(container, name) {
   return (
-    Array.from(container.querySelectorAll("button")).find((candidate) =>
+    [...container.querySelectorAll("button")].find((candidate) =>
       candidate.textContent?.includes(name)
     ) ?? null
   );
@@ -292,9 +292,9 @@ describe("FeishuWorkspacePage", () => {
     expect(
       message?.querySelector("[data-feishu-message-avatar]")?.className
     ).toContain("rounded-full");
-    const reactions = Array.from(
-      message?.querySelectorAll("[data-feishu-reactions] > span") ?? []
-    );
+    const reactions = [
+      ...(message?.querySelectorAll("[data-feishu-reactions] > span") ?? []),
+    ];
     expect(reactions.map((reaction) => reaction.textContent)).toEqual([
       "👍2",
       "😊1",
@@ -302,9 +302,9 @@ describe("FeishuWorkspacePage", () => {
     expect(reactions[0]?.getAttribute("aria-label")).toBe(
       "THUMBSUP reaction: 2"
     );
-    const renderedMessages = Array.from(
-      view.container.querySelectorAll("[data-feishu-message]")
-    );
+    const renderedMessages = [
+      ...view.container.querySelectorAll("[data-feishu-message]"),
+    ];
     expect(renderedMessages[1]?.textContent).toContain("Image");
     expect(renderedMessages[1]?.textContent).not.toContain("[image]");
     view.unmount();
@@ -425,7 +425,7 @@ describe("FeishuWorkspacePage", () => {
     expect(document?.querySelector("h1")?.textContent).toBe("Launch plan");
     expect(document?.querySelector("strong")?.textContent).toBe("Approved");
     expect(
-      Array.from(document?.querySelectorAll("li") ?? []).map(
+      [...(document?.querySelectorAll("li") ?? [])].map(
         (item) => item.textContent
       )
     ).toEqual(["Notify the group", "Update the tracker"]);
@@ -720,11 +720,9 @@ describe("FeishuWorkspacePage", () => {
     );
     expect(resourceButton(view.navigationHost, "Chat 8")).not.toBeNull();
     expect(
-      view.navigationHost
-        .querySelector(
-          '[data-feishu-section="contacts"] [data-feishu-resource]'
-        )
-        ?.getAttribute("data-feishu-resource")
+      view.navigationHost.querySelector(
+        '[data-feishu-section="contacts"] [data-feishu-resource]'
+      )?.dataset.feishuResource
     ).toBe("messages:chat-8");
     expect(dom.window.localStorage.getItem("codetwo.feishu.pins.v1")).toContain(
       "chat-8"
@@ -736,11 +734,9 @@ describe("FeishuWorkspacePage", () => {
       expect(resourceButton(restored.navigationHost, "Chat 8")).not.toBeNull()
     );
     expect(
-      restored.navigationHost
-        .querySelector(
-          '[data-feishu-section="contacts"] [data-feishu-resource]'
-        )
-        ?.getAttribute("data-feishu-resource")
+      restored.navigationHost.querySelector(
+        '[data-feishu-section="contacts"] [data-feishu-resource]'
+      )?.dataset.feishuResource
     ).toBe("messages:chat-8");
     expect(
       restored.navigationHost.querySelector('button[aria-label="Unpin Chat 8"]')
@@ -1012,7 +1008,7 @@ describe("FeishuWorkspacePage", () => {
       expect(button(view.settingsHost, "Authorize")).not.toBeNull()
     );
     click(button(view.settingsHost, "Authorize"));
-    await waitFor(() => expect(beginCalls).toBe(2), 1_800);
+    await waitFor(() => expect(beginCalls).toBe(2), 1800);
     view.unmount();
   });
 });

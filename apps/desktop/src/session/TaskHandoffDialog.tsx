@@ -11,7 +11,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { transferTaskToDevice, type TaskHandoffResult } from "../bridge";
+import { transferTaskToDevice } from "../bridge";
+import type { TaskHandoffResult } from "../bridge";
 
 export function TaskHandoffDialog({
   session,
@@ -39,8 +40,8 @@ export function TaskHandoffDialog({
           destination.trim()
         )
       );
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -80,7 +81,9 @@ export function TaskHandoffDialog({
               Choose a new folder on the remote device.
             </p>
           </div>
-          {error && <p className="text-metadata text-destructive">{error}</p>}
+          {error != null && error !== "" && (
+            <p className="text-metadata text-destructive">{error}</p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={onClose}>

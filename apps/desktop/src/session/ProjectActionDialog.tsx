@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 
 import { SettingToggle } from "@/components/business/setting-toggle";
 import { Button } from "@/components/ui/button";
@@ -25,11 +26,8 @@ import { Textarea } from "@/components/ui/textarea";
 import type { KeymapEntry, ProjectScript } from "../bridge";
 import { useT } from "../i18n";
 import { comboFromEvent, formatCombo, isModifierOnly } from "../keys";
-import {
-  projectActionId,
-  projectActionIssue,
-  type ProjectActionDraft,
-} from "./projectActions";
+import { projectActionId, projectActionIssue } from "./projectActions";
+import type { ProjectActionDraft } from "./projectActions";
 
 const EMPTY_ACTION: ProjectActionDraft = {
   name: "",
@@ -69,36 +67,41 @@ export function ProjectActionDialog({
     setSaveError(null);
   }, [open]);
 
-  const validation = useMemo(
-    () => projectActionIssue(draft, bindings, actions),
-    [actions, bindings, draft]
-  );
+  const validation = projectActionIssue(draft, bindings, actions);
   let validationMessage: string | null = null;
   switch (validation?.issue) {
-    case "name_required":
+    case "name_required": {
       validationMessage = t("actionDialog.nameRequired");
       break;
-    case "command_required":
+    }
+    case "command_required": {
       validationMessage = t("actionDialog.commandRequired");
       break;
-    case "prompt_required":
+    }
+    case "prompt_required": {
       validationMessage = t("actionDialog.promptRequired");
       break;
-    case "preview_invalid":
+    }
+    case "preview_invalid": {
       validationMessage = t("actionDialog.previewInvalid");
       break;
-    case "keybinding_conflict":
+    }
+    case "keybinding_conflict": {
       validationMessage = t("actionDialog.keybindingConflict", {
         name: validation.conflict ?? "",
       });
       break;
+    }
+    case undefined: {
+      break;
+    }
   }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitted(true);
     setSaveError(null);
-    if (validation) return;
+    if (validation != null) return;
     setSaving(true);
     try {
       await onSave({
@@ -322,7 +325,10 @@ export function ProjectActionDialog({
             )}
           </FieldGroup>
 
-          {(saveError || (submitted && validationMessage)) && (
+          {((saveError != null && saveError !== "") ||
+            (submitted &&
+              validationMessage != null &&
+              validationMessage !== "")) && (
             <FieldError>{saveError ?? validationMessage}</FieldError>
           )}
 

@@ -6,7 +6,7 @@ import React, { useEffect, useState } from "react";
 import { activateDom, dom, restoreDom } from "../../tests/domTestHarness";
 
 const canvasStyles = await Bun.file(
-  new URL("./styles.css", import.meta.url)
+  new URL("styles.css", import.meta.url)
 ).text();
 
 let act: any;
@@ -125,8 +125,8 @@ function FakeExcalidraw(props: any) {
         );
       },
       updateScene: ({ elements, appState }: any) => {
-        if (elements) fakeState.elements = elements;
-        if (appState)
+        if (elements != null) fakeState.elements = elements;
+        if (appState != null)
           fakeState.appState = { ...fakeState.appState, ...appState };
         latestProps?.onChange?.(
           fakeState.elements,
@@ -136,11 +136,11 @@ function FakeExcalidraw(props: any) {
       },
       resetScene: ({ elements, appState, files }: any) => {
         fakeState.elements = elements ?? [];
-        fakeState.appState = { ...fakeState.appState, ...(appState ?? {}) };
+        fakeState.appState = { ...fakeState.appState, ...appState };
         fakeState.files = files ?? {};
       },
-      refresh: () => undefined,
-      setActiveTool: () => undefined,
+      refresh: () => {},
+      setActiveTool: () => {},
     };
     props.excalidrawAPI?.(latestApi);
   }, [props]);
@@ -200,8 +200,8 @@ function FakeExcalidraw(props: any) {
   );
 }
 
-mock.module("./styles.css", () => ({}));
-mock.module("./excalidrawAdapter", () => ({
+void mock.module("./styles.css", () => ({}));
+void mock.module("./excalidrawAdapter", () => ({
   Excalidraw: FakeExcalidraw,
   newImageElement: fakeImageElement,
   exportToCanvas: async (options: any) => {
@@ -301,7 +301,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
 
   test("keeps C2 chrome in a bounded second row without toolbar overlap", () => {
     const chromeRule =
-      canvasStyles.match(/\.canvas-editor__chrome \{([\s\S]*?)\n\}/)?.[1] ?? "";
+      /\.canvas-editor__chrome \{([\s\S]*?)\n\}/.exec(canvasStyles)?.[1] ?? "";
     expect(chromeRule).toContain(
       "inset-block-start: var(--canvas-chrome-offset)"
     );
@@ -326,8 +326,8 @@ describe("CanvasEditor behavioral interaction contract", () => {
       "inset-block-start: var(--canvas-space-module-inset)"
     );
     const narrowRule =
-      canvasStyles.match(
-        /@media screen and \(max-width: 450px\) \{([\s\S]*?)\n\}/
+      /@media screen and \(max-width: 450px\) \{([\s\S]*?)\n\}/.exec(
+        canvasStyles
       )?.[1] ?? "";
     expect(narrowRule).toContain("--canvas-chrome-offset: 8rem;");
   });
@@ -360,7 +360,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
         initiallyExpanded
       />
     );
-    await act(async () => undefined);
+    await act(async () => {});
     expect(latestProps.theme).toBe("dark");
     expect(
       (container.firstElementChild as HTMLElement).dataset.canvasTheme
@@ -378,7 +378,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
         initiallyExpanded
       />
     );
-    await act(async () => undefined);
+    await act(async () => {});
     expect(latestProps.theme).toBe("light");
     expect(
       (historical.container.firstElementChild as HTMLElement).dataset
@@ -412,7 +412,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
   });
 
   test("debounces autosave without incrementing the core-owned revision", async () => {
-    const onChange = mock(() => undefined);
+    const onChange = mock(() => {});
     const value = {
       engine: "@excalidraw/excalidraw",
       engineVersion: "0.18.1",
@@ -439,7 +439,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
         onChange={onChange}
       />
     );
-    await act(async () => undefined);
+    await act(async () => {});
     await act(async () => {
       latestProps.onChange([], fakeState.appState, {});
     });
@@ -457,7 +457,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
       width: 80,
       height: 40,
     }));
-    const onChange = mock(() => undefined);
+    const onChange = mock(() => {});
     render(
       <CanvasEditor
         initiallyExpanded
@@ -504,7 +504,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
   });
 
   test("exposes only bounded C2 style presets and focuses the editor root", () => {
-    const onFocusChange = mock(() => undefined);
+    const onFocusChange = mock(() => {});
     const { container } = render(
       <CanvasEditor initiallyExpanded onFocusChange={onFocusChange} />
     );
@@ -532,7 +532,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
 
   test("prunes third-party chrome while keeping approved tools, presets, Image, and Done", async () => {
     const { container } = render(<CanvasEditor initiallyExpanded />);
-    await act(async () => undefined);
+    await act(async () => {});
     const root = container.firstElementChild as HTMLElement;
     expect(root.querySelector(".main-menu-trigger")?.hidden).toBe(true);
     expect(root.querySelector('[aria-label="Library"]')?.hidden).toBe(true);
@@ -557,10 +557,8 @@ describe("CanvasEditor behavioral interaction contract", () => {
     expect(
       screen.getByRole("button", { name: "Stroke color black" })
     ).toBeTruthy();
-    fireEvent.click(
-      root.querySelector('[aria-label="Rectangle"]') as HTMLElement
-    );
-    await act(async () => undefined);
+    fireEvent.click(root.querySelector('[aria-label="Rectangle"]'));
+    await act(async () => {});
     expect(root.querySelector(".selected-shape-actions")?.hidden).toBe(true);
     expect(
       screen.getByRole("button", { name: "Fill color blue" })
@@ -681,14 +679,14 @@ describe("CanvasEditor behavioral interaction contract", () => {
         locked: false,
       },
     ];
-    const bounds = getCanvasExportBounds(scene as any, 24);
+    const bounds = getCanvasExportBounds(scene, 24);
     expect(bounds).toEqual({ minX: -124, minY: 26, maxX: 4924, maxY: 3074 });
     const originalCreateElement = document.createElement.bind(document);
     (document as any).createElement = (tagName: string) =>
       tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
     try {
       const results = await exportCanvasPng(
-        scene as any,
+        scene,
         fakeState.appState as any,
         {},
         { maxBytes: 100_000_000 }

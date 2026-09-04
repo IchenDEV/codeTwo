@@ -93,15 +93,15 @@ describe("persisted transcript projection", () => {
         seq: 1,
         role: "user",
         part: { kind: "prompt", text: "inspect", display: "inspect" },
-        created_at: 1_000,
-        started_at: 1_000,
+        created_at: 1000,
+        started_at: 1000,
       },
       {
         seq: 2,
         role: "agent",
         part: { kind: "text", text: "checking" },
-        created_at: 1_500,
-        started_at: 1_500,
+        created_at: 1500,
+        started_at: 1500,
       },
       {
         seq: 3,
@@ -112,19 +112,19 @@ describe("persisted transcript projection", () => {
           title: "Read",
           status: "completed",
         },
-        created_at: 4_000,
-        started_at: 2_000,
+        created_at: 4000,
+        started_at: 2000,
       },
     ]);
 
-    expect(turns[0]).toMatchObject({ startedAt: 1_000, endedAt: 4_000 });
+    expect(turns[0]).toMatchObject({ startedAt: 1000, endedAt: 4000 });
     expect(turns[0].content).toEqual([
-      { kind: "text", text: "checking", transcriptSeq: 2, createdAt: 1_500 },
-      { kind: "tool", toolId: "read-1", transcriptSeq: 3, createdAt: 4_000 },
+      { kind: "text", text: "checking", transcriptSeq: 2, createdAt: 1500 },
+      { kind: "tool", toolId: "read-1", transcriptSeq: 3, createdAt: 4000 },
     ]);
     expect(turns[0].tools[0]).toMatchObject({
-      startedAt: 2_000,
-      endedAt: 4_000,
+      startedAt: 2000,
+      endedAt: 4000,
     });
   });
 
@@ -567,7 +567,7 @@ describe("long prompt preview", () => {
     const prompt = `${"😀".repeat(LONG_PROMPT_MAX_CHARS + 20)}\n${Array(9).fill("tail").join("\n")}`;
     const preview = collapsedPrompt(prompt);
 
-    expect(Array.from(preview)).toHaveLength(LONG_PROMPT_MAX_CHARS);
+    expect([...preview]).toHaveLength(LONG_PROMPT_MAX_CHARS);
     expect(preview).not.toContain("tail");
     expect(preview.endsWith("😀")).toBe(true);
   });

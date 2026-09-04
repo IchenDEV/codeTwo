@@ -9,8 +9,8 @@ import type {
 export const SCENE_SCHEMA_ID =
   "https://agent-scenes.org/schemas/1.0.0/scene.schema.json";
 
-const SLUG_PATTERN = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
-const ARTIFACT_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+const SLUG_PATTERN = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u;
+const ARTIFACT_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
 
 export interface SceneDraftIssue {
   field: string;
@@ -20,7 +20,7 @@ export interface SceneDraftIssue {
 
 export function splitSceneList(value: string): string[] {
   return value
-    .split(/[\n,]/)
+    .split(/[\n,]/u)
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
@@ -33,10 +33,10 @@ export function slugSceneName(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9.-]+/g, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/\.{2,}/g, ".")
-    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
+    .replaceAll(/[^a-z0-9.-]+/gu, "-")
+    .replaceAll(/-{2,}/gu, "-")
+    .replaceAll(/\.{2,}/gu, ".")
+    .replaceAll(/^[^a-z0-9]+|[^a-z0-9]+$/gu, "")
     .slice(0, 64);
 }
 
@@ -47,7 +47,7 @@ function nextAvailableName(
   const seed = slugSceneName(base) || "custom-scene";
   if (!existing.has(seed)) return seed;
   for (let suffix = 2; suffix < 10_000; suffix += 1) {
-    const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/, "");
+    const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/u, "");
     if (!existing.has(candidate)) return candidate;
   }
   return `custom-${Date.now()}`;
@@ -174,13 +174,20 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   }
 
   for (const [index, criterion] of (scene.exit?.criteria ?? []).entries()) {
-    if (criterion.kind === "checklist_complete" && !criterion.artifact) {
+    if (
+      criterion.kind === "checklist_complete" &&
+      (criterion.artifact == null || criterion.artifact === "")
+    ) {
       issues.push({
         field: `exit.criteria.${index}.artifact`,
         key: "sceneEditor.errorChecklistArtifact",
       });
     }
-    if (criterion.kind === "custom" && !criterion.description?.trim()) {
+    if (
+      criterion.kind === "custom" &&
+      (criterion.description?.trim() == null ||
+        criterion.description.trim() === "")
+    ) {
       issues.push({
         field: `exit.criteria.${index}.description`,
         key: "sceneEditor.errorCustomCriterion",
@@ -191,26 +198,35 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   for (const [index, hook] of (scene.hooks ?? []).entries()) {
     if (
       hook.on === "schedule" &&
-      hook.schedule?.trim().split(/\s+/).length !== 5
+      hook.schedule?.trim().split(/\s+/u).length !== 5
     ) {
       issues.push({
         field: `hooks.${index}.schedule`,
         key: "sceneEditor.errorSchedule",
       });
     }
-    if (hook.action.kind === "suggest_scene" && !hook.action.scene?.trim()) {
+    if (
+      hook.action.kind === "suggest_scene" &&
+      (hook.action.scene?.trim() == null || hook.action.scene.trim() === "")
+    ) {
       issues.push({
         field: `hooks.${index}.action.scene`,
         key: "sceneEditor.errorHookScene",
       });
     }
-    if (hook.action.kind === "run_macro" && !hook.action.macro?.trim()) {
+    if (
+      hook.action.kind === "run_macro" &&
+      (hook.action.macro?.trim() == null || hook.action.macro.trim() === "")
+    ) {
       issues.push({
         field: `hooks.${index}.action.macro`,
         key: "sceneEditor.errorHookMacro",
       });
     }
-    if (hook.action.kind === "notify" && !hook.action.message?.trim()) {
+    if (
+      hook.action.kind === "notify" &&
+      (hook.action.message?.trim() == null || hook.action.message.trim() === "")
+    ) {
       issues.push({
         field: `hooks.${index}.action.message`,
         key: "sceneEditor.errorHookMessage",

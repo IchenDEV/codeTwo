@@ -11,6 +11,8 @@ import type {
 } from "../bridge";
 import { pluginUiComponentId } from "../pluginModel";
 import { BUILTIN_UI_COMPONENTS } from "./builtinComponents";
+
+export { BUILTIN_UI_COMPONENTS } from "./builtinComponents";
 import type {
   PluginManagerComponent,
   PluginManagerMarketplaceItem,
@@ -39,8 +41,6 @@ const BUNDLE_CONTRIBUTIONS = [
   ["scenes", "Scenes"],
   ["pipelines", "Pipelines"],
 ] as const;
-
-export { BUILTIN_UI_COMPONENTS };
 
 export type BuiltinUiComponentId = (typeof BUILTIN_UI_COMPONENTS)[number]["id"];
 
@@ -74,7 +74,7 @@ export interface PluginManagerCatalogInput {
 export function normalizePluginProjectPath(path: string): string {
   const trimmed = path.trim();
   if (!trimmed) return ".";
-  const withoutTrailingSeparators = trimmed.replace(/[\\/]+$/, "");
+  const withoutTrailingSeparators = trimmed.replace(/[\\/]+$/u, "");
   return withoutTrailingSeparators || (trimmed.startsWith("/") ? "/" : trimmed);
 }
 
@@ -93,7 +93,7 @@ function titleFor(id: string): string {
   return (
     DISPLAY_NAMES[id] ??
     id
-      .split(/[-_]/)
+      .split(/[-_]/u)
       .filter(Boolean)
       .map((part) => part[0]?.toUpperCase() + part.slice(1))
       .join(" ")
@@ -169,13 +169,13 @@ function componentState(
 
 function scopeSupport(
   entry: ManagedPluginCatalogEntry
-): Array<"user" | "project"> {
+): ("user" | "project")[] {
   return entry.metadata.scope_support.includes("project")
     ? ["user", "project"]
     : ["user"];
 }
 
-function bundleScope(_bundle: PluginInfo): Array<"user" | "project"> {
+function bundleScope(_bundle: PluginInfo): ("user" | "project")[] {
   // InstalledPlugin.scope records where a bundle came from; it has no concrete project identity
   // and the protocol runtime is currently hosted by the user graph. Do not present that provenance
   // as a project-local lifecycle switch until the backend has a real (project, bundle) policy.
@@ -195,11 +195,11 @@ function bundleState(bundle: PluginInfo): PluginManagerScopedState {
     );
   return {
     effectiveEnabled,
-    status: !effectiveEnabled
-      ? "disabled"
-      : requiresTrust && !bundle.trusted
+    status: effectiveEnabled
+      ? requiresTrust && !bundle.trusted
         ? "pending"
-        : "active",
+        : "active"
+      : "disabled",
     error:
       bundle.diagnostics.find((diagnostic) => diagnostic.level === "error")
         ?.message ?? null,
@@ -251,7 +251,7 @@ function findSkillBundle(
   skill: SkillInfo,
   bundles: PluginInfo[]
 ): PluginInfo | undefined {
-  if (!skill.source) return undefined;
+  if (skill.source == null || skill.source === "") return undefined;
   const source = skill.source.toLocaleLowerCase();
   return bundles.find(
     (bundle) =>
@@ -345,9 +345,10 @@ export function buildPluginManagerCatalog({
             ),
           ]
         : undefined,
-      commands: policyEntry?.commands?.length
-        ? policyEntry.commands
-        : bundle.runtime_commands.map((command) => command.id),
+      commands:
+        policyEntry != null && (policyEntry.commands?.length ?? 0) > 0
+          ? policyEntry.commands
+          : bundle.runtime_commands.map((command) => command.id),
       services: policyEntry?.services ?? [],
       componentIds: [
         ...bundle.ui_contributions.map((contribution) =>

@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { SettingRow } from "@/components/business/setting-row";
 import { SettingToggle } from "@/components/business/setting-toggle";
@@ -21,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TooltipButton } from "@/components/ui/tooltip";
+import { cssVars } from "@/lib/cssVars";
 
 import {
   CODE_FONTS,
@@ -36,17 +31,16 @@ import {
   themeCatalog,
   updateCustomTheme,
   useAppearanceSettings,
-  type AppearanceColorKey,
-  type AppearanceTheme,
-  type CodeFontId,
-  type ColorScheme,
-  type DiffMarkerPreference,
-  type FontWeightId,
-  type ReduceMotionPreference,
-  type SchemeAppearanceProfile,
-  type ThemePalette,
-  type ThemePreference,
-  type UiFontId,
+} from "../appearance";
+import type {
+  AppearanceColorKey,
+  AppearanceTheme,
+  ColorScheme,
+  DiffMarkerPreference,
+  ReduceMotionPreference,
+  SchemeAppearanceProfile,
+  ThemePalette,
+  ThemePreference,
 } from "../appearance";
 import {
   pickAppearanceThemeDocument,
@@ -67,12 +61,12 @@ const SCHEMES: {
 
 const PROFILE_SCHEMES = ["light", "dark"] as const;
 
-function paletteVariables(palette: ThemePalette): CSSProperties {
-  return {
+function paletteVariables(palette: ThemePalette) {
+  return cssVars({
     "--appearance-preview-accent": palette.accent,
     "--appearance-preview-background": palette.background,
     "--appearance-preview-foreground": palette.foreground,
-  } as CSSProperties;
+  });
 }
 
 function MiniApp({ palette }: { palette: ThemePalette }) {
@@ -388,7 +382,7 @@ function TypographyProfileEditor({
         <span className="appearance-font-controls">
           <Select
             value={profile.uiFont}
-            onValueChange={(font) => onChange({ uiFont: font as UiFontId })}
+            onValueChange={(font) => onChange({ uiFont: font! })}
           >
             <SelectTrigger
               size="sm"
@@ -409,9 +403,7 @@ function TypographyProfileEditor({
           </Select>
           <Select
             value={profile.uiFontWeight}
-            onValueChange={(weight) =>
-              onChange({ uiFontWeight: weight as FontWeightId })
-            }
+            onValueChange={(weight) => onChange({ uiFontWeight: weight! })}
           >
             <SelectTrigger
               size="sm"
@@ -439,7 +431,7 @@ function TypographyProfileEditor({
         <span className="appearance-font-controls">
           <Select
             value={profile.codeFont}
-            onValueChange={(font) => onChange({ codeFont: font as CodeFontId })}
+            onValueChange={(font) => onChange({ codeFont: font! })}
           >
             <SelectTrigger
               size="sm"
@@ -460,9 +452,7 @@ function TypographyProfileEditor({
           </Select>
           <Select
             value={profile.codeFontWeight}
-            onValueChange={(weight) =>
-              onChange({ codeFontWeight: weight as FontWeightId })
-            }
+            onValueChange={(weight) => onChange({ codeFontWeight: weight! })}
           >
             <SelectTrigger
               size="sm"
@@ -538,7 +528,7 @@ export function AppearanceSettings({
 }) {
   const t = useT();
   const settings = useAppearanceSettings();
-  const catalog = useMemo(() => themeCatalog(settings), [settings]);
+  const catalog = themeCatalog(settings);
   const activeTheme =
     catalog.find((theme) => theme.id === settings.activeThemeId) ?? catalog[0];
   const fileInput = useRef<HTMLInputElement>(null);
@@ -587,8 +577,8 @@ export function AppearanceSettings({
       const filename = `${
         activeTheme.name
           .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "") || "codetwo-theme"
+          .replaceAll(/[^a-z0-9]+/gu, "-")
+          .replaceAll(/^-|-$/gu, "") || "codetwo-theme"
       }.json`;
       const nativeResult = await saveAppearanceThemeDocument(filename, json);
       if (nativeResult === "cancelled") return;

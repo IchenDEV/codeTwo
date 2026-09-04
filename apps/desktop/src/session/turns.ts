@@ -16,7 +16,7 @@ export function canvasIdsToPurgeAfterTurnStart(
   editorUnchanged = true
 ): string[] {
   return accepted && editorUnchanged
-    ? Array.from(new Set(canvasIds.filter((id) => id.length > 0)))
+    ? [...new Set(canvasIds.filter((id) => id.length > 0))]
     : [];
 }
 
@@ -43,7 +43,7 @@ export interface CanvasFrozenRef {
 
 /** Provider-image failures are the only terminal errors that may offer a structure-only retry. */
 export function isCanvasProviderImageError(message: string): boolean {
-  return /provider.*image|image.*unsupported|ProviderImageUnsupported/i.test(
+  return /provider.*image|image.*unsupported|ProviderImageUnsupported/iu.test(
     message
   );
 }
@@ -54,7 +54,12 @@ export function canvasRetryRefsForTerminal(
   message: string | undefined,
   refs: readonly CanvasFrozenRef[]
 ): CanvasFrozenRef[] {
-  if (kind !== "error" || !message || !isCanvasProviderImageError(message))
+  if (
+    kind !== "error" ||
+    message == null ||
+    message === "" ||
+    !isCanvasProviderImageError(message)
+  )
     return [];
   return refs.map((ref) => ({ id: ref.id, revision: ref.revision }));
 }
@@ -142,7 +147,7 @@ export interface PromptImage {
 }
 
 const PROMPT_ATTACHMENT_MARKER =
-  /\[attachment:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi;
+  /\[attachment:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/giu;
 
 function promptImagesFromCanonicalText(text: string): PromptImage[] {
   return Array.from(text.matchAll(PROMPT_ATTACHMENT_MARKER), (match) => ({
@@ -198,7 +203,7 @@ export function newTurn(
   promptImages: PromptImage[] = []
 ): Turn {
   return {
-    id: nextId++,
+    id: (nextId += 1),
     requestId,
     accepted: false,
     streamBoundaryKnown: false,
@@ -259,31 +264,35 @@ export function sameDocBlocks(
   if (a.length !== b.length) return false;
   return a.every((left, index) => {
     const right = b[index];
-    if (!right || left.type !== right.type) return false;
+    if (right == null || left.type !== right.type) return false;
     switch (left.type) {
-      case "text":
+      case "text": {
         return right.type === "text" && left.text === right.text;
+      }
       case "file":
-      case "image":
+      case "image": {
         return right.type === left.type && left.path === right.path;
-      case "session":
+      }
+      case "session": {
         return (
           right.type === "session" &&
           left.session_id === right.session_id &&
           left.through_seq === right.through_seq
         );
-      case "canvas":
+      }
+      case "canvas": {
         return (
           right.type === "canvas" &&
           left.id === right.id &&
           left.frozen_revision === right.frozen_revision &&
           left.pixel_policy === right.pixel_policy
         );
+      }
       case "skill": {
         if (right.type !== "skill" || left.skill_id !== right.skill_id)
           return false;
-        const leftKeys = Object.keys(left.params).sort();
-        const rightKeys = Object.keys(right.params).sort();
+        const leftKeys = Object.keys(left.params).toSorted();
+        const rightKeys = Object.keys(right.params).toSorted();
         return (
           leftKeys.length === rightKeys.length &&
           leftKeys.every(
@@ -292,6 +301,15 @@ export function sameDocBlocks(
               left.params[key] === right.params[key]
           )
         );
+      }
+      case "appshot": {
+        throw new Error('Not implemented yet: "appshot" case');
+      }
+      case "attachment": {
+        throw new Error('Not implemented yet: "attachment" case');
+      }
+      case "issue": {
+        throw new Error('Not implemented yet: "issue" case');
       }
     }
   });
@@ -314,7 +332,7 @@ export function isRunning(t: Turn | undefined): boolean {
   return !!t && t.endedAt === undefined;
 }
 
-type ToolUpdate = {
+interface ToolUpdate {
   id: string;
   title: string;
   status: string;
@@ -324,7 +342,7 @@ type ToolUpdate = {
   transcriptSeq?: number | null;
   startedAt?: number;
   endedAt?: number;
-};
+}
 
 function terminalToolStatus(status: string): boolean {
   return [
@@ -348,13 +366,13 @@ function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
     return tools;
   }
   const entry: ToolEntry = {
-    ...(existing ?? {}),
+    ...existing,
     id: update.id,
-    title: update.title || existing?.title || update.id,
+    title: (update.title || existing?.title) ?? update.id,
     activityTitle:
-      existing?.activityTitle ||
+      existing?.activityTitle ??
       (isAgentActivityTitle(update.title) ? update.title : undefined),
-    status: update.status || existing?.status || "pending",
+    status: (update.status || existing?.status) ?? "pending",
     outputs: mergeToolOutputs(existing?.outputs ?? [], update.outputs ?? []),
     startedAt: existing?.startedAt ?? update.startedAt,
     endedAt: update.endedAt ?? existing?.endedAt,
@@ -463,7 +481,7 @@ export function applyEvent(
   // separate row, so its output can never bind to a prompt this client lost the core-side race for.
   if (ev.event === "turn_started") {
     let match = -1;
-    if (requestId) {
+    if (requestId != null && requestId !== "") {
       for (let index = turns.length - 1; index >= 0; index -= 1) {
         if (turns[index].requestId === requestId) {
           match = index;
@@ -471,8 +489,9 @@ export function applyEvent(
         }
       }
     } else {
-      const tail = turns[turns.length - 1];
-      if (isRunning(tail) && !tail.requestId) match = turns.length - 1;
+      const tail = turns.at(-1)!;
+      if (isRunning(tail) && (tail.requestId == null || tail.requestId === ""))
+        match = turns.length - 1;
     }
     if (match >= 0) {
       const list = [...turns];
@@ -494,9 +513,10 @@ export function applyEvent(
   }
 
   if (ev.event === "prompt_queued") {
-    const match = requestId
-      ? turns.findIndex((turn) => turn.requestId === requestId)
-      : -1;
+    const match =
+      requestId != null && requestId !== ""
+        ? turns.findIndex((turn) => turn.requestId === requestId)
+        : -1;
     if (match < 0) return turns;
     const list = [...turns];
     list[match] = {
@@ -508,9 +528,10 @@ export function applyEvent(
   }
 
   if (ev.event === "steer_accepted") {
-    const match = requestId
-      ? turns.findIndex((turn) => turn.requestId === requestId)
-      : -1;
+    const match =
+      requestId != null && requestId !== ""
+        ? turns.findIndex((turn) => turn.requestId === requestId)
+        : -1;
     if (match < 0) return turns;
     const list = turns.map((turn, index) =>
       index !== match && isRunning(turn) && turn.accepted
@@ -527,7 +548,7 @@ export function applyEvent(
     return list;
   }
 
-  if (ev.event === "error" && requestId) {
+  if (ev.event === "error" && requestId != null && requestId !== "") {
     let match = -1;
     for (let index = turns.length - 1; index >= 0; index -= 1) {
       if (turns[index].requestId === requestId) {
@@ -553,11 +574,7 @@ export function applyEvent(
   }
 
   // A warning emitted while the session is idle is a completed notice, not a phantom running turn.
-  if (
-    ev.event === "error" &&
-    !ev.terminal &&
-    !isRunning(turns[turns.length - 1])
-  ) {
+  if (ev.event === "error" && !ev.terminal && !isRunning(turns.at(-1))) {
     const notice = newTurn("(session notice)");
     notice.error = ev.message;
     notice.endedAt = Date.now();
@@ -568,7 +585,7 @@ export function applyEvent(
   // ended transcript still starts a fresh remote turn instead of mutating the previous one.
   const list = [...turns];
   let i = -1;
-  if (activeRequestId) {
+  if (activeRequestId != null && activeRequestId !== "") {
     for (let index = list.length - 1; index >= 0; index -= 1) {
       if (isRunning(list[index]) && list[index].requestId === activeRequestId) {
         i = index;
@@ -608,10 +625,11 @@ export function applyEvent(
   const observedAt = Date.now();
 
   switch (ev.event) {
-    case "memory_context":
+    case "memory_context": {
       cur.memory = ev.receipt;
       break;
-    case "agent_text":
+    }
+    case "agent_text": {
       cur.observedTextDeltas += 1;
       if (cur.pendingTextDeltaSkips > 0) {
         cur.pendingTextDeltaSkips -= 1;
@@ -626,7 +644,8 @@ export function applyEvent(
         );
       }
       break;
-    case "agent_thought":
+    }
+    case "agent_thought": {
       cur.observedThoughtDeltas += 1;
       if (cur.pendingThoughtDeltaSkips > 0) {
         cur.pendingThoughtDeltaSkips -= 1;
@@ -634,6 +653,7 @@ export function applyEvent(
         cur.thoughts = [...cur.thoughts, ev.text];
       }
       break;
+    }
     case "tool_call": {
       cur.tools = upsertTool(cur.tools, {
         id: ev.id,
@@ -654,17 +674,56 @@ export function applyEvent(
       );
       break;
     }
-    case "plan":
+    case "plan": {
       cur.plan = normalizePlanEntries(ev.entries);
       break;
-    case "turn_ended":
+    }
+    case "turn_ended": {
       cur.stopReason = ev.stop_reason;
       cur.endedAt = Date.now();
       break;
-    case "error":
+    }
+    case "error": {
       cur.error = ev.message;
       if (ev.terminal) cur.endedAt = Date.now();
       break;
+    }
+    case "artifact_produced": {
+      throw new Error('Not implemented yet: "artifact_produced" case');
+    }
+    case "context_window": {
+      throw new Error('Not implemented yet: "context_window" case');
+    }
+    case "elicitation_request": {
+      throw new Error('Not implemented yet: "elicitation_request" case');
+    }
+    case "execution_policy_changed": {
+      throw new Error('Not implemented yet: "execution_policy_changed" case');
+    }
+    case "exit_criteria_met": {
+      throw new Error('Not implemented yet: "exit_criteria_met" case');
+    }
+    case "hook_suggestion": {
+      throw new Error('Not implemented yet: "hook_suggestion" case');
+    }
+    case "hook_turn_started": {
+      throw new Error('Not implemented yet: "hook_turn_started" case');
+    }
+    case "provider_changed": {
+      throw new Error('Not implemented yet: "provider_changed" case');
+    }
+    case "session_cost": {
+      throw new Error('Not implemented yet: "session_cost" case');
+    }
+    case "task_snapshot_changed": {
+      throw new Error('Not implemented yet: "task_snapshot_changed" case');
+    }
+    case "test_signal": {
+      throw new Error('Not implemented yet: "test_signal" case');
+    }
+    case "worktree_discarded": {
+      throw new Error('Not implemented yet: "worktree_discarded" case');
+    }
   }
 
   list[i] = cur;
@@ -712,7 +771,7 @@ function mergeTurnContent(
       // Snapshot state wins an equal sequence because it was read after persistence.
       bySeq.set(entry.transcriptSeq, entry);
     }
-    const ordered = [...bySeq.values()].sort(
+    const ordered = [...bySeq.values()].toSorted(
       (left, right) => (left.transcriptSeq ?? 0) - (right.transcriptSeq ?? 0)
     );
     const seenTools = new Set<string>();
@@ -774,12 +833,13 @@ export function mergeLoadedTurns(
   if (live.length === 0) return loaded;
   if (loaded.length === 0) return live;
 
-  const loadedTail = loaded[loaded.length - 1];
-  if (!loadedTail.requestId) return [...loaded, ...live];
+  const loadedTail = loaded.at(-1)!;
+  if (loadedTail.requestId == null || loadedTail.requestId === "")
+    return [...loaded, ...live];
   const liveIndex = live.findIndex(
     (turn) => turn.requestId === loadedTail.requestId
   );
-  if (liveIndex < 0) return [...loaded, ...live];
+  if (liveIndex === -1) return [...loaded, ...live];
   const liveTurn = live[liveIndex];
 
   let tools = [...loadedTail.tools];
@@ -851,7 +911,7 @@ export function turnsFromTranscript(
     createdAt?: number,
     startedAt?: number
   ) => {
-    const at = createdAt && createdAt > 0 ? createdAt : Date.now();
+    const at = createdAt != null && createdAt > 0 ? createdAt : Date.now();
     if (role === "user" && (part.kind === "text" || part.kind === "prompt")) {
       out.push({
         ...newTurn(
@@ -874,22 +934,25 @@ export function turnsFromTranscript(
         endedAt: Date.now(),
       });
     }
-    const cur = out[out.length - 1];
+    const cur = out.at(-1)!;
     switch (part.kind) {
-      case "text":
+      case "text": {
         cur.text += part.text;
         cur.textDeltas.push(part.text);
         cur.content = appendTextContent(cur.content, part.text, seq, at);
         break;
-      case "prompt":
+      }
+      case "prompt": {
         cur.text += part.text;
         cur.textDeltas.push(part.text);
         cur.content = appendTextContent(cur.content, part.text, seq, at);
         break;
-      case "reasoning":
+      }
+      case "reasoning": {
         cur.thoughts.push(part.text);
         break;
-      case "tool_call":
+      }
+      case "tool_call": {
         cur.tools = upsertTool(cur.tools, {
           id: part.id,
           title: part.title,
@@ -898,14 +961,16 @@ export function turnsFromTranscript(
           agentInput: part.agent_input,
           outputs: part.outputs,
           transcriptSeq: seq,
-          startedAt: startedAt && startedAt > 0 ? startedAt : at,
+          startedAt: startedAt != null && startedAt > 0 ? startedAt : at,
           endedAt: terminalToolStatus(part.status) ? at : undefined,
         });
         cur.content = appendToolContent(cur.content, part.id, seq, at);
         break;
-      case "plan":
+      }
+      case "plan": {
         cur.plan = normalizePlanEntries(part.entries);
         break;
+      }
     }
     cur.endedAt = Math.max(cur.endedAt ?? at, at);
   };
@@ -920,10 +985,10 @@ export function turnsFromTranscript(
       );
     } else push(entry[1], entry[0]);
   }
-  if (out.length > 0 && lastTurnRequestId) {
-    out[out.length - 1].requestId = lastTurnRequestId;
+  if (out.length > 0 && lastTurnRequestId != null && lastTurnRequestId !== "") {
+    out.at(-1)!.requestId = lastTurnRequestId;
   }
-  if (lastTurnRunning && out.length > 0) delete out[out.length - 1].endedAt;
+  if (lastTurnRunning && out.length > 0) delete out.at(-1)!.endedAt;
   return out;
 }
 

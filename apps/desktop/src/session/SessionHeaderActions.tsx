@@ -21,11 +21,10 @@ import {
 import { SplitButton } from "@/components/ui/split-button";
 
 import type { ProjectScript } from "../bridge";
-import {
-  gitNextActionLabel,
-  runGitNextAction,
-  type GitNextActionItem,
-  type GitNextActionProjection,
+import { gitNextActionLabel, runGitNextAction } from "../git/nextAction";
+import type {
+  GitNextActionItem,
+  GitNextActionProjection,
 } from "../git/nextAction";
 import { useT } from "../i18n";
 import { formatCombo } from "../keys";
@@ -83,7 +82,7 @@ export function SessionHeaderActions({
     onClick: () => runGitAction(item),
     disabled: item.disabled,
   }));
-  if (!gitAction.primary.disabled) {
+  if (gitAction.primary.disabled !== true) {
     gitAlternatives.push({
       label: t("header.checkpoint"),
       onClick: onCheckpoint,

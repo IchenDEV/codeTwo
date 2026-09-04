@@ -51,7 +51,7 @@ async function client() {
   if (!isElectrobun)
     throw new Error("C2 desktop APIs are unavailable in this browser");
   rpcPromise ??= createClient();
-  return rpcPromise;
+  return await rpcPromise;
 }
 
 export async function desktopCall<T>(
@@ -84,20 +84,20 @@ export function listenDesktop<T>(
 export async function desktopOpenDialog(
   options: OpenDialogOptions
 ): Promise<string[]> {
-  return (await client()).request.dialogOpen(options);
+  return await (await client()).request.dialogOpen(options);
 }
 
 export async function desktopSaveDialog(
   options: SaveDialogOptions
 ): Promise<string | null> {
-  return (await client()).request.dialogSave(options);
+  return await (await client()).request.dialogSave(options);
 }
 
 export async function desktopConfirm(
   message: string,
   title?: string
 ): Promise<boolean> {
-  return (await client()).request.confirm({ message, title });
+  return await (await client()).request.confirm({ message, title });
 }
 
 export async function desktopShowContextMenu(
@@ -107,66 +107,66 @@ export async function desktopShowContextMenu(
 }
 
 export async function desktopOpenExternal(url: string): Promise<boolean> {
-  return (await client()).request.openExternal({ url });
+  return await (await client()).request.openExternal({ url });
 }
 
 export async function desktopOpenPath(path: string): Promise<boolean> {
-  return (await client()).request.openPath({ path });
+  return await (await client()).request.openPath({ path });
 }
 
 export async function desktopOpenWorkspace(
   path: string,
   target: WorkspaceOpenTarget
 ): Promise<boolean> {
-  return (await client()).request.openWorkspace({ path, target });
+  return await (await client()).request.openWorkspace({ path, target });
 }
 
 export async function desktopShowItemInFolder(path: string): Promise<boolean> {
-  return (await client()).request.showItemInFolder({ path });
+  return await (await client()).request.showItemInFolder({ path });
 }
 
 export async function desktopSetSystemBadgeCount(
   count: number
 ): Promise<boolean> {
-  return (await client()).request.systemBadgeSet({ count });
+  return await (await client()).request.systemBadgeSet({ count });
 }
 
 export async function desktopPerformTitlebarDoubleClick(): Promise<boolean> {
-  return (await client()).request.titlebarDoubleClick();
+  return await (await client()).request.titlebarDoubleClick();
 }
 
 export async function desktopSystemProfileAvatar(): Promise<string | null> {
-  return (await client()).request.systemProfileAvatar();
+  return await (await client()).request.systemProfileAvatar();
 }
 
 export async function desktopAppshotSettings(): Promise<AppshotSettings> {
-  return (await client()).request.appshotsSettings();
+  return await (await client()).request.appshotsSettings();
 }
 
 export async function desktopUpdateAppshotSettings(
   patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>
 ): Promise<AppshotSettings> {
-  return (await client()).request.appshotsUpdate(patch);
+  return await (await client()).request.appshotsUpdate(patch);
 }
 
 export async function desktopRequestAppshotPermissions(
   kind: "screen-recording" | "accessibility"
 ): Promise<AppshotSettings> {
-  return (await client()).request.appshotsRequestPermissions({ kind });
+  return await (await client()).request.appshotsRequestPermissions({ kind });
 }
 
 export async function desktopOpenAppshotPrivacySettings(
   kind: "screen-recording" | "accessibility"
 ): Promise<boolean> {
-  return (await client()).request.appshotsOpenPrivacySettings({ kind });
+  return await (await client()).request.appshotsOpenPrivacySettings({ kind });
 }
 
 export async function desktopCaptureAppshot(): Promise<AppshotCapture> {
-  return (await client()).request.appshotsCapture();
+  return await (await client()).request.appshotsCapture();
 }
 
 export async function desktopGetAppshot(id: string): Promise<AppshotCapture> {
-  return (await client()).request.appshotsGet({ id });
+  return await (await client()).request.appshotsGet({ id });
 }
 
 export async function onDesktopAppshotCaptured(
@@ -189,7 +189,7 @@ export async function desktopSetBrowserZoom(
 }
 
 export async function desktopGetPetState(): Promise<DesktopPetState> {
-  return (await client()).request.desktopPetState();
+  return await (await client()).request.desktopPetState();
 }
 
 export async function desktopUpdatePetState(
@@ -207,9 +207,9 @@ export async function desktopOpenDevtools(): Promise<void> {
 }
 
 export async function desktopUpdateStatus(): Promise<AppUpdateStatus> {
-  return (await client()).request.updateStatus();
+  return await (await client()).request.updateStatus();
 }
 
 export async function desktopCheckForUpdates(): Promise<AppUpdateStatus> {
-  return (await client()).request.updateCheck();
+  return await (await client()).request.updateCheck();
 }

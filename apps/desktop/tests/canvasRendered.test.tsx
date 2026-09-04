@@ -11,6 +11,7 @@ import {
   restoreDom,
   text,
 } from "./domTestHarness";
+
 activateDom();
 const { PreviewModal } = await import("../src/editor/Preview");
 

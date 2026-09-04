@@ -1,4 +1,5 @@
 import type { ModelChoice } from "../bridge";
+import { isOneOf } from "../lib/jsonValue";
 
 /**
  * Grouping the flat ACP model list into families.
@@ -33,11 +34,11 @@ const EFFORT_RE =
 function normalizeEffort(token: string): Effort {
   const t = token
     .toLowerCase()
-    .replace(/[\s-]+/g, " ")
+    .replaceAll(/[\s-]+/g, " ")
     .trim();
-  return t === "extra high" || t === "x high" || t === "xhigh"
-    ? "xhigh"
-    : (t as Effort);
+  if (t === "extra high" || t === "x high" || t === "xhigh") return "xhigh";
+  if (isOneOf(t, EFFORTS)) return t;
+  return "medium";
 }
 
 /** `"GPT-5 Codex (High)"` → base `"GPT-5 Codex"`, effort `"high"`. No suffix → effort null. */
@@ -93,7 +94,7 @@ export function groupModels(models: ModelChoice[]): ModelFamily[] {
       families.push({
         key,
         label: bucket.label,
-        variants: [...bucket.members].sort(
+        variants: [...bucket.members].toSorted(
           (a, b) => rank(a.effort) - rank(b.effort)
         ),
       });
@@ -115,7 +116,7 @@ export function familyOf(
   families: ModelFamily[],
   id: string | null
 ): ModelFamily | null {
-  if (!id) return null;
+  if (id == null || id === "") return null;
   return (
     families.find((f) => f.variants.some((v) => v.choice.id === id)) ?? null
   );
@@ -126,7 +127,7 @@ export function variantOf(
   families: ModelFamily[],
   id: string | null
 ): ModelVariant | null {
-  if (!id) return null;
+  if (id == null || id === "") return null;
   for (const f of families) {
     const v = f.variants.find((x) => x.choice.id === id);
     if (v) return v;

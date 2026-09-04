@@ -1,3 +1,5 @@
+import { asJsonArray, asJsonObject } from "../lib/jsonValue";
+
 export const BROWSER_HISTORY_STORAGE_KEY = "codetwo.browser-history:v1";
 
 const HISTORY_VERSION = 1 as const;
@@ -41,7 +43,7 @@ function cleanProject(value: unknown): string | null {
 
 function cleanTitle(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const title = value.replace(/\s+/g, " ").trim();
+  const title = value.replaceAll(/\s+/gu, " ").trim();
   if (!title) return null;
   return title.slice(0, MAX_TITLE_LENGTH);
 }
@@ -73,34 +75,42 @@ function cleanTimestamp(value: unknown): number | null {
 
 /** Re-validate every persisted value so malformed or older data never reaches the Browser UI. */
 export function sanitizeBrowserHistory(value: unknown): BrowserHistoryState {
-  if (!value || typeof value !== "object") return EMPTY_BROWSER_HISTORY;
-  if ((value as { version?: unknown }).version !== HISTORY_VERSION) {
+  const root = asJsonObject(value);
+  if (root == null || root.version !== HISTORY_VERSION) {
     return EMPTY_BROWSER_HISTORY;
   }
-  const rawProjects = (value as { projects?: unknown }).projects;
-  if (!Array.isArray(rawProjects)) return EMPTY_BROWSER_HISTORY;
+  const rawProjects = asJsonArray(root.projects);
+  if (rawProjects == null) return EMPTY_BROWSER_HISTORY;
 
   const projects: ProjectHistory[] = [];
   const seenProjects = new Set<string>();
   for (const rawProject of rawProjects) {
-    if (!rawProject || typeof rawProject !== "object") continue;
-    const project = cleanProject((rawProject as { project?: unknown }).project);
-    const rawSites = (rawProject as { sites?: unknown }).sites;
-    if (!project || seenProjects.has(project) || !Array.isArray(rawSites))
+    const projectRecord = asJsonObject(rawProject);
+    if (projectRecord == null) continue;
+    const project = cleanProject(projectRecord.project);
+    const rawSites = asJsonArray(projectRecord.sites);
+    if (
+      project == null ||
+      project === "" ||
+      seenProjects.has(project) ||
+      rawSites == null
+    )
       continue;
 
     const sites: RecentSite[] = [];
     const seenUrls = new Set<string>();
     for (const rawSite of rawSites) {
-      if (!rawSite || typeof rawSite !== "object") continue;
-      const record = rawSite as {
-        url?: unknown;
-        title?: unknown;
-        last_visited_at?: unknown;
-      };
+      const record = asJsonObject(rawSite);
+      if (record == null) continue;
       const url = normalizeHistoryUrl(record.url);
       const lastVisitedAt = cleanTimestamp(record.last_visited_at);
-      if (!url || !lastVisitedAt || seenUrls.has(url)) continue;
+      if (
+        url == null ||
+        url === "" ||
+        lastVisitedAt == null ||
+        seenUrls.has(url)
+      )
+        continue;
       seenUrls.add(url);
       sites.push({
         url,
@@ -129,7 +139,7 @@ export function recentSitesForProject(
   project: string | null | undefined
 ): RecentSite[] {
   const key = cleanProject(project);
-  if (!key) return [];
+  if (key == null || key === "") return [];
   return state.projects.find((entry) => entry.project === key)?.sites ?? [];
 }
 
@@ -143,7 +153,14 @@ export function recordBrowserVisit(
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
   const timestamp = cleanTimestamp(visitedAt);
-  if (!key || !url || !timestamp) return state;
+  if (
+    key == null ||
+    key === "" ||
+    url == null ||
+    url === "" ||
+    timestamp == null
+  )
+    return state;
 
   const current = recentSitesForProject(state, key);
   const previous = current.find((site) => site.url === url);
@@ -172,7 +189,15 @@ export function updateBrowserVisitTitle(
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
   const title = cleanTitle(rawTitle);
-  if (!key || !url || !title) return state;
+  if (
+    key == null ||
+    key === "" ||
+    url == null ||
+    url === "" ||
+    title == null ||
+    title === ""
+  )
+    return state;
   let changed = false;
   const projects = state.projects.map((entry) => {
     if (entry.project !== key) return entry;
@@ -193,7 +218,7 @@ export function removeBrowserVisit(
 ): BrowserHistoryState {
   const key = cleanProject(project);
   const url = normalizeHistoryUrl(rawUrl);
-  if (!key || !url) return state;
+  if (key == null || key === "" || url == null || url === "") return state;
   let changed = false;
   const projects = state.projects.flatMap((entry) => {
     if (entry.project !== key) return [entry];
@@ -210,7 +235,7 @@ export function removeBrowserProject(
   project: string
 ): BrowserHistoryState {
   const key = cleanProject(project);
-  if (!key) return state;
+  if (key == null || key === "") return state;
   const projects = state.projects.filter((entry) => entry.project !== key);
   return projects.length === state.projects.length
     ? state
@@ -223,7 +248,7 @@ export function loadBrowserHistory(
   if (!storage) return EMPTY_BROWSER_HISTORY;
   try {
     const raw = storage.getItem(BROWSER_HISTORY_STORAGE_KEY);
-    return raw
+    return raw != null && raw !== ""
       ? sanitizeBrowserHistory(JSON.parse(raw))
       : EMPTY_BROWSER_HISTORY;
   } catch {

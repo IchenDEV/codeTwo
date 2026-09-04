@@ -57,7 +57,7 @@ export function permissionsFromSessions(
 ): PermissionQueueItem[] {
   return sessions
     .flatMap((session) => {
-      const state = sessionActivity(session).state;
+      const { state } = sessionActivity(session);
       if (state.kind !== "awaiting_input") return [];
       return state.pending.map((pending) => ({
         session: session.id,
@@ -69,7 +69,7 @@ export function permissionsFromSessions(
         form: pending.form,
       }));
     })
-    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
+    .toSorted((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
 }
 
 /** Project the application-wide pending-input queue onto the chat the user is viewing. */
@@ -77,7 +77,7 @@ export function pendingInputsForSession(
   queue: readonly PermissionQueueItem[],
   session: string | null
 ): PermissionQueueItem[] {
-  if (!session) return [];
+  if (session == null || session === "") return [];
   return queue.filter((request) => request.session === session);
 }
 
@@ -91,7 +91,7 @@ export function permissionQueueAfterActivity(
   return [
     ...queue.filter((request) => request.session !== session),
     ...pending,
-  ].sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
+  ].toSorted((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
 }
 
 /** Keep a prompt visible until the host confirms that it accepted the answer. */
@@ -116,7 +116,7 @@ export function enqueuePermission(
     (item) =>
       item.session === request.session && item.requestId === request.requestId
   );
-  return existing < 0
+  return existing === -1
     ? [...queue, request]
     : queue.map((item, index) => (index === existing ? request : item));
 }
@@ -212,11 +212,18 @@ export function sessionCreationSource(
   // An active id without either a list shell or a correlated creation receipt is ambiguous: `cwd`
   // may be inside an isolated checkout, so using it would create a nested worktree.
   if (hasActiveSession && !current) return null;
-  if (activeProject) return activeProject;
+  if (activeProject != null && activeProject !== "") return activeProject;
   if (current?.worktree_path !== null && current?.worktree_path !== undefined) {
-    return current.project_path || null;
+    return current.project_path ?? null;
   }
-  return current?.project_path || current?.cwd || cwd || ".";
+  return (
+    (current?.project_path != null && current.project_path !== ""
+      ? current.project_path
+      : null) ??
+    (current?.cwd != null && current.cwd !== "" ? current.cwd : null) ??
+    (cwd != null && cwd !== "" ? cwd : null) ??
+    "."
+  );
 }
 
 /** Carry a baseline into a new draft only when the current session records its meaning exactly. */
@@ -290,7 +297,8 @@ export function activeSessionWorktreeState(
   receipt: { session: string; shell: SessionCreationShell } | null
 ): { baseline: ResolvedWorktreeBaseline | null; legacyUnknown: boolean } {
   const shell = sessionShellWithReceipt(activeSession, stored, receipt);
-  if (!shell?.worktree_path) return { baseline: null, legacyUnknown: false };
+  if (shell?.worktree_path == null || shell?.worktree_path === "")
+    return { baseline: null, legacyUnknown: false };
   return {
     baseline: shell.worktree_baseline ?? null,
     // A persisted row must carry filesystem identity. A just-created receipt has not reached the
@@ -307,7 +315,13 @@ export function sessionCreationReceipt(
 ): SessionCreationShell | null {
   // New producers always persist a source project. Its absence means the event predates provenance
   // receipts; `cwd` alone cannot distinguish a normal checkout from an isolated worktree.
-  if (!event.cwd || !event.project_path) return null;
+  if (
+    event.cwd == null ||
+    event.cwd === "" ||
+    event.project_path == null ||
+    event.project_path === ""
+  )
+    return null;
   return {
     cwd: event.cwd,
     project_path: event.project_path,

@@ -3,7 +3,8 @@ import { X } from "@/components/ui/icons";
 
 import type { CoreEvent } from "../bridge";
 import { useLanguage, useT } from "../i18n";
-import { sceneTitle, type SceneInfo, type SceneNextSuggestion } from "./scene";
+import { sceneTitle } from "./scene";
+import type { SceneInfo, SceneNextSuggestion } from "./scene";
 
 /**
  * The quiet scene banner above the composer (R8): either the completion state — "all declared
@@ -85,7 +86,12 @@ function bannerSuggestions(
     const active = resolveSceneReference(scenes, banner.sceneRef);
     return active?.exit?.next ?? [];
   }
-  if (banner.kind === "notify" || !banner.targetScene) return [];
+  if (
+    banner.kind === "notify" ||
+    banner.targetScene == null ||
+    banner.targetScene === ""
+  )
+    return [];
   return [
     { scene: banner.targetScene, label: banner.message, carry: banner.carry },
   ];
@@ -119,10 +125,14 @@ export function SceneBanner({
         ? (banner.message ?? "")
         : (banner.message ??
           t("sceneBanner.suggest", {
-            scene: suggestions[0]
-              ? (resolveSceneReference(scenes, suggestions[0].scene)?.title ??
-                suggestions[0].scene)
-              : "",
+            scene: (() => {
+              const suggestion = suggestions[0];
+              if (suggestion == null) return "";
+              return (
+                resolveSceneReference(scenes, suggestion.scene)?.title ??
+                suggestion.scene
+              );
+            })(),
           }));
   return (
     <div className="shrink-0 px-4 pt-1 pb-2" data-testid="scene-banner">
@@ -166,8 +176,10 @@ export function SceneBanner({
                       // A pipeline suggestion advances the instance (escalation re-checked by the
                       // command); a plain suggestion just applies the scene.
                       if (
-                        banner.pipelineInstance &&
-                        banner.toStage &&
+                        banner.pipelineInstance != null &&
+                        banner.pipelineInstance !== "" &&
+                        banner.toStage != null &&
+                        banner.toStage !== "" &&
                         onAdvancePipeline
                       ) {
                         onAdvancePipeline(
@@ -186,8 +198,10 @@ export function SceneBanner({
                   </Button>
                 );
               })}
-              {banner.pipelineInstance &&
-                banner.toStage &&
+              {banner.pipelineInstance != null &&
+                banner.pipelineInstance !== "" &&
+                banner.toStage != null &&
+                banner.toStage !== "" &&
                 onAdvancePipelineNewSession && (
                   <Button
                     size="sm"

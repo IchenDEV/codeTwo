@@ -66,14 +66,18 @@ export function splitForEdge(edge: PaneEdge): {
   side: SplitSide;
 } {
   switch (edge) {
-    case "left":
+    case "left": {
       return { direction: "row", side: "before" };
-    case "right":
+    }
+    case "right": {
       return { direction: "row", side: "after" };
-    case "top":
+    }
+    case "top": {
       return { direction: "col", side: "before" };
-    case "bottom":
+    }
+    case "bottom": {
       return { direction: "col", side: "after" };
+    }
   }
 }
 
@@ -215,7 +219,7 @@ export function setSplitRatio(
 export function computePaneRects(
   node: PaneNode,
   rect: PaneRect = { x: 0, y: 0, w: 1, h: 1 },
-  out: Map<string, PaneRect> = new Map()
+  out = new Map<string, PaneRect>()
 ): Map<string, PaneRect> {
   if (node.kind === "leaf") {
     out.set(node.id, rect);
@@ -314,26 +318,30 @@ export function paneInDirection(
     let perp: boolean;
     let dist: number;
     switch (direction) {
-      case "left":
+      case "left": {
         inDir = cx < fromCx - 1e-6;
         perp = rangesOverlap(from.y, from.h, r.y, r.h);
         dist = fromCx - cx;
         break;
-      case "right":
+      }
+      case "right": {
         inDir = cx > fromCx + 1e-6;
         perp = rangesOverlap(from.y, from.h, r.y, r.h);
         dist = cx - fromCx;
         break;
-      case "top":
+      }
+      case "top": {
         inDir = cy < fromCy - 1e-6;
         perp = rangesOverlap(from.x, from.w, r.x, r.w);
         dist = fromCy - cy;
         break;
-      case "bottom":
+      }
+      case "bottom": {
         inDir = cy > fromCy + 1e-6;
         perp = rangesOverlap(from.x, from.w, r.x, r.w);
         dist = cy - fromCy;
         break;
+      }
     }
     if (!inDir || !perp) continue;
     if (!best || dist < best.dist) best = { id, dist };
@@ -347,5 +355,7 @@ export function focusInDirection(
   direction: PaneEdge
 ): PaneLayout {
   const target = paneInDirection(layout, direction);
-  return target ? { ...layout, focused: target } : layout;
+  return target != null && target !== ""
+    ? { ...layout, focused: target }
+    : layout;
 }

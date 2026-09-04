@@ -16,9 +16,11 @@ describe("provider registry startup", () => {
   test("bounds a lost first desktop request and retries", async () => {
     let attempts = 0;
     const providers = await loadProviderRegistry(
-      () => {
+      async () => {
         attempts += 1;
-        return attempts === 1 ? new Promise(() => {}) : Promise.resolve([grok]);
+        return attempts === 1
+          ? await new Promise(() => {})
+          : await Promise.resolve([grok]);
       },
       [0, 0],
       5
@@ -30,7 +32,7 @@ describe("provider registry startup", () => {
 
   test("rejects an empty registry instead of presenting an empty picker", async () => {
     let attempts = 0;
-    await expect(
+    expect(
       loadProviderRegistry(
         async () => {
           attempts += 1;

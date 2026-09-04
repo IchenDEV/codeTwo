@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -111,7 +111,7 @@ export function FileViewer({
   const revealRef = useRef(reveal);
   revealRef.current = reveal;
 
-  const save = useCallback(async () => {
+  const save = async () => {
     const m = modRef.current;
     const model = modelRef.current;
     if (!m || !model || !m.isDirtyModel(model)) return;
@@ -122,18 +122,18 @@ export function FileViewer({
       setDirty(false);
       m.notifySaved(cwd, model);
       toast(t("files.saved", { path }), "success");
-    } catch (e) {
-      toast(String(e), "error");
+    } catch (error) {
+      toast(String(error), "error");
     }
     setSaving(false);
-  }, [cwd, path, toast, t]);
+  };
 
   // The ⌘S binding lives inside Monaco and outlives any one render; give it a stable door.
   const saveRef = useRef(save);
   saveRef.current = save;
 
   /** Freeze the current selection into a comment card. Whole lines — comments read that way. */
-  const openDraft = useCallback(() => {
+  const openDraft = () => {
     const editor = editorRef.current;
     const sel = editor?.getSelection();
     if (!editor || !sel || sel.isEmpty()) return;
@@ -143,7 +143,7 @@ export function FileViewer({
         ? sel.endLineNumber - 1
         : sel.endLineNumber;
     setDraft({ startLine: sel.startLineNumber, endLine, note: "" });
-  }, []);
+  };
   const openDraftRef = useRef(openDraft);
   openDraftRef.current = openDraft;
 
@@ -243,8 +243,8 @@ export function FileViewer({
 
       setMod(m);
       void m.attachLsp(cwd, model);
-    })().catch((e) => {
-      if (alive) setError(String(e));
+    })().catch((error: unknown) => {
+      if (alive) setError(String(error));
     });
 
     return () => {
@@ -391,16 +391,16 @@ export function FileViewer({
           {/* Monaco owns this node. It stays mounted through loading so create() has real bounds. */}
           <div ref={container} className="absolute inset-0" />
 
-          {error ? (
+          {error != null && error !== "" ? (
             <p className="text-body text-destructive absolute inset-x-0 top-0 px-6 py-4">
               {error}
             </p>
-          ) : !mod ? (
+          ) : mod ? null : (
             <p className="text-body text-muted-foreground absolute inset-x-0 top-0 flex items-center gap-2 px-6 py-4">
               <Spinner className="size-3.5" />
               {t("files.loading")}
             </p>
-          ) : null}
+          )}
 
           {/* The comment card floats over the code, top-right — the GitHub-review gesture. */}
           {draft && (

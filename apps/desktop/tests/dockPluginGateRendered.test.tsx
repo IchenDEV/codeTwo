@@ -98,9 +98,9 @@ describe("Dock plugin component gate", () => {
     );
     await flush();
 
-    const cards = Array.from(
-      view.container.querySelectorAll(".dock-surface-grid > button")
-    );
+    const cards = [
+      ...view.container.querySelectorAll(".dock-surface-grid > button"),
+    ];
     expect(cards[2]?.textContent).toContain("Terminal");
     expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
     expect(cards[6]?.getAttribute("aria-label")).toBe("PR");
@@ -150,7 +150,7 @@ describe("Dock plugin component gate", () => {
     expect(panel).not.toBeNull();
     expect(panel?.classList.contains("dock-panel-side")).toBe(true);
     expect(panel?.classList.contains("border-l")).toBe(true);
-    expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/);
+    expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/u);
     expect(panel?.getAttribute("style")).not.toContain("height");
     expect(
       panel?.querySelector('[data-dock-resize="horizontal"]')

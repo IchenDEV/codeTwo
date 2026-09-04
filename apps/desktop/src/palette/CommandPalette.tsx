@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -79,11 +79,9 @@ export function CommandPalette({
     };
   }, [query, search]);
 
-  const visible = useMemo(() => {
-    return mergeCommandResults(commands, matches);
-  }, [commands, matches]);
+  const visible = mergeCommandResults(commands, matches);
 
-  const groups = useMemo(() => {
+  const groups = (() => {
     const filtered =
       filter === "all"
         ? visible
@@ -98,7 +96,7 @@ export function CommandPalette({
         ),
       }))
       .filter((group) => group.commands.length > 0);
-  }, [filter, visible]);
+  })();
 
   const filters = [
     { id: "all" as const, label: t("palette.filterAll") },
@@ -164,7 +162,11 @@ export function CommandPalette({
         ))}
       </div>
       <CommandList className="max-h-none min-h-0 flex-1">
-        <CommandEmpty>{searchStatus ? null : t("palette.empty")}</CommandEmpty>
+        <CommandEmpty>
+          {searchStatus != null && searchStatus !== ""
+            ? null
+            : t("palette.empty")}
+        </CommandEmpty>
         {groups.map((group) => (
           <CommandGroup
             key={group.category}
@@ -182,27 +184,29 @@ export function CommandPalette({
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{command.label}</span>
-                  {command.detail && (
+                  {command.detail != null && command.detail !== "" && (
                     <span className="text-callout text-muted-foreground block truncate">
                       {command.detail}
                     </span>
                   )}
                 </span>
-                {command.hint && (
+                {command.hint != null && command.hint !== "" && (
                   <CommandShortcut>{command.hint}</CommandShortcut>
                 )}
               </CommandItem>
             ))}
           </CommandGroup>
         ))}
-        {searchStatus && (filter === "all" || filter === "session") && (
-          <p
-            role="status"
-            className="text-callout text-muted-foreground px-3 py-2"
-          >
-            {searchStatus}
-          </p>
-        )}
+        {searchStatus != null &&
+          searchStatus !== "" &&
+          (filter === "all" || filter === "session") && (
+            <p
+              role="status"
+              className="text-callout text-muted-foreground px-3 py-2"
+            >
+              {searchStatus}
+            </p>
+          )}
       </CommandList>
       <CommandSeparator className="mx-0" />
       <div className="text-callout text-muted-foreground flex items-center gap-4 px-3 py-2">

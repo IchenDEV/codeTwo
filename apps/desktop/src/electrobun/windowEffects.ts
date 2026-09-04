@@ -1,4 +1,5 @@
-import { dlopen, FFIType, type Pointer } from "bun:ffi";
+import { dlopen, FFIType } from "bun:ffi";
+import type { Pointer } from "bun:ffi";
 import { join } from "node:path";
 
 const libraryName = "libCodeTwoWindowEffects.dylib";
@@ -22,10 +23,10 @@ let windowEffects:
     >
   | undefined;
 
-export type MacOSWindowEffectsStatus = {
+export interface MacOSWindowEffectsStatus {
   backdrop: boolean;
   shadow: boolean;
-};
+}
 
 const unavailableStatus: MacOSWindowEffectsStatus = {
   backdrop: false,
@@ -73,7 +74,7 @@ export function setMacOSSystemBadgeCount(count: number): boolean {
 
   try {
     const normalized = Number.isFinite(count)
-      ? Math.min(Math.max(Math.trunc(count), 0), 0xffff_ffff)
+      ? Math.min(Math.max(Math.trunc(count), 0), 0xff_ff_ff_ff)
       : 0;
     return library().symbols.codetwoSetDockBadgeCount(normalized) !== 0;
   } catch (error) {

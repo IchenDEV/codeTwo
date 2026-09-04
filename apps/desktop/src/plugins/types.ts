@@ -174,11 +174,11 @@ export interface PluginManagerChangePlan {
   request: PluginManagerChangeRequest;
   summary: string;
   requiresConfirmation: boolean;
-  affectedPlugins?: Array<{
+  affectedPlugins?: {
     id: string;
     name: string;
     desiredState?: PluginManagerDesiredState;
-  }>;
+  }[];
   activeResources?: PluginManagerActiveResource[];
   warnings?: string[];
 }

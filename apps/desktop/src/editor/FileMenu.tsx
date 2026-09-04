@@ -1,5 +1,6 @@
 import type { SuggestionMenuProps } from "@blocknote/react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +11,8 @@ import {
   FileType,
   MessageSquare,
   Package,
-  type AppIcon,
 } from "@/components/ui/icons";
+import type { AppIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 import { useT } from "../i18n";
@@ -83,9 +84,9 @@ const BY_EXTENSION: Record<string, AppIcon> = {
 /** A page icon on every row says only "this is a file", which the user already knows. */
 function iconFor(name: string): AppIcon {
   const dot = name.lastIndexOf(".");
-  return (
-    (dot > 0 && BY_EXTENSION[name.slice(dot + 1).toLowerCase()]) || FileText
-  );
+  const extension =
+    dot > 0 ? BY_EXTENSION[name.slice(dot + 1).toLowerCase()] : undefined;
+  return extension ?? FileText;
 }
 
 /** Split a name around the matched span so the middle can be emphasised. */
@@ -261,7 +262,7 @@ export function FileMenu({
             </div>
           );
         }
-        if (i === firstArtifact && (hasChats || firstFile >= 0)) {
+        if (i === firstArtifact && (hasChats || firstFile !== -1)) {
           return (
             <div key={`artifacts-${itemKey(item)}`}>
               <GroupLabel>{t("files.artifactsGroup")}</GroupLabel>

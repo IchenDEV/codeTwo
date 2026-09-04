@@ -14,7 +14,7 @@ macOSTest(
     );
     const executable = join(buildDirectory, "titlebar-double-click-harness");
     const harness = fileURLToPath(
-      new URL("./native/titlebarDoubleClickHarness.m", import.meta.url)
+      new URL("native/titlebarDoubleClickHarness.m", import.meta.url)
     );
     const implementation = fileURLToPath(
       new URL(

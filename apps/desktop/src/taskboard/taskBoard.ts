@@ -365,7 +365,7 @@ export function createBoardTask(
 ): BoardTask {
   const now = options.now ?? Date.now();
   return {
-    id: options.id?.trim() || generatedTaskId(),
+    id: options.id?.trim() ?? generatedTaskId(),
     title: input.title.trim() || "未命名任务",
     description: input.description?.trim() ?? "",
     status: input.status ?? "todo",
@@ -393,7 +393,7 @@ function normalizeSessionIds(values: readonly string[] | undefined): string[] {
 }
 
 export function latestTaskSessionId(task: BoardTask): string | null {
-  return task.sessionIds[task.sessionIds.length - 1] ?? null;
+  return task.sessionIds.at(-1)! ?? null;
 }
 
 export function taskForSession(
@@ -446,9 +446,9 @@ export function associateTaskPullRequest(
   now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
-  if (index < 0) return null;
+  if (index === -1) return null;
   const identity = githubPullRequestIdentity(reference);
-  const target = tasks[index]!;
+  const target = tasks[index];
   const linkedElsewhere = tasks.some(
     (task, taskIndex) =>
       taskIndex !== index &&
@@ -497,7 +497,7 @@ export function unlinkTaskPullRequest(
   const index = tasks.findIndex((task) => task.id === taskId);
   const task = tasks[index];
   if (
-    index < 0 ||
+    index === -1 ||
     !task?.pullRequest ||
     task.pullRequestLinkRevision !== expectedRevision ||
     githubPullRequestIdentity(task.pullRequest) !== expectedIdentity
@@ -527,8 +527,8 @@ export function associateTaskSession(
   now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
-  if (index < 0) return null;
-  const task = tasks[index]!;
+  if (index === -1) return null;
+  const task = tasks[index];
   const alreadyLinked = task.sessionIds.includes(sessionId);
   const linkedElsewhere = tasks.some(
     (candidate, candidateIndex) =>
@@ -568,7 +568,7 @@ export function associateTaskSession(
 export function sortBoardTasks(tasks: readonly BoardTask[]): BoardTask[] {
   return tasks
     .map((task, index) => ({ task, index }))
-    .sort(
+    .toSorted(
       (a, b) =>
         STATUS_INDEX[a.task.status] - STATUS_INDEX[b.task.status] ||
         a.task.order - b.task.order ||
@@ -782,7 +782,8 @@ function parseTask(
     updatedAt < createdAt ||
     !Array.isArray(persistedSessionIds) ||
     !persistedSessionIds.every(
-      (sessionId) => typeof sessionId === "string" && sessionId.trim()
+      (sessionId) =>
+        typeof sessionId === "string" && sessionId.trim().length > 0
     ) ||
     persistedPullRequest === undefined ||
     typeof persistedPullRequestRevision !== "number" ||
@@ -828,7 +829,7 @@ export function parseBoardSnapshot(
     ) {
       return corruptBoardState(locale);
     }
-    const version = value.version;
+    const { version } = value;
     const tasks: BoardTask[] = [];
     const ids = new Set<string>();
     const claimedSessions = new Set<string>();
@@ -1088,11 +1089,12 @@ export function boardReducer(
             );
       return { ...state, tasks: reindexStatuses(timestampedTasks, orderings) };
     }
-    case "hydrate":
+    case "hydrate": {
       return {
         tasks: action.tasks.map(cloneTask),
         warning: action.warning ?? null,
       };
+    }
   }
 }
 

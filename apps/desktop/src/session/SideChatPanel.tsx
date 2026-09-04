@@ -1,14 +1,8 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { ArrowUp, MessageSquare, Plus, Square, X } from "@/components/ui/icons";
+import { cssVars } from "@/lib/cssVars";
 
 import {
   cancelTurn,
@@ -21,15 +15,17 @@ import {
   setModel,
   setSessionMemoryPolicy,
   submitPrompt,
-  type AppshotCapture,
-  type ConfigOptionInfo,
-  type CoreEvent,
-  type DocBlock,
-  type ModelChoice,
-  type MemoryAccess,
-  type PermissionMode,
-  type ProviderInfo,
-  type Sandbox,
+} from "../bridge";
+import type {
+  AppshotCapture,
+  ConfigOptionInfo,
+  CoreEvent,
+  DocBlock,
+  ModelChoice,
+  MemoryAccess,
+  PermissionMode,
+  ProviderInfo,
+  Sandbox,
 } from "../bridge";
 import { ActivityOrb } from "../components/ui/activity-orb";
 import { Button } from "../components/ui/button";
@@ -39,9 +35,11 @@ import { cn } from "../lib/utils";
 import { VoiceButton } from "../voice/VoiceButton";
 import { ModelPicker, SessionModePicker } from "./Composer";
 import type { BuiltinLinkActions } from "./MarkdownContent";
-import { SESSION_MODES, type SessionMode } from "./mode";
+import { SESSION_MODES } from "./mode";
+import type { SessionMode } from "./mode";
 import { TurnCard } from "./TurnCard";
-import { applyEvent, newTurn, type Turn } from "./turns";
+import { applyEvent, newTurn } from "./turns";
+import type { Turn } from "./turns";
 
 export interface TransientChatSeed {
   id: string;
@@ -237,97 +235,83 @@ function TransientChatPanel({
   const panelOffsetRef = useRef<PanelOffset>({ x: 0, y: 0 });
   const activePanelMoveRef = useRef<ActivePanelMove | null>(null);
 
-  const clampPanelOffset = useCallback(
-    (offset: PanelOffset, width: number, height: number): PanelOffset => {
-      const centeredLeft = (window.innerWidth - width) / 2;
-      const centeredTop = (window.innerHeight - height) / 2;
-      const minX = QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
-      const maxX =
-        window.innerWidth - width - QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
-      const minY = QUICK_CHAT_VIEWPORT_INSET - centeredTop;
-      const maxY =
-        window.innerHeight - height - QUICK_CHAT_VIEWPORT_INSET - centeredTop;
-      return {
-        x: Math.round(
-          Math.min(
-            Math.max(minX, maxX),
-            Math.max(Math.min(minX, maxX), offset.x)
-          )
-        ),
-        y: Math.round(
-          Math.min(
-            Math.max(minY, maxY),
-            Math.max(Math.min(minY, maxY), offset.y)
-          )
-        ),
-      };
-    },
-    []
-  );
+  const clampPanelOffset = (
+    offset: PanelOffset,
+    width: number,
+    height: number
+  ): PanelOffset => {
+    const centeredLeft = (window.innerWidth - width) / 2;
+    const centeredTop = (window.innerHeight - height) / 2;
+    const minX = QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
+    const maxX =
+      window.innerWidth - width - QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
+    const minY = QUICK_CHAT_VIEWPORT_INSET - centeredTop;
+    const maxY =
+      window.innerHeight - height - QUICK_CHAT_VIEWPORT_INSET - centeredTop;
+    return {
+      x: Math.round(
+        Math.min(Math.max(minX, maxX), Math.max(Math.min(minX, maxX), offset.x))
+      ),
+      y: Math.round(
+        Math.min(Math.max(minY, maxY), Math.max(Math.min(minY, maxY), offset.y))
+      ),
+    };
+  };
 
-  const applyPanelOffset = useCallback((offset: PanelOffset) => {
+  const applyPanelOffset = (offset: PanelOffset) => {
     panelOffsetRef.current = offset;
     const panel = panelRef.current;
     if (!panel) return;
     panel.style.setProperty("--quick-chat-offset-x", `${offset.x}px`);
     panel.style.setProperty("--quick-chat-offset-y", `${offset.y}px`);
-  }, []);
+  };
 
-  const finishPanelMove = useCallback(
-    (header: HTMLElement, pointerId: number) => {
-      const active = activePanelMoveRef.current;
-      if (!active || active.pointerId !== pointerId) return;
-      activePanelMoveRef.current = null;
-      document.body.classList.remove("moving-quick-chat");
-      panelRef.current?.removeAttribute("data-moving");
-      if (header.hasPointerCapture(pointerId))
-        header.releasePointerCapture(pointerId);
-    },
-    []
-  );
+  const finishPanelMove = (header: HTMLElement, pointerId: number) => {
+    const active = activePanelMoveRef.current;
+    if (!active || active.pointerId !== pointerId) return;
+    activePanelMoveRef.current = null;
+    document.body.classList.remove("moving-quick-chat");
+    delete panelRef.current?.dataset.moving;
+    if (header.hasPointerCapture(pointerId))
+      header.releasePointerCapture(pointerId);
+  };
 
-  const onPanelPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
-      if (!floating || event.button !== 0 || activePanelMoveRef.current) return;
-      const target = event.target as Element;
-      if (target.closest("button, a, input, textarea, select, [role='tab']"))
-        return;
-      const panel = panelRef.current;
-      if (!panel) return;
-      const rect = panel.getBoundingClientRect();
-      event.preventDefault();
-      activePanelMoveRef.current = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        startOffset: panelOffsetRef.current,
-        width: rect.width,
-        height: rect.height,
-      };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      document.body.classList.add("moving-quick-chat");
-      panel.setAttribute("data-moving", "");
-    },
-    [floating]
-  );
+  const onPanelPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!floating || event.button !== 0 || activePanelMoveRef.current) return;
+    const target = event.target as Element;
+    if (target.closest("button, a, input, textarea, select, [role='tab']"))
+      return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    event.preventDefault();
+    activePanelMoveRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffset: panelOffsetRef.current,
+      width: rect.width,
+      height: rect.height,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add("moving-quick-chat");
+    panel.dataset.moving = "";
+  };
 
-  const onPanelPointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
-      const active = activePanelMoveRef.current;
-      if (!active || active.pointerId !== event.pointerId) return;
-      applyPanelOffset(
-        clampPanelOffset(
-          {
-            x: active.startOffset.x + event.clientX - active.startX,
-            y: active.startOffset.y + event.clientY - active.startY,
-          },
-          active.width,
-          active.height
-        )
-      );
-    },
-    [applyPanelOffset, clampPanelOffset]
-  );
+  const onPanelPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const active = activePanelMoveRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    applyPanelOffset(
+      clampPanelOffset(
+        {
+          x: active.startOffset.x + event.clientX - active.startX,
+          y: active.startOffset.y + event.clientY - active.startY,
+        },
+        active.width,
+        active.height
+      )
+    );
+  };
 
   useEffect(() => {
     if (!floating) return;
@@ -361,45 +345,43 @@ function TransientChatPanel({
     else panel.setAttribute("inert", "");
   }, [open]);
 
-  const providerModels = useCallback(
-    (providerId: string) => {
-      const advertised =
-        providers.find((candidate) => candidate.id === providerId)?.models ??
-        [];
-      if (advertised.length > 0 || providerId !== provider || !model)
-        return advertised;
-      return [{ id: model, name: model, description: null }];
-    },
-    [model, provider, providers]
-  );
+  const providerModels = (providerId: string) => {
+    const advertised =
+      providers.find((candidate) => candidate.id === providerId)?.models ?? [];
+    if (
+      advertised.length > 0 ||
+      providerId !== provider ||
+      model == null ||
+      model === ""
+    )
+      return advertised;
+    return [{ id: model, name: model, description: null }];
+  };
 
-  const createLocalTab = useCallback(
-    (draft = "", replaceExisting = false) => {
-      const tab = makeTab({
-        provider,
-        cwd: cwd || ".",
-        model,
-        mode,
-        sandbox,
-        models: providerModels(provider),
-        draft,
-        idPrefix: surface === "quick" ? "quick-chat" : "side-chat",
-      });
-      const previous = tabsRef.current;
-      const next = replaceExisting ? [tab] : [...previous, tab];
-      tabsRef.current = next;
-      setTabs(next);
-      setActiveTabId(tab.localId);
-      if (replaceExisting) {
-        for (const existing of previous) {
-          if (existing.sessionId)
-            void closeTransientSession(existing.sessionId);
-        }
+  const createLocalTab = (draft = "", replaceExisting = false) => {
+    const tab = makeTab({
+      provider,
+      cwd: cwd || ".",
+      model,
+      mode,
+      sandbox,
+      models: providerModels(provider),
+      draft,
+      idPrefix: surface === "quick" ? "quick-chat" : "side-chat",
+    });
+    const previous = tabsRef.current;
+    const next = replaceExisting ? [tab] : [...previous, tab];
+    tabsRef.current = next;
+    setTabs(next);
+    setActiveTabId(tab.localId);
+    if (replaceExisting) {
+      for (const existing of previous) {
+        if (existing.sessionId != null && existing.sessionId !== "")
+          void closeTransientSession(existing.sessionId);
       }
-      return tab.localId;
-    },
-    [cwd, mode, model, provider, providerModels, sandbox, surface]
-  );
+    }
+    return tab.localId;
+  };
 
   useEffect(() => {
     if (!open) {
@@ -447,43 +429,44 @@ function TransientChatPanel({
     onSeedHandled(seed.id);
   }, [activeTabId, createLocalTab, onSeedHandled, seed, surface]);
 
-  const updateTab = useCallback(
-    (tabId: string, update: (tab: TransientChatTab) => TransientChatTab) => {
-      setTabs((current) =>
-        current.map((tab) => (tab.localId === tabId ? update(tab) : tab))
-      );
-    },
-    []
-  );
+  const updateTab = (
+    tabId: string,
+    update: (tab: TransientChatTab) => TransientChatTab
+  ) => {
+    setTabs((current) =>
+      current.map((tab) => (tab.localId === tabId ? update(tab) : tab))
+    );
+  };
 
-  const failPrompt = useCallback(
-    (
-      tabId: string,
-      requestId: string,
-      message: string,
-      attachments: AppshotCapture[] = []
-    ) => {
-      updateTab(tabId, (tab) => ({
-        ...tab,
-        running: false,
-        creationRequestId: null,
-        attachments: tab.attachments.length > 0 ? tab.attachments : attachments,
-        turns: applyEvent(tab.turns, {
-          event: "error",
-          session: tab.sessionId,
-          message,
-          terminal: true,
-          request_id: requestId,
-        }),
-      }));
-    },
-    [updateTab]
-  );
+  const failPrompt = (
+    tabId: string,
+    requestId: string,
+    message: string,
+    attachments: AppshotCapture[] = []
+  ) => {
+    updateTab(tabId, (tab) => ({
+      ...tab,
+      running: false,
+      creationRequestId: null,
+      attachments: tab.attachments.length > 0 ? tab.attachments : attachments,
+      turns: applyEvent(tab.turns, {
+        event: "error",
+        session: tab.sessionId,
+        message,
+        terminal: true,
+        request_id: requestId,
+      }),
+    }));
+  };
 
   useEffect(() => {
     let disposed = false;
     const subscription = onEngineEvent((event) => {
-      if (event.event === "session_created" && event.request_id) {
+      if (
+        event.event === "session_created" &&
+        event.request_id != null &&
+        event.request_id !== ""
+      ) {
         const pending = pendingCreationsRef.current.get(event.request_id);
         if (!pending) return;
         pendingCreationsRef.current.delete(event.request_id);
@@ -518,7 +501,7 @@ function TransientChatPanel({
             pending.doc,
             pending.promptRequestId
           );
-        })().catch((error) =>
+        })().catch((error: unknown) =>
           failPrompt(
             pending.tabId,
             pending.promptRequestId,
@@ -532,7 +515,8 @@ function TransientChatPanel({
       if (
         event.event === "error" &&
         event.session === null &&
-        event.request_id
+        event.request_id != null &&
+        event.request_id !== ""
       ) {
         const pending = pendingCreationsRef.current.get(event.request_id);
         if (!pending) return;
@@ -603,7 +587,7 @@ function TransientChatPanel({
     tabs.find((tab) => tab.localId === activeTabId) ?? tabs[0] ?? null;
 
   useEffect(() => {
-    if (!open || !activeTab) return;
+    if (!open || activeTab == null) return;
     const frame = window.requestAnimationFrame(() => {
       panelRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
     });
@@ -626,81 +610,73 @@ function TransientChatPanel({
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [activeTab?.turns]);
 
-  const attachImages = useCallback(
-    async (files: readonly File[]) => {
-      const tab = tabsRef.current.find(
-        (candidate) => candidate.localId === activeTabId
-      );
-      const images = files.filter((file) => file.type.startsWith("image/"));
-      if (!tab || tab.running || images.length === 0) return;
-      updateTab(tab.localId, (current) => ({
-        ...current,
-        attaching: true,
-        controlError: null,
-      }));
-      const results = await Promise.allSettled(
-        images.map(async (file) =>
-          importPromptImage(
+  const attachImages = async (files: readonly File[]) => {
+    const tab = tabsRef.current.find(
+      (candidate) => candidate.localId === activeTabId
+    );
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (!tab || tab.running || images.length === 0) return;
+    updateTab(tab.localId, (current) => ({
+      ...current,
+      attaching: true,
+      controlError: null,
+    }));
+    const results = await Promise.allSettled(
+      images.map(
+        async (file) =>
+          await importPromptImage(
             new Uint8Array(await file.arrayBuffer()),
             file.type || null,
             file.name || "Image.png"
           )
-        )
-      );
-      const attachments = results.flatMap((result) =>
-        result.status === "fulfilled" ? [result.value] : []
-      );
-      const failure = results.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected"
-      );
+      )
+    );
+    const attachments = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : []
+    );
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    );
+    updateTab(tab.localId, (current) => ({
+      ...current,
+      attaching: false,
+      attachments: [...current.attachments, ...attachments],
+      controlError: failure
+        ? t("toast.imageAttachFailed", { error: String(failure.reason) })
+        : null,
+    }));
+  };
+
+  const changeMode = (nextMode: SessionMode) => {
+    const tab = tabsRef.current.find(
+      (candidate) => candidate.localId === activeTabId
+    );
+    const preset = SESSION_MODES.find((candidate) => candidate.id === nextMode);
+    if (!tab || !preset || tab.running) return;
+    const previous = { mode: tab.mode, sandbox: tab.sandbox };
+    updateTab(tab.localId, (current) => ({
+      ...current,
+      mode: preset.mode,
+      sandbox: preset.sandbox,
+      controlError: null,
+    }));
+    if (tab.sessionId == null || tab.sessionId === "") return;
+    const requestId = globalThis.crypto.randomUUID();
+    void setExecutionPolicy(
+      tab.sessionId,
+      preset.mode,
+      preset.sandbox,
+      requestId
+    ).catch((error: unknown) =>
       updateTab(tab.localId, (current) => ({
         ...current,
-        attaching: false,
-        attachments: [...current.attachments, ...attachments],
-        controlError: failure
-          ? t("toast.imageAttachFailed", { error: String(failure.reason) })
-          : null,
-      }));
-    },
-    [activeTabId, t, updateTab]
-  );
+        ...previous,
+        controlError: `Could not update execution policy: ${String(error)}`,
+      }))
+    );
+  };
 
-  const changeMode = useCallback(
-    (nextMode: SessionMode) => {
-      const tab = tabsRef.current.find(
-        (candidate) => candidate.localId === activeTabId
-      );
-      const preset = SESSION_MODES.find(
-        (candidate) => candidate.id === nextMode
-      );
-      if (!tab || !preset || tab.running) return;
-      const previous = { mode: tab.mode, sandbox: tab.sandbox };
-      updateTab(tab.localId, (current) => ({
-        ...current,
-        mode: preset.mode,
-        sandbox: preset.sandbox,
-        controlError: null,
-      }));
-      if (!tab.sessionId) return;
-      const requestId = globalThis.crypto.randomUUID();
-      void setExecutionPolicy(
-        tab.sessionId,
-        preset.mode,
-        preset.sandbox,
-        requestId
-      ).catch((error) =>
-        updateTab(tab.localId, (current) => ({
-          ...current,
-          ...previous,
-          controlError: `Could not update execution policy: ${String(error)}`,
-        }))
-      );
-    },
-    [activeTabId, updateTab]
-  );
-
-  const send = useCallback(async () => {
+  const send = async () => {
     const tab = tabsRef.current.find(
       (candidate) => candidate.localId === activeTabId
     );
@@ -726,7 +702,7 @@ function TransientChatPanel({
       turns: [...current.turns, newTurn(summary, promptRequestId)],
     }));
 
-    if (tab.sessionId) {
+    if (tab.sessionId != null && tab.sessionId !== "") {
       try {
         await submitPrompt(tab.sessionId, doc, promptRequestId);
       } catch (error) {
@@ -772,27 +748,25 @@ function TransientChatPanel({
         );
       }
     }
-  }, [activeTabId, failPrompt, surface, updateTab]);
+  };
 
-  const closeTab = useCallback(
-    (tabId: string) => {
-      const current = tabsRef.current;
-      const index = current.findIndex((tab) => tab.localId === tabId);
-      if (index < 0) return;
-      const closing = current[index];
-      const remaining = current.filter((tab) => tab.localId !== tabId);
-      tabsRef.current = remaining;
-      setTabs(remaining);
-      if (closing.sessionId) void closeTransientSession(closing.sessionId);
-      if (activeTabId === tabId) {
-        setActiveTabId(
-          remaining[Math.min(index, remaining.length - 1)]?.localId ?? null
-        );
-      }
-      if (remaining.length === 0) onClose();
-    },
-    [activeTabId, onClose]
-  );
+  const closeTab = (tabId: string) => {
+    const { current } = tabsRef;
+    const index = current.findIndex((tab) => tab.localId === tabId);
+    if (index === -1) return;
+    const closing = current[index];
+    const remaining = current.filter((tab) => tab.localId !== tabId);
+    tabsRef.current = remaining;
+    setTabs(remaining);
+    if (closing.sessionId != null && closing.sessionId !== "")
+      void closeTransientSession(closing.sessionId);
+    if (activeTabId === tabId) {
+      setActiveTabId(
+        remaining[Math.min(index, remaining.length - 1)]?.localId ?? null
+      );
+    }
+    if (remaining.length === 0) onClose();
+  };
 
   return (
     <section
@@ -813,10 +787,10 @@ function TransientChatPanel({
       )}
       style={
         floating
-          ? ({
+          ? cssVars({
               "--quick-chat-offset-x": `${panelOffsetRef.current.x}px`,
               "--quick-chat-offset-y": `${panelOffsetRef.current.y}px`,
-            } as CSSProperties)
+            })
           : undefined
       }
     >
@@ -864,7 +838,7 @@ function TransientChatPanel({
                   className="text-body min-w-0 flex-1 truncate px-2"
                   onClick={() => setActiveTabId(tab.localId)}
                 >
-                  {tab.title || t(labels.title)}
+                  {tab.title ?? t(labels.title)}
                 </Button>
                 <Button
                   type="button"
@@ -906,7 +880,7 @@ function TransientChatPanel({
         ref={viewportRef}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
-        {activeTab && activeTab.turns.length > 0 ? (
+        {activeTab != null && activeTab.turns.length > 0 ? (
           <ol className="m-0 mx-auto w-full max-w-2xl list-none px-5 pt-5 pb-8">
             {activeTab.turns.map((turn) => (
               <li key={turn.transcriptStartSeq ?? turn.id}>
@@ -930,7 +904,7 @@ function TransientChatPanel({
         )}
       </div>
 
-      {activeTab && (
+      {activeTab != null && (
         <form
           className="shrink-0 p-4 pt-2"
           onSubmit={(event) => {
@@ -938,7 +912,7 @@ function TransientChatPanel({
             void send();
           }}
         >
-          {activeTab.controlError ? (
+          {activeTab.controlError != null && activeTab.controlError !== "" ? (
             <p role="alert" className="text-fine text-destructive mb-2 px-1">
               {activeTab.controlError}
             </p>
@@ -954,7 +928,7 @@ function TransientChatPanel({
               multiple
               hidden
               onChange={(event) => {
-                const files = Array.from(event.currentTarget.files ?? []);
+                const files = [...(event.currentTarget.files ?? [])];
                 event.currentTarget.value = "";
                 if (files.length > 0) void attachImages(files);
               }}
@@ -1062,9 +1036,12 @@ function TransientChatPanel({
                       currentModel: nextModel,
                       controlError: null,
                     }));
-                    if (activeTab.sessionId) {
+                    if (
+                      activeTab.sessionId != null &&
+                      activeTab.sessionId !== ""
+                    ) {
                       void setModel(activeTab.sessionId, nextModel).catch(
-                        (error) =>
+                        (error: unknown) =>
                           updateTab(activeTab.localId, (tab) => ({
                             ...tab,
                             currentModel: previousModel,
@@ -1076,7 +1053,11 @@ function TransientChatPanel({
                     }
                   }}
                   onConfigOption={(configId, value) => {
-                    if (!activeTab.sessionId) return;
+                    if (
+                      activeTab.sessionId == null ||
+                      activeTab.sessionId === ""
+                    )
+                      return;
                     const previousOptions = activeTab.configOptions;
                     updateTab(activeTab.localId, (tab) => ({
                       ...tab,
@@ -1091,7 +1072,7 @@ function TransientChatPanel({
                       activeTab.sessionId,
                       configId,
                       value
-                    ).catch((error) =>
+                    ).catch((error: unknown) =>
                       updateTab(activeTab.localId, (tab) => ({
                         ...tab,
                         configOptions: previousOptions,
@@ -1109,13 +1090,13 @@ function TransientChatPanel({
                   onText={(text) =>
                     updateTab(activeTab.localId, (tab) => ({
                       ...tab,
-                      draft: `${tab.draft}${tab.draft && !/\s$/.test(tab.draft) ? " " : ""}${text}`,
+                      draft: `${tab.draft}${tab.draft && !/\s$/u.test(tab.draft) ? " " : ""}${text}`,
                     }))
                   }
                 />
               ) : null}
               {activeTab.running ? (
-                activeTab.sessionId ? (
+                activeTab.sessionId != null && activeTab.sessionId !== "" ? (
                   <Button
                     type="button"
                     variant="destructive"

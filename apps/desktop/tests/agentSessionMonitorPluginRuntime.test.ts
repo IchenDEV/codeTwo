@@ -16,8 +16,8 @@ test("agent session monitor orders three sessions and reveals a selected action"
   const decoder = new TextDecoder();
   let buffer = "";
   const send = (message: unknown) => {
-    child.stdin.write(`${JSON.stringify(message)}\n`);
-    child.stdin.flush();
+    void child.stdin.write(`${JSON.stringify(message)}\n`);
+    void child.stdin.flush();
   };
   const receive = async (): Promise<Record<string, unknown>> => {
     while (!buffer.includes("\n")) {
@@ -94,7 +94,7 @@ test("agent session monitor orders three sessions and reveals a selected action"
     });
     const rendered = await receive();
     expect(
-      (rendered.result as { items: Array<{ id: string }> }).items.map(
+      (rendered.result as { items: { id: string }[] }).items.map(
         (item) => item.id
       )
     ).toEqual(["input", "run", "failed"]);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { QuotaProgress } from "@/components/business/quota-progress";
 import { Button } from "@/components/ui/button";
@@ -22,19 +22,18 @@ import { Spinner } from "@/components/ui/spinner";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import {
-  providerQuota,
-  usageHistory,
-  usageReport,
-  type ProviderQuotaReason,
-  type ProviderQuotaReport,
-  type ProviderQuotaWindow,
-  type SourceUsage,
-  type UsageHistoryReport,
-  type UsageReport,
-  type UsageWindow,
+import { providerQuota, usageHistory, usageReport } from "../bridge";
+import type {
+  ProviderQuotaReason,
+  ProviderQuotaReport,
+  ProviderQuotaWindow,
+  SourceUsage,
+  UsageHistoryReport,
+  UsageReport,
+  UsageWindow,
 } from "../bridge";
-import { useLanguage, type Translate } from "../i18n";
+import { useLanguage } from "../i18n";
+import type { Translate } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import {
   fmtCost,
@@ -60,8 +59,8 @@ function quotaWindowLabel(minutes: number | null, t: Translate): string {
   if (minutes != null && minutes >= 43_000 && minutes <= 45_000)
     return t("quota.windowMonthly");
   if (minutes == null) return t("quota.windowUnknown");
-  if (minutes % 1_440 === 0)
-    return t("quota.windowDays", { count: minutes / 1_440 });
+  if (minutes % 1440 === 0)
+    return t("quota.windowDays", { count: minutes / 1440 });
   if (minutes % 60 === 0)
     return t("quota.windowHours", { count: minutes / 60 });
   return t("quota.windowMinutes", { count: minutes });
@@ -69,8 +68,8 @@ function quotaWindowLabel(minutes: number | null, t: Translate): string {
 
 function compactDuration(milliseconds: number): string {
   const minutes = Math.max(1, Math.ceil(milliseconds / 60_000));
-  const days = Math.floor(minutes / 1_440);
-  const hours = Math.floor((minutes % 1_440) / 60);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
   const mins = minutes % 60;
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${mins}m`;
@@ -84,7 +83,7 @@ function quotaResetLabel(
   t: Translate
 ): string {
   if (resetsAt == null) return t("quota.resetUnknown");
-  const resetMs = resetsAt * 1_000;
+  const resetMs = resetsAt * 1000;
   if (resetMs <= now) return t("quota.resetting");
   const absolute = new Intl.DateTimeFormat(locale, {
     weekday: "short",
@@ -103,12 +102,21 @@ function quotaReasonLabel(
   t: Translate
 ): string {
   switch (reason) {
-    case "cli_not_found":
+    case "cli_not_found": {
       return t("quota.cliNotFound", { provider: providerName });
-    case "query_failed":
+    }
+    case "query_failed": {
       return t("quota.queryFailed", { provider: providerName });
-    default:
+    }
+    case null: {
+      throw new Error("Not implemented yet: null case");
+    }
+    case "unsupported_provider": {
+      throw new Error('Not implemented yet: "unsupported_provider" case');
+    }
+    default: {
       return t("quota.unsupported", { provider: providerName });
+    }
   }
 }
 
@@ -217,25 +225,18 @@ function TrendChart({
 }) {
   const { t, locale } = useLanguage();
   const [hover, setHover] = useState<number | null>(null);
-  const { buckets, max } = useMemo(
-    () => stackHistory(report.history),
-    [report]
-  );
+  const { buckets, max } = stackHistory(report.history);
 
-  const timeFmt = useMemo(
-    () =>
-      new Intl.DateTimeFormat(
-        locale,
-        days <= 7
-          ? { month: "short", day: "numeric", hour: "2-digit" }
-          : { month: "short", day: "numeric" }
-      ),
-    [locale, days]
+  const timeFmt = new Intl.DateTimeFormat(
+    locale,
+    days <= 7
+      ? { month: "short", day: "numeric", hour: "2-digit" }
+      : { month: "short", day: "numeric" }
   );
-  const dayFmt = useMemo(
-    () => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }),
-    [locale]
-  );
+  const dayFmt = new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+  });
 
   if (buckets.length === 0 || max === 0) {
     return (
@@ -249,7 +250,7 @@ function TrendChart({
   const gap = days <= 7 ? 1 : 2;
   const barW = Math.max(1, slot - gap);
   const scale = (value: number) => (value / max) * (CHART_H - 2);
-  const hovered = hover != null ? buckets[hover] : null;
+  const hovered = hover == null ? null : buckets[hover];
 
   return (
     <div className="relative" onMouseLeave={() => setHover(null)}>
@@ -317,7 +318,7 @@ function TrendChart({
       </svg>
       <div className="text-callout text-muted-foreground mt-1 flex justify-between">
         <span>{dayFmt.format(buckets[0].startMs)}</span>
-        <span>{dayFmt.format(buckets[buckets.length - 1].startMs)}</span>
+        <span>{dayFmt.format(buckets.at(-1)!.startMs)}</span>
       </div>
       {hovered && hovered.parts.length > 0 && (
         <div
@@ -370,7 +371,7 @@ function ProviderRow({
         <span
           className={cn(
             "text-metadata w-20 text-right font-mono",
-            cost ? "" : "text-muted-foreground"
+            cost != null && cost !== "" ? "" : "text-muted-foreground"
           )}
         >
           {cost ?? t("usage.costUnknown")}
@@ -441,7 +442,7 @@ function ProviderQuotaSection({
           >
             {t("quota.title")}
           </h2>
-          {report?.plan && (
+          {report?.plan != null && report?.plan !== "" && (
             <p className="text-callout text-muted-foreground truncate">
               {t("quota.plan", { plan: report.plan.replaceAll("_", " ") })}
             </p>
@@ -451,7 +452,7 @@ function ProviderQuotaSection({
           <Select
             value={provider}
             onValueChange={(value) => {
-              if (value) onProvider(value);
+              if (value != null && value !== "") onProvider(value);
             }}
           >
             <SelectTrigger
@@ -522,7 +523,7 @@ function ProviderQuotaSection({
             </p>
           )}
 
-          {showCredits && credits && (
+          {showCredits && credits != null && (
             <div className="mt-3 flex items-center gap-3 pt-3">
               <span className="text-body font-medium">
                 {t("quota.credits")}
@@ -538,7 +539,7 @@ function ProviderQuotaSection({
           )}
 
           <p className="text-callout text-muted-foreground mt-3 pt-3">
-            {source && <>{source} · </>}
+            {source != null && source !== "" && <>{source} · </>}
             {t("quota.updated", {
               time: new Intl.DateTimeFormat(locale, {
                 hour: "numeric",
@@ -613,24 +614,27 @@ function UsageView({
   const quotaProviderName =
     providerNames[quotaProvider] ??
     (quotaProvider === provider ? providerName : quotaProvider);
-  const quotaProviders = useMemo(
-    () => quotaProviderOptions(provider, providerName, providerNames),
-    [provider, providerName, providerNames]
+  const quotaProviders = quotaProviderOptions(
+    provider,
+    providerName,
+    providerNames
   );
 
-  const loadLocal = useCallback((range: 7 | 30) => {
+  const loadLocal = (range: 7 | 30) => {
     setLoading(true);
     void Promise.all([usageReport(), usageHistory(range)])
       .then(([r, h]) => {
         setReport(r);
         setHistory(h);
       })
-      .catch(() => {})
+      .catch(() => {
+        /* empty */
+      })
       .finally(() => setLoading(false));
-  }, []);
+  };
 
-  const loadQuota = useCallback(async () => {
-    const request = ++quotaRequestRef.current;
+  const loadQuota = async () => {
+    const request = (quotaRequestRef.current += 1);
     setQuotaLoading(true);
     setQuotaFailed(false);
     try {
@@ -644,7 +648,7 @@ function UsageView({
     } finally {
       if (request === quotaRequestRef.current) setQuotaLoading(false);
     }
-  }, [quotaProvider]);
+  };
 
   useEffect(() => loadLocal(days), [days, loadLocal]);
   useEffect(() => {

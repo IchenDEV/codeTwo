@@ -2,11 +2,8 @@ import type { StatusIndicatorTone } from "@/components/business/status-indicator
 import type { Locale, Translate } from "@/i18n";
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus";
 
-import {
-  taskBoardLane,
-  type BoardTask,
-  type TaskSessionActivityKind,
-} from "./taskBoard";
+import { taskBoardLane } from "./taskBoard";
+import type { BoardTask, TaskSessionActivityKind } from "./taskBoard";
 import type { ProjectedTask, SessionProjection } from "./workspaceTypes";
 
 export const INITIAL_TASK_LIMIT = 40;
@@ -54,7 +51,7 @@ export function sessionActivityKind(
   session?: SessionProjection
 ): TaskSessionActivityKind {
   const kind = session?.activity?.state.kind ?? "idle";
-  return session?.running && kind === "idle" ? "running" : kind;
+  return session?.running === true && kind === "idle" ? "running" : kind;
 }
 
 export function sessionUpdatedAt(
@@ -67,12 +64,12 @@ export function sessionUpdatedAt(
 export function sessionCheckoutPath(
   session?: SessionProjection
 ): string | null {
-  if (!session || session.worktreeDiscarded) return null;
+  if (session == null || session.worktreeDiscarded === true) return null;
   return session.worktreePath ?? session.cwd ?? null;
 }
 
 function checkoutDisplay(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean);
+  const parts = path.split(/[\\/]/u).filter(Boolean);
   return parts.slice(-2).join("/") || path;
 }
 
@@ -81,8 +78,9 @@ export function checkoutLabel(
   session: SessionProjection,
   path: string | null
 ): string {
-  if (session.worktreeDiscarded) return t("taskboard.worktreeDiscarded");
-  if (path) return checkoutDisplay(path);
+  if (session.worktreeDiscarded === true)
+    return t("taskboard.worktreeDiscarded");
+  if (path != null && path !== "") return checkoutDisplay(path);
   return t("taskboard.noCheckout");
 }
 
@@ -139,14 +137,14 @@ function taskSessions(
       return session ? [{ ...session, number: index + 1 }] : [];
     });
   const latestAvailable = [...oldestFirst]
-    .reverse()
+    .toReversed()
     .find((session) => !session.archived);
   return oldestFirst
     .map((session) => ({
       ...session,
       current: session.id === latestAvailable?.id,
     }))
-    .reverse();
+    .toReversed();
 }
 
 export function projectTasks(
@@ -176,8 +174,10 @@ export function openPullRequestCount(
   let unresolved = false;
   for (const session of sessions) {
     const path = sessionCheckoutPath(session);
-    if (path && !pullRequestsByPath.has(path)) unresolved = true;
-    const state = path ? pullRequestsByPath.get(path)?.state : null;
+    if (path != null && path !== "" && !pullRequestsByPath.has(path))
+      unresolved = true;
+    const state =
+      path != null && path !== "" ? pullRequestsByPath.get(path)?.state : null;
     if (state && state !== "merged" && state !== "closed") count += 1;
   }
   return unresolved ? null : count;
@@ -187,5 +187,5 @@ export function pullRequestStatusLabel(
   t: Translate,
   state: SidebarPullRequestStatus["state"]
 ): string {
-  return t(`rail.pullRequest.${state}` as "rail.pullRequest.open");
+  return t(`rail.pullRequest.${state}`);
 }

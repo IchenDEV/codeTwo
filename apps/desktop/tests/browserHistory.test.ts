@@ -12,8 +12,8 @@ import {
   sanitizeBrowserHistory,
   saveBrowserHistory,
   updateBrowserVisitTitle,
-  type StorageLike,
 } from "../src/browser/history";
+import type { StorageLike } from "../src/browser/history";
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();

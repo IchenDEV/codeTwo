@@ -29,7 +29,7 @@ export function PluginUiSlot({
 
   const invoke = async (contribution: ActivePluginUiContribution) => {
     const key = `${contribution.pluginId}:${contribution.id}`;
-    if (busy) return;
+    if (busy != null && busy !== "") return;
     setBusy(key);
     try {
       await onInvoke(contribution);

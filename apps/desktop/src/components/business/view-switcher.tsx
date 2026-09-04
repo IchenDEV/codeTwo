@@ -42,9 +42,9 @@ function ViewSwitcher<Value extends string>({
             onClick={() => onValueChange(option.value)}
           >
             <span>{option.label}</span>
-            {option.count !== undefined ? (
+            {option.count === undefined ? null : (
               <span className="tabular-nums">{option.count}</span>
-            ) : null}
+            )}
           </Button>
         );
       })}

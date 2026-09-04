@@ -1,11 +1,4 @@
-import {
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 
 import { SearchField } from "@/components/business/search-field";
 import { Button } from "@/components/ui/button";
@@ -28,9 +21,11 @@ import {
   deriveTrajectory,
   filterTrajectory,
   formatTrajectoryDuration,
-  type TrajectoryKind,
-  type TrajectoryLane,
-  type TrajectoryRecord,
+} from "./trajectory";
+import type {
+  TrajectoryKind,
+  TrajectoryLane,
+  TrajectoryRecord,
 } from "./trajectory";
 import type { Turn } from "./turns";
 
@@ -60,7 +55,7 @@ const KIND_TONE: Record<TrajectoryKind, string> = {
   error: "bg-destructive",
 };
 
-const FILTER_KINDS: Array<TrajectoryKind | "all"> = [
+const FILTER_KINDS: (TrajectoryKind | "all")[] = [
   "all",
   "user",
   "assistant",
@@ -76,7 +71,7 @@ function safeDetail(value: unknown): { text: string; object: boolean } | null {
   const object = typeof value !== "string";
   let text: string;
   try {
-    text = object ? JSON.stringify(value, null, 2) : String(value);
+    text = object ? JSON.stringify(value, null, 2) : value;
   } catch {
     text = String(value);
   }
@@ -116,7 +111,7 @@ function packLane(records: readonly TrajectoryRecord[]): {
 } {
   const ends: number[] = [];
   const packed = [...records]
-    .sort(
+    .toSorted(
       (left, right) => left.startAt - right.startAt || left.index - right.index
     )
     .map((record) => {
@@ -140,7 +135,7 @@ function Timeline({
   const t = useT();
   const startAt = Math.min(...records.map((record) => record.startAt));
   const rawEnd = Math.max(...records.map((record) => record.endAt));
-  const endAt = Math.max(startAt + 1_000, rawEnd);
+  const endAt = Math.max(startAt + 1000, rawEnd);
   const span = endAt - startAt;
   const lanes: TrajectoryLane[] = ["context", "assistant", "tool"];
 
@@ -248,12 +243,10 @@ function LedgerRow({
           ? "bg-fill-rest text-foreground"
           : "bg-background text-muted-foreground"
       )}
-      style={
-        {
-          contentVisibility: "auto",
-          containIntrinsicSize: "36px",
-        } as CSSProperties
-      }
+      style={{
+        contentVisibility: "auto",
+        containIntrinsicSize: "36px",
+      }}
       onClick={onSelect}
     >
       <span className="text-metadata px-3 py-2 font-mono tabular-nums">
@@ -267,7 +260,7 @@ function LedgerRow({
         <span className="text-foreground block truncate">
           {record.summary || record.title}
         </span>
-        {record.status ? (
+        {record.status != null && record.status !== "" ? (
           <span className="text-metadata text-muted-foreground block truncate">
             {record.title} · {record.status}
           </span>
@@ -312,7 +305,7 @@ function Inspector({
               : t("trajectory.turn", { turn: record.turn })}
           </p>
         </div>
-        {record.status ? (
+        {record.status != null && record.status !== "" ? (
           <span className="text-metadata text-muted-foreground shrink-0">
             {record.status}
           </span>
@@ -373,17 +366,14 @@ export function TrajectoryView({
   const ledgerRef = useRef<HTMLDivElement | null>(null);
 
   const running = turns.some((turn) => turn.endedAt === undefined);
-  const records = useMemo(() => deriveTrajectory(turns, now), [now, turns]);
-  const visibleRecords = useMemo(
-    () => filterTrajectory(records, kind, deferredQuery),
-    [deferredQuery, kind, records]
-  );
+  const records = deriveTrajectory(turns, now);
+  const visibleRecords = filterTrajectory(records, kind, deferredQuery);
   const selected =
     visibleRecords.find((record) => record.id === selectedId) ??
-    visibleRecords[visibleRecords.length - 1] ??
+    visibleRecords.at(-1)! ??
     null;
-  const tailAt = records[records.length - 1]?.endAt ?? 0;
-  const turnsWithRecords = useMemo(() => {
+  const tailAt = records.at(-1)?.endAt ?? 0;
+  const turnsWithRecords = (() => {
     const grouped = new Map<number, TrajectoryRecord[]>();
     for (const record of visibleRecords) {
       const group = grouped.get(record.turn) ?? [];
@@ -391,23 +381,19 @@ export function TrajectoryView({
       grouped.set(record.turn, group);
     }
     return [...grouped.entries()];
-  }, [visibleRecords]);
-  const clock = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale, {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        fractionalSecondDigits: 3,
-      }),
-    [locale]
-  );
+  })();
+  const clock = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    fractionalSecondDigits: 3,
+  });
   const formatClock = (timestamp: number) => clock.format(new Date(timestamp));
 
   useEffect(() => {
     setNow(Date.now());
     if (!running) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [running, turns]);
 
@@ -458,12 +444,7 @@ export function TrajectoryView({
           label={t("trajectory.search")}
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
-        <Select
-          value={kind}
-          onValueChange={(value) =>
-            value && setKind(value as TrajectoryKind | "all")
-          }
-        >
+        <Select value={kind} onValueChange={(value) => value && setKind(value)}>
           <SelectTrigger size="sm" aria-label={t("trajectory.filter")}>
             <SelectValue>
               {kind === "all" ? t("trajectory.filterAll") : t(KIND_LABEL[kind])}
@@ -586,7 +567,7 @@ export function TrajectoryView({
               })
             )}
           </div>
-          {!following ? (
+          {following ? null : (
             <Button
               type="button"
               size="compact"
@@ -597,7 +578,7 @@ export function TrajectoryView({
               <ArrowDown data-icon="inline-start" aria-hidden />
               {t("transcript.jumpLatest")}
             </Button>
-          ) : null}
+          )}
         </section>
         <Inspector record={selected} formatClock={formatClock} />
       </div>

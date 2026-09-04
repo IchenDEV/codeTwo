@@ -167,7 +167,7 @@ describe("GitHub pull request projections", () => {
   });
 
   test("projects the stable GitHub identity stored by task links", () => {
-    expect(githubPullRequestReference(items[0]!)).toEqual({
+    expect(githubPullRequestReference(items[0])).toEqual({
       provider: "github",
       host: "github.com",
       repository: "acme/repo",

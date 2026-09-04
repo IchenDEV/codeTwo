@@ -1,19 +1,12 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   applyAppearanceSettings,
   setAppearanceSettings,
   useAppearanceSettings,
-  type ColorScheme,
-  type ThemePreference,
 } from "./appearance";
+import type { ColorScheme, ThemePreference } from "./appearance";
 
 export type { ColorScheme, ThemePreference } from "./appearance";
 
@@ -35,7 +28,9 @@ interface ThemeValue {
 const ThemeContext = createContext<ThemeValue>({
   preference: "system",
   scheme: "light",
-  setPreference: () => {},
+  setPreference: () => {
+    /* empty */
+  },
 });
 
 /**
@@ -59,7 +54,7 @@ export function ThemeProvider({
 
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!mq) return;
+    if (mq == null) return;
     const onChange = (e: MediaQueryListEvent) =>
       setSystem(e.matches ? "dark" : "light");
     mq.addEventListener("change", onChange);
@@ -87,13 +82,10 @@ export function ThemeProvider({
     applyAppearanceSettings(document.documentElement, appearance, scheme);
   }, [appearance, scheme]);
 
-  const setPreference = useCallback(
-    (p: ThemePreference) => {
-      if (preferenceOverride !== undefined) return;
-      setAppearanceSettings({ preference: p });
-    },
-    [preferenceOverride]
-  );
+  const setPreference = (p: ThemePreference) => {
+    if (preferenceOverride !== undefined) return;
+    setAppearanceSettings({ preference: p });
+  };
 
   return (
     <ThemeContext.Provider value={{ preference, scheme, setPreference }}>

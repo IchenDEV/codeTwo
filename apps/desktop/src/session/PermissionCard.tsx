@@ -4,25 +4,33 @@ import { Button } from "@/components/ui/button";
 import { CircleAlert } from "@/components/ui/icons";
 
 import type { PermissionContext, PermissionContextKind } from "../bridge";
-import { useT, type Translate } from "../i18n";
+import { useT } from "../i18n";
+import type { Translate } from "../i18n";
 import type { PermissionQueueItem } from "./sessionEvents";
 
 function contextLabel(kind: PermissionContextKind, t: Translate): string {
   switch (kind) {
-    case "mcp_elicitation":
+    case "mcp_elicitation": {
       return t("permission.kind.externalTool");
-    case "website_access":
+    }
+    case "website_access": {
       return t("permission.kind.websiteAccess");
-    case "sensitive_web_action":
+    }
+    case "sensitive_web_action": {
       return t("permission.kind.sensitiveWebAction");
-    case "computer_use_application":
+    }
+    case "computer_use_application": {
       return t("permission.kind.appControl");
-    case "sites_mutation":
+    }
+    case "sites_mutation": {
       return t("permission.kind.siteChange");
-    case "sites_production":
+    }
+    case "sites_production": {
       return t("permission.kind.productionDeploy");
-    case "acp":
+    }
+    case "acp": {
       return t("permission.kind.command");
+    }
   }
 }
 

@@ -38,16 +38,14 @@ describe("PaneTiles", () => {
     );
     await flush();
 
-    const frames = Array.from(
-      rendered.container.querySelectorAll("[data-pane-id]")
-    );
+    const frames = [...rendered.container.querySelectorAll("[data-pane-id]")];
+    expect(frames.map((frame) => frame.dataset.paneId).toSorted()).toEqual([
+      "p1",
+      "p2",
+      "p3",
+    ]);
     expect(
-      frames.map((frame) => frame.getAttribute("data-pane-id")).sort()
-    ).toEqual(["p1", "p2", "p3"]);
-    expect(
-      rendered.container
-        .querySelector("[data-focused]")
-        ?.getAttribute("data-pane-id")
+      rendered.container.querySelector("[data-focused]")?.dataset.paneId
     ).toBe("p3");
     // Every leaf's content is mounted, not just the focused one.
     expect(
@@ -98,7 +96,7 @@ describe("PaneTiles", () => {
     const initialPane = rendered.container.querySelector(
       "[data-pane-id='p1']"
     )!;
-    expect(initialPane.hasAttribute("data-pane-entrance")).toBe(false);
+    expect(Object.hasOwn(initialPane.dataset, "paneEntrance")).toBe(false);
 
     layout = splitPane(layout, "p1", "row", "after", "p2");
     rendered.rerender(
@@ -112,7 +110,7 @@ describe("PaneTiles", () => {
     await flush();
 
     const rightPane = rendered.container.querySelector("[data-pane-id='p2']")!;
-    expect(rightPane.getAttribute("data-pane-entrance")).toBe("right");
+    expect(rightPane.dataset.paneEntrance).toBe("right");
     expect(rightPane.classList.contains("pane-tile-enter-right")).toBe(true);
     expect(initialPane.classList.contains("pane-tile-enter")).toBe(false);
 
@@ -141,7 +139,7 @@ describe("PaneTiles", () => {
     );
     await flush();
     const bottomPane = rendered.container.querySelector("[data-pane-id='p3']")!;
-    expect(bottomPane.getAttribute("data-pane-entrance")).toBe("bottom");
+    expect(bottomPane.dataset.paneEntrance).toBe("bottom");
     expect(bottomPane.classList.contains("pane-tile-enter-bottom")).toBe(true);
 
     layout = splitPane(layout, "p1", "row", "before", "p4");
@@ -155,9 +153,8 @@ describe("PaneTiles", () => {
     );
     await flush();
     expect(
-      rendered.container
-        .querySelector("[data-pane-id='p4']")
-        ?.getAttribute("data-pane-entrance")
+      rendered.container.querySelector("[data-pane-id='p4']")?.dataset
+        .paneEntrance
     ).toBe("left");
 
     layout = splitPane(layout, "p1", "col", "before", "p5");
@@ -171,9 +168,8 @@ describe("PaneTiles", () => {
     );
     await flush();
     expect(
-      rendered.container
-        .querySelector("[data-pane-id='p5']")
-        ?.getAttribute("data-pane-entrance")
+      rendered.container.querySelector("[data-pane-id='p5']")?.dataset
+        .paneEntrance
     ).toBe("top");
     rendered.unmount();
   });

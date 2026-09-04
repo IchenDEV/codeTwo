@@ -8,11 +8,14 @@ import {
   DEFAULT_EXPORT_BUDGET,
   CanvasExportBudgetError,
   planCanvasExportTiles,
-  type CanvasExportBounds,
-  type CanvasExportBudget,
-  type CanvasExportTile,
+} from "./exportPlan";
+import type {
+  CanvasExportBounds,
+  CanvasExportBudget,
+  CanvasExportTile,
 } from "./exportPlan";
 import { sanitizeElements } from "./serialize";
+
 export {
   DEFAULT_EXPORT_BUDGET,
   CanvasExportBudgetError,
@@ -70,7 +73,7 @@ export function getCanvasExportBounds(
 }
 
 async function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) =>
         blob
@@ -124,7 +127,7 @@ export async function exportCanvasPng(
       "Cannot export an empty canvas"
     );
   const rendered = await exportToCanvas({
-    elements: elements as ExcalidrawElement[],
+    elements,
     // Grid dots are authoring-only chrome. Explicitly disable the engine grid for every export,
     // even when the live editor is in grid mode, so no UI pixels enter persisted PNGs.
     appState: {

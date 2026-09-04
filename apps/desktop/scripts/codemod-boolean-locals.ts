@@ -8,7 +8,7 @@
  */
 import { readFileSync } from "node:fs";
 
-import { Node, Project, SyntaxKind } from "ts-morph";
+import { Node, Project } from "ts-morph";
 
 interface Msg {
   ruleId: string | null;
@@ -27,7 +27,7 @@ const report = JSON.parse(
 
 const toIsName = (name: string): string | null => {
   if (
-    /^(?:is|are|has|have|can|should|was|were|did|will|requires)[A-Z0-9_]/.test(
+    /^(?:is|are|has|have|can|should|was|were|did|will|requires)[A-Z0-9_]/u.test(
       name
     )
   ) {
@@ -40,7 +40,7 @@ const toIsName = (name: string): string | null => {
   if (name === "on" || name === "ok" || name === "no") {
     return null;
   }
-  return `is${name[0]!.toUpperCase()}${name.slice(1)}`;
+  return `is${name[0].toUpperCase()}${name.slice(1)}`;
 };
 
 const project = new Project({
@@ -112,7 +112,7 @@ for (const file of report) {
     .filter((m) => m.ruleId === "unicorn/consistent-boolean-name")
     .map((m) => {
       const match = /Boolean name `([^`]+)`/.exec(m.message);
-      return match ? { name: match[1]!, line: m.line, column: m.column } : null;
+      return match ? { name: match[1], line: m.line, column: m.column } : null;
     })
     .filter(Boolean) as { name: string; line: number; column: number }[];
   if (targets.length === 0) {
@@ -128,7 +128,7 @@ for (const file of report) {
   let touched = false;
   const seen = new Set<string>();
 
-  for (const target of [...targets].sort(
+  for (const target of [...targets].toSorted(
     (a, b) => b.line - a.line || b.column - a.column
   )) {
     const next = toIsName(target.name);

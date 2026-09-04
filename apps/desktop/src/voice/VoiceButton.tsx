@@ -183,7 +183,7 @@ export function VoiceButton({
     bufferRef.current = "";
     rec.onresult = (e) => {
       let text = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let i = e.resultIndex; i < e.results.length; i += 1) {
         const r = e.results[i];
         if (r.isFinal) text += r[0].transcript;
       }
@@ -207,7 +207,7 @@ export function VoiceButton({
   };
 
   const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
+    if (navigator.mediaDevices?.getUserMedia == null) {
       toast(t("voice.noMicApi"), "error");
       return;
     }
@@ -218,7 +218,10 @@ export function VoiceButton({
     }
     streamRef.current = stream;
     const mimeType = preferredRecordingType();
-    const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const mr = new MediaRecorder(
+      stream,
+      mimeType != null && mimeType !== "" ? { mimeType } : undefined
+    );
     chunksRef.current = [];
     mr.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -247,8 +250,8 @@ export function VoiceButton({
         }
         if (text) onText(text);
         else toast(t("voice.noSpeech"), "error");
-      } catch (e) {
-        toast(t("voice.transcribeFailed", { error: String(e) }), "error");
+      } catch (error) {
+        toast(t("voice.transcribeFailed", { error: String(error) }), "error");
       }
       setMode("idle");
     };
@@ -280,8 +283,8 @@ export function VoiceButton({
         // Say so out loud, and name the fix — the button used to look simply broken here.
         toast(t("voice.unavailable"), "error");
       }
-    } catch (e) {
-      toast(t("voice.micUnavailable", { error: String(e) }), "error");
+    } catch (error) {
+      toast(t("voice.micUnavailable", { error: String(error) }), "error");
       setMode("idle");
     }
   };
@@ -362,7 +365,9 @@ export function VoiceButton({
       />
       <TooltipContent>
         {label}
-        {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
+        {hint != null && hint !== "" && (
+          <span className="ml-1.5 opacity-60">{hint}</span>
+        )}
       </TooltipContent>
     </Tooltip>
   );

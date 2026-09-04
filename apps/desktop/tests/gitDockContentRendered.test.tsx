@@ -81,9 +81,9 @@ describe("GitDockContent", () => {
     expect(calls).toEqual(["push"]);
 
     await press(button(view.container, "More Git actions"));
-    const sourceControl = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("Source control"));
+    const sourceControl = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Source control"));
     if (!sourceControl) throw new Error("Source control alternative not found");
     await press(sourceControl);
     expect(calls).toEqual(["push", "source-control"]);

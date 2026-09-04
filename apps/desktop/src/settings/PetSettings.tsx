@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SettingRow } from "@/components/business/setting-row";
 import { SettingToggle } from "@/components/business/setting-toggle";
@@ -17,19 +17,16 @@ import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n";
 import type { StringKey } from "@/i18n/strings";
 
-import {
-  setAppearanceSettings,
-  useAppearanceSettings,
-  type PetSize,
-} from "../appearance";
+import { setAppearanceSettings, useAppearanceSettings } from "../appearance";
+import type { PetSize } from "../appearance";
 import { CodeTwoPetSprite } from "../pet/CodeTwoPet";
 import type { CodeTwoPetAnimation } from "../pet/state";
 import {
   BUILTIN_PET,
   fetchPetShareCatalog,
   petSpritesheetUrl,
-  type PetCatalogItem,
 } from "../pet/store";
+import type { PetCatalogItem } from "../pet/store";
 
 import "./pet-settings.css";
 
@@ -84,7 +81,7 @@ export function PetSettings({
     };
   }, [catalogAttempt, loadCatalog]);
 
-  const pets = useMemo(() => {
+  const pets = (() => {
     const items = [BUILTIN_PET, ...catalog];
     if (
       settings.petSource === "petshare" &&
@@ -99,14 +96,14 @@ export function PetSettings({
         spriteVersionNumber: 2,
       });
     }
-    return items.sort((left, right) => {
+    return items.toSorted((left, right) => {
       const leftSelected =
         left.source === settings.petSource && left.id === settings.petId;
       const rightSelected =
         right.source === settings.petSource && right.id === settings.petId;
       return Number(rightSelected) - Number(leftSelected);
     });
-  }, [catalog, settings.petId, settings.petName, settings.petSource, t]);
+  })();
 
   const previewNextMood = () => {
     setPreviewAnimation((current) => {
@@ -258,7 +255,7 @@ export function PetSettings({
             <Select
               value={settings.petSize}
               onValueChange={(value) =>
-                setAppearanceSettings({ petSize: value as PetSize })
+                setAppearanceSettings({ petSize: value! })
               }
             >
               <SelectTrigger

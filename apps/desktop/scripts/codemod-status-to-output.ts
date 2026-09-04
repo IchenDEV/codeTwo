@@ -21,12 +21,12 @@ for (const sourceFile of project.getSourceFiles()) {
     .concat(
       sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement) as never
     )
-    .sort((a, b) => b.getStart() - a.getStart());
+    .toSorted((a, b) => b.getStart() - a.getStart());
 
   // Self-closing
   for (const el of sourceFile
     .getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement)
-    .sort((a, b) => b.getStart() - a.getStart())) {
+    .toSorted((a, b) => b.getStart() - a.getStart())) {
     if (el.wasForgotten()) {
       continue;
     }
@@ -35,7 +35,7 @@ for (const sourceFile of project.getSourceFiles()) {
       continue;
     }
     const init = role.getInitializer();
-    const value = init?.getText().replaceAll(/['"]/g, "");
+    const value = init?.getText().replaceAll(/['"]/gu, "");
     if (value !== "status") {
       continue;
     }
@@ -58,7 +58,7 @@ for (const sourceFile of project.getSourceFiles()) {
 
   for (const el of sourceFile
     .getDescendantsOfKind(SyntaxKind.JsxElement)
-    .sort((a, b) => b.getStart() - a.getStart())) {
+    .toSorted((a, b) => b.getStart() - a.getStart())) {
     if (el.wasForgotten()) {
       continue;
     }
@@ -68,7 +68,7 @@ for (const sourceFile of project.getSourceFiles()) {
       continue;
     }
     const init = role.getInitializer();
-    const value = init?.getText().replaceAll(/['"]/g, "");
+    const value = init?.getText().replaceAll(/['"]/gu, "");
     if (value !== "status") {
       continue;
     }

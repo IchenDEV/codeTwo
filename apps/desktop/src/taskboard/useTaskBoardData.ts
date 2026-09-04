@@ -1,10 +1,4 @@
-import {
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-} from "react";
+import { useDeferredValue, useEffect, useReducer, useRef } from "react";
 
 import type { Locale, Translate } from "@/i18n";
 import { useToast } from "@/ui/toast";
@@ -19,9 +13,8 @@ import {
   SAVE_BOARD_WARNING,
   saveBoardSnapshot,
   sortBoardTasks,
-  type BoardFilters,
-  type TaskPriority,
 } from "./taskBoard";
+import type { BoardFilters, TaskPriority } from "./taskBoard";
 import { projectTasks } from "./workspaceModel";
 import type { SessionProjection, TaskBoardSession } from "./workspaceTypes";
 
@@ -48,7 +41,8 @@ export function useTaskBoardData(
   const deferredQuery = useDeferredValue(query);
 
   useEffect(() => {
-    if (state.warning) toast(warningText(state.warning, t), "error");
+    if (state.warning != null && state.warning !== "")
+      toast(warningText(state.warning, t), "error");
   }, [state.warning, t, toast]);
 
   useEffect(() => {
@@ -60,47 +54,34 @@ export function useTaskBoardData(
     if (!result.ok) toast(warningText(result.warning, t), "error");
   }, [state.tasks, t, toast]);
 
-  const filters: BoardFilters = useMemo(
-    () => ({
-      query: deferredQuery,
-      priorities: [...priorities],
-      labels: [...labels],
-    }),
-    [deferredQuery, labels, priorities]
+  const filters: BoardFilters = {
+    query: deferredQuery,
+    priorities: [...priorities],
+    labels: [...labels],
+  };
+  const visibleTasks = sortBoardTasks(filterBoardTasks(state.tasks, filters));
+  const availableLabels = boardLabels(state.tasks);
+  const sessionsById = new Map(
+    sessions.map(
+      (session) =>
+        [
+          session.id,
+          { ...session, archived: session.archived === true },
+        ] satisfies [string, Omit<SessionProjection, "number" | "current">]
+    )
   );
-  const visibleTasks = useMemo(
-    () => sortBoardTasks(filterBoardTasks(state.tasks, filters)),
-    [filters, state.tasks]
-  );
-  const availableLabels = useMemo(
-    () => boardLabels(state.tasks),
-    [state.tasks]
-  );
-  const sessionsById = useMemo(
-    () =>
-      new Map(
-        sessions.map(
-          (session) =>
-            [
-              session.id,
-              { ...session, archived: session.archived === true },
-            ] satisfies [string, Omit<SessionProjection, "number" | "current">]
-        )
-      ),
-    [sessions]
-  );
-  const projectedTasks = useMemo(
-    () => projectTasks(visibleTasks, sessionsById),
-    [sessionsById, visibleTasks]
-  );
-  const allProjectedTasks = useMemo(
-    () => projectTasks(sortBoardTasks(state.tasks), sessionsById),
-    [sessionsById, state.tasks]
+  const projectedTasks = projectTasks(visibleTasks, sessionsById);
+  const allProjectedTasks = projectTasks(
+    sortBoardTasks(state.tasks),
+    sessionsById
   );
 
   return {
     state,
-    warning: state.warning ? warningText(state.warning, t) : null,
+    warning:
+      state.warning != null && state.warning !== ""
+        ? warningText(state.warning, t)
+        : null,
     dispatch,
     filters,
     projectedTasks,

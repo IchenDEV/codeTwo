@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from "react";
+import { useId } from "react";
+import type { ReactNode } from "react";
 
 interface SettingsSectionProps {
   title: ReactNode;
@@ -36,23 +37,23 @@ function SettingsSection({
           >
             {title}
           </h2>
-          {description ? (
+          {description == null ? null : (
             <p
               data-slot="settings-section-description"
               className="mt-inline text-metadata text-content-muted"
             >
               {description}
             </p>
-          ) : null}
+          )}
         </div>
-        {actions ? (
+        {actions == null ? null : (
           <div
             data-slot="settings-section-actions"
             className="gap-inline flex max-w-full shrink-0 flex-wrap items-center"
           >
             {actions}
           </div>
-        ) : null}
+        )}
       </header>
       <div
         data-slot="settings-section-content"

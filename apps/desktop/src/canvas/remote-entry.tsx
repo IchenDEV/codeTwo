@@ -1,13 +1,11 @@
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 import { CanvasEditor } from "./CanvasEditor";
-import {
-  DEFAULT_EXPORT_BUDGET,
-  exportCanvasPng,
-  type CanvasExportBudget,
-  type CanvasPngExport,
-} from "./export";
-import { deriveCanvasManifest, type CanvasManifest } from "./manifest";
+import { DEFAULT_EXPORT_BUDGET, exportCanvasPng } from "./export";
+import type { CanvasExportBudget, CanvasPngExport } from "./export";
+import { deriveCanvasManifest } from "./manifest";
+import type { CanvasManifest } from "./manifest";
 import { rehydrateEnvelope } from "./serialize";
 import type {
   CanvasEditorHandle,
@@ -219,7 +217,9 @@ export async function prepareCanvasIslandFreeze(
     options.assets ??
     (resolver
       ? (
-          await Promise.all(envelope.assetRefs.map((asset) => resolver(asset)))
+          await Promise.all(
+            envelope.assetRefs.map(async (asset) => await resolver(asset))
+          )
         ).filter((asset): asset is NormalizedStaticAsset => Boolean(asset))
       : []);
   const hydrated =

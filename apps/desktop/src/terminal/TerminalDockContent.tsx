@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,16 +15,16 @@ function terminalId(sessionKey: string, slot: number, tmux: boolean): string {
 }
 
 function terminalLabel(title: string | undefined, slot: number): string {
-  if (!title) return String(slot);
+  if (title == null || title === "") return String(slot);
   return title.split("/").filter(Boolean).pop() ?? title;
 }
 
-type TerminalDockContentProps = {
+interface TerminalDockContentProps {
   cwd: string | null;
   projectPath: string | null;
   sessionKey: string;
   onSendText: (text: string) => void;
-};
+}
 
 /** Terminal-specific tabs and lifecycle, rendered inside the generic Dock container. */
 export function TerminalDockContent({
@@ -53,10 +53,10 @@ export function TerminalDockContent({
   }, [projectPath]);
 
   const activeId = terminalId(sessionKey, activeSlot, tmux);
-  const sendToAgent = useCallback(async () => {
+  const sendToAgent = async () => {
     const text = (await ptyDump(activeId, true)).trimEnd();
     if (text) onSendText(text);
-  }, [activeId, onSendText]);
+  };
 
   function closeSlot(slot: number) {
     const remaining = slots.filter((candidate) => candidate !== slot);
@@ -134,7 +134,7 @@ export function TerminalDockContent({
         <label className="text-callout text-muted-foreground flex shrink-0 cursor-pointer items-center gap-1.5 px-1">
           <Checkbox
             checked={tmux}
-            onCheckedChange={(checked) => setTmux(checked === true)}
+            onCheckedChange={(checked) => setTmux(checked)}
             className="size-3.5"
           />
           {t("dock.tmux")}

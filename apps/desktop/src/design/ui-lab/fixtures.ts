@@ -9,8 +9,8 @@ import { githubPullRequestReference } from "../../github/pullRequests";
 import {
   associateTaskPullRequest,
   createBoardTask,
-  type BoardTask,
 } from "../../taskboard/taskBoard";
+import type { BoardTask } from "../../taskboard/taskBoard";
 
 const stableTimestamp = "2099-01-01T10:00:00Z";
 
@@ -210,7 +210,13 @@ export const pullRequestPanelApi: GitHubPullRequestPanelApi = {
     ].join("\n"),
     truncated: false,
   }),
-  review: async () => {},
-  merge: async () => {},
-  open: async () => {},
+  review: async () => {
+    /* empty */
+  },
+  merge: async () => {
+    /* empty */
+  },
+  open: async () => {
+    /* empty */
+  },
 };

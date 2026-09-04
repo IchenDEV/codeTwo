@@ -4,6 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 import { useT } from "../i18n";
+import { td } from "../i18n/dynamic";
 import type { ContextCategory, ContextWindow } from "./contextWindow";
 import { formatContextTokens, contextWindowPercentage } from "./contextWindow";
 
@@ -27,9 +28,7 @@ function categoryColor(id: string): string {
 
 function CategoryRow({ category }: { category: ContextCategory }) {
   const t = useT();
-  const key =
-    `context.category.${category.id}` as "context.category.system_prompt";
-  const label = t(key);
+  const label = td(t, `context.category.${category.id}`);
 
   return (
     <div className="flex items-center gap-3 py-1">
@@ -94,8 +93,8 @@ export function ContextBreakdown({
 }) {
   const t = useT();
   const percentage = contextWindowPercentage(contextWindow);
-  const percentLabel = percentage !== null ? Math.round(percentage) : 0;
-  const breakdown = contextWindow.breakdown;
+  const percentLabel = percentage === null ? 0 : Math.round(percentage);
+  const { breakdown } = contextWindow;
 
   return (
     <div className="w-80">
@@ -180,7 +179,9 @@ export function ContextBreakdown({
             <Minimize2 className="size-3.5" />
             {t("context.compact")}
           </Button>
-          {compactDisabled && compactDisabledReason ? (
+          {compactDisabled &&
+          compactDisabledReason != null &&
+          compactDisabledReason !== "" ? (
             <p className="text-callout text-muted-foreground mt-1.5">
               {compactDisabledReason}
             </p>

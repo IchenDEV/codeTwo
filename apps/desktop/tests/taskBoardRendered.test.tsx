@@ -26,7 +26,7 @@ const { TASKBOARD_VIEW_STORAGE_KEY } =
   await import("../src/taskboard/useTaskBoardView");
 const taskBoardStyles = readFileSync(
   new URL("../src/taskboard/task-board.css", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 
 const mountedRoots = [];
@@ -109,9 +109,9 @@ async function openMenu(trigger) {
 }
 
 function menuItem(label) {
-  return Array.from(
-    dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]')
-  ).find((item) => item.textContent?.replace(/\s+/g, " ").trim() === label);
+  return [
+    ...dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'),
+  ].find((item) => item.textContent?.replaceAll(/\s+/gu, " ").trim() === label);
 }
 
 function storeTasks(tasks) {
@@ -178,7 +178,7 @@ describe("TaskBoardPage rendered", () => {
     const view = await renderBoard();
     const page = view.container.querySelector("[data-task-board-page]");
 
-    expect(page?.getAttribute("data-task-board-view")).toBe("list");
+    expect(page?.dataset.taskBoardView).toBe("list");
     expect(button(view.container, "列表").getAttribute("aria-pressed")).toBe(
       "true"
     );
@@ -190,7 +190,7 @@ describe("TaskBoardPage rendered", () => {
     await setValue(search, "本地持久化");
     await click(button(view.container, "看板"));
 
-    expect(page?.getAttribute("data-task-board-view")).toBe("board");
+    expect(page?.dataset.taskBoardView).toBe("board");
     expect(view.container.querySelector('[aria-label="任务列表"]')).toBeNull();
     expect(view.container.querySelectorAll("[data-task-column]")).toHaveLength(
       4
@@ -221,7 +221,7 @@ describe("TaskBoardPage rendered", () => {
     );
 
     await click(button(view.container, "列表"));
-    expect(page?.getAttribute("data-task-board-view")).toBe("list");
+    expect(page?.dataset.taskBoardView).toBe("list");
     expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(0);
     expect(view.container.querySelectorAll("[data-task-item]")).toHaveLength(1);
     expect(dom.window.localStorage.getItem(TASKBOARD_VIEW_STORAGE_KEY)).toBe(
@@ -235,9 +235,8 @@ describe("TaskBoardPage rendered", () => {
     const view = await renderBoard();
 
     expect(
-      view.container
-        .querySelector("[data-task-board-page]")
-        ?.getAttribute("data-task-board-view")
+      view.container.querySelector("[data-task-board-page]")?.dataset
+        .taskBoardView
     ).toBe("board");
     expect(view.container.querySelectorAll("[data-task-column]")).toHaveLength(
       4
@@ -250,9 +249,8 @@ describe("TaskBoardPage rendered", () => {
 
     const fallback = await renderBoard();
     expect(
-      fallback.container
-        .querySelector("[data-task-board-page]")
-        ?.getAttribute("data-task-board-view")
+      fallback.container.querySelector("[data-task-board-page]")?.dataset
+        .taskBoardView
     ).toBe("list");
     expect(dom.window.localStorage.getItem(TASKBOARD_VIEW_STORAGE_KEY)).toBe(
       "list"
@@ -265,9 +263,8 @@ describe("TaskBoardPage rendered", () => {
     await click(button(view.container, "选择任务：完善空状态与操作提示"));
 
     expect(
-      view.container
-        .querySelector('[data-task-card][data-selected="true"]')
-        ?.getAttribute("data-task-card")
+      view.container.querySelector('[data-task-card][data-selected="true"]')
+        ?.dataset.taskCard
     ).toBe("seed-empty-state-copy");
     await click(button(view.container, "详情"));
     expect(
@@ -427,10 +424,8 @@ describe("TaskBoardPage rendered", () => {
       view.container.querySelector(".task-board-session-stack")?.className
     ).toContain("bg-fill-rest/40");
 
-    const rows = Array.from(
-      view.container.querySelectorAll("[data-task-session]")
-    );
-    expect(rows.map((row) => row.getAttribute("data-task-session"))).toEqual([
+    const rows = [...view.container.querySelectorAll("[data-task-session]")];
+    expect(rows.map((row) => row.dataset.taskSession)).toEqual([
       "session-current",
       "session-old",
     ]);
@@ -501,7 +496,7 @@ describe("TaskBoardPage rendered", () => {
       loadPullRequest: async (path) => {
         loadedPaths.push(path);
         if (path === "/worktrees/session-1") {
-          return new Promise((resolve) => {
+          return await new Promise((resolve) => {
             resolveSelectedPullRequest = () => resolve(githubPullRequest(1));
           });
         }
@@ -578,9 +573,9 @@ describe("TaskBoardPage rendered", () => {
   test("filters Tasks by priority and clears the active facet", async () => {
     const view = await renderBoard();
     await click(button(view.container, "筛选"));
-    const urgentLabel = Array.from(
-      dom.document.body.querySelectorAll("label")
-    ).find((label) => label.textContent?.trim() === "紧急");
+    const urgentLabel = [...dom.document.body.querySelectorAll("label")].find(
+      (label) => label.textContent?.trim() === "紧急"
+    );
     const urgentCheckbox = urgentLabel?.querySelector('[role="checkbox"]');
     await reactAct(async () => Simulate.click(urgentCheckbox));
     await flush();
@@ -607,9 +602,9 @@ describe("TaskBoardPage rendered", () => {
     await click(button(dom.document.body, "创建任务"));
 
     expect(view.container.querySelectorAll("[data-task-item]")).toHaveLength(0);
-    const toast = Array.from(
-      dom.document.body.querySelectorAll('[role="status"]')
-    ).find((status) => status.textContent?.includes("但它被当前筛选隐藏"));
+    const toast = [
+      ...dom.document.body.querySelectorAll('[role="status"]'),
+    ].find((status) => status.textContent?.includes("但它被当前筛选隐藏"));
     expect(toast).toBeTruthy();
     await click(button(toast, "清除筛选"));
     expect(view.container.textContent).toContain("隐藏后可找回的任务");
@@ -692,7 +687,7 @@ describe("TaskBoardPage rendered", () => {
     const view = await renderBoard();
     const page = view.container.querySelector("[data-task-board-page]");
 
-    expect(page?.getAttribute("data-inspector-open")).toBe("true");
+    expect(page?.dataset.inspectorOpen).toBe("true");
     expect(
       view.container.querySelector('aside[aria-label="任务检查器"]')
     ).not.toBeNull();
@@ -714,7 +709,7 @@ describe("TaskBoardPage rendered", () => {
         this.callback = callback;
       }
       observe(element) {
-        if (element.hasAttribute?.("data-task-board-page"))
+        if (element.hasAttribute?.("data-task-board-page") != null)
           notifyResize = this.callback;
       }
       disconnect() {}
@@ -732,13 +727,12 @@ describe("TaskBoardPage rendered", () => {
 
     await waitFor(() => {
       expect(
-        view.container
-          .querySelector("[data-task-board-page]")
-          ?.getAttribute("data-inspector-open")
+        view.container.querySelector("[data-task-board-page]")?.dataset
+          .inspectorOpen
       ).toBe("false");
     });
     await click(button(view.container, "展开任务：确认任务流转规则"));
-    expect(page?.getAttribute("data-inspector-open")).toBe("false");
+    expect(page?.dataset.inspectorOpen).toBe("false");
 
     const showInspector = button(view.container, "显示检查器");
     showInspector.focus();
@@ -760,7 +754,7 @@ describe("TaskBoardPage rendered", () => {
     );
 
     await click(button(view.container, "返回任务列表"));
-    expect(page?.getAttribute("data-inspector-open")).toBe("false");
+    expect(page?.dataset.inspectorOpen).toBe("false");
     expect(
       view.container.querySelector(".task-board-workspace")
     ).not.toBeNull();
@@ -781,7 +775,7 @@ describe("TaskBoardPage rendered", () => {
         this.callback = callback;
       }
       observe(element) {
-        if (element.hasAttribute?.("data-task-board-page"))
+        if (element.hasAttribute?.("data-task-board-page") != null)
           notifyResize = this.callback;
       }
       disconnect() {}
@@ -797,8 +791,8 @@ describe("TaskBoardPage rendered", () => {
 
     await click(button(view.container, "看板"));
     await click(button(view.container, "选择任务：完善空状态与操作提示"));
-    expect(page?.getAttribute("data-task-board-view")).toBe("board");
-    expect(page?.getAttribute("data-inspector-open")).toBe("false");
+    expect(page?.dataset.taskBoardView).toBe("board");
+    expect(page?.dataset.inspectorOpen).toBe("false");
 
     await click(button(view.container, "显示检查器"));
     expect(view.container.querySelector(".task-board-workspace")).toBeNull();
@@ -808,11 +802,10 @@ describe("TaskBoardPage rendered", () => {
     ).toContain("为第一次使用看板的成员准备简洁、可行动的中文引导。");
 
     await click(button(view.container, "返回任务列表"));
-    expect(page?.getAttribute("data-task-board-view")).toBe("board");
+    expect(page?.dataset.taskBoardView).toBe("board");
     expect(
-      view.container
-        .querySelector('[data-task-card][data-selected="true"]')
-        ?.getAttribute("data-task-card")
+      view.container.querySelector('[data-task-card][data-selected="true"]')
+        ?.dataset.taskCard
     ).toBe("seed-empty-state-copy");
   });
 });

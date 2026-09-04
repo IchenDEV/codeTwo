@@ -6,9 +6,11 @@ import {
   classifyToolSurface,
   followReduce,
   initialFollowState,
-  type FollowEvent,
-  type FollowState,
-  type ToolSurfaceHint,
+} from "../src/session/toolActivity";
+import type {
+  FollowEvent,
+  FollowState,
+  ToolSurfaceHint,
 } from "../src/session/toolActivity";
 import type { Turn } from "../src/session/turns";
 

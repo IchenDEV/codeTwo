@@ -3,8 +3,7 @@ import { createContext, useContext, useRef } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { X } from "@/components/ui/icons";
-import { Sparkles } from "@/components/ui/icons";
+import { X, Sparkles } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -15,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { asJsonObject, parseJsonPayload } from "@/lib/jsonValue";
 import { cn } from "@/lib/utils";
 
 import type { DocBlock } from "../bridge";
@@ -85,7 +85,11 @@ export function normalizeSlots(
       if (typeof entry === "string") {
         return { id: entry, label: "", kind: "text" };
       }
-      if (!entry || typeof entry.id !== "string" || entry.id.length === 0)
+      if (
+        entry == null ||
+        typeof entry.id !== "string" ||
+        entry.id.length === 0
+      )
         return null;
       const kind =
         entry.kind === "multiline" ||
@@ -111,7 +115,7 @@ export function normalizeSlots(
 /** Corrupt JSON props degrade to an empty slot list, never a crash (canvas-envelope discipline). */
 export function parseSlots(json: string): SceneSlotDef[] {
   try {
-    const parsed = JSON.parse(json);
+    const parsed = parseJsonPayload(json);
     return Array.isArray(parsed) ? normalizeSlots(parsed) : [];
   } catch {
     return [];
@@ -121,13 +125,10 @@ export function parseSlots(json: string): SceneSlotDef[] {
 /** Corrupt JSON props degrade to no values. */
 export function parseValues(json: string): Record<string, string> {
   try {
-    const parsed = JSON.parse(json);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return {};
+    const parsed = asJsonObject(parseJsonPayload(json));
+    if (parsed == null) return {};
     const out: Record<string, string> = {};
-    for (const [key, value] of Object.entries(
-      parsed as Record<string, unknown>
-    )) {
+    for (const [key, value] of Object.entries(parsed)) {
       if (typeof value === "string") out[key] = value;
     }
     return out;
@@ -203,11 +204,18 @@ export function unfilledRequiredSlots(editor: {
   const out: string[] = [];
   for (const block of editor.document) {
     if (block.type !== "slotCard") continue;
-    const props = block.props as Partial<SlotCardProps> | undefined;
-    const slots = parseSlots(props?.slots ?? "[]");
-    const values = parseValues(props?.values ?? "{}");
+    const propsObject = asJsonObject(block.props);
+    const slots = parseSlots(
+      typeof propsObject?.slots === "string" ? propsObject.slots : "[]"
+    );
+    const values = parseValues(
+      typeof propsObject?.values === "string" ? propsObject.values : "{}"
+    );
     for (const slot of slots) {
-      if (slot.required && effectiveSlotValue(slot, values).trim() === "") {
+      if (
+        slot.required === true &&
+        effectiveSlotValue(slot, values).trim() === ""
+      ) {
         out.push(slot.label || slot.id);
       }
     }
@@ -279,7 +287,9 @@ export function SlotCardView({
   // Committing on the native `input` event (via onInput) keeps one write per edit in browsers
   // and in happy-dom, whose own-instance `value` property defeats React's change tracker. The
   // noop onChange only satisfies React's controlled-input contract.
-  const noopChange = () => {};
+  const noopChange = () => {
+    /* empty */
+  };
 
   const exitToEditor = () => {
     try {
@@ -300,11 +310,11 @@ export function SlotCardView({
     if (event.key !== "Tab") return;
     const host = containerRef.current;
     if (!host) return;
-    const fields = Array.from(
-      host.querySelectorAll<HTMLElement>("[data-slot-field]")
-    );
-    const index = fields.indexOf(event.target as HTMLElement);
-    if (index < 0) return;
+    const fields = [...host.querySelectorAll<HTMLElement>("[data-slot-field]")];
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target == null) return;
+    const index = fields.indexOf(target);
+    if (index === -1) return;
     event.preventDefault();
     event.stopPropagation();
     const next = index + (event.shiftKey ? -1 : 1);
@@ -320,12 +330,12 @@ export function SlotCardView({
     const value = values[slot.id] ?? slot.default ?? "";
     const label = slot.label || slot.id;
     switch (slot.kind) {
-      case "multiline":
+      case "multiline": {
         return (
           <Textarea
             data-slot-field
             aria-label={label}
-            aria-required={slot.required || undefined}
+            aria-required={slot.required ?? undefined}
             size="compact"
             className="resize-none"
             rows={2}
@@ -341,7 +351,8 @@ export function SlotCardView({
             }}
           />
         );
-      case "select":
+      }
+      case "select": {
         return (
           <Select
             items={(slot.options ?? []).map((option) => ({
@@ -354,7 +365,7 @@ export function SlotCardView({
             <SelectTrigger
               data-slot-field
               aria-label={label}
-              aria-required={slot.required || undefined}
+              aria-required={slot.required ?? undefined}
               className="w-full min-w-0"
             >
               <SelectValue placeholder={t("slotCard.selectPlaceholder")} />
@@ -370,7 +381,8 @@ export function SlotCardView({
             </SelectContent>
           </Select>
         );
-      case "file":
+      }
+      case "file": {
         return runtime ? (
           <span className="inline-flex min-w-0 items-center gap-1.5">
             {value && (
@@ -386,7 +398,7 @@ export function SlotCardView({
               aria-label={`${label}: ${t("slotCard.pickFile")}`}
               onClick={() => {
                 void runtime.pickFile().then((path) => {
-                  if (path) write(slot.id, path);
+                  if (path != null && path !== "") write(slot.id, path);
                 });
               }}
             >
@@ -398,7 +410,7 @@ export function SlotCardView({
           <Input
             data-slot-field
             aria-label={label}
-            aria-required={slot.required || undefined}
+            aria-required={slot.required ?? undefined}
             className="inline-flex w-56 flex-none"
             placeholder={label}
             value={value}
@@ -406,6 +418,7 @@ export function SlotCardView({
             onInput={(event) => write(slot.id, event.currentTarget.value)}
           />
         );
+      }
       case "artifact": {
         const artifacts = runtime?.carriedArtifacts() ?? [];
         if (artifacts.length === 0 && !value) {
@@ -430,7 +443,7 @@ export function SlotCardView({
             <SelectTrigger
               data-slot-field
               aria-label={label}
-              aria-required={slot.required || undefined}
+              aria-required={slot.required ?? undefined}
               className="w-full min-w-0"
             >
               <SelectValue placeholder={t("slotCard.selectPlaceholder")} />
@@ -447,12 +460,15 @@ export function SlotCardView({
           </Select>
         );
       }
-      default:
+      case "text": {
+        throw new Error('Not implemented yet: "text" case');
+      }
+      default: {
         return (
           <Input
             data-slot-field
             aria-label={label}
-            aria-required={slot.required || undefined}
+            aria-required={slot.required ?? undefined}
             className="inline-flex w-56 flex-none"
             placeholder={label}
             value={value}
@@ -460,6 +476,7 @@ export function SlotCardView({
             onInput={(event) => write(slot.id, event.currentTarget.value)}
           />
         );
+      }
     }
   };
 

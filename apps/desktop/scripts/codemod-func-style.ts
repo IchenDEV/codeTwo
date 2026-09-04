@@ -32,7 +32,7 @@ for (const sourceFile of project.getSourceFiles()) {
   const variableStatements = sourceFile
     .getDescendants()
     .filter(Node.isVariableStatement)
-    .sort((a, b) => b.getStart() - a.getStart());
+    .toSorted((a, b) => b.getStart() - a.getStart());
 
   for (const statement of variableStatements) {
     if (statement.wasForgotten()) continue;
@@ -40,7 +40,7 @@ for (const sourceFile of project.getSourceFiles()) {
     if (statement.hasDeclareKeyword()) continue;
     const declarations = statement.getDeclarations();
     if (declarations.length !== 1) continue;
-    const declaration = declarations[0]!;
+    const declaration = declarations[0];
     const name = declaration.getNameNode();
     if (!Node.isIdentifier(name)) continue;
     const bindingName = name.getText();

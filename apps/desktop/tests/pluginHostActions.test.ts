@@ -49,7 +49,7 @@ const catalog = {
 
 describe("plugin host actions", () => {
   test("reuses UI contributions to render actions and route clicks", async () => {
-    const calls: Array<{ name: string; args: unknown }> = [];
+    const calls: { name: string; args: unknown }[] = [];
     const adapter = new FakeActionAdapter();
     const controller = new PluginHostActionController(async (name, args) => {
       calls.push({ name, args });

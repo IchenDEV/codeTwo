@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/icons";
 import type { Translate } from "@/i18n";
 
-import { TASK_STATUSES, type BoardTask, type TaskStatus } from "./taskBoard";
+import { TASK_STATUSES } from "./taskBoard";
+import type { BoardTask, TaskStatus } from "./taskBoard";
 import { taskStatusLabel } from "./TaskEditorDialog";
 
 interface TaskActionsMenuProps {

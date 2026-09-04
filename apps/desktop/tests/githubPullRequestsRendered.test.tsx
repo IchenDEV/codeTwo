@@ -24,18 +24,18 @@ const { associateTaskPullRequest, createBoardTask } =
 const { githubPullRequestReference } =
   await import("../src/github/pullRequests");
 const layoutSpec = JSON.parse(
-  readFileSync(new URL("../layout-spec.json", import.meta.url), "utf8")
+  readFileSync(new URL("../layout-spec.json", import.meta.url), "utf-8")
 );
 const pullRequestCss = readFileSync(
   new URL("../src/github/pull-requests.css", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 
 const mounted = [];
 let restoreCanvasContext = null;
 
 function disableCanvasDrawing() {
-  const getContext = dom.HTMLCanvasElement.prototype.getContext;
+  const { getContext } = dom.HTMLCanvasElement.prototype;
   dom.HTMLCanvasElement.prototype.getContext = () => null;
   restoreCanvasContext = () => {
     dom.HTMLCanvasElement.prototype.getContext = getContext;
@@ -238,7 +238,7 @@ describe("PullRequestsPage", () => {
     const detailHeader = view.container.querySelector(
       "[data-pull-request-detail-header]"
     );
-    expect(page?.getAttribute("data-compact-detail")).toBe("false");
+    expect(page?.dataset.compactDetail).toBe("false");
     expect(listHeader?.className).toContain("window-controls-safe-main");
     expect(listHeader?.querySelector("[role='tablist']")).toBeNull();
     expect(
@@ -260,12 +260,12 @@ describe("PullRequestsPage", () => {
     );
     expect(row).not.toBeUndefined();
     await reactAct(async () => click(row));
-    expect(page?.getAttribute("data-compact-detail")).toBe("true");
+    expect(page?.dataset.compactDetail).toBe("true");
 
     await reactAct(async () =>
       click(button(view.container, "Back to pull requests"))
     );
-    expect(page?.getAttribute("data-compact-detail")).toBe("false");
+    expect(page?.dataset.compactDetail).toBe("false");
   });
 
   test("keeps the selected detail inside the filtered result set", async () => {

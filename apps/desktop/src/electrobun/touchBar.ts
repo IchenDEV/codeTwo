@@ -1,4 +1,5 @@
-import { CString, dlopen, FFIType, JSCallback, type Pointer } from "bun:ffi";
+import { CString, dlopen, FFIType, JSCallback } from "bun:ffi";
+import type { Pointer } from "bun:ffi";
 import { join } from "node:path";
 
 import type { HostActionAdapter } from "./pluginHostActions";
@@ -49,7 +50,7 @@ export function createMacOSTouchBar(
     }
     return {
       render(items) {
-        const json = Buffer.from(`${JSON.stringify(items)}\0`, "utf8");
+        const json = Buffer.from(`${JSON.stringify(items)}\0`, "utf-8");
         return library.symbols.codetwoUpdateTouchBar(windowPointer, json) !== 0;
       },
       dispose() {

@@ -46,7 +46,7 @@ function session(id, activityKind = "idle") {
     acp_session_id: null,
     memory_read: "inherit",
     memory_write: "inherit",
-    created_at: ++counter,
+    created_at: (counter += 1),
     activity: { revision: 1, state },
   };
 }
@@ -78,7 +78,7 @@ describe("MissionControlDialog", () => {
   test("renders one row per session with title, scene pill, and context", async () => {
     activateDom();
     renderDialog();
-    const body = dom.document.body;
+    const { body } = dom.document;
     await waitFor(() => {
       expect(body.textContent).toContain("Session alpha");
       expect(body.textContent).toContain("Session beta");
@@ -97,7 +97,7 @@ describe("MissionControlDialog", () => {
   test("review click calls onSelect and onReview for that session, then closes", async () => {
     activateDom();
     const { calls } = renderDialog();
-    const body = dom.document.body;
+    const { body } = dom.document;
     await waitFor(() => {
       expect(body.textContent).toContain("Session alpha");
     });
@@ -112,7 +112,7 @@ describe("MissionControlDialog", () => {
   test("the full row primary action is a semantic button", async () => {
     activateDom();
     const { calls } = renderDialog();
-    const body = dom.document.body;
+    const { body } = dom.document;
     await waitFor(() => expect(button(body, "Session alpha")).not.toBeNull());
     click(button(body, "Session alpha"));
     expect(calls.selected).toEqual(["alpha"]);
@@ -123,7 +123,7 @@ describe("MissionControlDialog", () => {
   test("shows the empty line when there are no sessions", async () => {
     activateDom();
     renderDialog({ sessions: [] });
-    const body = dom.document.body;
+    const { body } = dom.document;
     await waitFor(() => {
       expect(body.textContent).toContain("No sessions yet.");
     });
@@ -137,7 +137,7 @@ describe("MissionControlDialog", () => {
       contextWindows: {},
       fetchStat: async () => null,
     });
-    const body = dom.document.body;
+    const { body } = dom.document;
     await waitFor(() => {
       expect(body.textContent).toContain("Session gone");
       expect(body.textContent).toContain("—");

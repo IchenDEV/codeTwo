@@ -34,16 +34,18 @@ import {
   setDeviceSyncEnabled,
   setPluginDeveloperMode,
   syncDeviceDataNow,
-  type BrowserUseSettings,
-  type ComputerUseSettings,
-  type DiagnosticsExportResult,
-  type DeviceSyncStatus,
-  type PluginDeveloperStatus,
+} from "../bridge";
+import type {
+  BrowserUseSettings,
+  ComputerUseSettings,
+  DiagnosticsExportResult,
+  DeviceSyncStatus,
+  PluginDeveloperStatus,
 } from "../bridge";
 import { useT } from "../i18n";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
-type BackendCopy = {
+interface BackendCopy {
   title: string;
   description: string;
   scope: string;
@@ -58,7 +60,7 @@ type BackendCopy = {
   unavailable: string;
   loadFailed: (error: unknown) => string;
   testId: string;
-};
+}
 
 function BackendSettingsPage({
   copy,
@@ -84,8 +86,8 @@ function BackendSettingsPage({
       .then((next) => {
         if (active) setSettings(next);
       })
-      .catch((cause) => {
-        if (active) setError(copyRef.current.loadFailed(cause));
+      .catch((error: unknown) => {
+        if (active) setError(copyRef.current.loadFailed(error));
       });
     return () => {
       active = false;
@@ -106,8 +108,8 @@ function BackendSettingsPage({
     setError(null);
     try {
       setSettings(await saver(backend));
-    } catch (cause) {
-      setError(copy.loadFailed(cause));
+    } catch (error) {
+      setError(copy.loadFailed(error));
     } finally {
       setSaving(false);
     }
@@ -119,8 +121,8 @@ function BackendSettingsPage({
     setError(null);
     try {
       setSettings(await accessSaver(enabled));
-    } catch (cause) {
-      setError(copy.loadFailed(cause));
+    } catch (error) {
+      setError(copy.loadFailed(error));
     } finally {
       setSaving(false);
     }
@@ -132,17 +134,15 @@ function BackendSettingsPage({
   return (
     <Page title={copy.title} description={copy.description}>
       <p className="text-metadata text-muted-foreground pb-2">{copy.scope}</p>
-      {error && <p className="text-metadata text-destructive pb-2">{error}</p>}
+      {error != null && error !== "" && (
+        <p className="text-metadata text-destructive pb-2">{error}</p>
+      )}
       {settings?.errors.map((message) => (
         <p key={message} className="text-metadata text-destructive pb-2">
           {message}
         </p>
       ))}
-      {!settings ? (
-        <p className="py-section text-body text-muted-foreground">
-          {copy.loading}
-        </p>
-      ) : (
+      {settings ? (
         <>
           {accessSaver && (
             <Row label={copy.access ?? ""} hint={copy.accessHint}>
@@ -160,7 +160,7 @@ function BackendSettingsPage({
               value={selection}
               disabled={saving || (accessSaver !== undefined && !accessEnabled)}
               onValueChange={(backend) => {
-                if (backend) void save(backend);
+                if (backend != null && backend !== "") void save(backend);
               }}
             >
               <SelectTrigger
@@ -218,6 +218,10 @@ function BackendSettingsPage({
             </Row>
           ))}
         </>
+      ) : (
+        <p className="py-section text-body text-muted-foreground">
+          {copy.loading}
+        </p>
       )}
     </Page>
   );
@@ -295,35 +299,47 @@ function syncHint(
   status: DeviceSyncStatus | null
 ): string {
   switch (status?.state) {
-    case "disabled":
+    case "disabled": {
       return status.available
         ? t("settings.syncReady")
         : t("settings.syncUnavailable");
-    case "ready":
-      return status.last_success_at
-        ? t("settings.syncLastSuccess", {
+    }
+    case "ready": {
+      return status.last_success_at == null
+        ? t("settings.syncReady")
+        : t("settings.syncLastSuccess", {
             time: new Intl.DateTimeFormat(undefined, {
               dateStyle: "medium",
               timeStyle: "short",
             }).format(status.last_success_at),
-          })
-        : t("settings.syncReady");
-    case "syncing":
+          });
+    }
+    case "syncing": {
       return t("settings.syncing");
-    case "signed-out":
+    }
+    case "signed-out": {
       return t("settings.syncSignedOut");
-    case "restricted":
+    }
+    case "restricted": {
       return t("settings.syncRestricted");
-    case "unsupported":
+    }
+    case "unsupported": {
       return t("settings.syncUnsupported");
-    case "unavailable":
+    }
+    case "unavailable": {
       return t("settings.syncUnavailable");
-    case "error":
-      return status.message || t("settings.syncUnavailable");
-    default:
-      return status?.available
+    }
+    case "error": {
+      return status.message ?? t("settings.syncUnavailable");
+    }
+    case undefined: {
+      throw new Error("Not implemented yet: undefined case");
+    }
+    default: {
+      return status?.available === true
         ? t("settings.syncReady")
         : t("settings.syncLoading");
+    }
   }
 }
 
@@ -346,7 +362,7 @@ export function DeviceSyncSettingsPage({
       .then((next) => {
         if (active) setStatus(next);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (active) {
           setStatus({
             transport: "paired-devices",
@@ -416,7 +432,9 @@ export function DeviceSyncSettingsPage({
           variant="outline"
           size="sm"
           className="gap-1.5"
-          disabled={!status?.enabled || status.state === "syncing" || saving}
+          disabled={
+            status?.enabled !== true || status.state === "syncing" || saving
+          }
           onClick={() => void startSync()}
         >
           {status?.state === "syncing" ? (
@@ -462,7 +480,9 @@ export function DeveloperSettingsPage({
 
   useEffect(() => {
     let active = true;
-    let unsubscribe = () => {};
+    let unsubscribe = () => {
+      /* empty */
+    };
     const refresh = () => {
       void loader()
         .then((next) => {
@@ -471,10 +491,10 @@ export function DeveloperSettingsPage({
             setError(null);
           }
         })
-        .catch((cause) => {
+        .catch((error: unknown) => {
           if (active)
             setError(
-              t("settings.developerLoadFailed", { error: String(cause) })
+              t("settings.developerLoadFailed", { error: String(error) })
             );
         });
     };
@@ -494,8 +514,8 @@ export function DeveloperSettingsPage({
     setError(null);
     try {
       setStatus(await modeSaver(enabled));
-    } catch (cause) {
-      setError(t("settings.developerSaveFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerSaveFailed", { error: String(error) }));
     } finally {
       setSaving(false);
     }
@@ -506,8 +526,8 @@ export function DeveloperSettingsPage({
     setError(null);
     try {
       setStatus(await reloader());
-    } catch (cause) {
-      setError(t("settings.developerReloadFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerReloadFailed", { error: String(error) }));
     } finally {
       setReloading(false);
     }
@@ -517,8 +537,8 @@ export function DeveloperSettingsPage({
     setError(null);
     try {
       await devtoolsOpener();
-    } catch (cause) {
-      setError(t("settings.developerDevtoolsFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerDevtoolsFailed", { error: String(error) }));
     }
   }
 
@@ -532,34 +552,35 @@ export function DeveloperSettingsPage({
         setDiagnosticsMessage(t("settings.diagnosticsExported"));
       else if (result === "unsupported")
         setError(t("settings.diagnosticsUnsupported"));
-    } catch (cause) {
-      setError(t("settings.diagnosticsExportFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.diagnosticsExportFailed", { error: String(error) }));
     } finally {
       setDiagnosticsExporting(false);
     }
   }
 
-  const statusText = !status
-    ? t("settings.pluginHotReloadLoading")
-    : !status.enabled
-      ? t("settings.pluginHotReloadOff")
-      : !status.watching
-        ? t("settings.pluginHotReloadUnavailable")
-        : t("settings.pluginHotReloadWatching", { path: status.plugins_dir });
+  const statusText = status
+    ? status.enabled
+      ? status.watching
+        ? t("settings.pluginHotReloadWatching", { path: status.plugins_dir })
+        : t("settings.pluginHotReloadUnavailable")
+      : t("settings.pluginHotReloadOff")
+    : t("settings.pluginHotReloadLoading");
   const reloadRecord = status?.last_reload;
-  const reloadDetail = reloadRecord?.success
-    ? t("settings.pluginHotReloadLastSuccess", {
-        plugins: reloadRecord.plugins.length
-          ? reloadRecord.plugins.join(", ")
-          : t("settings.allInstalledPlugins"),
-        time: new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(reloadRecord.at),
-      })
-    : reloadRecord?.error
-      ? t("settings.pluginHotReloadLastError", { error: reloadRecord.error })
-      : null;
+  const reloadDetail =
+    reloadRecord?.success === true
+      ? t("settings.pluginHotReloadLastSuccess", {
+          plugins: reloadRecord.plugins.length
+            ? reloadRecord.plugins.join(", ")
+            : t("settings.allInstalledPlugins"),
+          time: new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(reloadRecord.at),
+        })
+      : reloadRecord?.error != null && reloadRecord.error !== ""
+        ? t("settings.pluginHotReloadLastError", { error: reloadRecord.error })
+        : null;
 
   return (
     <Page
@@ -583,10 +604,10 @@ export function DeveloperSettingsPage({
         hint={
           <span aria-live="polite">
             <span className="block">{statusText}</span>
-            {reloadDetail && (
+            {reloadDetail != null && reloadDetail !== "" && (
               <span
                 className="mt-0.5 block"
-                role={reloadRecord?.success ? undefined : "alert"}
+                role={reloadRecord?.success === true ? undefined : "alert"}
               >
                 {reloadDetail}
               </span>
@@ -645,7 +666,7 @@ export function DeveloperSettingsPage({
             : t("settings.exportDiagnosticsAction")}
         </Button>
       </Row>
-      {error && (
+      {error != null && error !== "" && (
         <p className="text-metadata text-destructive pt-2" role="alert">
           {error}
         </p>

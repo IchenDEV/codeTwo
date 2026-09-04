@@ -1,11 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { CompositeActionRow } from "@/components/business/composite-action-row";
 import {
@@ -44,8 +38,8 @@ import {
   deletePath,
   listDir,
   renamePath,
-  type DirEntry,
 } from "../bridge";
+import type { DirEntry } from "../bridge";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
 
@@ -142,23 +136,20 @@ export function FilePanel({
   const [error, setError] = useState<string | null>(null);
   const draftInput = useRef<HTMLInputElement | null>(null);
 
-  const load = useCallback(
-    async (path: string) => {
-      if (!cwd) return;
-      try {
-        const entries = await listDir(cwd, path);
-        setLoaded((prev) => ({ ...prev, [path]: entries }));
-        setError(null);
-      } catch (e) {
-        setError(String(e));
-      }
-    },
-    [cwd]
-  );
+  const load = async (path: string) => {
+    if (cwd == null || cwd === "") return;
+    try {
+      const entries = await listDir(cwd, path);
+      setLoaded((prev) => ({ ...prev, [path]: entries }));
+      setError(null);
+    } catch (error) {
+      setError(String(error));
+    }
+  };
 
   /** Reload every directory currently open, so the tree matches disk after a mutation. */
-  const reload = useCallback(async () => {
-    if (!cwd) return;
+  const reload = async () => {
+    if (cwd == null || cwd === "") return;
     const paths = ["", ...expanded];
     const entries = await Promise.all(
       paths.map(
@@ -166,7 +157,7 @@ export function FilePanel({
       )
     );
     setLoaded(Object.fromEntries(entries));
-  }, [cwd, expanded]);
+  };
 
   // A stale tree from the previous project is worse than an empty one.
   useEffect(() => {
@@ -180,48 +171,39 @@ export function FilePanel({
     if (draft) draftInput.current?.focus();
   }, [draft]);
 
-  const toggle = useCallback(
-    (path: string) => {
-      setExpanded((prev) => {
-        const next = new Set(prev);
-        if (next.has(path)) next.delete(path);
-        else {
-          next.add(path);
-          if (!(path in loaded)) void load(path);
-        }
-        return next;
-      });
-    },
-    [loaded, load]
-  );
+  const toggle = (path: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else {
+        next.add(path);
+        if (!(path in loaded)) void load(path);
+      }
+      return next;
+    });
+  };
 
   /** Open a directory (without collapsing it) so a new child is visible where it lands. */
-  const reveal = useCallback(
-    (dir: string) => {
-      if (!dir) return;
-      setExpanded((prev) => new Set(prev).add(dir));
-      if (!(dir in loaded)) void load(dir);
-    },
-    [loaded, load]
-  );
+  const reveal = (dir: string) => {
+    if (!dir) return;
+    setExpanded((prev) => new Set(prev).add(dir));
+    if (!(dir in loaded)) void load(dir);
+  };
 
-  const run = useCallback(
-    async (op: Promise<unknown>, ok: string) => {
-      try {
-        await op;
-        await reload();
-        toast(ok, "success");
-        return true;
-      } catch (e) {
-        toast(String(e), "error");
-        return false;
-      }
-    },
-    [reload, toast]
-  );
+  const run = async (op: Promise<unknown>, ok: string) => {
+    try {
+      await op;
+      await reload();
+      toast(ok, "success");
+      return true;
+    } catch (error) {
+      toast(String(error), "error");
+      return false;
+    }
+  };
 
-  const commitDraft = useCallback(async () => {
-    if (!draft || !cwd) return;
+  const commitDraft = async () => {
+    if (!draft || cwd == null || cwd === "") return;
     const value = draft.value.trim();
     if (!value) {
       setDraft(null);
@@ -251,21 +233,15 @@ export function FilePanel({
       }
     }
     setDraft(null);
-  }, [draft, cwd, run, t, reveal, onOpen]);
+  };
 
   /** A filter hides non-matching files but keeps folders, so matches stay reachable. */
-  const visible = useCallback(
-    (entry: DirEntry) => {
-      const q = filter.trim().toLowerCase();
-      return !q || entry.is_dir || entry.name.toLowerCase().includes(q);
-    },
-    [filter]
-  );
+  const visible = (entry: DirEntry) => {
+    const q = filter.trim().toLowerCase();
+    return !q || entry.is_dir || entry.name.toLowerCase().includes(q);
+  };
 
-  const roots = useMemo(
-    () => (loaded[""] ?? []).filter(visible),
-    [loaded, visible]
-  );
+  const roots = (loaded[""] ?? []).filter(visible);
 
   const menuFor = (entry: DirEntry) => (
     <ContextMenuContent>
@@ -323,7 +299,7 @@ export function FilePanel({
         {!entry.is_dir && (
           <ContextMenuItem
             onClick={() => {
-              if (cwd)
+              if (cwd != null && cwd !== "")
                 void run(
                   copyPath(cwd, entry.path, copyName(entry.path)),
                   t("files.duplicated")
@@ -351,7 +327,7 @@ export function FilePanel({
               ? t("files.confirmDeleteFolder", { name: entry.name })
               : t("files.confirmDelete", { name: entry.name });
             if (!(await confirmNative(message))) return;
-            if (cwd)
+            if (cwd != null && cwd !== "")
               void run(
                 deletePath(cwd, entry.path),
                 t("files.deleted", { name: entry.name })
@@ -410,7 +386,7 @@ export function FilePanel({
                     style={{ paddingLeft: depth * 12 }}
                     contentClassName="flex items-center gap-1"
                     actions={
-                      !entry.is_dir ? (
+                      entry.is_dir ? null : (
                         <TooltipButton
                           label={t("files.insert")}
                           type="button"
@@ -421,7 +397,7 @@ export function FilePanel({
                         >
                           <AtSign className="size-3" />
                         </TooltipButton>
-                      ) : null
+                      )
                     }
                   >
                     <ChevronRight
@@ -498,7 +474,7 @@ export function FilePanel({
           variant="ghost"
           size="icon"
           className="size-7 shrink-0"
-          disabled={!cwd}
+          disabled={cwd == null || cwd === ""}
           onClick={() => setDraft({ kind: "new-file", parent: "", value: "" })}
         >
           <FilePlus className="size-3.5" />
@@ -508,7 +484,7 @@ export function FilePanel({
           variant="ghost"
           size="icon"
           className="size-7 shrink-0"
-          disabled={!cwd}
+          disabled={cwd == null || cwd === ""}
           onClick={() =>
             setDraft({ kind: "new-folder", parent: "", value: "" })
           }
@@ -534,11 +510,13 @@ export function FilePanel({
             draft.parent === "" &&
             draftRow(0)}
 
-          {error ? (
+          {error != null && error !== "" ? (
             <p className="text-callout text-destructive px-2 py-3">{error}</p>
           ) : roots.length === 0 && !draft ? (
             <p className="text-callout text-muted-foreground px-2 py-3">
-              {cwd ? t("files.empty") : t("files.noProject")}
+              {cwd != null && cwd !== ""
+                ? t("files.empty")
+                : t("files.noProject")}
             </p>
           ) : (
             level("", 0)

@@ -144,9 +144,7 @@ describe("SessionHeaderActions", () => {
       view.container.querySelector(".session-header-compact-action")
     ).toBeNull();
 
-    for (const action of Array.from(
-      view.container.querySelectorAll("button")
-    )) {
+    for (const action of [...view.container.querySelectorAll("button")]) {
       expect(
         action.classList.contains("h-control") ||
           action.classList.contains("h-control-mini") ||
@@ -170,17 +168,17 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("Finder");
     expect(dom.document.body.textContent).toContain("⌘O");
 
-    const finderItem = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("Finder"));
+    const finderItem = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Finder"));
     if (!finderItem) throw new Error("Finder menu item not found");
     await press(finderItem);
     expect(calls).toEqual(["add", "finder"]);
 
     await press(button(view.container, "Open"));
-    const moveItem = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("Move task to device"));
+    const moveItem = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Move task to device"));
     if (!moveItem) throw new Error("Move task menu item not found");
     await press(moveItem);
     expect(calls).toEqual(["add", "finder", "move"]);
@@ -192,9 +190,9 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("Checkpoint now");
     expect(dom.document.body.textContent).toContain("Push");
     expect(dom.document.body.textContent).toContain("View PR");
-    const pushItem = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("Push"));
+    const pushItem = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Push"));
     if (!pushItem) throw new Error("Push menu item not found");
     await press(pushItem);
     expect(calls).toEqual(["add", "finder", "move", "source-control", "push"]);
@@ -259,9 +257,9 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("File manager");
     expect(dom.document.body.textContent).toContain("Ctrl+O");
 
-    const fileManagerItem = Array.from(
-      dom.document.body.querySelectorAll('[role="menuitem"]')
-    ).find((item) => item.textContent?.includes("File manager"));
+    const fileManagerItem = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("File manager"));
     if (!fileManagerItem) throw new Error("File manager menu item not found");
     await press(fileManagerItem);
     expect(calls).toEqual(["finder"]);

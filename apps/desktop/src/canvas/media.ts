@@ -52,9 +52,7 @@ export interface CanvasMediaIntakeOptions {
   createFileId?: (media: NormalizedCanvasMedia, index: number) => string;
 }
 
-function byteLength(
-  value: CanvasMediaInput["bytes"] | NormalizedCanvasMedia["bytes"]
-): number {
+function byteLength(value: CanvasMediaInput["bytes"]): number {
   if (value instanceof Uint8Array) return value.byteLength;
   if (value instanceof ArrayBuffer) return value.byteLength;
   return value.size;
@@ -86,8 +84,8 @@ function assertOpaqueRef(
     typeof value !== "string" ||
     value.length === 0 ||
     value.length > 160 ||
-    /^(?:data:|blob:|https?:|javascript:)/i.test(value) ||
-    /[\\/\s]/.test(value)
+    /^(?:data:|blob:|https?:|javascript:)/iu.test(value) ||
+    /[\\/\s]/u.test(value)
   ) {
     throw new CanvasMediaError(
       "normalizer-rejected",
@@ -187,7 +185,7 @@ export function mediaInputsFromDataTransfer(
   dataTransfer: DataTransfer | null | undefined
 ): readonly CanvasMediaInput[] {
   if (!dataTransfer) return [];
-  return Array.from(dataTransfer.files ?? []).map(mediaInputFromFile);
+  return [...(dataTransfer.files ?? [])].map(mediaInputFromFile);
 }
 
 export function mediaInputsFromClipboard(

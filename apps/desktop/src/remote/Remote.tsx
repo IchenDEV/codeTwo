@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { StatusIndicator } from "@/components/business/status-indicator";
 import { Button } from "@/components/ui/button";
@@ -29,11 +29,13 @@ import {
   remoteStatus,
   startRemote,
   stopRemote,
-  type RemoteClientProtocol,
-  type RemoteDevice,
-  type RemoteEndpoint,
-  type RemotePairingLink,
-  type RemoteStatus,
+} from "../bridge";
+import type {
+  RemoteClientProtocol,
+  RemoteDevice,
+  RemoteEndpoint,
+  RemotePairingLink,
+  RemoteStatus,
 } from "../bridge";
 
 function defaultEndpointId(status: RemoteStatus | null): string | null {
@@ -49,7 +51,7 @@ function defaultEndpointId(status: RemoteStatus | null): string | null {
 }
 
 function supportedProtocols(status: RemoteStatus): RemoteClientProtocol[] {
-  return status.protocols?.length ? status.protocols : ["t3", "legacy"];
+  return status.protocols?.length == null ? ["t3", "legacy"] : status.protocols;
 }
 
 function protocolLabel(protocol: RemoteClientProtocol): string {
@@ -87,12 +89,13 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const linkRequest = useRef(0);
 
-  const applyStatus = useCallback((next: RemoteStatus | null) => {
+  const applyStatus = (next: RemoteStatus | null) => {
     setStatus(next);
     setSelectedEndpointId((current) => {
       if (
-        current &&
-        next?.endpoints.some((endpoint) => endpoint.id === current)
+        current != null &&
+        current !== "" &&
+        next?.endpoints.some((endpoint) => endpoint.id === current) === true
       )
         return current;
       return defaultEndpointId(next);
@@ -105,54 +108,58 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     } else {
       setLink(null);
     }
-  }, []);
+  };
 
-  const refresh = useCallback(() => {
+  const refresh = () => {
     remoteStatus()
       .then(applyStatus)
-      .catch(() => {});
+      .catch(() => {
+        /* empty */
+      });
     remoteDevices()
       .then(setDevices)
-      .catch(() => {});
-  }, [applyStatus]);
+      .catch(() => {
+        /* empty */
+      });
+  };
 
   useEffect(refresh, [refresh]);
 
-  const mintLink = useCallback(
-    async (endpointId: string | null, requestedProtocol = clientProtocol) => {
-      const request = ++linkRequest.current;
-      setLinkBusy(true);
-      setErr(null);
-      try {
-        const next = await remotePairingLink(
-          endpointId ?? undefined,
-          requestedProtocol
-        );
-        if (request !== linkRequest.current) return;
-        setLink(next);
-        if (next) setSelectedEndpointId(next.endpoint_id);
-        setCopied(false);
-      } catch (error) {
-        if (request === linkRequest.current) setErr(String(error));
-      } finally {
-        if (request === linkRequest.current) setLinkBusy(false);
-      }
-    },
-    [clientProtocol]
-  );
+  const mintLink = async (
+    endpointId: string | null,
+    requestedProtocol = clientProtocol
+  ) => {
+    const request = (linkRequest.current += 1);
+    setLinkBusy(true);
+    setErr(null);
+    try {
+      const next = await remotePairingLink(
+        endpointId ?? undefined,
+        requestedProtocol
+      );
+      if (request !== linkRequest.current) return;
+      setLink(next);
+      if (next) setSelectedEndpointId(next.endpoint_id);
+      setCopied(false);
+    } catch (error) {
+      if (request === linkRequest.current) setErr(String(error));
+    } finally {
+      if (request === linkRequest.current) setLinkBusy(false);
+    }
+  };
 
   const turnOn = async () => {
     setBusy(true);
     setErr(null);
     try {
       const next = await startRemote();
-      if (!next) {
-        setErr("Device connections are only available in the desktop app.");
-      } else {
+      if (next) {
         applyStatus(next);
         const protocol = supportedProtocols(next)[0] ?? "c2";
         setClientProtocol(protocol);
         await mintLink(defaultEndpointId(next), protocol);
+      } else {
+        setErr("Device connections are only available in the desktop app.");
       }
     } catch (error) {
       setErr(String(error));
@@ -273,7 +280,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
               {pairBusy ? "Pairing…" : "Pair"}
             </Button>
           </div>
-          {pairedMessage && (
+          {pairedMessage != null && pairedMessage !== "" && (
             <p className="text-metadata text-foreground">{pairedMessage}</p>
           )}
         </Card>
@@ -339,7 +346,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 value={selectedEndpointId ?? undefined}
                 disabled={status.endpoints.length === 0}
                 onValueChange={(endpointId) =>
-                  endpointId && selectEndpoint(endpointId)
+                  endpointId != null &&
+                  endpointId !== "" &&
+                  selectEndpoint(endpointId)
                 }
               >
                 <SelectTrigger
@@ -378,7 +387,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                   {clientProtocol === "c2"
                     ? "Paste this complete link into Device connections on the other C2 device. "
                     : clientProtocol === "t3"
-                      ? linkEndpoint?.qr_shareable
+                      ? linkEndpoint?.qr_shareable === true
                         ? "Scan this inside T3 Code mobile. "
                         : "Choose a LAN or verified tailnet address for T3 Code mobile. "
                       : "Open this link in the C2 browser client. "}
@@ -485,7 +494,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {err && <p className="text-metadata text-destructive">{err}</p>}
+        {err != null && err !== "" && (
+          <p className="text-metadata text-destructive">{err}</p>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

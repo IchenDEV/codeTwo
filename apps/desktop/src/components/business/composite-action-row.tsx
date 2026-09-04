@@ -1,9 +1,5 @@
-import {
-  type ComponentProps,
-  type KeyboardEventHandler,
-  type ReactNode,
-  forwardRef,
-} from "react";
+import { forwardRef } from "react";
+import type { ComponentProps, KeyboardEventHandler, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -31,7 +27,7 @@ interface CompositeActionRowProps extends Omit<
  * callers never need a clickable div or nested buttons to build a dense navigation row.
  */
 const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
-  function CompositeActionRow(
+  (
     {
       accessibilityLabel,
       children,
@@ -47,7 +43,7 @@ const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
       ...props
     },
     ref
-  ) {
+  ) => {
     return (
       <div
         ref={ref}
@@ -80,14 +76,14 @@ const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
         >
           {children}
         </div>
-        {actions ? (
+        {actions == null ? null : (
           <div
             data-slot="composite-action-row-actions"
             className="relative z-20 flex shrink-0 items-center"
           >
             {actions}
           </div>
-        ) : null}
+        )}
       </div>
     );
   }

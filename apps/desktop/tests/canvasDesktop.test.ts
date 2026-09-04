@@ -76,7 +76,7 @@ function draft(id: string, revision = 1) {
 
 describe("Desktop Canvas Composer integration seams", () => {
   test("feature gate is hidden by default and never reports production enabled", async () => {
-    await expect(canvasFeatureState()).resolves.toEqual({
+    expect(canvasFeatureState()).resolves.toEqual({
       feature: "CODETWO_CANVAS_INPUT_V1",
       enabled: false,
       status: "not production-enabled",
@@ -197,18 +197,18 @@ describe("Desktop Canvas Composer integration seams", () => {
         id: "canvas-bounded",
         revision: 1,
         title: "",
-        text_originals: ["🙂".repeat(2_000)],
+        text_originals: ["🙂".repeat(2000)],
       })}]`
     );
     expect(valid.visiblePrompt).toBe("");
     expect(valid.canvases[0]?.title).toBe("");
-    expect(valid.canvases[0]?.textOriginals[0]).toBe("🙂".repeat(2_000));
+    expect(valid.canvases[0]?.textOriginals[0]).toBe("🙂".repeat(2000));
 
     const malformed = parseCanvasHistoryPrompt(
       [
         `[canvas-history-json ${JSON.stringify({ version: 1, id: "bad-revision", revision: 0, title: "", text_originals: [] })}]`,
         `[canvas-history-json ${JSON.stringify({ version: 1, id: "too-many", revision: 1, title: "", text_originals: Array.from({ length: 65 }, () => "x") })}]`,
-        `[canvas-history-json ${JSON.stringify({ version: 1, id: "too-long", revision: 1, title: "", text_originals: ["x".repeat(2_001)] })}]`,
+        `[canvas-history-json ${JSON.stringify({ version: 1, id: "too-long", revision: 1, title: "", text_originals: ["x".repeat(2001)] })}]`,
       ].join("\n")
     );
     expect(malformed.canvases).toEqual([]);
@@ -219,8 +219,7 @@ describe("Desktop Canvas Composer integration seams", () => {
 
   test("CAS autosave serializes A/B and keeps the latest local scene while rebasing", async () => {
     const savedRevisions: number[] = [];
-    const acknowledgements: Array<{ isLatest: boolean; elements: unknown[] }> =
-      [];
+    const acknowledgements: { isLatest: boolean; elements: unknown[] }[] = [];
     let active = 0;
     let maximumActive = 0;
     let releaseFirst!: () => void;

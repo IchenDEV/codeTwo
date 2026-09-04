@@ -53,11 +53,11 @@ describe("ProjectActionDialog", () => {
     );
 
     await flush();
-    const body = dom.document.body;
+    const { body } = dom.document;
     const switches = body.querySelectorAll('[data-slot="switch"]');
     expect(switches).toHaveLength(2);
     const previewSwitch = switches[1] as HTMLElement;
-    expect(previewSwitch.hasAttribute("data-disabled")).toBe(true);
+    expect(Object.hasOwn(previewSwitch.dataset, "disabled")).toBe(true);
 
     setValue(body.querySelector("#action-name"), "Test");
     setValue(body.querySelector("#action-command"), "bun test");
@@ -66,7 +66,7 @@ describe("ProjectActionDialog", () => {
       "http://localhost:5173"
     );
     await flush();
-    expect(previewSwitch.hasAttribute("data-disabled")).toBe(false);
+    expect(Object.hasOwn(previewSwitch.dataset, "disabled")).toBe(false);
 
     const shortcut = button(body, "Keybinding");
     await reactAct(async () => {
@@ -126,7 +126,7 @@ describe("ProjectActionDialog", () => {
     );
 
     await flush();
-    const body = dom.document.body;
+    const { body } = dom.document;
     click(button(body, "Send prompt"));
     await flush();
     expect(body.querySelector("#action-command")).toBeNull();

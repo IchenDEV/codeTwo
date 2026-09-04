@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import React from "react";
 
@@ -111,9 +111,7 @@ describe("mounted CanvasBlock host behavior", () => {
     );
     expect(handleRef.current?.id).toBe("canvas");
     expect(
-      view.container
-        .querySelector("[data-canvas-theme]")
-        ?.getAttribute("data-canvas-theme")
+      view.container.querySelector("[data-canvas-theme]")?.dataset.canvasTheme
     ).toBe("dark");
     expect(maybeButton(view.container, "Send structure only")).toBeNull();
     await flush();

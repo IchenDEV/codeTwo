@@ -1,3 +1,5 @@
+import { asJsonObject } from "../lib/jsonValue";
+import type { JsonObject } from "../lib/jsonValue";
 import type { ToolEntry } from "./turns";
 
 export interface AgentActivity {
@@ -12,7 +14,7 @@ export interface AgentActivity {
 
 export type AgentActivityState = "active" | "pending" | "completed" | "failed";
 
-type JsonRecord = Record<string, unknown>;
+type JsonRecord = JsonObject;
 
 const DIRECT_AGENT_TOOLS = new Set([
   "agent",
@@ -45,34 +47,31 @@ const SUFFIX_AGENT_TOOLS = [
 ] as const;
 
 const AGENT_ACTION =
-  /^(?:create|delegate|invoke|launch|run|spawn|start)_(?:agent|subagent|workflow)$/;
+  /^(?:create|delegate|invoke|launch|run|spawn|start)_(?:agent|subagent|workflow)$/u;
 const NAMESPACED_AGENT_ACTION =
-  /(?:^|_)(?:collab|collaboration|workflow)_(?:create|delegate|invoke|launch|run|spawn|start)?_?(?:agent|subagent|task|workflow)$/;
+  /(?:^|_)(?:collab|collaboration|workflow)_(?:create|delegate|invoke|launch|run|spawn|start)?_?(?:agent|subagent|task|workflow)$/u;
 const LABELED_AGENT_TITLE =
-  /^(?:agent|subagent|delegate|workflow)(?:\s*[:#-]|\s+\()/i;
+  /^(?:agent|subagent|delegate|workflow)(?:\s*[:#-]|\s+\()/iu;
 const VERB_AGENT_TITLE =
-  /^(?:create|delegate|invoke|launch|run|spawn|start)(?:\s+(?:an?|the))?\s+(?:agent|subagent|sub-agent|workflow)(?:\s*[:#-]|\s+\(|\s*$)/i;
+  /^(?:create|delegate|invoke|launch|run|spawn|start)(?:\s+(?:an?|the))?\s+(?:agent|subagent|sub-agent|workflow)(?:\s*[:#-]|\s+\(|\s*$)/iu;
 
 function normalizeIdentifier(value: string | null | undefined): string {
   return (value ?? "")
     .trim()
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replaceAll(/([a-z0-9])([A-Z])/gu, "$1_$2")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+    .replaceAll(/[^a-z0-9]+/gu, "_")
+    .replaceAll(/^_+|_+$/gu, "");
 }
 
 function parsedRecord(value: unknown): JsonRecord | null {
-  if (value && typeof value === "object" && !Array.isArray(value))
-    return value as JsonRecord;
+  const direct = asJsonObject(value);
+  if (direct != null) return direct;
   if (typeof value !== "string") return null;
   const text = value.trim();
   if (!text.startsWith("{") || !text.endsWith("}")) return null;
   try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as JsonRecord)
-      : null;
+    return asJsonObject(JSON.parse(text) as unknown);
   } catch {
     return null;
   }
@@ -138,7 +137,8 @@ function signalTitle(tool: ToolEntry): string | null {
  * tool list. A generic `task`/`prompt` argument alone is deliberately not enough evidence.
  */
 export function isAgentActivityTool(tool: ToolEntry): boolean {
-  if (isAgentToolIdentifier(tool.kind) || signalTitle(tool)) return true;
+  if (isAgentToolIdentifier(tool.kind) || signalTitle(tool) != null)
+    return true;
 
   const input = inputRecord(tool.agentInput);
   if (!input) return false;
@@ -151,12 +151,12 @@ export function isAgentActivityTool(tool: ToolEntry): boolean {
       "agentType",
       "subagent_type",
       "subagentType",
-    ])
+    ]) != null
   )
     return true;
   if (
-    stringValue(input, ["task_name", "taskName"]) &&
-    stringValue(input, ["message", "prompt", "task"])
+    stringValue(input, ["task_name", "taskName"]) != null &&
+    stringValue(input, ["message", "prompt", "task"]) != null
   ) {
     return true;
   }
@@ -175,24 +175,24 @@ export function isAgentActivityTool(tool: ToolEntry): boolean {
   const name = stringValue(input, ["name", "workflow"]);
   return (
     isAgentToolIdentifier(name) &&
-    !!stringValue(input, ["message", "prompt", "task", "objective"])
+    stringValue(input, ["message", "prompt", "task", "objective"]) != null
   );
 }
 
 function compact(value: string, max: number): string {
-  const text = value.replace(/\s+/g, " ").trim();
+  const text = value.replaceAll(/\s+/gu, " ").trim();
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
 function humanize(value: string): string {
   const words = value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll(/[_-]+/g, " ")
+    .replaceAll(/\s+/g, " ")
     .trim();
   if (!words) return "Agent";
-  return words.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return words.replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function fallbackRole(tool: ToolEntry): string {
@@ -233,17 +233,24 @@ function activityFromTool(tool: ToolEntry): AgentActivity {
     72
   );
   const title =
-    named && !isAgentToolIdentifier(named)
-      ? compact(taskName ? humanize(named) : named, 72)
+    named != null && named !== "" && !isAgentToolIdentifier(named)
+      ? compact(
+          taskName != null && taskName !== "" ? humanize(named) : named,
+          72
+        )
       : toolTitle;
-  const summary = assignment ? compact(assignment, 160) : null;
+  const summary =
+    assignment != null && assignment !== "" ? compact(assignment, 160) : null;
 
   const activity: AgentActivity = {
     id: tool.id,
     title,
-    role: role ? compact(humanize(role), 36) : fallbackRole(tool),
+    role:
+      role != null && role !== ""
+        ? compact(humanize(role), 36)
+        : fallbackRole(tool),
     status: tool.status,
-    task: summary && summary !== title ? summary : null,
+    task: summary != null && summary !== title ? summary : null,
   };
   if (tool.startedAt !== undefined) activity.startedAt = tool.startedAt;
   if (tool.endedAt !== undefined) activity.endedAt = tool.endedAt;

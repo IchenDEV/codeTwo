@@ -1,9 +1,5 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { useT } from "@/i18n";
 
@@ -16,9 +12,8 @@ import {
   listenDesktop,
   nativeContextMenusAvailable,
   showNativeContextMenu,
-  type DesktopPetState,
-  type NativeContextMenuItem,
 } from "../container";
+import type { DesktopPetState, NativeContextMenuItem } from "../container";
 import { CodeTwoPet } from "./CodeTwoPet";
 import type { CodeTwoPetAnimation } from "./state";
 
@@ -62,7 +57,10 @@ export function DesktopPetBridge({
     updateTimer.current = window.setTimeout(() => {
       updateTimer.current = undefined;
       const state = pendingState.current;
-      if (state) void desktopUpdatePetState(state).catch(() => undefined);
+      if (state)
+        void desktopUpdatePetState(state).catch(() => {
+          /* empty */
+        });
     }, PET_STATE_UPDATE_INTERVAL_MS);
   }, [
     animation,
@@ -107,7 +105,9 @@ export function DesktopPetWindow() {
       .then((value) => {
         if (active) setState(value);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        /* empty */
+      });
     return () => {
       active = false;
       stop();

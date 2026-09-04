@@ -43,7 +43,7 @@ for (const sourceFile of project.getSourceFiles()) {
   // Collect first, mutate deepest-first via reverse document order of starts.
   const literals = sourceFile
     .getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression)
-    .sort((a, b) => b.getStart() - a.getStart());
+    .toSorted((a, b) => b.getStart() - a.getStart());
 
   for (const node of literals) {
     if (node.wasForgotten()) continue;
@@ -83,7 +83,7 @@ for (const sourceFile of project.getSourceFiles()) {
     const sortedSegments = segments.map((segment) => {
       if (segment.kind === "barrier") return segment;
       const before = segment.items.map((item) => item.key).join("\0");
-      const items = [...segment.items].sort((a, b) =>
+      const items = [...segment.items].toSorted((a, b) =>
         a.key < b.key ? -1 : a.key > b.key ? 1 : 0
       );
       const after = items.map((item) => item.key).join("\0");
@@ -98,7 +98,8 @@ for (const sourceFile of project.getSourceFiles()) {
       else parts.push(...segment.items.map((item) => item.text));
     }
     const multiline = node.getText().includes("\n");
-    const inner = multiline ? `\n${parts.join(",\n")},\n` : parts.join(", ");
+    const inner =
+      multiline == null ? parts.join(", ") : `\n${parts.join(",\n")},\n`;
     node.replaceWithText(`{${inner}}`);
     fileTouched = true;
     objectsSorted += 1;

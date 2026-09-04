@@ -60,3 +60,19 @@ export function parseJsonPayload(payload: string): unknown {
   // JSON.parse is typed as `any` in lib.es5; wrap once at the wire boundary.
   return JSON.parse(payload) as unknown;
 }
+
+/** True when `value` is one of the string literals in a `as const` list. */
+export function isOneOf<const T extends string>(
+  value: unknown,
+  allowed: readonly T[]
+): value is T {
+  return (
+    typeof value === "string" && (allowed as readonly string[]).includes(value)
+  );
+}
+
+export function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((entry) => typeof entry === "string")
+  );
+}

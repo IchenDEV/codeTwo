@@ -18,7 +18,7 @@ for (const sourceFile of project.getSourceFiles()) {
   let touched = false;
   const arrows = sourceFile
     .getDescendantsOfKind(SyntaxKind.ArrowFunction)
-    .sort((a, b) => b.getStart() - a.getStart());
+    .toSorted((a, b) => b.getStart() - a.getStart());
 
   for (const arrow of arrows) {
     if (arrow.wasForgotten()) {

@@ -1,5 +1,6 @@
 import type { MemoryAccess } from "../bridge";
-import { SESSION_MODES, type SessionMode } from "./mode";
+import { SESSION_MODES } from "./mode";
+import type { SessionMode } from "./mode";
 
 /**
  * Agent Scenes 1.0.0 wire shapes and pure helpers (see docs/reference/scenes.md).
@@ -214,7 +215,7 @@ export function sceneTitle(scene: SceneInfo, locale: string): string {
  * never count as customized.
  */
 export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
-  const execution = scene.execution;
+  const { execution } = scene;
   if (!execution) return false;
   if (
     execution.session_mode !== undefined &&
@@ -257,7 +258,7 @@ export function softApplyPending(
   scene: SceneInfo,
   live: LivePosture | null
 ): string[] {
-  const execution = scene.execution;
+  const { execution } = scene;
   if (!execution) return [];
   const pending: string[] = [];
   if (execution.providers !== undefined && execution.providers.length > 0) {
@@ -379,9 +380,9 @@ export function orderSkillsForScene<T extends SkillLike>(
   const rank = new Map(pinned.map((id, index) => [id, index]));
   const front = [...skills]
     .filter((s) => rank.has(s.id))
-    .sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+    .toSorted((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
   const rest = skills.filter((s) => !rank.has(s.id));
-  if (scene?.skills?.suppress_unpinned && !showAll) {
+  if (scene?.skills?.suppress_unpinned === true && !showAll) {
     return { items: front, hiddenCount: rest.length };
   }
   return { items: [...front, ...rest], hiddenCount: 0 };

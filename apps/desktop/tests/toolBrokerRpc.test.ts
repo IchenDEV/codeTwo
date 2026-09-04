@@ -91,7 +91,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         JSON.parse(child.stdout.toString()).result.computer_use.selections
       ).toEqual({ "*": "automatic" });
       expect(
-        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf-8"))
           .computer_use_selection
       ).toEqual({ "*": "automatic" });
     } finally {
@@ -126,7 +126,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         JSON.parse(child.stdout.toString()).result.browser_use.selections
       ).toEqual({ "*": "automatic" });
       expect(
-        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf-8"))
           .browser_use_selection
       ).toEqual({ "*": "automatic" });
     } finally {
@@ -155,7 +155,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
         JSON.parse(setChild.stdout.toString()).result.browser_use.access_enabled
       ).toBe(false);
       expect(
-        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf-8"))
           .agent_browser_access
       ).toBe(false);
 

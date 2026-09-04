@@ -1,16 +1,11 @@
-import { useRef, type CSSProperties, type ReactNode } from "react";
+import { useRef } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 import { PaneDivider } from "./PaneDivider";
-import {
-  computeDividers,
-  computePaneRects,
-  listPanes,
-  type PaneEdge,
-  type PaneLayout,
-  type PaneNode,
-} from "./paneLayout";
+import { computeDividers, computePaneRects, listPanes } from "./paneLayout";
+import type { PaneEdge, PaneLayout, PaneNode } from "./paneLayout";
 
 const percent = (value: number): string => `${value * 100}%`;
 

@@ -13,7 +13,7 @@ const subs = new Set<() => void>();
 let snapshot: ReadonlySet<string> = new Set();
 
 export function dirtyKey(cwd: string, path: string): string {
-  return `${cwd.replace(/\/$/, "")}/${path}`;
+  return `${cwd.replace(/\/$/u, "")}/${path}`;
 }
 
 export function markDirty(key: string, value: boolean): void {

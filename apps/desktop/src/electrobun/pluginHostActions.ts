@@ -98,7 +98,7 @@ function activeContributions(
       });
     }
   }
-  return contributions.sort(
+  return contributions.toSorted(
     (left, right) =>
       left.order - right.order || left.label.localeCompare(right.label)
   );
@@ -124,14 +124,14 @@ function parseDocument(value: unknown): ActionDocumentItem[] | null {
       return null;
     if (
       typeof item.id !== "string" ||
-      !/^[A-Za-z0-9_-]{1,128}$/.test(item.id) ||
+      !/^[A-Za-z0-9_-]{1,128}$/u.test(item.id) ||
       ids.has(item.id)
     )
       return null;
     if (
       typeof item.label !== "string" ||
       item.label.trim() === "" ||
-      Array.from(item.label).length > 80
+      [...item.label].length > 80
     )
       return null;
     const detail = item.detail ?? "";
@@ -141,17 +141,17 @@ function parseDocument(value: unknown): ActionDocumentItem[] | null {
     const input = item.input ?? null;
     if (
       typeof detail !== "string" ||
-      Array.from(detail).length > 80 ||
+      [...detail].length > 80 ||
       !["default", "running", "attention", "failure"].includes(String(state)) ||
       typeof enabled !== "boolean" ||
       typeof accessibilityLabel !== "string" ||
-      Array.from(accessibilityLabel).length > 160 ||
+      [...accessibilityLabel].length > 160 ||
       (input !== null && asObject(input) === null)
     )
       return null;
     let inputBytes: number;
     try {
-      inputBytes = Buffer.byteLength(JSON.stringify(input), "utf8");
+      inputBytes = Buffer.byteLength(JSON.stringify(input), "utf-8");
     } catch {
       return null;
     }
@@ -182,8 +182,8 @@ export class PluginHostActionController {
     private readonly adapter: HostActionAdapter
   ) {}
 
-  start(): Promise<void> {
-    return this.refresh();
+  async start(): Promise<void> {
+    return await this.refresh();
   }
 
   handleHostEvent(event: DesktopEvent): void {
@@ -204,7 +204,7 @@ export class PluginHostActionController {
         context: { operation: "invoke", input },
       },
       null
-    ).catch((error) => {
+    ).catch((error: unknown) => {
       console.warn("Plugin host action failed", error);
     });
   }
@@ -227,7 +227,7 @@ export class PluginHostActionController {
   }
 
   private async refresh(): Promise<void> {
-    const generation = ++this.generation;
+    const generation = (this.generation += 1);
     try {
       const [installed, catalog] = await Promise.all([
         this.call("plugins.list", {}, null),

@@ -1,3 +1,5 @@
+import { asJsonObject, parseJsonPayload } from "../lib/jsonValue";
+
 export const SIDEBAR_PROJECTS_STORAGE_KEY = "codetwo.rail.projects.v1";
 export const ROOT_PROJECT_ORDER_KEY = "root";
 
@@ -13,20 +15,21 @@ function emptyState(): SidebarProjectsState {
 }
 
 function cleanPathLists(value: unknown): Record<string, string[]> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const object = asJsonObject(value);
+  if (object == null) return {};
   const result: Record<string, string[]> = {};
-  for (const [key, candidate] of Object.entries(value)) {
-    if (!key || !Array.isArray(candidate)) continue;
+  for (const [key, candidate] of Object.entries(object)) {
+    if (key === "" || !Array.isArray(candidate)) continue;
     const paths = [
       ...new Set(
         candidate
           .filter(
             (path): path is string =>
-              typeof path === "string" && Boolean(path.trim())
+              typeof path === "string" && path.trim().length > 0
           )
           .map((path) => path.trim())
       ),
-    ].slice(0, 2_000);
+    ].slice(0, 2000);
     if (paths.length > 0) result[key] = paths;
   }
   return result;
@@ -38,30 +41,29 @@ export function loadSidebarProjects(
   if (!storage) return emptyState();
   try {
     const raw = storage.getItem(SIDEBAR_PROJECTS_STORAGE_KEY);
-    if (!raw) return emptyState();
-    const value = JSON.parse(raw) as Record<string, unknown>;
-    if (value.version !== 1) return emptyState();
-    const assignments =
-      value.assignments &&
-      typeof value.assignments === "object" &&
-      !Array.isArray(value.assignments)
-        ? (Object.fromEntries(
-            Object.entries(value.assignments).filter(
-              ([path, sectionId]) =>
-                path && typeof sectionId === "string" && Boolean(sectionId)
-            )
-          ) as Record<string, string>)
-        : {};
-    const collapsed =
-      value.collapsed &&
-      typeof value.collapsed === "object" &&
-      !Array.isArray(value.collapsed)
-        ? (Object.fromEntries(
-            Object.entries(value.collapsed).filter(
-              ([path, isCollapsed]) => path && isCollapsed === true
-            )
-          ) as Record<string, boolean>)
-        : {};
+    if (raw == null || raw === "") return emptyState();
+    const value = asJsonObject(parseJsonPayload(raw));
+    if (value == null || value.version !== 1) return emptyState();
+    const assignmentsObject = asJsonObject(value.assignments);
+    const assignments: Record<string, string> = {};
+    if (assignmentsObject != null) {
+      for (const [path, sectionId] of Object.entries(assignmentsObject)) {
+        if (
+          path !== "" &&
+          typeof sectionId === "string" &&
+          sectionId.trim().length > 0
+        ) {
+          assignments[path] = sectionId;
+        }
+      }
+    }
+    const collapsedObject = asJsonObject(value.collapsed);
+    const collapsed: Record<string, boolean> = {};
+    if (collapsedObject != null) {
+      for (const [path, isCollapsed] of Object.entries(collapsedObject)) {
+        if (path !== "" && isCollapsed === true) collapsed[path] = true;
+      }
+    }
     return {
       version: 1,
       assignments,
@@ -125,7 +127,7 @@ export function moveSidebarProject(
   destination.splice(index, 0, path);
 
   const assignments = { ...state.assignments };
-  if (sectionId) assignments[path] = sectionId;
+  if (sectionId != null && sectionId !== "") assignments[path] = sectionId;
   else delete assignments[path];
   const order = Object.fromEntries(
     Object.entries(state.order)
@@ -158,7 +160,7 @@ export function releaseSidebarSectionProjects(
   const released = Object.entries(state.assignments)
     .filter(([, assigned]) => assigned === sectionId)
     .map(([path]) => path);
-  if (released.length === 0 && !state.order[sectionId]) return state;
+  if (released.length === 0 && state.order[sectionId] == null) return state;
   const assignments = Object.fromEntries(
     Object.entries(state.assignments).filter(
       ([, assigned]) => assigned !== sectionId

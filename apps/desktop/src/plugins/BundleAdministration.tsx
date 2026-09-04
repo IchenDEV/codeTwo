@@ -58,7 +58,7 @@ export function BundleAdministration({
   const uninstallBusy = busyAction === uninstallKey;
   const repositoryUrl = (() => {
     const repository = bundle.repository?.trim();
-    if (!repository) return null;
+    if (repository == null || repository === "") return null;
     try {
       const url = new URL(repository);
       return url.protocol === "https:" || url.protocol === "http:"
@@ -99,7 +99,7 @@ export function BundleAdministration({
                 {labels.bundleManagement}
               </h3>
               <p className="text-callout text-muted-foreground mt-1 break-words">
-                {bundle.repository || labels.installedBundle}
+                {bundle.repository ?? labels.installedBundle}
               </p>
             </div>
           </div>
@@ -117,19 +117,21 @@ export function BundleAdministration({
           )}
         </div>
 
-        {!userScope ? (
+        {userScope ? (
+          bundle.requiresTrust && !bundle.trusted ? (
+            <p className="text-metadata text-muted-foreground flex items-start gap-2">
+              <ShieldAlert
+                className="text-warning mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <span>{labels.trustRequired}</span>
+            </p>
+          ) : null
+        ) : (
           <p className="text-metadata text-muted-foreground">
             {labels.bundleManagementUserOnly}
           </p>
-        ) : bundle.requiresTrust && !bundle.trusted ? (
-          <p className="text-metadata text-muted-foreground flex items-start gap-2">
-            <ShieldAlert
-              className="text-warning mt-0.5 size-4 shrink-0"
-              aria-hidden="true"
-            />
-            <span>{labels.trustRequired}</span>
-          </p>
-        ) : null}
+        )}
 
         {bundle.contributions.length ? (
           <div className="flex flex-col gap-2">
@@ -168,7 +170,8 @@ export function BundleAdministration({
                   />
                   <span>
                     {diagnostic.message}
-                    {diagnostic.component ? (
+                    {diagnostic.component != null &&
+                    diagnostic.component !== "" ? (
                       <span className="text-callout block">
                         {diagnostic.component}
                       </span>
@@ -183,7 +186,7 @@ export function BundleAdministration({
         {userScope ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              {repositoryUrl ? (
+              {repositoryUrl != null && repositoryUrl !== "" ? (
                 <Button
                   type="button"
                   size="compact"
@@ -247,7 +250,7 @@ export function BundleAdministration({
               id={`keep-plugin-data-${bundle.id}`}
               checked={keepData}
               disabled={uninstallBusy}
-              onCheckedChange={(checked) => setKeepData(checked === true)}
+              onCheckedChange={(checked) => setKeepData(checked)}
             />
             <FieldLabel htmlFor={`keep-plugin-data-${bundle.id}`}>
               {labels.keepPluginData}

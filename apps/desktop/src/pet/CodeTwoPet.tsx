@@ -4,11 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "@/i18n";
 
-import {
-  useAppearanceSettings,
-  type AppearanceSettings,
-  type PetSize,
-} from "../appearance";
+import { useAppearanceSettings } from "../appearance";
+import type { AppearanceSettings, PetSize } from "../appearance";
 import type { CodeTwoPetAnimation } from "./state";
 import { BUILTIN_PET, petSpritesheetUrl } from "./store";
 
@@ -99,7 +96,7 @@ export function CodeTwoPet({
 
   return (
     <section className="codetwo-pet-stage" aria-label={t("pet.label")}>
-      {bubble ? (
+      {bubble != null && bubble !== "" ? (
         <p className="codetwo-pet-bubble" dir="auto">
           <span>{bubble}</span>
         </p>

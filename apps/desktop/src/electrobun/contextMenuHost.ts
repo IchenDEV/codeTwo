@@ -40,7 +40,7 @@ export function nativeContextMenuAction(
   )
     return null;
 
-  const requestId = (data as { requestId?: unknown }).requestId;
+  const { requestId } = data as { requestId?: unknown };
   const selectedAction = (data as { action?: unknown }).action;
   if (typeof requestId !== "string" || typeof selectedAction !== "string")
     return null;

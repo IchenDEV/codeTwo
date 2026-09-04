@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { useLanguage, useT } from "../i18n";
+import { asJsonObject } from "../lib/jsonValue";
 
 export interface ChartSeries {
   name: string;
@@ -44,13 +45,23 @@ export function parseChartSpec(source: string): ChartSpec | null {
   } catch {
     return null;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const input = value as Record<string, unknown>;
-  const type = input.type;
+  if (value == null || typeof value !== "object" || Array.isArray(value))
+    return null;
+  const input = asJsonObject(value);
+  if (input == null) return null;
+  const { type } = input;
   const title = text(input.title, 120);
   const xLabel = text(input.xLabel, 80);
   const yLabel = text(input.yLabel, 80);
-  if ((type !== "line" && type !== "bar") || !title || !xLabel || !yLabel)
+  if (
+    (type !== "line" && type !== "bar") ||
+    title == null ||
+    title === "" ||
+    xLabel == null ||
+    xLabel === "" ||
+    yLabel == null ||
+    yLabel === ""
+  )
     return null;
   if (
     !Array.isArray(input.labels) ||
@@ -59,8 +70,12 @@ export function parseChartSpec(source: string): ChartSpec | null {
   ) {
     return null;
   }
-  const labels = input.labels.map((label) => text(label, 80));
-  if (labels.some((label) => label === null)) return null;
+  const labels: string[] = [];
+  for (const label of input.labels) {
+    const parsed = text(label, 80);
+    if (parsed == null) return null;
+    labels.push(parsed);
+  }
   if (
     !Array.isArray(input.series) ||
     input.series.length === 0 ||
@@ -70,12 +85,12 @@ export function parseChartSpec(source: string): ChartSpec | null {
   }
   const series: ChartSeries[] = [];
   for (const candidate of input.series) {
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate))
-      return null;
-    const item = candidate as Record<string, unknown>;
+    const item = asJsonObject(candidate);
+    if (item == null) return null;
     const name = text(item.name, 80);
     if (
-      !name ||
+      name == null ||
+      name === "" ||
       !Array.isArray(item.values) ||
       item.values.length !== labels.length
     )
@@ -89,7 +104,7 @@ export function parseChartSpec(source: string): ChartSpec | null {
     title,
     xLabel,
     yLabel,
-    labels: labels as string[],
+    labels,
     series,
   };
 }
@@ -138,9 +153,8 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
 
   useEffect(() => setVisible(spec.series.map(() => true)), [spec]);
 
-  const visibleIndexes = useMemo(
-    () => visible.flatMap((shown, index) => (shown ? [index] : [])),
-    [visible]
+  const visibleIndexes = visible.flatMap((shown, index) =>
+    shown ? [index] : []
   );
   const effectiveIndexes = visibleIndexes.length > 0 ? visibleIndexes : [0];
   const [domainMin, domainMax] = paddedDomain(spec, effectiveIndexes);
@@ -171,10 +185,9 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
     Math.min(34, barBand / Math.max(1, visibleIndexes.length))
   );
   const zeroY = y(Math.min(domainMax, Math.max(domainMin, 0)));
-  const numberFormatter = useMemo(
-    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
-    [locale]
-  );
+  const numberFormatter = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 2,
+  });
   const summary = t("chart.summary", {
     title: spec.title,
     type: t(spec.type === "line" ? "chart.type.line" : "chart.type.bar"),
@@ -329,7 +342,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
             })
           : spec.series.map((series, seriesIndex) => {
               const visiblePosition = visibleIndexes.indexOf(seriesIndex);
-              if (visiblePosition < 0) return null;
+              if (visiblePosition === -1) return null;
               return (
                 <g
                   key={series.name}

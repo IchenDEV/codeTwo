@@ -69,18 +69,18 @@ export function activeContextWindow(
   current: ContextWindowBySession,
   session: string | null
 ): ContextWindow | null {
-  return session ? (current[session] ?? null) : null;
+  return session != null && session !== "" ? (current[session] ?? null) : null;
 }
 
 function trimDecimal(value: number): string {
-  return value.toFixed(1).replace(/\.0$/, "");
+  return value.toFixed(1).replace(/\.0$/u, "");
 }
 
 /** Compact labels fit the Composer row while retaining enough precision for a glance. */
 export function formatContextTokens(tokens: number): string {
   if (!Number.isSafeInteger(tokens) || tokens < 0) return "—";
-  if (tokens < 1_000) return String(tokens);
-  if (tokens < 1_000_000) return `${trimDecimal(tokens / 1_000)}k`;
+  if (tokens < 1000) return String(tokens);
+  if (tokens < 1_000_000) return `${trimDecimal(tokens / 1000)}k`;
   if (tokens < 1_000_000_000) return `${trimDecimal(tokens / 1_000_000)}m`;
   return `${trimDecimal(tokens / 1_000_000_000)}b`;
 }

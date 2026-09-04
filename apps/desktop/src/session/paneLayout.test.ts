@@ -15,9 +15,8 @@ import {
   splitFocused,
   splitForEdge,
   splitPane,
-  type PaneLayout,
-  type PaneSplit,
 } from "./paneLayout";
+import type { PaneLayout, PaneSplit } from "./paneLayout";
 
 const rootSplit = (layout: PaneLayout): PaneSplit => {
   if (layout.root.kind !== "split") throw new Error("expected a split root");

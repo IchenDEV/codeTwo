@@ -37,7 +37,7 @@ export function TaskInspector(props: TaskInspectorProps) {
     );
   }
 
-  const task = props.task;
+  const { task } = props;
   return (
     <Tabs
       value={props.tab}

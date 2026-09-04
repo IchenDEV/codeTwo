@@ -5,10 +5,8 @@ import type {
   GitStatus,
   SourceControlInfo,
 } from "../src/bridge";
-import {
-  resolveGitNextAction,
-  type GitNextActionInput,
-} from "../src/git/nextAction";
+import { resolveGitNextAction } from "../src/git/nextAction";
+import type { GitNextActionInput } from "../src/git/nextAction";
 
 const status = (overrides: Partial<GitStatus> = {}): GitStatus => ({
   is_repo: true,

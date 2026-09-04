@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import type { MemoryRecord } from "../bridge";
-import {
-  filterMemories,
-  memoryProfile,
-  type MemoryFilter,
-} from "./memory-model";
+import { filterMemories, memoryProfile } from "./memory-model";
+import type { MemoryFilter } from "./memory-model";
 
 const NOW = 2_000_000_000_000;
 
@@ -22,7 +19,7 @@ function record(patch: Partial<MemoryRecord> = {}): MemoryRecord {
     pinned: false,
     active: true,
     created_at: NOW - 10_000,
-    updated_at: NOW - 5_000,
+    updated_at: NOW - 5000,
     accessed_at: null,
     access_count: 0,
     origin: "automatic",

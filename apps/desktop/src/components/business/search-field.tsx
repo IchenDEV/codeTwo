@@ -1,9 +1,5 @@
-import {
-  useId,
-  useRef,
-  type ChangeEventHandler,
-  type ComponentProps,
-} from "react";
+import { useId, useRef } from "react";
+import type { ChangeEventHandler, ComponentProps } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Search, X } from "@/components/ui/icons";

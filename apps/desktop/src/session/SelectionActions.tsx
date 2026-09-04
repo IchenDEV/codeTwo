@@ -1,11 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -43,11 +37,11 @@ export function SelectionToolbar({
   const [tabStop, setTabStop] = useState(0);
 
   const onToolbarKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const buttons = Array.from(
-      toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
+    const buttons = [
+      ...(toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
         "button:not(:disabled)"
-      ) ?? []
-    );
+      ) ?? []),
+    ];
     if (buttons.length === 0) return;
 
     const current = Math.max(
@@ -69,6 +63,7 @@ export function SelectionToolbar({
 
   return (
     <div
+      tabIndex={0}
       ref={toolbarRef}
       className="flex items-center gap-0"
       aria-label={t("selection.actions")}
@@ -166,7 +161,7 @@ export function SelectionActions({
     // accessibility actions through the document-level selectionchange event. Those paths do
     // not consistently dispatch an ending pointer or mouse event to the transcript element.
     document.addEventListener("selectionchange", capture);
-    scope.addEventListener("scroll", close, { passive: true });
+    scope.addEventListener("scroll", close);
     window.addEventListener("resize", close);
     return () => {
       window.clearTimeout(timer);
@@ -179,15 +174,11 @@ export function SelectionActions({
     };
   }, [scopeRef]);
 
-  const anchor = useMemo(
-    () =>
-      captured
-        ? {
-            getBoundingClientRect: () => captured.rect,
-          }
-        : null,
-    [captured]
-  );
+  const anchor = captured
+    ? {
+        getBoundingClientRect: () => captured.rect,
+      }
+    : null;
 
   const run = (action: (text: string) => void) => {
     if (!captured) return;

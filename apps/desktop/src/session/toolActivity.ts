@@ -1,5 +1,7 @@
 import type { ArtifactRef } from "../bridge";
 import type { DockSurface, DockTab } from "../dock/Dock";
+import { asJsonObject } from "../lib/jsonValue";
+import type { JsonObject } from "../lib/jsonValue";
 import type { ToolEntry, Turn } from "./turns";
 
 /**
@@ -15,7 +17,7 @@ export interface ToolSurfaceHint {
   file?: string;
 }
 
-type JsonRecord = Record<string, unknown>;
+type JsonRecord = JsonObject;
 
 /** ACP kinds whose whole point is looking, not acting — the dock never follows a read. */
 const READ_KINDS = new Set(["read", "search", "fetch", "think"]);
@@ -61,10 +63,10 @@ const TEST_RUN =
 function normalizeIdentifier(value: string | null | undefined): string {
   return (value ?? "")
     .trim()
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1_$2")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+    .replaceAll(/[^a-z0-9]+/g, "_")
+    .replaceAll(/^_+|_+$/g, "");
 }
 
 export interface InteractiveToolPreview {
@@ -96,7 +98,7 @@ export function activeInteractivePreview(
 ): InteractiveToolPreview | null {
   for (let turnIndex = turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
     const turn = turns[turnIndex];
-    if (!turn || turn.endedAt !== undefined) continue;
+    if (turn == null || turn.endedAt !== undefined) continue;
 
     let activeTool: Pick<InteractiveToolPreview, "kind" | "title"> | null =
       null;
@@ -106,8 +108,8 @@ export function activeInteractivePreview(
       toolIndex -= 1
     ) {
       const tool = turn.tools[toolIndex];
-      const kind = tool && interactiveToolKind(tool);
-      if (tool && kind) {
+      const kind = tool == null ? null : interactiveToolKind(tool);
+      if (tool != null && kind != null) {
         activeTool = { kind, title: tool.title };
         break;
       }
@@ -120,7 +122,8 @@ export function activeInteractivePreview(
       toolIndex -= 1
     ) {
       const tool = turn.tools[toolIndex];
-      if (!tool || interactiveToolKind(tool) !== activeTool.kind) continue;
+      if (tool == null || interactiveToolKind(tool) !== activeTool.kind)
+        continue;
       const outputs = tool.outputs ?? [];
       for (
         let outputIndex = outputs.length - 1;
@@ -138,16 +141,13 @@ export function activeInteractivePreview(
 }
 
 function parsedRecord(value: unknown): JsonRecord | null {
-  if (value && typeof value === "object" && !Array.isArray(value))
-    return value as JsonRecord;
+  const direct = asJsonObject(value);
+  if (direct != null) return direct;
   if (typeof value !== "string") return null;
   const text = value.trim();
   if (!text.startsWith("{") || !text.endsWith("}")) return null;
   try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as JsonRecord)
-      : null;
+    return asJsonObject(JSON.parse(text) as unknown);
   } catch {
     return null;
   }
@@ -207,7 +207,9 @@ export function classifyToolSurface(tool: {
   if (isGitTool(title) || isGitTool(kind)) return { surface: "git" };
   if (kind === "edit" || isFileTool(title)) {
     const file = filePathFrom(tool.agentInput);
-    return file ? { surface: "files", file } : { surface: "files" };
+    return file != null && file !== ""
+      ? { surface: "files", file }
+      : { surface: "files" };
   }
   if (kind === "execute" || isTerminalTool(title))
     return { surface: "terminal" };
@@ -249,15 +251,18 @@ export function followReduce(
   e: FollowEvent
 ): { state: FollowState; setTab?: DockSurface } {
   switch (e.kind) {
-    case "manual":
+    case "manual": {
       return { state: { ...s, manualLatched: true, autoTab: null } };
-    case "run_ended":
+    }
+    case "run_ended": {
       return { state: { ...s, manualLatched: false, autoTab: null } };
-    case "session_switched":
+    }
+    case "session_switched": {
       return { state: initialFollowState };
+    }
     case "tool": {
       if (s.manualLatched) return { state: s };
-      const surface = e.hint.surface;
+      const { surface } = e.hint;
       if (!e.dockOpen) {
         return { state: { ...s, autoTab: surface } };
       }

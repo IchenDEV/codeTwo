@@ -2,10 +2,10 @@
 
 import { createInterface } from "node:readline";
 
-import {
-  ToolBroker,
-  type AcpMcpServer,
-  type ToolPlan,
+import { ToolBroker } from "../../../../packages/tool-broker/src";
+import type {
+  AcpMcpServer,
+  ToolPlan,
 } from "../../../../packages/tool-broker/src";
 import {
   detectHostToolEvidence,
@@ -33,7 +33,7 @@ function requiredBoolean(value: unknown, name: string): boolean {
 }
 
 function environment(value: unknown): NodeJS.ProcessEnv {
-  if (!value || typeof value !== "object" || Array.isArray(value))
+  if (value == null || typeof value !== "object" || Array.isArray(value))
     return process.env;
   return Object.fromEntries(
     Object.entries(value).flatMap(([name, candidate]) => {
@@ -49,7 +49,7 @@ function wireServer(server: AcpMcpServer): Record<string, unknown> {
       command: server.command,
       args: server.args,
       env: server.env.map(({ name, value }) => [name, value]),
-      ...(server.cwd ? { cwd: server.cwd } : {}),
+      ...(server.cwd != null && server.cwd !== "" ? { cwd: server.cwd } : {}),
     };
   }
   return {
@@ -104,15 +104,17 @@ function handle(request: JsonRpcRequest): unknown {
   const broker = new ToolBroker();
 
   switch (request.method) {
-    case "tool.catalog":
+    case "tool.catalog": {
       return wireSettings(broker.catalog({ evidence }));
-    case "tool.resolve":
+    }
+    case "tool.resolve": {
       return wirePlan(
         broker.resolve({
           providerId: requiredString(params.provider_id, "params.provider_id"),
           context: { evidence },
         })
       );
+    }
     case "tool.snapshot": {
       if (
         !Array.isArray(params.provider_ids) ||
@@ -161,8 +163,9 @@ function handle(request: JsonRpcRequest): unknown {
       );
       return wireSettings(broker.catalog({ evidence }));
     }
-    default:
+    default: {
       throw new Error(`method not found: ${request.method}`);
+    }
   }
 }
 
@@ -177,16 +180,16 @@ async function runEmptyMcpServer(): Promise<void> {
       continue;
     }
     if (!("id" in request)) continue;
-    const method = request.method;
+    const { method } = request;
     const params =
-      request.params &&
+      request.params != null &&
       typeof request.params === "object" &&
       !Array.isArray(request.params)
         ? (request.params as Record<string, unknown>)
         : {};
     let result: Record<string, unknown>;
     switch (method) {
-      case "initialize":
+      case "initialize": {
         result = {
           protocolVersion:
             typeof params.protocolVersion === "string"
@@ -196,30 +199,36 @@ async function runEmptyMcpServer(): Promise<void> {
           serverInfo: { name: "codetwo-browser-access-disabled", version: "1" },
         };
         break;
-      case "tools/list":
+      }
+      case "tools/list": {
         result = { tools: [] };
         break;
-      case "resources/list":
+      }
+      case "resources/list": {
         result = { resources: [] };
         break;
-      case "prompts/list":
+      }
+      case "prompts/list": {
         result = { prompts: [] };
         break;
-      case "ping":
+      }
+      case "ping": {
         result = {};
         break;
-      default:
+      }
+      default: {
         process.stdout.write(
           `${JSON.stringify({
             jsonrpc: "2.0",
             id: request.id,
             error: {
-              code: -32601,
+              code: -32_601,
               message: `method not found: ${String(method)}`,
             },
           })}\n`
         );
         continue;
+      }
     }
     process.stdout.write(
       `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`
@@ -241,7 +250,7 @@ async function main(): Promise<void> {
         jsonrpc: "2.0",
         id: request?.id ?? null,
         error: {
-          code: -32000,
+          code: -32_000,
           message: error instanceof Error ? error.message : String(error),
         },
       })}\n`

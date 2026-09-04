@@ -14,8 +14,8 @@ import {
   isLspLanguage,
   onLspRuntimeEnabled,
   pathToUri,
-  type LspClient,
 } from "./client";
+import type { LspClient } from "./client";
 import { applyDiagnostics, registerProviders } from "./providers";
 
 const synced = new Set<string>();
@@ -129,9 +129,11 @@ export async function attachLsp(
     model.onDidChangeContent(() => {
       const current = clientForPath(model.uri.path, model.getLanguageId());
       if (current) {
-        if (!current.isOpen(uri))
+        if (current.isOpen(uri)) {
+          current.scheduleChange(uri, model.getValue());
+        } else {
           current.didOpen(uri, model.getLanguageId(), model.getValue());
-        else current.scheduleChange(uri, model.getValue());
+        }
       }
     });
   }

@@ -391,8 +391,8 @@ function modernizeWindowChrome(bundle: string): void {
     process.exit(show.exitCode);
   }
   const buildInfo = show.stdout.toString();
-  const minos = buildInfo.match(/minos\s+(\d+(?:\.\d+)*)/)?.[1] ?? "13.0";
-  const sdk = Number(buildInfo.match(/sdk\s+(\d+(?:\.\d+)*)/)?.[1] ?? "0");
+  const minos = /minos\s+(\d+(?:\.\d+)*)/.exec(buildInfo)?.[1] ?? "13.0";
+  const sdk = Number(/sdk\s+(\d+(?:\.\d+)*)/.exec(buildInfo)?.[1] ?? "0");
   if (sdk >= 26) {
     return;
   }
@@ -554,12 +554,15 @@ function configureUpdater(plist: string): void {
 
   const feedURL = process.env.CODETWO_SPARKLE_FEED_URL;
   const publicKey = process.env.CODETWO_SPARKLE_PUBLIC_KEY;
-  if (feedURL == null || (feedURL === "" && !publicKey)) {
+  if (
+    feedURL == null ||
+    (feedURL === "" && (publicKey == null || publicKey === ""))
+  ) {
     removePlistKey(plist, "SUFeedURL");
     removePlistKey(plist, "SUPublicEDKey");
     return;
   }
-  if (!feedURL || !publicKey) {
+  if (!feedURL || publicKey == null || publicKey === "") {
     throw new Error(
       "CODETWO_SPARKLE_FEED_URL and CODETWO_SPARKLE_PUBLIC_KEY must be provided together"
     );
@@ -595,7 +598,7 @@ for (const bundle of bundles) {
   // The wrapper bundle (postWrap) no longer contains the unpacked payload — the app resources
   // were compressed into the update tarball after postBuild, where these were already checked
   // and signed.
-  if (!wrapperBundle) {
+  if (wrapperBundle == null || wrapperBundle === "") {
     prepareEmbeddedRuntime(bundle);
     signEmbeddedRuntime(bundle);
     modernizeWindowChrome(bundle);

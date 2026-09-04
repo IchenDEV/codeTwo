@@ -43,17 +43,17 @@ interface PendingRequest {
   reject: (error: Error) => void;
 }
 
-function error(value: unknown): Error {
+function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
 
-function withTimeout<T>(
+async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
   message: string
 ): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
+  return await Promise.race([
     promise,
     new Promise<never>((_, reject) => {
       timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
@@ -64,7 +64,7 @@ function withTimeout<T>(
 }
 
 function desktopEvent(value: unknown): DesktopEvent {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("C2 Plugin Kernel emitted an invalid event envelope");
   }
   const candidate = value as { name?: unknown; payload?: unknown };
@@ -75,7 +75,11 @@ function desktopEvent(value: unknown): DesktopEvent {
 }
 
 function assertReadyPayload(payload: unknown): void {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (
+    payload == null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload)
+  ) {
     throw new Error("C2 Plugin Kernel emitted an invalid readiness payload");
   }
   const ready = payload as { protocol_version?: unknown; commands?: unknown };
@@ -119,16 +123,18 @@ export class NativeHost {
       this.resolveReady = resolve;
       this.rejectReady = reject;
     });
-    void this.readyPromise.catch(() => undefined);
+    void this.readyPromise.catch(() => {
+      /* empty */
+    });
   }
 
-  start(): Promise<void> {
-    if (this.startPromise) return this.startPromise;
+  async start(): Promise<void> {
+    if (this.startPromise) return await this.startPromise;
     if (this.stopping || this.stopped) {
-      return Promise.reject(new Error("C2 Plugin Kernel has already stopped"));
+      throw new Error("C2 Plugin Kernel has already stopped");
     }
     this.startPromise = this.startProcess();
-    return this.startPromise;
+    return await this.startPromise;
   }
 
   async call(
@@ -139,11 +145,15 @@ export class NativeHost {
     if (!this.startPromise)
       throw new Error("C2 Plugin Kernel has not been started");
     await this.startPromise;
-    return this.request("call", { name, args, project_path: projectPath });
+    return await this.request("call", {
+      name,
+      args,
+      project_path: projectPath,
+    });
   }
 
   async shutdown(): Promise<void> {
-    const child = this.child;
+    const { child } = this;
     if (!child || this.stopped) return;
     this.stopping = true;
 
@@ -151,7 +161,7 @@ export class NativeHost {
       if (this.ready && !this.failure) {
         await withTimeout(
           this.request("shutdown", null),
-          this.options.shutdownTimeoutMs ?? 2_000,
+          this.options.shutdownTimeoutMs ?? 2000,
           "C2 Plugin Kernel shutdown timed out"
         );
       }
@@ -167,12 +177,14 @@ export class NativeHost {
 
     const exited = await withTimeout(
       child.exited.then(() => true),
-      this.options.shutdownTimeoutMs ?? 2_000,
+      this.options.shutdownTimeoutMs ?? 2000,
       "C2 Plugin Kernel did not exit after shutdown"
     ).catch(() => false);
     if (!exited) {
       child.kill();
-      await child.exited.catch(() => undefined);
+      await child.exited.catch(() => {
+        /* empty */
+      });
     }
     this.child = null;
     this.stopped = true;
@@ -187,22 +199,22 @@ export class NativeHost {
         "--data-dir",
         this.options.dataDir,
       ]);
-    } catch (cause) {
+    } catch (error) {
       const startupError = new Error(
-        `C2 Plugin Kernel could not be launched: ${error(cause).message}`
+        `C2 Plugin Kernel could not be launched: ${asError(error).message}`
       );
       this.fail(startupError);
       throw startupError;
     }
 
-    const child = this.child;
-    void this.readOutput(child.stdout).catch((cause) => {
-      this.fail(error(cause));
+    const { child } = this;
+    void this.readOutput(child.stdout).catch((error: unknown) => {
+      this.fail(asError(error));
       child.kill();
     });
     void child.exited.then(
       (status) => this.handleExit(status),
-      (cause) => this.fail(error(cause))
+      (error: unknown) => this.fail(asError(error))
     );
 
     try {
@@ -211,35 +223,34 @@ export class NativeHost {
         this.options.startupTimeoutMs ?? 60_000,
         "C2 Plugin Kernel did not become ready"
       );
-    } catch (cause) {
-      const startupError = error(cause);
+    } catch (error) {
+      const startupError = asError(error);
       this.fail(startupError);
       child.kill();
       throw startupError;
     }
   }
 
-  private request(method: string, params: unknown): Promise<unknown> {
-    const child = this.child;
-    if (!child)
-      return Promise.reject(new Error("C2 Plugin Kernel is not running"));
-    if (this.failure) return Promise.reject(this.failure);
+  private async request(method: string, params: unknown): Promise<unknown> {
+    const { child } = this;
+    if (!child) throw new Error("C2 Plugin Kernel is not running");
+    if (this.failure) throw this.failure;
     if (this.stopping && method !== "shutdown") {
-      return Promise.reject(new Error("C2 Plugin Kernel is stopping"));
+      throw new Error("C2 Plugin Kernel is stopping");
     }
 
-    const id = this.nextId++;
+    const id = (this.nextId += 1);
     const response = new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
     });
     try {
       child.stdin.write(`${JSON.stringify({ id, method, params })}\n`);
       child.stdin.flush();
-    } catch (cause) {
+    } catch (error) {
       this.pending.delete(id);
-      return Promise.reject(error(cause));
+      return await Promise.reject(asError(error));
     }
-    return response;
+    return await response;
   }
 
   private async readOutput(stdout: ReadableStream<Uint8Array>): Promise<void> {
@@ -284,9 +295,10 @@ export class NativeHost {
     let message: HostResponse;
     try {
       message = JSON.parse(line) as HostResponse;
-    } catch (cause) {
+    } catch (error) {
       throw new Error(
-        `C2 Plugin Kernel emitted invalid protocol data: ${error(cause).message}`
+        `C2 Plugin Kernel emitted invalid protocol data: ${asError(error).message}`,
+        { cause: error }
       );
     }
 
@@ -299,14 +311,14 @@ export class NativeHost {
       }
       try {
         this.options.onEvent(event);
-      } catch (cause) {
-        console.error("C2 desktop event handler failed", cause);
+      } catch (error) {
+        console.error("C2 desktop event handler failed", error);
       }
       return;
     }
 
     if (typeof message.id !== "number") {
-      throw new Error(
+      throw new TypeError(
         "C2 Plugin Kernel emitted a response without a numeric id"
       );
     }

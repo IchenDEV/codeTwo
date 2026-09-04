@@ -30,7 +30,7 @@ const project = new Project({
 project.addSourceFilesAtPaths(patterns);
 
 function isPascalCase(name: string): boolean {
-  return /^[A-Z][A-Za-z0-9]*$/.test(name);
+  return /^[A-Z][A-Za-z0-9]*$/u.test(name);
 }
 
 function returnsJsx(body: import("ts-morph").Node): boolean {
@@ -66,7 +66,7 @@ for (const sourceFile of project.getSourceFiles()) {
   const variableStatements = sourceFile
     .getDescendants()
     .filter(Node.isVariableStatement)
-    .sort((a, b) => b.getStart() - a.getStart());
+    .toSorted((a, b) => b.getStart() - a.getStart());
 
   for (const statement of variableStatements) {
     if (statement.wasForgotten() || statement.hasDeclareKeyword()) {
@@ -76,7 +76,7 @@ for (const sourceFile of project.getSourceFiles()) {
     if (declarations.length !== 1) {
       continue;
     }
-    const declaration = declarations[0]!;
+    const declaration = declarations[0];
     const nameNode = declaration.getNameNode();
     if (!Node.isIdentifier(nameNode)) {
       continue;

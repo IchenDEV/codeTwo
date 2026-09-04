@@ -23,7 +23,7 @@ describe("project worktree management rows", () => {
   test("shows the branch name people type, not the full ref", () => {
     expect(worktreeBranchDisplay("refs/heads/codetwo/fix")).toBe("codetwo/fix");
     expect(worktreeBranchDisplay("codetwo/fix")).toBe("codetwo/fix");
-    expect(worktreeBranchDisplay(undefined)).toBeNull();
+    expect(worktreeBranchDisplay()).toBeNull();
   });
 
   test("derives status badges in display order", () => {

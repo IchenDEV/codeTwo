@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const desktopRoot = resolve(import.meta.dir, "..");
@@ -17,7 +17,6 @@ function run(command: string[], cwd: string): void {
 run(["bun", "run", "build:renderer"], desktopRoot);
 run(["bun", "run", "build:tool-broker"], desktopRoot);
 
-import { existsSync } from "node:fs";
 const hostExecutable =
   process.platform === "win32"
     ? "codetwo-desktop-host.exe"

@@ -4,7 +4,7 @@ import type { WorktreeStatusEntry } from "../bridge";
 export function worktreeBranchDisplay(
   branch: string | null | undefined
 ): string | null {
-  if (!branch) return null;
+  if (branch == null || branch === "") return null;
   return branch.startsWith("refs/heads/")
     ? branch.slice("refs/heads/".length)
     : branch;
@@ -31,7 +31,9 @@ export type WorktreeDiscardRoute =
 export function worktreeDiscardRoute(
   entry: WorktreeStatusEntry
 ): WorktreeDiscardRoute {
-  return entry.kind === "session" && entry.session_id
+  return entry.kind === "session" &&
+    entry.session_id != null &&
+    entry.session_id !== ""
     ? { kind: "session", session: entry.session_id }
     : { kind: "orphan", worktreePath: entry.path };
 }

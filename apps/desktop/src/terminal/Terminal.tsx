@@ -1,7 +1,8 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
-import { Terminal, type ITheme } from "@xterm/xterm";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Terminal } from "@xterm/xterm";
+import type { ITheme } from "@xterm/xterm";
+import { useEffect, useRef, useState } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { ArrowDown, ArrowUp, X } from "@/components/ui/icons";
@@ -104,7 +105,7 @@ export function TerminalPanel({
   // Terminals stay mounted when they're not the visible tab, so they have no layout box — and
   // xterm's fit addon throws on those. The dock's resize event reaches every mounted instance, so
   // this guard is what keeps a panel resize from spraying errors from the hidden ones.
-  const refit = useCallback(() => {
+  const refit = () => {
     const el = boxRef.current;
     const term = termRef.current;
     if (
@@ -122,7 +123,7 @@ export function TerminalPanel({
     } catch {
       return false;
     }
-  }, []);
+  };
 
   useEffect(() => {
     const el = boxRef.current;
@@ -182,7 +183,7 @@ export function TerminalPanel({
       });
       stopExit = await onPtyExit((exited) => {
         if (exited.id === id && exited.project_path === projectPath) {
-          term.write(`\r\n\x1b[2m${t("terminal.exited")}\x1b[0m\r\n`);
+          term.write(`\r\n\u001B[2m${t("terminal.exited")}\u001B[0m\r\n`);
         }
       });
       if (disposed) return;
@@ -247,15 +248,12 @@ export function TerminalPanel({
     if (term) term.options.theme = terminalTheme();
   }, [scheme]);
 
-  const find = useCallback(
-    (next: boolean) => {
-      if (!query) return;
-      const search = searchRef.current;
-      if (next) search?.findNext(query);
-      else search?.findPrevious(query);
-    },
-    [query]
-  );
+  const find = (next: boolean) => {
+    if (!query) return;
+    const search = searchRef.current;
+    if (next) search?.findNext(query);
+    else search?.findPrevious(query);
+  };
 
   return (
     <div

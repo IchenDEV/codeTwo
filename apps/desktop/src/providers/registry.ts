@@ -1,10 +1,10 @@
 import type { ProviderInfo } from "../bridge";
 
 const DEFAULT_RETRY_DELAYS_MS = [0, 250, 750] as const;
-const DEFAULT_ATTEMPT_TIMEOUT_MS = 7_000;
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 7000;
 
-function timeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+async function timeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
     const timer = globalThis.setTimeout(
       () =>
         reject(new Error(`Provider detection timed out after ${timeoutMs}ms`)),
@@ -15,18 +15,18 @@ function timeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
         globalThis.clearTimeout(timer);
         resolve(value);
       },
-      (error) => {
+      (error: unknown) => {
         globalThis.clearTimeout(timer);
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     );
   });
 }
 
-function pause(delayMs: number): Promise<void> {
+async function pause(delayMs: number): Promise<void> {
   return delayMs > 0
-    ? new Promise((resolve) => globalThis.setTimeout(resolve, delayMs))
-    : Promise.resolve();
+    ? await new Promise((resolve) => globalThis.setTimeout(resolve, delayMs))
+    : await Promise.resolve();
 }
 
 /**

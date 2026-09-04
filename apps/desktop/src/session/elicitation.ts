@@ -20,7 +20,9 @@ export type ElicitationValues = Record<string, ElicitationValue>;
 
 /** The fields a user answers. The free-text "Other" boxes hang off these, and aren't questions. */
 export function questionFields(form: ElicitationForm): ElicitationField[] {
-  return form.fields.filter((field) => !field.custom_answer_for);
+  return form.fields.filter(
+    (field) => field.custom_answer_for == null || field.custom_answer_for === ""
+  );
 }
 
 /** The "Other" box belonging to a question, when the agent offered one. */
@@ -83,7 +85,7 @@ export function setValue(
 ): ElicitationValues {
   const next = { ...values, [field.key]: value };
   const owner = field.custom_answer_for;
-  if (owner && isAnswered(value)) delete next[owner];
+  if (owner != null && owner !== "" && isAnswered(value)) delete next[owner];
   return next;
 }
 
@@ -106,7 +108,7 @@ export function answerContent(
   const content: ElicitationContent = {};
   for (const field of form.fields) {
     const value = values[field.key];
-    if (isAnswered(value)) content[field.key] = value as ElicitationValue;
+    if (isAnswered(value)) content[field.key] = value;
   }
   return content;
 }

@@ -150,7 +150,11 @@ export function TaskListItem({
                   task={task}
                   session={session}
                   selected={session.id === selectedSessionId}
-                  pullRequest={path ? pullRequestsByPath.get(path) : null}
+                  pullRequest={
+                    path != null && path !== ""
+                      ? pullRequestsByPath.get(path)
+                      : null
+                  }
                   onSelect={() => onSelectSession(session.id)}
                 />
               );

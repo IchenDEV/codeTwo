@@ -6,8 +6,8 @@ import {
   loadModelPreferences,
   setModelHidden,
   showAllProviderModels,
-  type ModelPreferencesStorage,
 } from "../src/session/modelPreferences";
+import type { ModelPreferencesStorage } from "../src/session/modelPreferences";
 
 class MemoryStorage implements ModelPreferencesStorage {
   values = new Map<string, string>();

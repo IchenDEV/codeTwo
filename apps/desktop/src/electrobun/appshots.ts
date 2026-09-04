@@ -43,7 +43,7 @@ const HOTKEY_ACCELERATORS: Partial<Record<AppshotHotkey, string>> = {
 const captureRetentionMs = 7 * 24 * 60 * 60 * 1000;
 const maxStoredCaptures = 40;
 const captureIdPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 type StoredSettings = Pick<
   AppshotSettings,
@@ -64,7 +64,7 @@ function isDestination(value: unknown): value is AppshotDestination {
 
 export function normalizeAppshotSettings(value: unknown): StoredSettings {
   const settings =
-    value && typeof value === "object"
+    value != null && typeof value === "object"
       ? (value as Record<string, unknown>)
       : {};
   return {
@@ -103,7 +103,7 @@ export class AppshotManager {
     chmodSync(this.capturesDir, 0o700);
     try {
       this.settings = normalizeAppshotSettings(
-        JSON.parse(readFileSync(this.settingsPath, "utf8"))
+        JSON.parse(readFileSync(this.settingsPath, "utf-8"))
       );
     } catch {
       this.settings = { ...DEFAULT_SETTINGS };
@@ -131,7 +131,7 @@ export class AppshotManager {
     writeFileSync(
       this.settingsPath,
       `${JSON.stringify(this.settings, null, 2)}\n`,
-      { encoding: "utf8", mode: 0o600 }
+      { encoding: "utf-8", mode: 0o600 }
     );
     this.applyHotkey();
     return this.getSettings();
@@ -182,7 +182,7 @@ export class AppshotManager {
         height: result.height ?? 0,
       };
       writeFileSync(metadataPath, `${JSON.stringify(metadata)}\n`, {
-        encoding: "utf8",
+        encoding: "utf-8",
         mode: 0o600,
       });
       const capture: AppshotCapture = {
@@ -230,7 +230,7 @@ export class AppshotManager {
       throw new Error("Appshot metadata is invalid.");
     }
     const image = readFileSync(imagePath);
-    const rawMetadata = readFileSync(metadataPath, "utf8");
+    const rawMetadata = readFileSync(metadataPath, "utf-8");
     const value = JSON.parse(rawMetadata) as Record<string, unknown>;
     if (value.id !== id)
       throw new Error("Appshot metadata does not match the image.");
@@ -294,7 +294,8 @@ export class AppshotManager {
     }
     const accelerator = HOTKEY_ACCELERATORS[this.settings.hotkey];
     if (
-      accelerator &&
+      accelerator != null &&
+      accelerator !== "" &&
       GlobalShortcut.register(accelerator, () => void this.captureFromHotkey())
     ) {
       this.registeredAccelerator = accelerator;
@@ -305,7 +306,7 @@ export class AppshotManager {
     if (this.pollTimer) clearInterval(this.pollTimer);
     this.pollTimer = null;
     this.dualCommandLatched = false;
-    if (this.registeredAccelerator)
+    if (this.registeredAccelerator != null && this.registeredAccelerator !== "")
       GlobalShortcut.unregister(this.registeredAccelerator);
     this.registeredAccelerator = null;
   }
@@ -332,7 +333,7 @@ export class AppshotManager {
           return [];
         }
       })
-      .sort((left, right) => right.modified - left.modified);
+      .toSorted((left, right) => right.modified - left.modified);
     for (const [index, entry] of entries.entries()) {
       if (
         index >= maxStoredCaptures * 2 ||

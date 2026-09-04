@@ -1,4 +1,5 @@
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useState } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import {
   ArrowLeft,
@@ -15,7 +16,8 @@ import {
 } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-import { Dock, type DockTab } from "../../dock/Dock";
+import { Dock } from "../../dock/Dock";
+import type { DockTab } from "../../dock/Dock";
 import { GitHubPullRequestPanel } from "../../git/GitHubPullRequestPanel";
 import { PullRequestsPage } from "../../github/PullRequestsPage";
 import { useLanguage } from "../../i18n";
@@ -31,14 +33,14 @@ import {
 import "./ui-lab.css";
 
 type UiLabRoute = "home" | "design-system" | "pull-requests" | "pr-dock";
-type UiLabCard = {
+interface UiLabCard {
   route: UiLabRoute;
   icon: ComponentType<{ className?: string }>;
   title: string;
   description: string;
   tags: readonly string[];
   fixture?: boolean;
-};
+}
 
 const catalogCards: readonly UiLabCard[] = [
   {
@@ -127,7 +129,7 @@ function CatalogCard({ card }: { card: UiLabCard }) {
             <span key={tag}>{tag}</span>
           ))}
         </span>
-        {card.fixture ? (
+        {card.fixture === true ? (
           <span className="ui-lab-fixture-badge">Fixture</span>
         ) : null}
       </span>
@@ -248,8 +250,12 @@ function PullRequestsScenario() {
         activeTaskId="ui-lab-pr-task"
         loadPullRequest={loadPullRequest}
         loadPullRequests={loadPullRequests}
-        onChat={() => {}}
-        onOpenTask={() => {}}
+        onChat={() => {
+          /* empty */
+        }}
+        onOpenTask={() => {
+          /* empty */
+        }}
         tasks={pullRequestTasks}
       />
     </ScenarioShell>
@@ -315,9 +321,13 @@ function PullRequestDockScenario() {
               </ScrollArea>
             ),
           }}
-          onClose={() => {}}
+          onClose={() => {
+            /* empty */
+          }}
           onTab={setTab}
-          onWidth={() => {}}
+          onWidth={() => {
+            /* empty */
+          }}
           open
           tab={tab}
           width={420}

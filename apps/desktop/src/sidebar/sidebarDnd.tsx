@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import {
   useDragDropSortable,
   useDragDropZone,
-  type UseSortableInput,
 } from "@/components/ui/drag-drop";
+import type { UseSortableInput } from "@/components/ui/drag-drop";
 
 export type SidebarDragItem =
   | { kind: "task"; id: string }
@@ -129,7 +129,7 @@ export function SidebarDropZone({
   children: (state: DndRenderState) => ReactNode;
 }) {
   const acceptKey = Array.isArray(accept)
-    ? [...accept].sort().join("-")
+    ? [...accept].toSorted().join("-")
     : accept;
   const droppable = useDragDropZone<SidebarDndData>({
     id: dndId(`zone:${acceptKey}`, undefined, location),
@@ -146,7 +146,7 @@ export function SidebarDropZone({
 }
 
 export function sidebarDndData(value: unknown): SidebarDndData | null {
-  if (!value || typeof value !== "object") return null;
+  if (value == null || typeof value !== "object") return null;
   const candidate = value as Partial<SidebarDndData>;
   if (!candidate.location || typeof candidate.location !== "object")
     return null;
@@ -192,7 +192,7 @@ export function sidebarRememberedDragTarget(
 export function sidebarSortableSnapshot(
   value: unknown
 ): SidebarSortableSnapshot | null {
-  if (!value || typeof value !== "object") return null;
+  if (value == null || typeof value !== "object") return null;
   const candidate = value as Partial<SidebarSortableSnapshot>;
   if (
     typeof candidate.group !== "string" ||
@@ -224,7 +224,7 @@ export function sidebarTaskLocationFromGroup(
   const prefix = "sidebar-tasks:";
   if (!group.startsWith(prefix)) return undefined;
   const separator = group.indexOf(":", prefix.length);
-  if (separator < 0) return undefined;
+  if (separator === -1) return undefined;
   const sectionId = decodeURIComponent(group.slice(prefix.length, separator));
   const projectPath = decodeURIComponent(group.slice(separator + 1));
   return {

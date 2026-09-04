@@ -11,19 +11,21 @@ import {
   CANVAS_ENGINE,
   CANVAS_ENGINE_VERSION,
   CANVAS_SCHEMA_VERSION,
-  type AllowedElementType,
-  type CanvasAppStateSubset,
-  type CanvasAssetRef,
-  type CanvasEnvelope,
-  type CanvasSceneSnapshot,
-  type CanvasTheme,
-  type NormalizedStaticAsset,
+} from "./types";
+import type {
+  AllowedElementType,
+  CanvasAppStateSubset,
+  CanvasAssetRef,
+  CanvasEnvelope,
+  CanvasSceneSnapshot,
+  CanvasTheme,
+  NormalizedStaticAsset,
 } from "./types";
 
-const DATA_URL_RE = /^data:[^;,]+(?:;[^;,]+)*;base64,[a-z0-9+/=\s]+$/i;
+const DATA_URL_RE = /^data:[^;,]+(?:;[^;,]+)*;base64,[a-z0-9+/=\s]+$/iu;
 const INLINE_DATA_URL_RE =
-  /data:[^;,\s]+(?:;[^;,\s]+)*;base64,[a-z0-9+/=\s]+/gi;
-const HTTP_URL_RE = /^(?:https?:|javascript:|data:|blob:)/i;
+  /data:[^;,\s]+(?:;[^;,\s]+)*;base64,[a-z0-9+/=\s]+/giu;
+const HTTP_URL_RE = /^(?:https?:|javascript:|data:|blob:)/iu;
 const COLOR_PRESETS = new Set([
   "black",
   "white",
@@ -106,7 +108,7 @@ function safeText(value: unknown, fallback = ""): string {
 }
 
 function safeElementBase(element: ElementRecord, index: number): ElementRecord {
-  const type = element.type;
+  const { type } = element;
   return {
     id: safeId(element.id, `canvas-element-${index + 1}`),
     type,
@@ -144,16 +146,17 @@ function sanitizeElement(
   element: unknown,
   index: number
 ): ExcalidrawElement | null {
-  if (!element || typeof element !== "object") return null;
+  if (element == null || typeof element !== "object") return null;
   const source = element as ElementRecord;
-  const type = source.type;
+  const { type } = source;
   if (!ALLOWED_ELEMENT_TYPES.includes(type as AllowedElementType)) return null;
   const base = safeElementBase(source, index);
 
   switch (type) {
     case "rectangle":
-    case "ellipse":
+    case "ellipse": {
       return base as ExcalidrawElement;
+    }
     case "line":
     case "arrow": {
       const points = safePoints(source.points);
@@ -169,7 +172,7 @@ function sanitizeElement(
         ...(type === "arrow" ? { elbowed: false } : {}),
       } as unknown as ExcalidrawElement;
     }
-    case "freedraw":
+    case "freedraw": {
       return {
         ...base,
         type,
@@ -182,6 +185,7 @@ function sanitizeElement(
         simulatePressure: Boolean(source.simulatePressure),
         lastCommittedPoint: null,
       } as unknown as ExcalidrawElement;
+    }
     case "text": {
       const text = safeText(source.text);
       const originalText = safeText(source.originalText, text);
@@ -227,8 +231,9 @@ function sanitizeElement(
         crop: null,
       } as ExcalidrawImageElement;
     }
-    default:
+    default: {
       return null;
+    }
   }
 }
 
@@ -284,8 +289,8 @@ function normalizeAssetRefs(
           typeof asset.ref === "string" &&
           asset.ref.length > 0 &&
           asset.ref.length <= 160 &&
-          !/^(?:data:|blob:|https?:|javascript:)/i.test(asset.ref) &&
-          !/[\\/\s]/.test(asset.ref) &&
+          !/^(?:data:|blob:|https?:|javascript:)/iu.test(asset.ref) &&
+          !/[\\/\s]/u.test(asset.ref) &&
           (asset.mimeType === "image/png" || asset.mimeType === "image/webp") &&
           typeof asset.fileId === "string" &&
           asset.fileId.length > 0
@@ -313,7 +318,7 @@ function normalizeAssetRefs(
     if (existingRef) refs.push(existingRef);
   }
   const unique = new Map(refs.map((asset) => [asset.fileId, asset]));
-  return Array.from(unique.values()).sort((a, b) =>
+  return [...unique.values()].toSorted((a, b) =>
     a.fileId.localeCompare(b.fileId)
   );
 }
@@ -354,10 +359,10 @@ export function createEnvelope(
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
-  if (!value || typeof value !== "object") return value;
+  if (value == null || typeof value !== "object") return value;
   return Object.fromEntries(
     Object.entries(value)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .toSorted(([a], [b]) => a.localeCompare(b))
       .map(([key, entry]) => [key, stableValue(entry)])
   );
 }
@@ -377,7 +382,7 @@ export function serializeEnvelope(envelope: CanvasEnvelope): string {
 }
 
 function assertEnvelope(value: unknown): asserts value is CanvasEnvelope {
-  if (!value || typeof value !== "object")
+  if (value == null || typeof value !== "object")
     throw new CanvasEnvelopeError(
       "invalid-envelope",
       "Canvas envelope must be an object"
@@ -420,11 +425,11 @@ export function deserializeEnvelope(
     );
   }
   assertEnvelope(parsed);
-  const envelope = parsed as CanvasEnvelope;
+  const envelope = parsed;
   const sanitizedElements = sanitizeElements(envelope.elements);
   if (
     sanitizedElements.some((element) =>
-      JSON.stringify(element).match(DATA_URL_RE)
+      DATA_URL_RE.exec(JSON.stringify(element))
     )
   ) {
     throw new CanvasEnvelopeError(
@@ -519,7 +524,7 @@ export function stripDataUrls(value: unknown): unknown {
   if (typeof value === "string") return isDataUrl(value) ? undefined : value;
   if (Array.isArray(value))
     return value.map(stripDataUrls).filter((entry) => entry !== undefined);
-  if (!value || typeof value !== "object") return value;
+  if (value == null || typeof value !== "object") return value;
   return Object.fromEntries(
     Object.entries(value)
       .map(([key, entry]) => [key, stripDataUrls(entry)] as const)

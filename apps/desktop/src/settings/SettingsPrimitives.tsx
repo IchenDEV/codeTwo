@@ -4,7 +4,7 @@ import { SettingRow } from "@/components/business/setting-row";
 import { SettingsPanel } from "@/components/business/settings-panel";
 import { cn } from "@/lib/utils";
 
-type RowProps = {
+interface RowProps {
   icon?: ReactNode;
   label: string;
   hint?: ReactNode;
@@ -12,7 +12,7 @@ type RowProps = {
   className?: string;
   controlClassName?: string;
   children: ReactNode;
-};
+}
 
 /** Shared anatomy for every setting: description on the left, control on the right. */
 export function Row({
@@ -29,7 +29,7 @@ export function Row({
       label={label}
       description={hint}
       leading={icon}
-      density={compact ? "compact" : "default"}
+      density={compact === true ? "compact" : "default"}
       className={cn("settings-row", className)}
       controlClassName={cn("settings-row-control", controlClassName)}
     >
@@ -45,7 +45,7 @@ export function ProjectRow(props: RowProps) {
       label={props.label}
       description={props.hint}
       leading={props.icon}
-      density={props.compact ? "compact" : "default"}
+      density={props.compact === true ? "compact" : "default"}
       controlSize="wide"
       className={cn("project-settings-row", props.className)}
       controlClassName={cn("project-settings-control", props.controlClassName)}

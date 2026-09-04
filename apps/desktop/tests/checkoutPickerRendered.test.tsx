@@ -150,7 +150,7 @@ describe("CheckoutBar", () => {
       expect(sourceControlOpens).toBe(1);
 
       const popup = await openPicker(rendered.container);
-      expect(popup?.getAttribute("data-side")).toBe("bottom");
+      expect(popup?.dataset.side).toBe("bottom");
       expect(popup?.textContent).toContain("codeTwo");
       expect(popup?.textContent).toContain("main");
       expect(popup?.textContent).toContain("origin/main");

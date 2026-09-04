@@ -1,6 +1,6 @@
 import type { KeymapEntry } from "./bridge";
 
-const MAC = /mac/i.test(navigator.userAgent);
+const MAC = /mac/iu.test(navigator.userAgent);
 
 /** `Mod` resolves to Cmd on macOS, Ctrl elsewhere. */
 export const MOD_LABEL = MAC ? "⌘" : "Ctrl";
@@ -69,13 +69,12 @@ export function isModifierOnly(e: KeyboardEvent): boolean {
 
 /** Is the user typing into the document, an input, or a dialog field? */
 export function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el || !el.tagName) return false;
+  if (!(target instanceof HTMLElement)) return false;
   return (
-    el.isContentEditable ||
-    el.tagName === "INPUT" ||
-    el.tagName === "TEXTAREA" ||
-    el.tagName === "SELECT"
+    target.isContentEditable ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
   );
 }
 

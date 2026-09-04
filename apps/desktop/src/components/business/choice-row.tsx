@@ -1,10 +1,10 @@
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Radio } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 
-type ChoiceRowProps = {
+interface ChoiceRowProps {
   kind: "radio" | "checkbox";
   label: string;
   description?: string | null;
@@ -13,7 +13,7 @@ type ChoiceRowProps = {
   disabled?: boolean;
   value?: string;
   onCheckedChange?: (checked: boolean) => void;
-};
+}
 
 function ChoiceRow({
   kind,
@@ -40,13 +40,13 @@ function ChoiceRow({
         <Checkbox
           checked={selected}
           disabled={disabled}
-          onCheckedChange={(checked) => onCheckedChange?.(checked === true)}
+          onCheckedChange={(checked) => onCheckedChange?.(checked)}
           className="mt-0.5"
         />
       )}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-foreground font-medium">{label}</span>
-        {description ? (
+        {description != null && description !== "" ? (
           <span className="text-callout text-muted-foreground">
             {description}
           </span>

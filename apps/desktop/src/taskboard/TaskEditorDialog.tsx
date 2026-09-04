@@ -1,4 +1,5 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState } from "react";
+import type { FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,15 +27,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useT, type Translate } from "@/i18n";
+import { useT } from "@/i18n";
+import type { Translate } from "@/i18n";
 
-import {
-  PRIORITIES,
-  TASK_STATUSES,
-  type BoardTask,
-  type TaskPriority,
-  type TaskStatus,
-} from "./taskBoard";
+import { PRIORITIES, TASK_STATUSES } from "./taskBoard";
+import type { BoardTask, TaskPriority, TaskStatus } from "./taskBoard";
 
 export interface TaskEditorValue {
   title: string;
@@ -80,7 +77,7 @@ export function taskPriorityLabel(
 function normalizeLabels(value: string): string[] {
   const labels: string[] = [];
   const seen = new Set<string>();
-  for (const part of value.split(/[,，]/)) {
+  for (const part of value.split(/[,，]/u)) {
     const label = part.trim();
     if (!label || seen.has(label)) continue;
     seen.add(label);
@@ -195,9 +192,7 @@ export function TaskEditorDialog({
                 </FieldLabel>
                 <Select
                   value={status}
-                  onValueChange={(value) =>
-                    value && setStatus(value as TaskStatus)
-                  }
+                  onValueChange={(value) => value && setStatus(value)}
                 >
                   <SelectTrigger
                     size="sm"
@@ -224,9 +219,7 @@ export function TaskEditorDialog({
                 </FieldLabel>
                 <Select
                   value={priority}
-                  onValueChange={(value) =>
-                    value && setPriority(value as TaskPriority)
-                  }
+                  onValueChange={(value) => value && setPriority(value)}
                 >
                   <SelectTrigger
                     size="sm"

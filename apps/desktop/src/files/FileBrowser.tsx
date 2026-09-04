@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -38,13 +38,13 @@ export function FileBrowserModal({
       .catch(() => setLoading(false));
   }, [cwd]);
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     const s = q.trim().toLowerCase();
     return (s ? all.filter((p) => p.toLowerCase().includes(s)) : all).slice(
       0,
       300
     );
-  }, [all, q]);
+  })();
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

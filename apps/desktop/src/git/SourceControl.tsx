@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   AlertDialog,
@@ -40,11 +40,13 @@ import {
   gitSuggestCommit,
   gitUnstagePaths,
   openExternal,
-  type Checkpoint,
-  type GitDiffResult,
-  type GitDiffScope,
-  type GitFile,
-  type GitStatus,
+} from "../bridge";
+import type {
+  Checkpoint,
+  GitDiffResult,
+  GitDiffScope,
+  GitFile,
+  GitStatus,
 } from "../bridge";
 import { GitSyncStatus } from "./GitSyncStatus";
 import {
@@ -57,9 +59,8 @@ import {
   gitPhaseLabel,
   sourceControlStateForCwd,
   uniquePathspecs,
-  type GitPhase,
-  type SourceControlLoadState,
 } from "./state";
+import type { GitPhase, SourceControlLoadState } from "./state";
 
 type DiffSelection =
   | { kind: "working"; scope: GitDiffScope; path: string | null; label: string }
@@ -85,10 +86,7 @@ const DEFAULT_DIFF_SELECTION: DiffSelection = {
 };
 
 function DiffView({ state }: { state: DiffState }) {
-  const preview = useMemo(
-    () => diffPreviewLines(state.result?.text ?? ""),
-    [state.result?.text]
-  );
+  const preview = diffPreviewLines(state.result?.text ?? "");
 
   if (state.loading) {
     return (
@@ -100,14 +98,14 @@ function DiffView({ state }: { state: DiffState }) {
       </p>
     );
   }
-  if (state.error) {
+  if (state.error != null && state.error !== "") {
     return (
       <p role="alert" className="p-surface-inset text-body text-destructive">
         Diff failed: {state.error}
       </p>
     );
   }
-  if (!state.result?.text.trim()) {
+  if (state.result?.text.trim() == null || state.result.text.trim() === "") {
     return (
       <p className="p-surface-inset text-body text-muted-foreground">
         No changes in this scope.
@@ -207,7 +205,7 @@ function GitFileRow({
         )}
         aria-pressed={selected}
         title={
-          file.original_path
+          file.original_path != null && file.original_path !== ""
             ? `${file.original_path} → ${file.path}`
             : file.path
         }
@@ -284,18 +282,9 @@ export function SourceControlModal({
   const sourceControlRequestRef = useRef(0);
   const cwdRef = useRef(cwd);
   cwdRef.current = cwd;
-  const sections = useMemo(
-    () => gitFileSections(status?.files ?? []),
-    [status?.files]
-  );
-  const stagedPathspecs = useMemo(
-    () => uniquePathspecs(sections.staged),
-    [sections.staged]
-  );
-  const unstagedPathspecs = useMemo(
-    () => uniquePathspecs(sections.unstaged),
-    [sections.unstaged]
-  );
+  const sections = gitFileSections(status?.files ?? []);
+  const stagedPathspecs = uniquePathspecs(sections.staged);
+  const unstagedPathspecs = uniquePathspecs(sections.unstaged);
   const busy = phase !== "idle" || suggesting;
   const repositoryReady = !statusLoading && status?.is_repo === true;
   const repositoryBusy = busy || !repositoryReady;
@@ -325,9 +314,9 @@ export function SourceControlModal({
     setPrUrl(null);
   }, [cwd]);
 
-  const loadSourceControl = useCallback(async () => {
+  const loadSourceControl = async () => {
     const targetCwd = cwd;
-    const request = ++sourceControlRequestRef.current;
+    const request = (sourceControlRequestRef.current += 1);
     setSourceControlState({
       cwd: targetCwd,
       loading: true,
@@ -354,7 +343,7 @@ export function SourceControlModal({
         });
       }
     }
-  }, [cwd]);
+  };
 
   useEffect(() => {
     void loadSourceControl();
@@ -363,31 +352,28 @@ export function SourceControlModal({
     };
   }, [loadSourceControl]);
 
-  const loadDiff = useCallback(
-    async (next: DiffSelection) => {
-      if (next.kind === "working" && !repositoryReady) {
-        diffRequestRef.current += 1;
-        setDiffState(EMPTY_DIFF_STATE);
-        return;
+  const loadDiff = async (next: DiffSelection) => {
+    if (next.kind === "working" && !repositoryReady) {
+      diffRequestRef.current += 1;
+      setDiffState(EMPTY_DIFF_STATE);
+      return;
+    }
+    const request = (diffRequestRef.current += 1);
+    setDiffState((current) => ({ ...current, loading: true, error: null }));
+    try {
+      const result =
+        next.kind === "working"
+          ? await gitDiff(cwd, next.path, next.scope)
+          : await gitDiffSince(cwd, next.commit);
+      if (request === diffRequestRef.current) {
+        setDiffState({ loading: false, result, error: null });
       }
-      const request = ++diffRequestRef.current;
-      setDiffState((current) => ({ ...current, loading: true, error: null }));
-      try {
-        const result =
-          next.kind === "working"
-            ? await gitDiff(cwd, next.path, next.scope)
-            : await gitDiffSince(cwd, next.commit);
-        if (request === diffRequestRef.current) {
-          setDiffState({ loading: false, result, error: null });
-        }
-      } catch (error) {
-        if (request === diffRequestRef.current) {
-          setDiffState({ loading: false, result: null, error: String(error) });
-        }
+    } catch (error) {
+      if (request === diffRequestRef.current) {
+        setDiffState({ loading: false, result: null, error: String(error) });
       }
-    },
-    [cwd, repositoryReady]
-  );
+    }
+  };
 
   useEffect(() => {
     void loadDiff(selection);
@@ -552,7 +538,7 @@ export function SourceControlModal({
   };
 
   const openCreatedChangeRequest = async () => {
-    if (!prUrl) return;
+    if (prUrl == null || prUrl === "") return;
     setActionError(null);
     try {
       await openExternal(prUrl);
@@ -563,7 +549,7 @@ export function SourceControlModal({
 
   const openRepository = async () => {
     const url = currentSourceControl.info?.web_url;
-    if (!url) return;
+    if (url == null || url === "") return;
     setActionError(null);
     try {
       await openExternal(url);
@@ -574,7 +560,7 @@ export function SourceControlModal({
 
   const suggestMessage = async () => {
     if (repositoryBusy) return;
-    const request = ++suggestionRequestRef.current;
+    const request = (suggestionRequestRef.current += 1);
     setSuggesting(true);
     setActionError(null);
     try {
@@ -645,7 +631,7 @@ export function SourceControlModal({
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-3">
             Source Control
-            {status?.is_repo && (
+            {status?.is_repo === true && (
               <span className="text-metadata text-primary flex items-center gap-1 font-semibold">
                 <GitBranch className="size-3.5" aria-hidden="true" />
                 {status.branch}
@@ -687,23 +673,24 @@ export function SourceControlModal({
               >
                 {currentSourceControl.info.host}
               </dd>
-              {currentSourceControl.info.web_url && (
-                <>
-                  <dt className="text-muted-foreground">Repository</dt>
-                  <dd className="min-w-0">
-                    <Button
-                      type="button"
-                      variant="link"
-                      size="compact"
-                      className="text-primary h-auto max-w-full justify-start truncate px-0 py-0"
-                      title={currentSourceControl.info.web_url}
-                      onClick={() => void openRepository()}
-                    >
-                      {currentSourceControl.info.web_url}
-                    </Button>
-                  </dd>
-                </>
-              )}
+              {currentSourceControl.info.web_url != null &&
+                currentSourceControl.info.web_url !== "" && (
+                  <>
+                    <dt className="text-muted-foreground">Repository</dt>
+                    <dd className="min-w-0">
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="compact"
+                        className="text-primary h-auto max-w-full justify-start truncate px-0 py-0"
+                        title={currentSourceControl.info.web_url}
+                        onClick={() => void openRepository()}
+                      >
+                        {currentSourceControl.info.web_url}
+                      </Button>
+                    </dd>
+                  </>
+                )}
             </dl>
           )}
           <p
@@ -794,7 +781,7 @@ export function SourceControlModal({
               >
                 {statusLoading
                   ? "Loading this workspace’s Git status…"
-                  : status?.is_repo
+                  : status?.is_repo === true
                     ? "Nothing staged"
                     : status
                       ? "This workspace is not a Git repository."
@@ -950,7 +937,7 @@ export function SourceControlModal({
               <AlertDialogTitle>Revert checkpoint?</AlertDialogTitle>
               <AlertDialogDescription>
                 Revert tracked files to checkpoint “
-                {checkpointToRevert?.message ||
+                {checkpointToRevert?.message ??
                   checkpointToRevert?.id.slice(0, 8)}
                 ”? Uncommitted tracked changes will be overwritten.
               </AlertDialogDescription>
@@ -984,14 +971,19 @@ export function SourceControlModal({
               value={message}
               disabled={repositoryBusy}
               aria-describedby={
-                messageError ? "source-control-message-error" : undefined
+                messageError != null && messageError !== ""
+                  ? "source-control-message-error"
+                  : undefined
               }
-              aria-invalid={messageError ? true : undefined}
+              aria-invalid={
+                messageError != null && messageError !== "" ? true : undefined
+              }
               onChange={(event) => {
                 suggestionRequestRef.current += 1;
                 setSuggesting(false);
                 setMessage(event.target.value);
-                if (messageError) setMessageError(null);
+                if (messageError != null && messageError !== "")
+                  setMessageError(null);
               }}
               onKeyDown={(event) =>
                 event.key === "Enter" && !repositoryBusy && void commit()
@@ -1043,7 +1035,7 @@ export function SourceControlModal({
               Done
             </Button>
           </div>
-          {messageError && (
+          {messageError != null && messageError !== "" && (
             <p
               id="source-control-message-error"
               role="alert"
@@ -1060,17 +1052,17 @@ export function SourceControlModal({
                 {gitPhaseLabel(phase, changeRequest.label)}
               </p>
             )}
-          {actionError && (
+          {actionError != null && actionError !== "" && (
             <p role="alert" className="text-metadata text-destructive">
               {actionError}
             </p>
           )}
-          {actionStatus && (
+          {actionStatus != null && actionStatus !== "" && (
             <p role="status" className="text-metadata text-muted-foreground">
               {actionStatus}
             </p>
           )}
-          {prUrl && (
+          {prUrl != null && prUrl !== "" && (
             <Button
               type="button"
               variant="link"

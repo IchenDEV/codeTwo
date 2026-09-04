@@ -28,23 +28,23 @@ function PageHeader({
           </h1>
           {titleAccessory}
         </div>
-        {description ? (
+        {description == null ? null : (
           <p
             data-slot="page-header-description"
             className="mt-module-inset text-body text-content-muted max-w-2xl"
           >
             {description}
           </p>
-        ) : null}
+        )}
       </div>
-      {actions ? (
+      {actions == null ? null : (
         <div
           data-slot="page-header-actions"
           className="gap-module-inset flex w-full shrink-0 flex-wrap items-center sm:w-auto"
         >
           {actions}
         </div>
-      ) : null}
+      )}
     </header>
   );
 }

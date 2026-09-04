@@ -26,7 +26,7 @@ export function enclosingAppBundle(executablePath: string): string | null {
 function updatePaths(): { application: string; helper: string } | null {
   const application =
     process.env.CODETWO_APP_BUNDLE_PATH ?? enclosingAppBundle(process.execPath);
-  if (!application) return null;
+  if (application == null || application === "") return null;
   return {
     application,
     helper: join(application, "Contents", "Helpers", "CodeTwoUpdateHelper"),
@@ -35,7 +35,7 @@ function updatePaths(): { application: string; helper: string } | null {
 
 function parseHelperEvent(output: string): HelperEvent | null {
   const lines = output.trim().split("\n");
-  const line = lines[lines.length - 1];
+  const line = lines.at(-1)!;
   if (!line) return null;
   try {
     return JSON.parse(line) as HelperEvent;

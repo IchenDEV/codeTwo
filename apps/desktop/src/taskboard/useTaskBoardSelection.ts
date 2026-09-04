@@ -28,7 +28,7 @@ export function useTaskBoardSelection(
     null;
 
   useEffect(() => {
-    if (!selectedProjectedTask) {
+    if (selectedProjectedTask == null) {
       if (selectedTaskId !== null) setSelectedTaskId(null);
       if (selectedSessionId !== null) setSelectedSessionId(null);
       return;

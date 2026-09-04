@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
 import { StatusBadge } from "@/components/business/status-badge";
 import { ActivityOrb } from "@/components/ui/activity-orb";
@@ -48,40 +48,35 @@ import {
   openExternal,
   revealArtifact,
   saveArtifactAs,
-  type ArtifactRef,
-  type CanvasSnapshot,
 } from "../bridge";
+import type { ArtifactRef, CanvasSnapshot } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import {
   agentActivityState,
   deriveAgentRoster,
   isAgentActivityTool,
-  type AgentActivity,
-  type AgentActivityState,
 } from "./agentActivity";
-import { MarkdownContent, type BuiltinLinkActions } from "./MarkdownContent";
+import type { AgentActivity, AgentActivityState } from "./agentActivity";
+import { MarkdownContent } from "./MarkdownContent";
+import type { BuiltinLinkActions } from "./MarkdownContent";
 import {
   canvasExportDataUrl,
   collapsedPrompt,
   isLongPrompt,
   parseCanvasHistoryPrompt,
-  type CanvasHistoryMarker,
 } from "./promptPreview";
-import {
-  isRunning,
-  type PromptImage,
-  type ToolEntry,
-  type Turn,
-} from "./turns";
+import type { CanvasHistoryMarker } from "./promptPreview";
+import { isRunning } from "./turns";
+import type { PromptImage, ToolEntry, Turn } from "./turns";
 
 const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
-const SEARCH_TOOL_PATTERN = /\b(?:search|searched|find|found|grep|rg)\b/i;
-const READ_TOOL_PATTERN = /\b(?:read|reading|open|view|inspect)\b/i;
+const SEARCH_TOOL_PATTERN = /\b(?:search|searched|find|found|grep|rg)\b/iu;
+const READ_TOOL_PATTERN = /\b(?:read|reading|open|view|inspect)\b/iu;
 const COMMAND_TOOL_PATTERN =
-  /\b(?:command|exec|execute|run|shell|terminal|test)\b/i;
+  /\b(?:command|exec|execute|run|shell|terminal|test)\b/iu;
 
 function duration(t: Turn): string | null {
-  if (!t.endedAt) return null;
+  if (t.endedAt == null) return null;
   const s = Math.max(0, Math.round((t.endedAt - t.startedAt) / 1000));
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
@@ -142,10 +137,11 @@ function promptTextWithoutImageMarkers(
   const markers = new Set<string>();
   for (const image of images) {
     markers.add(`[attachment:${image.id}]`);
-    if (image.name) markers.add(`[image:${image.name}]`);
+    if (image.name != null && image.name !== "")
+      markers.add(`[image:${image.name}]`);
   }
   for (const marker of markers) visible = visible.split(marker).join("");
-  return visible.replace(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
+  return visible.replaceAll(/\n(?:[ \t]*\n){2,}/gu, "\n\n").trim();
 }
 
 function PromptImageThumbnail({ image }: { image: PromptImage }) {
@@ -154,7 +150,7 @@ function PromptImageThumbnail({ image }: { image: PromptImage }) {
   > | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (image.previewDataUrl) return;
+    if (image.previewDataUrl != null && image.previewDataUrl !== "") return;
     let alive = true;
     void getPromptImage(image.id)
       .then((capture) => {
@@ -178,12 +174,12 @@ function PromptImageThumbnail({ image }: { image: PromptImage }) {
       data-prompt-image={image.id}
       className="rounded-module bg-background/25 ring-foreground/10 flex min-h-24 max-w-80 min-w-0 items-center justify-center overflow-hidden ring-[0.5px]"
     >
-      {src && !failed ? (
+      {src != null && src !== "" && !failed ? (
         <img
           src={src}
           alt={name}
-          width={width || undefined}
-          height={height || undefined}
+          width={width ?? undefined}
+          height={height ?? undefined}
           loading="lazy"
           className="block max-h-80 w-full object-contain"
           onError={() => setFailed(true)}
@@ -239,7 +235,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
       .then((bytes) => {
         if (!alive) return;
         objectUrl = URL.createObjectURL(
-          new Blob([bytes.slice().buffer as ArrayBuffer], {
+          new Blob([Uint8Array.from(bytes).buffer], {
             type: artifact.mime_type,
           })
         );
@@ -248,14 +244,14 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
       .catch(() => alive && setError(true));
     return () => {
       alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl != null && objectUrl !== "") URL.revokeObjectURL(objectUrl);
     };
   }, [artifact.id, artifact.mime_type]);
 
   return (
     <figure className="rounded-module bg-fill-quiet min-w-0 overflow-hidden border">
       <div className="image-checker flex min-h-32 items-center justify-center">
-        {url ? (
+        {url != null && url !== "" ? (
           <img
             src={url}
             alt={artifact.display_name}
@@ -309,7 +305,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
         >
           <FolderOpen className="size-3.5" />
         </TooltipButton>
-        {actionError && (
+        {actionError != null && actionError !== "" && (
           <span className="text-destructive basis-full">{actionError}</span>
         )}
       </figcaption>
@@ -351,7 +347,7 @@ function ToolCallBlock({
       >
         {tool.title}
       </span>
-      {!compact && tool.kind ? (
+      {!compact && tool.kind != null && tool.kind !== "" ? (
         <span className="text-metadata text-muted-foreground shrink-0 font-mono">
           {tool.kind}
         </span>
@@ -477,7 +473,7 @@ function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
       status = tool.status;
   }
   const active = status !== "completed" && status !== "failed";
-  const latest = tools[tools.length - 1];
+  const latest = tools.at(-1)!;
   const LatestIcon = toolIcon(latest);
   const history = toolHasOutput(latest) ? tools : tools.slice(0, -1);
   const historyIsLong = history.length > 6;
@@ -563,13 +559,13 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
   const seenTools = new Set<string>();
   const blocks: RenderBlock[] = [];
   const appendTool = (tool: ToolEntry) => {
-    const tail = blocks[blocks.length - 1];
+    const tail = blocks.at(-1)!;
     if (tail?.kind === "tools") tail.tools.push(tool);
     else blocks.push({ kind: "tools", tools: [tool] });
   };
   for (const entry of turn.content ?? []) {
     if (entry.kind === "text") {
-      const tail = blocks[blocks.length - 1];
+      const tail = blocks.at(-1)!;
       if (tail?.kind === "text") tail.text += entry.text;
       else blocks.push({ kind: "text", text: entry.text });
       continue;
@@ -726,7 +722,7 @@ function AgentRosterSection({
                     {agent.role}
                   </span>
                 </div>
-                {agent.task && (
+                {agent.task != null && agent.task !== "" && (
                   <p className="text-callout text-muted-foreground mt-0.5 line-clamp-2">
                     {agent.task}
                   </p>
@@ -736,7 +732,7 @@ function AgentRosterSection({
                 <span className="block" aria-live="polite" aria-atomic="true">
                   {agentStatusLabel(state, t)}
                 </span>
-                {elapsed && (
+                {elapsed != null && elapsed !== "" && (
                   <time className="block tabular-nums">{elapsed}</time>
                 )}
               </div>
@@ -789,444 +785,449 @@ function AgentRoster({ agents }: { agents: readonly AgentActivity[] }) {
  * their streamed position, with adjacent calls sharing one disclosure; thinking and memory
  * metadata stay collapsed underneath. The current task plan lives in the right information panel.
  */
-export const TurnCard = memo(function TurnCard({
-  turn,
-  canvasSnapshotLoader = canvasGetSnapshot,
-  onSaveTemplate,
-  linkActions,
-  onFork,
-}: {
-  turn: Turn;
-  canvasSnapshotLoader?: typeof canvasGetSnapshot;
-  /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
-  onSaveTemplate?: (promptText: string) => void;
-  /** Native context-menu actions for links rendered inside the assistant response. */
-  linkActions?: BuiltinLinkActions;
-  /** Starts a new task whose referenced context ends at this completed turn. */
-  onFork?: (turn: Turn) => void;
-}) {
-  const t = useT();
-  const toast = useToast();
-  const { locale } = useLanguage();
-  const [promptExpanded, setPromptExpanded] = useState(false);
-  const [copied, setCopied] = useState<CopyTarget | null>(null);
-  const running = isRunning(turn);
-  const queued = turn.delivery === "queued";
-  const dur = duration(turn);
-  const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
-  const activeAgentCount = agents.filter((agent) => {
-    const state = agentActivityState(agent.status);
-    return state === "active" || state === "pending";
-  }).length;
-  const blocks = useMemo(
-    () => orderedBlocks(turn),
-    [turn.content, turn.text, turn.tools]
-  );
-  const history = useMemo(
-    () => parseCanvasHistoryPrompt(turn.prompt),
-    [turn.prompt]
-  );
-  const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
-  const promptText = useMemo(
-    () => promptTextWithoutImageMarkers(history.visiblePrompt, promptImages),
-    [history.visiblePrompt, promptImages]
-  );
-  const clock = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }),
-    [locale]
-  );
-  useEffect(() => {
-    if (!copied) return;
-    const timeout = window.setTimeout(() => setCopied(null), 1_500);
-    return () => window.clearTimeout(timeout);
-  }, [copied]);
-  const copyText = (target: CopyTarget, text: string) => {
-    const write = navigator.clipboard?.writeText(text);
-    if (!write) {
-      toast(t("turn.copyFailed"), "error");
-      return;
-    }
-    void write
-      .then(() => setCopied(target))
-      .catch(() => toast(t("turn.copyFailed"), "error"));
-  };
-  const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
-  const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>(
-    {}
-  );
-  useEffect(() => {
-    let cancelled = false;
-    for (const canvas of history.canvases) {
-      void canvasSnapshotLoader(canvas.id, canvas.revision)
-        .then((snapshot) => {
-          if (cancelled || !snapshot) return;
-          historySnapshots.set(canvasKey(canvas), snapshot);
-          setSnapshots((current) => ({
-            ...current,
-            [canvasKey(canvas)]: snapshot,
-          }));
-        })
-        .catch(() => {
-          // Browser/dev fallback has no native bridge; marker metadata remains read-only.
-        });
-    }
-    return () => {
-      cancelled = true;
-      historySnapshots.clear();
+export const TurnCard = memo(
+  ({
+    turn,
+    canvasSnapshotLoader = canvasGetSnapshot,
+    onSaveTemplate,
+    linkActions,
+    onFork,
+  }: {
+    turn: Turn;
+    canvasSnapshotLoader?: typeof canvasGetSnapshot;
+    /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
+    onSaveTemplate?: (promptText: string) => void;
+    /** Native context-menu actions for links rendered inside the assistant response. */
+    linkActions?: BuiltinLinkActions;
+    /** Starts a new task whose referenced context ends at this completed turn. */
+    onFork?: (turn: Turn) => void;
+  }) => {
+    const t = useT();
+    const toast = useToast();
+    const { locale } = useLanguage();
+    const [promptExpanded, setPromptExpanded] = useState(false);
+    const [copied, setCopied] = useState<CopyTarget | null>(null);
+    const running = isRunning(turn);
+    const queued = turn.delivery === "queued";
+    const dur = duration(turn);
+    const agents = deriveAgentRoster(turn.tools);
+    const activeAgentCount = agents.filter((agent) => {
+      const state = agentActivityState(agent.status);
+      return state === "active" || state === "pending";
+    }).length;
+    const blocks = orderedBlocks(turn);
+    const history = parseCanvasHistoryPrompt(turn.prompt);
+    const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
+    const promptText = promptTextWithoutImageMarkers(
+      history.visiblePrompt,
+      promptImages
+    );
+    const clock = new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    useEffect(() => {
+      if (!copied) return;
+      const timeout = window.setTimeout(() => setCopied(null), 1500);
+      return () => window.clearTimeout(timeout);
+    }, [copied]);
+    const copyText = (target: CopyTarget, text: string) => {
+      const write = navigator.clipboard?.writeText(text);
+      if (write == null) {
+        toast(t("turn.copyFailed"), "error");
+        return;
+      }
+      void write
+        .then(() => setCopied(target))
+        .catch(() => toast(t("turn.copyFailed"), "error"));
     };
-  }, [canvasSnapshotLoader, history.canvases, historySnapshots]);
-  const hasDetail =
-    agents.length + turn.thoughts.length + (turn.memory?.items.length ?? 0) > 0;
-  const promptIsLong = isLongPrompt(promptText);
-  const visiblePrompt =
-    promptIsLong && !promptExpanded ? collapsedPrompt(promptText) : promptText;
+    const historySnapshots = new Map<string, CanvasSnapshot>();
+    const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>(
+      {}
+    );
+    useEffect(() => {
+      let cancelled = false;
+      for (const canvas of history.canvases) {
+        void canvasSnapshotLoader(canvas.id, canvas.revision)
+          .then((snapshot) => {
+            if (cancelled || !snapshot) return;
+            historySnapshots.set(canvasKey(canvas), snapshot);
+            setSnapshots((current) => ({
+              ...current,
+              [canvasKey(canvas)]: snapshot,
+            }));
+          })
+          .catch(() => {
+            // Browser/dev fallback has no native bridge; marker metadata remains read-only.
+          });
+      }
+      return () => {
+        cancelled = true;
+        historySnapshots.clear();
+      };
+    }, [canvasSnapshotLoader, history.canvases, historySnapshots]);
+    const hasDetail =
+      agents.length + turn.thoughts.length + (turn.memory?.items.length ?? 0) >
+      0;
+    const promptIsLong = isLongPrompt(promptText);
+    const visiblePrompt =
+      promptIsLong && !promptExpanded
+        ? collapsedPrompt(promptText)
+        : promptText;
 
-  return (
-    // Turns arrive one at a time, so each one entering under its own animation reads as the
-    // conversation advancing rather than the list redrawing.
-    <article aria-busy={running && !queued} className="animate-rise-in py-7">
-      {/* prompt */}
-      <div className="group/prompt flex flex-col items-end">
-        <div className="flex items-start justify-end gap-1">
-          {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
+    return (
+      // Turns arrive one at a time, so each one entering under its own animation reads as the
+      // conversation advancing rather than the list redrawing.
+      <article aria-busy={running && !queued} className="animate-rise-in py-7">
+        {/* prompt */}
+        <div className="group/prompt flex flex-col items-end">
+          <div className="flex items-start justify-end gap-1">
+            {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
               button so future turn actions slot in beside "Save as template…". */}
-          {onSaveTemplate && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={t("templateFrom.menu")}
-                    className="text-muted-foreground mt-1 opacity-0 transition-opacity group-hover/prompt:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+            {onSaveTemplate && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={t("templateFrom.menu")}
+                      className="text-muted-foreground mt-1 opacity-0 transition-opacity group-hover/prompt:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                    >
+                      <MoreHorizontal className="size-3.5" aria-hidden />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => onSaveTemplate(history.visiblePrompt)}
                   >
-                    <MoreHorizontal className="size-3.5" aria-hidden />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => onSaveTemplate(history.visiblePrompt)}
+                    {t("templateFrom.saveAs")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <div className="rounded-module bg-secondary text-prose text-secondary-foreground max-w-[86%] px-3.5 py-2">
+              {promptImages.length > 0 && (
+                <div
+                  data-prompt-images
+                  className={cn(
+                    "grid min-w-0 gap-1.5",
+                    visiblePrompt && "mb-2",
+                    promptImages.length > 1 && "grid-cols-2"
+                  )}
                 >
-                  {t("templateFrom.saveAs")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          <div className="rounded-module bg-secondary text-prose text-secondary-foreground max-w-[86%] px-3.5 py-2">
-            {promptImages.length > 0 && (
-              <div
-                data-prompt-images
-                className={cn(
-                  "grid min-w-0 gap-1.5",
-                  visiblePrompt && "mb-2",
-                  promptImages.length > 1 && "grid-cols-2"
+                  {promptImages.map((image, index) => (
+                    <PromptImageThumbnail
+                      key={`${image.id}-${index}`}
+                      image={image}
+                    />
+                  ))}
+                </div>
+              )}
+              {visiblePrompt && (
+                <p className="break-words whitespace-pre-wrap">
+                  {visiblePrompt}
+                </p>
+              )}
+              {turn.delivery && (
+                <p className="text-metadata text-muted-foreground mt-1.5 font-medium uppercase">
+                  {turn.delivery === "queued"
+                    ? t("turn.queued", { position: turn.queuePosition ?? 1 })
+                    : t("turn.steered")}
+                </p>
+              )}
+              {promptIsLong && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="compact"
+                  focusStyle="inset"
+                  aria-expanded={promptExpanded}
+                  onClick={() => setPromptExpanded((value) => !value)}
+                  className="text-callout text-muted-foreground mt-1.5 h-auto gap-1 px-0 py-0 font-medium"
+                >
+                  {promptExpanded ? (
+                    <ChevronUp className="size-3" aria-hidden />
+                  ) : (
+                    <ChevronDown className="size-3" aria-hidden />
+                  )}
+                  {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
+                </Button>
+              )}
+            </div>
+          </div>
+          <div
+            data-turn-actions="prompt"
+            className="text-callout text-muted-foreground mt-1 flex min-h-(--ds-control-mini) items-center gap-1"
+          >
+            <time dateTime={new Date(turn.startedAt).toISOString()}>
+              {clock.format(turn.startedAt)}
+            </time>
+            {promptText && (
+              <TurnActionButton
+                label={t(
+                  copied === "prompt" ? "turn.copiedPrompt" : "turn.copyPrompt"
                 )}
+                onClick={() => copyText("prompt", promptText)}
               >
-                {promptImages.map((image, index) => (
-                  <PromptImageThumbnail
-                    key={`${image.id}-${index}`}
-                    image={image}
-                  />
-                ))}
-              </div>
-            )}
-            {visiblePrompt && (
-              <p className="break-words whitespace-pre-wrap">{visiblePrompt}</p>
-            )}
-            {turn.delivery && (
-              <p className="text-metadata text-muted-foreground mt-1.5 font-medium uppercase">
-                {turn.delivery === "queued"
-                  ? t("turn.queued", { position: turn.queuePosition ?? 1 })
-                  : t("turn.steered")}
-              </p>
-            )}
-            {promptIsLong && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="compact"
-                focusStyle="inset"
-                aria-expanded={promptExpanded}
-                onClick={() => setPromptExpanded((value) => !value)}
-                className="text-callout text-muted-foreground mt-1.5 h-auto gap-1 px-0 py-0 font-medium"
-              >
-                {promptExpanded ? (
-                  <ChevronUp className="size-3" aria-hidden />
+                {copied === "prompt" ? (
+                  <Check aria-hidden />
                 ) : (
-                  <ChevronDown className="size-3" aria-hidden />
+                  <Copy aria-hidden />
                 )}
-                {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
-              </Button>
+              </TurnActionButton>
             )}
           </div>
         </div>
-        <div
-          data-turn-actions="prompt"
-          className="text-callout text-muted-foreground mt-1 flex min-h-(--ds-control-mini) items-center gap-1"
-        >
-          <time dateTime={new Date(turn.startedAt).toISOString()}>
-            {clock.format(turn.startedAt)}
-          </time>
-          {promptText && (
+
+        {history.canvases.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2" aria-label="Canvas history">
+            {history.canvases.map((canvas) => {
+              const snapshot = snapshots[canvasKey(canvas)];
+              const thumbnail =
+                snapshot?.exports.find((item) => item.kind === "overview") ??
+                snapshot?.exports[0];
+              return (
+                <section
+                  key={canvasKey(canvas)}
+                  className="canvas-ui-module bg-fill-quiet text-callout border p-2.5"
+                >
+                  <div className="flex items-start gap-2">
+                    {thumbnail != null && (
+                      <img
+                        src={canvasExportDataUrl(thumbnail)}
+                        alt={`${canvas.title} thumbnail`}
+                        className="rounded-control size-14 shrink-0 border object-cover"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-foreground truncate font-medium">
+                        {canvas.title}
+                      </h3>
+                      <p className="text-muted-foreground">
+                        rev {canvas.revision}
+                        {snapshot == null
+                          ? ""
+                          : ` · ${snapshot.objectCount} objects`}
+                        {snapshot?.frozenAt
+                          ? ` · ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(snapshot.frozenAt)}`
+                          : ""}
+                      </p>
+                      {canvas.textOriginals.length > 0 && (
+                        <p className="text-muted-foreground mt-1 break-words whitespace-pre-wrap">
+                          {canvas.textOriginals.join("\n")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="compact"
+                      className="text-metadata text-muted-foreground"
+                      disabled={!snapshot?.exports.length}
+                      onClick={() => downloadCanvasPng(canvas, snapshot)}
+                    >
+                      Export PNG
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="compact"
+                      className="text-metadata text-muted-foreground"
+                      onClick={() => requestCanvasDuplicate(canvas)}
+                    >
+                      Duplicate into Composer
+                    </Button>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Streamed answer blocks keep provider order: text → tool → text → visual/chart. */}
+        {blocks.length > 0 ? (
+          <div className="mt-3.5 min-w-0">
+            {blocks.map((block, index) =>
+              block.kind === "text" ? (
+                <MarkdownContent
+                  key={`text-${index}`}
+                  text={block.text}
+                  streaming={running && index === blocks.length - 1}
+                  linkActions={linkActions}
+                />
+              ) : block.tools.length === 1 ? (
+                <ToolCallBlock key={block.tools[0].id} tool={block.tools[0]} />
+              ) : (
+                <ToolCallGroup key={block.tools[0].id} tools={block.tools} />
+              )
+            )}
+          </div>
+        ) : null}
+
+        {running && !queued && !turn.text && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-body text-muted-foreground mt-3.5 flex items-center gap-2"
+          >
+            <ActivityOrb
+              state={turn.thoughts.length > 0 ? "solving" : "working"}
+              aria-hidden="true"
+            />
+            {t("turn.working")}
+          </p>
+        )}
+
+        {turn.error != null && turn.error !== "" && (
+          <p className="rounded-control bg-destructive/10 text-body text-destructive mt-3.5 flex items-start gap-1.5 px-3 py-2">
+            <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+            {turn.error}
+          </p>
+        )}
+
+        {/* secondary detail + outcome, on one quiet line */}
+        {(hasDetail ||
+          (dur != null && dur !== "") ||
+          (turn.stopReason != null && turn.stopReason !== "") ||
+          queued ||
+          (running && turn.text != null && turn.text !== "")) && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+            <Detail
+              icon={Bot}
+              label={t("turn.agents")}
+              count={agents.length}
+              wide
+              defaultOpen={activeAgentCount > 0}
+            >
+              <AgentRoster agents={agents} />
+            </Detail>
+
+            <Detail
+              icon={Brain}
+              label={t("turn.thinking")}
+              count={turn.thoughts.length}
+            >
+              <div className="text-callout text-muted-foreground flex flex-col gap-1 italic">
+                {turn.thoughts.map((thought, i) => (
+                  <p key={i} className="whitespace-pre-wrap">
+                    {thought}
+                  </p>
+                ))}
+              </div>
+            </Detail>
+
+            <Detail
+              icon={BrainCircuit}
+              label={t("turn.memory")}
+              count={turn.memory?.items.length ?? 0}
+            >
+              {turn.memory && (
+                <div className="text-callout flex flex-col gap-2">
+                  <p className="text-muted-foreground">
+                    {t("turn.memoryTokens", {
+                      count: new Intl.NumberFormat(locale).format(
+                        turn.memory.estimated_tokens
+                      ),
+                    })}
+                  </p>
+                  <ul className="flex flex-col gap-1.5">
+                    {turn.memory.items.map((item) => {
+                      const source = item.source
+                        ? `${item.source.session_id.slice(0, 8)}:${item.source.part_seq}`
+                        : t("memory.manual");
+                      return (
+                        <li
+                          key={item.id}
+                          className="rounded-control bg-fill-quiet px-2 py-1.5"
+                        >
+                          <div className="text-metadata text-muted-foreground flex items-center gap-1.5">
+                            <span className="font-mono">{item.layer}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{item.category}</span>
+                            <span className="ms-auto font-mono">{source}</span>
+                          </div>
+                          <p
+                            dir="auto"
+                            className="text-foreground/80 mt-1 break-words whitespace-pre-wrap"
+                          >
+                            {item.content}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </Detail>
+
+            <span className="ms-auto flex shrink-0 items-center gap-1.5">
+              {queued ? (
+                <StatusBadge tone="neutral">
+                  {t("turn.queued", { position: turn.queuePosition ?? 1 })}
+                </StatusBadge>
+              ) : running ? (
+                <StatusBadge tone="neutral">
+                  <Spinner className="size-2.5" /> {t("turn.running")}
+                </StatusBadge>
+              ) : turn.error != null && turn.error !== "" ? (
+                <StatusBadge tone="destructive">{t("turn.failed")}</StatusBadge>
+              ) : (
+                turn.stopReason != null &&
+                turn.stopReason !== "" && (
+                  <StatusBadge tone="neutral">{turn.stopReason}</StatusBadge>
+                )
+              )}
+              {dur != null && dur !== "" && (
+                <span className="text-metadata text-muted-foreground font-mono">
+                  {dur}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
+
+        {!running && turn.text && (
+          <div
+            data-turn-actions="response"
+            className="text-callout text-muted-foreground mt-2 flex min-h-(--ds-control-mini) items-center gap-1"
+          >
             <TurnActionButton
               label={t(
-                copied === "prompt" ? "turn.copiedPrompt" : "turn.copyPrompt"
+                copied === "response"
+                  ? "turn.copiedResponse"
+                  : "turn.copyResponse"
               )}
-              onClick={() => copyText("prompt", promptText)}
+              onClick={() => copyText("response", turn.text)}
             >
-              {copied === "prompt" ? (
+              {copied === "response" ? (
                 <Check aria-hidden />
               ) : (
                 <Copy aria-hidden />
               )}
             </TurnActionButton>
-          )}
-        </div>
-      </div>
-
-      {history.canvases.length > 0 && (
-        <div className="mt-3 flex flex-col gap-2" aria-label="Canvas history">
-          {history.canvases.map((canvas) => {
-            const snapshot = snapshots[canvasKey(canvas)];
-            const thumbnail =
-              snapshot?.exports.find((item) => item.kind === "overview") ??
-              snapshot?.exports[0];
-            return (
-              <section
-                key={canvasKey(canvas)}
-                className="canvas-ui-module bg-fill-quiet text-callout border p-2.5"
-              >
-                <div className="flex items-start gap-2">
-                  {thumbnail && (
-                    <img
-                      src={canvasExportDataUrl(thumbnail)}
-                      alt={`${canvas.title} thumbnail`}
-                      className="rounded-control size-14 shrink-0 border object-cover"
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-foreground truncate font-medium">
-                      {canvas.title}
-                    </h3>
-                    <p className="text-muted-foreground">
-                      rev {canvas.revision}
-                      {snapshot ? ` · ${snapshot.objectCount} objects` : ""}
-                      {snapshot?.frozenAt
-                        ? ` · ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(snapshot.frozenAt)}`
-                        : ""}
-                    </p>
-                    {canvas.textOriginals.length > 0 && (
-                      <p className="text-muted-foreground mt-1 break-words whitespace-pre-wrap">
-                        {canvas.textOriginals.join("\n")}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="compact"
-                    className="text-metadata text-muted-foreground"
-                    disabled={!snapshot?.exports.length}
-                    onClick={() => downloadCanvasPng(canvas, snapshot)}
-                  >
-                    Export PNG
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="compact"
-                    className="text-metadata text-muted-foreground"
-                    onClick={() => requestCanvasDuplicate(canvas)}
-                  >
-                    Duplicate into Composer
-                  </Button>
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Streamed answer blocks keep provider order: text → tool → text → visual/chart. */}
-      {blocks.length > 0 ? (
-        <div className="mt-3.5 min-w-0">
-          {blocks.map((block, index) =>
-            block.kind === "text" ? (
-              <MarkdownContent
-                key={`text-${index}`}
-                text={block.text}
-                streaming={running && index === blocks.length - 1}
-                linkActions={linkActions}
-              />
-            ) : block.tools.length === 1 ? (
-              <ToolCallBlock key={block.tools[0].id} tool={block.tools[0]} />
-            ) : (
-              <ToolCallGroup key={block.tools[0].id} tools={block.tools} />
-            )
-          )}
-        </div>
-      ) : null}
-
-      {running && !queued && !turn.text && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="text-body text-muted-foreground mt-3.5 flex items-center gap-2"
-        >
-          <ActivityOrb
-            state={turn.thoughts.length > 0 ? "solving" : "working"}
-            aria-hidden="true"
-          />
-          {t("turn.working")}
-        </p>
-      )}
-
-      {turn.error && (
-        <p className="rounded-control bg-destructive/10 text-body text-destructive mt-3.5 flex items-start gap-1.5 px-3 py-2">
-          <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-          {turn.error}
-        </p>
-      )}
-
-      {/* secondary detail + outcome, on one quiet line */}
-      {(hasDetail ||
-        dur ||
-        turn.stopReason ||
-        queued ||
-        (running && turn.text)) && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <Detail
-            icon={Bot}
-            label={t("turn.agents")}
-            count={agents.length}
-            wide
-            defaultOpen={activeAgentCount > 0}
-          >
-            <AgentRoster agents={agents} />
-          </Detail>
-
-          <Detail
-            icon={Brain}
-            label={t("turn.thinking")}
-            count={turn.thoughts.length}
-          >
-            <div className="text-callout text-muted-foreground flex flex-col gap-1 italic">
-              {turn.thoughts.map((thought, i) => (
-                <p key={i} className="whitespace-pre-wrap">
-                  {thought}
-                </p>
-              ))}
-            </div>
-          </Detail>
-
-          <Detail
-            icon={BrainCircuit}
-            label={t("turn.memory")}
-            count={turn.memory?.items.length ?? 0}
-          >
-            {turn.memory && (
-              <div className="text-callout flex flex-col gap-2">
-                <p className="text-muted-foreground">
-                  {t("turn.memoryTokens", {
-                    count: new Intl.NumberFormat(locale).format(
-                      turn.memory.estimated_tokens
-                    ),
-                  })}
-                </p>
-                <ul className="flex flex-col gap-1.5">
-                  {turn.memory.items.map((item) => {
-                    const source = item.source
-                      ? `${item.source.session_id.slice(0, 8)}:${item.source.part_seq}`
-                      : t("memory.manual");
-                    return (
-                      <li
-                        key={item.id}
-                        className="rounded-control bg-fill-quiet px-2 py-1.5"
-                      >
-                        <div className="text-metadata text-muted-foreground flex items-center gap-1.5">
-                          <span className="font-mono">{item.layer}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{item.category}</span>
-                          <span className="ms-auto font-mono">{source}</span>
-                        </div>
-                        <p
-                          dir="auto"
-                          className="text-foreground/80 mt-1 break-words whitespace-pre-wrap"
-                        >
-                          {item.content}
-                        </p>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-          </Detail>
-
-          <span className="ms-auto flex shrink-0 items-center gap-1.5">
-            {queued ? (
-              <StatusBadge tone="neutral">
-                {t("turn.queued", { position: turn.queuePosition ?? 1 })}
-              </StatusBadge>
-            ) : running ? (
-              <StatusBadge tone="neutral">
-                <Spinner className="size-2.5" /> {t("turn.running")}
-              </StatusBadge>
-            ) : turn.error ? (
-              <StatusBadge tone="destructive">{t("turn.failed")}</StatusBadge>
-            ) : (
-              turn.stopReason && (
-                <StatusBadge tone="neutral">{turn.stopReason}</StatusBadge>
-              )
-            )}
-            {dur && (
-              <span className="text-metadata text-muted-foreground font-mono">
-                {dur}
-              </span>
-            )}
-          </span>
-        </div>
-      )}
-
-      {!running && turn.text && (
-        <div
-          data-turn-actions="response"
-          className="text-callout text-muted-foreground mt-2 flex min-h-(--ds-control-mini) items-center gap-1"
-        >
-          <TurnActionButton
-            label={t(
-              copied === "response"
-                ? "turn.copiedResponse"
-                : "turn.copyResponse"
-            )}
-            onClick={() => copyText("response", turn.text)}
-          >
-            {copied === "response" ? (
-              <Check aria-hidden />
-            ) : (
-              <Copy aria-hidden />
-            )}
-          </TurnActionButton>
-          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined && (
-            <TurnActionButton
-              label={t("turn.fork")}
-              onClick={() => onFork(turn)}
+            {onFork &&
+              turn.accepted &&
+              turn.transcriptStartSeq !== undefined && (
+                <TurnActionButton
+                  label={t("turn.fork")}
+                  onClick={() => onFork(turn)}
+                >
+                  <GitFork aria-hidden />
+                </TurnActionButton>
+              )}
+            <time
+              dateTime={new Date(turn.endedAt ?? turn.startedAt).toISOString()}
             >
-              <GitFork aria-hidden />
-            </TurnActionButton>
-          )}
-          <time
-            dateTime={new Date(turn.endedAt ?? turn.startedAt).toISOString()}
-          >
-            {clock.format(turn.endedAt ?? turn.startedAt)}
-          </time>
-        </div>
-      )}
-    </article>
-  );
-});
+              {clock.format(turn.endedAt ?? turn.startedAt)}
+            </time>
+          </div>
+        )}
+      </article>
+    );
+  }
+);

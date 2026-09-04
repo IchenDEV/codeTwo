@@ -11,24 +11,23 @@ import {
   gitNextActionLabel,
   gitNextActionReason,
   runGitNextAction,
-  type GitNextActionItem,
-  type GitNextActionProjection,
 } from "./nextAction";
+import type { GitNextActionItem, GitNextActionProjection } from "./nextAction";
 
-type GitDockContentProps = {
+interface GitDockContentProps {
   status: GitStatus | null;
   action: GitNextActionProjection;
   onOpenSourceControl: () => void;
   onPush: () => void;
   onOpenPullRequest: () => void;
   onCleanupWorktree: () => void;
-};
+}
 
-type PullRequestDockContentProps = {
+interface PullRequestDockContentProps {
   cwd: string | null;
   status: GitStatus | null;
   onRefresh: () => void;
-};
+}
 
 /** Working-tree summary rendered inside the generic Dock container. */
 export function GitDockContent({
@@ -56,7 +55,7 @@ export function GitDockContent({
   return (
     <ScrollArea className="h-full min-h-0 flex-1">
       <div className="space-y-module-inset text-metadata p-4">
-        {status?.is_repo ? (
+        {status?.is_repo === true ? (
           <section
             className="space-y-module-inset"
             aria-label={t("dock.workingTree")}
@@ -113,7 +112,7 @@ export function GitDockContent({
               disabled: item.disabled,
             }))}
             disabled={action.primary.disabled}
-            variant={action.primary.disabled ? "secondary" : "default"}
+            variant={action.primary.disabled === true ? "secondary" : "default"}
             size="sm"
             className="w-full"
             primaryClassName="flex-1"
@@ -139,7 +138,7 @@ export function PullRequestDockContent({
   return (
     <ScrollArea className="h-full min-h-0 flex-1">
       <div className="text-metadata p-4">
-        {status?.is_repo ? (
+        {status?.is_repo === true ? (
           <GitHubPullRequestPanel
             key={`${cwd ?? "."}:${status.branch}`}
             cwd={cwd ?? "."}

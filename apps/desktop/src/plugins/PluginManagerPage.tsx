@@ -1,10 +1,9 @@
-import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import { useDeferredValue, useState } from "react";
+import type { ReactNode } from "react";
 
 import { SearchField } from "@/components/business/search-field";
-import {
-  StatusBadge,
-  type StatusTone,
-} from "@/components/business/status-badge";
+import { StatusBadge } from "@/components/business/status-badge";
+import type { StatusTone } from "@/components/business/status-badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -122,7 +121,7 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   closeInstaller: "Close GitHub installer",
   installingPlugin: "Installing…",
   bundleInstalled: (result) =>
-    `${result.name}${result.version ? ` ${result.version}` : ""} installed. Review its source and trust requirements before enabling code.`,
+    `${result.name}${result.version != null && result.version !== "" ? ` ${result.version}` : ""} installed. Review its source and trust requirements before enabling code.`,
   bundleManagement: "Bundle management",
   bundleManagementUserOnly:
     "Installation, trust, and removal are managed in User scope.",
@@ -228,7 +227,7 @@ function sourceLabel(
   labels: PluginManagerLabels,
   custom?: string | null
 ): string {
-  return custom || labels.sourceNames[source];
+  return custom ?? labels.sourceNames[source];
 }
 
 function statusDotClass(status: PluginManagerStatus): string {
@@ -289,18 +288,18 @@ function StatusSummary({
       <StatusBadge tone={statusTone(state.status)}>
         {labels.status[state.status]}
       </StatusBadge>
-      {state.missingDependencies?.length ? (
+      {state.missingDependencies?.length == null ? null : (
         <StatusBadge tone="destructive">
           <CircleAlert />
           {labels.missingCount(state.missingDependencies.length)}
         </StatusBadge>
-      ) : null}
+      )}
     </div>
   );
 }
 
 function scopeSupportsProject(
-  supportedScopes: Array<"user" | "project">
+  supportedScopes: ("user" | "project")[]
 ): boolean {
   return supportedScopes.includes("project");
 }
@@ -345,7 +344,7 @@ function scopeValue(
   const index = projects.findIndex(
     (project) => project.path === scope.projectPath
   );
-  return index >= 0 ? `project:${index}` : "project:current";
+  return index === -1 ? "project:current" : `project:${index}`;
 }
 
 function ScopeSelector({
@@ -399,7 +398,8 @@ function ScopeSelector({
           }
           const index = Number(value?.replace("project:", ""));
           const project = projects[index];
-          if (project) onChange({ kind: "project", projectPath: project.path });
+          if (project != null)
+            onChange({ kind: "project", projectPath: project.path });
         }}
       >
         <SelectTrigger id="plugin-manager-scope" size="sm" className="w-36">
@@ -479,11 +479,11 @@ function GithubInstaller({
             value={repository}
             placeholder="owner/repository"
             aria-describedby={
-              error
+              error != null && error !== ""
                 ? "plugin-github-hint plugin-github-error"
                 : "plugin-github-hint"
             }
-            aria-invalid={error ? true : undefined}
+            aria-invalid={error != null && error !== "" ? true : undefined}
             onChange={(event) => onRepositoryChange(event.currentTarget.value)}
           />
           <Button type="submit" className="shrink-0" disabled={busy}>
@@ -495,7 +495,7 @@ function GithubInstaller({
             {busy ? labels.installingPlugin : labels.install}
           </Button>
         </div>
-        {error ? (
+        {error != null && error !== "" ? (
           <p
             id="plugin-github-error"
             role="alert"
@@ -529,14 +529,15 @@ function StateControl({
   name: string;
   kind: "plugin" | "component";
   required?: boolean;
-  supportedScopes: Array<"user" | "project">;
+  supportedScopes: ("user" | "project")[];
   state: PluginManagerScopedState;
   scope: PluginManagerScope;
   labels: PluginManagerLabels;
   disabled: boolean;
   onChange: (request: PluginManagerChangeRequest) => void;
 }) {
-  if (required) return <Badge variant="secondary">{labels.required}</Badge>;
+  if (required === true)
+    return <Badge variant="secondary">{labels.required}</Badge>;
 
   if (scope.kind === "user" && !supportedScopes.includes("user")) {
     return (
@@ -555,10 +556,10 @@ function StateControl({
       );
     }
     const value = state.override ?? "inherit";
-    const projectStates: Array<{
+    const projectStates: {
       value: PluginManagerDesiredState;
       label: string;
-    }> = [
+    }[] = [
       { value: "inherit", label: labels.inherit },
       { value: "enabled", label: labels.enabled },
       { value: "disabled", label: labels.disabled },
@@ -605,7 +606,7 @@ function StateControl({
             targetId: id,
             targetName: name,
             scope,
-            desiredState: checked === true ? "enabled" : "disabled",
+            desiredState: checked ? "enabled" : "disabled",
           })
         }
       />
@@ -617,7 +618,7 @@ function StateControl({
 }
 
 function DetailList({ title, values }: { title: string; values?: string[] }) {
-  if (!values?.length) return null;
+  if (values?.length == null) return null;
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-metadata text-muted-foreground font-medium">
@@ -669,7 +670,7 @@ function ScaffoldList({
               <div className="min-w-0 flex-1">
                 <p className="text-body font-medium">{scaffold.name}</p>
                 <p className="text-callout text-muted-foreground">
-                  {scaffold.description || labels.scaffoldFiles(scaffold.files)}
+                  {scaffold.description ?? labels.scaffoldFiles(scaffold.files)}
                 </p>
               </div>
               <Button
@@ -732,7 +733,8 @@ function PluginList({
                 <span className="min-w-0 flex-1 truncate font-medium">
                   {plugin.name}
                 </span>
-                {plugin.bundle?.requiresTrust && !plugin.bundle.trusted ? (
+                {plugin.bundle?.requiresTrust === true &&
+                !plugin.bundle.trusted ? (
                   <StatusBadge tone="destructive">
                     {labels.notTrusted}
                   </StatusBadge>
@@ -827,7 +829,11 @@ function ResourceDetails({
   const individuallyManageable =
     resource.manageable !== false && resource.state.status !== "unsupported";
   const definition =
-    resource.slot && resource.slot !== "composer.skills" ? resource.slot : null;
+    resource.slot != null &&
+    resource.slot !== "" &&
+    resource.slot !== "composer.skills"
+      ? resource.slot
+      : null;
 
   return (
     <article
@@ -843,7 +849,7 @@ function ResourceDetails({
             </Badge>
           </h1>
           <p className="text-prose text-muted-foreground mt-2 max-w-3xl">
-            {resource.description || labels.noDescription}
+            {resource.description ?? labels.noDescription}
           </p>
         </div>
         <div className="shrink-0">
@@ -876,7 +882,7 @@ function ResourceDetails({
 
       <div className="mt-8 flex flex-col gap-5">
         <StatusSummary state={resource.state} labels={labels} />
-        {resource.state.error ? (
+        {resource.state.error != null && resource.state.error !== "" ? (
           <p
             role="alert"
             className="text-body text-destructive flex items-start gap-2"
@@ -899,7 +905,7 @@ function ResourceDetails({
           <dd className="text-callout min-w-0 font-mono break-all">
             {resource.id}
           </dd>
-          {definition ? (
+          {definition != null && definition !== "" ? (
             <>
               <dt className="text-muted-foreground">{labels.definition}</dt>
               <dd className="text-callout min-w-0 font-mono break-all">
@@ -909,7 +915,7 @@ function ResourceDetails({
           ) : null}
         </dl>
 
-        {!individuallyManageable ? (
+        {individuallyManageable ? null : (
           <section className="rounded-module bg-fill-quiet flex flex-wrap items-center justify-between gap-3 p-3">
             <p className="text-callout text-muted-foreground max-w-2xl">
               {labels.managedByPlugin}
@@ -925,7 +931,7 @@ function ResourceDetails({
               </Button>
             ) : null}
           </section>
-        ) : null}
+        )}
       </div>
     </article>
   );
@@ -963,9 +969,8 @@ function PluginDetails({
   const configurable =
     plugin.configurable ??
     (plugin.configSchema !== undefined || plugin.state.config !== undefined);
-  const trustRequired = Boolean(
-    plugin.bundle?.requiresTrust && !plugin.bundle.trusted
-  );
+  const trustRequired =
+    plugin.bundle?.requiresTrust === true && !plugin.bundle.trusted;
   return (
     <article
       data-plugin-details
@@ -975,7 +980,7 @@ function PluginDetails({
         <div className="min-w-0">
           <h1 className="text-page flex min-w-0 flex-wrap items-center gap-2 font-semibold">
             <span className="truncate">{plugin.name}</span>
-            {plugin.version ? (
+            {plugin.version != null && plugin.version !== "" ? (
               <Badge variant="secondary">v{plugin.version}</Badge>
             ) : null}
             <Badge variant="secondary">
@@ -983,7 +988,7 @@ function PluginDetails({
             </Badge>
           </h1>
           <p className="text-prose text-muted-foreground mt-2 max-w-3xl">
-            {plugin.description || labels.noDescription}
+            {plugin.description ?? labels.noDescription}
           </p>
         </div>
         <div className="shrink-0">
@@ -1034,7 +1039,7 @@ function PluginDetails({
         {trustRequired ? null : (
           <StatusSummary state={plugin.state} labels={labels} />
         )}
-        {plugin.state.error ? (
+        {plugin.state.error != null && plugin.state.error !== "" ? (
           <p
             role="alert"
             className="text-body text-destructive flex items-start gap-2"
@@ -1066,12 +1071,12 @@ function PluginDetails({
             />
           </>
         ) : null}
-        {detailsExtension ? (
+        {detailsExtension == null ? null : (
           <>
             <Separator />
             {detailsExtension}
           </>
-        ) : null}
+        )}
         <DetailList
           title={labels.missingDependencies}
           values={plugin.state.missingDependencies}
@@ -1079,7 +1084,7 @@ function PluginDetails({
         <DetailList title={labels.dependencies} values={plugin.dependencies} />
         <DetailList title={labels.commands} values={plugin.commands} />
         <DetailList title={labels.services} values={plugin.services} />
-        {plugin.state.activeResources?.length ? (
+        {plugin.state.activeResources?.length == null ? null : (
           <div className="flex flex-col gap-2">
             <h3 className="text-metadata text-muted-foreground font-medium">
               {labels.activeResources}
@@ -1088,7 +1093,7 @@ function PluginDetails({
               {plugin.state.activeResources.map((resource) => (
                 <li key={resource.id}>
                   {resource.label}
-                  {resource.kind ? (
+                  {resource.kind != null && resource.kind !== "" ? (
                     <span className="text-muted-foreground">
                       {" "}
                       · {resource.kind}
@@ -1098,7 +1103,7 @@ function PluginDetails({
               ))}
             </ul>
           </div>
-        ) : null}
+        )}
         {configurable ? (
           <>
             <Separator />
@@ -1122,8 +1127,8 @@ function PluginDetails({
                 config={plugin.state.config}
                 schema={plugin.configSchema}
                 labels={labels}
-                onSave={(config) =>
-                  onSaveConfig({ pluginId: plugin.id, scope, config })
+                onSave={async (config) =>
+                  await onSaveConfig({ pluginId: plugin.id, scope, config })
                 }
               />
             </section>
@@ -1133,8 +1138,10 @@ function PluginDetails({
       <Separator className="mt-8" />
       <footer className="text-callout text-muted-foreground flex items-center justify-between gap-3 pt-4">
         <span>
-          {plugin.author ? `${plugin.author} · ` : ""}
-          {plugin.category || plugin.id}
+          {plugin.author != null && plugin.author !== ""
+            ? `${plugin.author} · `
+            : ""}
+          {plugin.category ?? plugin.id}
         </span>
         {onReset && plugin.source !== "bundle" ? (
           <Button
@@ -1173,7 +1180,7 @@ function MarketplaceSources({
           className="rounded-control bg-fill-quiet px-3 py-2.5"
         >
           <h2 className="text-dialog font-medium">{source.name}</h2>
-          {source.description ? (
+          {source.description != null && source.description !== "" ? (
             <p className="text-callout text-muted-foreground mt-1">
               {source.description}
             </p>
@@ -1237,7 +1244,7 @@ function MarketplaceList({
           <span className="text-callout text-muted-foreground">
             {item.installed
               ? labels.installed
-              : item.version
+              : item.version != null && item.version !== ""
                 ? `v${item.version}`
                 : ""}
           </span>
@@ -1280,13 +1287,13 @@ function MarketplaceDetails({
         <div className="min-w-0">
           <h1 className="text-page flex min-w-0 flex-wrap items-center gap-2 font-semibold">
             <span className="truncate">{item.name}</span>
-            {item.version ? (
+            {item.version != null && item.version !== "" ? (
               <Badge variant="secondary">v{item.version}</Badge>
             ) : null}
             <Badge variant="secondary">{item.kind}</Badge>
           </h1>
           <p className="text-prose text-muted-foreground mt-2 max-w-3xl">
-            {item.description || labels.noDescription}
+            {item.description ?? labels.noDescription}
           </p>
         </div>
         <Button
@@ -1309,7 +1316,7 @@ function MarketplaceDetails({
         </Button>
       </div>
       <div className="mt-8 flex flex-col gap-5">
-        {item.diagnostic ? (
+        {item.diagnostic != null && item.diagnostic !== "" ? (
           <p
             role="status"
             className="text-body text-destructive flex items-start gap-2"
@@ -1323,10 +1330,10 @@ function MarketplaceDetails({
         ) : null}
         <div className="text-body grid grid-cols-[9rem_minmax(0,1fr)] gap-3">
           <span className="text-muted-foreground">{labels.source}</span>
-          <span>{item.sourceLabel || item.id}</span>
+          <span>{item.sourceLabel ?? item.id}</span>
           <span className="text-muted-foreground">{labels.scope}</span>
           <span>{item.supportedScopes.join(" · ")}</span>
-          {item.author ? (
+          {item.author != null && item.author !== "" ? (
             <>
               <span className="text-muted-foreground">
                 {labels.contribution("author", "Author")}
@@ -1366,7 +1373,7 @@ function ChangeConfirmation({
           <AlertDialogTitle>{labels.confirmTitle}</AlertDialogTitle>
           <AlertDialogDescription>{plan?.summary}</AlertDialogDescription>
         </AlertDialogHeader>
-        {plan?.affectedPlugins?.length ? (
+        {plan?.affectedPlugins?.length == null ? null : (
           <div className="flex flex-col gap-2">
             <h3 className="text-metadata text-muted-foreground font-medium">
               {labels.affectedPlugins}
@@ -1390,8 +1397,8 @@ function ChangeConfirmation({
               ))}
             </ul>
           </div>
-        ) : null}
-        {plan?.activeResources?.length ? (
+        )}
+        {plan?.activeResources?.length == null ? null : (
           <div className="flex flex-col gap-2">
             <h3 className="text-metadata text-muted-foreground font-medium">
               {labels.activeResources}
@@ -1402,13 +1409,13 @@ function ChangeConfirmation({
               ))}
             </ul>
           </div>
-        ) : null}
+        )}
         {plan?.warnings?.map((warning) => (
           <p key={warning} className="text-body text-destructive">
             {warning}
           </p>
         ))}
-        {error ? (
+        {error != null && error !== "" ? (
           <p role="alert" className="text-body text-destructive">
             {error}
           </p>
@@ -1439,7 +1446,7 @@ function ChangeConfirmation({
  */
 export function PluginManagerPage({
   plugins,
-  components = [],
+  components,
   marketplaceItems,
   marketplaceSources = [],
   headerLeadingAction,
@@ -1464,10 +1471,7 @@ export function PluginManagerPage({
   onApplyScaffold,
   onResetPlugin,
 }: PluginManagerPageProps) {
-  const labels = useMemo(
-    () => ({ ...DEFAULT_LABELS, ...labelOverrides }),
-    [labelOverrides]
-  );
+  const labels = { ...DEFAULT_LABELS, ...labelOverrides };
   const [tab, setTab] = useState(initialTab);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -1493,35 +1497,27 @@ export function PluginManagerPage({
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const visiblePlugins = useMemo(
-    () =>
-      plugins.filter((plugin) =>
-        [
-          plugin.name,
-          plugin.description,
-          plugin.author,
-          plugin.category,
-          sourceLabel(plugin.source, labels, plugin.sourceLabel),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery)
-      ),
-    [labels, normalizedQuery, plugins]
+  const visiblePlugins = plugins.filter((plugin) =>
+    [
+      plugin.name,
+      plugin.description,
+      plugin.author,
+      plugin.category,
+      sourceLabel(plugin.source, labels, plugin.sourceLabel),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedQuery)
   );
-  const visibleMarketplace = useMemo(
-    () =>
-      marketplaceItems.filter((item) =>
-        [item.name, item.description, item.kind, item.author, item.sourceLabel]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery)
-      ),
-    [marketplaceItems, normalizedQuery]
+  const visibleMarketplace = marketplaceItems.filter((item) =>
+    [item.name, item.description, item.kind, item.author, item.sourceLabel]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedQuery)
   );
-  const resourcesByTab = useMemo(() => {
+  const resourcesByTab = (() => {
     const grouped: Record<PluginResourceTab, PluginManagerComponent[]> = {
       mcps: [],
       skills: [],
@@ -1532,8 +1528,8 @@ export function PluginManagerPage({
       if (resourceTab) grouped[resourceTab].push(component);
     }
     return grouped;
-  }, [components]);
-  const visibleResources = useMemo(() => {
+  })();
+  const visibleResources = (() => {
     if (!isResourceTab(tab)) return [];
     return resourcesByTab[tab].filter((resource) =>
       [
@@ -1548,7 +1544,7 @@ export function PluginManagerPage({
         .toLowerCase()
         .includes(normalizedQuery)
     );
-  }, [normalizedQuery, resourcesByTab, tab]);
+  })();
 
   const selectedPlugin =
     selectedPluginId === null
@@ -1671,7 +1667,7 @@ export function PluginManagerPage({
     setActionNotice(null);
     try {
       await action();
-      if (success) setActionNotice(success);
+      if (success != null && success !== "") setActionNotice(success);
       return true;
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
@@ -1753,14 +1749,14 @@ export function PluginManagerPage({
         <header
           className={cn(
             "plugin-manager-list-header electrobun-webkit-app-region-drag h-layout-titlebar pr-surface-inset flex shrink-0 items-center gap-1",
-            headerLeadingAction ? "pl-surface-inset" : "pl-page-section"
+            headerLeadingAction == null ? "pl-page-section" : "pl-surface-inset"
           )}
         >
-          {headerLeadingAction ? (
+          {headerLeadingAction == null ? null : (
             <div data-plugin-manager-leading-action className="shrink-0">
               {headerLeadingAction}
             </div>
-          ) : null}
+          )}
           <h1 className="text-dialog shrink-0 font-semibold">{labels.title}</h1>
           <div className="electrobun-webkit-app-region-drag flex-1" />
         </header>
@@ -1855,14 +1851,14 @@ export function PluginManagerPage({
 
       <div className="plugin-manager-detail-pane bg-background flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="plugin-manager-detail-header electrobun-webkit-app-region-drag h-layout-titlebar flex shrink-0 items-center gap-2 px-4">
-          {headerLeadingAction ? (
+          {headerLeadingAction == null ? null : (
             <div
               data-plugin-manager-detail-leading-action
               className="plugin-manager-detail-leading-action shrink-0"
             >
               {headerLeadingAction}
             </div>
-          ) : null}
+          )}
           <Button
             variant="ghost"
             size="icon-xs"
@@ -1981,7 +1977,7 @@ export function PluginManagerPage({
                     {recovery.kind === "safe_mode"
                       ? labels.safeMode
                       : labels.restoredLastGood}
-                    {recovery.error ? (
+                    {recovery.error != null && recovery.error !== "" ? (
                       <span className="text-callout text-muted-foreground mt-0.5 block">
                         {recovery.error}
                       </span>
@@ -1989,7 +1985,7 @@ export function PluginManagerPage({
                   </span>
                 </div>
               ) : null}
-              {actionError && !pendingPlan ? (
+              {actionError != null && actionError !== "" && !pendingPlan ? (
                 <p
                   role="alert"
                   className="text-body text-destructive mb-4 flex items-start gap-2"
@@ -2001,7 +1997,7 @@ export function PluginManagerPage({
                   <span>{actionError}</span>
                 </p>
               ) : null}
-              {actionNotice ? (
+              {actionNotice != null && actionNotice !== "" ? (
                 <p
                   role="status"
                   aria-live="polite"
@@ -2039,7 +2035,8 @@ export function PluginManagerPage({
                     ? async (pluginId, enabled) => {
                         await runAction(
                           `bundle-enabled:${pluginId}`,
-                          () => onSetBundleEnabled(pluginId, enabled),
+                          async () =>
+                            await onSetBundleEnabled(pluginId, enabled),
                           labels.bundleEnabled(selectedPlugin.name, enabled)
                         );
                       }
@@ -2050,7 +2047,8 @@ export function PluginManagerPage({
                     ? async (pluginId, trusted) => {
                         await runAction(
                           `bundle-trust:${pluginId}`,
-                          () => onSetBundleTrusted(pluginId, trusted),
+                          async () =>
+                            await onSetBundleTrusted(pluginId, trusted),
                           labels.bundleTrusted(selectedPlugin.name, trusted)
                         );
                       }
@@ -2061,7 +2059,8 @@ export function PluginManagerPage({
                     ? async (pluginId, keepData) => {
                         const uninstalled = await runAction(
                           `bundle-uninstall:${pluginId}`,
-                          () => onUninstallBundle(pluginId, keepData),
+                          async () =>
+                            await onUninstallBundle(pluginId, keepData),
                           labels.bundleUninstalled(
                             selectedPlugin.name,
                             keepData
@@ -2073,8 +2072,8 @@ export function PluginManagerPage({
                 }
                 onApplyScaffold={
                   onApplyScaffold
-                    ? (pluginId, scaffoldId) =>
-                        applyScaffold(pluginId, scaffoldId)
+                    ? async (pluginId, scaffoldId) =>
+                        await applyScaffold(pluginId, scaffoldId)
                     : undefined
                 }
                 onSaveConfig={onSaveConfig}

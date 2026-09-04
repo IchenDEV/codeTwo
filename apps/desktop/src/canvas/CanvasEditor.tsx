@@ -1,37 +1,32 @@
 import {
   forwardRef,
-  useCallback,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
-  type ChangeEvent,
-  type DragEvent,
-  type KeyboardEvent,
 } from "react";
+import type { ChangeEvent, DragEvent, KeyboardEvent } from "react";
 
 import "./styles.css";
 
 import { Button } from "@/components/ui/button";
 
-import {
-  Excalidraw,
-  newImageElement,
-  type AppState,
-  type BinaryFileData,
-  type BinaryFiles,
-  type ExcalidrawElement,
-  type ExcalidrawImperativeAPI,
-  type ExcalidrawProps,
+import { Excalidraw, newImageElement } from "./excalidrawAdapter";
+import type {
+  AppState,
+  BinaryFileData,
+  BinaryFiles,
+  ExcalidrawElement,
+  ExcalidrawImperativeAPI,
+  ExcalidrawProps,
 } from "./excalidrawAdapter";
 import {
   intakeCanvasMedia,
   mediaInputFromFile,
   mediaInputsFromClipboard,
   mediaInputsFromDataTransfer,
-  type NormalizedCanvasMedia,
 } from "./media";
+import type { NormalizedCanvasMedia } from "./media";
 import {
   createEnvelope,
   deserializeEnvelope,
@@ -64,8 +59,8 @@ const ALLOWED_EXCALIDRAW_UI_LABELS = [
 ] as const;
 
 function isAllowedExcalidrawLabel(label: string): boolean {
-  const normalized = label.trim().toLowerCase().replace(/\s+/g, " ");
-  const base = normalized.split(/\s+[—-]\s*/)[0].trim();
+  const normalized = label.trim().toLowerCase().replaceAll(/\s+/gu, " ");
+  const base = normalized.split(/\s+[—-]\s*/u)[0]!.trim();
   return ALLOWED_EXCALIDRAW_UI_LABELS.some(
     (term) =>
       base === term || (term === "hand" && base === "hand (panning tool)")
@@ -122,7 +117,7 @@ function fileAssetRefs(
     const asset = metadata.get(element.fileId);
     if (asset) refs.set(asset.fileId, asset);
   }
-  return Array.from(refs.values()).sort((a, b) =>
+  return [...refs.values()].toSorted((a, b) =>
     a.fileId.localeCompare(b.fileId)
   );
 }
@@ -155,7 +150,8 @@ function mediaByteLength(media: NormalizedCanvasMedia): number {
 }
 
 function isSafePreviewImage(value: string | null): value is string {
-  if (!value || /^(?:https?:|javascript:)/i.test(value)) return false;
+  if (value == null || value === "" || /^(?:https?:|javascript:)/i.test(value))
+    return false;
   if (/^data:image\/(?:svg|gif)/i.test(value)) return false;
   return /^(?:data:image\/(?:png|webp);|blob:|\/|\.\/|\.\.\/)/i.test(value);
 }
@@ -170,7 +166,7 @@ function initialDataForEnvelope(
       return {
         elements: [],
         appState: {
-          ...(appState ?? {}),
+          ...appState,
           showWelcomeScreen: false,
           currentItemRoughness: 0,
           currentItemStrokeWidth: 2,
@@ -201,7 +197,7 @@ function initialDataForEnvelope(
 }
 
 export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
-  function CanvasEditor(
+  (
     {
       className,
       value,
@@ -220,7 +216,7 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
       name = "Canvas",
     },
     ref
-  ) {
+  ) => {
     const rootRef = useRef<HTMLDivElement>(null);
     const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
     const sceneRef = useRef<CanvasSceneSnapshot>({
@@ -234,13 +230,12 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
     const revisionRef = useRef(envelopeRef.current?.revision ?? 0);
     const knownFileIdsRef = useRef(
       new Set<string>(
-        envelopeRef.current?.assetRefs.map((asset) => asset.fileId) ?? []
+        envelopeRef.current?.assetRefs.map((asset) => asset.fileId)
       )
     );
     const assetMetadataRef = useRef(
       new Map<string, CanvasAssetRef>(
-        envelopeRef.current?.assetRefs.map((asset) => [asset.fileId, asset]) ??
-          []
+        envelopeRef.current?.assetRefs.map((asset) => [asset.fileId, asset])
       )
     );
     const autosaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -248,15 +243,12 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
     const [expanded, setExpanded] = useState(initiallyExpanded);
     const [error, setError] = useState<string | null>(null);
 
-    const effectiveEnvelope = useMemo(
-      () =>
-        value === undefined
-          ? envelopeRef.current
-          : value
-            ? deserializeEnvelope(value)
-            : null,
-      [value]
-    );
+    const effectiveEnvelope =
+      value === undefined
+        ? envelopeRef.current
+        : value
+          ? deserializeEnvelope(value)
+          : null;
     // Authoring follows the caller's current UI theme even when a server-created draft still
     // carries its default theme. Read-only/history views must remain faithful to the frozen value.
     const currentTheme =
@@ -273,10 +265,10 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
       envelopeRef.current = next;
       revisionRef.current = next?.revision ?? 0;
       knownFileIdsRef.current = new Set(
-        next?.assetRefs.map((asset) => asset.fileId) ?? []
+        next?.assetRefs.map((asset) => asset.fileId)
       );
       assetMetadataRef.current = new Map(
-        next?.assetRefs.map((asset) => [asset.fileId, asset]) ?? []
+        next?.assetRefs.map((asset) => [asset.fileId, asset])
       );
       if (apiRef.current) {
         suppressAutosaveRef.current = true;
@@ -376,10 +368,10 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
           envelopeRef.current = next ? deserializeEnvelope(next) : null;
           revisionRef.current = next?.revision ?? 0;
           knownFileIdsRef.current = new Set(
-            next?.assetRefs.map((asset) => asset.fileId) ?? []
+            next?.assetRefs.map((asset) => asset.fileId)
           );
           assetMetadataRef.current = new Map(
-            next?.assetRefs.map((asset) => [asset.fileId, asset]) ?? []
+            next?.assetRefs.map((asset) => [asset.fileId, asset])
           );
           if (apiRef.current) {
             suppressAutosaveRef.current = true;
@@ -406,252 +398,215 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
       [currentTheme, mode]
     );
 
-    const collapse = useCallback(() => {
+    const collapse = () => {
       setExpanded(false);
       onDone?.();
-    }, [onDone]);
+    };
 
-    const scheduleAutosave = useCallback(
-      (next: CanvasEnvelope) => {
-        envelopeRef.current = next;
-        if (!onChange || suppressAutosaveRef.current) return;
-        if (autosaveRef.current) clearTimeout(autosaveRef.current);
-        autosaveRef.current = setTimeout(
-          () => {
-            autosaveRef.current = null;
-            onChange(next);
+    const scheduleAutosave = (next: CanvasEnvelope) => {
+      envelopeRef.current = next;
+      if (!onChange || suppressAutosaveRef.current) return;
+      if (autosaveRef.current) clearTimeout(autosaveRef.current);
+      autosaveRef.current = setTimeout(
+        () => {
+          autosaveRef.current = null;
+          onChange(next);
+        },
+        Math.max(0, autosaveDebounceMs)
+      );
+    };
+
+    const onSceneChange = (
+      elements: readonly ExcalidrawElement[],
+      appState: AppState,
+      files: BinaryFiles
+    ) => {
+      if (mode !== "edit") return;
+      const normalizedFiles = Object.fromEntries(
+        Object.entries(files).filter(([fileId]) =>
+          knownFileIdsRef.current.has(fileId)
+        )
+      );
+      const filteredElements = sanitizeElements(elements).filter(
+        (element) =>
+          element.type !== "image" ||
+          (element.fileId !== null &&
+            knownFileIdsRef.current.has(element.fileId))
+      );
+      sceneRef.current = {
+        elements: filteredElements,
+        appState,
+        files: normalizedFiles,
+      };
+      const next = createEnvelope(
+        { elements: filteredElements, appState },
+        // The server/core owns the monotonic CAS revision. Local edits keep the
+        // last authoritative revision until the caller sends a newer envelope.
+        revisionRef.current,
+        currentTheme,
+        fileAssetRefs(
+          normalizedFiles,
+          assetMetadataRef.current,
+          filteredElements
+        )
+      );
+      scheduleAutosave(next);
+    };
+
+    const placeNormalizedImage = (
+      file: BinaryFileData,
+      media: NormalizedCanvasMedia
+    ) => {
+      const api = apiRef.current;
+      if (!api) return;
+      const appState = api.getAppState();
+      const zoom = typeof appState.zoom === "object" ? appState.zoom.value : 1;
+      const width = Math.max(64, Math.min(1024, media.width ?? 320));
+      const height = Math.max(64, Math.min(1024, media.height ?? 180));
+      const image = newImageElement({
+        type: "image",
+        fileId: file.id,
+        status: "saved",
+        x: -appState.scrollX + 160 / Math.max(0.1, zoom),
+        y: -appState.scrollY + 120 / Math.max(0.1, zoom),
+        width,
+        height,
+        strokeColor: "black",
+        backgroundColor: "transparent",
+        fillStyle: "solid",
+        strokeWidth: 2,
+        strokeStyle: "solid",
+        roughness: 0,
+        roundness: null,
+        opacity: 100,
+        locked: false,
+        frameId: null,
+        scale: [1, 1],
+      });
+      api.updateScene({ elements: [...api.getSceneElements(), image] });
+    };
+
+    const normalizeFiles = async (files: readonly File[]) => {
+      if (files.length === 0) return;
+      if (!mediaNormalizer) {
+        const mediaError = new Error(
+          "Canvas mediaNormalizer is required for image input"
+        );
+        setError(mediaError.message);
+        onMediaError?.(mediaError);
+        return;
+      }
+      try {
+        const normalizedMediaByFileId = new Map<
+          string,
+          NormalizedCanvasMedia
+        >();
+        const added = await intakeCanvasMedia(files.map(mediaInputFromFile), {
+          normalize: mediaNormalizer,
+          // Excalidraw's image element points at BinaryFiles by file id. The trusted opaque
+          // normalizer ref is the core asset id, so use it directly to make reopen lossless.
+          createFileId: (media) => media.ref,
+          onAsset: (file, media) => {
+            knownFileIdsRef.current.add(file.id);
+            normalizedMediaByFileId.set(file.id, media);
+            assetMetadataRef.current.set(file.id, {
+              ref: media.ref,
+              fileId: file.id,
+              mimeType: media.mimeType,
+              byteLength: mediaByteLength(media),
+              ...(typeof media.width === "number"
+                ? { width: media.width }
+                : {}),
+              ...(typeof media.height === "number"
+                ? { height: media.height }
+                : {}),
+            });
+            apiRef.current?.addFiles([file]);
           },
-          Math.max(0, autosaveDebounceMs)
-        );
-      },
-      [autosaveDebounceMs, onChange]
-    );
-
-    const onSceneChange = useCallback(
-      (
-        elements: readonly ExcalidrawElement[],
-        appState: AppState,
-        files: BinaryFiles
-      ) => {
-        if (mode !== "edit") return;
-        const normalizedFiles = Object.fromEntries(
-          Object.entries(files).filter(([fileId]) =>
-            knownFileIdsRef.current.has(fileId)
-          )
-        ) as BinaryFiles;
-        const filteredElements = sanitizeElements(elements).filter(
-          (element) =>
-            element.type !== "image" ||
-            (element.fileId !== null &&
-              knownFileIdsRef.current.has(element.fileId))
-        );
-        sceneRef.current = {
-          elements: filteredElements,
-          appState,
-          files: normalizedFiles,
-        };
-        const next = createEnvelope(
-          { elements: filteredElements, appState },
-          // The server/core owns the monotonic CAS revision. Local edits keep the
-          // last authoritative revision until the caller sends a newer envelope.
-          revisionRef.current,
-          currentTheme,
-          fileAssetRefs(
-            normalizedFiles,
-            assetMetadataRef.current,
-            filteredElements
-          )
-        );
-        scheduleAutosave(next);
-      },
-      [currentTheme, mode, scheduleAutosave]
-    );
-
-    const placeNormalizedImage = useCallback(
-      (file: BinaryFileData, media: NormalizedCanvasMedia) => {
-        const api = apiRef.current;
-        if (!api) return;
-        const appState = api.getAppState();
-        const zoom =
-          typeof appState.zoom === "object" ? appState.zoom.value : 1;
-        const width = Math.max(64, Math.min(1024, media.width ?? 320));
-        const height = Math.max(64, Math.min(1024, media.height ?? 180));
-        const image = newImageElement({
-          type: "image",
-          fileId: file.id,
-          status: "saved",
-          x: -appState.scrollX + 160 / Math.max(0.1, zoom),
-          y: -appState.scrollY + 120 / Math.max(0.1, zoom),
-          width,
-          height,
-          strokeColor: "black",
-          backgroundColor: "transparent",
-          fillStyle: "solid",
-          strokeWidth: 2,
-          strokeStyle: "solid",
-          roughness: 0,
-          roundness: null,
-          opacity: 100,
-          locked: false,
-          frameId: null,
-          scale: [1, 1],
         });
-        api.updateScene({ elements: [...api.getSceneElements(), image] });
-      },
-      []
-    );
-
-    const normalizeFiles = useCallback(
-      async (files: readonly File[]) => {
-        if (files.length === 0) return;
-        if (!mediaNormalizer) {
-          const mediaError = new Error(
-            "Canvas mediaNormalizer is required for image input"
-          );
-          setError(mediaError.message);
-          onMediaError?.(mediaError);
-          return;
+        for (const file of added) {
+          const media = normalizedMediaByFileId.get(file.id);
+          if (media) placeNormalizedImage(file, media);
         }
-        try {
-          const normalizedMediaByFileId = new Map<
-            string,
-            NormalizedCanvasMedia
-          >();
-          const added = await intakeCanvasMedia(files.map(mediaInputFromFile), {
-            normalize: mediaNormalizer,
-            // Excalidraw's image element points at BinaryFiles by file id. The trusted opaque
-            // normalizer ref is the core asset id, so use it directly to make reopen lossless.
-            createFileId: (media) => media.ref,
-            onAsset: (file, media) => {
-              knownFileIdsRef.current.add(file.id);
-              normalizedMediaByFileId.set(file.id, media);
-              assetMetadataRef.current.set(file.id, {
-                ref: media.ref,
-                fileId: file.id,
-                mimeType: media.mimeType,
-                byteLength: mediaByteLength(media),
-                ...(typeof media.width === "number"
-                  ? { width: media.width }
-                  : {}),
-                ...(typeof media.height === "number"
-                  ? { height: media.height }
-                  : {}),
-              });
-              apiRef.current?.addFiles([file]);
-            },
-          });
-          for (const file of added) {
-            const media = normalizedMediaByFileId.get(file.id);
-            if (media) placeNormalizedImage(file, media);
-          }
-          setError(null);
-        } catch (cause) {
-          const mediaError =
-            cause instanceof Error
-              ? cause
-              : new Error("Canvas media input failed");
-          setError(mediaError.message);
-          onMediaError?.(mediaError);
-        }
-      },
-      [mediaNormalizer, onMediaError, placeNormalizedImage]
-    );
+        setError(null);
+      } catch (error) {
+        const mediaError =
+          error instanceof Error
+            ? error
+            : new Error("Canvas media input failed");
+        setError(mediaError.message);
+        onMediaError?.(mediaError);
+      }
+    };
 
-    const handlePaste = useCallback(
-      async (event: ClipboardEvent) => {
-        const files = mediaInputsFromClipboard(event)
-          .map((input) => input.bytes)
-          .filter((input): input is File => input instanceof File);
-        if (files.length === 0) return false;
-        event.preventDefault();
-        await normalizeFiles(files);
-        return true;
-      },
-      [normalizeFiles]
-    );
+    const handlePaste = async (event: ClipboardEvent) => {
+      const files = mediaInputsFromClipboard(event)
+        .map((input) => input.bytes)
+        .filter((input): input is File => input instanceof File);
+      if (files.length === 0) return false;
+      event.preventDefault();
+      await normalizeFiles(files);
+      return true;
+    };
 
-    const handleDrop = useCallback(
-      async (event: DragEvent<HTMLDivElement>) => {
+    const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const files = mediaInputsFromDataTransfer(event.dataTransfer)
+        .map((input) => input.bytes)
+        .filter((input): input is File => input instanceof File);
+      if (files.length === 0) return;
+      await normalizeFiles(files);
+    };
+
+    const handleFileInput = async (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget;
+      const files = [...(input.files ?? [])];
+      await normalizeFiles(files);
+      input.value = "";
+    };
+
+    const handleKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Escape" && expanded) {
         event.preventDefault();
         event.stopPropagation();
-        const files = mediaInputsFromDataTransfer(event.dataTransfer)
-          .map((input) => input.bytes)
-          .filter((input): input is File => input instanceof File);
-        if (files.length === 0) return;
-        await normalizeFiles(files);
-      },
-      [normalizeFiles]
-    );
+        collapse();
+        return;
+      }
+      // Excalidraw's single-key shortcuts include tools that C2 rejects.
+      // Stop them before the renderer's keyboard handler sees the event.
+      const target = event.target as HTMLElement | null;
+      const isTextEntry =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+      const key = event.key.toLowerCase();
+      // Numeric shortcuts are captured too: Excalidraw's 3 selects the unsupported diamond,
+      // while 9 activates its raw image tool and would bypass the required media normalizer.
+      // Images remain available through the C2-owned Image button, which always normalizes
+      // to a trusted static asset before insertion.
+      const blockedShortcutKeys = new Set(["3", "9", "d", "f", "i", "k", "m"]);
+      const blockedModifiedShortcut =
+        (event.metaKey || event.ctrlKey) &&
+        (key === "k" || key === "f" || (event.shiftKey && key === "l"));
+      if (
+        isTextEntry !== true &&
+        (blockedShortcutKeys.has(key) || blockedModifiedShortcut)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
 
-    const handleFileInput = useCallback(
-      async (event: ChangeEvent<HTMLInputElement>) => {
-        const input = event.currentTarget;
-        const files = Array.from(input.files ?? []);
-        await normalizeFiles(files);
-        input.value = "";
-      },
-      [normalizeFiles]
-    );
+    const updatePreset = (patch: Partial<AppState>) => {
+      if (mode !== "edit") return;
+      apiRef.current?.updateScene({ appState: patch as never });
+    };
 
-    const handleKeyDownCapture = useCallback(
-      (event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === "Escape" && expanded) {
-          event.preventDefault();
-          event.stopPropagation();
-          collapse();
-          return;
-        }
-        // Excalidraw's single-key shortcuts include tools that C2 rejects.
-        // Stop them before the renderer's keyboard handler sees the event.
-        const target = event.target as HTMLElement | null;
-        const isTextEntry =
-          target?.tagName === "INPUT" ||
-          target?.tagName === "TEXTAREA" ||
-          target?.isContentEditable;
-        const key = event.key.toLowerCase();
-        // Numeric shortcuts are captured too: Excalidraw's 3 selects the unsupported diamond,
-        // while 9 activates its raw image tool and would bypass the required media normalizer.
-        // Images remain available through the C2-owned Image button, which always normalizes
-        // to a trusted static asset before insertion.
-        const blockedShortcutKeys = new Set([
-          "3",
-          "9",
-          "d",
-          "f",
-          "i",
-          "k",
-          "m",
-        ]);
-        const blockedModifiedShortcut =
-          (event.metaKey || event.ctrlKey) &&
-          (key === "k" || key === "f" || (event.shiftKey && key === "l"));
-        if (
-          !isTextEntry &&
-          (blockedShortcutKeys.has(key) || blockedModifiedShortcut)
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      },
-      [collapse, expanded]
-    );
-
-    const updatePreset = useCallback(
-      (patch: Partial<AppState>) => {
-        if (mode !== "edit") return;
-        apiRef.current?.updateScene({ appState: patch as never });
-      },
-      [mode]
-    );
-
-    const initialData = useMemo(
-      () =>
-        initialDataForEnvelope(
-          effectiveEnvelope,
-          null,
-          mode === "edit" ? currentTheme : undefined
-        ),
-      [currentTheme, effectiveEnvelope, mode]
+    const initialData = initialDataForEnvelope(
+      effectiveEnvelope,
+      null,
+      mode === "edit" ? currentTheme : undefined
     );
     const editorProps: ExcalidrawProps = {
       initialData,
@@ -666,7 +621,8 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
       detectScroll: true,
       isCollaborating: false,
       onChange: onSceneChange,
-      onPaste: async (_data, event) => (event ? handlePaste(event) : false),
+      onPaste: async (_data, event) =>
+        event ? await handlePaste(event) : false,
       excalidrawAPI: (api) => {
         apiRef.current = api;
       },
@@ -705,7 +661,9 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
       void (async () => {
         const assets = (
           await Promise.all(
-            effectiveEnvelope.assetRefs.map((asset) => assetResolver(asset))
+            effectiveEnvelope.assetRefs.map(
+              async (asset) => await assetResolver(asset)
+            )
           )
         ).filter(
           (
@@ -738,7 +696,11 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
       return (
         <div
           ref={rootRef}
-          className={className ? `canvas-editor ${className}` : "canvas-editor"}
+          className={
+            className != null && className !== ""
+              ? `canvas-editor ${className}`
+              : "canvas-editor"
+          }
           data-canvas-mode={mode}
           data-canvas-theme={currentTheme}
           data-canvas-collapsed="true"
@@ -753,7 +715,7 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
             aria-expanded="false"
             onClick={() => setExpanded(true)}
           >
-            {previewSource ? (
+            {previewSource != null && previewSource !== "" ? (
               <img
                 className="canvas-editor__preview-image"
                 src={previewSource}
@@ -776,7 +738,11 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
     return (
       <div
         ref={rootRef}
-        className={className ? `canvas-editor ${className}` : "canvas-editor"}
+        className={
+          className != null && className !== ""
+            ? `canvas-editor ${className}`
+            : "canvas-editor"
+        }
         data-canvas-mode={mode}
         data-canvas-theme={currentTheme}
         data-canvas-collapsed="false"
@@ -785,7 +751,7 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
         onDrop={handleDrop}
         onFocus={() => onFocusChange?.(true)}
         onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          if (!event.currentTarget.contains(event.relatedTarget))
             onFocusChange?.(false);
         }}
       >
@@ -906,7 +872,7 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(
               Done
             </Button>
           </div>
-          {error ? (
+          {error != null && error !== "" ? (
             <div className="canvas-editor__error" role="alert">
               {error}
             </div>

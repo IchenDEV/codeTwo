@@ -2,16 +2,12 @@ import {
   Children,
   cloneElement,
   isValidElement,
-  useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
-  type HTMLAttributes,
-  type ReactElement,
-  type ReactNode,
 } from "react";
+import type { HTMLAttributes, ReactElement, ReactNode } from "react";
 
 import { NavigationRow } from "@/components/business/navigation-row";
 import { ActivityOrb } from "@/components/ui/activity-orb";
@@ -37,9 +33,11 @@ import {
   KeyboardSensor,
   PointerActivationConstraints,
   PointerSensor,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
+} from "@/components/ui/drag-drop";
+import type {
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
 } from "@/components/ui/drag-drop";
 import {
   DropdownMenu,
@@ -98,15 +96,13 @@ import {
   githubCurrentPullRequest,
   openNativePath,
   providerLabel,
-  type GitHubPullRequest,
-  type Project,
-  type SessionInfo,
 } from "../bridge";
+import type { GitHubPullRequest, Project, SessionInfo } from "../bridge";
 import {
   nativeContextMenusAvailable,
   showNativeContextMenu,
-  type NativeContextMenuItem,
 } from "../container";
+import type { NativeContextMenuItem } from "../container";
 import { useT } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { sessionActivity } from "../session/sessionEvents";
@@ -121,13 +117,10 @@ import {
   sidebarRememberedDragTarget,
   sidebarSortableSnapshot,
   sidebarTaskContainerCollisionPriority,
-  type SidebarDndData,
-  type SidebarDragItem,
 } from "./sidebarDnd";
-import {
-  loadSidebarPullRequests,
-  type SidebarPullRequestStatus,
-} from "./sidebarGitStatus";
+import type { SidebarDndData, SidebarDragItem } from "./sidebarDnd";
+import { loadSidebarPullRequests } from "./sidebarGitStatus";
+import type { SidebarPullRequestStatus } from "./sidebarGitStatus";
 import {
   ROOT_PROJECT_ORDER_KEY,
   loadSidebarProjects,
@@ -150,8 +143,8 @@ import {
   setSidebarTaskSectionCollapsed,
   sortSidebarTasks,
   UNSECTIONED_TASK_ORDER_KEY,
-  type SidebarTaskSection,
 } from "./sidebarSections";
+import type { SidebarTaskSection } from "./sidebarSections";
 
 type ContextMenuTriggerElement = ReactElement<{
   render: ReactElement<HTMLAttributes<HTMLDivElement>>;
@@ -161,8 +154,8 @@ type ContextMenuTriggerElement = ReactElement<{
 function shortAge(timestamp: number, now: number): string {
   const seconds = Math.max(0, Math.floor((now - timestamp) / 1000));
   if (seconds < 60) return "now";
-  if (seconds < 3_600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3_600)}h`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h`;
   if (seconds < 7 * 86_400) return `${Math.floor(seconds / 86_400)}d`;
   return `${Math.floor(seconds / (7 * 86_400))}w`;
 }
@@ -241,7 +234,7 @@ function SessionContextMenu({
   const trigger = Children.toArray(children)[0];
   if (!isValidElement(trigger)) return null;
   const row = (trigger as ContextMenuTriggerElement).props.render;
-  const onContextMenu = row.props.onContextMenu;
+  const { onContextMenu } = row.props;
 
   return cloneElement(row, {
     onContextMenu: (event) => {
@@ -463,32 +456,29 @@ export function SessionRail({
   const [archiveMotion, setArchiveMotion] = useState<
     ReadonlyMap<string, boolean>
   >(() => new Map());
-  const requestArchive = useCallback((id: string, archived: boolean) => {
+  const requestArchive = (id: string, archived: boolean) => {
     setArchiveMotion((current) => {
       if (current.has(id)) return current;
       const next = new Map(current);
       next.set(id, archived);
       return next;
     });
-  }, []);
-  const finishArchiveMotion = useCallback(
-    (id: string) => {
-      const archived = archiveMotion.get(id);
-      if (archived === undefined) return;
+  };
+  const finishArchiveMotion = (id: string) => {
+    const archived = archiveMotion.get(id);
+    if (archived === undefined) return;
 
-      const clearMotion = () => {
-        setArchiveMotion((current) => {
-          if (!current.has(id)) return current;
-          const next = new Map(current);
-          next.delete(id);
-          return next;
-        });
-      };
+    const clearMotion = () => {
+      setArchiveMotion((current) => {
+        if (!current.has(id)) return current;
+        const next = new Map(current);
+        next.delete(id);
+        return next;
+      });
+    };
 
-      Promise.resolve(onArchive(id, archived)).then(clearMotion, clearMotion);
-    },
-    [archiveMotion, onArchive]
-  );
+    Promise.resolve(onArchive(id, archived)).then(clearMotion, clearMotion);
+  };
 
   const resizeHandle = useResizeHandle({
     axis: "x",
@@ -502,37 +492,25 @@ export function SessionRail({
     onEnd: () => setDragging(false),
   });
 
-  const projectNames = useMemo(
-    () => new Map(projects.map((project) => [project.path, project.name])),
-    [projects]
+  const projectNames = new Map(
+    projects.map((project) => [project.path, project.name])
   );
 
   // "Recent" follows deliberate re-entry into work, not background chunks or the original
   // creation date. Archived history keeps its stable creation order.
-  const recent = useMemo(
-    () =>
-      [...sessions].sort(
-        (a, b) =>
-          Number(b.pinned) - Number(a.pinned) ||
-          (b.last_active_at ?? b.created_at) -
-            (a.last_active_at ?? a.created_at)
-      ),
-    [sessions]
+  const recent = [...sessions].toSorted(
+    (a, b) =>
+      Number(b.pinned) - Number(a.pinned) ||
+      (b.last_active_at ?? b.created_at) - (a.last_active_at ?? a.created_at)
   );
-  const archived = useMemo(
-    () => [...archivedSessions].sort((a, b) => b.created_at - a.created_at),
-    [archivedSessions]
+  const archived = [...archivedSessions].toSorted(
+    (a, b) => b.created_at - a.created_at
   );
-  const gitTargetPaths = useMemo(
-    () => [
-      ...new Set(
-        recent
-          .slice(0, 48)
-          .map((session) => session.worktree_path ?? session.cwd)
-      ),
-    ],
-    [recent]
-  );
+  const gitTargetPaths = [
+    ...new Set(
+      recent.slice(0, 48).map((session) => session.worktree_path ?? session.cwd)
+    ),
+  ];
   const gitTargetKey = gitTargetPaths.join("\u0000");
   const [gitRefresh, setGitRefresh] = useState(0);
   const [pullRequestsByPath, setPullRequestsByPath] = useState<
@@ -560,28 +538,21 @@ export function SessionRail({
     };
   }, [gitRefresh, gitTargetKey, loadPullRequest]);
 
-  const manualSectionIds = useMemo(
-    () => new Set(taskSections.sections.map((section) => section.id)),
-    [taskSections.sections]
+  const manualSectionIds = new Set(
+    taskSections.sections.map((section) => section.id)
   );
-  const assignedSection = useCallback(
-    (session: SessionInfo) => {
-      const id = taskSections.assignments[session.id];
-      return id && manualSectionIds.has(id) ? id : null;
-    },
-    [manualSectionIds, taskSections.assignments]
-  );
-  const projectPathForSession = useCallback(
-    (session: SessionInfo) =>
-      session.project_path ??
-      (projectNames.has(session.cwd) ? session.cwd : null),
-    [projectNames]
-  );
-  const projectEntries = useMemo(() => {
+  const assignedSection = (session: SessionInfo) => {
+    const id = taskSections.assignments[session.id];
+    return id && manualSectionIds.has(id) ? id : null;
+  };
+  const projectPathForSession = (session: SessionInfo) =>
+    session.project_path ??
+    (projectNames.has(session.cwd) ? session.cwd : null);
+  const projectEntries = (() => {
     const entries = new Map(projects.map((project) => [project.path, project]));
     for (const session of recent) {
       const path = projectPathForSession(session);
-      if (!path || entries.has(path)) continue;
+      if (path == null || path === "" || entries.has(path)) continue;
       entries.set(path, {
         path,
         name: path.split(/[\\/]/).filter(Boolean).pop() ?? path,
@@ -589,93 +560,60 @@ export function SessionRail({
         default_worktree_mode: null,
       });
     }
-    return [...entries.values()].sort(
+    return [...entries.values()].toSorted(
       (left, right) => right.last_opened_at - left.last_opened_at
     );
-  }, [projectPathForSession, projects, recent]);
-  const assignedProjectSection = useCallback(
-    (path: string) => {
-      const id = projectOrganization.assignments[path];
-      return id && manualSectionIds.has(id) ? id : null;
-    },
-    [manualSectionIds, projectOrganization.assignments]
+  })();
+  const assignedProjectSection = (path: string) => {
+    const id = projectOrganization.assignments[path];
+    return id && manualSectionIds.has(id) ? id : null;
+  };
+  const unsectioned = sortSidebarTasks(
+    recent.filter(
+      (session) =>
+        assignedSection(session) == null &&
+        projectPathForSession(session) == null
+    ),
+    taskSections.taskOrder[UNSECTIONED_TASK_ORDER_KEY]
   );
-  const unsectioned = useMemo(
-    () =>
+  const sectionRows = new Map(
+    taskSections.sections.map((section) => [
+      section.id,
+      sortSidebarTasks(
+        recent.filter((session) => assignedSection(session) === section.id),
+        taskSections.taskOrder[section.id]
+      ),
+    ])
+  );
+  const projectRows = new Map(
+    projectEntries.map((project) => [
+      project.path,
       sortSidebarTasks(
         recent.filter(
           (session) =>
-            !assignedSection(session) && !projectPathForSession(session)
+            assignedSection(session) == null &&
+            projectPathForSession(session) === project.path
         ),
-        taskSections.taskOrder[UNSECTIONED_TASK_ORDER_KEY]
+        taskSections.taskOrder[projectTaskOrderKey(project.path)]
       ),
-    [assignedSection, projectPathForSession, recent, taskSections.taskOrder]
+    ])
   );
-  const sectionRows = useMemo(
-    () =>
-      new Map(
-        taskSections.sections.map((section) => [
-          section.id,
-          sortSidebarTasks(
-            recent.filter((session) => assignedSection(session) === section.id),
-            taskSections.taskOrder[section.id]
-          ),
-        ])
-      ),
-    [assignedSection, recent, taskSections.sections, taskSections.taskOrder]
+  const rootProjects = sortSidebarProjects(
+    projectEntries.filter(
+      (project) => assignedProjectSection(project.path) == null
+    ),
+    projectOrganization.order[ROOT_PROJECT_ORDER_KEY]
   );
-  const projectRows = useMemo(
-    () =>
-      new Map(
-        projectEntries.map((project) => [
-          project.path,
-          sortSidebarTasks(
-            recent.filter(
-              (session) =>
-                !assignedSection(session) &&
-                projectPathForSession(session) === project.path
-            ),
-            taskSections.taskOrder[projectTaskOrderKey(project.path)]
-          ),
-        ])
-      ),
-    [
-      assignedSection,
-      projectEntries,
-      projectPathForSession,
-      recent,
-      taskSections.taskOrder,
-    ]
-  );
-  const rootProjects = useMemo(
-    () =>
+  const sectionProjects = new Map(
+    taskSections.sections.map((section) => [
+      section.id,
       sortSidebarProjects(
         projectEntries.filter(
-          (project) => !assignedProjectSection(project.path)
+          (project) => assignedProjectSection(project.path) === section.id
         ),
-        projectOrganization.order[ROOT_PROJECT_ORDER_KEY]
+        projectOrganization.order[section.id]
       ),
-    [assignedProjectSection, projectEntries, projectOrganization.order]
-  );
-  const sectionProjects = useMemo(
-    () =>
-      new Map(
-        taskSections.sections.map((section) => [
-          section.id,
-          sortSidebarProjects(
-            projectEntries.filter(
-              (project) => assignedProjectSection(project.path) === section.id
-            ),
-            projectOrganization.order[section.id]
-          ),
-        ])
-      ),
-    [
-      assignedProjectSection,
-      projectEntries,
-      projectOrganization.order,
-      taskSections.sections,
-    ]
+    ])
   );
 
   const [allProjectsOpen, setAllProjectsOpen] = usePersistedBoolean(
@@ -689,42 +627,37 @@ export function SessionRail({
     false
   );
 
-  const copyToClipboard = useCallback(
-    async (value: string, confirmation: string) => {
-      try {
-        if (!navigator.clipboard) throw new Error("Clipboard API unavailable");
-        await navigator.clipboard.writeText(value);
-        toast(confirmation, "success");
-      } catch {
-        toast(t("rail.copyFailed"), "error");
-      }
-    },
-    [t, toast]
-  );
+  const copyToClipboard = async (value: string, confirmation: string) => {
+    try {
+      if (navigator.clipboard == null)
+        throw new Error("Clipboard API unavailable");
+      await navigator.clipboard.writeText(value);
+      toast(confirmation, "success");
+    } catch {
+      toast(t("rail.copyFailed"), "error");
+    }
+  };
 
-  const revealWorkingDirectory = useCallback(
-    async (path: string) => {
-      try {
-        if (!(await openNativePath(path)))
-          throw new Error("Native path reveal unavailable");
-      } catch {
-        toast(t("rail.revealFailed"), "error");
-      }
-    },
-    [t, toast]
-  );
+  const revealWorkingDirectory = async (path: string) => {
+    try {
+      if (!(await openNativePath(path)))
+        throw new Error("Native path reveal unavailable");
+    } catch {
+      toast(t("rail.revealFailed"), "error");
+    }
+  };
 
-  const beginSectionCreation = useCallback((taskId: string) => {
+  const beginSectionCreation = (taskId: string) => {
     setSectionDraft("");
     setCreatingSectionFor({ kind: "task", id: taskId });
-  }, []);
+  };
 
-  const beginProjectSectionCreation = useCallback((path: string) => {
+  const beginProjectSectionCreation = (path: string) => {
     setSectionDraft("");
     setCreatingSectionFor({ kind: "project", id: path });
-  }, []);
+  };
 
-  const commitSectionCreation = useCallback(() => {
+  const commitSectionCreation = () => {
     const name = sectionDraft.trim();
     if (name) {
       const id = `section:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
@@ -746,9 +679,9 @@ export function SessionRail({
     }
     setCreatingSectionFor(undefined);
     setSectionDraft("");
-  }, [creatingSectionFor, sectionDraft]);
+  };
 
-  const commitSectionRename = useCallback(() => {
+  const commitSectionRename = () => {
     if (!renamingSection) return;
     setTaskSections((current) =>
       renameSidebarTaskSection(
@@ -758,303 +691,269 @@ export function SessionRail({
       )
     );
     setRenamingSection(null);
-  }, [renamingSection]);
+  };
 
-  const taskIdsForSection = useCallback(
-    (sectionId: string | null) =>
-      (sectionId === null
-        ? unsectioned
-        : (sectionRows.get(sectionId) ?? [])
-      ).map((session) => session.id),
-    [sectionRows, unsectioned]
-  );
-  const taskIdsForProject = useCallback(
-    (path: string) =>
-      (projectRows.get(path) ?? []).map((session) => session.id),
-    [projectRows]
-  );
+  const taskIdsForSection = (sectionId: string | null) =>
+    (sectionId === null ? unsectioned : (sectionRows.get(sectionId) ?? [])).map(
+      (session) => session.id
+    );
+  const taskIdsForProject = (path: string) =>
+    (projectRows.get(path) ?? []).map((session) => session.id);
 
-  const dropTask = useCallback(
-    (
-      taskId: string,
-      sectionId: string | null,
-      beforeTaskId: string | null,
-      destinationTaskIds: readonly string[],
-      destinationOrderKey: string,
-      projectPath: string | null = null
-    ) => {
-      if (projectPath) {
-        const source = recent.find((session) => session.id === taskId);
-        if (!source || projectPathForSession(source) !== projectPath) return;
-      }
-      setTaskSections((current) =>
-        moveSidebarTask(
-          current,
-          taskId,
-          sectionId,
-          beforeTaskId,
-          destinationTaskIds,
-          destinationOrderKey
-        )
-      );
-      setDragItem(null);
-    },
-    [projectPathForSession, recent]
-  );
-
-  const moveTaskBy = useCallback(
-    (session: SessionInfo, offset: -1 | 1) => {
-      const sectionId = assignedSection(session);
-      const projectPath =
-        sectionId === null ? projectPathForSession(session) : null;
-      const ids = projectPath
-        ? taskIdsForProject(projectPath)
-        : taskIdsForSection(sectionId);
-      const currentIndex = ids.indexOf(session.id);
-      const nextIndex = Math.min(
-        ids.length - 1,
-        Math.max(0, currentIndex + offset)
-      );
-      if (currentIndex < 0 || nextIndex === currentIndex) return;
-      const remaining = ids.filter((id) => id !== session.id);
-      const beforeTaskId = remaining[nextIndex] ?? null;
-      dropTask(
-        session.id,
+  const dropTask = (
+    taskId: string,
+    sectionId: string | null,
+    beforeTaskId: string | null,
+    destinationTaskIds: readonly string[],
+    destinationOrderKey: string,
+    projectPath: string | null = null
+  ) => {
+    if (projectPath != null && projectPath !== "") {
+      const source = recent.find((session) => session.id === taskId);
+      if (!source || projectPathForSession(source) !== projectPath) return;
+    }
+    setTaskSections((current) =>
+      moveSidebarTask(
+        current,
+        taskId,
         sectionId,
         beforeTaskId,
-        ids,
-        projectPath
-          ? projectTaskOrderKey(projectPath)
-          : (sectionId ?? UNSECTIONED_TASK_ORDER_KEY),
-        projectPath
-      );
-    },
-    [
-      assignedSection,
-      dropTask,
-      projectPathForSession,
-      taskIdsForProject,
-      taskIdsForSection,
-    ]
-  );
+        destinationTaskIds,
+        destinationOrderKey
+      )
+    );
+    setDragItem(null);
+  };
 
-  const projectPathsForSection = useCallback(
-    (sectionId: string | null) =>
-      (sectionId === null
-        ? rootProjects
-        : (sectionProjects.get(sectionId) ?? [])
-      ).map((project) => project.path),
-    [rootProjects, sectionProjects]
-  );
+  const moveTaskBy = (session: SessionInfo, offset: -1 | 1) => {
+    const sectionId = assignedSection(session);
+    const projectPath =
+      sectionId === null ? projectPathForSession(session) : null;
+    const ids =
+      projectPath != null && projectPath !== ""
+        ? taskIdsForProject(projectPath)
+        : taskIdsForSection(sectionId);
+    const currentIndex = ids.indexOf(session.id);
+    const nextIndex = Math.min(
+      ids.length - 1,
+      Math.max(0, currentIndex + offset)
+    );
+    if (currentIndex === -1 || nextIndex === currentIndex) return;
+    const remaining = ids.filter((id) => id !== session.id);
+    const beforeTaskId = remaining[nextIndex] ?? null;
+    dropTask(
+      session.id,
+      sectionId,
+      beforeTaskId,
+      ids,
+      projectPath != null && projectPath !== ""
+        ? projectTaskOrderKey(projectPath)
+        : (sectionId ?? UNSECTIONED_TASK_ORDER_KEY),
+      projectPath
+    );
+  };
 
-  const dropProject = useCallback(
-    (path: string, sectionId: string | null, beforePath: string | null) => {
-      setProjectOrganization((current) =>
-        moveSidebarProject(
-          current,
-          path,
-          sectionId,
-          beforePath,
-          projectPathsForSection(sectionId)
-        )
-      );
-      setDragItem(null);
-    },
-    [projectPathsForSection]
-  );
+  const projectPathsForSection = (sectionId: string | null) =>
+    (sectionId === null
+      ? rootProjects
+      : (sectionProjects.get(sectionId) ?? [])
+    ).map((project) => project.path);
 
-  const moveProjectBy = useCallback(
-    (path: string, offset: -1 | 1) => {
-      const sectionId = assignedProjectSection(path);
-      const paths = projectPathsForSection(sectionId);
-      const currentIndex = paths.indexOf(path);
-      const nextIndex = Math.min(
-        paths.length - 1,
-        Math.max(0, currentIndex + offset)
-      );
-      if (currentIndex < 0 || nextIndex === currentIndex) return;
-      const remaining = paths.filter((candidate) => candidate !== path);
-      dropProject(path, sectionId, remaining[nextIndex] ?? null);
-    },
-    [assignedProjectSection, dropProject, projectPathsForSection]
-  );
+  const dropProject = (
+    path: string,
+    sectionId: string | null,
+    beforePath: string | null
+  ) => {
+    setProjectOrganization((current) =>
+      moveSidebarProject(
+        current,
+        path,
+        sectionId,
+        beforePath,
+        projectPathsForSection(sectionId)
+      )
+    );
+    setDragItem(null);
+  };
 
-  const moveSectionBy = useCallback(
-    (section: SidebarTaskSection, offset: -1 | 1) => {
-      const ids = taskSections.sections.map((candidate) => candidate.id);
-      const currentIndex = ids.indexOf(section.id);
-      const nextIndex = Math.min(
-        ids.length - 1,
-        Math.max(0, currentIndex + offset)
-      );
-      if (currentIndex < 0 || nextIndex === currentIndex) return;
-      const remaining = ids.filter((id) => id !== section.id);
-      const beforeId = remaining[nextIndex] ?? null;
-      setTaskSections((current) =>
-        moveSidebarTaskSection(current, section.id, beforeId)
-      );
-    },
-    [taskSections.sections]
-  );
+  const moveProjectBy = (path: string, offset: -1 | 1) => {
+    const sectionId = assignedProjectSection(path);
+    const paths = projectPathsForSection(sectionId);
+    const currentIndex = paths.indexOf(path);
+    const nextIndex = Math.min(
+      paths.length - 1,
+      Math.max(0, currentIndex + offset)
+    );
+    if (currentIndex === -1 || nextIndex === currentIndex) return;
+    const remaining = paths.filter((candidate) => candidate !== path);
+    dropProject(path, sectionId, remaining[nextIndex] ?? null);
+  };
 
-  const handleSidebarDragStart = useCallback((event: DragStartEvent) => {
+  const moveSectionBy = (section: SidebarTaskSection, offset: -1 | 1) => {
+    const ids = taskSections.sections.map((candidate) => candidate.id);
+    const currentIndex = ids.indexOf(section.id);
+    const nextIndex = Math.min(
+      ids.length - 1,
+      Math.max(0, currentIndex + offset)
+    );
+    if (currentIndex === -1 || nextIndex === currentIndex) return;
+    const remaining = ids.filter((id) => id !== section.id);
+    const beforeId = remaining[nextIndex] ?? null;
+    setTaskSections((current) =>
+      moveSidebarTaskSection(current, section.id, beforeId)
+    );
+  };
+
+  const handleSidebarDragStart = (event: DragStartEvent) => {
     dragTargetRef.current = null;
     const source = sidebarDndData(event.operation.source?.data);
     setDragItem(source?.item ?? null);
-  }, []);
+  };
 
-  const handleSidebarDragOver = useCallback((event: DragOverEvent) => {
+  const handleSidebarDragOver = (event: DragOverEvent) => {
     const source = sidebarDndData(event.operation.source?.data)?.item;
     dragTargetRef.current = sidebarRememberedDragTarget(
       source ?? null,
       event.operation.target?.data,
       dragTargetRef.current
     );
-  }, []);
+  };
 
-  const handleSidebarDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      setDragItem(null);
-      const lastTarget = dragTargetRef.current;
-      dragTargetRef.current = null;
-      if (event.canceled) return;
+  const handleSidebarDragEnd = (event: DragEndEvent) => {
+    setDragItem(null);
+    const lastTarget = dragTargetRef.current;
+    dragTargetRef.current = null;
+    if (event.canceled) return;
 
-      const source = sidebarDndData(event.operation.source?.data)?.item;
-      if (!source) return;
-      const sortable = sidebarSortableSnapshot(event.operation.source);
-      const rawEventTarget = sidebarDndData(event.operation.target?.data);
-      const eventTarget = sidebarRememberedDragTarget(
-        source,
-        event.operation.target?.data,
-        lastTarget
-      );
-      const target =
-        rawEventTarget?.item?.kind === source.kind &&
-        rawEventTarget.item.id === source.id
-          ? lastTarget
-          : eventTarget;
-      const finalized = sidebarFinalizedDestination(source, sortable);
+    const source = sidebarDndData(event.operation.source?.data)?.item;
+    if (!source) return;
+    const sortable = sidebarSortableSnapshot(event.operation.source);
+    const rawEventTarget = sidebarDndData(event.operation.target?.data);
+    const eventTarget = sidebarRememberedDragTarget(
+      source,
+      event.operation.target?.data,
+      lastTarget
+    );
+    const target =
+      rawEventTarget?.item?.kind === source.kind &&
+      rawEventTarget.item.id === source.id
+        ? lastTarget
+        : eventTarget;
+    const finalized = sidebarFinalizedDestination(source, sortable);
 
-      if (source.kind === "section") {
-        if (finalized?.kind === "sections") {
-          const sectionIds = taskSections.sections.map((section) => section.id);
-          const beforeId = sidebarBeforeIdAtFinalIndex(
-            sectionIds,
-            source.id,
-            finalized.index
-          );
-          setTaskSections((current) =>
-            moveSidebarTaskSection(current, source.id, beforeId)
-          );
-          return;
-        }
-        if (!target) return;
-        if (target.item?.kind === "section") {
-          setTaskSections((current) =>
-            moveSidebarTaskSection(current, source.id, target.item!.id)
-          );
-        } else if (target.location.kind === "sections") {
-          setTaskSections((current) =>
-            moveSidebarTaskSection(current, source.id, null)
-          );
-        }
-        return;
-      }
-
-      if (source.kind === "project") {
-        if (finalized?.kind === "projects") {
-          dropProject(
-            source.id,
-            finalized.sectionId,
-            sidebarBeforeIdAtFinalIndex(
-              projectPathsForSection(finalized.sectionId),
-              source.id,
-              finalized.index
-            )
-          );
-          return;
-        }
-        if (!target) return;
-        if (target.item?.kind === "section") {
-          dropProject(source.id, target.item.id, null);
-        } else if (
-          target.item?.kind === "project" &&
-          target.location.kind === "projects"
-        ) {
-          dropProject(source.id, target.location.sectionId, target.item.id);
-        } else if (target.location.kind === "section") {
-          dropProject(source.id, target.location.sectionId, null);
-        } else if (target.location.kind === "projects") {
-          dropProject(source.id, target.location.sectionId, null);
-        }
-        return;
-      }
-
-      if (finalized?.kind === "tasks") {
-        const destinationTaskIds = finalized.projectPath
-          ? taskIdsForProject(finalized.projectPath)
-          : taskIdsForSection(finalized.sectionId);
-        dropTask(
+    if (source.kind === "section") {
+      if (finalized?.kind === "sections") {
+        const sectionIds = taskSections.sections.map((section) => section.id);
+        const beforeId = sidebarBeforeIdAtFinalIndex(
+          sectionIds,
           source.id,
-          finalized.sectionId,
-          sidebarBeforeIdAtFinalIndex(
-            destinationTaskIds,
-            source.id,
-            finalized.index
-          ),
-          destinationTaskIds,
-          finalized.projectPath
-            ? projectTaskOrderKey(finalized.projectPath)
-            : (finalized.sectionId ?? UNSECTIONED_TASK_ORDER_KEY),
-          finalized.projectPath
+          finalized.index
+        );
+        setTaskSections((current) =>
+          moveSidebarTaskSection(current, source.id, beforeId)
         );
         return;
       }
       if (!target) return;
-
-      let sectionId: string | null;
-      let projectPath: string | null;
-      let beforeTaskId: string | null = null;
       if (target.item?.kind === "section") {
-        sectionId = target.item.id;
-        projectPath = null;
-      } else if (target.item?.kind === "project") {
-        sectionId = null;
-        projectPath = target.item.id;
-      } else if (target.location.kind === "section") {
-        sectionId = target.location.sectionId;
-        projectPath = null;
-      } else if (target.location.kind === "tasks") {
-        sectionId = target.location.sectionId;
-        projectPath = target.location.projectPath;
-        beforeTaskId = target.item?.kind === "task" ? target.item.id : null;
-      } else {
+        setTaskSections((current) =>
+          moveSidebarTaskSection(current, source.id, target.item!.id)
+        );
+      } else if (target.location.kind === "sections") {
+        setTaskSections((current) =>
+          moveSidebarTaskSection(current, source.id, null)
+        );
+      }
+      return;
+    }
+
+    if (source.kind === "project") {
+      if (finalized?.kind === "projects") {
+        dropProject(
+          source.id,
+          finalized.sectionId,
+          sidebarBeforeIdAtFinalIndex(
+            projectPathsForSection(finalized.sectionId),
+            source.id,
+            finalized.index
+          )
+        );
         return;
       }
+      if (!target) return;
+      if (target.item?.kind === "section") {
+        dropProject(source.id, target.item.id, null);
+      } else if (
+        target.item?.kind === "project" &&
+        target.location.kind === "projects"
+      ) {
+        dropProject(source.id, target.location.sectionId, target.item.id);
+      } else if (target.location.kind === "section") {
+        dropProject(source.id, target.location.sectionId, null);
+      } else if (target.location.kind === "projects") {
+        dropProject(source.id, target.location.sectionId, null);
+      }
+      return;
+    }
 
-      const destinationTaskIds = projectPath
-        ? taskIdsForProject(projectPath)
-        : taskIdsForSection(sectionId);
+    if (finalized?.kind === "tasks") {
+      const destinationTaskIds =
+        finalized.projectPath != null && finalized.projectPath !== ""
+          ? taskIdsForProject(finalized.projectPath)
+          : taskIdsForSection(finalized.sectionId);
       dropTask(
         source.id,
-        sectionId,
-        beforeTaskId,
+        finalized.sectionId,
+        sidebarBeforeIdAtFinalIndex(
+          destinationTaskIds,
+          source.id,
+          finalized.index
+        ),
         destinationTaskIds,
-        projectPath
-          ? projectTaskOrderKey(projectPath)
-          : (sectionId ?? UNSECTIONED_TASK_ORDER_KEY),
-        projectPath
+        finalized.projectPath != null && finalized.projectPath !== ""
+          ? projectTaskOrderKey(finalized.projectPath)
+          : (finalized.sectionId ?? UNSECTIONED_TASK_ORDER_KEY),
+        finalized.projectPath
       );
-    },
-    [
-      dropProject,
-      dropTask,
-      projectPathsForSection,
-      taskIdsForProject,
-      taskIdsForSection,
-      taskSections.sections,
-    ]
-  );
+      return;
+    }
+    if (!target) return;
+
+    let sectionId: string | null;
+    let projectPath: string | null;
+    let beforeTaskId: string | null = null;
+    if (target.item?.kind === "section") {
+      sectionId = target.item.id;
+      projectPath = null;
+    } else if (target.item?.kind === "project") {
+      sectionId = null;
+      projectPath = target.item.id;
+    } else if (target.location.kind === "section") {
+      sectionId = target.location.sectionId;
+      projectPath = null;
+    } else if (target.location.kind === "tasks") {
+      sectionId = target.location.sectionId;
+      projectPath = target.location.projectPath;
+      beforeTaskId = target.item?.kind === "task" ? target.item.id : null;
+    } else {
+      return;
+    }
+
+    const destinationTaskIds =
+      projectPath != null && projectPath !== ""
+        ? taskIdsForProject(projectPath)
+        : taskIdsForSection(sectionId);
+    dropTask(
+      source.id,
+      sectionId,
+      beforeTaskId,
+      destinationTaskIds,
+      projectPath != null && projectPath !== ""
+        ? projectTaskOrderKey(projectPath)
+        : (sectionId ?? UNSECTIONED_TASK_ORDER_KEY),
+      projectPath
+    );
+  };
 
   /** One quiet source-list row: task title, workspace identity, and only actionable status. */
   const sessionRow = (
@@ -1083,16 +982,19 @@ export function SessionRail({
     // when it happens to match the Task title.
     const hasUsefulPreview = Boolean(preview && /[\p{L}\p{N}]/u.test(preview));
     const lastActiveAt =
-      s.last_active_at && s.last_active_at > 0
+      s.last_active_at != null && s.last_active_at > 0
         ? s.last_active_at
         : s.created_at;
     const workspacePath = s.project_path ?? s.worktree_path ?? s.cwd;
     const workspaceName =
-      (s.project_path ? projectNames.get(s.project_path) : null) ??
+      (s.project_path != null && s.project_path !== ""
+        ? projectNames.get(s.project_path)
+        : null) ??
       workspacePath.split(/[\\/]/).filter(Boolean).pop() ??
       workspacePath;
     const checkoutPath = s.worktree_path ?? s.cwd;
-    const isWorktree = s.worktree_path !== null && !s.worktree_discarded;
+    const isWorktree =
+      s.worktree_path !== null && s.worktree_discarded !== true;
     const pullRequest = pullRequestsByPath.get(checkoutPath) ?? null;
     const pullRequestLabel = pullRequest
       ? t(`rail.pullRequest.${pullRequest.state}`)
@@ -1120,7 +1022,7 @@ export function SessionRail({
       </span>
     );
     const pullRequestBadge =
-      pullRequest && pullRequestLabel ? (
+      pullRequest && pullRequestLabel != null && pullRequestLabel !== "" ? (
         <span
           data-session-pull-request={pullRequest.state}
           title={`#${pullRequest.number} · ${pullRequestLabel}`}
@@ -1158,14 +1060,15 @@ export function SessionRail({
     const currentSectionId = assignedSection(s);
     const currentProjectPath =
       currentSectionId === null ? projectPathForSession(s) : null;
-    const currentTaskIds = currentProjectPath
-      ? taskIdsForProject(currentProjectPath)
-      : taskIdsForSection(currentSectionId);
+    const currentTaskIds =
+      currentProjectPath != null && currentProjectPath !== ""
+        ? taskIdsForProject(currentProjectPath)
+        : taskIdsForSection(currentSectionId);
     const currentTaskIndex = currentTaskIds.indexOf(s.id);
     const canMoveUp = !isArchived && currentTaskIndex > 0;
     const canMoveDown =
       !isArchived &&
-      currentTaskIndex >= 0 &&
+      currentTaskIndex !== -1 &&
       currentTaskIndex < currentTaskIds.length - 1;
     const assignSection = (sectionId: string | null) => {
       setTaskSections((current) => assignTaskSection(current, s.id, sectionId));
@@ -1189,36 +1092,45 @@ export function SessionRail({
         return;
       }
       switch (action) {
-        case "pin":
+        case "pin": {
           onPin(s.id, !s.pinned);
           break;
-        case "rename":
+        }
+        case "rename": {
           startRename();
           break;
-        case "move-up":
+        }
+        case "move-up": {
           moveTaskBy(s, -1);
           break;
-        case "move-down":
+        }
+        case "move-down": {
           moveTaskBy(s, 1);
           break;
-        case "archive":
+        }
+        case "archive": {
           requestArchive(s.id, !isArchived);
           break;
-        case "reveal-working-directory":
+        }
+        case "reveal-working-directory": {
           void revealWorkingDirectory(s.worktree_path ?? s.cwd);
           break;
-        case "copy-working-directory":
+        }
+        case "copy-working-directory": {
           void copyToClipboard(
             s.worktree_path ?? s.cwd,
             t("rail.workingDirectoryCopied")
           );
           break;
-        case "copy-session-id":
+        }
+        case "copy-session-id": {
           void copyToClipboard(s.id, t("rail.sessionIdCopied"));
           break;
-        case "discard-worktree":
+        }
+        case "discard-worktree": {
           onDiscardWorktree(s);
           break;
+        }
       }
     };
 
@@ -1249,18 +1161,19 @@ export function SessionRail({
     };
 
     const nativeMenuItems: NativeContextMenuItem[] = [
-      ...(!isArchived
-        ? [
+      ...(isArchived
+        ? []
+        : [
             {
               type: "item",
               label: s.pinned ? t("rail.unpin") : t("rail.pin"),
               action: "pin",
             } as const,
-          ]
-        : []),
+          ]),
       { type: "item", label: t("rail.rename"), action: "rename" },
-      ...(!isArchived
-        ? [
+      ...(isArchived
+        ? []
+        : [
             {
               type: "item",
               label: t("rail.moveUp"),
@@ -1273,9 +1186,8 @@ export function SessionRail({
               action: "move-down",
               enabled: canMoveDown,
             } as const,
-          ]
-        : []),
-      ...(!isArchived ? [nativeSectionMenu] : []),
+          ]),
+      ...(isArchived ? [] : [nativeSectionMenu]),
       {
         type: "item",
         label: isArchived ? t("rail.unarchive") : t("rail.archive"),
@@ -1297,7 +1209,7 @@ export function SessionRail({
         label: t("rail.copySessionId"),
         action: "copy-session-id",
       },
-      ...(s.worktree_path !== null && !s.worktree_discarded
+      ...(s.worktree_path !== null && s.worktree_discarded !== true
         ? [
             { type: "separator" } as const,
             {
@@ -1319,16 +1231,17 @@ export function SessionRail({
       }
 
       if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        const rows = Array.from(
-          event.currentTarget
+        const rows = [
+          ...(event.currentTarget
             .closest("[data-session-list]")
-            ?.querySelectorAll<HTMLButtonElement>("[data-session-select]") ?? []
-        );
+            ?.querySelectorAll<HTMLButtonElement>("[data-session-select]") ??
+            []),
+        ];
         const current = rows.indexOf(event.currentTarget);
         const delta = event.key === "ArrowDown" ? 1 : -1;
         const next =
           rows[Math.min(rows.length - 1, Math.max(0, current + delta))];
-        if (next && next !== event.currentTarget) {
+        if (next != null && next !== event.currentTarget) {
           event.preventDefault();
           next.focus();
         }
@@ -1634,17 +1547,17 @@ export function SessionRail({
             />
             <ContextMenuContent className="min-w-56">
               <ContextMenuGroup>
-                {!isArchived ? (
+                {isArchived ? null : (
                   <ContextMenuItem onClick={() => onPin(s.id, !s.pinned)}>
                     <Pin />
                     {s.pinned ? t("rail.unpin") : t("rail.pin")}
                   </ContextMenuItem>
-                ) : null}
+                )}
                 <ContextMenuItem onClick={startRename}>
                   <Pencil />
                   {t("rail.rename")}
                 </ContextMenuItem>
-                {!isArchived ? (
+                {isArchived ? null : (
                   <>
                     <ContextMenuItem
                       disabled={!canMoveUp}
@@ -1661,8 +1574,8 @@ export function SessionRail({
                       {t("rail.moveDown")}
                     </ContextMenuItem>
                   </>
-                ) : null}
-                {!isArchived ? (
+                )}
+                {isArchived ? null : (
                   <ContextMenuSub>
                     <ContextMenuSubTrigger>
                       <Hash />
@@ -1697,7 +1610,7 @@ export function SessionRail({
                       </ContextMenuItem>
                     </ContextMenuSubContent>
                   </ContextMenuSub>
-                ) : null}
+                )}
                 <ContextMenuItem
                   onClick={() => requestArchive(s.id, !isArchived)}
                 >
@@ -1737,7 +1650,7 @@ export function SessionRail({
               </ContextMenuGroup>
               {/* Discarding deletes uncommitted work, so it sits apart from the reversible actions
               and only appears while there is still a checkout to remove. */}
-              {s.worktree_path !== null && !s.worktree_discarded ? (
+              {s.worktree_path !== null && s.worktree_discarded !== true ? (
                 <>
                   <ContextMenuSeparator />
                   <ContextMenuGroup>
@@ -1764,8 +1677,8 @@ export function SessionRail({
     const paths = projectPathsForSection(sectionId);
     const projectIndex = paths.indexOf(project.path);
     const canMoveUp = projectIndex > 0;
-    const canMoveDown = projectIndex >= 0 && projectIndex < paths.length - 1;
-    const open = projectOrganization.collapsed[project.path] !== true;
+    const canMoveDown = projectIndex !== -1 && projectIndex < paths.length - 1;
+    const open = !projectOrganization.collapsed[project.path];
     // Only registry Projects can be removed; entries synthesized from live sessions would
     // reappear on the next refresh, so the action stays hidden for them.
     const removable = projects.some(
@@ -1963,7 +1876,7 @@ export function SessionRail({
     );
     const canMoveUp = sectionIndex > 0;
     const canMoveDown =
-      sectionIndex >= 0 && sectionIndex < taskSections.sections.length - 1;
+      sectionIndex !== -1 && sectionIndex < taskSections.sections.length - 1;
     const archiveSection = async () => {
       const tasks = [
         ...rows,
@@ -1972,7 +1885,7 @@ export function SessionRail({
         ),
       ];
       await Promise.all(
-        tasks.map((row) => Promise.resolve(onArchive(row.id, true)))
+        tasks.map(async (row) => await onArchive(row.id, true))
       );
     };
     return (
@@ -2495,7 +2408,7 @@ export function SessionRail({
                       </div>
                     </Collapsible>
                   ) : null}
-                  {creatingSectionFor !== undefined ? (
+                  {creatingSectionFor === undefined ? null : (
                     <div data-task-section-creation className="px-2 pt-2 pb-1">
                       <Input
                         autoFocus
@@ -2520,7 +2433,7 @@ export function SessionRail({
                         }}
                       />
                     </div>
-                  ) : null}
+                  )}
                   {unsectioned.length > 0 || dragItem?.kind === "task" ? (
                     <SidebarDropZone
                       location={{

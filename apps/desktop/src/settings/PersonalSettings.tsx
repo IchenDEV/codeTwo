@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Download, RotateCcw } from "@/components/ui/icons";
@@ -19,12 +19,16 @@ import {
   checkForAppUpdates,
   getAppUpdateStatus,
   importSessionFiles,
-  type AppUpdateStatus,
-  type KeymapEntry,
-  type SessionImportResult,
 } from "../bridge";
-import { useLanguage, useT, type LanguagePreference } from "../i18n";
-import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
+import type {
+  AppUpdateStatus,
+  KeymapEntry,
+  SessionImportResult,
+} from "../bridge";
+import { useLanguage, useT } from "../i18n";
+import { td } from "../i18n/dynamic";
+import { en as EN_STRINGS, LOCALES } from "../i18n/strings";
+import type { StringKey } from "../i18n/strings";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
@@ -93,7 +97,7 @@ export function GeneralSettingsPage({
       .then((status) => {
         if (active) setUpdate(status);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (active) setUpdate({ state: "unavailable", message: String(error) });
       });
     return () => {
@@ -109,7 +113,7 @@ export function GeneralSettingsPage({
         .then((status) => {
           if (active) setUpdate(status);
         })
-        .catch((error) => {
+        .catch((error: unknown) => {
           if (active)
             setUpdate({ state: "unavailable", message: String(error) });
         });
@@ -122,20 +126,29 @@ export function GeneralSettingsPage({
 
   const updateHint = (() => {
     switch (update?.state) {
-      case "ready":
+      case "ready": {
         return t("settings.updateReady", {
           version: update.currentVersion ?? t("settings.updateUnknownVersion"),
         });
-      case "checking":
+      }
+      case "checking": {
         return t("settings.updateChecking");
-      case "not-configured":
+      }
+      case "not-configured": {
         return t("settings.updateNotConfigured");
-      case "unsupported":
+      }
+      case "unsupported": {
         return t("settings.updateUnsupported");
-      case "unavailable":
+      }
+      case "unavailable": {
         return t("settings.updateUnavailable");
-      default:
+      }
+      case undefined: {
+        throw new Error("Not implemented yet: undefined case");
+      }
+      default: {
         return t("settings.updateLoading");
+      }
     }
   })();
 
@@ -151,10 +164,7 @@ export function GeneralSettingsPage({
   return (
     <Page title={t("settings.general")} description={t("settings.generalHint")}>
       <Row label={t("settings.language")} hint={t("settings.languageHint")}>
-        <Select
-          value={language}
-          onValueChange={(value) => setLanguage(value as LanguagePreference)}
-        >
+        <Select value={language} onValueChange={(value) => setLanguage(value!)}>
           <SelectTrigger size="sm" className="w-44 justify-between">
             <SelectValue />
           </SelectTrigger>
@@ -163,13 +173,13 @@ export function GeneralSettingsPage({
               <SelectItem value="system">
                 {t("settings.languageSystem")}
               </SelectItem>
-              {(Object.keys(LOCALES) as (keyof typeof LOCALES)[]).map(
-                (locale) => (
+              {[...Object.keys(LOCALES)]
+                .filter((key): key is keyof typeof LOCALES => key in LOCALES)
+                .map((locale) => (
                   <SelectItem key={locale} value={locale}>
                     {LOCALES[locale].label}
                   </SelectItem>
-                )
-              )}
+                ))}
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -222,7 +232,7 @@ export function GeneralSettingsPage({
           size="compact"
           type="number"
           min={100}
-          max={200000}
+          max={200_000}
           step={1000}
           value={terminal.scrollback}
           onChange={(event) =>
@@ -238,8 +248,12 @@ export function GeneralSettingsPage({
 export function ImportSettingsPage({
   projectPath,
   importer = importSessionFiles,
-  onImported = async () => {},
-  onOpenSession = () => {},
+  onImported = async () => {
+    /* empty */
+  },
+  onOpenSession = () => {
+    /* empty */
+  },
 }: {
   projectPath: string;
   importer?: (fallbackCwd: string) => Promise<SessionImportResult | null>;
@@ -259,8 +273,8 @@ export function ImportSettingsPage({
       if (!next) return;
       setResult(next);
       if (next.imported > 0) await onImported();
-    } catch (cause) {
-      setError(t("settings.importFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.importFailed", { error: String(error) }));
     } finally {
       setImporting(false);
     }
@@ -290,7 +304,7 @@ export function ImportSettingsPage({
             : t("settings.chooseSessionFiles")}
         </Button>
       </Row>
-      {error && (
+      {error != null && error !== "" && (
         <p role="alert" className="text-metadata text-destructive mt-3">
           {error}
         </p>
@@ -322,7 +336,7 @@ export function ImportSettingsPage({
               </p>
             ))}
           </div>
-          {result.sessions[0] && (
+          {result.sessions[0] != null && (
             <Button
               variant="secondary"
               size="sm"
@@ -350,17 +364,14 @@ export function KeybindingsSettingsPage({
   onReset?: (action: string) => void;
 }) {
   const t = useT();
-  const byAction = useMemo(
-    () => new Map(bindings.map((binding) => [binding[0], binding])),
-    [bindings]
-  );
-  const conflicts = useMemo(() => {
+  const byAction = new Map(bindings.map((binding) => [binding[0], binding]));
+  const conflicts = (() => {
     const seen = new Map<string, number>();
     for (const [, key] of bindings) seen.set(key, (seen.get(key) ?? 0) + 1);
     return new Set(
       [...seen.entries()].filter(([, count]) => count > 1).map(([key]) => key)
     );
-  }, [bindings]);
+  })();
   const known = new Set(GROUPS.flatMap((group) => group.actions));
   const groups = [
     ...GROUPS.map((group) => ({
@@ -379,8 +390,8 @@ export function KeybindingsSettingsPage({
     const entry = byAction.get(action);
     if (!entry) return null;
     const [, key, coreLabel] = entry;
-    const labelKey = `action.${action}` as StringKey;
-    const label = labelKey in EN_STRINGS ? t(labelKey) : coreLabel;
+    const labelKey = `action.${action}`;
+    const label = labelKey in EN_STRINGS ? td(t, labelKey) : coreLabel;
     return (
       <Row key={action} compact label={label}>
         {conflicts.has(key) && capturing !== action && (

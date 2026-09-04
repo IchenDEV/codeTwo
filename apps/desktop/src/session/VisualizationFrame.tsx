@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { TriangleAlert } from "@/components/ui/icons";
 import { Spinner } from "@/components/ui/spinner";
@@ -9,8 +9,8 @@ import { useT } from "../i18n";
 import {
   VISUALIZATION_THEME_VARIABLES,
   visualizationDocument,
-  type VisualizationReference,
 } from "./visualization";
+import type { VisualizationReference } from "./visualization";
 
 function safeWebLink(uri: string): string | null {
   try {
@@ -76,7 +76,7 @@ export function VisualizationFrame({
   const t = useT();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const confirmingLinkRef = useRef(false);
-  const token = useMemo(frameToken, []);
+  const token = frameToken();
   const [fragment, setFragment] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [height, setHeight] = useState(220);
@@ -153,7 +153,7 @@ export function VisualizationFrame({
         typeof message.url === "string"
       ) {
         const link = safeWebLink(message.url);
-        if (link && !confirmingLinkRef.current) {
+        if (link != null && link !== "" && !confirmingLinkRef.current) {
           confirmingLinkRef.current = true;
           void confirmNative(
             t("visualization.openLink", { url: link }),
@@ -171,11 +171,8 @@ export function VisualizationFrame({
     return subscribeVisualizationMessages(receive);
   }, [t, token]);
 
-  const source = useMemo(
-    () =>
-      fragment === null ? null : visualizationDocument(fragment, theme, token),
-    [fragment, theme, token]
-  );
+  const source =
+    fragment === null ? null : visualizationDocument(fragment, theme, token);
 
   if (failed) {
     return (
@@ -188,7 +185,7 @@ export function VisualizationFrame({
       </p>
     );
   }
-  if (!source) {
+  if (source == null || source === "") {
     return (
       <p
         role="status"

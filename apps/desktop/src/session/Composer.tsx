@@ -1,12 +1,5 @@
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type MutableRefObject,
-  type ReactNode,
-} from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { MutableRefObject, ReactNode } from "react";
 
 import { SearchField } from "@/components/business/search-field";
 import { SelectableRow } from "@/components/business/selectable-row";
@@ -61,35 +54,33 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import {
-  fallbackProviders,
-  type ConfigOptionInfo,
-  type AppshotCapture,
-  type GoalCapabilityInfo,
-  type GoalSnapshot,
-  type ModelChoice,
+import { fallbackProviders } from "../bridge";
+import type {
+  ConfigOptionInfo,
+  AppshotCapture,
+  GoalCapabilityInfo,
+  GoalSnapshot,
+  ModelChoice,
 } from "../bridge";
 import { briefOfferVisible } from "../editor/slotCard";
 import { useT } from "../i18n";
+import { td } from "../i18n/dynamic";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
-import { memoryPresetsForProvider, type SessionConfig } from "./config";
+import { memoryPresetsForProvider } from "./config";
+import type { SessionConfig } from "./config";
 import type { ContextWindow } from "./contextWindow";
 import { SESSION_MODES, sessionMode } from "./mode";
 import { useProviderModelFavorites } from "./modelFavorites";
 import { useProviderModelPreferences } from "./modelPreferences";
-import {
-  familyOf,
-  groupModels,
-  pickVariant,
-  variantOf,
-  type Effort,
-} from "./models";
+import { familyOf, groupModels, pickVariant, variantOf } from "./models";
+import type { Effort } from "./models";
 import type { SceneInfo } from "./scene";
 import { SceneChip } from "./SceneChip";
 import { worktreeGatingReason } from "./sessionEvents";
 // Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
-import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
+import { Statusline } from "./Statusline.tsx";
+import type { StatuslineUsage } from "./Statusline.tsx";
 
 interface ComposerProps {
   /** The document editor itself. The composer only owns the frame around it. */
@@ -169,7 +160,7 @@ interface ComposerProps {
 }
 
 function displayGitRef(reference: string | null | undefined): string | null {
-  if (!reference) return null;
+  if (reference == null || reference === "") return null;
   return reference
     .replace(/^refs\/heads\//, "")
     .replace(/^refs\/remotes\//, "");
@@ -212,16 +203,19 @@ export function CheckoutBar({
       : config.hasSession
         ? t("checkout.sessionWorktree")
         : t("checkout.newWorktree");
-  const projectDetail = checkout.branch
-    ? checkout.dirty > 0
-      ? t("checkout.branchDirty", {
-          branch: checkout.branch,
-          count: checkout.dirty,
-        })
-      : t("checkout.branchClean", { branch: checkout.branch })
-    : t("checkout.notRepository");
+  const projectDetail =
+    checkout.branch != null && checkout.branch !== ""
+      ? checkout.dirty > 0
+        ? t("checkout.branchDirty", {
+            branch: checkout.branch,
+            count: checkout.dirty,
+          })
+        : t("checkout.branchClean", { branch: checkout.branch })
+      : t("checkout.notRepository");
   const projectLabel =
-    !checkout.project || checkout.project === "."
+    checkout.project == null ||
+    checkout.project === "" ||
+    checkout.project === "."
       ? t("rail.noProject")
       : checkout.project;
 
@@ -291,7 +285,9 @@ export function CheckoutBar({
                     ? t("worktree.legacyUnknownHint")
                     : (config.activeWorktreeBaseline?.display ?? projectDetail)
                 }
-                onSelect={() => {}}
+                onSelect={() => {
+                  /* empty */
+                }}
               />
               <p className="text-callout text-muted-foreground px-2.5 pt-1.5 pb-1">
                 {t("worktree.fixedForSession")}
@@ -363,7 +359,7 @@ export function CheckoutBar({
         </PopoverContent>
       </Popover>
 
-      {checkout.branch && (
+      {checkout.branch != null && checkout.branch !== "" && (
         <Button
           type="button"
           variant="ghost"
@@ -512,7 +508,7 @@ export function SessionModePicker({
             title={t("config.mode")}
             disabled={disabled}
             aria-busy={disabled}
-            aria-label={`${t("config.mode")}: ${t(`mode.${active}` as "mode.ask")}`}
+            aria-label={`${t("config.mode")}: ${t(`mode.${active}`)}`}
             className={cn(
               disabled && "cursor-wait opacity-60 hover:bg-transparent"
             )}
@@ -522,7 +518,7 @@ export function SessionModePicker({
             ) : (
               <Lock className="size-3 shrink-0" />
             )}
-            <span>{t(`mode.${active}` as "mode.ask")}</span>
+            <span>{t(`mode.${active}`)}</span>
             <ChevronDown className="size-3 shrink-0 opacity-50" />
           </Chip>
         }
@@ -533,8 +529,8 @@ export function SessionModePicker({
           <SelectableRow
             key={m.id}
             selected={m.id === active}
-            label={t(`mode.${m.id}` as "mode.ask")}
-            description={t(`mode.${m.id}Hint` as "mode.askHint")}
+            label={t(`mode.${m.id}`)}
+            description={t(`mode.${m.id}Hint`)}
             disabled={disabled}
             onSelect={() => {
               onMode(m.id);
@@ -574,12 +570,10 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
         render={
           <Chip
             title={t("config.memory")}
-            aria-label={`${t("config.memory")}: ${t(`memory.preset.${active.id}` as "memory.preset.standard")}`}
+            aria-label={`${t("config.memory")}: ${t(`memory.preset.${active.id}`)}`}
           >
             <BrainCircuit className="size-3.5 shrink-0" />
-            <span>
-              {t(`memory.preset.${active.id}` as "memory.preset.standard")}
-            </span>
+            <span>{t(`memory.preset.${active.id}`)}</span>
             <ChevronDown className="size-3 shrink-0 opacity-50" />
           </Chip>
         }
@@ -590,11 +584,9 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
           <SelectableRow
             key={preset.id}
             selected={preset.id === active.id}
-            label={t(`memory.preset.${preset.id}` as "memory.preset.standard")}
-            description={t(
-              `memory.preset.${preset.id}Hint` as "memory.preset.standardHint"
-            )}
-            meta={preset.isDefault ? <DefaultBadge /> : undefined}
+            label={t(`memory.preset.${preset.id}`)}
+            description={t(`memory.preset.${preset.id}Hint`)}
+            meta={preset.isDefault === true ? <DefaultBadge /> : undefined}
             onSelect={() => {
               config.onMemoryPolicy(preset.read, preset.write);
               setOpen(false);
@@ -707,7 +699,7 @@ export function GoalPicker({
                 {goal.objective}
               </p>
               <p className="text-callout text-muted-foreground mt-0.5">
-                {t(`goal.status.${goal.status}` as "goal.status.active")}
+                {td(t, `goal.status.${goal.status}`)}
               </p>
             </div>
             <div className="flex gap-1.5">
@@ -807,7 +799,7 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
       ? config.activeWorktreeBaseline.display
       : selectedKind == null || gatingReason !== null
         ? t("worktree.off")
-        : t(`worktree.${selectedKind}` as "worktree.current");
+        : t(`worktree.${selectedKind}`);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -847,7 +839,7 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
                   ? t("worktree.legacyUnknown")
                   : selectedKind == null
                     ? t("worktree.off")
-                    : t(`worktree.${selectedKind}` as "worktree.current")
+                    : t(`worktree.${selectedKind}`)
               }
               description={
                 config.activeWorktreeUnknown
@@ -856,7 +848,9 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
                     t("worktree.offHint"))
               }
               disabled
-              onSelect={() => {}}
+              onSelect={() => {
+                /* empty */
+              }}
             />
             <p className="text-callout text-muted-foreground px-2.5 pt-2 pb-1">
               {t("worktree.fixedForSession")}
@@ -883,12 +877,12 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
                 ? t("worktree.resolving")
                 : option?.resolved
                   ? `${option.resolved.display} · ${t("worktree.localOnly")}`
-                  : option?.unavailable_reason || t("worktree.unavailable");
+                  : (option?.unavailable_reason ?? t("worktree.unavailable"));
               return (
                 <SelectableRow
                   key={kind}
                   selected={config.worktreeBase === kind}
-                  label={t(`worktree.${kind}` as "worktree.current")}
+                  label={t(`worktree.${kind}`)}
                   description={detail}
                   disabled={unavailable}
                   onSelect={() => {
@@ -973,8 +967,7 @@ export function ModelPicker({
   const providerChoices = providerConfig
     ? providerRegistry.filter(
         (candidate) =>
-          candidate.enabled !== false ||
-          candidate.id === providerConfig.provider
+          candidate.enabled || candidate.id === providerConfig.provider
       )
     : [];
   const pickerProvider = providerSwitcherEnabled ? browseProvider : provider;
@@ -995,11 +988,8 @@ export function ModelPicker({
     }
     onModel(id);
   };
-  const families = useMemo(() => groupModels(models), [models]);
-  const pickerFamilies = useMemo(
-    () => groupModels(pickerModels),
-    [pickerModels]
-  );
+  const families = groupModels(models);
+  const pickerFamilies = groupModels(pickerModels);
   const { favorites, toggle: toggleFavorite } =
     useProviderModelFavorites(pickerProvider);
   const { hidden: hiddenModels } = useProviderModelPreferences(pickerProvider);
@@ -1038,7 +1028,7 @@ export function ModelPicker({
     return null;
 
   const effortName = (e: Effort | null) =>
-    e ? t(`effort.${e}` as "effort.low") : t("composer.default");
+    e ? t(`effort.${e}`) : t("composer.default");
 
   const modelOpt = configOptions.find(
     (o) => o.category === "model" || o.id === "model"
@@ -1065,8 +1055,8 @@ export function ModelPicker({
   if (modelOpt) {
     // Keep the trigger anchored to the active Provider even while the popup browses another one.
     modelLabel =
-      modelOpt.choices.find((c) => c.id === modelOpt.current)?.name ||
-      modelOpt.current ||
+      (modelOpt.choices.find((c) => c.id === modelOpt.current)?.name ??
+        modelOpt.current) ||
       t("composer.defaultModel");
   } else {
     const active = models.find((m) => m.id === current);
@@ -1111,7 +1101,7 @@ export function ModelPicker({
   // discard that real ladder just because the model selector arrived through the older surface.
   if (effortOpt) {
     effortLabel =
-      effortOpt.choices.find((c) => c.id === effortOpt.current)?.name ||
+      effortOpt.choices.find((c) => c.id === effortOpt.current)?.name ??
       effortOpt.current;
     effortRows = effortOpt.choices.map((c) => ({
       key: c.id,
@@ -1578,7 +1568,7 @@ export function Composer({
   const [unfilledRequired, setUnfilledRequired] = useState<string[]>([]);
   useEffect(() => {
     const onRequiredSlots = (event: Event) => {
-      const detail = (event as CustomEvent<string[]>).detail;
+      const { detail } = event as CustomEvent<string[]>;
       setUnfilledRequired(Array.isArray(detail) ? detail : []);
     };
     window.addEventListener("codetwo-required-slots", onRequiredSlots);
@@ -1609,7 +1599,7 @@ export function Composer({
         multiple
         hidden
         onChange={(event) => {
-          const files = Array.from(event.currentTarget.files ?? []);
+          const files = [...(event.currentTarget.files ?? [])];
           event.currentTarget.value = "";
           if (files.length > 0) void onAttachImages(files);
         }}
@@ -1694,9 +1684,9 @@ export function Composer({
         compactDisabledReason={
           running || loading
             ? t("context.compactBusy")
-            : !composerEmpty
-              ? t("context.compactDraft")
-              : null
+            : composerEmpty
+              ? null
+              : t("context.compactDraft")
         }
       />
 
@@ -1915,7 +1905,11 @@ export function Composer({
           <div
             className={cn(
               "min-h-0 overflow-y-auto",
-              docMode ? "bn-doc-mode flex-1" : hero ? "min-h-28 py-3" : "py-2"
+              docMode
+                ? "bn-doc-mode flex-1"
+                : hero === true
+                  ? "min-h-28 py-3"
+                  : "py-2"
             )}
             style={docMode ? undefined : { maxHeight: applied }}
           >

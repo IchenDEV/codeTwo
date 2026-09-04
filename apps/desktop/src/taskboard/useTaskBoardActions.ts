@@ -2,15 +2,14 @@ import type { Dispatch, FormEvent, SetStateAction } from "react";
 
 import { confirmNative } from "@/bridge";
 import type { Translate } from "@/i18n";
-import { useToast } from "@/ui/toast";
+import type { useToast } from "@/ui/toast";
 
-import {
-  createBoardTask,
-  filterBoardTasks,
-  type BoardAction,
-  type BoardFilters,
-  type BoardTask,
-  type TaskStatus,
+import { createBoardTask, filterBoardTasks } from "./taskBoard";
+import type {
+  BoardAction,
+  BoardFilters,
+  BoardTask,
+  TaskStatus,
 } from "./taskBoard";
 import type { TaskEditorValue } from "./TaskEditorDialog";
 import type {
@@ -57,7 +56,7 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
   };
 
   const saveEditor = (value: TaskEditorValue): void => {
-    const editor = options.editor;
+    const { editor } = options;
     if (!editor) return;
     if (editor.task) {
       options.dispatch({
@@ -145,7 +144,7 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
 
   const copyCheckout = (path: string): void => {
     const write = navigator.clipboard?.writeText(path);
-    if (!write) {
+    if (write == null) {
       options.toast(options.t("taskboard.copyCheckoutFailed"), "error");
       return;
     }

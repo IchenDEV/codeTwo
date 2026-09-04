@@ -5,7 +5,7 @@ import { activateDom, dom, restoreDom } from "../../tests/domTestHarness";
 
 const normalizeLineEndings = (value: string) => value.replaceAll("\r\n", "\n");
 const source = normalizeLineEndings(
-  await Bun.file(new URL("./remote-entry.tsx", import.meta.url)).text()
+  await Bun.file(new URL("remote-entry.tsx", import.meta.url)).text()
 );
 const remoteShell = normalizeLineEndings(
   await Bun.file(
@@ -13,7 +13,7 @@ const remoteShell = normalizeLineEndings(
   ).text()
 );
 const shellScript =
-  remoteShell.match(/<script>\n([\s\S]*?)\n    <\/script>/)?.[1] || "";
+  /<script>\n([\s\S]*?)\n {4}<\/script>/u.exec(remoteShell)?.[1] ?? "";
 let restoreRemoteGlobals: (() => void) | null = null;
 
 function response(body, status = 200) {
@@ -65,7 +65,7 @@ async function mountRemoteShell(featureEnabled = true) {
   };
   activateDom();
   dom.document.open();
-  dom.document.write(remoteShell.replace(/<script>[\s\S]*<\/script>/, ""));
+  dom.document.write(remoteShell.replace(/<script>[\s\S]*<\/script>/u, ""));
   dom.document.close();
   dom.window.__CODETWO_REMOTE_TEST__ = true;
   dom.window.localStorage.setItem("codetwo.remote.bearer", "test-bearer");
@@ -83,15 +83,15 @@ async function mountRemoteShell(featureEnabled = true) {
     },
     prepareDraft() {
       const value = mountedCanvasOptions?.value;
-      if (value) {
+      if (value != null) {
         return {
           envelope: {
             ...value,
             elements: Array.isArray(value.elements) ? [...value.elements] : [],
-            appState: { ...(value.appState || {}) },
+            appState: { ...value.appState },
           },
           manifest: { objects: [] },
-          theme: value.theme || "light",
+          theme: value.theme ?? "light",
         };
       }
       return {
@@ -110,7 +110,7 @@ async function mountRemoteShell(featureEnabled = true) {
       };
     },
     reset(_root: HTMLElement, value: any) {
-      if (mountedCanvasOptions) mountedCanvasOptions.value = value;
+      if (mountedCanvasOptions != null) mountedCanvasOptions.value = value;
     },
     prepareFreeze: async () => ({
       envelope: {
@@ -146,7 +146,7 @@ async function mountRemoteShell(featureEnabled = true) {
     return response({});
   };
   class FakeWebSocket {
-    static OPEN = 1;
+    static readonly OPEN = 1;
     readyState = 1;
     sent: any[] = [];
     onopen: (() => void) | null = null;
@@ -216,7 +216,7 @@ describe("Remote Canvas island draft seam", () => {
   });
 
   test("does not add browser persistence to the Remote entry", () => {
-    expect(source).not.toMatch(/localStorage|sessionStorage|indexedDB/i);
+    expect(source).not.toMatch(/localStorage|sessionStorage|indexedDB/iu);
   });
 
   test("keeps rejected provider recovery explicit and avoids dead mutable-head restoration", () => {
@@ -238,7 +238,7 @@ describe("Remote Canvas island draft seam", () => {
     const emojiTitle = "😀".repeat(200);
     const marker = `[canvas-history-json ${JSON.stringify({ version: 1, id: "history-1", revision: 4, title: emojiTitle, text_originals: [] })}]`;
     expect(api.parseCanvasHistoryMarker(marker).title).toBe(emojiTitle);
-    expect(api.parseCanvasHistoryMarker(marker + "x")).toBeNull();
+    expect(api.parseCanvasHistoryMarker(`${marker}x`)).toBeNull();
     const historyTarget = dom.document.createElement("div");
     const escapedTitle = "line\n] bracket";
     const escapedMarker = `[canvas-history-json ${JSON.stringify({ version: 1, id: "history-2", revision: 1, title: escapedTitle, text_originals: [] })}]`;
@@ -264,7 +264,7 @@ describe("Remote Canvas island draft seam", () => {
     api.menuButton.dispatchEvent(
       new dom.window.MouseEvent("click", { bubbles: true })
     );
-    expect(dom.document.getElementById("canvas-menu-panel").hidden).toBe(false);
+    expect(dom.document.querySelector("#canvas-menu-panel").hidden).toBe(false);
     expect(api.menuCanvasButton.getAttribute("aria-label")).toBe("Canvas");
     api.setCanvasFeature(false);
     api.setPromptBlocks([{ type: "text", text: "/canvas" }]);
@@ -287,9 +287,7 @@ describe("Remote Canvas island draft seam", () => {
     ]);
     expect(api.getPromptBlocks()[1].id).toBe("draft-1");
     expect(
-      dom.document
-        .querySelector(".canvas-mount")
-        ?.getAttribute("data-canvas-mounted")
+      dom.document.querySelector(".canvas-mount")?.dataset.canvasMounted
     ).toBe("true");
     expect(remote.mountedCanvasOptions?.theme).toBe("dark");
     cleanupRemoteShell();
@@ -326,7 +324,7 @@ describe("Remote Canvas island draft seam", () => {
 
       const trace = requests
         .slice(requestStart)
-        .map(([path, options]) => `${options.method || "GET"} ${path}`);
+        .map(([path, options]) => `${options.method ?? "GET"} ${path}`);
       expect(trace).toEqual(["POST /api/canvas/drafts"]);
       expect(
         trace.some(
@@ -376,7 +374,7 @@ describe("Remote Canvas island draft seam", () => {
 
       const trace = requests
         .slice(requestStart)
-        .map(([path, options]) => `${options.method || "GET"} ${path}`);
+        .map(([path, options]) => `${options.method ?? "GET"} ${path}`);
       expect(trace).toEqual([
         "POST /api/canvas/drafts",
         "POST /api/canvas/drafts/draft-1/tombstone",
@@ -432,7 +430,7 @@ describe("Remote Canvas island draft seam", () => {
     expect(
       api.submitPrompt("session-1", accepted.doc, true, sourceBlocks, accepted)
     ).toBe(true);
-    const requestId = socket.sent.at(-1).request_id;
+    const requestId = socket.sent.at(-1)!.request_id;
     expect(api.providerRecoverySize()).toBe(1);
     api.handleMessage({
       kind: "event",
@@ -463,7 +461,7 @@ describe("Remote Canvas island draft seam", () => {
     expect(
       api.submitPrompt("session-1", sourceBlocks, true, sourceBlocks)
     ).toBe(true);
-    const requestId = socket.sent.at(-1).request_id;
+    const requestId = socket.sent.at(-1)!.request_id;
     api.setPromptBlocks([{ type: "text", text: "newer text" }]);
     api.handleMessage({
       kind: "event",

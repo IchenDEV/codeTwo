@@ -5,9 +5,10 @@ import { cn } from "@/lib/utils";
 import { useT } from "../i18n";
 import { dirtyKey, useDirtyPaths } from "./dirty";
 import { FilePanel } from "./FilePanel";
-import { FileViewer, type FileRevealTarget } from "./FileViewer";
+import { FileViewer } from "./FileViewer";
+import type { FileRevealTarget } from "./FileViewer";
 
-type FileDockContentProps = {
+interface FileDockContentProps {
   cwd: string | null;
   openFiles: string[];
   activeFile: string | null;
@@ -18,7 +19,7 @@ type FileDockContentProps = {
   onInsertFile: (path: string) => void;
   onOpenFile: (path: string) => void;
   onSendText: (text: string) => void;
-};
+}
 
 /** File tabs, viewer, and tree composed as one content module for the generic Dock container. */
 export function FileDockContent({
@@ -62,9 +63,11 @@ export function FileDockContent({
               >
                 <FileText className="size-3.5 shrink-0" />
                 <span className="truncate">{name}</span>
-                {cwd && dirtyPaths.has(dirtyKey(cwd, path)) && (
-                  <span className="bg-warning size-1.5 shrink-0 rounded-full" />
-                )}
+                {cwd != null &&
+                  cwd !== "" &&
+                  dirtyPaths.has(dirtyKey(cwd, path)) && (
+                    <span className="bg-warning size-1.5 shrink-0 rounded-full" />
+                  )}
                 <X
                   className="hover:text-destructive size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                   onClick={(event) => {
@@ -80,7 +83,10 @@ export function FileDockContent({
           })}
         </div>
 
-        {activeFile && cwd ? (
+        {activeFile != null &&
+        activeFile !== "" &&
+        cwd != null &&
+        cwd !== "" ? (
           <FileViewer
             key={activeFile}
             cwd={cwd}

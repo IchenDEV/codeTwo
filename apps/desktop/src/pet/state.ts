@@ -37,10 +37,10 @@ export function petConversationBubbleForActivity(
   if (!activity.loading && !activity.running && !activity.awaitingInput)
     return null;
 
-  const normalized = assistantText.replace(/\s+/gu, " ").trim();
+  const normalized = assistantText.replaceAll(/\s+/gu, " ").trim();
   if (!normalized) return null;
 
-  const characters = Array.from(normalized);
+  const characters = [...normalized];
   if (characters.length <= PET_BUBBLE_MAX_CHARACTERS) return normalized;
   return `…${characters.slice(-(PET_BUBBLE_MAX_CHARACTERS - 1)).join("")}`;
 }

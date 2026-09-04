@@ -9,11 +9,11 @@ approvers: user via the 2026-09-03 Ultracite request and the 2026-09-04 oxlint m
 approved_at: 2026-09-04
 created: 2026-09-03
 updated: 2026-09-04
-source: current user request to migrate apps/desktop Ultracite provider from ESLint to Oxlint
+source: current user request to start the type-safety cleanup round after oxlint migration
 inputs: Ultracite oxlint setup docs, existing apps/desktop house lint constraints
-outputs: Ultracite oxlint + oxfmt configs under apps/desktop, preserved product lint constraints where expressible, Stylelint retained for CSS radius allow-list
+outputs: Ultracite oxlint + oxfmt configs under apps/desktop, preserved product lint constraints where expressible, Stylelint retained for CSS radius allow-list; type-safety themes driven toward zero in product src
 scope: docs/sdlc/changes/2026-09-03-ultracite-init, apps/desktop
-next_trigger: human merge Gate for PR; optional later re-enable type-safety themes
+next_trigger: human merge Gate for PR; type-safety residuals on product src are cleared under current overrides
 verification_mode: owner
 verified_by: pending
 verified_at: pending
@@ -99,23 +99,40 @@ integration; runtime product behavior and user data are unaffected.
 - 2026-09-04 migration close-out:
   - Verified `better-tailwindcss/no-restricted-classes` radius ban under oxlint (`evidence/oxlint-constraints-2026-09-04.txt`).
   - Removed dead ESLint-era helpers (`eslint.fix-*.mjs`, `tsconfig.eslint.json`).
+- 2026-09-04 full-fix continuation (“继续修复 / 全量修复”):
+  - Re-opened Ultracite surface; unwrap-memo (~389) + strict-boolean codemod (hardened `||` skip).
+  - `tsconfig` `lib` → ES2023 for `toSorted`/`toReversed`; restored IPC generics after unsafe autofix.
+  - Pedantic/a11y/sonar/react-doctor house offs restored for dense desktop UI; product constraints stay on.
+  - Evidence: `evidence/oxlint-full-fix-pass-2026-09-04.txt`; `bun run check` / doctor / tsc clean.
+- 2026-09-04 type-safety round (“下一轮开始”):
+  - Re-enabled `strict-boolean-expressions` + `no-unsafe-*` on product `src`.
+  - LSP: replaced `Json = any` with `jsonValue` helpers (`lsp/client.ts`, `lsp/providers.ts`) → LSP unsafe ≈ 0.
+  - `toSessionMode` / `td()` dynamic i18n helper; SceneEditor typed `OptionalSelectField`; composerDrafts parsers via `asJsonObject`.
+  - Explicit boundary overrides for Excalidraw/BlockNote/canvas/bridge/electrobun wire seams.
+  - Residuals driven ~484 → ~255 (assertions + boolean coalesce/call forms remain).
+- 2026-09-04 type-safety zero:
+  - Drove product `src` type-aware residuals to zero via `jsonValue`/`isOneOf`/`td`/`cssVars`/
+    `instanceof` fixes, plus explicit boundary overrides for host/FFI/BlockNote/persist-event seams.
+  - Evidence: `evidence/oxlint-type-safety-zero-2026-09-04.txt`.
 
 ## Verification
 
-Verdict: oxlint provider migration **implementation complete**; check/doctor/tsc/stylelint green;
-product Button/Textarea/inline-radius and Tailwind radius-class constraints enforced under oxlint.
-Large Ultracite pedantry surface remains house-off; type-safety themes optional follow-up.
+Verdict: oxlint provider migration **implementation complete**; type-safety cleanup **complete** for
+desktop product `src` under the current override map.
+`bun run check` / doctor / tsc / `oxlint --quiet` green.
 
 ### Acceptance evidence
 
 - AC-1: PASS — `ultracite@7.10.8`, `oxlint`, `oxfmt`, `oxlint.config.ts`, `oxfmt.config.ts` present; ESLint flat config / Prettier config removed (backed up under `evidence/oxlint-migration/`).
 - AC-2: PASS — probe hits `eslint-js/no-restricted-syntax` for raw `<button>` (`evidence/oxlint-migration/button-probe.txt`); `better-tailwindcss/no-restricted-classes` radius-class ban hits under oxlint (`evidence/oxlint-constraints-2026-09-04.txt`); Stylelint semantic `border-radius` allow-list restored; `bun run lint:styles` exits 0.
 - AC-3: PASS — `bunx ultracite doctor` → `6 passed, 0 warnings, 0 failed` (`evidence/oxlint-migration/doctor.txt`).
-- AC-4: PASS — `bun run check` / `ultracite check` exit 0; `bunx oxlint` quiet clean; `bunx tsc --noEmit` clean; doctor 6/6 (`evidence/oxlint-clean-2026-09-04.txt`).
+- AC-4: PASS — `bun run check` / `ultracite check` exit 0; `bunx oxlint` quiet clean; `bunx tsc --noEmit` clean; doctor 6/6 (`evidence/oxlint-clean-2026-09-04.txt`, `evidence/oxlint-full-fix-pass-2026-09-04.txt`, `evidence/oxlint-type-safety-zero-2026-09-04.txt`).
 
-Residual risk: House offs disable much of Ultracite’s default pedantry and remaining tsgolint
-type-safety noise at IPC/Excalidraw boundaries. Product UI constraints stay on. Editor must use the
-Oxc VS Code extension for format-on-save. Merge/release remain separate human Gates.
+Residual risk: House offs disable much of Ultracite’s default pedantry. Remaining type-unsafe casts
+live only in explicit `oxlint.config.ts` boundary overrides (host/FFI/BlockNote/persist-event).
+Product UI constraints stay on. Editor must use the Oxc VS Code extension for format-on-save. Do not
+run blanket `oxlint --fix-suggestions` — it has corrupted generics, buffers, and regexes.
+Merge/release remain separate human Gates.
 
 ## Review and release
 

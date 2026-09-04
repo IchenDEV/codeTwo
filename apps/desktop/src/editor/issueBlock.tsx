@@ -33,7 +33,7 @@ export interface IssueRefProps {
  */
 export function issueContextBody(context: string): string {
   const cut = context.indexOf("\n\n");
-  return cut < 0 ? "" : context.slice(cut + 2);
+  return cut === -1 ? "" : context.slice(cut + 2);
 }
 
 /**

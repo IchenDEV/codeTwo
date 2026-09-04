@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { GitHubPullRequest } from "@/bridge";
-import {
-  loadSidebarPullRequests,
-  type SidebarPullRequestStatus,
-} from "@/sidebar/sidebarGitStatus";
+import { loadSidebarPullRequests } from "@/sidebar/sidebarGitStatus";
+import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus";
 
 import { sessionCheckoutPath } from "./workspaceModel";
 import type { ProjectedTask } from "./workspaceTypes";
@@ -18,19 +16,20 @@ export function useTaskPullRequests(
   const [pullRequestsByPath, setPullRequestsByPath] = useState<
     ReadonlyMap<string, SidebarPullRequestStatus | null>
   >(() => new Map());
-  const targetPaths = useMemo(() => {
+  const targetPaths = (() => {
     const paths = new Set<string>();
     for (const { sessions } of tasks) {
       for (const session of sessions) {
         const path = sessionCheckoutPath(session);
-        if (path) paths.add(path);
+        if (path != null && path !== "") paths.add(path);
         if (paths.size === 48) break;
       }
       if (paths.size === 48) break;
     }
-    if (selectedCheckoutPath) paths.add(selectedCheckoutPath);
+    if (selectedCheckoutPath != null && selectedCheckoutPath !== "")
+      paths.add(selectedCheckoutPath);
     return [...paths];
-  }, [tasks, selectedCheckoutPath]);
+  })();
   const targetKey = targetPaths.join("\u0000");
 
   useEffect(() => {

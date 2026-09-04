@@ -1,10 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 import { useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
+import { isOneOf } from "../lib/jsonValue";
 
 export type DockSurface =
   | "trajectory"
@@ -36,15 +32,25 @@ export type DockSurface =
 export type DockTab = DockSurface | "home";
 export type DockContentMap = Partial<Record<DockSurface, ReactNode>>;
 
+const DOCK_SURFACES = [
+  "trajectory",
+  "terminal",
+  "browser",
+  "side-chat",
+  "files",
+  "git",
+  "pull-request",
+] as const satisfies readonly DockSurface[];
+
 /** The picker's cards, in the order a coding session tends to want them. */
-type DockSurfaceDefinition = {
+interface DockSurfaceDefinition {
   id: DockSurface;
   icon: typeof Globe;
   titleKey: StringKey;
   descKey: StringKey;
-};
+}
 
-type DockProps = {
+interface DockProps {
   /** Whether the dock is expanded. It stays mounted while closed so shells survive. */
   open: boolean;
   /** null while closed; the last surface stays rendered underneath the collapse animation. */
@@ -60,7 +66,7 @@ type DockProps = {
   availableSurfaces?: DockSurface[];
   /** Content is inert until its matching surface is enabled and mounted by the container. */
   content?: DockContentMap;
-};
+}
 
 const SURFACES: DockSurfaceDefinition[] = [
   {
@@ -177,10 +183,7 @@ export function Dock({
 
   // Never let the dock squeeze the document below a usable measure. Persist the preferred width,
   // but clamp only what is applied so it returns in full on a larger window.
-  const maxForPlacement = useCallback(
-    () => dockMaxWidth(window.innerWidth, reservedWidth),
-    [reservedWidth]
-  );
+  const maxForPlacement = () => dockMaxWidth(window.innerWidth, reservedWidth);
   const [maxSize, setMaxSize] = useState(maxForPlacement);
   useEffect(() => {
     const measure = () => setMaxSize(maxForPlacement());
@@ -306,7 +309,9 @@ export function Dock({
         ) : (
           <Tabs
             value={shown}
-            onValueChange={(v) => onTab(v as DockSurface)}
+            onValueChange={(v) => {
+              if (isOneOf(v, DOCK_SURFACES)) onTab(v);
+            }}
             className="flex min-h-0 flex-1 flex-col gap-0"
           >
             {/* The shared 46px height matches the main header, so this tab row and the breadcrumb

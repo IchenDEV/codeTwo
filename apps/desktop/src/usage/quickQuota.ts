@@ -12,7 +12,7 @@ export function quickQuotaProviderFor(
   activeProvider: string | null,
   recentProviders: readonly string[]
 ): string {
-  if (activeProvider) return activeProvider;
+  if (activeProvider != null && activeProvider !== "") return activeProvider;
   if (currentProvider === "codex") return currentProvider;
   return recentProviders.includes("codex") ? "codex" : currentProvider;
 }

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
-const source = (path: string) => readFileSync(resolve(root, path), "utf8");
+const source = (path: string) => readFileSync(resolve(root, path), "utf-8");
 
 const appSource = source("src/App.tsx");
 const styleSource = source("src/styles.css");
@@ -35,14 +35,14 @@ describe("desktop interaction performance contracts", () => {
       sideChatSource,
     ]) {
       expect(implementation).not.toMatch(
-        /liquid-gooey|LiquidSelectionGroup|LiquidActionSurface|data-gooey|<Liquid\b|Liquid\./
+        /liquid-gooey|LiquidSelectionGroup|LiquidActionSurface|data-gooey|<Liquid\b|Liquid\./u
       );
     }
 
     expect(packageSource).not.toContain('"liquid-gooey"');
     expect(lockSource).not.toContain('"liquid-gooey"');
     expect(tabsSource).not.toMatch(
-      /MutationObserver|ResizeObserver|getBoundingClientRect|useLiquidIndicator/
+      /MutationObserver|ResizeObserver|getBoundingClientRect|useLiquidIndicator/u
     );
     expect(sessionRailSource).not.toContain("typeof ResizeObserver");
   });
@@ -58,7 +58,7 @@ describe("desktop interaction performance contracts", () => {
       "./plugins/PluginManagerPage",
       "./docker/DockerPage",
     ]) {
-      expect(appSource).toContain(`import(\"${modulePath}\")`);
+      expect(appSource).toContain(`import("${modulePath}")`);
     }
 
     expect(appSource).not.toContain(
@@ -74,13 +74,13 @@ describe("desktop interaction performance contracts", () => {
       expect(pageSource).toContain("animate-data-page-in");
     }
 
-    const keyframes = styleSource.match(
-      /@keyframes data-page-in\s*\{([\s\S]*?)\n\s*\}/
+    const keyframes = /@keyframes data-page-in\s*\{([\s\S]*?)\n\s*\}/u.exec(
+      styleSource
     )?.[1];
     expect(keyframes).toContain("opacity:");
     expect(keyframes).not.toContain("transform:");
     expect(styleSource).toMatch(
-      /\.animate-data-page-in\s*\{[\s\S]*animation:\s*data-page-in\s+var\(--motion-slow\)/
+      /\.animate-data-page-in\s*\{[\s\S]*animation:\s*data-page-in\s+var\(--motion-slow\)/u
     );
   });
 
@@ -92,17 +92,17 @@ describe("desktop interaction performance contracts", () => {
     ]) {
       expect(pageSource).toContain("useDeferredValue");
       expect(pageSource).toContain("deferredQuery");
-      expect(pageSource).toMatch(/value=\{(?:props\.)?query\}/);
+      expect(pageSource).toMatch(/value=\{(?:props\.)?query\}/u);
     }
   });
 
   test("defers off-screen session-row paint without virtualizing rows out of the DOM", () => {
     expect(sessionRailSource).toContain("session-rail-row");
     expect(styleSource).toMatch(
-      /\.session-rail-row\s*\{[\s\S]*content-visibility:\s*auto;[\s\S]*contain-intrinsic-size:/
+      /\.session-rail-row\s*\{[\s\S]*content-visibility:\s*auto;[\s\S]*contain-intrinsic-size:/u
     );
     expect(styleSource).toMatch(
-      /\.session-rail-row:has\(\[aria-current="page"\]\)\s*\{[\s\S]*content-visibility:\s*visible;/
+      /\.session-rail-row:has\(\[aria-current="page"\]\)\s*\{[\s\S]*content-visibility:\s*visible;/u
     );
     expect(sessionRailSource).not.toContain("react-window");
     expect(sessionRailSource).not.toContain("react-virtualized");

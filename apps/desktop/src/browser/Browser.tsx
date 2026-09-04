@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CompositeActionRow } from "@/components/business/composite-action-row";
 import { Button } from "@/components/ui/button";
@@ -59,8 +53,8 @@ import {
   onBrowserRegistry,
   onBrowserTitle,
   openExternal,
-  type Annotation,
 } from "../bridge";
+import type { Annotation } from "../bridge";
 import { embeddedBrowserRenderer, registerBrowserWebview } from "../container";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
@@ -71,9 +65,8 @@ import {
   removeBrowserVisit,
   saveBrowserHistory,
   updateBrowserVisitTitle,
-  type BrowserHistoryState,
-  type StorageLike,
 } from "./history";
+import type { BrowserHistoryState, StorageLike } from "./history";
 
 const BLANK = "about:blank";
 
@@ -173,7 +166,7 @@ function MenuItem({
     >
       <Icon className="text-muted-foreground size-3.5 shrink-0" />
       <span className="flex-1">{label}</span>
-      {checked && <Check className="text-primary size-3.5 shrink-0" />}
+      {checked === true && <Check className="text-primary size-3.5 shrink-0" />}
     </Button>
   );
 }
@@ -187,10 +180,8 @@ function BrowserWebview({
   url: string;
   visible: boolean;
 }) {
-  const connect = useCallback(
-    (element: HTMLElement | null) => registerBrowserWebview(label, element),
-    [label]
-  );
+  const connect = (element: HTMLElement | null) =>
+    registerBrowserWebview(label, element);
   return (
     <electrobun-webview
       ref={connect}
@@ -269,30 +260,27 @@ export function BrowserPanel({
   const annotatingRef = useRef(annotating);
   annotatingRef.current = annotating;
 
-  const applyRegistry = useCallback(
-    (registry: import("../bridge").BrowserTab[]) => {
-      const restored = registry
-        .map((tab) => ({
-          id: Number(tab.id.replace(/^browser-/, "")),
-          url: tab.url,
-          title: tab.title,
-          agentActive: tab.agent_active,
-          leaseSession: tab.lease_session,
-        }))
-        .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
-      if (restored.length === 0) return;
-      const selected = registry.find((tab) => tab.active);
-      const selectedId = selected
-        ? Number(selected.id.replace(/^browser-/, ""))
-        : restored[0].id;
-      const selectedTab =
-        restored.find((tab) => tab.id === selectedId) ?? restored[0];
-      setTabs(restored);
-      setActiveId(selectedTab.id);
-      setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
-    },
-    []
-  );
+  const applyRegistry = (registry: import("../bridge").BrowserTab[]) => {
+    const restored = registry
+      .map((tab) => ({
+        id: Number(tab.id.replace(/^browser-/, "")),
+        url: tab.url,
+        title: tab.title,
+        agentActive: tab.agent_active,
+        leaseSession: tab.lease_session,
+      }))
+      .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
+    if (restored.length === 0) return;
+    const selected = registry.find((tab) => tab.active);
+    const selectedId = selected
+      ? Number(selected.id.replace(/^browser-/, ""))
+      : restored[0].id;
+    const selectedTab =
+      restored.find((tab) => tab.id === selectedId) ?? restored[0];
+    setTabs(restored);
+    setActiveId(selectedTab.id);
+    setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
+  };
 
   useEffect(() => {
     void browserRegistrySnapshot().then(applyRegistry);
@@ -306,25 +294,24 @@ export function BrowserPanel({
     setHistoryState(loadBrowserHistory(localHistoryStorage()));
   }, [projectPath]);
 
-  const updateHistory = useCallback(
-    (update: (current: BrowserHistoryState) => BrowserHistoryState) => {
-      const storage = localHistoryStorage();
-      const current = loadBrowserHistory(storage);
-      const next = update(current);
-      saveBrowserHistory(storage, next);
-      setHistoryState(next);
-    },
-    []
-  );
+  const updateHistory = (
+    update: (current: BrowserHistoryState) => BrowserHistoryState
+  ) => {
+    const storage = localHistoryStorage();
+    const current = loadBrowserHistory(storage);
+    const next = update(current);
+    saveBrowserHistory(storage, next);
+    setHistoryState(next);
+  };
 
   const patch = (id: number, f: (t: Tab) => Tab) =>
     setTabs((prev) => prev.map((x) => (x.id === id ? f(x) : x)));
 
   /** Where the native page belongs, in the window's own logical coordinates. */
-  const rect = useCallback(() => {
+  const rect = () => {
     const r = hostRef.current?.getBoundingClientRect();
     return r ? { x: r.left, y: r.top, width: r.width, height: r.height } : null;
-  }, []);
+  };
 
   /* Create/move/show the active tab's webview. This runs on every layout-affecting change, and
      `browser_open` is idempotent, so it doubles as the "keep it pinned to the placeholder" path. */
@@ -431,7 +418,7 @@ export function BrowserPanel({
     const left = tabs.filter((x) => x.id !== id);
     void browserClose(labelOf(id));
     setTabs(left);
-    if (id === activeId && left.length > 0) selectTab(left[left.length - 1]);
+    if (id === activeId && left.length > 0) selectTab(left.at(-1)!);
   };
 
   /* The page navigating itself is the normal case once you can actually browse: links, redirects,
@@ -443,7 +430,7 @@ export function BrowserPanel({
           void browserAnnotate(label, true);
         }
         const project = projectPathRef.current;
-        if (!project) return;
+        if (project == null || project === "") return;
         const title =
           tabsRef.current.find((tab) => labelOf(tab.id) === label)?.title ??
           null;
@@ -468,7 +455,7 @@ export function BrowserPanel({
           prev.map((x) => (labelOf(x.id) === label ? { ...x, title } : x))
         );
         const project = projectPathRef.current;
-        if (project && tab) {
+        if (project != null && project !== "" && tab) {
           updateHistory((current) =>
             updateBrowserVisitTitle(current, project, tab.url, title)
           );
@@ -619,7 +606,7 @@ export function BrowserPanel({
           spellCheck={false}
         />
 
-        {active.agentActive && (
+        {active.agentActive === true && (
           <Button
             variant="outline"
             size="sm"
@@ -781,7 +768,7 @@ export function BrowserPanel({
               {d.label}
             </Button>
           ))}
-          {device && (
+          {device != null && (
             <span className="text-metadata text-muted-foreground ml-auto font-mono">
               {device}px
             </span>
@@ -792,14 +779,19 @@ export function BrowserPanel({
       {/* ---- the page --------------------------------------------------------------------- */}
       {/* Electrobun keeps each sandboxed child webview aligned to its custom element. A device
           width narrows this container and the native page follows without accepting iframe CSP. */}
-      <div className={cn("relative min-h-0 flex-1", device && "bg-muted/40")}>
+      <div
+        className={cn(
+          "relative min-h-0 flex-1",
+          device != null && "bg-muted/40"
+        )}
+      >
         <div
           ref={hostRef}
           className={cn(
             "relative h-full",
-            device && "ring-foreground/15 mx-auto shadow-lg ring-1"
+            device != null && "ring-foreground/15 mx-auto shadow-lg ring-1"
           )}
-          style={device ? { width: device } : undefined}
+          style={device == null ? undefined : { width: device }}
         >
           {isDesktop &&
             tabs
@@ -830,7 +822,9 @@ export function BrowserPanel({
                     <CompositeActionRow
                       key={site.url}
                       accessibilityLabel={
-                        site.title || hostOf(site.url) || site.url
+                        site.title != null && site.title !== ""
+                          ? site.title
+                          : (hostOf(site.url) ?? site.url)
                       }
                       onSelect={() => go(site.url)}
                       className="gap-module-inset rounded-control px-module-inset py-module-inset hover:bg-fill-hover min-w-0 transition-colors"
@@ -844,7 +838,7 @@ export function BrowserPanel({
                           label={t("browser.removeRecent")}
                           onClick={() => {
                             const project = projectPathRef.current;
-                            if (!project) return;
+                            if (project == null || project === "") return;
                             updateHistory((current) =>
                               removeBrowserVisit(current, project, site.url)
                             );
@@ -855,7 +849,9 @@ export function BrowserPanel({
                       }
                     >
                       <span className="text-body block truncate font-medium">
-                        {site.title || hostOf(site.url) || site.url}
+                        {site.title != null && site.title !== ""
+                          ? site.title
+                          : (hostOf(site.url) ?? site.url)}
                       </span>
                       <span className="text-callout text-muted-foreground mt-0.5 flex min-w-0 items-center gap-2">
                         <span className="truncate font-mono">{site.url}</span>

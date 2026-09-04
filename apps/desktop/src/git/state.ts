@@ -22,7 +22,9 @@ export function gitFileSections(files: readonly GitFile[]): {
 
 /** A rename is one index operation even though Git needs both literal paths. */
 export function gitFilePathspecs(file: GitFile): string[] {
-  return file.original_path && file.original_path !== file.path
+  return file.original_path != null &&
+    file.original_path !== "" &&
+    file.original_path !== file.path
     ? [file.original_path, file.path]
     : [file.path];
 }
@@ -45,22 +47,30 @@ export function gitPhaseLabel(
   changeRequestLabel = "PR"
 ): string {
   switch (phase) {
-    case "staging":
+    case "staging": {
       return "Staging…";
-    case "unstaging":
+    }
+    case "unstaging": {
       return "Unstaging…";
-    case "checkpointing":
+    }
+    case "checkpointing": {
       return "Creating checkpoint…";
-    case "reverting":
+    }
+    case "reverting": {
       return "Reverting…";
-    case "committing":
+    }
+    case "committing": {
       return "Committing…";
-    case "pushing":
+    }
+    case "pushing": {
       return "Pushing…";
-    case "creating_pr":
+    }
+    case "creating_pr": {
       return `Creating ${changeRequestLabel}…`;
-    case "idle":
+    }
+    case "idle": {
       return "";
+    }
   }
 }
 
@@ -149,7 +159,7 @@ export function changeRequestPresentation(
       statusKind: "unavailable",
     };
   }
-  if (error) {
+  if (error != null && error !== "") {
     return {
       ...base,
       canCreate: false,
@@ -174,7 +184,11 @@ export function changeRequestPresentation(
       statusKind: "unavailable",
     };
   }
-  if (info.required_cli && !info.required_cli_available) {
+  if (
+    info.required_cli != null &&
+    info.required_cli !== "" &&
+    !info.required_cli_available
+  ) {
     return {
       ...base,
       canCreate: false,
@@ -185,14 +199,15 @@ export function changeRequestPresentation(
   return {
     ...base,
     canCreate: true,
-    status: info.required_cli
-      ? `${info.provider_name} ${label} creation is available through ${info.required_cli}.`
-      : `${info.provider_name} ${label} creation is available.`,
+    status:
+      info.required_cli != null && info.required_cli !== ""
+        ? `${info.provider_name} ${label} creation is available through ${info.required_cli}.`
+        : `${info.provider_name} ${label} creation is available.`,
     statusKind: "available",
   };
 }
 
-const MAX_RENDERED_DIFF_LINES = 4_000;
+const MAX_RENDERED_DIFF_LINES = 4000;
 
 /** Keep the DOM bounded even when the core's byte-bounded preview contains many tiny lines. */
 export function diffPreviewLines(

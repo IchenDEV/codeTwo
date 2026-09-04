@@ -1,3 +1,5 @@
+import { asJsonObject, parseJsonPayload } from "../lib/jsonValue";
+
 export type FeishuResourceTab = "messages" | "documents" | "bases";
 
 export const FEISHU_SIDEBAR_ORDER_KEY = "codetwo.feishu.sidebarOrder.v1";
@@ -30,7 +32,7 @@ function cloneEmptyOrder(): FeishuSidebarOrder {
 function isResourceTab(value: unknown): value is FeishuResourceTab {
   return (
     typeof value === "string" &&
-    FEISHU_RESOURCE_TABS.includes(value as FeishuResourceTab)
+    (FEISHU_RESOURCE_TABS as readonly string[]).includes(value)
   );
 }
 
@@ -45,7 +47,7 @@ function cleanIds(value: unknown): string[] {
       seen.add(id);
       return true;
     })
-    .slice(0, 2_000);
+    .slice(0, 2000);
 }
 
 export function loadFeishuSidebarOrder(
@@ -54,19 +56,16 @@ export function loadFeishuSidebarOrder(
   if (!storage) return cloneEmptyOrder();
   try {
     const raw = storage.getItem(FEISHU_SIDEBAR_ORDER_KEY);
-    if (!raw) return cloneEmptyOrder();
-    const value = JSON.parse(raw) as Record<string, unknown>;
-    if (value.version !== 1) return cloneEmptyOrder();
+    if (raw == null || raw === "") return cloneEmptyOrder();
+    const value = asJsonObject(parseJsonPayload(raw));
+    if (value == null || value.version !== 1) return cloneEmptyOrder();
     const supplied = Array.isArray(value.sectionOrder)
       ? value.sectionOrder.filter(isResourceTab)
       : [];
-    const sectionOrder = [
+    const sectionOrder: FeishuResourceTab[] = [
       ...new Set([...supplied, ...FEISHU_RESOURCE_TABS]),
-    ] as FeishuResourceTab[];
-    const resourceOrder =
-      value.resourceOrder && typeof value.resourceOrder === "object"
-        ? (value.resourceOrder as Record<string, unknown>)
-        : {};
+    ];
+    const resourceOrder = asJsonObject(value.resourceOrder) ?? {};
     return {
       version: 1,
       sectionOrder,

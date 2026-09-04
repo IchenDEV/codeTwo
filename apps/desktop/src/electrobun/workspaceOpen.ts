@@ -13,13 +13,17 @@ export function workspaceOpenCommand(
   if (platform !== "darwin") return null;
 
   switch (target) {
-    case "cursor":
+    case "cursor": {
       return ["/usr/bin/open", "-a", "Cursor", path];
-    case "antigravity":
+    }
+    case "antigravity": {
       return ["/usr/bin/open", "-a", "Antigravity", path];
-    case "finder":
+    }
+    case "finder": {
       return null;
-    default:
+    }
+    default: {
       return null;
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 export const MODEL_FAVORITES_STORAGE_KEY = "codetwo.modelFavorites";
 
@@ -58,12 +58,12 @@ export function loadModelFavorites(
   if (!storage) return emptySnapshot();
   try {
     const raw = storage.getItem(MODEL_FAVORITES_STORAGE_KEY);
-    if (!raw) return emptySnapshot();
+    if (raw == null || raw === "") return emptySnapshot();
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return emptySnapshot();
+    if (parsed == null || typeof parsed !== "object") return emptySnapshot();
     const candidate = parsed as { version?: unknown; providers?: unknown };
     if (candidate.version !== MODEL_FAVORITES_VERSION) return emptySnapshot();
-    if (!candidate.providers || typeof candidate.providers !== "object")
+    if (candidate.providers == null || typeof candidate.providers !== "object")
       return emptySnapshot();
 
     const providers: Record<string, string[]> = {};
@@ -123,7 +123,7 @@ export function useProviderModelFavorites(provider: string) {
   useEffect(() => {
     const syncFromStorage = () => setFavorites(favoritesForProvider(provider));
     const syncFromPicker = (event: Event) => {
-      const detail = (event as CustomEvent<ModelFavoritesChangeDetail>).detail;
+      const { detail } = event as CustomEvent<ModelFavoritesChangeDetail>;
       if (detail?.provider === provider) setFavorites(detail.favorites);
     };
     syncFromStorage();
@@ -136,23 +136,20 @@ export function useProviderModelFavorites(provider: string) {
     };
   }, [provider]);
 
-  const toggle = useCallback(
-    (model: string) => {
-      const next = toggleModelFavorite(provider, model);
-      setFavorites(next);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent<ModelFavoritesChangeDetail>(MODEL_FAVORITES_EVENT, {
-            detail: { provider, favorites: next },
-          })
-        );
-      }
-    },
-    [provider]
-  );
+  const toggle = (model: string) => {
+    const next = toggleModelFavorite(provider, model);
+    setFavorites(next);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent<ModelFavoritesChangeDetail>(MODEL_FAVORITES_EVENT, {
+          detail: { provider, favorites: next },
+        })
+      );
+    }
+  };
 
   return {
-    favorites: useMemo(() => new Set(favorites), [favorites]),
+    favorites: new Set(favorites),
     toggle,
   };
 }

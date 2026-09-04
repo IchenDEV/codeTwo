@@ -8,9 +8,11 @@ import {
   promoteComposerDraft,
   saveComposerDrafts,
   updateComposerDraft,
-  type ComposerDraftPosture,
-  type ComposerDraftScope,
-  type StorageLike,
+} from "../src/session/composerDrafts";
+import type {
+  ComposerDraftPosture,
+  ComposerDraftScope,
+  StorageLike,
 } from "../src/session/composerDrafts";
 
 class MemoryStorage implements StorageLike {

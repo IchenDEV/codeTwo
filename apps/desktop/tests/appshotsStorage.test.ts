@@ -3,16 +3,16 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-mock.module("electrobun/bun", () => ({
+void mock.module("electrobun/bun", () => ({
   GlobalShortcut: {
     isRegistered: () => false,
     register: () => false,
-    unregister: () => undefined,
+    unregister: () => {},
   },
   Utils: { openExternal: () => true },
 }));
 
-mock.module("../src/electrobun/appshots.native", () => ({
+void mock.module("../src/electrobun/appshots.native", () => ({
   captureMacOSAppshot: () => ({ ok: false }),
   macOSAppshotPermissions: () => ({
     available: false,
@@ -20,7 +20,7 @@ mock.module("../src/electrobun/appshots.native", () => ({
     accessibility: false,
   }),
   macOSCommandKeyState: () => 0,
-  requestMacOSAppshotPermissions: () => undefined,
+  requestMacOSAppshotPermissions: () => {},
 }));
 
 const { AppshotManager } = await import("../src/electrobun/appshots");

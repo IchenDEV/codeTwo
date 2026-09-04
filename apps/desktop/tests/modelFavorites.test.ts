@@ -5,8 +5,8 @@ import {
   favoritesForProvider,
   loadModelFavorites,
   toggleModelFavorite,
-  type ModelFavoritesStorage,
 } from "../src/session/modelFavorites";
+import type { ModelFavoritesStorage } from "../src/session/modelFavorites";
 
 class MemoryStorage implements ModelFavoritesStorage {
   values = new Map<string, string>();

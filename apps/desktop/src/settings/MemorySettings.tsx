@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/business/page-header";
 import { SearchField } from "@/components/business/search-field";
@@ -68,17 +62,20 @@ import {
   setMemoryCategory,
   setMemoryPinned,
   updateMemory,
-  type MemoryEvidence,
-  type MemoryPolicyValue,
-  type MemoryProjectPolicy,
-  type MemoryRecord,
-  type MemorySettings,
-  type MemoryStats,
-  type MemoryUsage,
-  type Project,
+} from "../bridge";
+import type {
+  MemoryEvidence,
+  MemoryPolicyValue,
+  MemoryProjectPolicy,
+  MemoryRecord,
+  MemorySettings,
+  MemoryStats,
+  MemoryUsage,
+  Project,
 } from "../bridge";
 import { useLanguage, useT } from "../i18n";
-import { en as EN_STRINGS, type StringKey } from "../i18n/strings";
+import { td } from "../i18n/dynamic";
+import type { StringKey } from "../i18n/strings";
 import { useToast } from "../ui/toast";
 import {
   filterMemories,
@@ -86,10 +83,8 @@ import {
   memoryProfile,
   MEMORY_CATEGORIES,
   originLabelKey,
-  type MemoryFilter,
-  type MemorySort,
-  type MemoryView,
 } from "./memory-model";
+import type { MemoryFilter, MemoryView } from "./memory-model";
 
 import "./memory-settings.css";
 
@@ -141,8 +136,7 @@ function translatedDynamic(
   prefix: string,
   value: string
 ): string {
-  const key = `${prefix}.${value}` as StringKey;
-  return key in EN_STRINGS ? t(key) : value;
+  return td(t, `${prefix}.${value}`);
 }
 
 function useNarrowMemoryLayout(): boolean {
@@ -199,7 +193,7 @@ function PolicySelect({
         value={value}
         disabled={disabled}
         onValueChange={(next) => {
-          if (next) onChange(next as MemoryPolicyValue);
+          if (next) onChange(next);
         }}
       >
         <SelectTrigger
@@ -246,7 +240,7 @@ function StatButton({
       className={cn(
         "memory-stat",
         active && "is-active",
-        warning && value > 0 && "is-warning"
+        warning === true && value > 0 && "is-warning"
       )}
       onClick={onClick}
     >
@@ -284,7 +278,7 @@ function MemoryRow({
       <Checkbox
         aria-label={t("memory.selectRecord")}
         checked={checked}
-        onCheckedChange={(value) => onCheck(value === true)}
+        onCheckedChange={(value) => onCheck(value)}
         onClick={(event) => event.stopPropagation()}
       />
       <Button
@@ -315,7 +309,7 @@ function MemoryRow({
         </span>
       </Button>
       <div className="memory-row-signals">
-        {memory.conflict_with_id && (
+        {memory.conflict_with_id != null && memory.conflict_with_id !== "" && (
           <AlertTriangle
             aria-label={t("memory.needsAttention")}
             className="text-warning size-3.5"
@@ -395,7 +389,7 @@ function MemoryEditor({
             <Select
               value={category}
               onValueChange={(value) => {
-                if (value) setCategory(value);
+                if (value != null && value !== "") setCategory(value);
               }}
             >
               <SelectTrigger className="w-full justify-between">
@@ -426,7 +420,7 @@ function MemoryEditor({
             <label className="text-metadata flex items-center gap-2">
               <Checkbox
                 checked={pinned}
-                onCheckedChange={(value) => setPinned(value === true)}
+                onCheckedChange={(value) => setPinned(value)}
               />
               {t("memory.keepPinned")}
             </label>
@@ -495,8 +489,14 @@ function DetailPanel({
     <div className="memory-detail-content">
       <header className="memory-detail-header">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <Badge variant={memory.conflict_with_id ? "destructive" : "outline"}>
-            {memory.conflict_with_id
+          <Badge
+            variant={
+              memory.conflict_with_id != null && memory.conflict_with_id !== ""
+                ? "destructive"
+                : "outline"
+            }
+          >
+            {memory.conflict_with_id != null && memory.conflict_with_id !== ""
               ? t("memory.needsAttention")
               : t(originLabelKey(memory.origin))}
           </Badge>
@@ -531,12 +531,13 @@ function DetailPanel({
               </TooltipButton>
             </>
           ) : (
-            !memory.conflict_with_id && (
+            memory.conflict_with_id == null ||
+            (memory.conflict_with_id === "" && (
               <Button variant="ghost" size="xs" onClick={onRestore}>
                 <ArchiveRestore />
                 {t("memory.restore")}
               </Button>
-            )
+            ))
           )}
         </div>
       </header>
@@ -550,7 +551,7 @@ function DetailPanel({
             <Select
               value={memory.category}
               onValueChange={(value) => {
-                if (value) onCategory(value);
+                if (value != null && value !== "") onCategory(value);
               }}
             >
               <SelectTrigger
@@ -588,7 +589,7 @@ function DetailPanel({
           </dd>
         </div>
       </dl>
-      {conflictReason && (
+      {conflictReason != null && conflictReason !== "" && (
         <aside className="memory-conflict-note">
           <AlertTriangle className="size-4 shrink-0" />
           <div>
@@ -732,7 +733,7 @@ export function MemorySettingsPage({
     if (projectPath) setSelectedProject(projectPath);
   }, [projectPath]);
 
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
     if (!selectedProject) {
       setRecords([]);
       setStats(EMPTY_STATS);
@@ -750,7 +751,9 @@ export function MemorySettingsPage({
       setStats(nextStats);
       setPolicy(nextPolicy);
       setSelectedId((current) =>
-        current && nextRecords.some((record) => record.id === current)
+        current != null &&
+        current !== "" &&
+        nextRecords.some((record) => record.id === current)
           ? current
           : (nextRecords.find((record) => record.layer !== "L3")?.id ?? null)
       );
@@ -759,12 +762,12 @@ export function MemorySettingsPage({
     } finally {
       setLoading(false);
     }
-  }, [selectedProject, toast]);
+  };
 
   useEffect(() => {
     void getMemorySettings()
       .then(setSettings)
-      .catch((error) => toast(String(error), "error"));
+      .catch((error: unknown) => toast(String(error), "error"));
   }, [toast]);
   useEffect(() => {
     setCheckedIds(new Set());
@@ -773,39 +776,30 @@ export function MemorySettingsPage({
     void refresh();
   }, [refresh]);
 
-  const selected = useMemo(
-    () => records.find((record) => record.id === selectedId) ?? null,
-    [records, selectedId]
-  );
-  const profile = useMemo(() => memoryProfile(records), [records]);
-  const visible = useMemo(
-    () => filterMemories(records, { ...filter, query: deferredQuery }),
-    [deferredQuery, filter, records]
-  );
+  const selected = records.find((record) => record.id === selectedId) ?? null;
+  const profile = memoryProfile(records);
+  const visible = filterMemories(records, { ...filter, query: deferredQuery });
 
-  const loadDetail = useCallback(
-    async (memory: MemoryRecord | null, reveal = false) => {
-      if (!memory) {
-        setEvidence([]);
-        setUsages([]);
-        return;
-      }
-      setDetailLoading(true);
-      try {
-        const [nextEvidence, nextUsages] = await Promise.all([
-          getMemoryEvidence(memory.id, reveal),
-          getMemoryUsages(memory.id),
-        ]);
-        setEvidence(nextEvidence);
-        setUsages(nextUsages);
-      } catch (error) {
-        toast(String(error), "error");
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [toast]
-  );
+  const loadDetail = async (memory: MemoryRecord | null, reveal = false) => {
+    if (!memory) {
+      setEvidence([]);
+      setUsages([]);
+      return;
+    }
+    setDetailLoading(true);
+    try {
+      const [nextEvidence, nextUsages] = await Promise.all([
+        getMemoryEvidence(memory.id, reveal),
+        getMemoryUsages(memory.id),
+      ]);
+      setEvidence(nextEvidence);
+      setUsages(nextUsages);
+    } catch (error) {
+      toast(String(error), "error");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   useEffect(() => {
     setRevealed(false);
@@ -816,7 +810,7 @@ export function MemorySettingsPage({
     const previous = settings;
     const next = { ...settings, ...patch };
     setSettings(next);
-    void saveMemorySettings(next).catch((error) => {
+    void saveMemorySettings(next).catch((error: unknown) => {
       setSettings(previous);
       toast(String(error), "error");
     });
@@ -825,10 +819,12 @@ export function MemorySettingsPage({
     const previous = policy;
     const next = { ...policy, ...patch, project_path: selectedProject };
     setPolicy(next);
-    void saveMemoryProjectPolicy(selectedProject, next).catch((error) => {
-      setPolicy(previous);
-      toast(String(error), "error");
-    });
+    void saveMemoryProjectPolicy(selectedProject, next).catch(
+      (error: unknown) => {
+        setPolicy(previous);
+        toast(String(error), "error");
+      }
+    );
   };
   const patchRecord = (id: string, patch: Partial<MemoryRecord>) =>
     setRecords((items) =>
@@ -854,7 +850,7 @@ export function MemorySettingsPage({
         run: () => {
           void setMemoryActive(memory.id, true)
             .then(refresh)
-            .catch((error) => toast(String(error), "error"));
+            .catch((error: unknown) => toast(String(error), "error"));
         },
       });
       await refresh();
@@ -936,10 +932,10 @@ export function MemorySettingsPage({
       return;
     try {
       await Promise.all(
-        targets.map((record) =>
+        targets.map(async (record) =>
           action === "pin" || action === "unpin"
-            ? setMemoryPinned(record.id, action === "pin")
-            : setMemoryActive(record.id, action === "restore")
+            ? await setMemoryPinned(record.id, action === "pin")
+            : await setMemoryActive(record.id, action === "restore")
         )
       );
       setCheckedIds(new Set());
@@ -949,9 +945,8 @@ export function MemorySettingsPage({
     }
   };
 
-  const policySummary = !settings.enabled
-    ? t("memory.behavior.off")
-    : t("memory.behavior.summary", {
+  const policySummary = settings.enabled
+    ? t("memory.behavior.summary", {
         capture: effectivePolicy(
           settings.capture,
           policy.capture,
@@ -966,7 +961,8 @@ export function MemorySettingsPage({
         )
           ? t("memory.behavior.on")
           : t("memory.behavior.offShort"),
-      });
+      })
+    : t("memory.behavior.off");
   const detail = (
     <DetailPanel
       memory={selected}
@@ -987,14 +983,16 @@ export function MemorySettingsPage({
       }}
       onRestore={() => {
         if (selected)
-          void restore(selected).catch((error) =>
+          void restore(selected).catch((error: unknown) =>
             toast(String(error), "error")
           );
       }}
-      onEdit={() => openEditor(selected?.editable ? "edit" : "correct")}
+      onEdit={() =>
+        openEditor(selected?.editable === true ? "edit" : "correct")
+      }
       onDelete={() => {
         if (selected)
-          void removePermanently(selected).catch((error) =>
+          void removePermanently(selected).catch((error: unknown) =>
             toast(String(error), "error")
           );
       }}
@@ -1015,7 +1013,7 @@ export function MemorySettingsPage({
             <Select
               value={selectedProject}
               onValueChange={(value) => {
-                if (value) setSelectedProject(value);
+                if (value != null && value !== "") setSelectedProject(value);
               }}
             >
               <SelectTrigger
@@ -1143,9 +1141,7 @@ export function MemorySettingsPage({
         </details>
       )}
 
-      {!selectedProject ? (
-        <p className="memory-empty-state">{t("memory.noProject")}</p>
-      ) : (
+      {selectedProject ? (
         <div className="memory-workbench">
           <div className="memory-stats" aria-label={t("memory.stats")}>
             <StatButton
@@ -1221,7 +1217,7 @@ export function MemorySettingsPage({
             <Select
               value={filter.category}
               onValueChange={(category) => {
-                if (category)
+                if (category != null && category !== "")
                   setFilter((current) => ({ ...current, category }));
               }}
             >
@@ -1248,7 +1244,8 @@ export function MemorySettingsPage({
             <Select
               value={filter.origin}
               onValueChange={(origin) => {
-                if (origin) setFilter((current) => ({ ...current, origin }));
+                if (origin != null && origin !== "")
+                  setFilter((current) => ({ ...current, origin }));
               }}
             >
               <SelectTrigger
@@ -1279,7 +1276,7 @@ export function MemorySettingsPage({
                 if (sort)
                   setFilter((current) => ({
                     ...current,
-                    sort: sort as MemorySort,
+                    sort,
                   }));
               }}
             >
@@ -1367,9 +1364,7 @@ export function MemorySettingsPage({
                       setCheckedIds((current) => {
                         const next = new Set(current);
                         visible.forEach((record) =>
-                          value === true
-                            ? next.add(record.id)
-                            : next.delete(record.id)
+                          value ? next.add(record.id) : next.delete(record.id)
                         );
                         return next;
                       })
@@ -1394,9 +1389,8 @@ export function MemorySettingsPage({
                       onCheck={(checked) =>
                         setCheckedIds((current) => {
                           const next = new Set(current);
-                          checked
-                            ? next.add(memory.id)
-                            : next.delete(memory.id);
+                          if (checked) next.add(memory.id);
+                          else next.delete(memory.id);
                           return next;
                         })
                       }
@@ -1415,6 +1409,8 @@ export function MemorySettingsPage({
             </aside>
           </div>
         </div>
+      ) : (
+        <p className="memory-empty-state">{t("memory.noProject")}</p>
       )}
 
       <Dialog open={narrow && detailOpen} onOpenChange={setDetailOpen}>

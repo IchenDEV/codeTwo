@@ -1,8 +1,10 @@
 // @ts-nocheck
 import { GlobalWindow } from "happy-dom";
-import React, { act as reactAct, type ReactElement } from "react";
+import { act as reactAct } from "react";
+import type { ReactElement } from "react";
 import { flushSync } from "react-dom";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 /**
  * The repository's CanvasEditor tests install their own happy-dom window at
@@ -65,18 +67,16 @@ function installDom(): void {
 }
 
 export function activateDom(): void {
-  if (!previousGlobals) {
-    previousGlobals = Object.fromEntries(
-      [
-        ...DOM_KEYS,
-        "getComputedStyle",
-        "requestAnimationFrame",
-        "cancelAnimationFrame",
-        "btoa",
-        "devicePixelRatio",
-      ].map((key) => [key, (globalThis as Record<string, unknown>)[key]])
-    );
-  }
+  previousGlobals ??= Object.fromEntries(
+    [
+      ...DOM_KEYS,
+      "getComputedStyle",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      "btoa",
+      "devicePixelRatio",
+    ].map((key) => [key, (globalThis as Record<string, unknown>)[key]])
+  );
   installDom();
 }
 
@@ -86,11 +86,11 @@ export function restoreDom(): void {
   // source CanvasEditor test bind to different DOM owners in one Bun run.
 }
 
-export type Mounted = {
+export interface Mounted {
   container: HTMLElement;
   rerender: (element: ReactElement) => void;
   unmount: () => void;
-};
+}
 
 export function mount(element: ReactElement): Mounted {
   const container = dom.document.createElement("div") as unknown as HTMLElement;
@@ -118,7 +118,9 @@ export function mount(element: ReactElement): Mounted {
 }
 
 export async function flush(): Promise<void> {
-  await reactAct(async () => undefined);
+  await reactAct(async () => {
+    /* empty */
+  });
 }
 
 export function click(element: Element): void {
@@ -128,14 +130,14 @@ export function click(element: Element): void {
 }
 
 export function button(container: ParentNode, name: string): HTMLButtonElement {
-  const candidates = Array.from(container.querySelectorAll("button"));
+  const candidates = [...container.querySelectorAll("button")];
   const result = candidates.find((candidate) => {
     const label =
       candidate.getAttribute("aria-label") ?? candidate.textContent ?? "";
-    return label.replace(/\s+/g, " ").trim() === name;
+    return label.replaceAll(/\s+/gu, " ").trim() === name;
   });
   if (!result) throw new Error(`button not found: ${name}`);
-  return result as HTMLButtonElement;
+  return result;
 }
 
 export function maybeButton(
@@ -150,15 +152,15 @@ export function maybeButton(
 }
 
 export function image(container: ParentNode, alt: string): HTMLImageElement {
-  const result = Array.from(container.querySelectorAll("img")).find(
+  const result = [...container.querySelectorAll("img")].find(
     (candidate) => candidate.getAttribute("alt") === alt
   );
   if (!result) throw new Error(`image not found: ${alt}`);
-  return result as HTMLImageElement;
+  return result;
 }
 
 export function text(container: ParentNode, value: string): Element {
-  const result = Array.from(container.querySelectorAll("*")).find((candidate) =>
+  const result = [...container.querySelectorAll("*")].find((candidate) =>
     candidate.textContent?.includes(value)
   );
   if (!result) throw new Error(`text not found: ${value}`);

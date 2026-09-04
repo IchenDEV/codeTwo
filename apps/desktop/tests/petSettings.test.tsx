@@ -37,9 +37,9 @@ afterEach(() => {
 });
 
 function findButton(container: HTMLElement, label: string): HTMLButtonElement {
-  const button = Array.from(
-    container.querySelectorAll<HTMLButtonElement>("button")
-  ).find((candidate) => candidate.textContent?.trim() === label);
+  const button = [
+    ...container.querySelectorAll<HTMLButtonElement>("button"),
+  ].find((candidate) => candidate.textContent?.trim() === label);
   if (!button) throw new Error(`Button not found: ${label}`);
   return button;
 }
@@ -102,9 +102,9 @@ describe("Pet settings", () => {
     expect(getAppearanceSettings().petSize).toBe("large");
     const size = view.container.querySelector('[aria-label="Pet size"]');
     expect(size?.textContent).toContain("Large");
-    expect(
-      size?.closest('[data-slot="setting-row"]')?.getAttribute("data-surface")
-    ).toBe("plain");
+    expect(size?.closest('[data-slot="setting-row"]')?.dataset.surface).toBe(
+      "plain"
+    );
     expect(view.container.querySelector(".pet-setting-group")).not.toBeNull();
     expect(
       view.container.querySelector(".pet-setting-group [data-surface='card']")
@@ -122,16 +122,16 @@ describe("Pet settings", () => {
     );
     await flush();
 
-    expect(
-      view.container.querySelector(".codex-pet")?.getAttribute("data-animation")
-    ).toBe("idle");
+    expect(view.container.querySelector(".codex-pet")?.dataset.animation).toBe(
+      "idle"
+    );
     view.container
       .querySelector<HTMLButtonElement>('[aria-label="Preview next pet mood"]')
       ?.click();
     await flush();
-    expect(
-      view.container.querySelector(".codex-pet")?.getAttribute("data-animation")
-    ).toBe("running");
+    expect(view.container.querySelector(".codex-pet")?.dataset.animation).toBe(
+      "running"
+    );
 
     view.unmount();
   });
@@ -176,7 +176,7 @@ describe("Pet settings", () => {
     await flush();
 
     const sprite = view.container.querySelector<HTMLElement>(".codex-pet");
-    expect(sprite?.getAttribute("data-animation")).toBe("idle");
+    expect(sprite?.dataset.animation).toBe("idle");
     expect(sprite?.style.getPropertyValue("--codex-pet-display-width")).toBe(
       "136px"
     );
@@ -185,7 +185,7 @@ describe("Pet settings", () => {
     await flush();
     const updatedSprite =
       view.container.querySelector<HTMLElement>(".codex-pet");
-    expect(updatedSprite?.getAttribute("data-animation")).toBe("failed");
+    expect(updatedSprite?.dataset.animation).toBe("failed");
     expect(
       updatedSprite?.style.getPropertyValue("--codex-pet-display-width")
     ).toBe("88px");
@@ -230,9 +230,9 @@ describe("Pet settings", () => {
       ?.click();
     await flush();
 
-    expect(
-      view.container.querySelector(".codex-pet")?.getAttribute("data-animation")
-    ).toBe("waving");
+    expect(view.container.querySelector(".codex-pet")?.dataset.animation).toBe(
+      "waving"
+    );
 
     view.unmount();
   });

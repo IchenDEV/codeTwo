@@ -2,8 +2,8 @@
  * Intentional unknown→T boundary for desktop IPC / host RPC results.
  * Callers choose T; the wire value is unknown until this point.
  */
-export function assertIpcResult<T>(value: unknown): T {
-  return value as T;
+export function assertIpcResult(value: unknown): unknown {
+  return value;
 }
 
 /**

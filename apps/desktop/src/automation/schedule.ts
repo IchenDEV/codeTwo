@@ -12,10 +12,10 @@ export interface ScheduleDraft {
   customCron: string;
 }
 
-const DAILY = /^(\d{1,2}) (\d{1,2}) \* \* \*$/;
-const WEEKDAYS = /^(\d{1,2}) (\d{1,2}) \* \* 1-5$/;
-const WEEKLY = /^(\d{1,2}) (\d{1,2}) \* \* ([0-6])$/;
-const HOURLY = /^(\d{1,2}) \* \* \* \*$/;
+const DAILY = /^(\d{1,2}) (\d{1,2}) \* \* \*$/u;
+const WEEKDAYS = /^(\d{1,2}) (\d{1,2}) \* \* 1-5$/u;
+const WEEKLY = /^(\d{1,2}) (\d{1,2}) \* \* ([0-6])$/u;
+const HOURLY = /^(\d{1,2}) \* \* \* \*$/u;
 
 function timeParts(time: string): [number, number] {
   const [hour, minute] = time.split(":").map(Number);
@@ -28,22 +28,27 @@ function timeParts(time: string): [number, number] {
 export function cronFromSchedule(schedule: ScheduleDraft): string {
   const [hour, minute] = timeParts(schedule.time);
   switch (schedule.cadence) {
-    case "hourly":
+    case "hourly": {
       return `${minute} * * * *`;
-    case "daily":
+    }
+    case "daily": {
       return `${minute} ${hour} * * *`;
-    case "weekdays":
+    }
+    case "weekdays": {
       return `${minute} ${hour} * * 1-5`;
-    case "weekly":
+    }
+    case "weekly": {
       return `${minute} ${hour} * * ${Math.min(6, Math.max(0, schedule.weekday))}`;
-    case "custom":
-      return schedule.customCron.trim().replace(/\s+/g, " ");
+    }
+    case "custom": {
+      return schedule.customCron.trim().replaceAll(/\s+/gu, " ");
+    }
   }
 }
 
 export function scheduleFromCron(cron: string): ScheduleDraft {
-  const normalized = cron.trim().replace(/\s+/g, " ");
-  let match = normalized.match(HOURLY);
+  const normalized = cron.trim().replaceAll(/\s+/gu, " ");
+  let match = HOURLY.exec(normalized);
   if (match) {
     return {
       cadence: "hourly",
@@ -52,7 +57,7 @@ export function scheduleFromCron(cron: string): ScheduleDraft {
       customCron: normalized,
     };
   }
-  match = normalized.match(WEEKDAYS);
+  match = WEEKDAYS.exec(normalized);
   if (match) {
     return {
       cadence: "weekdays",
@@ -61,7 +66,7 @@ export function scheduleFromCron(cron: string): ScheduleDraft {
       customCron: normalized,
     };
   }
-  match = normalized.match(WEEKLY);
+  match = WEEKLY.exec(normalized);
   if (match) {
     return {
       cadence: "weekly",
@@ -70,7 +75,7 @@ export function scheduleFromCron(cron: string): ScheduleDraft {
       customCron: normalized,
     };
   }
-  match = normalized.match(DAILY);
+  match = DAILY.exec(normalized);
   if (match) {
     return {
       cadence: "daily",

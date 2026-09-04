@@ -12,6 +12,8 @@ import { shikiToMonaco } from "@shikijs/monaco";
  * language servers cover the rest (see ../lsp).
  */
 import * as monaco from "monaco-editor";
+
+export * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import cssWorker from "monaco-editor/languages/features/css/css.worker.js?worker";
 import htmlWorker from "monaco-editor/languages/features/html/html.worker.js?worker";
@@ -26,7 +28,6 @@ import type {
 
 import { dirtyKey, markDirty } from "./dirty";
 
-export { monaco };
 export {
   attachLsp,
   notifySaved,
@@ -89,21 +90,26 @@ export function languageOf(path: string): string {
 self.MonacoEnvironment = {
   getWorker(_id: string, label: string): Worker {
     switch (label) {
-      case "json":
+      case "json": {
         return new jsonWorker();
+      }
       case "css":
       case "scss":
-      case "less":
+      case "less": {
         return new cssWorker();
+      }
       case "html":
       case "handlebars":
-      case "razor":
+      case "razor": {
         return new htmlWorker();
+      }
       case "typescript":
-      case "javascript":
+      case "javascript": {
         return new tsWorker();
-      default:
+      }
+      default: {
         return new editorWorker();
+      }
     }
   },
 };
@@ -182,8 +188,8 @@ async function grammarFor(
       r.name === from ? { ...r, name: to, aliases: [] } : r
     );
   };
-  if (langId === "typescript") return renamed("tsx", "typescript");
-  if (langId === "javascript") return renamed("jsx", "javascript");
+  if (langId === "typescript") return await renamed("tsx", "typescript");
+  if (langId === "javascript") return await renamed("jsx", "javascript");
   if (langId in bundledLanguages) {
     return (await bundledLanguages[langId as keyof typeof bundledLanguages]())
       .default;
@@ -224,7 +230,7 @@ async function ensureBoot(): Promise<Highlighter> {
     }
     return highlighter;
   })();
-  return boot;
+  return await boot;
 }
 
 /** The scheme the app last asked for, so anything that resets the theme can be corrected back. */

@@ -15,8 +15,10 @@ import {
   stdioServer,
   withProviderToolInstructions,
   withRichResponseInstructions,
-  type AcpMcpServer,
-  type HostToolEvidence,
+} from "../src/electrobun/toolBroker/providerTools";
+import type {
+  AcpMcpServer,
+  HostToolEvidence,
 } from "../src/electrobun/toolBroker/providerTools";
 
 const computerMcp: AcpMcpServer = {
@@ -231,10 +233,10 @@ describe("provider capability wire compatibility", () => {
   test("describes the chart and visualize renderer contracts to providers", () => {
     const blocks = withRichResponseInstructions([
       { type: "text", text: "hello" },
-    ]) as Array<{
+    ]) as {
       type: string;
       text: string;
-    }>;
+    }[];
     expect(blocks[0]?.text).toContain("fenced `chart` JSON block");
     expect(blocks[0]?.text).toContain("visualize");
     expect(blocks[1]).toEqual({ type: "text", text: "hello" });

@@ -1,10 +1,7 @@
 import { useSyncExternalStore } from "react";
 
-import {
-  resolveThemeColorProperties,
-  type ColorScheme,
-  type ThemePalette,
-} from "./design/theme";
+import { resolveThemeColorProperties } from "./design/theme";
+import type { ColorScheme, ThemePalette } from "./design/theme";
 import {
   DEFAULT_CODE_FONT_SIZE,
   DEFAULT_UI_FONT_SIZE,
@@ -225,23 +222,23 @@ function isDiffMarkers(value: unknown): value is DiffMarkerPreference {
 }
 
 function safePetId(value: unknown): string | null {
-  return typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/.test(value)
+  return typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(value)
     ? value
     : null;
 }
 
 export function isHexColor(value: unknown): value is string {
-  return typeof value === "string" && /^#[\da-f]{6}$/i.test(value);
+  return typeof value === "string" && /^#[\da-f]{6}$/iu.test(value);
 }
 
 function safeName(value: unknown, fallback: string): string {
   if (typeof value !== "string") return fallback;
-  const name = value.trim().replace(/\s+/g, " ").slice(0, 40);
+  const name = value.trim().replaceAll(/\s+/gu, " ").slice(0, 40);
   return name || fallback;
 }
 
 function safePalette(value: unknown): ThemePalette | null {
-  if (!value || typeof value !== "object") return null;
+  if (value == null || typeof value !== "object") return null;
   const candidate = value as Partial<ThemePalette>;
   if (
     !isHexColor(candidate.accent) ||
@@ -261,7 +258,7 @@ function safeCustomTheme(
   value: unknown,
   fallbackId: string
 ): AppearanceTheme | null {
-  if (!value || typeof value !== "object") return null;
+  if (value == null || typeof value !== "object") return null;
   const candidate = value as Partial<AppearanceTheme>;
   const light = safePalette(candidate.light);
   const dark = safePalette(candidate.dark);
@@ -269,7 +266,7 @@ function safeCustomTheme(
   return {
     id:
       typeof candidate.id === "string" &&
-      /^custom-[\w-]{1,80}$/.test(candidate.id)
+      /^custom-[\w-]{1,80}$/u.test(candidate.id)
         ? candidate.id
         : fallbackId,
     name: safeName(candidate.name, "Imported theme"),
@@ -291,7 +288,7 @@ function safeSchemeProfile(
   fallback: SchemeAppearanceProfile
 ): SchemeAppearanceProfile {
   const candidate =
-    value && typeof value === "object"
+    value != null && typeof value === "object"
       ? (value as Partial<SchemeAppearanceProfile>)
       : {};
   return {
@@ -321,7 +318,7 @@ export function normalizeAppearanceSettings(
   value: unknown
 ): AppearanceSettings {
   const candidate =
-    value && typeof value === "object"
+    value != null && typeof value === "object"
       ? (value as Omit<
           Partial<AppearanceSettings>,
           "version" | "light" | "dark"
@@ -355,7 +352,7 @@ export function normalizeAppearanceSettings(
     : DEFAULT_APPEARANCE_SETTINGS.petSource;
   const petId = safePetId(candidate.petId);
   const petSource =
-    requestedPetSource === "petshare" && petId
+    requestedPetSource === "petshare" && petId != null && petId !== ""
       ? requestedPetSource
       : DEFAULT_APPEARANCE_SETTINGS.petSource;
   const customThemes: AppearanceTheme[] = [];
@@ -397,7 +394,7 @@ export function normalizeAppearanceSettings(
       : DEFAULT_APPEARANCE_SETTINGS.petSize,
     petSource,
     petId:
-      petSource === "petshare" && petId
+      petSource === "petshare" && petId != null && petId !== ""
         ? petId
         : DEFAULT_APPEARANCE_SETTINGS.petId,
     petName:
@@ -437,7 +434,8 @@ export function normalizeAppearanceSettings(
 function read(): AppearanceSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return normalizeAppearanceSettings(JSON.parse(raw));
+    if (raw != null && raw !== "")
+      return normalizeAppearanceSettings(JSON.parse(raw));
     const legacy = localStorage.getItem(LEGACY_THEME_KEY);
     return normalizeAppearanceSettings({
       ...DEFAULT_APPEARANCE_SETTINGS,
@@ -531,12 +529,13 @@ export function themeById(id: string, settings = snapshot): AppearanceTheme {
 }
 
 function cssVariableName(value: string): string | null {
-  return value.match(/^var\((--[\w-]+)\)$/)?.[1] ?? null;
+  return /^var\((--[\w-]+)\)$/.exec(value)?.[1] ?? null;
 }
 
 export function resolveThemeColor(value: string): string {
   const variable = cssVariableName(value);
-  if (!variable || typeof document === "undefined") return value;
+  if (variable == null || variable === "" || typeof document === "undefined")
+    return value;
   return getComputedStyle(document.documentElement)
     .getPropertyValue(variable)
     .trim();
@@ -550,7 +549,15 @@ export function materializeTheme(theme: AppearanceTheme): AppearanceTheme {
   });
   const light = resolvePalette(theme.light);
   const dark = resolvePalette(theme.dark);
-  if (![...Object.values(light), ...Object.values(dark)].every(isHexColor)) {
+  const colors: string[] = [
+    light.accent,
+    light.background,
+    light.foreground,
+    dark.accent,
+    dark.background,
+    dark.foreground,
+  ];
+  if (!colors.every(isHexColor)) {
     throw new Error("Theme colors are not available yet.");
   }
   return { ...theme, light, dark };
@@ -628,14 +635,14 @@ export function importAppearanceTheme(source: string): AppearanceTheme {
   } catch {
     throw new Error("Invalid theme JSON.");
   }
-  if (!parsed || typeof parsed !== "object")
+  if (parsed == null || typeof parsed !== "object")
     throw new Error("Invalid theme document.");
   const document = parsed as Partial<ThemeDocument>;
   if (document.format !== THEME_DOCUMENT_FORMAT || document.version !== 1) {
     throw new Error("Unsupported theme format.");
   }
   const imported = safeCustomTheme(
-    { ...(document.theme ?? {}), id: customId(), builtin: false },
+    { ...document.theme, id: customId(), builtin: false },
     customId()
   );
   if (!imported) throw new Error("Theme colors must use six-digit hex values.");
@@ -647,8 +654,8 @@ export function importAppearanceTheme(source: string): AppearanceTheme {
   return imported;
 }
 
-function fontStack<T extends readonly { id: string; stack: string }[]>(
-  items: T,
+function fontStack(
+  items: readonly { id: string; stack: string }[],
   id: string
 ): string {
   return items.find((item) => item.id === id)?.stack ?? items[0].stack;

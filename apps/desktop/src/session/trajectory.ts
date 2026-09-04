@@ -30,7 +30,7 @@ export interface TrajectoryRecord {
 }
 
 function compact(value: string, max = 160): string {
-  const text = value.replace(/\s+/g, " ").trim();
+  const text = value.replaceAll(/\s+/gu, " ").trim();
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
@@ -46,7 +46,9 @@ function toolOutputSummary(outputs: readonly ToolOutput[]): string {
 }
 
 function timeFor(entry: TurnContentEntry, fallback: number): number {
-  return entry.createdAt && entry.createdAt > 0 ? entry.createdAt : fallback;
+  return entry.createdAt != null && entry.createdAt > 0
+    ? entry.createdAt
+    : fallback;
 }
 
 function toolRecord(
@@ -59,7 +61,7 @@ function toolRecord(
 ): TrajectoryRecord {
   const fallback = timeFor(entry, turn.startedAt);
   const startAt =
-    tool.startedAt && tool.startedAt > 0 ? tool.startedAt : fallback;
+    tool.startedAt != null && tool.startedAt > 0 ? tool.startedAt : fallback;
   const running = tool.endedAt === undefined && turn.endedAt === undefined;
   const endAt = Math.max(startAt, tool.endedAt ?? (running ? now : fallback));
   const output = tool.outputs ?? [];
@@ -70,7 +72,7 @@ function toolRecord(
     lane: "tool",
     turn: turnNumber,
     step,
-    title: tool.title || tool.kind || "Tool",
+    title: (tool.title || tool.kind) ?? "Tool",
     summary: toolOutputSummary(output) || tool.status,
     status: tool.status,
     startAt,
@@ -170,7 +172,7 @@ export function deriveTrajectory(
       assistantSegment += 1;
       const text = textEntries.map((entry) => entry.text).join("");
       const startAt = timeFor(textEntries[0], turn.startedAt);
-      const lastAt = timeFor(textEntries[textEntries.length - 1], startAt);
+      const lastAt = timeFor(textEntries.at(-1)!, startAt);
       const running = !terminal && turn.endedAt === undefined;
       records.push({
         id: `turn:${turn.id}:assistant:${assistantSegment}`,
@@ -219,7 +221,7 @@ export function deriveTrajectory(
       });
     }
 
-    if (turn.error) {
+    if (turn.error != null && turn.error !== "") {
       records.push({
         id: `turn:${turn.id}:error`,
         index: 0,
@@ -265,9 +267,9 @@ export function filterTrajectory(
 
 export function formatTrajectoryDuration(milliseconds: number): string {
   const value = Math.max(0, milliseconds);
-  if (value < 1_000) return `${Math.round(value)} ms`;
-  if (value < 10_000) return `${(value / 1_000).toFixed(1)} s`;
-  const roundedSeconds = Math.round(value / 1_000);
+  if (value < 1000) return `${Math.round(value)} ms`;
+  if (value < 10_000) return `${(value / 1000).toFixed(1)} s`;
+  const roundedSeconds = Math.round(value / 1000);
   if (roundedSeconds < 60) return `${roundedSeconds} s`;
   const minutes = Math.floor(roundedSeconds / 60);
   const seconds = roundedSeconds % 60;

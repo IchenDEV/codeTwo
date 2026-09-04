@@ -11,8 +11,8 @@ export function usePersistedNumber(
 ): [number, (n: number) => void] {
   const [value, setValue] = useState(() => {
     const raw =
-      typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
-    const n = raw === null ? NaN : Number(raw);
+      typeof localStorage === "undefined" ? null : localStorage.getItem(key);
+    const n = raw === null ? Number.NaN : Number(raw);
     return Number.isFinite(n) ? n : fallback;
   });
 
@@ -37,7 +37,7 @@ export function usePersistedBoolean(
 ): [boolean, (b: boolean) => void] {
   const [value, setValue] = useState(() => {
     const raw =
-      typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
+      typeof localStorage === "undefined" ? null : localStorage.getItem(key);
     return raw === null ? fallback : raw === "1";
   });
 

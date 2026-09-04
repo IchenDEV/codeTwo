@@ -29,13 +29,15 @@ import {
   taskForPullRequest,
   taskForSession,
   unlinkTaskPullRequest,
-  type BoardFilters,
-  type BoardTask,
-  type GitHubPullRequestReference,
-  type StorageLike,
-  type TaskBoardState,
-  type TaskPriority,
-  type TaskStatus,
+} from "../src/taskboard/taskBoard";
+import type {
+  BoardFilters,
+  BoardTask,
+  GitHubPullRequestReference,
+  StorageLike,
+  TaskBoardState,
+  TaskPriority,
+  TaskStatus,
 } from "../src/taskboard/taskBoard";
 import { continueTaskBoardPrompt } from "../src/taskboard/taskBoardContinuation";
 
@@ -90,7 +92,7 @@ describe("TaskBoard prompt continuation", () => {
     const continuation = continueTaskBoardPrompt({
       target: { paneId: "pane-a", sessionId: "session-a" },
       prompt: "Do not redirect this",
-      selectSession: () => selection,
+      selectSession: async () => await selection,
       isTargetActive: () => active,
       openDocumentMode: () => events.push("document"),
       insertMarkdown: async () => {
@@ -180,7 +182,7 @@ describe("task board model constants and creation", () => {
     expect(first).not.toBe(second);
     expect(first[0]).not.toBe(second[0]);
     expect(first[0]?.labels).not.toBe(second[0]?.labels);
-    expect(first.some((item) => /[\u3400-\u9fff]/u.test(item.title))).toBe(
+    expect(first.some((item) => /[\u3400-\u9FFF]/u.test(item.title))).toBe(
       true
     );
     expect(new Set(first.map((item) => item.status))).toEqual(
@@ -195,8 +197,8 @@ describe("task board model constants and creation", () => {
     });
     expect(first.every((item) => item.sessionIds.length === 0)).toBe(true);
 
-    first[0]!.title = "mutated";
-    first[0]!.labels.push("mutated");
+    first[0].title = "mutated";
+    first[0].labels.push("mutated");
     expect(seedTasks()).toEqual(second);
   });
 
@@ -591,7 +593,7 @@ describe("task board persistence", () => {
       getItem: () => {
         throw new Error("storage denied");
       },
-      setItem: () => undefined,
+      setItem: () => {},
     };
     const loaded = loadBoardSnapshot(storage);
     expect(loaded.warning).toBe(LOAD_BOARD_WARNING);
@@ -639,7 +641,7 @@ describe("task board reducer", () => {
       task("review", "in_review", 4),
     ]);
     const renamed = {
-      ...initial.tasks[0]!,
+      ...initial.tasks[0],
       title: "Renamed",
       updatedAt: BASE_TIME + 1,
     };
@@ -728,11 +730,11 @@ describe("task board reducer", () => {
       id: "b",
       status: "in_review",
       beforeId: "review",
-      now: BASE_TIME + 5_000,
+      now: BASE_TIME + 5000,
     });
 
     expect(next.tasks.find((item) => item.id === "b")?.updatedAt).toBe(
-      BASE_TIME + 5_000
+      BASE_TIME + 5000
     );
     expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(
       BASE_TIME

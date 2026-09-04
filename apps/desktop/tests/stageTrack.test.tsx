@@ -115,7 +115,7 @@ describe("StageTrack", () => {
     const rendered = renderTrack();
     const chips = [
       ...rendered.container.querySelectorAll("[data-testid^='stage-']"),
-    ].filter((el) => el.hasAttribute("data-state"));
+    ].filter((el) => Object.hasOwn(el.dataset, "state"));
     expect(chips.length).toBe(5);
     const states = Object.fromEntries(
       chips.map((chip) => [chip.dataset.testid, chip.dataset.state])

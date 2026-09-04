@@ -2,7 +2,7 @@ import { desktopCall, isElectrobun, listenDesktop } from "./container";
 
 export interface CoreTransport {
   call<T>(name: string, args: unknown, projectPath: string | null): Promise<T>;
-  listen<T>(name: string, listener: (payload: T) => void): () => void;
+  listen(name: string, listener: (payload: unknown) => void): () => void;
 }
 
 interface StorageLike {
@@ -56,8 +56,12 @@ async function responsePayload(response: Response): Promise<unknown> {
 
 function errorMessage(payload: unknown, fallback: string): string {
   if (typeof payload === "string" && payload) return payload;
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    const error = (payload as { error?: unknown }).error;
+  if (
+    payload != null &&
+    typeof payload === "object" &&
+    !Array.isArray(payload)
+  ) {
+    const { error } = payload as { error?: unknown };
     if (typeof error === "string" && error) return error;
   }
   return fallback;
@@ -74,8 +78,12 @@ export function createWebCoreTransport(
 ): CoreTransport {
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
   const bootstrapToken = pairingToken(dependencies.location.hash);
-  let bearer = bootstrapToken ? null : dependencies.storage.getItem(BEARER_KEY);
-  if (bootstrapToken) dependencies.storage.removeItem(BEARER_KEY);
+  let bearer =
+    bootstrapToken != null && bootstrapToken !== ""
+      ? null
+      : dependencies.storage.getItem(BEARER_KEY);
+  if (bootstrapToken != null && bootstrapToken !== "")
+    dependencies.storage.removeItem(BEARER_KEY);
   let bearerRequest: Promise<string> | null = null;
   let socket: SocketLike | null = null;
   let socketRequest: Promise<void> | null = null;
@@ -91,12 +99,12 @@ export function createWebCoreTransport(
     dependencies.storage.removeItem(BEARER_KEY);
   };
 
-  const ensureBearer = (): Promise<string> => {
-    if (bearer) return Promise.resolve(bearer);
-    if (bearerRequest) return bearerRequest;
+  const ensureBearer = async (): Promise<string> => {
+    if (bearer != null && bearer !== "") return bearer;
+    if (bearerRequest) return await bearerRequest;
     bearerRequest = (async () => {
       const token = pairingToken(dependencies.location.hash);
-      if (!token) {
+      if (token == null || token === "") {
         throw new Error(
           "C2 Web UI is not paired. Open a fresh browser pairing link."
         );
@@ -112,7 +120,9 @@ export function createWebCoreTransport(
         throw new Error(errorMessage(payload, "C2 Web UI pairing failed"));
       }
       const next =
-        payload && typeof payload === "object" && !Array.isArray(payload)
+        payload != null &&
+        typeof payload === "object" &&
+        !Array.isArray(payload)
           ? (payload as { bearer?: unknown }).bearer
           : null;
       if (typeof next !== "string" || !next) {
@@ -124,7 +134,7 @@ export function createWebCoreTransport(
     })().finally(() => {
       bearerRequest = null;
     });
-    return bearerRequest;
+    return await bearerRequest;
   };
 
   const scheduleReconnect = () => {
@@ -138,13 +148,18 @@ export function createWebCoreTransport(
   function reportConnectionError(error: unknown) {
     // Keep retrying ordinary outages while a reusable bearer still exists. A rejected bearer or
     // missing pairing link fails closed until the user opens a fresh one.
-    if (bearer || pairingToken(dependencies.location.hash)) scheduleReconnect();
+    if (
+      (bearer != null && bearer !== "") ||
+      (pairingToken(dependencies.location.hash) != null &&
+        pairingToken(dependencies.location.hash) !== "")
+    )
+      scheduleReconnect();
     dependencies.onError(error);
   }
 
-  const ensureSocket = (): Promise<void> => {
-    if (socket) return Promise.resolve();
-    if (socketRequest) return socketRequest;
+  const ensureSocket = async (): Promise<void> => {
+    if (socket) return;
+    if (socketRequest) return await socketRequest;
     socketRequest = (async () => {
       const authorization = await ensureBearer();
       const response = await dependencies.fetch("/api/ws-ticket", {
@@ -159,7 +174,9 @@ export function createWebCoreTransport(
         );
       }
       const ticket =
-        payload && typeof payload === "object" && !Array.isArray(payload)
+        payload != null &&
+        typeof payload === "object" &&
+        !Array.isArray(payload)
           ? (payload as { ticket?: unknown }).ticket
           : null;
       if (typeof ticket !== "string" || !ticket) {
@@ -189,7 +206,7 @@ export function createWebCoreTransport(
             const message =
               typeof data === "string" ? (JSON.parse(data) as unknown) : data;
             if (
-              !message ||
+              message == null ||
               typeof message !== "object" ||
               Array.isArray(message)
             )
@@ -211,7 +228,7 @@ export function createWebCoreTransport(
     })().finally(() => {
       socketRequest = null;
     });
-    return socketRequest;
+    return await socketRequest;
   };
 
   return {
@@ -237,7 +254,7 @@ export function createWebCoreTransport(
         );
       }
       if (
-        !payload ||
+        payload == null ||
         typeof payload !== "object" ||
         Array.isArray(payload) ||
         !("result" in payload)
@@ -249,8 +266,8 @@ export function createWebCoreTransport(
       return (payload as { result: T }).result;
     },
 
-    listen<T>(name: string, listener: (payload: T) => void): () => void {
-      const wrapped = listener as (payload: unknown) => void;
+    listen(name: string, listener: (payload: unknown) => void): () => void {
+      const wrapped = listener;
       const group =
         listeners.get(name) ?? new Set<(payload: unknown) => void>();
       group.add(wrapped);
@@ -291,10 +308,10 @@ function browserWebTransport(): CoreTransport | null {
       history.replaceState(null, "", `${location.pathname}${location.search}`);
     },
     createSocket: (url) => new WebSocket(url),
-    fetch: (input, init) => fetch(input, init),
+    fetch: async (input, init) => await fetch(input, init),
     location,
     onError: (error) => console.error("C2 Web UI transport error", error),
-    reconnectDelayMs: 1_500,
+    reconnectDelayMs: 1500,
     storage: localStorage,
   });
 }
@@ -306,19 +323,24 @@ const selectedTransport = isElectrobun
 /** True when product commands have a real Core behind them, independent of the desktop shell. */
 export const coreAvailable = selectedTransport !== null;
 
-export function coreCall<T>(
+export async function coreCall<T>(
   name: string,
   args: unknown,
   projectPath: string | null
 ): Promise<T> {
   if (!selectedTransport)
     throw new Error("C2 Core is unavailable in this browser preview");
-  return selectedTransport.call<T>(name, args, projectPath);
+  return await selectedTransport.call<T>(name, args, projectPath);
 }
 
 export function listenCore<T>(
   name: string,
   listener: (payload: T) => void
 ): () => void {
-  return selectedTransport?.listen(name, listener) ?? (() => {});
+  return (
+    selectedTransport?.listen(name, (payload) => listener(payload as T)) ??
+    (() => {
+      /* empty */
+    })
+  );
 }

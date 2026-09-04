@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const desktop = resolve(import.meta.dir, "..");
-const read = (path: string) => readFileSync(resolve(desktop, path), "utf8");
+const read = (path: string) => readFileSync(resolve(desktop, path), "utf-8");
 
 describe("Rust Plugin Kernel remote contract", () => {
   test("keeps C2 sync, T3, and browser pairing explicit end to end", () => {

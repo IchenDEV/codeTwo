@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from "react";
+import { useRef } from "react";
+import type { ReactNode } from "react";
 
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";

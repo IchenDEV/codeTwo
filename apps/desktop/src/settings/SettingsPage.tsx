@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 
 import { NavigationRow } from "@/components/business/navigation-row";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   Wrench,
 } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cssVars } from "@/lib/cssVars";
 import { cn } from "@/lib/utils";
 
 import { resetVisualAppearanceSettings } from "../appearance";
@@ -35,20 +36,22 @@ import {
   getWorktreeSettings,
   listProjectWorktrees,
   updateWorktreeSettings,
-  type AppshotSettings,
-  type BrowserUseSettings,
-  type ComputerUseSettings,
-  type AppUpdateStatus,
-  type DeviceSyncStatus,
-  type DiagnosticsExportResult,
-  type KeymapEntry,
-  type Project,
-  type ProjectWorktreeMode,
-  type ProviderInfo,
-  type ProviderRuntimeOverride,
-  type SessionImportResult,
-  type WorktreeSettings,
-  type PluginDeveloperStatus,
+} from "../bridge";
+import type {
+  AppshotSettings,
+  BrowserUseSettings,
+  ComputerUseSettings,
+  AppUpdateStatus,
+  DeviceSyncStatus,
+  DiagnosticsExportResult,
+  KeymapEntry,
+  Project,
+  ProjectWorktreeMode,
+  ProviderInfo,
+  ProviderRuntimeOverride,
+  SessionImportResult,
+  WorktreeSettings,
+  PluginDeveloperStatus,
 } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
@@ -97,11 +100,11 @@ export type SettingsTab =
   | "developer"
   | "browser";
 
-type SettingsNavItem = {
+interface SettingsNavItem {
   id: SettingsTab;
   icon: typeof Keyboard;
   labelKey: StringKey;
-};
+}
 
 const NAV_GROUPS: {
   id: "personal" | "workspace" | "integrations";
@@ -171,16 +174,30 @@ export function SettingsPage({
   project,
   projects = EMPTY_PROJECTS,
   onProjectWorktreeMode,
-  onProjectRename = async () => {},
-  onProjectIcon = async () => {},
-  onProjectAgentDefaults = async () => {},
-  onProjectRemove = async () => {},
+  onProjectRename = async () => {
+    /* empty */
+  },
+  onProjectIcon = async () => {
+    /* empty */
+  },
+  onProjectAgentDefaults = async () => {
+    /* empty */
+  },
+  onProjectRemove = async () => {
+    /* empty */
+  },
   projectIconPicker,
   projectActionsCount = 0,
-  onAddProjectAction = () => {},
-  onOpenSession = () => {},
+  onAddProjectAction = () => {
+    /* empty */
+  },
+  onOpenSession = () => {
+    /* empty */
+  },
   sessionImporter,
-  onSessionsImported = async () => {},
+  onSessionsImported = async () => {
+    /* empty */
+  },
   worktreeLister = listProjectWorktrees,
   worktreeSettingsLoader = getWorktreeSettings,
   worktreeSettingsSaver = updateWorktreeSettings,
@@ -308,12 +325,8 @@ export function SettingsPage({
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const { setPreference: setLanguage } = useLanguage();
-  const providerNames = useMemo(
-    () =>
-      Object.fromEntries(
-        providers.map((candidate) => [candidate.id, candidate.display_name])
-      ),
-    [providers]
+  const providerNames = Object.fromEntries(
+    providers.map((candidate) => [candidate.id, candidate.display_name])
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [projectNavigationLocked, setProjectNavigationLocked] = useState(false);
@@ -346,11 +359,9 @@ export function SettingsPage({
       <aside
         data-settings-sidebar
         className="settings-sidebar glass-rail flex shrink-0 flex-col"
-        style={
-          {
-            "--settings-sidebar-width": `${Math.min(420, Math.max(220, sidebarWidth))}px`,
-          } as CSSProperties
-        }
+        style={cssVars({
+          "--settings-sidebar-width": `${Math.min(420, Math.max(220, sidebarWidth))}px`,
+        })}
       >
         {/* Same 46px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />

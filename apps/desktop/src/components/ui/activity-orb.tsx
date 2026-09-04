@@ -1,5 +1,7 @@
-import { memo, type CSSProperties, type ComponentProps } from "react";
-import { ThinkingOrb, type OrbState } from "thinking-orbs";
+import { memo } from "react";
+import type { CSSProperties, ComponentProps } from "react";
+import { ThinkingOrb } from "thinking-orbs";
+import type { OrbState } from "thinking-orbs";
 
 import { cn } from "@/lib/utils";
 
@@ -21,24 +23,26 @@ export interface ActivityOrbProps extends Omit<
  * thinking-orbs has separately tuned 20px and 64px drawings. C2's compact controls need a 14px
  * loading mark, so that case keeps the detailed 20px preset and only changes its CSS footprint.
  */
-export const ActivityOrb = memo(function ActivityOrb({
-  state,
-  visualSize = 20,
-  className,
-  style,
-  ...props
-}: ActivityOrbProps) {
-  const presetSize = visualSize === 64 ? 64 : 20;
+export const ActivityOrb = memo(
+  ({
+    state,
+    visualSize = 20,
+    className,
+    style,
+    ...props
+  }: ActivityOrbProps) => {
+    const presetSize = visualSize === 64 ? 64 : 20;
 
-  return (
-    <ThinkingOrb
-      {...props}
-      data-activity-orb=""
-      data-activity-state={state}
-      state={state}
-      size={presetSize}
-      className={cn("shrink-0", className)}
-      style={{ width: visualSize, height: visualSize, ...style }}
-    />
-  );
-});
+    return (
+      <ThinkingOrb
+        {...props}
+        data-activity-orb=""
+        data-activity-state={state}
+        state={state}
+        size={presetSize}
+        className={cn("shrink-0", className)}
+        style={{ width: visualSize, height: visualSize, ...style }}
+      />
+    );
+  }
+);

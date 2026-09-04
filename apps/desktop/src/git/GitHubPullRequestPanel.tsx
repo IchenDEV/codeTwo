@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { StatusBadge } from "@/components/business/status-badge";
 import {
@@ -42,12 +42,14 @@ import {
   githubPullRequestDiff,
   githubReviewPullRequest,
   openExternal,
-  type GitHubMergeStrategy,
-  type GitHubPullRequest,
-  type GitHubPullRequestCheck,
-  type GitHubPullRequestDiff,
-  type GitHubReviewAction,
-  type SourceControlInfo,
+} from "../bridge";
+import type {
+  GitHubMergeStrategy,
+  GitHubPullRequest,
+  GitHubPullRequestCheck,
+  GitHubPullRequestDiff,
+  GitHubReviewAction,
+  SourceControlInfo,
 } from "../bridge";
 import { useT } from "../i18n";
 import { diffLinePresentation, diffPreviewLines } from "./state";
@@ -147,7 +149,7 @@ export function pullRequestMergeBlock(
 
 function DiffPreview({ result }: { result: GitHubPullRequestDiff }) {
   const t = useT();
-  const preview = useMemo(() => diffPreviewLines(result.text), [result.text]);
+  const preview = diffPreviewLines(result.text);
   if (!result.text.trim()) {
     return (
       <p className="text-metadata text-muted-foreground p-3">
@@ -238,48 +240,45 @@ export function GitHubPullRequestPanel({
   const cwdRef = useRef(cwd);
   cwdRef.current = cwd;
 
-  const load = useCallback(
-    async (resetFeedback = true) => {
-      const targetCwd = cwd;
-      const request = ++loadRequestRef.current;
-      if (resetFeedback) {
-        setActionError(null);
-        setActionStatus(null);
+  const load = async (resetFeedback = true) => {
+    const targetCwd = cwd;
+    const request = (loadRequestRef.current += 1);
+    if (resetFeedback) {
+      setActionError(null);
+      setActionStatus(null);
+    }
+    setLoadState({ kind: "loading", pullRequest: null, error: null });
+    try {
+      const sourceControl = await apiRef.current.sourceControl(targetCwd);
+      if (request !== loadRequestRef.current) return;
+      if (sourceControl?.provider !== "github") {
+        setLoadState({ kind: "not_github", pullRequest: null, error: null });
+        return;
       }
-      setLoadState({ kind: "loading", pullRequest: null, error: null });
-      try {
-        const sourceControl = await apiRef.current.sourceControl(targetCwd);
-        if (request !== loadRequestRef.current) return;
-        if (sourceControl?.provider !== "github") {
-          setLoadState({ kind: "not_github", pullRequest: null, error: null });
-          return;
-        }
-        if (
-          sourceControl.required_cli === "gh" &&
-          !sourceControl.required_cli_available
-        ) {
-          setLoadState({ kind: "cli_missing", pullRequest: null, error: null });
-          return;
-        }
-        const pullRequest = await apiRef.current.currentPullRequest(targetCwd);
-        if (request !== loadRequestRef.current) return;
-        setLoadState(
-          pullRequest
-            ? { kind: "ready", pullRequest, error: null }
-            : { kind: "empty", pullRequest: null, error: null }
-        );
-      } catch (error) {
-        if (request === loadRequestRef.current) {
-          setLoadState({
-            kind: "error",
-            pullRequest: null,
-            error: String(error),
-          });
-        }
+      if (
+        sourceControl.required_cli === "gh" &&
+        !sourceControl.required_cli_available
+      ) {
+        setLoadState({ kind: "cli_missing", pullRequest: null, error: null });
+        return;
       }
-    },
-    [cwd]
-  );
+      const pullRequest = await apiRef.current.currentPullRequest(targetCwd);
+      if (request !== loadRequestRef.current) return;
+      setLoadState(
+        pullRequest
+          ? { kind: "ready", pullRequest, error: null }
+          : { kind: "empty", pullRequest: null, error: null }
+      );
+    } catch (error) {
+      if (request === loadRequestRef.current) {
+        setLoadState({
+          kind: "error",
+          pullRequest: null,
+          error: String(error),
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     setView("overview");
@@ -306,8 +305,8 @@ export function GitHubPullRequestPanel({
     setView("changes");
     if (diffState.kind !== "idle" || loadState.kind !== "ready") return;
     const targetCwd = cwd;
-    const number = loadState.pullRequest.number;
-    const request = ++diffRequestRef.current;
+    const { number } = loadState.pullRequest;
+    const request = (diffRequestRef.current += 1);
     setDiffState({ kind: "loading", result: null, error: null });
     try {
       const result = await apiRef.current.pullRequestDiff(targetCwd, number);
@@ -340,7 +339,7 @@ export function GitHubPullRequestPanel({
       setActionError(t("githubPr.reviewBodyRequired"));
       return;
     }
-    const pullRequest = loadState.pullRequest;
+    const { pullRequest } = loadState;
     const targetCwd = cwd;
     setPhase(action);
     setActionError(null);
@@ -362,7 +361,7 @@ export function GitHubPullRequestPanel({
 
   const mergePullRequest = async () => {
     if (loadState.kind !== "ready" || phase !== "idle") return;
-    const pullRequest = loadState.pullRequest;
+    const { pullRequest } = loadState;
     if (pullRequestMergeBlock(pullRequest)) return;
     setMergeConfirmOpen(false);
     const targetCwd = cwd;
@@ -586,7 +585,8 @@ export function GitHubPullRequestPanel({
                           </span>
                         </>
                       );
-                      return check.details_url ? (
+                      return check.details_url != null &&
+                        check.details_url !== "" ? (
                         <Button
                           key={`${check.name}:${index}`}
                           type="button"
@@ -685,9 +685,7 @@ export function GitHubPullRequestPanel({
               <div className="flex gap-2">
                 <Select
                   value={mergeStrategy}
-                  onValueChange={(value) =>
-                    setMergeStrategy(value as GitHubMergeStrategy)
-                  }
+                  onValueChange={(value) => setMergeStrategy(value!)}
                   disabled={phase !== "idle" || Boolean(mergeBlock)}
                 >
                   <SelectTrigger
@@ -745,12 +743,12 @@ export function GitHubPullRequestPanel({
         </div>
       )}
 
-      {actionError && (
+      {actionError != null && actionError !== "" && (
         <p role="alert" className="text-metadata text-destructive">
           {actionError}
         </p>
       )}
-      {actionStatus && (
+      {actionStatus != null && actionStatus !== "" && (
         <p role="status" className="text-metadata text-success">
           {actionStatus}
         </p>

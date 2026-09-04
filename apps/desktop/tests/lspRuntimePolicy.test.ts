@@ -111,7 +111,7 @@ describe("LSP component policy", () => {
         projectPath: "/old-project",
         workspace: "/old-project",
       },
-      async () => backendResumed,
+      async () => await backendResumed,
       () => current
     );
 

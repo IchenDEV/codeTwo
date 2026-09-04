@@ -147,11 +147,8 @@ import { WebhooksLogoIcon } from "@phosphor-icons/react/dist/csr/WebhooksLogo";
 import { WrenchIcon as PhosphorWrenchIcon } from "@phosphor-icons/react/dist/csr/Wrench";
 import { XIcon as PhosphorXIcon } from "@phosphor-icons/react/dist/csr/X";
 import { XCircleIcon as PhosphorXCircleIcon } from "@phosphor-icons/react/dist/csr/XCircle";
-import {
-  forwardRef,
-  type ForwardRefExoticComponent,
-  type RefAttributes,
-} from "react";
+import { forwardRef } from "react";
+import type { ForwardRefExoticComponent, RefAttributes } from "react";
 
 export type IconProps = Omit<PhosphorIconProps, "strokeWidth">;
 export type AppIcon = ForwardRefExoticComponent<

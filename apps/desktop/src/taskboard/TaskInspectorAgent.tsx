@@ -129,12 +129,12 @@ export function TaskInspectorAgent(props: TaskInspectorAgentProps) {
               {checkoutLabel(t, session, checkoutPath)}
             </strong>
             <span className="text-metadata text-muted-foreground">
-              {session.worktreePath
+              {session.worktreePath != null && session.worktreePath !== ""
                 ? t("checkout.worktreeBadge")
                 : t("checkout.projectBadge")}
             </span>
           </div>
-          {checkoutPath ? (
+          {checkoutPath != null && checkoutPath !== "" ? (
             <Button
               type="button"
               variant="ghost"

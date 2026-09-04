@@ -21,11 +21,11 @@ const {
 } = await import("../src/design/ui-lab/fixtures");
 
 const layoutSpec = JSON.parse(
-  readFileSync(new URL("../layout-spec.json", import.meta.url), "utf8")
+  readFileSync(new URL("../layout-spec.json", import.meta.url), "utf-8")
 );
 const mainSource = readFileSync(
   new URL("../src/main.tsx", import.meta.url),
-  "utf8"
+  "utf-8"
 );
 
 const mounted = [];
@@ -33,8 +33,8 @@ let restoreCanvasContext = null;
 
 function renderUiLab({ route = "home", theme = "dark", language = "en" } = {}) {
   activateDom();
-  if (!restoreCanvasContext) {
-    const getContext = dom.HTMLCanvasElement.prototype.getContext;
+  if (restoreCanvasContext == null) {
+    const { getContext } = dom.HTMLCanvasElement.prototype;
     dom.HTMLCanvasElement.prototype.getContext = () => null;
     restoreCanvasContext = () => {
       dom.HTMLCanvasElement.prototype.getContext = getContext;
@@ -84,7 +84,7 @@ describe("UI Lab", () => {
         "Keep a persistent catalog rail at standard widths, move it above content at compact widths, and let each production scenario retain its own container-query breakpoints.",
     });
 
-    const links = Array.from(view.container.querySelectorAll("a")).map((link) =>
+    const links = [...view.container.querySelectorAll("a")].map((link) =>
       link.getAttribute("href")
     );
     expect(links).toContain("?ui-lab=design-system&theme=dark&lang=en");

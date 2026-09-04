@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,6 +22,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { isOneOf, parseJsonPayload } from "@/lib/jsonValue";
 
 import type { PluginManagerLabels } from "./types";
 
@@ -73,7 +74,7 @@ function asSimpleObjectSchema(value: unknown): SimpleObjectSchema | null {
     );
   });
 
-  return supported ? ({ ...value, properties } as SimpleObjectSchema) : null;
+  return supported ? { ...value, properties } : null;
 }
 
 function formatJson(value: unknown): string {
@@ -123,7 +124,7 @@ function SchemaField({
   const id = `plugin-config-${name}`;
   const label = schema.title ?? name;
 
-  if (schema.enum?.length) {
+  if (schema.enum?.length != null) {
     const items = schema.enum.map((entry) => ({
       value: enumKey(entry),
       label: enumLabel(entry),
@@ -135,7 +136,7 @@ function SchemaField({
     return (
       <Field>
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        {schema.description ? (
+        {schema.description != null && schema.description !== "" ? (
           <FieldDescription>{schema.description}</FieldDescription>
         ) : null}
         <Select
@@ -169,11 +170,11 @@ function SchemaField({
         <Checkbox
           id={id}
           checked={typeof value === "boolean" ? value : Boolean(schema.default)}
-          onCheckedChange={(checked) => onChange(checked === true)}
+          onCheckedChange={(checked) => onChange(checked)}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <FieldLabel htmlFor={id}>{label}</FieldLabel>
-          {schema.description ? (
+          {schema.description != null && schema.description !== "" ? (
             <FieldDescription>{schema.description}</FieldDescription>
           ) : null}
         </div>
@@ -187,7 +188,7 @@ function SchemaField({
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      {schema.description ? (
+      {schema.description != null && schema.description !== "" ? (
         <FieldDescription>{schema.description}</FieldDescription>
       ) : null}
       <Input
@@ -220,8 +221,8 @@ export function SchemaConfigEditor({
   labels: PluginManagerLabels;
   onSave: (config: unknown) => Promise<void>;
 }) {
-  const simpleSchema = useMemo(() => asSimpleObjectSchema(schema), [schema]);
-  const incomingJson = useMemo(() => formatJson(config), [config]);
+  const simpleSchema = asSimpleObjectSchema(schema);
+  const incomingJson = formatJson(config);
   const [draft, setDraft] = useState<Record<string, unknown>>(() =>
     initialObject(config)
   );
@@ -282,7 +283,7 @@ export function SchemaConfigEditor({
 
   const actions = (
     <>
-      {saveError ? (
+      {saveError != null && saveError !== "" ? (
         <p role="alert" className="text-callout text-destructive">
           {saveError}
         </p>
@@ -318,7 +319,9 @@ export function SchemaConfigEditor({
           setJsonError(null);
         }}
       />
-      {jsonError ? <FieldError>{jsonError}</FieldError> : null}
+      {jsonError != null && jsonError !== "" ? (
+        <FieldError>{jsonError}</FieldError>
+      ) : null}
     </Field>
   );
 
@@ -335,12 +338,13 @@ export function SchemaConfigEditor({
     <Tabs
       value={mode}
       onValueChange={(value) => {
-        const next = value as "form" | "json";
+        if (!isOneOf(value, ["form", "json"] as const)) return;
+        const next = value;
         if (next === "json") {
           setJson(formatJson(draft));
         } else if (mode === "json") {
           try {
-            const parsed = JSON.parse(json);
+            const parsed = parseJsonPayload(json);
             if (!isRecord(parsed))
               throw new Error(labels.invalidConfigurationObject);
             setDraft(parsed);

@@ -29,7 +29,7 @@ let fixes = 0;
 let skipped = 0;
 
 function wrap(expr: string): string {
-  return /[?:|&]/.test(expr) ? `(${expr})` : expr;
+  return /[?:|&]/u.test(expr) ? `(${expr})` : expr;
 }
 
 function positiveCheck(message: string, expr: string): string | null {
@@ -117,7 +117,7 @@ for (const file of report) {
   const targets = file.messages
     .filter((m) => m.ruleId === "@typescript-eslint/strict-boolean-expressions")
     .filter((m) => m.endLine != null && m.endColumn != null)
-    .sort((a, b) => b.line - a.line || b.column - a.column);
+    .toSorted((a, b) => b.line - a.line || b.column - a.column);
   if (targets.length === 0) {
     continue;
   }
@@ -147,14 +147,15 @@ for (const file of report) {
       continue;
     }
 
-    // Skip value-producing `||` / `&&` fallbacks: `a || b`, `a && b` assigned
-    // or returned as a non-boolean value. Only rewrite when clearly a condition.
-    const after = row.slice(endCol).trimStart();
+    // Skip value-producing `||` / `&&` fallbacks when THIS span is the RHS of
+    // `a || …` / `a && …`, or an assignment / ternary value. Do NOT skip
+    // `if (!a || !b)` merely because `after` starts with `||`.
     const before = row.slice(0, startCol);
     const inValueCoalesce =
-      after.startsWith("||") ||
-      /\|\|\s*$/.test(before.trimEnd()) ||
-      /:\s*$/.test(before.trimEnd());
+      /\|\|\s*$/u.test(before.trimEnd()) ||
+      /&&\s*$/u.test(before.trimEnd()) ||
+      /(?:=\s*|:\s*)$/u.test(before.trimEnd()) ||
+      /\breturn\s*$/u.test(before.trimEnd());
     if (inValueCoalesce) {
       skipped += 1;
       continue;
@@ -163,7 +164,7 @@ for (const file of report) {
     const bang =
       startCol > 0 &&
       row[startCol - 1] === "!" &&
-      (startCol === 1 || !/[\w$]/.test(row[startCol - 2] ?? ""));
+      (startCol === 1 || !/[\w$]/u.test(row[startCol - 2] ?? ""));
     if (bang) {
       startCol -= 1;
     }
@@ -182,7 +183,7 @@ for (const file of report) {
     if (
       replacement.includes("||") &&
       !replacement.startsWith("(") &&
-      /(?:&&|\|\||[?:!(,=])$/.test(prev)
+      /(?:&&|\|\||[?:!(,=])$/u.test(prev)
     ) {
       replacement = `(${replacement})`;
     }

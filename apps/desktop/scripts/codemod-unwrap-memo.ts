@@ -23,7 +23,7 @@ for (const sourceFile of project.getSourceFiles()) {
   let touched = false;
   const calls = sourceFile
     .getDescendantsOfKind(SyntaxKind.CallExpression)
-    .sort((a, b) => b.getStart() - a.getStart());
+    .toSorted((a, b) => b.getStart() - a.getStart());
 
   for (const call of calls) {
     if (call.wasForgotten()) continue;
@@ -32,7 +32,7 @@ for (const sourceFile of project.getSourceFiles()) {
     if (!isMemoCallee(callee)) continue;
     const args = call.getArguments();
     if (args.length < 1) continue;
-    const factory = args[0]!;
+    const factory = args[0];
     let replacement: string | null = null;
 
     if (callee.endsWith("useCallback") || callee === "useCallback") {
@@ -52,10 +52,10 @@ for (const sourceFile of project.getSourceFiles()) {
         const statements = body.getStatements();
         if (
           statements.length === 1 &&
-          Node.isReturnStatement(statements[0]!) &&
-          statements[0]!.getExpression()
+          Node.isReturnStatement(statements[0]) &&
+          statements[0].getExpression()
         ) {
-          replacement = `(${statements[0]!.getExpression()!.getText()})`;
+          replacement = `(${statements[0].getExpression()!.getText()})`;
         } else {
           replacement = `(${factory.getText()})()`;
         }
@@ -66,7 +66,7 @@ for (const sourceFile of project.getSourceFiles()) {
       replacement = factory.getText();
     }
 
-    if (!replacement) continue;
+    if (replacement == null || replacement === "") continue;
     call.replaceWithText(replacement);
     unwrapped += 1;
     touched = true;

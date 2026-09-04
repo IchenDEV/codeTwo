@@ -1,3 +1,5 @@
+import { asJsonObject } from "../lib/jsonValue";
+
 export interface VisualizationReference {
   path: string;
   mode?: "wide";
@@ -12,8 +14,8 @@ const VISUALIZE_START = "visualize";
 const VISUALIZE_END = "";
 
 function visualizationReference(value: unknown): VisualizationReference | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const candidate = value as Record<string, unknown>;
+  const candidate = asJsonObject(value);
+  if (candidate == null) return null;
   if (
     typeof candidate.path !== "string" ||
     candidate.path.length === 0 ||
@@ -48,7 +50,7 @@ export function splitRichText(
   let cursor = 0;
   while (cursor < source.length) {
     const start = source.indexOf(VISUALIZE_START, cursor);
-    if (start < 0) {
+    if (start === -1) {
       const tail = source.slice(cursor);
       if (tail) output.push({ kind: "markdown", text: tail });
       break;
@@ -57,7 +59,7 @@ export function splitRichText(
       output.push({ kind: "markdown", text: source.slice(cursor, start) });
     const payloadStart = start + VISUALIZE_START.length;
     const end = source.indexOf(VISUALIZE_END, payloadStart);
-    if (end < 0) {
+    if (end === -1) {
       if (!streaming)
         output.push({ kind: "markdown", text: source.slice(start) });
       break;
@@ -111,7 +113,7 @@ export const VISUALIZATION_THEME_VARIABLES = [
 ] as const;
 
 function safeCssValue(value: string): string {
-  return value.replace(/[;{}]/g, "").trim();
+  return value.replaceAll(/[;{}]/g, "").trim();
 }
 
 const VISUALIZATION_BASE_CSS = String.raw`

@@ -18,12 +18,8 @@ import {
 import { ChevronDown, ChevronRight, Clapperboard } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-import {
-  listGithubIssues,
-  listIssueDelegations,
-  type Issue,
-  type IssueDelegation,
-} from "../bridge";
+import { listGithubIssues, listIssueDelegations } from "../bridge";
+import type { Issue, IssueDelegation } from "../bridge";
 import { useT } from "../i18n";
 import type { SceneInfo } from "../session/scene";
 
@@ -72,7 +68,7 @@ function DelegationTrail({
           <span className="shrink-0">
             {new Date(row.created_at).toLocaleString()}
           </span>
-          {row.session_id && onOpenSession && (
+          {row.session_id != null && row.session_id !== "" && onOpenSession && (
             <Button
               type="button"
               variant="link"
@@ -83,7 +79,7 @@ function DelegationTrail({
               {t("issueDeleg.openSession")}
             </Button>
           )}
-          {row.comment_url && (
+          {row.comment_url != null && row.comment_url !== "" && (
             <a
               href={row.comment_url}
               target="_blank"
@@ -128,8 +124,8 @@ export function IssuesModal({
         setIssues(i);
         setLoading(false);
       })
-      .catch((e) => {
-        setErr(String(e));
+      .catch((error: unknown) => {
+        setErr(String(error));
         setLoading(false);
       });
   }, [cwd]);
@@ -144,7 +140,9 @@ export function IssuesModal({
         {loading && (
           <p className="text-metadata text-muted-foreground">Loading via gh…</p>
         )}
-        {err && <p className="text-metadata text-destructive">{err}</p>}
+        {err != null && err !== "" && (
+          <p className="text-metadata text-destructive">{err}</p>
+        )}
 
         <ScrollArea className="max-h-dialog-content pe-3">
           <div className="space-y-1.5">
@@ -221,7 +219,7 @@ export function IssuesModal({
                 )}
               </div>
             ))}
-            {!loading && !err && issues.length === 0 && (
+            {!loading && (err == null || err === "") && issues.length === 0 && (
               <p className="text-body text-muted-foreground p-2">
                 No open issues (or this dir isn’t a GitHub repo).
               </p>

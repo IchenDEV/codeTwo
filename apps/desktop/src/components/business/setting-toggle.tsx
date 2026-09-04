@@ -1,9 +1,7 @@
 import { useId } from "react";
 
-import {
-  SettingRow,
-  type SettingRowSurface,
-} from "@/components/business/setting-row";
+import { SettingRow } from "@/components/business/setting-row";
+import type { SettingRowSurface } from "@/components/business/setting-row";
 import { Switch } from "@/components/ui/switch";
 
 interface SettingToggleProps {
@@ -24,7 +22,10 @@ function SettingToggle({
   onCheckedChange,
 }: SettingToggleProps) {
   const controlId = useId();
-  const descriptionId = description ? `${controlId}-description` : undefined;
+  const descriptionId =
+    description != null && description !== ""
+      ? `${controlId}-description`
+      : undefined;
 
   return (
     <div

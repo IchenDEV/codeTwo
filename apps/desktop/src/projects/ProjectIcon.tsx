@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import { Folder } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
-import { getProjectIcon, type Project, type ProjectIconData } from "../bridge";
+import { getProjectIcon } from "../bridge";
+import type { Project, ProjectIconData } from "../bridge";
 
 const iconRequests = new Map<string, Promise<ProjectIconData | null>>();
 
-function loadIcon(project: Project): Promise<ProjectIconData | null> {
+async function loadIcon(project: Project): Promise<ProjectIconData | null> {
   const key = `${project.path}:${project.icon_updated_at ?? 0}`;
   let request = iconRequests.get(key);
   if (!request) {
@@ -16,7 +17,7 @@ function loadIcon(project: Project): Promise<ProjectIconData | null> {
     if (iconRequests.size > 64)
       iconRequests.delete(iconRequests.keys().next().value!);
   }
-  return request;
+  return await request;
 }
 
 /** Project identity used in settings and the sidebar; custom pixels fall back to the folder mark. */
@@ -35,12 +36,15 @@ export function ProjectIcon({
     let active = true;
     let objectUrl: string | null = null;
     setUrl(null);
-    if (!project.has_icon) return () => {};
+    if (project.has_icon !== true)
+      return () => {
+        /* empty */
+      };
 
     void loadIcon(project).then((icon) => {
       if (!active || !icon) return;
       objectUrl = URL.createObjectURL(
-        new Blob([icon.bytes.slice().buffer as ArrayBuffer], {
+        new Blob([Uint8Array.from(icon.bytes).buffer], {
           type: icon.mime_type,
         })
       );
@@ -48,7 +52,7 @@ export function ProjectIcon({
     });
     return () => {
       active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl != null && objectUrl !== "") URL.revokeObjectURL(objectUrl);
     };
   }, [project.path, project.has_icon, project.icon_updated_at]);
 
@@ -62,7 +66,7 @@ export function ProjectIcon({
       )}
       style={{ width: size, height: size }}
     >
-      {url ? (
+      {url != null && url !== "" ? (
         <img src={url} alt="" className="size-full object-cover" />
       ) : (
         <Folder style={{ width: size * 0.52, height: size * 0.52 }} />

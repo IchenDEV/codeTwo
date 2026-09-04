@@ -1,10 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { SearchField } from "@/components/business/search-field";
 import { StatusIndicator } from "@/components/business/status-indicator";
@@ -93,7 +88,7 @@ interface DetailState {
 }
 
 function display(value: string | null | undefined): string {
-  return value && value !== "<none>" ? value : "—";
+  return value != null && value !== "" && value !== "<none>" ? value : "—";
 }
 
 function shortId(value: string | null): string {
@@ -101,8 +96,12 @@ function shortId(value: string | null): string {
 }
 
 function imageReference(image: DockerImage): string {
-  if (image.repository && image.repository !== "<none>") {
-    return image.tag && image.tag !== "<none>"
+  if (
+    image.repository != null &&
+    image.repository !== "" &&
+    image.repository !== "<none>"
+  ) {
+    return image.tag != null && image.tag !== "" && image.tag !== "<none>"
       ? `${image.repository}:${image.tag}`
       : image.repository;
   }
@@ -128,7 +127,7 @@ function ActionButton({
       disabled={busy}
       onClick={onClick}
     >
-      {busy ? (
+      {busy === true ? (
         <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
       ) : (
         children
@@ -161,7 +160,7 @@ export function DockerPage({
   const [pullReference, setPullReference] = useState("");
   const [removeTarget, setRemoveTarget] = useState<DockerImage | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
     if (!enabled) return;
     setLoading(true);
     setError(null);
@@ -180,146 +179,124 @@ export function DockerPage({
       setStatus(nextStatus);
       setContainers(nextContainers.containers);
       setImages(nextImages.images);
-    } catch (cause) {
-      setError(String(cause));
+    } catch (error) {
+      setError(String(error));
     } finally {
       setLoading(false);
     }
-  }, [callCommand, enabled]);
+  };
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filteredContainers = useMemo(
-    () =>
-      normalizedQuery
-        ? containers.filter((container) =>
-            `${container.name ?? ""}\n${container.image ?? ""}\n${container.state ?? ""}`
-              .toLocaleLowerCase()
-              .includes(normalizedQuery)
-          )
-        : containers,
-    [containers, normalizedQuery]
-  );
-  const filteredImages = useMemo(
-    () =>
-      normalizedQuery
-        ? images.filter((image) =>
-            `${image.repository ?? ""}\n${image.tag ?? ""}\n${image.id ?? ""}`
-              .toLocaleLowerCase()
-              .includes(normalizedQuery)
-          )
-        : images,
-    [images, normalizedQuery]
-  );
+  const filteredContainers = normalizedQuery
+    ? containers.filter((container) =>
+        `${container.name ?? ""}\n${container.image ?? ""}\n${container.state ?? ""}`
+          .toLocaleLowerCase()
+          .includes(normalizedQuery)
+      )
+    : containers;
+  const filteredImages = normalizedQuery
+    ? images.filter((image) =>
+        `${image.repository ?? ""}\n${image.tag ?? ""}\n${image.id ?? ""}`
+          .toLocaleLowerCase()
+          .includes(normalizedQuery)
+      )
+    : images;
 
-  const runContainerAction = useCallback(
-    async (
-      action: "start" | "stop" | "restart",
-      container: DockerContainer
-    ) => {
-      const name = container.name ?? container.id;
-      if (!name) return;
-      const key = `${action}:${name}`;
-      setBusyAction(key);
-      try {
-        await callCommand(`docker.${action}`, { container: name });
-        const messageKey =
-          action === "start"
-            ? "docker.startedToast"
-            : action === "stop"
-              ? "docker.stoppedToast"
-              : "docker.restartedToast";
-        toast(t(messageKey, { name }), "success");
-        await refresh();
-      } catch (cause) {
-        toast(t("docker.commandFailed", { error: String(cause) }), "error");
-      } finally {
-        setBusyAction(null);
-      }
-    },
-    [callCommand, refresh, t, toast]
-  );
+  const runContainerAction = async (
+    action: "start" | "stop" | "restart",
+    container: DockerContainer
+  ) => {
+    const name = container.name ?? container.id;
+    if (name == null || name === "") return;
+    const key = `${action}:${name}`;
+    setBusyAction(key);
+    try {
+      await callCommand(`docker.${action}`, { container: name });
+      const messageKey =
+        action === "start"
+          ? "docker.startedToast"
+          : action === "stop"
+            ? "docker.stoppedToast"
+            : "docker.restartedToast";
+      toast(t(messageKey, { name }), "success");
+      await refresh();
+    } catch (error) {
+      toast(t("docker.commandFailed", { error: String(error) }), "error");
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
-  const showInspect = useCallback(
-    async (container: DockerContainer) => {
-      const name = container.name ?? container.id;
-      if (!name) return;
-      setDetail({
-        title: t("docker.inspectTitle", { name }),
-        description: t("docker.inspectDescription"),
-        content: null,
-        loading: true,
+  const showInspect = async (container: DockerContainer) => {
+    const name = container.name ?? container.id;
+    if (name == null || name === "") return;
+    setDetail({
+      title: t("docker.inspectTitle", { name }),
+      description: t("docker.inspectDescription"),
+      content: null,
+      loading: true,
+    });
+    try {
+      const result = await callCommand<{ details: unknown }>("docker.inspect", {
+        container: name,
       });
-      try {
-        const result = await callCommand<{ details: unknown }>(
-          "docker.inspect",
-          { container: name }
-        );
-        setDetail((current) =>
-          current
-            ? {
-                ...current,
-                content: JSON.stringify(result.details, null, 2),
-                loading: false,
-              }
-            : null
-        );
-      } catch (cause) {
-        setDetail((current) =>
-          current
-            ? { ...current, content: String(cause), loading: false }
-            : null
-        );
-      }
-    },
-    [callCommand, t]
-  );
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              content: JSON.stringify(result.details, null, 2),
+              loading: false,
+            }
+          : null
+      );
+    } catch (error) {
+      setDetail((current) =>
+        current ? { ...current, content: String(error), loading: false } : null
+      );
+    }
+  };
 
-  const showLogs = useCallback(
-    async (container: DockerContainer) => {
-      const name = container.name ?? container.id;
-      if (!name) return;
-      setDetail({
-        title: t("docker.logsTitle", { name }),
-        description: t("docker.logsDescription"),
-        content: null,
-        loading: true,
-      });
-      try {
-        const result = await callCommand<{ stdout: string; stderr: string }>(
-          "docker.logs",
-          {
-            container: name,
-            tail: 200,
-            timestamps: true,
-          }
-        );
-        setDetail((current) =>
-          current
-            ? {
-                ...current,
-                content: [result.stdout, result.stderr]
-                  .filter(Boolean)
-                  .join("\n"),
-                loading: false,
-              }
-            : null
-        );
-      } catch (cause) {
-        setDetail((current) =>
-          current
-            ? { ...current, content: String(cause), loading: false }
-            : null
-        );
-      }
-    },
-    [callCommand, t]
-  );
+  const showLogs = async (container: DockerContainer) => {
+    const name = container.name ?? container.id;
+    if (name == null || name === "") return;
+    setDetail({
+      title: t("docker.logsTitle", { name }),
+      description: t("docker.logsDescription"),
+      content: null,
+      loading: true,
+    });
+    try {
+      const result = await callCommand<{ stdout: string; stderr: string }>(
+        "docker.logs",
+        {
+          container: name,
+          tail: 200,
+          timestamps: true,
+        }
+      );
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              content: [result.stdout, result.stderr]
+                .filter(Boolean)
+                .join("\n"),
+              loading: false,
+            }
+          : null
+      );
+    } catch (error) {
+      setDetail((current) =>
+        current ? { ...current, content: String(error), loading: false } : null
+      );
+    }
+  };
 
-  const pullImage = useCallback(async () => {
+  const pullImage = async () => {
     const image = pullReference.trim();
     if (!image) return;
     setBusyAction("pull");
@@ -328,14 +305,14 @@ export function DockerPage({
       setPullReference("");
       toast(t("docker.pulled", { name: image }), "success");
       await refresh();
-    } catch (cause) {
-      toast(t("docker.commandFailed", { error: String(cause) }), "error");
+    } catch (error) {
+      toast(t("docker.commandFailed", { error: String(error) }), "error");
     } finally {
       setBusyAction(null);
     }
-  }, [callCommand, pullReference, refresh, t, toast]);
+  };
 
-  const removeImage = useCallback(async () => {
+  const removeImage = async () => {
     if (!removeTarget) return;
     const image = imageReference(removeTarget);
     if (!image) return;
@@ -345,12 +322,12 @@ export function DockerPage({
       setRemoveTarget(null);
       toast(t("docker.removed", { name: image }), "success");
       await refresh();
-    } catch (cause) {
-      toast(t("docker.commandFailed", { error: String(cause) }), "error");
+    } catch (error) {
+      toast(t("docker.commandFailed", { error: String(error) }), "error");
     } finally {
       setBusyAction(null);
     }
-  }, [callCommand, refresh, removeTarget, t, toast]);
+  };
 
   if (!enabled) {
     return (
@@ -435,7 +412,7 @@ export function DockerPage({
             </div>
           ) : null}
 
-          {error ? (
+          {error != null && error !== "" ? (
             <div
               role="alert"
               className="rounded-control bg-destructive/10 text-body text-destructive mb-5 flex items-center gap-3 px-4 py-3"
@@ -750,7 +727,7 @@ export function DockerPage({
             <DialogTitle>{detail?.title}</DialogTitle>
             <DialogDescription>{detail?.description}</DialogDescription>
           </DialogHeader>
-          {detail?.loading ? (
+          {detail?.loading === true ? (
             <div
               role="status"
               className="text-body text-muted-foreground flex min-h-48 items-center justify-center gap-2"
@@ -760,7 +737,7 @@ export function DockerPage({
             </div>
           ) : (
             <pre className="rounded-control bg-fill-quiet text-callout max-h-96 min-h-48 overflow-auto p-4 break-words whitespace-pre-wrap">
-              {detail?.content || t("docker.noOutput")}
+              {detail?.content ?? t("docker.noOutput")}
             </pre>
           )}
         </DialogContent>
@@ -790,7 +767,7 @@ export function DockerPage({
               disabled={busyAction?.startsWith("remove:")}
               onClick={() => void removeImage()}
             >
-              {busyAction?.startsWith("remove:") ? (
+              {busyAction?.startsWith("remove:") === true ? (
                 <ActivityOrb state="working" visualSize={14} />
               ) : (
                 <Trash2 className="size-3.5" />

@@ -34,7 +34,7 @@ let restoreCanvasContext: (() => void) | null = null;
 function disableCanvasDrawing(): void {
   // Other canvas suites install purpose-specific partial contexts. The activity-orb contract tests
   // only need the canvas element and state metadata, so keep this suite on the supported no-context path.
-  const getContext = dom.HTMLCanvasElement.prototype.getContext;
+  const { getContext } = dom.HTMLCanvasElement.prototype;
   dom.HTMLCanvasElement.prototype.getContext = () => null;
   restoreCanvasContext = () => {
     dom.HTMLCanvasElement.prototype.getContext = getContext;
@@ -141,9 +141,9 @@ describe("SessionRail row layout", () => {
     const sessionScroll = view.container.querySelector(
       "[data-rail-session-scroll]"
     );
-    const resources = Array.from(
-      sessionScroll?.querySelectorAll("section") ?? []
-    ).find((section) => section.textContent?.includes("Feishu resources"));
+    const resources = [
+      ...(sessionScroll?.querySelectorAll("section") ?? []),
+    ].find((section) => section.textContent?.includes("Feishu resources"));
     expect(resources).toBeTruthy();
     expect(sessionScroll?.contains(resources ?? null)).toBe(true);
     expect(
@@ -226,9 +226,9 @@ describe("SessionRail row layout", () => {
       previews: {},
     });
 
-    const projectPaths = Array.from(
-      view.container.querySelectorAll("[data-project-group]")
-    ).map((group) => group.getAttribute("data-project-group"));
+    const projectPaths = [
+      ...view.container.querySelectorAll("[data-project-group]"),
+    ].map((group) => group.dataset.projectGroup);
     expect(projectPaths).toEqual(["/tmp/other", "/tmp/repo"]);
     expect(
       view.container.querySelector(
@@ -314,9 +314,9 @@ describe("SessionRail row layout", () => {
     expect(flat?.textContent).toContain("Pinned task");
     expect(flat?.textContent).toContain("Flat task");
 
-    const ids = Array.from(
-      view.container.querySelectorAll("[data-session-id]")
-    ).map((row) => row.getAttribute("data-session-id"));
+    const ids = [...view.container.querySelectorAll("[data-session-id]")].map(
+      (row) => row.dataset.sessionId
+    );
     expect(ids).toHaveLength(3);
     expect(new Set(ids).size).toBe(3);
 
@@ -641,7 +641,7 @@ describe("SessionRail row layout", () => {
         copy
           .querySelectorAll('[role="progressbar"] [role="presentation"]')
           .forEach((node) => node.remove());
-        return copy.textContent?.replace(/\s+/g, " ").trim();
+        return copy.textContent?.replaceAll(/\s+/g, " ").trim();
       })
     ).toEqual([
       "New task",
@@ -656,7 +656,7 @@ describe("SessionRail row layout", () => {
       "Settings",
       "Codex · Weekly limit · 42% left · Open Usage settings",
     ]);
-    expect(utilities?.getAttribute("data-layout")).toBe("icon-toolbar");
+    expect(utilities?.dataset.layout).toBe("icon-toolbar");
     expect(sessionScroll?.nextElementSibling).toBe(utilities);
     expect(
       features
@@ -708,12 +708,12 @@ describe("SessionRail row layout", () => {
     );
     expect(quotaButton?.querySelector('[role="progressbar"]')).toBeNull();
     expect(
-      utilities
-        ?.querySelector('[data-rail-feature="usage"] [data-quota-provider]')
-        ?.getAttribute("data-quota-provider")
+      utilities?.querySelector(
+        '[data-rail-feature="usage"] [data-quota-provider]'
+      )?.dataset.quotaProvider
     ).toBe("codex");
     for (const row of rows.slice(1)) {
-      expect(row.getAttribute("data-slot")).toBe("navigation-row");
+      expect(row.dataset.slot).toBe("navigation-row");
       expect(row.className).toContain("min-h-navigation-row");
       expect(row.className).toContain("rounded-control");
     }
@@ -747,15 +747,13 @@ describe("SessionRail row layout", () => {
     expect(button?.textContent?.trim()).toBe("");
     expect(button?.getAttribute("aria-label")).toBe("Device connections");
     expect(button?.getAttribute("aria-current")).toBe("page");
-    expect(button?.getAttribute("data-selected")).toBe("true");
+    expect(button?.dataset.selected).toBe("true");
     expect(button?.className).toContain("rounded-full");
     expect(
       button?.querySelector('[data-device-connections-icon="phone"]')
     ).toBeTruthy();
     expect(
-      button?.parentElement?.previousElementSibling?.getAttribute(
-        "data-rail-feature"
-      )
+      button?.parentElement?.previousElementSibling?.dataset.railFeature
     ).toBe("usage");
     click(button);
     expect(opened).toEqual(["device-connections"]);
@@ -924,15 +922,16 @@ describe("SessionRail row layout", () => {
     const meaningfulSummary = meaningful?.querySelector(
       '[data-session-line="summary"]'
     );
-    const meaningfulSummaryOrder = Array.from(
-      meaningfulSummary?.children ?? []
-    ).map((child) => {
-      if (child.hasAttribute("data-session-preview")) return "preview";
-      if (child.hasAttribute("data-session-provider")) return "provider";
-      if (child.hasAttribute("data-session-age")) return "age";
-      if (child.hasAttribute("data-session-checkout-kind")) return "checkout";
-      return "other";
-    });
+    const meaningfulSummaryOrder = [...(meaningfulSummary?.children ?? [])].map(
+      (child) => {
+        if (Object.hasOwn(child.dataset, "sessionPreview")) return "preview";
+        if (Object.hasOwn(child.dataset, "sessionProvider")) return "provider";
+        if (Object.hasOwn(child.dataset, "sessionAge")) return "age";
+        if (Object.hasOwn(child.dataset, "sessionCheckoutKind"))
+          return "checkout";
+        return "other";
+      }
+    );
     expect(meaningfulSummaryOrder).toEqual([
       "preview",
       "provider",
@@ -966,9 +965,9 @@ describe("SessionRail row layout", () => {
       );
     }
 
-    const meaningfulLines = Array.from(
-      meaningful?.querySelectorAll("[data-session-line]") ?? []
-    ).map((line) => line.getAttribute("data-session-line"));
+    const meaningfulLines = [
+      ...(meaningful?.querySelectorAll("[data-session-line]") ?? []),
+    ].map((line) => line.dataset.sessionLine);
     expect(meaningfulLines).toEqual(["title", "summary"]);
 
     view.unmount();
@@ -1021,13 +1020,11 @@ describe("SessionRail row layout", () => {
       displayProvider: () => "OpenCode 2 (Beta)",
     });
     const row = view.container.querySelector('[data-session-id="recent"]');
-    const lines = Array.from(
-      row?.querySelectorAll("[data-session-line]") ?? []
-    );
+    const lines = [...(row?.querySelectorAll("[data-session-line]") ?? [])];
     const summary = row?.querySelector('[data-session-line="summary"]');
 
-    expect(lines[0]?.getAttribute("data-session-line")).toBe("title");
-    expect(lines[1]?.getAttribute("data-session-line")).toBe("summary");
+    expect(lines[0]?.dataset.sessionLine).toBe("title");
+    expect(lines[1]?.dataset.sessionLine).toBe("summary");
     expect(summary?.textContent).toContain("The newest AI reply");
     expect(summary?.querySelector("svg")?.getAttribute("viewBox")).toBe(
       "96 96 320 320"
@@ -1217,7 +1214,7 @@ describe("SessionRail row layout", () => {
       '[data-rail-feature="usage"] canvas[data-activity-state="searching"]'
     );
 
-    expect(runningOrb?.getAttribute("data-activity-state")).toBe("working");
+    expect(runningOrb?.dataset.activityState).toBe("working");
     expect(runningOrb?.style.width).toBe("14px");
     expect(
       running
@@ -1300,7 +1297,7 @@ describe("SessionRail row layout", () => {
       '[data-session-id="punctuation"]'
     );
 
-    expect(row?.getAttribute("data-session-density")).toBe("compact");
+    expect(row?.dataset.sessionDensity).toBe("compact");
     expect(row?.parentElement?.className).toContain("gap-0.5");
     expect(activeRow?.className).toContain("bg-fill-hover");
     expect(activeRow?.className).toContain("rounded-control");
@@ -1358,7 +1355,7 @@ describe("SessionRail row layout", () => {
 
     click(archive);
     await waitFor(() => {
-      expect(row?.getAttribute("data-session-archive-motion")).toBe("archive");
+      expect(row?.dataset.sessionArchiveMotion).toBe("archive");
       expect(row?.getAttribute("aria-busy")).toBe("true");
     });
     expect(archived).toEqual([]);
@@ -1366,7 +1363,7 @@ describe("SessionRail row layout", () => {
     row?.dispatchEvent(new dom.Event("animationend", { bubbles: true }));
     await waitFor(() => expect(archived).toEqual([["meaningful", true]]));
     await waitFor(() => {
-      expect(row?.getAttribute("data-session-archive-motion")).toBeNull();
+      expect(row?.dataset.sessionArchiveMotion).toBeNull();
       expect(row?.getAttribute("aria-busy")).toBeNull();
     });
 
@@ -1430,7 +1427,7 @@ describe("SessionRail row layout", () => {
       '[data-session-id="meaningful"]'
     );
 
-    expect(list?.getAttribute("data-session-selection")).toBe("instant");
+    expect(list?.dataset.sessionSelection).toBe("instant");
     expect(activeRow?.className.split(/\s+/)).toContain("bg-fill-hover");
     expect(activeRow?.className).not.toContain("transition-[background-color");
     expect(inactiveRow?.className.split(/\s+/)).not.toContain("bg-fill-hover");

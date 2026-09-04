@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, PanelRight } from "@/components/ui/icons";
 import { Separator } from "@/components/ui/separator";
 import { useLanguage } from "@/i18n";
 
-import { type BoardTask, type TaskPriority } from "./taskBoard";
+import type { BoardTask, TaskPriority } from "./taskBoard";
 import { TaskBoardCollection } from "./TaskBoardCollection";
 import { TaskBoardHeader } from "./TaskBoardHeader";
 import { TaskEditorDialog } from "./TaskEditorDialog";
@@ -24,6 +24,7 @@ import type {
 } from "./workspaceTypes";
 
 import "./task-board.css";
+
 export type { TaskBoardSession } from "./workspaceTypes";
 const NARROW_BOARD_WIDTH_REM = 48;
 function toggleValue<T extends string>(values: readonly T[], value: T): T[] {
@@ -71,9 +72,7 @@ export function TaskBoardPage({
     if (!page || typeof ResizeObserver === "undefined") return;
     const updateLayout = (): void => {
       const rootFontSize =
-        Number.parseFloat(
-          getComputedStyle(document.documentElement).fontSize
-        ) || 16;
+        Number(getComputedStyle(document.documentElement).fontSize) || 16;
       const width = page.clientWidth;
       if (width <= 0) return;
       const narrow = width <= NARROW_BOARD_WIDTH_REM * rootFontSize;
@@ -104,9 +103,10 @@ export function TaskBoardPage({
     selectedCheckoutPath,
     loadPullRequest
   );
-  const selectedPullRequest = selectedCheckoutPath
-    ? pullRequestsByPath.get(selectedCheckoutPath)
-    : null;
+  const selectedPullRequest =
+    selectedCheckoutPath != null && selectedCheckoutPath !== ""
+      ? pullRequestsByPath.get(selectedCheckoutPath)
+      : null;
   const activeFilterCount =
     (query.trim() ? 1 : 0) + priorities.length + labels.length;
   const renderedTasks = data.projectedTasks.slice(0, visibleTaskLimit);
@@ -154,11 +154,11 @@ export function TaskBoardPage({
       className="task-board-page animate-data-page-in bg-background text-foreground min-h-0 min-w-0 flex-1"
     >
       <div className="task-board-titlebar h-layout-titlebar flex shrink-0 items-center gap-3 px-4 sm:px-6">
-        {headerLeadingAction ? (
+        {headerLeadingAction == null ? null : (
           <div data-taskboard-leading-action className="shrink-0">
             {headerLeadingAction}
           </div>
-        ) : null}
+        )}
         <nav
           aria-label={t("taskboard.breadcrumb")}
           className="text-body flex min-w-0 items-center gap-2"
@@ -223,7 +223,7 @@ export function TaskBoardPage({
               onClearFilters={clearFilters}
               onCreateTask={() => actions.openEditor(null, "todo")}
             />
-            {data.warning ? (
+            {data.warning != null && data.warning !== "" ? (
               <p
                 role="alert"
                 className="bg-destructive/10 text-metadata text-destructive px-6 py-2"

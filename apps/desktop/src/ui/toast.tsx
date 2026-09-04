@@ -1,11 +1,5 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, CircleAlert, Info, X } from "@/components/ui/icons";
@@ -28,7 +22,9 @@ interface Toast {
 
 const ToastContext = createContext<
   (text: string, tone?: Tone, action?: ToastAction) => void
->(() => {});
+>(() => {
+  /* empty */
+});
 
 /**
  * Transient feedback. Several actions used to fail silently — a click that hits a disabled
@@ -47,17 +43,14 @@ let nextId = 1;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const push = useCallback(
-    (text: string, tone: Tone = "info", action?: ToastAction) => {
-      const id = nextId++;
-      setToasts((t) => [...t.slice(-3), { id, text, tone, action }]);
-    },
-    []
-  );
+  const push = (text: string, tone: Tone = "info", action?: ToastAction) => {
+    const id = (nextId += 1);
+    setToasts((t) => [...t.slice(-3), { id, text, tone, action }]);
+  };
 
-  const dismiss = useCallback((id: number) => {
+  const dismiss = (id: number) => {
     setToasts((t) => t.filter((x) => x.id !== id));
-  }, []);
+  };
 
   return (
     <ToastContext.Provider value={push}>

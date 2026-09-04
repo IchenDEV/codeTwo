@@ -4,8 +4,8 @@ import {
   projectActionBindings,
   projectActionId,
   projectActionIssue,
-  type ProjectActionDraft,
 } from "../src/session/projectActions";
+import type { ProjectActionDraft } from "../src/session/projectActions";
 
 const draft: ProjectActionDraft = {
   name: "Test",

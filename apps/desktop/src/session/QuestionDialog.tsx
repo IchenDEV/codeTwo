@@ -27,11 +27,13 @@ import {
   selectOption,
   setValue,
   toggleOption,
-  type ElicitationValues,
 } from "./elicitation";
+import type { ElicitationValues } from "./elicitation";
 
 /** happy-dom and React disagree about controlled inputs; the repo's fields drive them via onInput. */
-function noopChange() {}
+function noopChange() {
+  /* empty */
+}
 
 function Question({
   form,
@@ -57,12 +59,12 @@ function Question({
 
   return (
     <section className="flex min-w-0 flex-col gap-2">
-      {field.title && (
+      {field.title != null && field.title !== "" && (
         <h3 className="text-metadata text-muted-foreground font-medium uppercase">
           {field.title}
         </h3>
       )}
-      {field.description && (
+      {field.description != null && field.description !== "" && (
         <p className="text-body text-foreground/90">{field.description}</p>
       )}
 
@@ -90,7 +92,9 @@ function Question({
                     }
                   }}
                   details={
-                    option.preview && optionSelected ? (
+                    option.preview != null &&
+                    option.preview !== "" &&
+                    optionSelected ? (
                       <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
                         {option.preview}
                       </pre>
@@ -119,7 +123,9 @@ function Question({
                   description={option.description}
                   selected={optionSelected}
                   details={
-                    option.preview && optionSelected ? (
+                    option.preview != null &&
+                    option.preview !== "" &&
+                    optionSelected ? (
                       <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
                         {option.preview}
                       </pre>
@@ -155,7 +161,9 @@ function Question({
             // A half-typed number ("-", "1.") parses to NaN; keep the draft as text and let the
             // core drop it if the user leaves it that way, rather than fighting their typing.
             const parsed =
-              field.kind === "integer" ? parseInt(text, 10) : parseFloat(text);
+              field.kind === "integer"
+                ? Math.trunc(Number(text))
+                : Number(text);
             onChange(
               setValue(values, field, Number.isNaN(parsed) ? text : parsed)
             );
@@ -166,10 +174,10 @@ function Question({
       {custom && (
         <label className="flex flex-col gap-1">
           <span className="text-metadata text-muted-foreground uppercase">
-            {custom.title || t("question.other")}
+            {custom.title ?? t("question.other")}
           </span>
           <Input
-            aria-label={custom.title || t("question.other")}
+            aria-label={custom.title ?? t("question.other")}
             placeholder={t("question.otherPlaceholder")}
             value={
               typeof values[custom.key] === "string"
