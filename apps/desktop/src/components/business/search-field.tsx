@@ -1,24 +1,27 @@
-import { useId, useRef, type ChangeEventHandler, type ComponentProps } from "react"
-import { Search, X } from "@/components/ui/icons"
+import { useId, useRef } from "react";
+import type { ChangeEventHandler, ComponentProps } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import { Search, X } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
-interface SearchFieldBaseProps
-  extends Omit<ComponentProps<typeof Input>, "type" | "value" | "onChange" | "size" | "className"> {
-  label: string
-  value: string
-  className?: string
-  inputClassName?: string
-  onChange: ChangeEventHandler<HTMLInputElement>
+interface SearchFieldBaseProps extends Omit<
+  ComponentProps<typeof Input>,
+  "type" | "value" | "onChange" | "size" | "className"
+> {
+  label: string;
+  value: string;
+  className?: string;
+  inputClassName?: string;
+  onChange: ChangeEventHandler<HTMLInputElement>;
 }
 
 type SearchFieldProps = SearchFieldBaseProps &
   (
     | { clearLabel: string; onClear: () => void }
     | { clearLabel?: undefined; onClear?: undefined }
-  )
+  );
 
 function SearchField({
   label,
@@ -30,10 +33,10 @@ function SearchField({
   onChange,
   ...inputProps
 }: SearchFieldProps) {
-  const generatedId = useId()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const id = generatedId
-  const clearable = onClear !== undefined && value.length > 0
+  const generatedId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const id = generatedId;
+  const clearable = onClear !== undefined && value.length > 0;
 
   return (
     <div
@@ -46,7 +49,7 @@ function SearchField({
       </label>
       <Search
         aria-hidden="true"
-        className="pointer-events-none absolute start-surface-inset top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        className="start-surface-inset text-muted-foreground pointer-events-none absolute top-1/2 size-4 -translate-y-1/2"
       />
       <Input
         ref={inputRef}
@@ -56,7 +59,10 @@ function SearchField({
         aria-label={label}
         value={value}
         onChange={onChange}
-        className={cn(clearable ? "ps-page-section pe-page-section" : "ps-page-section", inputClassName)}
+        className={cn(
+          clearable ? "ps-page-section pe-page-section" : "ps-page-section",
+          inputClassName
+        )}
         {...inputProps}
       />
       {clearable ? (
@@ -64,18 +70,18 @@ function SearchField({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="absolute end-control-group top-1/2 -translate-y-1/2"
+          className="end-control-group absolute top-1/2 -translate-y-1/2"
           aria-label={clearLabel}
           onClick={() => {
-            onClear?.()
-            inputRef.current?.focus()
+            onClear?.();
+            inputRef.current?.focus();
           }}
         >
           <X aria-hidden="true" />
         </Button>
       ) : null}
     </div>
-  )
+  );
 }
 
-export { SearchField, type SearchFieldProps }
+export { SearchField, type SearchFieldProps };

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { useT } from "@/i18n";
 
@@ -11,17 +12,20 @@ import {
   listenDesktop,
   nativeContextMenusAvailable,
   showNativeContextMenu,
-  type DesktopPetState,
-  type NativeContextMenuItem,
 } from "../container";
+import type { DesktopPetState, NativeContextMenuItem } from "../container";
 import { CodeTwoPet } from "./CodeTwoPet";
 import type { CodeTwoPetAnimation } from "./state";
 
 const PET_STATE_UPDATE_INTERVAL_MS = 160;
 export const DESKTOP_PET_CLOSE_ACTION = "close";
 
-export function desktopPetContextMenu(closeLabel: string): NativeContextMenuItem[] {
-  return [{ type: "item", label: closeLabel, action: DESKTOP_PET_CLOSE_ACTION }];
+export function desktopPetContextMenu(
+  closeLabel: string
+): NativeContextMenuItem[] {
+  return [
+    { type: "item", label: closeLabel, action: DESKTOP_PET_CLOSE_ACTION },
+  ];
 }
 
 export function DesktopPetBridge({
@@ -53,7 +57,10 @@ export function DesktopPetBridge({
     updateTimer.current = window.setTimeout(() => {
       updateTimer.current = undefined;
       const state = pendingState.current;
-      if (state) void desktopUpdatePetState(state).catch(() => undefined);
+      if (state)
+        void desktopUpdatePetState(state).catch(() => {
+          /* empty */
+        });
     }, PET_STATE_UPDATE_INTERVAL_MS);
   }, [
     animation,
@@ -68,9 +75,10 @@ export function DesktopPetBridge({
 
   useEffect(
     () => () => {
-      if (updateTimer.current !== undefined) window.clearTimeout(updateTimer.current);
+      if (updateTimer.current !== undefined)
+        window.clearTimeout(updateTimer.current);
     },
-    [],
+    []
   );
 
   useEffect(() => {
@@ -97,7 +105,9 @@ export function DesktopPetWindow() {
       .then((value) => {
         if (active) setState(value);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        /* empty */
+      });
     return () => {
       active = false;
       stop();
@@ -109,9 +119,12 @@ export function DesktopPetWindow() {
   const openContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
     event.preventDefault();
     if (!nativeContextMenusAvailable) return;
-    void showNativeContextMenu(desktopPetContextMenu(t("pet.close")), (action) => {
-      if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet();
-    });
+    void showNativeContextMenu(
+      desktopPetContextMenu(t("pet.close")),
+      (action) => {
+        if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet();
+      }
+    );
   };
 
   return (

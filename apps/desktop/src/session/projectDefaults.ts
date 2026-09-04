@@ -8,7 +8,7 @@ import type { ProjectWorktreeMode, WorktreeBaselineKind } from "../bridge";
  * disabling a baseline the user chose in the composer.
  */
 export function projectWorktreeBaseline(
-  mode: ProjectWorktreeMode | null,
+  mode: ProjectWorktreeMode | null
 ): WorktreeBaselineKind | null | undefined {
   if (mode === null) return undefined;
   if (mode === "local") return null;
@@ -17,7 +17,7 @@ export function projectWorktreeBaseline(
 
 /** Switching projects opens a fresh draft, so automatic mode starts at C2's local default. */
 export function projectSwitchWorktreeBaseline(
-  mode: ProjectWorktreeMode | null,
+  mode: ProjectWorktreeMode | null
 ): WorktreeBaselineKind | null {
   return projectWorktreeBaseline(mode) ?? null;
 }
@@ -25,7 +25,7 @@ export function projectSwitchWorktreeBaseline(
 /** A New action follows its session's baseline kind; creation resolves a fresh local ref + SHA. */
 export function nextSessionWorktreeBaseline(
   mode: ProjectWorktreeMode | null,
-  inherited: WorktreeBaselineKind | null | undefined,
+  inherited: WorktreeBaselineKind | null | undefined
 ): WorktreeBaselineKind | null | undefined {
   const preferred = projectWorktreeBaseline(mode);
   return preferred === undefined ? inherited : preferred;

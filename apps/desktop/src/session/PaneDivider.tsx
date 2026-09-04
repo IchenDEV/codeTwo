@@ -1,7 +1,9 @@
-import { type CSSProperties, type RefObject } from "react";
+import type { CSSProperties, RefObject } from "react";
 
 import { useResizeHandle } from "@/components/ui/use-resize-handle";
-import { MIN_RATIO, type DividerRect } from "./paneLayout";
+
+import { MIN_RATIO } from "./paneLayout";
+import type { DividerRect } from "./paneLayout";
 
 const percent = (value: number): string => `${value * 100}%`;
 
@@ -14,7 +16,12 @@ interface PaneDividerProps {
 }
 
 /** Shared pointer-and-keyboard boundary for every tiled-pane host. */
-export function PaneDivider({ divider, containerRef, onResize, className = "group z-20" }: PaneDividerProps) {
+export function PaneDivider({
+  divider,
+  containerRef,
+  onResize,
+  className = "group z-20",
+}: PaneDividerProps) {
   const vertical = divider.direction === "row";
   const boundary = vertical
     ? divider.rect.x + divider.rect.w * divider.ratio
@@ -88,7 +95,10 @@ export function PaneDivider({ divider, containerRef, onResize, className = "grou
       className={className}
       style={handleStyle}
     >
-      <div className="bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary" style={lineStyle} />
+      <div
+        className="bg-border group-hover:bg-primary group-focus-visible:bg-primary transition-colors"
+        style={lineStyle}
+      />
     </div>
   );
 }

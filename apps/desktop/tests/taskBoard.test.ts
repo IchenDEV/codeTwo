@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   CORRUPT_BOARD_WARNING,
   DEFAULT_TASKS,
@@ -28,13 +29,15 @@ import {
   taskForPullRequest,
   taskForSession,
   unlinkTaskPullRequest,
-  type BoardFilters,
-  type BoardTask,
-  type GitHubPullRequestReference,
-  type StorageLike,
-  type TaskBoardState,
-  type TaskPriority,
-  type TaskStatus,
+} from "../src/taskboard/taskBoard";
+import type {
+  BoardFilters,
+  BoardTask,
+  GitHubPullRequestReference,
+  StorageLike,
+  TaskBoardState,
+  TaskPriority,
+  TaskStatus,
 } from "../src/taskboard/taskBoard";
 import { continueTaskBoardPrompt } from "../src/taskboard/taskBoardContinuation";
 
@@ -59,10 +62,14 @@ describe("TaskBoard prompt continuation", () => {
     const inserted = await continueTaskBoardPrompt({
       target: { paneId: "pane-a", sessionId: "session-a" },
       prompt: "Review this approach",
-      selectSession: async () => { events.push("selected"); },
+      selectSession: async () => {
+        events.push("selected");
+      },
       isTargetActive: () => true,
       openDocumentMode: () => events.push("document"),
-      insertMarkdown: async (markdown, mode) => { events.push(`${mode}:${markdown}`); },
+      insertMarkdown: async (markdown, mode) => {
+        events.push(`${mode}:${markdown}`);
+      },
       focusEditor: () => events.push("focused"),
     });
 
@@ -85,10 +92,12 @@ describe("TaskBoard prompt continuation", () => {
     const continuation = continueTaskBoardPrompt({
       target: { paneId: "pane-a", sessionId: "session-a" },
       prompt: "Do not redirect this",
-      selectSession: () => selection,
+      selectSession: async () => await selection,
       isTargetActive: () => active,
       openDocumentMode: () => events.push("document"),
-      insertMarkdown: async () => { events.push("inserted"); },
+      insertMarkdown: async () => {
+        events.push("inserted");
+      },
       focusEditor: () => events.push("focused"),
     });
 
@@ -104,7 +113,7 @@ function task(
   id: string,
   status: TaskStatus = "todo",
   order = 0,
-  overrides: Partial<BoardTask> = {},
+  overrides: Partial<BoardTask> = {}
 ): BoardTask {
   return {
     id,
@@ -123,7 +132,10 @@ function task(
   };
 }
 
-function pullRequest(number = 7, repository = "acme/repo"): GitHubPullRequestReference {
+function pullRequest(
+  number = 7,
+  repository = "acme/repo"
+): GitHubPullRequestReference {
   return {
     provider: "github",
     host: "github.com",
@@ -133,7 +145,10 @@ function pullRequest(number = 7, repository = "acme/repo"): GitHubPullRequestRef
   };
 }
 
-function state(tasks: BoardTask[], warning: string | null = null): TaskBoardState {
+function state(
+  tasks: BoardTask[],
+  warning: string | null = null
+): TaskBoardState {
   return { tasks, warning };
 }
 
@@ -147,7 +162,13 @@ describe("task board model constants and creation", () => {
   test("exposes the complete status and priority wire values", () => {
     expect(TASK_STATUSES).toEqual(["todo", "in_progress", "in_review", "done"]);
     expect(TASK_BOARD_LANES).toEqual(["queue", "running", "needs_you", "done"]);
-    expect(TASK_PRIORITIES).toEqual(["none", "low", "medium", "high", "urgent"]);
+    expect(TASK_PRIORITIES).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "urgent",
+    ]);
     expect(PRIORITIES).toBe(TASK_PRIORITIES);
     expect(TASKBOARD_STORAGE_KEY).toBe("codetwo.taskboard.v1");
   });
@@ -161,8 +182,12 @@ describe("task board model constants and creation", () => {
     expect(first).not.toBe(second);
     expect(first[0]).not.toBe(second[0]);
     expect(first[0]?.labels).not.toBe(second[0]?.labels);
-    expect(first.some((item) => /[\u3400-\u9fff]/u.test(item.title))).toBe(true);
-    expect(new Set(first.map((item) => item.status))).toEqual(new Set(TASK_STATUSES));
+    expect(first.some((item) => /[\u3400-\u9FFF]/u.test(item.title))).toBe(
+      true
+    );
+    expect(new Set(first.map((item) => item.status))).toEqual(
+      new Set(TASK_STATUSES)
+    );
     expect(first).toHaveLength(9);
     expect(countTasksByStatus(first)).toEqual({
       todo: 3,
@@ -172,8 +197,8 @@ describe("task board model constants and creation", () => {
     });
     expect(first.every((item) => item.sessionIds.length === 0)).toBe(true);
 
-    first[0]!.title = "mutated";
-    first[0]!.labels.push("mutated");
+    first[0].title = "mutated";
+    first[0].labels.push("mutated");
     expect(seedTasks()).toEqual(second);
   });
 
@@ -187,7 +212,7 @@ describe("task board model constants and creation", () => {
         labels: [" 前端 ", "", "前端", "体验"],
         sessionIds: [" session-7 ", "session-7", " session-8 "],
       },
-      { id: " task-7 ", now: BASE_TIME },
+      { id: " task-7 ", now: BASE_TIME }
     );
 
     expect(created).toEqual({
@@ -211,7 +236,12 @@ describe("task board model constants and creation", () => {
       task("tracked", "todo", 0, { sessionIds: ["session-1"] }),
       task("previous-owner", "in_progress", 0, { sessionIds: ["session-2"] }),
     ];
-    const associated = associateTaskSession(tasks, "tracked", "session-2", BASE_TIME + 1);
+    const associated = associateTaskSession(
+      tasks,
+      "tracked",
+      "session-2",
+      BASE_TIME + 1
+    );
 
     expect(associated?.[0]).toMatchObject({
       status: "in_progress",
@@ -233,7 +263,12 @@ describe("task board model constants and creation", () => {
         pullRequestLinkRevision: 3,
       }),
     ];
-    const linked = associateTaskPullRequest(tasks, "target", reference, BASE_TIME + 1)!;
+    const linked = associateTaskPullRequest(
+      tasks,
+      "target",
+      reference,
+      BASE_TIME + 1
+    )!;
 
     expect(taskForPullRequest(linked, reference)?.id).toBe("target");
     expect(linked[0]).toMatchObject({
@@ -245,18 +280,20 @@ describe("task board model constants and creation", () => {
       pullRequest: null,
       pullRequestLinkRevision: 4,
     });
-    expect(unlinkTaskPullRequest(
-      linked,
-      "target",
-      githubPullRequestIdentity(reference),
-      0,
-    )).toBeNull();
+    expect(
+      unlinkTaskPullRequest(
+        linked,
+        "target",
+        githubPullRequestIdentity(reference),
+        0
+      )
+    ).toBeNull();
     const unlinked = unlinkTaskPullRequest(
       linked,
       "target",
       githubPullRequestIdentity(reference),
       1,
-      BASE_TIME + 2,
+      BASE_TIME + 2
     );
     expect(unlinked?.[0]).toMatchObject({
       pullRequest: null,
@@ -296,11 +333,19 @@ describe("task board projection helpers", () => {
 
   test("projects durable task stages with live session activity", () => {
     expect(taskBoardLane(task("queued", "todo"), "running")).toBe("queue");
-    expect(taskBoardLane(task("active", "in_progress"), "running")).toBe("running");
-    expect(taskBoardLane(task("waiting", "in_progress"), "awaiting_input")).toBe("needs_you");
-    expect(taskBoardLane(task("failed", "in_progress"), "failed")).toBe("needs_you");
+    expect(taskBoardLane(task("active", "in_progress"), "running")).toBe(
+      "running"
+    );
+    expect(
+      taskBoardLane(task("waiting", "in_progress"), "awaiting_input")
+    ).toBe("needs_you");
+    expect(taskBoardLane(task("failed", "in_progress"), "failed")).toBe(
+      "needs_you"
+    );
     expect(taskBoardLane(task("paused", "in_progress"), "idle")).toBe("queue");
-    expect(taskBoardLane(task("review", "in_review"), "running")).toBe("needs_you");
+    expect(taskBoardLane(task("review", "in_review"), "running")).toBe(
+      "needs_you"
+    );
     expect(taskBoardLane(task("done", "done"), "failed")).toBe("done");
   });
 
@@ -318,19 +363,28 @@ describe("task board projection helpers", () => {
   });
 
   test("searches id, title, description, and labels case-insensitively", () => {
-    const filters = (query: string): BoardFilters => ({ query, priorities: [], labels: [] });
-    expect(filterBoardTasks(tasks, filters("THIRD")).map((item) => item.id)).toEqual(["third"]);
-    expect(filterBoardTasks(tasks, filters("design search")).map((item) => item.id)).toEqual([
-      "first",
-    ]);
-    expect(filterBoardTasks(tasks, filters("accessibility")).map((item) => item.id)).toEqual([
-      "review",
-    ]);
-    expect(filterBoardTasks(tasks, filters("backend")).map((item) => item.id)).toEqual([
-      "equal-b",
-    ]);
-    expect(filterBoardTasks(tasks, filters("acme/accessibility #42")).map((item) => item.id))
-      .toEqual(["review"]);
+    const filters = (query: string): BoardFilters => ({
+      query,
+      priorities: [],
+      labels: [],
+    });
+    expect(
+      filterBoardTasks(tasks, filters("THIRD")).map((item) => item.id)
+    ).toEqual(["third"]);
+    expect(
+      filterBoardTasks(tasks, filters("design search")).map((item) => item.id)
+    ).toEqual(["first"]);
+    expect(
+      filterBoardTasks(tasks, filters("accessibility")).map((item) => item.id)
+    ).toEqual(["review"]);
+    expect(
+      filterBoardTasks(tasks, filters("backend")).map((item) => item.id)
+    ).toEqual(["equal-b"]);
+    expect(
+      filterBoardTasks(tasks, filters("acme/accessibility #42")).map(
+        (item) => item.id
+      )
+    ).toEqual(["review"]);
   });
 
   test("combines query and facets while OR-ing values within each facet", () => {
@@ -351,14 +405,22 @@ describe("task board projection helpers", () => {
 
   test("filtering preserves the caller's ordering", () => {
     expect(
-      filterBoardTasks(tasks, { query: "", priorities: [], labels: ["Public"] }).map(
-        (item) => item.id,
-      ),
+      filterBoardTasks(tasks, {
+        query: "",
+        priorities: [],
+        labels: ["Public"],
+      }).map((item) => item.id)
     ).toEqual(["third", "first"]);
   });
 
   test("collects unique labels in first-seen order and counts every status", () => {
-    expect(boardLabels(tasks)).toEqual(["Docs", "Public", "QA", "UI", "Backend"]);
+    expect(boardLabels(tasks)).toEqual([
+      "Docs",
+      "Public",
+      "QA",
+      "UI",
+      "Backend",
+    ]);
     expect(countTasksByStatus(tasks)).toEqual({
       todo: 4,
       in_progress: 0,
@@ -385,13 +447,20 @@ describe("task board persistence", () => {
     });
     expect(loadBoardSnapshot(storage)).toEqual({ tasks: [], warning: null });
 
-    const savedTasks = [task("saved", "in_progress", 3, {
-      labels: ["本地"],
-      pullRequest: pullRequest(),
-      pullRequestLinkRevision: 2,
-    })];
-    expect(saveBoardSnapshot(state(savedTasks, "transient warning"), storage)).toEqual({ ok: true });
-    expect(loadBoardSnapshot(storage)).toEqual({ tasks: savedTasks, warning: null });
+    const savedTasks = [
+      task("saved", "in_progress", 3, {
+        labels: ["本地"],
+        pullRequest: pullRequest(),
+        pullRequestLinkRevision: 2,
+      }),
+    ];
+    expect(
+      saveBoardSnapshot(state(savedTasks, "transient warning"), storage)
+    ).toEqual({ ok: true });
+    expect(loadBoardSnapshot(storage)).toEqual({
+      tasks: savedTasks,
+      warning: null,
+    });
   });
 
   test("warns and safely restores seeds for invalid JSON, versions, task shapes, and duplicate IDs", () => {
@@ -399,27 +468,37 @@ describe("task board persistence", () => {
     const corruptValues: string[] = [
       "{ definitely not json",
       JSON.stringify({ version: 99, tasks: [] }),
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [{ ...malformedTask, status: "blocked" }] }),
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [malformedTask, malformedTask] }),
       JSON.stringify({
         version: TASKBOARD_SNAPSHOT_VERSION,
-        tasks: [{
-          ...malformedTask,
-          pullRequest: { ...pullRequest(), host: "github.example" },
-          pullRequestLinkRevision: 1,
-        }],
+        tasks: [{ ...malformedTask, status: "blocked" }],
       }),
       JSON.stringify({
         version: TASKBOARD_SNAPSHOT_VERSION,
-        tasks: [{
-          ...malformedTask,
-          pullRequest: {
-            ...pullRequest(),
-            repository: "acme/repo?tab=files",
-            url: "https://github.com/acme/repo?tab=files/pull/7",
+        tasks: [malformedTask, malformedTask],
+      }),
+      JSON.stringify({
+        version: TASKBOARD_SNAPSHOT_VERSION,
+        tasks: [
+          {
+            ...malformedTask,
+            pullRequest: { ...pullRequest(), host: "github.example" },
+            pullRequestLinkRevision: 1,
           },
-          pullRequestLinkRevision: 1,
-        }],
+        ],
+      }),
+      JSON.stringify({
+        version: TASKBOARD_SNAPSHOT_VERSION,
+        tasks: [
+          {
+            ...malformedTask,
+            pullRequest: {
+              ...pullRequest(),
+              repository: "acme/repo?tab=files",
+              url: "https://github.com/acme/repo?tab=files/pull/7",
+            },
+            pullRequestLinkRevision: 1,
+          },
+        ],
       }),
     ];
 
@@ -437,7 +516,7 @@ describe("task board persistence", () => {
       sessionIds: [" session-1 ", "session-1", " session-2 "],
     });
     const loaded = parseBoardSnapshot(
-      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [rawTask] }),
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [rawTask] })
     );
     expect(loaded).toEqual({
       warning: null,
@@ -456,10 +535,12 @@ describe("task board persistence", () => {
   test("migrates the v1 single-session shape without losing its association", () => {
     const legacy = task("legacy");
     const { sessionIds: _sessionIds, ...legacyTask } = legacy;
-    const loaded = parseBoardSnapshot(JSON.stringify({
-      version: 1,
-      tasks: [{ ...legacyTask, linkedSessionId: " session-old " }],
-    }));
+    const loaded = parseBoardSnapshot(
+      JSON.stringify({
+        version: 1,
+        tasks: [{ ...legacyTask, linkedSessionId: " session-old " }],
+      })
+    );
 
     expect(loaded.warning).toBeNull();
     expect(loaded.tasks[0]?.sessionIds).toEqual(["session-old"]);
@@ -474,7 +555,9 @@ describe("task board persistence", () => {
       pullRequestLinkRevision: _pullRequestLinkRevision,
       ...v2Task
     } = v2;
-    const migrated = parseBoardSnapshot(JSON.stringify({ version: 2, tasks: [v2Task] }));
+    const migrated = parseBoardSnapshot(
+      JSON.stringify({ version: 2, tasks: [v2Task] })
+    );
     expect(migrated.warning).toBeNull();
     expect(migrated.tasks[0]).toMatchObject({
       pullRequest: null,
@@ -482,19 +565,21 @@ describe("task board persistence", () => {
     });
 
     const reference = pullRequest();
-    const repaired = parseBoardSnapshot(JSON.stringify({
-      version: TASKBOARD_SNAPSHOT_VERSION,
-      tasks: [
-        task("first-owner", "todo", 0, {
-          pullRequest: reference,
-          pullRequestLinkRevision: 1,
-        }),
-        task("duplicate-owner", "todo", 1, {
-          pullRequest: reference,
-          pullRequestLinkRevision: 4,
-        }),
-      ],
-    }));
+    const repaired = parseBoardSnapshot(
+      JSON.stringify({
+        version: TASKBOARD_SNAPSHOT_VERSION,
+        tasks: [
+          task("first-owner", "todo", 0, {
+            pullRequest: reference,
+            pullRequestLinkRevision: 1,
+          }),
+          task("duplicate-owner", "todo", 1, {
+            pullRequest: reference,
+            pullRequestLinkRevision: 4,
+          }),
+        ],
+      })
+    );
     expect(repaired.warning).toBeNull();
     expect(repaired.tasks[0]?.pullRequest).toEqual(reference);
     expect(repaired.tasks[1]).toMatchObject({
@@ -508,7 +593,7 @@ describe("task board persistence", () => {
       getItem: () => {
         throw new Error("storage denied");
       },
-      setItem: () => undefined,
+      setItem: () => {},
     };
     const loaded = loadBoardSnapshot(storage);
     expect(loaded.warning).toBe(LOAD_BOARD_WARNING);
@@ -516,7 +601,10 @@ describe("task board persistence", () => {
   });
 
   test("reports absent and throwing storage writes without throwing", () => {
-    expect(saveBoardSnapshot([], null)).toEqual({ ok: false, warning: SAVE_BOARD_WARNING });
+    expect(saveBoardSnapshot([], null)).toEqual({
+      ok: false,
+      warning: SAVE_BOARD_WARNING,
+    });
     const storage: StorageLike = {
       getItem: () => null,
       setItem: () => {
@@ -539,7 +627,9 @@ describe("task board reducer", () => {
 
     expect(idsForStatus(next, "todo")).toEqual(["a", "b", "c"]);
     expect(next.tasks.find((item) => item.id === "c")?.order).toBe(2);
-    expect(next.tasks.find((item) => item.id === "c")?.labels).not.toBe(created.labels);
+    expect(next.tasks.find((item) => item.id === "c")?.labels).not.toBe(
+      created.labels
+    );
     expect(boardReducer(next, { type: "create", task: created })).toBe(next);
     expect(initial.tasks.map((item) => item.order)).toEqual([7, 20]);
   });
@@ -550,12 +640,22 @@ describe("task board reducer", () => {
       task("b", "todo", 1),
       task("review", "in_review", 4),
     ]);
-    const renamed = { ...initial.tasks[0]!, title: "Renamed", updatedAt: BASE_TIME + 1 };
+    const renamed = {
+      ...initial.tasks[0],
+      title: "Renamed",
+      updatedAt: BASE_TIME + 1,
+    };
     const sameColumn = boardReducer(initial, { type: "update", task: renamed });
-    expect(sameColumn.tasks.find((item) => item.id === "a")?.title).toBe("Renamed");
+    expect(sameColumn.tasks.find((item) => item.id === "a")?.title).toBe(
+      "Renamed"
+    );
     expect(idsForStatus(sameColumn, "todo")).toEqual(["a", "b"]);
 
-    const movedEdit = { ...renamed, status: "in_review" as const, updatedAt: BASE_TIME + 2 };
+    const movedEdit = {
+      ...renamed,
+      status: "in_review" as const,
+      updatedAt: BASE_TIME + 2,
+    };
     const next = boardReducer(sameColumn, { type: "update", task: movedEdit });
     expect(idsForStatus(next, "todo")).toEqual(["b"]);
     expect(idsForStatus(next, "in_review")).toEqual(["review", "a"]);
@@ -563,7 +663,11 @@ describe("task board reducer", () => {
   });
 
   test("deletes only the selected task, reindexes its column, and no-ops unknown IDs", () => {
-    const initial = state([task("a", "todo", 2), task("b", "todo", 8), task("done", "done", 9)]);
+    const initial = state([
+      task("a", "todo", 2),
+      task("b", "todo", 8),
+      task("done", "done", 9),
+    ]);
     const next = boardReducer(initial, { type: "delete", id: "a" });
     expect(next.tasks.map((item) => item.id)).toEqual(["b", "done"]);
     expect(next.tasks.find((item) => item.id === "b")?.order).toBe(0);
@@ -585,7 +689,9 @@ describe("task board reducer", () => {
       beforeId: "b",
     });
     expect(idsForStatus(next, "todo")).toEqual(["a", "d", "b", "c"]);
-    expect(sortBoardTasks(next.tasks).map((item) => item.order)).toEqual([0, 1, 2, 3]);
+    expect(sortBoardTasks(next.tasks).map((item) => item.order)).toEqual([
+      0, 1, 2, 3,
+    ]);
   });
 
   test("moves across columns before an anchor or appends when beforeId is omitted", () => {
@@ -604,7 +710,11 @@ describe("task board reducer", () => {
     expect(idsForStatus(before, "todo")).toEqual(["a"]);
     expect(idsForStatus(before, "in_review")).toEqual(["x", "b", "y"]);
 
-    const appended = boardReducer(before, { type: "move", id: "a", status: "in_review" });
+    const appended = boardReducer(before, {
+      type: "move",
+      id: "a",
+      status: "in_review",
+    });
     expect(idsForStatus(appended, "todo")).toEqual([]);
     expect(idsForStatus(appended, "in_review")).toEqual(["x", "b", "y", "a"]);
   });
@@ -620,13 +730,21 @@ describe("task board reducer", () => {
       id: "b",
       status: "in_review",
       beforeId: "review",
-      now: BASE_TIME + 5_000,
+      now: BASE_TIME + 5000,
     });
 
-    expect(next.tasks.find((item) => item.id === "b")?.updatedAt).toBe(BASE_TIME + 5_000);
-    expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(BASE_TIME);
-    expect(next.tasks.find((item) => item.id === "review")?.updatedAt).toBe(BASE_TIME);
-    expect(initial.tasks.find((item) => item.id === "b")?.updatedAt).toBe(BASE_TIME);
+    expect(next.tasks.find((item) => item.id === "b")?.updatedAt).toBe(
+      BASE_TIME + 5000
+    );
+    expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(
+      BASE_TIME
+    );
+    expect(next.tasks.find((item) => item.id === "review")?.updatedAt).toBe(
+      BASE_TIME
+    );
+    expect(initial.tasks.find((item) => item.id === "b")?.updatedAt).toBe(
+      BASE_TIME
+    );
   });
 
   test("keeps a moved task timestamp valid and monotonic when the clock rolls back", () => {
@@ -643,21 +761,44 @@ describe("task board reducer", () => {
       now: BASE_TIME,
     });
 
-    expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(createdAt);
+    expect(next.tasks.find((item) => item.id === "a")?.updatedAt).toBe(
+      createdAt
+    );
   });
 
   test("uses exact anchors: self, missing, and cross-column beforeIds are no-ops", () => {
-    const initial = state([task("a", "todo", 0), task("b", "todo", 1), task("done", "done", 0)]);
+    const initial = state([
+      task("a", "todo", 0),
+      task("b", "todo", 1),
+      task("done", "done", 0),
+    ]);
     expect(
-      boardReducer(initial, { type: "move", id: "a", status: "todo", beforeId: "a" }),
+      boardReducer(initial, {
+        type: "move",
+        id: "a",
+        status: "todo",
+        beforeId: "a",
+      })
     ).toBe(initial);
     expect(
-      boardReducer(initial, { type: "move", id: "a", status: "todo", beforeId: "missing" }),
+      boardReducer(initial, {
+        type: "move",
+        id: "a",
+        status: "todo",
+        beforeId: "missing",
+      })
     ).toBe(initial);
     expect(
-      boardReducer(initial, { type: "move", id: "a", status: "todo", beforeId: "done" }),
+      boardReducer(initial, {
+        type: "move",
+        id: "a",
+        status: "todo",
+        beforeId: "done",
+      })
     ).toBe(initial);
-    expect(boardReducer(initial, { type: "move", id: "missing", status: "done" })).toBe(initial);
+    expect(
+      boardReducer(initial, { type: "move", id: "missing", status: "done" })
+    ).toBe(initial);
   });
 
   test("preserves every non-moved task's relative order when dragging a filtered subset", () => {
@@ -673,7 +814,11 @@ describe("task board reducer", () => {
       priorities: ["high"],
       labels: [],
     });
-    expect(visible.map((item) => item.id)).toEqual(["visible-a", "visible-b", "visible-c"]);
+    expect(visible.map((item) => item.id)).toEqual([
+      "visible-a",
+      "visible-b",
+      "visible-c",
+    ]);
 
     const next = boardReducer(state(allTasks), {
       type: "move",
@@ -689,7 +834,7 @@ describe("task board reducer", () => {
       "hidden-b",
     ]);
     expect(
-      idsForStatus(next, "todo").filter((id) => id.startsWith("hidden")),
+      idsForStatus(next, "todo").filter((id) => id.startsWith("hidden"))
     ).toEqual(["hidden-a", "hidden-b"]);
   });
 
@@ -714,7 +859,11 @@ describe("task board reducer", () => {
     const priorities: TaskPriority[] = ["high"];
     const initialTask = task("a", "todo", 0, { priority: priorities[0] });
     const initial = state([initialTask], "storage warning");
-    const next = boardReducer(initial, { type: "move", id: "a", status: "done" });
+    const next = boardReducer(initial, {
+      type: "move",
+      id: "a",
+      status: "done",
+    });
     expect(next.warning).toBe("storage warning");
     expect(initialTask).toEqual(task("a", "todo", 0, { priority: "high" }));
   });

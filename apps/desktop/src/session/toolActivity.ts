@@ -1,5 +1,7 @@
-import type { DockSurface, DockTab } from "../dock/Dock";
 import type { ArtifactRef } from "../bridge";
+import type { DockSurface, DockTab } from "../dock/Dock";
+import { asJsonObject } from "../lib/jsonValue";
+import type { JsonObject } from "../lib/jsonValue";
 import type { ToolEntry, Turn } from "./turns";
 
 /**
@@ -15,31 +17,56 @@ export interface ToolSurfaceHint {
   file?: string;
 }
 
-type JsonRecord = Record<string, unknown>;
+type JsonRecord = JsonObject;
 
 /** ACP kinds whose whole point is looking, not acting — the dock never follows a read. */
 const READ_KINDS = new Set(["read", "search", "fetch", "think"]);
 
 // Complete-token matches on normalized identifiers, exactly like agentActivity's suffix rule:
 // a whole `git_commit` or `apply_patch` operation is evidence, a substring in prose is not.
-const GIT_TOOL = /(?:^|_)git_(?:commit|branch|merge|status|checkout|rebase|stash|push|pull)(?:_|$)/;
-const GIT_EXACT = new Set(["commit", "git_commit", "branch", "create_branch", "git_branch", "merge", "merge_branch", "git_merge", "git_status"]);
+const GIT_TOOL =
+  /(?:^|_)git_(?:commit|branch|merge|status|checkout|rebase|stash|push|pull)(?:_|$)/;
+const GIT_EXACT = new Set([
+  "commit",
+  "git_commit",
+  "branch",
+  "create_branch",
+  "git_branch",
+  "merge",
+  "merge_branch",
+  "git_merge",
+  "git_status",
+]);
 
-const FILE_TOOL = /(?:^|_)(?:apply_patch|str_replace|(?:edit|write|create)_file|file_(?:edit|write|create))(?:_|$)/;
-const FILE_EXACT = new Set(["edit", "write", "create", "apply_patch", "multi_edit", "str_replace", "str_replace_editor", "str_replace_based_edit_tool", "notebook_edit", "text_editor"]);
+const FILE_TOOL =
+  /(?:^|_)(?:apply_patch|str_replace|(?:edit|write|create)_file|file_(?:edit|write|create))(?:_|$)/;
+const FILE_EXACT = new Set([
+  "edit",
+  "write",
+  "create",
+  "apply_patch",
+  "multi_edit",
+  "str_replace",
+  "str_replace_editor",
+  "str_replace_based_edit_tool",
+  "notebook_edit",
+  "text_editor",
+]);
 
-const TERMINAL_TOOL = /(?:^|_)(?:bash|shell|zsh|exec|execute|terminal|cmd)(?:_|$)/;
+const TERMINAL_TOOL =
+  /(?:^|_)(?:bash|shell|zsh|exec|execute|terminal|cmd)(?:_|$)/;
 const TERMINAL_COMMAND = /(?:^|_)(?:run|exec|shell|execute)_commands?(?:_|$)/;
 // "Test-run" titles: a runner followed by `test`, or a runner whose only job is running tests.
-const TEST_RUN = /(?:^|_)(?:cargo|npm|pnpm|yarn|bun|go|make|mvn|gradle|python)_tests?(?:_|$)|(?:^|_)(?:pytest|vitest|jest|ctest)(?:_|$)|(?:^|_)run_tests?(?:_|$)/;
+const TEST_RUN =
+  /(?:^|_)(?:cargo|npm|pnpm|yarn|bun|go|make|mvn|gradle|python)_tests?(?:_|$)|(?:^|_)(?:pytest|vitest|jest|ctest)(?:_|$)|(?:^|_)run_tests?(?:_|$)/;
 
 function normalizeIdentifier(value: string | null | undefined): string {
   return (value ?? "")
     .trim()
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1_$2")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+    .replaceAll(/[^a-z0-9]+/g, "_")
+    .replaceAll(/^_+|_+$/g, "");
 }
 
 export interface InteractiveToolPreview {
@@ -48,7 +75,9 @@ export interface InteractiveToolPreview {
   artifact: ArtifactRef;
 }
 
-function interactiveToolKind(tool: ToolEntry): InteractiveToolPreview["kind"] | null {
+function interactiveToolKind(
+  tool: ToolEntry
+): InteractiveToolPreview["kind"] | null {
   const kind = normalizeIdentifier(tool.kind);
   const title = normalizeIdentifier(tool.title);
   if (kind === "computer_use" || title === "computer_use") return "computer";
@@ -64,27 +93,43 @@ function interactiveToolKind(tool: ToolEntry): InteractiveToolPreview["kind"] | 
 }
 
 /** The latest real screen image from Browser/Computer activity in the current agent turn. */
-export function activeInteractivePreview(turns: readonly Turn[]): InteractiveToolPreview | null {
+export function activeInteractivePreview(
+  turns: readonly Turn[]
+): InteractiveToolPreview | null {
   for (let turnIndex = turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
     const turn = turns[turnIndex];
-    if (!turn || turn.endedAt !== undefined) continue;
+    if (turn == null || turn.endedAt !== undefined) continue;
 
-    let activeTool: Pick<InteractiveToolPreview, "kind" | "title"> | null = null;
-    for (let toolIndex = turn.tools.length - 1; toolIndex >= 0; toolIndex -= 1) {
+    let activeTool: Pick<InteractiveToolPreview, "kind" | "title"> | null =
+      null;
+    for (
+      let toolIndex = turn.tools.length - 1;
+      toolIndex >= 0;
+      toolIndex -= 1
+    ) {
       const tool = turn.tools[toolIndex];
-      const kind = tool && interactiveToolKind(tool);
-      if (tool && kind) {
+      const kind = tool == null ? null : interactiveToolKind(tool);
+      if (tool != null && kind != null) {
         activeTool = { kind, title: tool.title };
         break;
       }
     }
     if (!activeTool) continue;
 
-    for (let toolIndex = turn.tools.length - 1; toolIndex >= 0; toolIndex -= 1) {
+    for (
+      let toolIndex = turn.tools.length - 1;
+      toolIndex >= 0;
+      toolIndex -= 1
+    ) {
       const tool = turn.tools[toolIndex];
-      if (!tool || interactiveToolKind(tool) !== activeTool.kind) continue;
+      if (tool == null || interactiveToolKind(tool) !== activeTool.kind)
+        continue;
       const outputs = tool.outputs ?? [];
-      for (let outputIndex = outputs.length - 1; outputIndex >= 0; outputIndex -= 1) {
+      for (
+        let outputIndex = outputs.length - 1;
+        outputIndex >= 0;
+        outputIndex -= 1
+      ) {
         const output = outputs[outputIndex];
         if (output?.type === "image") {
           return { ...activeTool, artifact: output.artifact };
@@ -96,13 +141,13 @@ export function activeInteractivePreview(turns: readonly Turn[]): InteractiveToo
 }
 
 function parsedRecord(value: unknown): JsonRecord | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as JsonRecord;
+  const direct = asJsonObject(value);
+  if (direct != null) return direct;
   if (typeof value !== "string") return null;
   const text = value.trim();
   if (!text.startsWith("{") || !text.endsWith("}")) return null;
   try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as JsonRecord) : null;
+    return asJsonObject(JSON.parse(text) as unknown);
   } catch {
     return null;
   }
@@ -124,7 +169,8 @@ function filePathFrom(value: unknown): string | undefined {
   if (!record) return undefined;
   for (const key of ["file_path", "filePath", "path", "filename", "fileName"]) {
     const candidate = record[key];
-    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    if (typeof candidate === "string" && candidate.trim())
+      return candidate.trim();
   }
   return undefined;
 }
@@ -161,9 +207,12 @@ export function classifyToolSurface(tool: {
   if (isGitTool(title) || isGitTool(kind)) return { surface: "git" };
   if (kind === "edit" || isFileTool(title)) {
     const file = filePathFrom(tool.agentInput);
-    return file ? { surface: "files", file } : { surface: "files" };
+    return file != null && file !== ""
+      ? { surface: "files", file }
+      : { surface: "files" };
   }
-  if (kind === "execute" || isTerminalTool(title)) return { surface: "terminal" };
+  if (kind === "execute" || isTerminalTool(title))
+    return { surface: "terminal" };
   return null;
 }
 
@@ -199,18 +248,21 @@ const SWITCH_DEBOUNCE_MS = 2000;
  */
 export function followReduce(
   s: FollowState,
-  e: FollowEvent,
+  e: FollowEvent
 ): { state: FollowState; setTab?: DockSurface } {
   switch (e.kind) {
-    case "manual":
+    case "manual": {
       return { state: { ...s, manualLatched: true, autoTab: null } };
-    case "run_ended":
+    }
+    case "run_ended": {
       return { state: { ...s, manualLatched: false, autoTab: null } };
-    case "session_switched":
+    }
+    case "session_switched": {
       return { state: initialFollowState };
+    }
     case "tool": {
       if (s.manualLatched) return { state: s };
-      const surface = e.hint.surface;
+      const { surface } = e.hint;
       if (!e.dockOpen) {
         return { state: { ...s, autoTab: surface } };
       }

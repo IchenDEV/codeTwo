@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
+
+import { NavigationRow } from "@/components/business/navigation-row";
+import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
   BrainCircuit,
@@ -19,7 +22,11 @@ import {
   UserRound,
   Wrench,
 } from "@/components/ui/icons";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cssVars } from "@/lib/cssVars";
+import { cn } from "@/lib/utils";
 
+import { resetVisualAppearanceSettings } from "../appearance";
 import {
   checkForAppUpdates,
   confirmNative,
@@ -29,40 +36,30 @@ import {
   getWorktreeSettings,
   listProjectWorktrees,
   updateWorktreeSettings,
-  type AppshotSettings,
-  type BrowserUseSettings,
-  type ComputerUseSettings,
-  type AppUpdateStatus,
-  type DeviceSyncStatus,
-  type DiagnosticsExportResult,
-  type KeymapEntry,
-  type Project,
-  type ProjectWorktreeMode,
-  type ProviderInfo,
-  type ProviderRuntimeOverride,
-  type SessionImportResult,
-  type WorktreeSettings,
-  type PluginDeveloperStatus,
+} from "../bridge";
+import type {
+  AppshotSettings,
+  BrowserUseSettings,
+  ComputerUseSettings,
+  AppUpdateStatus,
+  DeviceSyncStatus,
+  DiagnosticsExportResult,
+  KeymapEntry,
+  Project,
+  ProjectWorktreeMode,
+  ProviderInfo,
+  ProviderRuntimeOverride,
+  SessionImportResult,
+  WorktreeSettings,
+  PluginDeveloperStatus,
 } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import type { StringKey } from "../i18n/strings";
-import { resetVisualAppearanceSettings } from "../appearance";
 import { useTheme } from "../theme";
 import { UsagePanel } from "../usage/Usage";
-import { MemorySettingsPage } from "./MemorySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AppshotsSettingsPage } from "./AppshotsSettings";
-import { PetSettings } from "./PetSettings";
-import {
-  GeneralSettingsPage,
-  ImportSettingsPage,
-  KeybindingsSettingsPage,
-} from "./PersonalSettings";
-import { ProfileSettings } from "./ProfileSettings";
-import { ProjectSettingsPage } from "./ProjectSettings";
-import { ProviderSettingsPage } from "./ProviderSettings";
-import { WorktreeSettingsPage } from "./WorktreeSettings";
-import { Page } from "./SettingsPrimitives";
+import { MemorySettingsPage } from "./MemorySettings";
 import {
   BrowserPermissionsSettingsPage,
   BrowserUseSettingsPage,
@@ -70,10 +67,17 @@ import {
   DeveloperSettingsPage,
   DeviceSyncSettingsPage,
 } from "./OperationalSettings";
-import { Button } from "@/components/ui/button";
-import { NavigationRow } from "@/components/business/navigation-row";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
+import {
+  GeneralSettingsPage,
+  ImportSettingsPage,
+  KeybindingsSettingsPage,
+} from "./PersonalSettings";
+import { PetSettings } from "./PetSettings";
+import { ProfileSettings } from "./ProfileSettings";
+import { ProjectSettingsPage } from "./ProjectSettings";
+import { ProviderSettingsPage } from "./ProviderSettings";
+import { Page } from "./SettingsPrimitives";
+import { WorktreeSettingsPage } from "./WorktreeSettings";
 
 import "./settings-page.css";
 
@@ -96,11 +100,11 @@ export type SettingsTab =
   | "developer"
   | "browser";
 
-type SettingsNavItem = {
+interface SettingsNavItem {
   id: SettingsTab;
   icon: typeof Keyboard;
   labelKey: StringKey;
-};
+}
 
 const NAV_GROUPS: {
   id: "personal" | "workspace" | "integrations";
@@ -135,7 +139,11 @@ const NAV_GROUPS: {
     labelKey: "settings.navIntegrations",
     items: [
       { id: "providers", icon: Package, labelKey: "settings.providers" },
-      { id: "computer-use", icon: MousePointer2, labelKey: "settings.computerUse" },
+      {
+        id: "computer-use",
+        icon: MousePointer2,
+        labelKey: "settings.computerUse",
+      },
       { id: "appshots", icon: ScanText, labelKey: "settings.appshots" },
       { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
       { id: "browser", icon: Globe, labelKey: "settings.browser" },
@@ -166,16 +174,30 @@ export function SettingsPage({
   project,
   projects = EMPTY_PROJECTS,
   onProjectWorktreeMode,
-  onProjectRename = async () => {},
-  onProjectIcon = async () => {},
-  onProjectAgentDefaults = async () => {},
-  onProjectRemove = async () => {},
+  onProjectRename = async () => {
+    /* empty */
+  },
+  onProjectIcon = async () => {
+    /* empty */
+  },
+  onProjectAgentDefaults = async () => {
+    /* empty */
+  },
+  onProjectRemove = async () => {
+    /* empty */
+  },
   projectIconPicker,
   projectActionsCount = 0,
-  onAddProjectAction = () => {},
-  onOpenSession = () => {},
+  onAddProjectAction = () => {
+    /* empty */
+  },
+  onOpenSession = () => {
+    /* empty */
+  },
   sessionImporter,
-  onSessionsImported = async () => {},
+  onSessionsImported = async () => {
+    /* empty */
+  },
   worktreeLister = listProjectWorktrees,
   worktreeSettingsLoader = getWorktreeSettings,
   worktreeSettingsSaver = updateWorktreeSettings,
@@ -225,25 +247,32 @@ export function SettingsPage({
   projectPath: string;
   project: Project | null;
   projects?: Project[];
-  onProjectWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
+  onProjectWorktreeMode: (
+    path: string,
+    mode: ProjectWorktreeMode | null
+  ) => Promise<void>;
   onProjectRename?: (path: string, name: string) => Promise<void>;
   onProjectIcon?: (path: string, source: string | null) => Promise<void>;
   onProjectAgentDefaults?: (
     path: string,
     provider: string | null,
     model: string | null,
-    reasoningEffort: string | null,
+    reasoningEffort: string | null
   ) => Promise<void>;
   onProjectRemove?: (path: string) => Promise<void>;
   projectIconPicker?: () => Promise<string | null>;
   projectActionsCount?: number;
   onAddProjectAction?: () => void;
   onOpenSession?: (sessionId: string) => void;
-  sessionImporter?: (fallbackCwd: string) => Promise<SessionImportResult | null>;
+  sessionImporter?: (
+    fallbackCwd: string
+  ) => Promise<SessionImportResult | null>;
   onSessionsImported?: () => void | Promise<unknown>;
   worktreeLister?: typeof listProjectWorktrees;
   worktreeSettingsLoader?: () => Promise<WorktreeSettings>;
-  worktreeSettingsSaver?: (settings: WorktreeSettings) => Promise<WorktreeSettings>;
+  worktreeSettingsSaver?: (
+    settings: WorktreeSettings
+  ) => Promise<WorktreeSettings>;
   sessionWorktreeDiscarder?: typeof discardSessionWorktree;
   orphanWorktreeDiscarder?: typeof discardOrphanWorktree;
   worktreeDiscardConfirmer?: typeof confirmNative;
@@ -261,25 +290,34 @@ export function SettingsPage({
   browserUseAccessSaver?: (enabled: boolean) => Promise<BrowserUseSettings>;
   appshotSettingsLoader?: () => Promise<AppshotSettings>;
   appshotSettingsSaver?: (
-    patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>,
+    patch: Partial<
+      Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">
+    >
   ) => Promise<AppshotSettings>;
   appshotPermissionRequester?: (
-    kind: "screen-recording" | "accessibility",
+    kind: "screen-recording" | "accessibility"
   ) => Promise<AppshotSettings>;
-  appshotPrivacyOpener?: (kind: "screen-recording" | "accessibility") => Promise<boolean>;
+  appshotPrivacyOpener?: (
+    kind: "screen-recording" | "accessibility"
+  ) => Promise<boolean>;
   appshotCapturer?: () => Promise<unknown>;
   providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
   providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
-  providerEnabledSaver?: (provider: string, enabled: boolean) => Promise<ProviderInfo[]>;
+  providerEnabledSaver?: (
+    provider: string,
+    enabled: boolean
+  ) => Promise<ProviderInfo[]>;
   providerConfigurationSaver?: (
     provider: string,
-    configuration: ProviderRuntimeOverride,
+    configuration: ProviderRuntimeOverride
   ) => Promise<ProviderInfo[]>;
   deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
   deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
   deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
   pluginDeveloperStatusLoader?: () => Promise<PluginDeveloperStatus>;
-  pluginDeveloperModeSaver?: (enabled: boolean) => Promise<PluginDeveloperStatus>;
+  pluginDeveloperModeSaver?: (
+    enabled: boolean
+  ) => Promise<PluginDeveloperStatus>;
   pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
   devtoolsOpener?: () => Promise<void>;
   diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
@@ -287,21 +325,20 @@ export function SettingsPage({
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const { setPreference: setLanguage } = useLanguage();
-  const providerNames = useMemo(
-    () => Object.fromEntries(providers.map((candidate) => [candidate.id, candidate.display_name])),
-    [providers],
+  const providerNames = Object.fromEntries(
+    providers.map((candidate) => [candidate.id, candidate.display_name])
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [projectNavigationLocked, setProjectNavigationLocked] = useState(false);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
-      setTab((current) => current === "memory" ? "general" : current);
+      setTab((current) => (current === "memory" ? "general" : current));
     }
   }, [memoryEnabled]);
   useEffect(() => {
     if (!deviceSyncEnabled) {
-      setTab((current) => current === "sync" ? "general" : current);
+      setTab((current) => (current === "sync" ? "general" : current));
     }
   }, [deviceSyncEnabled]);
 
@@ -322,11 +359,9 @@ export function SettingsPage({
       <aside
         data-settings-sidebar
         className="settings-sidebar glass-rail flex shrink-0 flex-col"
-        style={
-          {
-            "--settings-sidebar-width": `${Math.min(420, Math.max(220, sidebarWidth))}px`,
-          } as CSSProperties
-        }
+        style={cssVars({
+          "--settings-sidebar-width": `${Math.min(420, Math.max(220, sidebarWidth))}px`,
+        })}
       >
         {/* Same 46px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />
@@ -339,62 +374,69 @@ export function SettingsPage({
           onClick={onClose}
           aria-label={t("settings.back")}
           title={t("settings.back")}
-          className="mx-3 mb-2 w-auto text-muted-foreground"
+          className="text-muted-foreground mx-3 mb-2 w-auto"
         >
           <ArrowLeft className="size-3.5 shrink-0" />
           <span className="settings-back-label">{t("settings.back")}</span>
         </Button>
         <nav
           aria-label={t("settings.title")}
-          className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-6 pt-2"
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pt-2 pb-6"
         >
           <div className="space-y-6">
-          {NAV_GROUPS.map((group) => {
-            const items = group.items.filter(({ id }) => memoryEnabled || id !== "memory")
-              .filter(({ id }) => deviceSyncEnabled || id !== "sync");
-            const headingId = `settings-nav-${group.id}`;
-            return (
-              <section key={group.id} aria-label={t(group.labelKey)} aria-labelledby={headingId}>
-                <h2
-                  id={headingId}
-                  className="settings-nav-heading px-2 pb-2 text-metadata font-medium text-muted-foreground"
+            {NAV_GROUPS.map((group) => {
+              const items = group.items
+                .filter(({ id }) => memoryEnabled || id !== "memory")
+                .filter(({ id }) => deviceSyncEnabled || id !== "sync");
+              const headingId = `settings-nav-${group.id}`;
+              return (
+                <section
+                  key={group.id}
+                  aria-label={t(group.labelKey)}
+                  aria-labelledby={headingId}
                 >
-                  {t(group.labelKey)}
-                </h2>
-                <div className="space-y-1">
-                  {items.map(({ id, icon: Icon, labelKey }) => (
-                    <NavigationRow
-                      key={id}
-                      className="settings-nav-item"
-                      labelClassName="settings-nav-label"
-                      label={t(labelKey)}
-                      leading={<Icon />}
-                      current={id === tab}
-                      accessibilityLabel={t(labelKey)}
-                      tooltip={t(labelKey)}
-                      onSelect={() => setTab(id)}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+                  <h2
+                    id={headingId}
+                    className="settings-nav-heading text-metadata text-muted-foreground px-2 pb-2 font-medium"
+                  >
+                    {t(group.labelKey)}
+                  </h2>
+                  <div className="space-y-1">
+                    {items.map(({ id, icon: Icon, labelKey }) => (
+                      <NavigationRow
+                        key={id}
+                        className="settings-nav-item"
+                        labelClassName="settings-nav-label"
+                        label={t(labelKey)}
+                        leading={<Icon />}
+                        current={id === tab}
+                        accessibilityLabel={t(labelKey)}
+                        tooltip={t(labelKey)}
+                        onSelect={() => setTab(id)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         </nav>
       </aside>
 
       {/* ---- the page ---- */}
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <main className="bg-background flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* The same 46px bar as the main shell's header, border and all. */}
         <header
           data-settings-titlebar
-          className="electrobun-webkit-app-region-drag settings-titlebar flex shrink-0 items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5"
+          className="electrobun-webkit-app-region-drag settings-titlebar flex shrink-0 items-center gap-1.5 border-b pt-1.5 pr-3 pb-1.5 pl-6"
         >
-          <span className="electrobun-webkit-app-region-drag text-body font-medium text-muted-foreground">
+          <span className="electrobun-webkit-app-region-drag text-body text-muted-foreground font-medium">
             {tab === "profile" ? t("profile.title") : t("settings.title")}
           </span>
           <div className="electrobun-webkit-app-region-drag flex-1" />
-          {(tab === "general" || tab === "appearance" || tab === "keybindings") && (
+          {(tab === "general" ||
+            tab === "appearance" ||
+            tab === "keybindings") && (
             <Button
               variant="ghost"
               size="sm"
@@ -412,7 +454,7 @@ export function SettingsPage({
             className={cn(
               "settings-page mx-auto w-full",
               tab === "profile" && "settings-profile-page",
-              tab === "worktrees" && "settings-worktrees-page",
+              tab === "worktrees" && "settings-worktrees-page"
             )}
           >
             {tab === "general" && (
@@ -432,12 +474,17 @@ export function SettingsPage({
             )}
 
             {tab === "appearance" && (
-              <Page title={t("settings.appearance")} description={t("settings.appearanceHint")}>
+              <Page
+                title={t("settings.appearance")}
+                description={t("settings.appearanceHint")}
+              >
                 <AppearanceSettings value={theme} onChange={setTheme} />
               </Page>
             )}
 
-            {tab === "profile" && <ProfileSettings providerNames={providerNames} />}
+            {tab === "profile" && (
+              <ProfileSettings providerNames={providerNames} />
+            )}
 
             {tab === "pets" && (
               <Page title={t("settings.pets")}>
@@ -502,7 +549,10 @@ export function SettingsPage({
             {tab === "usage" && (
               <UsagePanel
                 provider={provider}
-                providerName={providers.find((candidate) => candidate.id === provider)?.display_name ?? provider}
+                providerName={
+                  providers.find((candidate) => candidate.id === provider)
+                    ?.display_name ?? provider
+                }
                 providerNames={providerNames}
               />
             )}

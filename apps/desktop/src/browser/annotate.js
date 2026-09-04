@@ -21,13 +21,30 @@
   const FIELDS = [
     { prop: "color", label: "Text color", kind: "color" },
     { prop: "background-color", label: "Background", kind: "color" },
-    { prop: "opacity", label: "Opacity", kind: "number", step: "0.05", min: "0", max: "1" },
+    {
+      prop: "opacity",
+      label: "Opacity",
+      kind: "number",
+      step: "0.05",
+      min: "0",
+      max: "1",
+    },
     { prop: "font-family", label: "Font", kind: "text" },
     { prop: "font-size", label: "Font size", kind: "px" },
     { prop: "font-weight", label: "Font weight", kind: "weight" },
   ];
 
-  const WEIGHTS = ["100", "200", "300", "400", "500", "600", "700", "800", "900"];
+  const WEIGHTS = [
+    "100",
+    "200",
+    "300",
+    "400",
+    "500",
+    "600",
+    "700",
+    "800",
+    "900",
+  ];
 
   let on = false;
   /** Committed annotations, in the order they were made — the numbering the markers show. */
@@ -61,7 +78,9 @@
       part += cls;
       const parent = node.parentElement;
       if (parent) {
-        const same = [...parent.children].filter((c) => c.tagName === node.tagName);
+        const same = [...parent.children].filter(
+          (c) => c.tagName === node.tagName
+        );
         if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`;
       }
       parts.unshift(part);
@@ -76,7 +95,9 @@
 
   /** The visible text of an element, trimmed to something quotable. */
   function textOf(el) {
-    const t = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ");
+    const t = (el.innerText || el.textContent || "")
+      .trim()
+      .replace(/\s+/g, " ");
     return t.length > 160 ? `${t.slice(0, 160)}…` : t;
   }
 
@@ -131,7 +152,8 @@
     if (host) return;
     host = document.createElement("div");
     host.className = "__codetwo-annotator";
-    host.style.cssText = "all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647";
+    host.style.cssText =
+      "all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647";
     root = host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = CSS_TEXT;
@@ -183,7 +205,10 @@
     const m = String(value).match(/rgba?\(([^)]+)\)/);
     if (!m) return "#000000";
     const [r, g, b] = m[1].split(",").map((v) => parseFloat(v));
-    const hex = (n) => Math.max(0, Math.min(255, Math.round(n || 0))).toString(16).padStart(2, "0");
+    const hex = (n) =>
+      Math.max(0, Math.min(255, Math.round(n || 0)))
+        .toString(16)
+        .padStart(2, "0");
     return `#${hex(r)}${hex(g)}${hex(b)}`;
   }
 
@@ -235,7 +260,12 @@
       if (f.min !== undefined) input.min = f.min;
       if (f.max !== undefined) input.max = f.max;
       input.value = parseFloat(from) || 0;
-      input.oninput = () => record(f.prop, from, f.kind === "px" ? `${input.value}px` : input.value);
+      input.oninput = () =>
+        record(
+          f.prop,
+          from,
+          f.kind === "px" ? `${input.value}px` : input.value
+        );
       row.appendChild(input);
     } else {
       const input = document.createElement("input");
@@ -330,7 +360,10 @@
   // ---- mode -----------------------------------------------------------------------------------
 
   function inUI(node) {
-    return !!(node && (node === host || node.closest?.(".__codetwo-annotator")));
+    return !!(
+      node &&
+      (node === host || node.closest?.(".__codetwo-annotator"))
+    );
   }
 
   function onMove(e) {

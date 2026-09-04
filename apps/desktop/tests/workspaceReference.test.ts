@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { workspaceReferenceBlock } from "../src/editor/workspaceReference";
 import { imageTypeOf, isAgentImagePath } from "../src/files/imageTypes";
 

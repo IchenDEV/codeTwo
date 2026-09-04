@@ -40,8 +40,8 @@ export const BURN_MIN_SPAN_MS = 60_000;
  */
 export function deriveBurnRate(samples: UsageSample[]): number | null {
   if (samples.length < 2) return null;
-  const ordered = [...samples].sort((a, b) => a.at - b.at);
-  const newest = ordered[ordered.length - 1];
+  const ordered = [...samples].toSorted((a, b) => a.at - b.at);
+  const newest = ordered.at(-1)!;
   const inWindow = ordered.filter((s) => newest.at - s.at <= BURN_WINDOW_MS);
   if (inWindow.length < 2) return null;
   const oldest = inWindow[0];

@@ -1,7 +1,15 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
@@ -20,7 +28,7 @@ function renderDock(
   availableSurfaces,
   tab = "home",
   open = true,
-  onTab = () => {},
+  onTab = () => {}
 ) {
   return mount(
     <I18nProvider>
@@ -32,7 +40,9 @@ function renderDock(
         onClose={() => {}}
         content={{
           trajectory: (
-            <div aria-label="Execution trajectory">No events match this view.</div>
+            <div aria-label="Execution trajectory">
+              No events match this view.
+            </div>
           ),
           "side-chat": (
             <div aria-label="Side chat conversation">Ask anything</div>
@@ -41,7 +51,7 @@ function renderDock(
         width={440}
         onWidth={() => {}}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
 
@@ -73,22 +83,42 @@ describe("Dock plugin component gate", () => {
     activateDom();
     const opened = [];
     const view = renderDock(
-      ["trajectory", "browser", "terminal", "side-chat", "files", "git", "pull-request"],
+      [
+        "trajectory",
+        "browser",
+        "terminal",
+        "side-chat",
+        "files",
+        "git",
+        "pull-request",
+      ],
       "home",
       true,
-      (surface) => opened.push(surface),
+      (surface) => opened.push(surface)
     );
     await flush();
 
-    const cards = Array.from(view.container.querySelectorAll(".dock-surface-grid > button"));
+    const cards = [
+      ...view.container.querySelectorAll(".dock-surface-grid > button"),
+    ];
     expect(cards[2]?.textContent).toContain("Terminal");
     expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
     expect(cards[6]?.getAttribute("aria-label")).toBe("PR");
-    expect(cards.every((card) => card.classList.contains("dock-surface-card"))).toBe(true);
-    expect(cards.every((card) => card.classList.contains("bg-card"))).toBe(true);
+    expect(
+      cards.every((card) => card.classList.contains("dock-surface-card"))
+    ).toBe(true);
+    expect(cards.every((card) => card.classList.contains("bg-card"))).toBe(
+      true
+    );
     expect(cards.every((card) => card.classList.contains("p-3"))).toBe(true);
-    expect(cards.every((card) => !card.className.includes("ring-foreground"))).toBe(true);
-    expect(cards.every((card) => card.querySelector("svg")?.classList.contains("size-4"))).toBe(true);
+    expect(
+      cards.every((card) => !card.className.includes("ring-foreground"))
+    ).toBe(true);
+    expect(
+      cards.every((card) =>
+        card.querySelector("svg")?.classList.contains("size-4")
+      )
+    ).toBe(true);
     click(button(view.container, "Side chat"));
     expect(opened).toEqual(["side-chat"]);
 
@@ -100,8 +130,12 @@ describe("Dock plugin component gate", () => {
     const view = renderDock(["side-chat"], "side-chat");
     await flush();
 
-    expect(view.container.querySelector('[data-dock-placement="right"]')).not.toBeNull();
-    expect(view.container.querySelector('[aria-label="Side chat conversation"]')).not.toBeNull();
+    expect(
+      view.container.querySelector('[data-dock-placement="right"]')
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector('[aria-label="Side chat conversation"]')
+    ).not.toBeNull();
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
 
     view.unmount();
@@ -116,9 +150,11 @@ describe("Dock plugin component gate", () => {
     expect(panel).not.toBeNull();
     expect(panel?.classList.contains("dock-panel-side")).toBe(true);
     expect(panel?.classList.contains("border-l")).toBe(true);
-    expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/);
+    expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/u);
     expect(panel?.getAttribute("style")).not.toContain("height");
-    expect(panel?.querySelector('[data-dock-resize="horizontal"]')).not.toBeNull();
+    expect(
+      panel?.querySelector('[data-dock-resize="horizontal"]')
+    ).not.toBeNull();
     expect(view.container.textContent).toContain("Terminal");
 
     view.unmount();
@@ -133,7 +169,11 @@ describe("Dock plugin component gate", () => {
     expect(view.container.textContent).not.toContain("Browser");
     expect(view.container.textContent).not.toContain("Terminal");
     expect(view.container.textContent).not.toContain("Source control");
-    expect(view.container.querySelector('[data-slot="tabs-content"][data-value="terminal"]')).toBeNull();
+    expect(
+      view.container.querySelector(
+        '[data-slot="tabs-content"][data-value="terminal"]'
+      )
+    ).toBeNull();
 
     view.unmount();
   });
@@ -144,15 +184,21 @@ describe("Dock plugin component gate", () => {
     await flush();
 
     expect(home.container.textContent).toContain("Execution trajectory");
-    expect(home.container.textContent).toContain("Inspect the session timeline");
+    expect(home.container.textContent).toContain(
+      "Inspect the session timeline"
+    );
     home.unmount();
 
     const module = renderDock(["trajectory"], "trajectory");
     await flush();
 
     expect(module.container.querySelector('[role="tabpanel"]')).not.toBeNull();
-    expect(module.container.querySelector('[aria-label="Execution trajectory"]')).not.toBeNull();
-    expect(module.container.textContent).toContain("No events match this view.");
+    expect(
+      module.container.querySelector('[aria-label="Execution trajectory"]')
+    ).not.toBeNull();
+    expect(module.container.textContent).toContain(
+      "No events match this view."
+    );
     module.unmount();
   });
 });

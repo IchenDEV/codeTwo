@@ -1,5 +1,4 @@
-import { MessageSquareText, MoreHorizontal, Pencil, Trash2 } from "@/components/ui/icons"
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,19 +6,26 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import type { Translate } from "@/i18n"
+} from "@/components/ui/dropdown-menu";
+import {
+  MessageSquareText,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "@/components/ui/icons";
+import type { Translate } from "@/i18n";
 
-import { TASK_STATUSES, type BoardTask, type TaskStatus } from "./taskBoard"
-import { taskStatusLabel } from "./TaskEditorDialog"
+import { TASK_STATUSES } from "./taskBoard";
+import type { BoardTask, TaskStatus } from "./taskBoard";
+import { taskStatusLabel } from "./TaskEditorDialog";
 
 interface TaskActionsMenuProps {
-  t: Translate
-  task: BoardTask
-  onEdit: () => void
-  onDelete: () => void
-  onMove: (status: TaskStatus) => void
-  onStartTask?: (task: BoardTask) => void
+  t: Translate;
+  task: BoardTask;
+  onEdit: () => void;
+  onDelete: () => void;
+  onMove: (status: TaskStatus) => void;
+  onStartTask?: (task: BoardTask) => void;
 }
 
 export function TaskActionsMenu({
@@ -62,11 +68,13 @@ export function TaskActionsMenu({
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {TASK_STATUSES.filter((status) => status !== task.status).map((status) => (
-            <DropdownMenuItem key={status} onClick={() => onMove(status)}>
-              {t("taskboard.moveTo", { status: taskStatusLabel(t, status) })}
-            </DropdownMenuItem>
-          ))}
+          {TASK_STATUSES.filter((status) => status !== task.status).map(
+            (status) => (
+              <DropdownMenuItem key={status} onClick={() => onMove(status)}>
+                {t("taskboard.moveTo", { status: taskStatusLabel(t, status) })}
+              </DropdownMenuItem>
+            )
+          )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
@@ -77,5 +85,5 @@ export function TaskActionsMenu({
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }

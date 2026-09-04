@@ -12,7 +12,8 @@ export type PluginManagerSource = "builtin" | "host" | "bundle";
 export type PluginManagerScopeKind = "user" | "project";
 
 export type PluginManagerScope =
-  { kind: "user" } | { kind: "project"; projectPath: string };
+  | { kind: "user" }
+  | { kind: "project"; projectPath: string };
 
 export interface PluginManagerProject {
   path: string;
@@ -173,11 +174,11 @@ export interface PluginManagerChangePlan {
   request: PluginManagerChangeRequest;
   summary: string;
   requiresConfirmation: boolean;
-  affectedPlugins?: Array<{
+  affectedPlugins?: {
     id: string;
     name: string;
     desiredState?: PluginManagerDesiredState;
-  }>;
+  }[];
   activeResources?: PluginManagerActiveResource[];
   warnings?: string[];
 }
@@ -295,7 +296,7 @@ export interface PluginManagerLabels {
   changeSummary: (
     kind: "plugin" | "component",
     name: string,
-    state: PluginManagerDesiredState,
+    state: PluginManagerDesiredState
   ) => string;
   marketplaceInstalled: string;
   componentUninstalled: string;
@@ -327,27 +328,27 @@ export interface PluginManagerPageProps {
   labels?: Partial<PluginManagerLabels>;
   onScopeChange: (scope: PluginManagerScope) => void;
   onPlanChange: (
-    request: PluginManagerChangeRequest,
+    request: PluginManagerChangeRequest
   ) => Promise<PluginManagerChangePlan>;
   onApplyChange: (plan: PluginManagerChangePlan) => Promise<void>;
   onSaveConfig: (request: PluginManagerConfigRequest) => Promise<void>;
   onInstallMarketplaceItem: (
-    request: PluginManagerInstallRequest,
+    request: PluginManagerInstallRequest
   ) => Promise<void>;
   onRefreshMarketplace?: () => Promise<void>;
   onOpenMarketplace?: () => Promise<void>;
   onImportGithub?: (
-    repository: string,
+    repository: string
   ) => Promise<PluginManagerBundleInstallResult>;
   onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
   onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
   onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
   onApplyScaffold?: (
     pluginId: string,
-    scaffoldId: string,
+    scaffoldId: string
   ) => Promise<{ files: number }>;
   onResetPlugin?: (
     pluginId: string,
-    scope: PluginManagerScope,
+    scope: PluginManagerScope
   ) => Promise<void>;
 }

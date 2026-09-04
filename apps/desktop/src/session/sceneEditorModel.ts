@@ -9,8 +9,8 @@ import type {
 export const SCENE_SCHEMA_ID =
   "https://agent-scenes.org/schemas/1.0.0/scene.schema.json";
 
-const SLUG_PATTERN = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
-const ARTIFACT_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+const SLUG_PATTERN = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u;
+const ARTIFACT_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
 
 export interface SceneDraftIssue {
   field: string;
@@ -20,7 +20,7 @@ export interface SceneDraftIssue {
 
 export function splitSceneList(value: string): string[] {
   return value
-    .split(/[\n,]/)
+    .split(/[\n,]/u)
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
@@ -33,24 +33,29 @@ export function slugSceneName(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9.-]+/g, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/\.{2,}/g, ".")
-    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
+    .replaceAll(/[^a-z0-9.-]+/gu, "-")
+    .replaceAll(/-{2,}/gu, "-")
+    .replaceAll(/\.{2,}/gu, ".")
+    .replaceAll(/^[^a-z0-9]+|[^a-z0-9]+$/gu, "")
     .slice(0, 64);
 }
 
-function nextAvailableName(base: string, existing: ReadonlySet<string>): string {
+function nextAvailableName(
+  base: string,
+  existing: ReadonlySet<string>
+): string {
   const seed = slugSceneName(base) || "custom-scene";
   if (!existing.has(seed)) return seed;
   for (let suffix = 2; suffix < 10_000; suffix += 1) {
-    const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/, "");
+    const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/u, "");
     if (!existing.has(candidate)) return candidate;
   }
   return `custom-${Date.now()}`;
 }
 
-export function createSceneDocument(existingScenes: readonly SceneInfo[]): SceneDocument {
+export function createSceneDocument(
+  existingScenes: readonly SceneInfo[]
+): SceneDocument {
   const existing = new Set(existingScenes.map((scene) => scene.name));
   return {
     $schema: SCENE_SCHEMA_ID,
@@ -71,7 +76,7 @@ export function createSceneDocument(existingScenes: readonly SceneInfo[]): Scene
 
 export function duplicateSceneDocument(
   source: SceneDocument,
-  existingScenes: readonly SceneInfo[],
+  existingScenes: readonly SceneInfo[]
 ): SceneDocument {
   const copy = structuredClone(source);
   const existing = new Set(existingScenes.map((scene) => scene.name));
@@ -106,7 +111,10 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   const slotIds = new Set<string>();
   if (scene.brief) {
     if (!scene.brief.template.trim()) {
-      issues.push({ field: "brief.template", key: "sceneEditor.errorBriefTemplate" });
+      issues.push({
+        field: "brief.template",
+        key: "sceneEditor.errorBriefTemplate",
+      });
     }
     for (const [index, slot] of (scene.brief.slots ?? []).entries()) {
       if (!SLUG_PATTERN.test(slot.id) || slot.id.length > 64) {
@@ -166,13 +174,20 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   }
 
   for (const [index, criterion] of (scene.exit?.criteria ?? []).entries()) {
-    if (criterion.kind === "checklist_complete" && !criterion.artifact) {
+    if (
+      criterion.kind === "checklist_complete" &&
+      (criterion.artifact == null || criterion.artifact === "")
+    ) {
       issues.push({
         field: `exit.criteria.${index}.artifact`,
         key: "sceneEditor.errorChecklistArtifact",
       });
     }
-    if (criterion.kind === "custom" && !criterion.description?.trim()) {
+    if (
+      criterion.kind === "custom" &&
+      (criterion.description?.trim() == null ||
+        criterion.description.trim() === "")
+    ) {
       issues.push({
         field: `exit.criteria.${index}.description`,
         key: "sceneEditor.errorCustomCriterion",
@@ -181,28 +196,58 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   }
 
   for (const [index, hook] of (scene.hooks ?? []).entries()) {
-    if (hook.on === "schedule" && hook.schedule?.trim().split(/\s+/).length !== 5) {
-      issues.push({ field: `hooks.${index}.schedule`, key: "sceneEditor.errorSchedule" });
+    if (
+      hook.on === "schedule" &&
+      hook.schedule?.trim().split(/\s+/u).length !== 5
+    ) {
+      issues.push({
+        field: `hooks.${index}.schedule`,
+        key: "sceneEditor.errorSchedule",
+      });
     }
-    if (hook.action.kind === "suggest_scene" && !hook.action.scene?.trim()) {
-      issues.push({ field: `hooks.${index}.action.scene`, key: "sceneEditor.errorHookScene" });
+    if (
+      hook.action.kind === "suggest_scene" &&
+      (hook.action.scene?.trim() == null || hook.action.scene.trim() === "")
+    ) {
+      issues.push({
+        field: `hooks.${index}.action.scene`,
+        key: "sceneEditor.errorHookScene",
+      });
     }
-    if (hook.action.kind === "run_macro" && !hook.action.macro?.trim()) {
-      issues.push({ field: `hooks.${index}.action.macro`, key: "sceneEditor.errorHookMacro" });
+    if (
+      hook.action.kind === "run_macro" &&
+      (hook.action.macro?.trim() == null || hook.action.macro.trim() === "")
+    ) {
+      issues.push({
+        field: `hooks.${index}.action.macro`,
+        key: "sceneEditor.errorHookMacro",
+      });
     }
-    if (hook.action.kind === "notify" && !hook.action.message?.trim()) {
-      issues.push({ field: `hooks.${index}.action.message`, key: "sceneEditor.errorHookMessage" });
+    if (
+      hook.action.kind === "notify" &&
+      (hook.action.message?.trim() == null || hook.action.message.trim() === "")
+    ) {
+      issues.push({
+        field: `hooks.${index}.action.message`,
+        key: "sceneEditor.errorHookMessage",
+      });
     }
   }
   return issues;
 }
 
-export function parseSceneJson(value: string): { scene: SceneDocument | null; error: string | null } {
+export function parseSceneJson(value: string): {
+  scene: SceneDocument | null;
+  error: string | null;
+} {
   try {
     const scene = JSON.parse(value) as SceneDocument;
     return { scene, error: null };
   } catch (error) {
-    return { scene: null, error: error instanceof Error ? error.message : String(error) };
+    return {
+      scene: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 

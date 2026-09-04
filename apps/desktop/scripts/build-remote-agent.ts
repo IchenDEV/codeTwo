@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 
 const desktopRoot = resolve(import.meta.dir, "..");
 const repositoryRoot = resolve(desktopRoot, "..", "..");
-const executable = process.platform === "win32" ? "codetwo-agent.exe" : "codetwo-agent";
+const executable =
+  process.platform === "win32" ? "codetwo-agent.exe" : "codetwo-agent";
 const outputDirectory = resolve(desktopRoot, "dist", "remote-agent");
 
 const result = Bun.spawnSync(
@@ -13,7 +14,7 @@ const result = Bun.spawnSync(
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
-  },
+  }
 );
 if (result.exitCode !== 0) process.exit(result.exitCode);
 

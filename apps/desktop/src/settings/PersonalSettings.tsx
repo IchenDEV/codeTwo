@@ -1,30 +1,48 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import { Download, RotateCcw } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   checkForAppUpdates,
   getAppUpdateStatus,
   importSessionFiles,
-  type AppUpdateStatus,
-  type KeymapEntry,
-  type SessionImportResult,
 } from "../bridge";
+import type {
+  AppUpdateStatus,
+  KeymapEntry,
+  SessionImportResult,
+} from "../bridge";
+import { useLanguage, useT } from "../i18n";
+import { td } from "../i18n/dynamic";
+import { en as EN_STRINGS, LOCALES } from "../i18n/strings";
+import type { StringKey } from "../i18n/strings";
 import { formatCombo, MOD_LABEL } from "../keys";
-import { useLanguage, useT, type LanguagePreference } from "../i18n";
-import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
 const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
   {
     labelKey: "settings.groupPrompt",
-    actions: ["run", "cancel", "open_skill_picker", "focus_editor", "toggle_doc_mode"],
+    actions: [
+      "run",
+      "cancel",
+      "open_skill_picker",
+      "focus_editor",
+      "toggle_doc_mode",
+    ],
   },
   {
     labelKey: "settings.groupSessions",
@@ -42,7 +60,10 @@ const GROUPS: { labelKey: StringKey; actions: string[] }[] = [
       "close_panel",
     ],
   },
-  { labelKey: "settings.groupGit", actions: ["refresh_git", "open_source_control"] },
+  {
+    labelKey: "settings.groupGit",
+    actions: ["refresh_git", "open_source_control"],
+  },
   {
     labelKey: "settings.groupOpen",
     actions: [
@@ -76,7 +97,7 @@ export function GeneralSettingsPage({
       .then((status) => {
         if (active) setUpdate(status);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (active) setUpdate({ state: "unavailable", message: String(error) });
       });
     return () => {
@@ -92,8 +113,9 @@ export function GeneralSettingsPage({
         .then((status) => {
           if (active) setUpdate(status);
         })
-        .catch((error) => {
-          if (active) setUpdate({ state: "unavailable", message: String(error) });
+        .catch((error: unknown) => {
+          if (active)
+            setUpdate({ state: "unavailable", message: String(error) });
         });
     }, 1000);
     return () => {
@@ -104,20 +126,29 @@ export function GeneralSettingsPage({
 
   const updateHint = (() => {
     switch (update?.state) {
-      case "ready":
+      case "ready": {
         return t("settings.updateReady", {
           version: update.currentVersion ?? t("settings.updateUnknownVersion"),
         });
-      case "checking":
+      }
+      case "checking": {
         return t("settings.updateChecking");
-      case "not-configured":
+      }
+      case "not-configured": {
         return t("settings.updateNotConfigured");
-      case "unsupported":
+      }
+      case "unsupported": {
         return t("settings.updateUnsupported");
-      case "unavailable":
+      }
+      case "unavailable": {
         return t("settings.updateUnavailable");
-      default:
+      }
+      case undefined: {
+        throw new Error("Not implemented yet: undefined case");
+      }
+      default: {
         return t("settings.updateLoading");
+      }
     }
   })();
 
@@ -133,18 +164,22 @@ export function GeneralSettingsPage({
   return (
     <Page title={t("settings.general")} description={t("settings.generalHint")}>
       <Row label={t("settings.language")} hint={t("settings.languageHint")}>
-        <Select value={language} onValueChange={(value) => setLanguage(value as LanguagePreference)}>
+        <Select value={language} onValueChange={(value) => setLanguage(value!)}>
           <SelectTrigger size="sm" className="w-44 justify-between">
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" align="end">
             <SelectGroup>
-              <SelectItem value="system">{t("settings.languageSystem")}</SelectItem>
-              {(Object.keys(LOCALES) as (keyof typeof LOCALES)[]).map((locale) => (
-                <SelectItem key={locale} value={locale}>
-                  {LOCALES[locale].label}
-                </SelectItem>
-              ))}
+              <SelectItem value="system">
+                {t("settings.languageSystem")}
+              </SelectItem>
+              {[...Object.keys(LOCALES)]
+                .filter((key): key is keyof typeof LOCALES => key in LOCALES)
+                .map((locale) => (
+                  <SelectItem key={locale} value={locale}>
+                    {LOCALES[locale].label}
+                  </SelectItem>
+                ))}
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -158,7 +193,9 @@ export function GeneralSettingsPage({
           disabled={update?.state !== "ready"}
           onClick={() => void startUpdateCheck()}
         >
-          {update?.state === "checking" ? t("settings.updateCheckingButton") : t("settings.checkNow")}
+          {update?.state === "checking"
+            ? t("settings.updateCheckingButton")
+            : t("settings.checkNow")}
         </Button>
       </Row>
 
@@ -168,8 +205,10 @@ export function GeneralSettingsPage({
           size="compact"
           value={terminal.fontFamily}
           placeholder={t("settings.termFontDefault")}
-          onChange={(event) => setTerminalSettings({ fontFamily: event.target.value })}
-          className="w-44 text-metadata"
+          onChange={(event) =>
+            setTerminalSettings({ fontFamily: event.target.value })
+          }
+          className="text-metadata w-44"
         />
       </Row>
       <Row label={t("settings.termFontSize")}>
@@ -179,20 +218,27 @@ export function GeneralSettingsPage({
           min={8}
           max={32}
           value={terminal.fontSize}
-          onChange={(event) => setTerminalSettings({ fontSize: Number(event.target.value) })}
-          className="w-44 text-metadata"
+          onChange={(event) =>
+            setTerminalSettings({ fontSize: Number(event.target.value) })
+          }
+          className="text-metadata w-44"
         />
       </Row>
-      <Row label={t("settings.termScrollback")} hint={t("settings.termScrollbackHint")}>
+      <Row
+        label={t("settings.termScrollback")}
+        hint={t("settings.termScrollbackHint")}
+      >
         <Input
           size="compact"
           type="number"
           min={100}
-          max={200000}
+          max={200_000}
           step={1000}
           value={terminal.scrollback}
-          onChange={(event) => setTerminalSettings({ scrollback: Number(event.target.value) })}
-          className="w-44 text-metadata"
+          onChange={(event) =>
+            setTerminalSettings({ scrollback: Number(event.target.value) })
+          }
+          className="text-metadata w-44"
         />
       </Row>
     </Page>
@@ -202,8 +248,12 @@ export function GeneralSettingsPage({
 export function ImportSettingsPage({
   projectPath,
   importer = importSessionFiles,
-  onImported = async () => {},
-  onOpenSession = () => {},
+  onImported = async () => {
+    /* empty */
+  },
+  onOpenSession = () => {
+    /* empty */
+  },
 }: {
   projectPath: string;
   importer?: (fallbackCwd: string) => Promise<SessionImportResult | null>;
@@ -223,8 +273,8 @@ export function ImportSettingsPage({
       if (!next) return;
       setResult(next);
       if (next.imported > 0) await onImported();
-    } catch (cause) {
-      setError(t("settings.importFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.importFailed", { error: String(error) }));
     } finally {
       setImporting(false);
     }
@@ -234,18 +284,31 @@ export function ImportSettingsPage({
     <Page title={t("settings.import")} description={t("settings.importHint")}>
       <GroupHeading>{t("settings.importFromFiles")}</GroupHeading>
       <Row
-        icon={<Download className="size-4 text-muted-foreground" />}
+        icon={<Download className="text-muted-foreground size-4" />}
         label={t("settings.importSessions")}
         hint={t("settings.importSessionsHint")}
       >
-        <Button variant="outline" size="sm" disabled={importing} onClick={() => void startImport()}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={importing}
+          onClick={() => void startImport()}
+        >
+          {importing ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <Download data-icon="inline-start" />
+          )}
           {importing
-            ? <Spinner data-icon="inline-start" />
-            : <Download data-icon="inline-start" />}
-          {importing ? t("settings.importing") : t("settings.chooseSessionFiles")}
+            ? t("settings.importing")
+            : t("settings.chooseSessionFiles")}
         </Button>
       </Row>
-      {error && <p role="alert" className="mt-3 text-metadata text-destructive">{error}</p>}
+      {error != null && error !== "" && (
+        <p role="alert" className="text-metadata text-destructive mt-3">
+          {error}
+        </p>
+      )}
       {result && (
         <div
           data-session-import-result
@@ -261,17 +324,25 @@ export function ImportSettingsPage({
                 failed: result.failed,
               })}
             </p>
-            <p className="mt-0.5 text-metadata text-muted-foreground">
+            <p className="text-metadata text-muted-foreground mt-0.5">
               {t("settings.importedMessages", { count: result.messages })}
             </p>
             {result.errors.slice(0, 3).map((item) => (
-              <p key={`${item.path}:${item.message}`} className="mt-1 break-words text-metadata text-destructive">
+              <p
+                key={`${item.path}:${item.message}`}
+                className="text-metadata text-destructive mt-1 break-words"
+              >
                 {item.path}: {item.message}
               </p>
             ))}
           </div>
-          {result.sessions[0] && (
-            <Button variant="secondary" size="sm" className="shrink-0" onClick={() => onOpenSession(result.sessions[0].id)}>
+          {result.sessions[0] != null && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shrink-0"
+              onClick={() => onOpenSession(result.sessions[0].id)}
+            >
               {t("settings.openImportedSession")}
             </Button>
           )}
@@ -293,18 +364,25 @@ export function KeybindingsSettingsPage({
   onReset?: (action: string) => void;
 }) {
   const t = useT();
-  const byAction = useMemo(() => new Map(bindings.map((binding) => [binding[0], binding])), [bindings]);
-  const conflicts = useMemo(() => {
+  const byAction = new Map(bindings.map((binding) => [binding[0], binding]));
+  const conflicts = (() => {
     const seen = new Map<string, number>();
     for (const [, key] of bindings) seen.set(key, (seen.get(key) ?? 0) + 1);
-    return new Set([...seen.entries()].filter(([, count]) => count > 1).map(([key]) => key));
-  }, [bindings]);
+    return new Set(
+      [...seen.entries()].filter(([, count]) => count > 1).map(([key]) => key)
+    );
+  })();
   const known = new Set(GROUPS.flatMap((group) => group.actions));
   const groups = [
-    ...GROUPS.map((group) => ({ title: t(group.labelKey), actions: group.actions })),
+    ...GROUPS.map((group) => ({
+      title: t(group.labelKey),
+      actions: group.actions,
+    })),
     {
       title: t("settings.groupOther"),
-      actions: bindings.map((binding) => binding[0]).filter((action) => !known.has(action)),
+      actions: bindings
+        .map((binding) => binding[0])
+        .filter((action) => !known.has(action)),
     },
   ].filter((group) => group.actions.length > 0);
 
@@ -312,12 +390,15 @@ export function KeybindingsSettingsPage({
     const entry = byAction.get(action);
     if (!entry) return null;
     const [, key, coreLabel] = entry;
-    const labelKey = `action.${action}` as StringKey;
-    const label = labelKey in EN_STRINGS ? t(labelKey) : coreLabel;
+    const labelKey = `action.${action}`;
+    const label = labelKey in EN_STRINGS ? td(t, labelKey) : coreLabel;
     return (
       <Row key={action} compact label={label}>
         {conflicts.has(key) && capturing !== action && (
-          <span className="text-metadata text-warning" title={t("settings.conflictHint")}>
+          <span
+            className="text-metadata text-warning"
+            title={t("settings.conflictHint")}
+          >
             {t("settings.conflict")}
           </span>
         )}
@@ -325,9 +406,9 @@ export function KeybindingsSettingsPage({
           variant="outline"
           size="sm"
           className={cn(
-            "min-w-24 justify-center font-mono text-callout",
+            "text-callout min-w-24 justify-center font-mono",
             capturing === action && "text-primary",
-            conflicts.has(key) && capturing !== action && "text-warning",
+            conflicts.has(key) && capturing !== action && "text-warning"
           )}
           onClick={() => onCapture(action)}
         >
@@ -338,7 +419,7 @@ export function KeybindingsSettingsPage({
             label={t("settings.reset")}
             variant="ghost"
             size="icon"
-            className="size-7 text-muted-foreground"
+            className="text-muted-foreground size-7"
             onClick={() => onReset(action)}
           >
             <RotateCcw className="size-3.5" />
@@ -349,7 +430,10 @@ export function KeybindingsSettingsPage({
   }
 
   return (
-    <Page title={t("settings.keybindings")} description={t("settings.keysHint", { mod: MOD_LABEL })}>
+    <Page
+      title={t("settings.keybindings")}
+      description={t("settings.keysHint", { mod: MOD_LABEL })}
+    >
       {groups.map((group) => (
         <div key={group.title}>
           <GroupHeading>{group.title}</GroupHeading>

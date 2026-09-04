@@ -1,17 +1,17 @@
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 
 interface ViewSwitcherOption<Value extends string> {
-  readonly value: Value
-  readonly label: string
-  readonly count?: number
-  readonly disabled?: boolean
+  readonly value: Value;
+  readonly label: string;
+  readonly count?: number;
+  readonly disabled?: boolean;
 }
 
 interface ViewSwitcherProps<Value extends string> {
-  label: string
-  value: Value
-  options: readonly ViewSwitcherOption<Value>[]
-  onValueChange: (value: Value) => void
+  label: string;
+  value: Value;
+  options: readonly ViewSwitcherOption<Value>[];
+  onValueChange: (value: Value) => void;
 }
 
 function ViewSwitcher<Value extends string>({
@@ -25,10 +25,10 @@ function ViewSwitcher<Value extends string>({
       data-slot="view-switcher"
       role="group"
       aria-label={label}
-      className="flex min-w-0 max-w-full items-center gap-control-group overflow-x-auto overscroll-x-contain"
+      className="gap-control-group flex max-w-full min-w-0 items-center overflow-x-auto overscroll-x-contain"
     >
       {options.map((option) => {
-        const selected = option.value === value
+        const selected = option.value === value;
 
         return (
           <Button
@@ -42,14 +42,14 @@ function ViewSwitcher<Value extends string>({
             onClick={() => onValueChange(option.value)}
           >
             <span>{option.label}</span>
-            {option.count !== undefined ? (
+            {option.count === undefined ? null : (
               <span className="tabular-nums">{option.count}</span>
-            ) : null}
+            )}
           </Button>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
-export { ViewSwitcher, type ViewSwitcherOption, type ViewSwitcherProps }
+export { ViewSwitcher, type ViewSwitcherOption, type ViewSwitcherProps };

@@ -17,7 +17,8 @@ const listeners = new Map<string, Set<EventListener>>();
 
 export const isElectrobun =
   typeof window !== "undefined" &&
-  typeof (window as Window & { __electrobunWebviewId?: unknown }).__electrobunWebviewId === "number";
+  typeof (window as Window & { __electrobunWebviewId?: unknown })
+    .__electrobunWebviewId === "number";
 
 let rpcPromise: Promise<Awaited<ReturnType<typeof createClient>>> | null = null;
 
@@ -33,9 +34,12 @@ async function createClient() {
       requests: {},
       messages: {
         event: dispatch,
-        hostStatus: (status) => dispatch({ name: "host-status", payload: status }),
-        appshotCaptured: (capture) => dispatch({ name: "appshot-captured", payload: capture }),
-        appshotFailed: (failure) => dispatch({ name: "appshot-failed", payload: failure }),
+        hostStatus: (status) =>
+          dispatch({ name: "host-status", payload: status }),
+        appshotCaptured: (capture) =>
+          dispatch({ name: "appshot-captured", payload: capture }),
+        appshotFailed: (failure) =>
+          dispatch({ name: "appshot-failed", payload: failure }),
       },
     },
   });
@@ -44,15 +48,16 @@ async function createClient() {
 }
 
 async function client() {
-  if (!isElectrobun) throw new Error("C2 desktop APIs are unavailable in this browser");
+  if (!isElectrobun)
+    throw new Error("C2 desktop APIs are unavailable in this browser");
   rpcPromise ??= createClient();
-  return rpcPromise;
+  return await rpcPromise;
 }
 
 export async function desktopCall<T>(
   name: string,
   args: unknown,
-  projectPath: string | null,
+  projectPath: string | null
 ): Promise<T> {
   const rpc = await client();
   // `request` is itself a function. Property access for a command named `call` resolves to
@@ -61,7 +66,10 @@ export async function desktopCall<T>(
   return (await rpc.request("call", { name, args, projectPath })) as T;
 }
 
-export function listenDesktop<T>(name: string, listener: (payload: T) => void): () => void {
+export function listenDesktop<T>(
+  name: string,
+  listener: (payload: T) => void
+): () => void {
   const wrapped: EventListener = (payload) => listener(payload as T);
   const group = listeners.get(name) ?? new Set<EventListener>();
   group.add(wrapped);
@@ -73,104 +81,120 @@ export function listenDesktop<T>(name: string, listener: (payload: T) => void): 
   };
 }
 
-export async function desktopOpenDialog(options: OpenDialogOptions): Promise<string[]> {
-  return (await client()).request.dialogOpen(options);
+export async function desktopOpenDialog(
+  options: OpenDialogOptions
+): Promise<string[]> {
+  return await (await client()).request.dialogOpen(options);
 }
 
-export async function desktopSaveDialog(options: SaveDialogOptions): Promise<string | null> {
-  return (await client()).request.dialogSave(options);
+export async function desktopSaveDialog(
+  options: SaveDialogOptions
+): Promise<string | null> {
+  return await (await client()).request.dialogSave(options);
 }
 
-export async function desktopConfirm(message: string, title?: string): Promise<boolean> {
-  return (await client()).request.confirm({ message, title });
+export async function desktopConfirm(
+  message: string,
+  title?: string
+): Promise<boolean> {
+  return await (await client()).request.confirm({ message, title });
 }
 
-export async function desktopShowContextMenu(options: NativeContextMenuRequest): Promise<void> {
+export async function desktopShowContextMenu(
+  options: NativeContextMenuRequest
+): Promise<void> {
   await (await client()).request.contextMenuShow(options);
 }
 
 export async function desktopOpenExternal(url: string): Promise<boolean> {
-  return (await client()).request.openExternal({ url });
+  return await (await client()).request.openExternal({ url });
 }
 
 export async function desktopOpenPath(path: string): Promise<boolean> {
-  return (await client()).request.openPath({ path });
+  return await (await client()).request.openPath({ path });
 }
 
 export async function desktopOpenWorkspace(
   path: string,
-  target: WorkspaceOpenTarget,
+  target: WorkspaceOpenTarget
 ): Promise<boolean> {
-  return (await client()).request.openWorkspace({ path, target });
+  return await (await client()).request.openWorkspace({ path, target });
 }
 
 export async function desktopShowItemInFolder(path: string): Promise<boolean> {
-  return (await client()).request.showItemInFolder({ path });
+  return await (await client()).request.showItemInFolder({ path });
 }
 
-export async function desktopSetSystemBadgeCount(count: number): Promise<boolean> {
-  return (await client()).request.systemBadgeSet({ count });
+export async function desktopSetSystemBadgeCount(
+  count: number
+): Promise<boolean> {
+  return await (await client()).request.systemBadgeSet({ count });
 }
 
 export async function desktopPerformTitlebarDoubleClick(): Promise<boolean> {
-  return (await client()).request.titlebarDoubleClick();
+  return await (await client()).request.titlebarDoubleClick();
 }
 
 export async function desktopSystemProfileAvatar(): Promise<string | null> {
-  return (await client()).request.systemProfileAvatar();
+  return await (await client()).request.systemProfileAvatar();
 }
 
 export async function desktopAppshotSettings(): Promise<AppshotSettings> {
-  return (await client()).request.appshotsSettings();
+  return await (await client()).request.appshotsSettings();
 }
 
 export async function desktopUpdateAppshotSettings(
-  patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>,
+  patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>
 ): Promise<AppshotSettings> {
-  return (await client()).request.appshotsUpdate(patch);
+  return await (await client()).request.appshotsUpdate(patch);
 }
 
 export async function desktopRequestAppshotPermissions(
-  kind: "screen-recording" | "accessibility",
+  kind: "screen-recording" | "accessibility"
 ): Promise<AppshotSettings> {
-  return (await client()).request.appshotsRequestPermissions({ kind });
+  return await (await client()).request.appshotsRequestPermissions({ kind });
 }
 
 export async function desktopOpenAppshotPrivacySettings(
-  kind: "screen-recording" | "accessibility",
+  kind: "screen-recording" | "accessibility"
 ): Promise<boolean> {
-  return (await client()).request.appshotsOpenPrivacySettings({ kind });
+  return await (await client()).request.appshotsOpenPrivacySettings({ kind });
 }
 
 export async function desktopCaptureAppshot(): Promise<AppshotCapture> {
-  return (await client()).request.appshotsCapture();
+  return await (await client()).request.appshotsCapture();
 }
 
 export async function desktopGetAppshot(id: string): Promise<AppshotCapture> {
-  return (await client()).request.appshotsGet({ id });
+  return await (await client()).request.appshotsGet({ id });
 }
 
 export async function onDesktopAppshotCaptured(
-  listener: (capture: AppshotCapture) => void,
+  listener: (capture: AppshotCapture) => void
 ): Promise<() => void> {
   return listenDesktop("appshot-captured", listener);
 }
 
 export async function onDesktopAppshotFailed(
-  listener: (failure: { message: string }) => void,
+  listener: (failure: { message: string }) => void
 ): Promise<() => void> {
   return listenDesktop("appshot-failed", listener);
 }
 
-export async function desktopSetBrowserZoom(webviewId: number, factor: number): Promise<void> {
+export async function desktopSetBrowserZoom(
+  webviewId: number,
+  factor: number
+): Promise<void> {
   await (await client()).request.browserZoom({ webviewId, factor });
 }
 
 export async function desktopGetPetState(): Promise<DesktopPetState> {
-  return (await client()).request.desktopPetState();
+  return await (await client()).request.desktopPetState();
 }
 
-export async function desktopUpdatePetState(state: DesktopPetState): Promise<void> {
+export async function desktopUpdatePetState(
+  state: DesktopPetState
+): Promise<void> {
   await (await client()).request.desktopPetUpdate(state);
 }
 
@@ -183,9 +207,9 @@ export async function desktopOpenDevtools(): Promise<void> {
 }
 
 export async function desktopUpdateStatus(): Promise<AppUpdateStatus> {
-  return (await client()).request.updateStatus();
+  return await (await client()).request.updateStatus();
 }
 
 export async function desktopCheckForUpdates(): Promise<AppUpdateStatus> {
-  return (await client()).request.updateCheck();
+  return await (await client()).request.updateCheck();
 }

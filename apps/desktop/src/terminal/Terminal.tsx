@@ -1,21 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
+import { Terminal } from "@xterm/xterm";
+import type { ITheme } from "@xterm/xterm";
+import { useEffect, useRef, useState } from "react";
+
 import "@xterm/xterm/css/xterm.css";
 import { ArrowDown, ArrowUp, X } from "@/components/ui/icons";
-import { onPtyExit, onPtyOutput, ptyResize, ptySpawn, ptyWrite } from "../bridge";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { TooltipButton } from "@/components/ui/tooltip";
+
+import {
+  onPtyExit,
+  onPtyOutput,
+  ptyResize,
+  ptySpawn,
+  ptyWrite,
+} from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
-import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { TooltipButton } from "@/components/ui/tooltip";
 import { useTerminalSettings } from "./settings";
 
-const FALLBACK_MONO = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace';
+const FALLBACK_MONO =
+  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace';
 
 function cssVar(name: string, fallback = ""): string {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
   return value || fallback;
 }
 
@@ -93,10 +105,16 @@ export function TerminalPanel({
   // Terminals stay mounted when they're not the visible tab, so they have no layout box — and
   // xterm's fit addon throws on those. The dock's resize event reaches every mounted instance, so
   // this guard is what keeps a panel resize from spraying errors from the hidden ones.
-  const refit = useCallback(() => {
+  const refit = () => {
     const el = boxRef.current;
     const term = termRef.current;
-    if (!el || !term || el.offsetParent === null || el.clientWidth === 0 || el.clientHeight === 0) {
+    if (
+      !el ||
+      !term ||
+      el.offsetParent === null ||
+      el.clientWidth === 0 ||
+      el.clientHeight === 0
+    ) {
       return false;
     }
     try {
@@ -105,7 +123,7 @@ export function TerminalPanel({
     } catch {
       return false;
     }
-  }, []);
+  };
 
   useEffect(() => {
     const el = boxRef.current;
@@ -113,7 +131,8 @@ export function TerminalPanel({
 
     const term = new Terminal({
       fontSize: initial.current.fontSize,
-      fontFamily: initial.current.fontFamily || cssVar("--font-mono", FALLBACK_MONO),
+      fontFamily:
+        initial.current.fontFamily || cssVar("--font-mono", FALLBACK_MONO),
       scrollback: initial.current.scrollback,
       theme: terminalTheme(),
       // xterm's defaults date the terminal more than anything else about it. 1.0 line height is
@@ -164,7 +183,7 @@ export function TerminalPanel({
       });
       stopExit = await onPtyExit((exited) => {
         if (exited.id === id && exited.project_path === projectPath) {
-          term.write(`\r\n\x1b[2m${t("terminal.exited")}\x1b[0m\r\n`);
+          term.write(`\r\n\u001B[2m${t("terminal.exited")}\u001B[0m\r\n`);
         }
       });
       if (disposed) return;
@@ -216,7 +235,8 @@ export function TerminalPanel({
     const term = termRef.current;
     if (!term) return;
     term.options.fontSize = settings.fontSize;
-    term.options.fontFamily = settings.fontFamily || cssVar("--font-mono", FALLBACK_MONO);
+    term.options.fontFamily =
+      settings.fontFamily || cssVar("--font-mono", FALLBACK_MONO);
     if (refit()) void ptyResize(id, term.rows, term.cols);
   }, [id, refit, settings.fontFamily, settings.fontSize]);
 
@@ -228,15 +248,12 @@ export function TerminalPanel({
     if (term) term.options.theme = terminalTheme();
   }, [scheme]);
 
-  const find = useCallback(
-    (next: boolean) => {
-      if (!query) return;
-      const search = searchRef.current;
-      if (next) search?.findNext(query);
-      else search?.findPrevious(query);
-    },
-    [query],
-  );
+  const find = (next: boolean) => {
+    if (!query) return;
+    const search = searchRef.current;
+    if (next) search?.findNext(query);
+    else search?.findPrevious(query);
+  };
 
   return (
     <div
@@ -253,7 +270,7 @@ export function TerminalPanel({
     >
       {finding && (
         <>
-          <div className="flex items-center gap-1 bg-muted/40 px-2 py-1.5">
+          <div className="bg-muted/40 flex items-center gap-1 px-2 py-1.5">
             <Input
               autoFocus
               size="compact"
@@ -261,7 +278,9 @@ export function TerminalPanel({
               placeholder={t("terminal.search")}
               onChange={(e) => {
                 setQuery(e.target.value);
-                searchRef.current?.findNext(e.target.value, { incremental: true });
+                searchRef.current?.findNext(e.target.value, {
+                  incremental: true,
+                });
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") find(!e.shiftKey);
@@ -271,12 +290,18 @@ export function TerminalPanel({
                   termRef.current?.focus();
                 }
               }}
-              className="min-w-0 flex-1 bg-transparent text-callout outline-none placeholder:text-muted-foreground/60"
+              className="text-callout placeholder:text-muted-foreground/60 min-w-0 flex-1 bg-transparent outline-none"
             />
-            <FindButton title={t("terminal.findPrev")} onClick={() => find(false)}>
+            <FindButton
+              title={t("terminal.findPrev")}
+              onClick={() => find(false)}
+            >
               <ArrowUp className="size-3" />
             </FindButton>
-            <FindButton title={t("terminal.findNext")} onClick={() => find(true)}>
+            <FindButton
+              title={t("terminal.findNext")}
+              onClick={() => find(true)}
+            >
               <ArrowDown className="size-3" />
             </FindButton>
             <FindButton

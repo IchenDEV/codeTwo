@@ -1,0 +1,24 @@
+┌  Ultracite v7.10.8 Doctor
+│
+●  Detected linter: oxlint
+[?25l│
+◇  Diagnostics complete.
+[?25h│
+◆  oxlint is installed (Version: 1.81.0)
+│
+◆  oxlint.config.ts extends ultracite oxlint config
+│
+◆  oxfmt is installed (Version: 0.66.0)
+│
+◆  oxfmt.config.ts extends ultracite oxfmt config
+│
+◆  Ultracite is installed (7.10.8)
+│
+◆  No conflicting formatting/linting tools found
+│
+●  Summary: 6 passed, 0 warnings, 0 failed
+│
+◆  Everything looks good!
+│
+└  Doctor complete
+

@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 
 test("agent session monitor orders three sessions and reveals a selected action", async () => {
-  const pluginRoot = resolve(import.meta.dir, "../../../packs/agent-session-monitor");
+  const pluginRoot = resolve(
+    import.meta.dir,
+    "../../../packs/agent-session-monitor"
+  );
   const child = Bun.spawn(["node", "plugin.js"], {
     cwd: pluginRoot,
     stdin: "pipe",
@@ -13,8 +16,8 @@ test("agent session monitor orders three sessions and reveals a selected action"
   const decoder = new TextDecoder();
   let buffer = "";
   const send = (message: unknown) => {
-    child.stdin.write(`${JSON.stringify(message)}\n`);
-    child.stdin.flush();
+    void child.stdin.write(`${JSON.stringify(message)}\n`);
+    void child.stdin.flush();
   };
   const receive = async (): Promise<Record<string, unknown>> => {
     while (!buffer.includes("\n")) {
@@ -56,20 +59,45 @@ test("agent session monitor orders three sessions and reveals a selected action"
       },
     });
     const summaryCall = await receive();
-    expect((summaryCall.params as { name: string }).name).toBe("sessions.summary");
+    expect((summaryCall.params as { name: string }).name).toBe(
+      "sessions.summary"
+    );
     send({
       jsonrpc: "2.0",
       id: summaryCall.id,
       result: [
-        { id: "idle", title: "Idle", last_active_at: 50, activity_state: "idle" },
-        { id: "run", title: "Running", last_active_at: 20, activity_state: "running" },
-        { id: "input", title: "Needs input", last_active_at: 10, activity_state: "awaiting_input" },
-        { id: "failed", title: "Failed", last_active_at: 30, activity_state: "failed" },
+        {
+          id: "idle",
+          title: "Idle",
+          last_active_at: 50,
+          activity_state: "idle",
+        },
+        {
+          id: "run",
+          title: "Running",
+          last_active_at: 20,
+          activity_state: "running",
+        },
+        {
+          id: "input",
+          title: "Needs input",
+          last_active_at: 10,
+          activity_state: "awaiting_input",
+        },
+        {
+          id: "failed",
+          title: "Failed",
+          last_active_at: 30,
+          activity_state: "failed",
+        },
       ],
     });
     const rendered = await receive();
-    expect((rendered.result as { items: Array<{ id: string }> }).items.map((item) => item.id))
-      .toEqual(["input", "run", "failed"]);
+    expect(
+      (rendered.result as { items: { id: string }[] }).items.map(
+        (item) => item.id
+      )
+    ).toEqual(["input", "run", "failed"]);
 
     send({
       jsonrpc: "2.0",

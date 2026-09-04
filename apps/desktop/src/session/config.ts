@@ -98,6 +98,8 @@ const CODEX_MEMORY_PRESETS: readonly MemoryPreset[] = [
 ];
 
 /** Codex keeps inherited C2 recall out of its visible ACP user turn. */
-export function memoryPresetsForProvider(provider: string): readonly MemoryPreset[] {
+export function memoryPresetsForProvider(
+  provider: string
+): readonly MemoryPreset[] {
   return provider === "codex" ? CODEX_MEMORY_PRESETS : MEMORY_PRESETS;
 }

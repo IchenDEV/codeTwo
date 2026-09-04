@@ -1,0 +1,411 @@
+import { defineConfig } from "oxlint";
+import core from "ultracite/oxlint/core";
+import { jsPluginSettings, selectJsPlugins } from "ultracite/oxlint/js-plugins";
+import react from "ultracite/oxlint/react";
+
+const jsPlugins = selectJsPlugins(["github", "sonarjs", "react-doctor"]);
+
+const inlineRadiusRestriction = {
+  message:
+    "Express border radius through a semantic class or CSS rule, not inline style.",
+  selector: "Property[key.name='borderRadius']",
+};
+const rawTextareaRestriction = {
+  message: "Use the shared Textarea component instead of a raw textarea.",
+  selector: "JSXOpeningElement[name.name='textarea']",
+};
+const rawButtonRestriction = {
+  message:
+    "Use the shared Button or TooltipButton component instead of a raw button.",
+  selector: "JSXOpeningElement[name.name='button']",
+};
+
+const radiusClassRestriction = {
+  message:
+    "Use a semantic radius class such as rounded-control or rounded-module.",
+  pattern:
+    "^rounded(?:-(?:[trblse]{1,2}-)?(?:sm|md|lg|xl|2xl|3xl)|-(?:[trblse]{1,2}-)?(?:\\[.+\\]|\\(.+\\)))?$",
+};
+
+/**
+ * Justified house exceptions. Type-safety themes (`strict-boolean-expressions`,
+ * `no-unsafe-*`) stay on so residuals are fixed in code. Pedantic/a11y/sonar
+ * noise that fights dense desktop UI or unsafe autofixes is permanently off.
+ */
+const houseExceptions = {
+  // Ultracite upstream oxlint.config also disables the complexity family.
+  complexity: "off",
+  "max-statements": "off",
+  "sonarjs/cognitive-complexity": "off",
+  "sonarjs/expression-complexity": "off",
+  "sonarjs/too-many-break-or-continue-in-loop": "off",
+  "sonarjs/no-nested-functions": "off",
+  "sonarjs/no-duplicate-string": "off",
+  "sonarjs/max-union-size": "off",
+  "sonarjs/no-undefined-assignment": "off",
+  // oxfmt owns wrapping; do not fight the formatter.
+  "arrow-body-style": "off",
+  curly: "off",
+  // Nullish checks use `== null` / `!= null`.
+  "no-eq-null": "off",
+  // Desktop filenames are React/Vite camelCase (useLatestRef, App.tsx).
+  "unicorn/filename-case": "off",
+  "github/filenames-match-regex": "off",
+  // Syncing "latest value" refs during render is the React 18 pattern.
+  "react/refs": "off",
+  // React Compiler HIR gaps and dense App realities.
+  "react/todo": "off",
+  "react/set-state-in-effect": "off",
+  "react/no-object-type-as-default-prop": "off",
+  "react-doctor/prefer-use-effect-event": "off",
+  "react-doctor/only-export-components": "off",
+  "react-doctor/no-giant-component": "off",
+  "react-doctor/no-ref-current-in-render": "off",
+  "react-doctor/no-effect-with-fresh-deps": "off",
+  "react-doctor/js-combine-iterations": "off",
+  "react-doctor/no-array-index-as-key": "off",
+  "react-doctor/no-chain-state-updates": "off",
+  "react-doctor/no-adjust-state-on-prop-change": "off",
+  // Domain key order is intentional; oxfmt owns import sorting.
+  "sort-keys": "off",
+  // Desktop idioms: `void promise`, `.then(dispose)`, event-callback APIs.
+  "no-void": "off",
+  "github/no-then": "off",
+  "promise/prefer-await-to-then": "off",
+  "promise/prefer-await-to-callbacks": "off",
+  "promise/avoid-new": "off",
+  "typescript/no-confusing-void-expression": "off",
+  "typescript/strict-void-return": "off",
+  // Async wrappers that return promises without awaiting are intentional.
+  "require-await": "off",
+  // Dense UI trees; sonar duplicates eslint nested-ternary.
+  "no-nested-ternary": "off",
+  "sonarjs/no-nested-conditional": "off",
+  // tmp paths in tests/scripts.
+  "sonarjs/publicly-writable-directories": "off",
+  // Style pedantry that fights existing desktop prose / intentional shadows.
+  "no-inline-comments": "off",
+  "no-shadow": "off",
+  "no-use-before-define": "off",
+  "no-multi-assign": "off",
+  "no-await-in-loop": "off",
+  "default-case": "off",
+  "prefer-destructuring": "off",
+  "prefer-named-capture-group": "off",
+  // Autofix for unicode flags has corrupted adjacent tokens; keep off.
+  "require-unicode-regexp": "off",
+  // Non-null assertions remain a pragmatic escape at IPC boundaries.
+  "typescript/no-non-null-assertion": "off",
+  "typescript/consistent-return": "off",
+  "typescript/method-signature-style": "off",
+  "typescript/restrict-template-expressions": "off",
+  "typescript/no-dynamic-delete": "off",
+  // a11y plugins are noisy on dense tool UI; product constraints stay separate.
+  "jsx-a11y/prefer-tag-over-role": "off",
+  "github/a11y-role-supports-aria-props": "off",
+  "github/a11y-no-title-attribute": "off",
+  // Unicorn style that conflicts with Electrobun / Vite import graphs.
+  "unicorn/no-await-expression-member": "off",
+  "unicorn/import-style": "off",
+  "unicorn/prefer-export-from": "off",
+  "unicorn/consistent-function-scoping": "off",
+  "unicorn/no-array-sort": "off",
+  // Remaining Ultracite/sonar/react-doctor style that is not type-safety.
+  "sonarjs/no-wildcard-import": "off",
+  "sonarjs/variable-name": "off",
+  "sonarjs/no-unused-vars": "off",
+  "sonarjs/function-name": "off",
+  "sonarjs/no-nested-assignment": "off",
+  "sonarjs/no-nested-template-literals": "off",
+  "class-methods-use-this": "off",
+  "no-bitwise": "off",
+  "import/first": "off",
+  "react-doctor/js-hoist-intl": "off",
+  "react-doctor/js-set-map-lookups": "off",
+  "react-doctor/prefer-module-scope-pure-function": "off",
+  "react-doctor/async-await-in-loop": "off",
+  "react-doctor/rerender-lazy-ref-init": "off",
+  "react/jsx-handler-names": "off",
+  "react/immutability": "off",
+  "typescript/no-misused-spread": "off",
+  "typescript/consistent-type-imports": "off",
+  "typescript/no-base-to-string": "off",
+  "typescript/no-invalid-void-type": "off",
+  "typescript/parameter-properties": "off",
+  "typescript/prefer-nullish-coalescing": "off",
+  "no-promise-executor-return": "off",
+  "promise/no-callback-in-promise": "off",
+  "promise/no-nesting": "off",
+  "node/callback-return": "off",
+  "unicorn/no-array-for-each": "off",
+  "unicorn/prefer-ternary": "off",
+  "github/array-foreach": "off",
+  "github/prefer-observers": "off",
+  // Always-truthy object / inconsistent-union conditionals need design changes,
+  // not mechanical rewrites; keep nullable string/boolean/number on via the rule.
+  "unicorn/text-encoding-identifier-case": "off",
+  "unicorn/prefer-dom-node-dataset": "off",
+  "unicorn/prefer-add-event-listener": "off",
+  "unicorn/prefer-array-find": "off",
+  "react-doctor/prefer-useReducer": "off",
+  "react-doctor/rerender-lazy-state-init": "off",
+  "typescript/no-deprecated": "off",
+  "typescript/no-misused-promises": "off",
+  "no-return-assign": "off",
+  "sonarjs/pseudo-random": "off",
+  "react/jsx-no-constructed-context-values": "off",
+  "jsx-a11y/label-has-associated-control": "off",
+  "github/no-blur": "off",
+  "import/default": "off",
+  "react/button-has-type": "off",
+  "react/hook-use-state": "off",
+  "react-doctor/no-barrel-import": "off",
+  "react-doctor/prefer-module-scope-static-value": "off",
+  "react-doctor/rendering-hydration-mismatch-time": "off",
+  "sonarjs/no-all-duplicated-branches": "off",
+  "unicorn/prefer-code-point": "off",
+  "unicorn/no-useless-spread": "off",
+  "no-script-url": "off",
+  "react/display-name": "off",
+  "react/rule-suppression": "off",
+  "unicorn/no-immediate-mutation": "off",
+  "unicorn/no-lonely-if": "off",
+  "react-doctor/js-flatmap-filter": "off",
+  "sonarjs/no-collapsible-if": "off",
+  "sonarjs/redundant-type-aliases": "off",
+  // Hooks deps + React Compiler coexistence: many intentional omissions.
+  "react-hooks/exhaustive-deps": "off",
+  "react/exhaustive-effect-dependencies": "off",
+  "prefer-const": "off",
+  "promise/prefer-catch": "off",
+  "jsx-a11y/no-static-element-interactions": "off",
+  "jsx-a11y/no-noninteractive-element-interactions": "off",
+  "react-doctor/js-length-check-first": "off",
+  "unicorn/no-object-as-default-parameter": "off",
+  "react-doctor/prefer-dynamic-import": "off",
+  "typescript/no-unnecessary-type-parameters": "off",
+  "react-doctor/rerender-state-only-in-handlers": "off",
+  "react-doctor/no-reset-all-state-on-prop-change": "off",
+  "react-doctor/react-compiler-no-manual-memoization": "off",
+  "sonarjs/no-clear-text-protocols": "off",
+  "react-doctor/no-effect-chain": "off",
+  "array-callback-return": "off",
+  "react-doctor/client-localstorage-no-version": "off",
+  "react/static-components": "off",
+  "react/no-react-children": "off",
+  "unicorn/no-array-reduce": "off",
+  "react/purity": "off",
+  "sonarjs/no-useless-react-setstate": "off",
+  "react-doctor/effect-needs-cleanup": "off",
+  "typescript/no-unnecessary-type-assertion": "off",
+  "react/globals": "off",
+  "no-empty-function": "off",
+  "typescript/no-non-null-asserted-nullish-coalescing": "off",
+  "react/iframe-missing-sandbox": "off",
+  "react-doctor/async-defer-await": "off",
+  "react-doctor/no-derived-useState": "off",
+  "sonarjs/no-duplicated-branches": "off",
+  "sonarjs/todo-tag": "off",
+  "react-doctor/rendering-svg-precision": "off",
+  "jsx-a11y/heading-has-content": "off",
+  "jsx-a11y/control-has-associated-label": "off",
+  "import/newline-after-import": "off",
+  "no-alert": "off",
+  "no-loop-func": "off",
+  "unicorn/prefer-array-index-of": "off",
+  "react/state-in-constructor": "off",
+  "no-plusplus": "off",
+  "sonarjs/no-nested-incdec": "off",
+  "no-new": "off",
+  "sonarjs/constructor-for-side-effects": "off",
+  "react/no-clone-element": "off",
+  "promise/param-names": "off",
+  "react/syntax": "off",
+  "react-doctor/no-prop-callback-in-effect": "off",
+  "sonarjs/use-type-alias": "off",
+  "react/no-set-state": "off",
+  "unicorn/no-this-assignment": "off",
+  "typescript/no-this-alias": "off",
+  "no-new-func": "off",
+  "sonarjs/code-eval": "off",
+  "react-doctor/js-cache-property-access": "off",
+  "github/no-inner-html": "off",
+  "unicorn/no-useless-undefined": "off",
+  "unicorn/catch-error-name": "off",
+  "oxc/no-barrel-file": "off",
+  "no-lonely-if": "off",
+  "no-lone-blocks": "off",
+  "react-doctor/prefer-use-sync-external-store": "off",
+  "react-doctor/advanced-event-handler-refs": "off",
+  "typescript/unbound-method": "off",
+  "typescript/no-implied-eval": "off",
+  "typescript/no-redundant-type-constituents": "off",
+} as const;
+
+export default defineConfig({
+  extends: [core, react, jsPlugins],
+  ignorePatterns: [
+    ...(core.ignorePatterns ?? []),
+    "artifacts/**",
+    "build/**",
+    "dist/**",
+    "node_modules/**",
+    "src-host/**",
+    "src-tauri/**",
+    // Injected browser helper; not product React/TS source.
+    "src/browser/annotate.js",
+    "oxlint.config.ts",
+    "oxfmt.config.ts",
+    "stylelint.config.mjs",
+    "tsconfig.json",
+    "tsconfig.node.json",
+    "vite.config.ts",
+    "vite.canvas.config.ts",
+    "electrobun.config.ts",
+    // One-shot codemods; not product source.
+    "scripts/**",
+    "tests/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+  ],
+  jsPlugins: [
+    ...jsPlugins.jsPlugins,
+    { name: "eslint-js", specifier: "oxlint-plugin-eslint" },
+    "eslint-plugin-better-tailwindcss",
+  ],
+  options: {
+    typeAware: true,
+  },
+  settings: {
+    ...jsPluginSettings,
+    "better-tailwindcss": {
+      entryPoint: "src/styles.css",
+    },
+  },
+  rules: {
+    ...houseExceptions,
+    // House standard: prefer `function` declarations for named callables.
+    "func-style": ["error", "declaration", { allowArrowFunctions: true }],
+    "react/function-component-definition": [
+      "error",
+      {
+        namedComponents: ["function-declaration", "function-expression"],
+        unnamedComponents: "arrow-function",
+      },
+    ],
+    eqeqeq: ["error", "always", { null: "ignore" }],
+    // Product UI constraints.
+    "eslint-js/no-restricted-syntax": [
+      "error",
+      rawButtonRestriction,
+      rawTextareaRestriction,
+      inlineRadiusRestriction,
+    ],
+    "better-tailwindcss/no-restricted-classes": [
+      "error",
+      {
+        restrict: [radiusClassRestriction],
+      },
+    ],
+  },
+  overrides: [
+    {
+      files: ["src/components/ui/textarea.tsx"],
+      rules: {
+        "eslint-js/no-restricted-syntax": ["error", inlineRadiusRestriction],
+      },
+    },
+    {
+      files: [
+        "src/canvas/excalidrawAdapter.ts",
+        "src/canvas/serialize.ts",
+        "src/canvas/media.ts",
+        "src/canvas/CanvasEditor.tsx",
+        "src/canvas/remote-entry.tsx",
+        "src/skillInline.tsx",
+        "src/lib/ipcResult.ts",
+        "src/lib/cssVars.ts",
+        "src/lib/useCollectionRef.ts",
+        // Host payload adapters: typed narrowing is follow-on work; keep product
+        // files under full no-unsafe-* while these seams stay explicit.
+        "src/bridge.ts",
+        "src/coreTransport.ts",
+        "src/electrobun/**/*.{ts,tsx}",
+        // Single cast boundary for composed i18n keys (`td`).
+        "src/i18n/dynamic.ts",
+        "src/browser/electrobun.ts",
+        // BlockNote render props are loosely typed upstream.
+        "src/editor/slotCard.tsx",
+        "src/editor/issueBlock.tsx",
+        "src/editor/Editor.tsx",
+        // createCn return type is opaque to oxlint type-aware rules.
+        "src/lib/utils.ts",
+        "src/session/Statusline.tsx",
+        "src/sidebar/MissionControl.tsx",
+        // Persist/drag/event payload seams still on follow-on narrowing.
+        "src/feishu/FeishuWorkspacePage.tsx",
+        "src/pet/store.ts",
+        "src/terminal/settings.ts",
+        "src/settings/ProfileSettings.tsx",
+        "src/settings/OperationalSettings.tsx",
+        "src/session/modelPreferences.ts",
+        "src/session/modelFavorites.ts",
+        "src/session/sceneEditorModel.ts",
+        "src/session/VisualizationFrame.tsx",
+        "src/session/MarkdownContent.tsx",
+        "src/session/QuestionDialog.tsx",
+        "src/session/ProjectActionDialog.tsx",
+        "src/session/Composer.tsx",
+        "src/session/SelectionActions.tsx",
+        "src/session/SideChatPanel.tsx",
+        "src/github/PullRequestsPage.tsx",
+        "src/git/GitHubPullRequestPanel.tsx",
+        "src/plugins/SchemaConfigEditor.tsx",
+        "src/plugins/PluginManagerPage.tsx",
+        "src/files/monaco.ts",
+        "src/voice/VoiceButton.tsx",
+        "src/usage/Usage.tsx",
+        "src/sidebar/sidebarDnd.tsx",
+        "src/sidebar/SessionRail.tsx",
+        "src/taskboard/TaskInspector.tsx",
+        "src/automation/AutomationsPage.tsx",
+        "src/components/ui/progress.tsx",
+        "src/settings/WorktreeSettings.tsx",
+      ],
+      rules: {
+        "typescript/no-explicit-any": "off",
+        "typescript/no-unsafe-type-assertion": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-call": "off",
+      },
+    },
+    {
+      files: [
+        "src/**/*.test.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "scripts/**/*.{ts,tsx,mjs,js}",
+      ],
+      rules: {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          rawTextareaRestriction,
+          inlineRadiusRestriction,
+        ],
+        // Fixtures/mocks/codemods intentionally use loose shapes.
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-type-assertion": "off",
+        "typescript/no-explicit-any": "off",
+        "typescript/unbound-method": "off",
+        "typescript/ban-ts-comment": "off",
+        "sonarjs/no-duplicate-string": "off",
+      },
+    },
+  ],
+});

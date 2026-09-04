@@ -1,13 +1,11 @@
 import { PetX } from "@petx/react";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { useT } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  useAppearanceSettings,
-  type AppearanceSettings,
-  type PetSize,
-} from "../appearance";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { useT } from "@/i18n";
+
+import { useAppearanceSettings } from "../appearance";
+import type { AppearanceSettings, PetSize } from "../appearance";
 import type { CodeTwoPetAnimation } from "./state";
 import { BUILTIN_PET, petSpritesheetUrl } from "./store";
 
@@ -74,9 +72,10 @@ export function CodeTwoPet({
 
   useEffect(
     () => () => {
-      if (waveTimer.current !== undefined) window.clearTimeout(waveTimer.current);
+      if (waveTimer.current !== undefined)
+        window.clearTimeout(waveTimer.current);
     },
-    [],
+    []
   );
 
   const greet = () => {
@@ -88,12 +87,16 @@ export function CodeTwoPet({
     }, WAVE_DURATION_MS);
   };
 
-  const activeAnimation = wave > 0 ? "waving" : appearance.petActivityEnabled ? animation : "idle";
-  const spritesheetUrl = petSpritesheetUrl(appearance.petSource, appearance.petId);
+  const activeAnimation =
+    wave > 0 ? "waving" : appearance.petActivityEnabled ? animation : "idle";
+  const spritesheetUrl = petSpritesheetUrl(
+    appearance.petSource,
+    appearance.petId
+  );
 
   return (
     <section className="codetwo-pet-stage" aria-label={t("pet.label")}>
-      {bubble ? (
+      {bubble != null && bubble !== "" ? (
         <p className="codetwo-pet-bubble" dir="auto">
           <span>{bubble}</span>
         </p>

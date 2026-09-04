@@ -1,3 +1,12 @@
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Box,
   Folder,
@@ -9,26 +18,16 @@ import {
   Play,
   Send,
 } from "@/components/ui/icons";
+import { SplitButton } from "@/components/ui/split-button";
 
+import type { ProjectScript } from "../bridge";
+import { gitNextActionLabel, runGitNextAction } from "../git/nextAction";
+import type {
+  GitNextActionItem,
+  GitNextActionProjection,
+} from "../git/nextAction";
 import { useT } from "../i18n";
 import { formatCombo } from "../keys";
-import type { ProjectScript } from "../bridge";
-import {
-  gitNextActionLabel,
-  runGitNextAction,
-  type GitNextActionItem,
-  type GitNextActionProjection,
-} from "../git/nextAction";
-import { Button } from "@/components/ui/button";
-import { SplitButton } from "@/components/ui/split-button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 export function SessionHeaderActions({
   gitAction,
@@ -66,23 +65,24 @@ export function SessionHeaderActions({
   onMoveTask: () => void;
 }) {
   const t = useT();
-  const runGitAction = (item: GitNextActionItem) => runGitNextAction(item, {
-    openSourceControl: onOpenSourceControl,
-    push: onPush,
-    openPullRequest: onOpenPullRequest,
-    cleanupWorktree: onCleanupWorktree,
-  });
+  const runGitAction = (item: GitNextActionItem) =>
+    runGitNextAction(item, {
+      openSourceControl: onOpenSourceControl,
+      push: onPush,
+      openPullRequest: onOpenPullRequest,
+      cleanupWorktree: onCleanupWorktree,
+    });
   const primaryGitLabel = gitNextActionLabel(
     t,
     gitAction.primary,
-    gitAction.changeRequestLabel,
+    gitAction.changeRequestLabel
   );
   const gitAlternatives = gitAction.alternatives.map((item) => ({
     label: gitNextActionLabel(t, item, gitAction.changeRequestLabel),
     onClick: () => runGitAction(item),
     disabled: item.disabled,
   }));
-  if (!gitAction.primary.disabled) {
+  if (gitAction.primary.disabled !== true) {
     gitAlternatives.push({
       label: t("header.checkpoint"),
       onClick: onCheckpoint,
@@ -107,7 +107,9 @@ export function SessionHeaderActions({
         <DropdownMenuItem onClick={onOpenFinder}>
           <Folder aria-hidden />
           {fileManagerLabel}
-          {finderHint && <DropdownMenuShortcut>{finderHint}</DropdownMenuShortcut>}
+          {finderHint && (
+            <DropdownMenuShortcut>{finderHint}</DropdownMenuShortcut>
+          )}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onMoveTask}>
           <Send aria-hidden />
@@ -130,8 +132,13 @@ export function SessionHeaderActions({
         aria-label={t("header.addAction")}
         onClick={onAddAction}
       >
-        <Plus className="session-header-action-icon size-4 text-muted-foreground" aria-hidden />
-        <span className="session-header-action-label">{t("header.addAction")}</span>
+        <Plus
+          className="session-header-action-icon text-muted-foreground size-4"
+          aria-hidden
+        />
+        <span className="session-header-action-label">
+          {t("header.addAction")}
+        </span>
       </Button>
 
       {actions.slice(0, 2).map((action) => (
@@ -140,39 +147,50 @@ export function SessionHeaderActions({
           type="button"
           variant="ghost"
           size="compact"
-          className="session-header-action-main max-w-36 bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
+          className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground max-w-36"
           aria-label={action.name || action.id}
           title={action.kind === "prompt" ? action.prompt : action.command}
           onClick={() => onRunAction?.(action)}
         >
           {action.kind === "prompt" ? (
-            <MessageSquareText className="session-header-action-icon size-3.5 text-muted-foreground" aria-hidden />
+            <MessageSquareText
+              className="session-header-action-icon text-muted-foreground size-3.5"
+              aria-hidden
+            />
           ) : (
-            <Play className="session-header-action-icon size-3.5 text-muted-foreground" aria-hidden />
+            <Play
+              className="session-header-action-icon text-muted-foreground size-3.5"
+              aria-hidden
+            />
           )}
-          <span className="session-header-action-label truncate">{action.name || action.id}</span>
+          <span className="session-header-action-label truncate">
+            {action.name || action.id}
+          </span>
         </Button>
       ))}
 
       {actions.length > 2 && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={(
+            render={
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground hover:text-muted-foreground"
+                className="text-muted-foreground hover:text-muted-foreground size-7"
                 aria-label={t("actionDialog.moreActions")}
               >
                 <Ellipsis className="size-4" aria-hidden />
               </Button>
-            )}
+            }
           />
           <DropdownMenuContent align="end">
             <DropdownMenuGroup>
               {actions.slice(2).map((action) => (
-                <DropdownMenuItem key={action.id} onClick={() => onRunAction?.(action)}>
+                <DropdownMenuItem
+                  key={action.id}
+                  onClick={() => onRunAction?.(action)}
+                >
                   {action.kind === "prompt" ? (
                     <MessageSquareText aria-hidden />
                   ) : (
@@ -180,7 +198,9 @@ export function SessionHeaderActions({
                   )}
                   {action.name || action.id}
                   {action.keybinding && (
-                    <DropdownMenuShortcut>{formatCombo(action.keybinding)}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>
+                      {formatCombo(action.keybinding)}
+                    </DropdownMenuShortcut>
                   )}
                 </DropdownMenuItem>
               ))}
@@ -191,7 +211,7 @@ export function SessionHeaderActions({
 
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={(
+          render={
             <Button
               type="button"
               variant="ghost"
@@ -199,21 +219,31 @@ export function SessionHeaderActions({
               className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
               aria-label={t("header.open")}
             >
-              <Folder className="session-header-action-icon size-4 text-muted-foreground" aria-hidden />
-              <span className="session-header-action-label">{t("header.open")}</span>
+              <Folder
+                className="session-header-action-icon text-muted-foreground size-4"
+                aria-hidden
+              />
+              <span className="session-header-action-label">
+                {t("header.open")}
+              </span>
             </Button>
-          )}
+          }
         />
         {renderOpenMenu()}
       </DropdownMenu>
 
       <SplitButton
-        label={(
+        label={
           <>
-            <GitCommitHorizontal className="session-header-action-icon size-4 text-muted-foreground" aria-hidden />
-            <span className="session-header-action-label">{primaryGitLabel}</span>
+            <GitCommitHorizontal
+              className="session-header-action-icon text-muted-foreground size-4"
+              aria-hidden
+            />
+            <span className="session-header-action-label">
+              {primaryGitLabel}
+            </span>
           </>
-        )}
+        }
         primaryLabel={primaryGitLabel}
         onClick={() => runGitAction(gitAction.primary)}
         actions={gitAlternatives}

@@ -1,8 +1,8 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
 interface InspectorSectionProps {
-  title: string
-  children: ReactNode
+  title: string;
+  children: ReactNode;
 }
 
 export function InspectorSection({ title, children }: InspectorSectionProps) {
@@ -11,5 +11,5 @@ export function InspectorSection({ title, children }: InspectorSectionProps) {
       <h2 className="text-body font-semibold">{title}</h2>
       {children}
     </section>
-  )
+  );
 }

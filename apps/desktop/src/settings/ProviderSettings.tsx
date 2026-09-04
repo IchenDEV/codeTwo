@@ -1,28 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+
+import { SearchField } from "@/components/business/search-field";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { ChevronDown, Download, RefreshCw } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 import {
   configureProvider,
   installProvider,
   setProviderEnabled,
   upgradeProvider,
-  type ProviderInfo,
-  type ProviderRuntimeConfiguration,
-  type ProviderRuntimeOverride,
 } from "../bridge";
-import { ProviderIcon } from "../providers/ProviderIcon";
+import type {
+  ProviderInfo,
+  ProviderRuntimeConfiguration,
+  ProviderRuntimeOverride,
+} from "../bridge";
 import { useT } from "../i18n";
-import { groupModels } from "../session/models";
+import { ProviderIcon } from "../providers/ProviderIcon";
 import { useProviderModelPreferences } from "../session/modelPreferences";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { SearchField } from "@/components/business/search-field";
-import { cn } from "@/lib/utils";
+import { groupModels } from "../session/models";
 import { GroupHeading, Page } from "./SettingsPrimitives";
 
 const CAPABILITY_LABELS = {
@@ -33,31 +36,39 @@ const CAPABILITY_LABELS = {
   sites: "Sites",
 } as const;
 
-type ProviderOperation = {
+interface ProviderOperation {
   id: string;
   action: "install" | "upgrade" | "enable" | "configure" | "refresh";
-};
+}
 
-function runtimeConfiguration(provider: ProviderInfo): ProviderRuntimeConfiguration {
-  return provider.configuration ?? {
-    display_name: null,
-    command: null,
-    args: null,
-    home_path: null,
-    home_environment: provider.id === "codex"
-      ? "CODEX_HOME"
-      : provider.id === "claude_code"
-        ? "CLAUDE_CONFIG_DIR"
-        : null,
-    forwarded_environment: [],
-    missing_environment: [],
-    effective_command: "",
-    effective_args: [],
-  };
+function runtimeConfiguration(
+  provider: ProviderInfo
+): ProviderRuntimeConfiguration {
+  return (
+    provider.configuration ?? {
+      display_name: null,
+      command: null,
+      args: null,
+      home_path: null,
+      home_environment:
+        provider.id === "codex"
+          ? "CODEX_HOME"
+          : provider.id === "claude_code"
+            ? "CLAUDE_CONFIG_DIR"
+            : null,
+      forwarded_environment: [],
+      missing_environment: [],
+      effective_command: "",
+      effective_args: [],
+    }
+  );
 }
 
 function listFromLines(value: string): string[] {
-  return value.split("\n").map((line) => line.trim()).filter(Boolean);
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 export function providerRuntimeOverrideFromDraft(draft: {
@@ -90,13 +101,17 @@ function ProviderRuntimeEditor({
 }) {
   const t = useT();
   const configuration = runtimeConfiguration(provider);
-  const [displayName, setDisplayName] = useState(configuration.display_name ?? "");
+  const [displayName, setDisplayName] = useState(
+    configuration.display_name ?? ""
+  );
   const [command, setCommand] = useState(configuration.command ?? "");
   const [homePath, setHomePath] = useState(configuration.home_path ?? "");
-  const [argsOverridden, setArgsOverridden] = useState(configuration.args !== null);
+  const [argsOverridden, setArgsOverridden] = useState(
+    configuration.args !== null
+  );
   const [args, setArgs] = useState((configuration.args ?? []).join("\n"));
   const [forwardedEnvironment, setForwardedEnvironment] = useState(
-    configuration.forwarded_environment.join("\n"),
+    configuration.forwarded_environment.join("\n")
   );
 
   useEffect(() => {
@@ -109,16 +124,14 @@ function ProviderRuntimeEditor({
     setForwardedEnvironment(next.forwarded_environment.join("\n"));
   }, [provider]);
 
-  const nextConfiguration = useMemo<ProviderRuntimeOverride>(() => (
-    providerRuntimeOverrideFromDraft({
-      displayName,
-      command,
-      homePath,
-      argsOverridden,
-      args,
-      forwardedEnvironment,
-    })
-  ), [args, argsOverridden, command, displayName, forwardedEnvironment, homePath]);
+  const nextConfiguration = providerRuntimeOverrideFromDraft({
+    displayName,
+    command,
+    homePath,
+    argsOverridden,
+    args,
+    forwardedEnvironment,
+  });
   const persistedConfiguration: ProviderRuntimeOverride = {
     display_name: configuration.display_name,
     command: configuration.command,
@@ -126,7 +139,9 @@ function ProviderRuntimeEditor({
     home_path: configuration.home_path,
     forwarded_environment: configuration.forwarded_environment,
   };
-  const changed = JSON.stringify(nextConfiguration) !== JSON.stringify(persistedConfiguration);
+  const changed =
+    JSON.stringify(nextConfiguration) !==
+    JSON.stringify(persistedConfiguration);
 
   function reset() {
     setDisplayName("");
@@ -138,9 +153,12 @@ function ProviderRuntimeEditor({
   }
 
   return (
-    <div data-provider-runtime-editor={provider.id} className="space-y-section pt-module-inset">
+    <div
+      data-provider-runtime-editor={provider.id}
+      className="space-y-section pt-module-inset"
+    >
       <GroupHeading>{t("settings.providerRuntimeConfiguration")}</GroupHeading>
-      <div className="grid gap-module-inset">
+      <div className="gap-module-inset grid">
         <Field>
           <FieldLabel htmlFor={`provider-display-name-${provider.id}`}>
             {t("settings.providerDisplayName")}
@@ -153,7 +171,9 @@ function ProviderRuntimeEditor({
             disabled={disabled}
             onChange={(event) => setDisplayName(event.target.value)}
           />
-          <FieldDescription>{t("settings.providerDisplayNameHint")}</FieldDescription>
+          <FieldDescription>
+            {t("settings.providerDisplayNameHint")}
+          </FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor={`provider-command-${provider.id}`}>
@@ -163,32 +183,40 @@ function ProviderRuntimeEditor({
             id={`provider-command-${provider.id}`}
             size="compact"
             value={command}
-            placeholder={configuration.effective_command || t("settings.providerRuntimeCommandPlaceholder")}
+            placeholder={
+              configuration.effective_command ||
+              t("settings.providerRuntimeCommandPlaceholder")
+            }
             disabled={disabled}
             spellCheck={false}
             onChange={(event) => setCommand(event.target.value)}
           />
-          <FieldDescription>{t("settings.providerRuntimeCommandHint")}</FieldDescription>
+          <FieldDescription>
+            {t("settings.providerRuntimeCommandHint")}
+          </FieldDescription>
         </Field>
-        {configuration.home_environment && (
-          <Field>
-            <FieldLabel htmlFor={`provider-home-${provider.id}`}>
-              {t("settings.providerConfigDirectory")}
-            </FieldLabel>
-            <Input
-              id={`provider-home-${provider.id}`}
-              size="compact"
-              value={homePath}
-              placeholder={`~/.${provider.id === "codex" ? "codex" : "claude"}`}
-              disabled={disabled}
-              spellCheck={false}
-              onChange={(event) => setHomePath(event.target.value)}
-            />
-            <FieldDescription>
-              {t("settings.providerConfigDirectoryHint", { variable: configuration.home_environment })}
-            </FieldDescription>
-          </Field>
-        )}
+        {configuration.home_environment != null &&
+          configuration.home_environment !== "" && (
+            <Field>
+              <FieldLabel htmlFor={`provider-home-${provider.id}`}>
+                {t("settings.providerConfigDirectory")}
+              </FieldLabel>
+              <Input
+                id={`provider-home-${provider.id}`}
+                size="compact"
+                value={homePath}
+                placeholder={`~/.${provider.id === "codex" ? "codex" : "claude"}`}
+                disabled={disabled}
+                spellCheck={false}
+                onChange={(event) => setHomePath(event.target.value)}
+              />
+              <FieldDescription>
+                {t("settings.providerConfigDirectoryHint", {
+                  variable: configuration.home_environment,
+                })}
+              </FieldDescription>
+            </Field>
+          )}
         <Field>
           <div className="flex items-center justify-between gap-3">
             <FieldLabel htmlFor={`provider-args-${provider.id}`}>
@@ -207,11 +235,16 @@ function ProviderRuntimeEditor({
             rows={3}
             value={args}
             disabled={disabled || !argsOverridden}
-            placeholder={configuration.effective_args.join("\n") || t("settings.providerNoArguments")}
+            placeholder={
+              configuration.effective_args.join("\n") ||
+              t("settings.providerNoArguments")
+            }
             spellCheck={false}
             onChange={(event) => setArgs(event.target.value)}
           />
-          <FieldDescription>{t("settings.providerRuntimeArgumentsHint")}</FieldDescription>
+          <FieldDescription>
+            {t("settings.providerRuntimeArgumentsHint")}
+          </FieldDescription>
         </Field>
       </div>
       <Field>
@@ -228,7 +261,9 @@ function ProviderRuntimeEditor({
           spellCheck={false}
           onChange={(event) => setForwardedEnvironment(event.target.value)}
         />
-        <FieldDescription>{t("settings.providerForwardedEnvironmentHint")}</FieldDescription>
+        <FieldDescription>
+          {t("settings.providerForwardedEnvironmentHint")}
+        </FieldDescription>
         {configuration.missing_environment.length > 0 && (
           <p className="text-fine text-warning">
             {t("settings.providerMissingEnvironment", {
@@ -237,8 +272,14 @@ function ProviderRuntimeEditor({
           </p>
         )}
       </Field>
-      <div className="flex items-center justify-end gap-control-group">
-        <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={reset}>
+      <div className="gap-control-group flex items-center justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={disabled}
+          onClick={reset}
+        >
           {t("settings.restoreDefaults")}
         </Button>
         <Button
@@ -259,19 +300,34 @@ function ProviderRuntimeEditor({
 function ProviderModels({ provider }: { provider: ProviderInfo }) {
   const t = useT();
   const [search, setSearch] = useState("");
-  const { hidden, setVisible, showAll } = useProviderModelPreferences(provider.id);
-  const models = useMemo(() => groupModels(provider.models), [provider.models]);
+  const { hidden, setVisible, showAll } = useProviderModelPreferences(
+    provider.id
+  );
+  const models = groupModels(provider.models);
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filtered = normalizedSearch
-    ? models.filter((model) => `${model.label}\n${model.key}`.toLocaleLowerCase().includes(normalizedSearch))
+    ? models.filter((model) =>
+        `${model.label}\n${model.key}`
+          .toLocaleLowerCase()
+          .includes(normalizedSearch)
+      )
     : models;
 
   if (models.length === 0) return null;
   return (
-    <div data-provider-models={provider.id} className="space-y-module-inset pt-section">
-      <div className="flex flex-wrap items-center justify-between gap-control-group">
+    <div
+      data-provider-models={provider.id}
+      className="space-y-module-inset pt-section"
+    >
+      <div className="gap-control-group flex flex-wrap items-center justify-between">
         <GroupHeading>{t("settings.providerModels")}</GroupHeading>
-        <Button type="button" variant="ghost" size="xs" disabled={hidden.size === 0} onClick={showAll}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          disabled={hidden.size === 0}
+          onClick={showAll}
+        >
           {t("settings.providerShowAllModels")}
         </Button>
       </div>
@@ -283,32 +339,42 @@ function ProviderModels({ provider }: { provider: ProviderInfo }) {
         onClear={() => setSearch("")}
         onChange={(event) => setSearch(event.target.value)}
       />
-      <div className="divide-y divide-border/60">
+      <div className="divide-border/60 divide-y">
         {filtered.map((model) => {
           const visible = !hidden.has(model.key);
           return (
-            <div key={model.key} data-provider-model={`${provider.id}:${model.key}`} className="flex min-h-control-field items-center gap-4 py-inline">
+            <div
+              key={model.key}
+              data-provider-model={`${provider.id}:${model.key}`}
+              className="min-h-control-field py-inline flex items-center gap-4"
+            >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-ui font-medium">{model.label}</p>
-                <p className="truncate font-mono text-cap text-muted-foreground">{model.key}</p>
+                <p className="text-ui truncate font-medium">{model.label}</p>
+                <p className="text-cap text-muted-foreground truncate font-mono">
+                  {model.key}
+                </p>
               </div>
               <Switch
                 checked={visible}
-                aria-label={visible
-                  ? t("settings.providerHideModel", { model: model.label })
-                  : t("settings.providerShowModel", { model: model.label })}
+                aria-label={
+                  visible
+                    ? t("settings.providerHideModel", { model: model.label })
+                    : t("settings.providerShowModel", { model: model.label })
+                }
                 onCheckedChange={(checked) => setVisible(model.key, checked)}
               />
             </div>
           );
         })}
         {filtered.length === 0 && (
-          <p className="py-section text-center text-fine text-muted-foreground">
+          <p className="py-section text-fine text-muted-foreground text-center">
             {t("settings.providerNoMatchingModels")}
           </p>
         )}
       </div>
-      <p className="text-fine text-muted-foreground">{t("settings.providerModelsHint")}</p>
+      <p className="text-fine text-muted-foreground">
+        {t("settings.providerModelsHint")}
+      </p>
     </div>
   );
 }
@@ -325,16 +391,21 @@ export function ProviderSettingsPage({
   reload?: () => void | Promise<ProviderInfo[]>;
   installer?: (provider: string) => Promise<ProviderInfo[]>;
   upgrader?: (provider: string) => Promise<ProviderInfo[]>;
-  enabledSaver?: (provider: string, enabled: boolean) => Promise<ProviderInfo[]>;
+  enabledSaver?: (
+    provider: string,
+    enabled: boolean
+  ) => Promise<ProviderInfo[]>;
   configurationSaver?: (
     provider: string,
-    configuration: ProviderRuntimeOverride,
+    configuration: ProviderRuntimeOverride
   ) => Promise<ProviderInfo[]>;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [operation, setOperation] = useState<ProviderOperation | null>(null);
-  const [message, setMessage] = useState<{ id: string; text: string } | null>(null);
+  const [message, setMessage] = useState<{ id: string; text: string } | null>(
+    null
+  );
   const [error, setError] = useState<{ id: string; text: string } | null>(null);
 
   useEffect(() => {
@@ -345,10 +416,14 @@ export function ProviderSettingsPage({
     void (async () => {
       try {
         await reload();
-        if (active) setMessage({ id: "*", text: t("settings.providerChecked") });
-      } catch (cause) {
+        if (active)
+          setMessage({ id: "*", text: t("settings.providerChecked") });
+      } catch (error) {
         if (active) {
-          setError({ id: "*", text: t("settings.providerRefreshFailed", { error: String(cause) }) });
+          setError({
+            id: "*",
+            text: t("settings.providerRefreshFailed", { error: String(error) }),
+          });
         }
       } finally {
         if (active) setOperation(null);
@@ -366,8 +441,11 @@ export function ProviderSettingsPage({
     try {
       await reload();
       setMessage({ id: "*", text: t("settings.providerChecked") });
-    } catch (cause) {
-      setError({ id: "*", text: t("settings.providerRefreshFailed", { error: String(cause) }) });
+    } catch (error) {
+      setError({
+        id: "*",
+        text: t("settings.providerRefreshFailed", { error: String(error) }),
+      });
     } finally {
       setOperation(null);
     }
@@ -385,13 +463,21 @@ export function ProviderSettingsPage({
       else await upgrader(providerId);
       setMessage({
         id: providerId,
-        text: action === "install"
-          ? t("settings.providerInstalled", { provider: candidate.display_name })
-          : t("settings.providerUpgraded", { provider: candidate.display_name }),
+        text:
+          action === "install"
+            ? t("settings.providerInstalled", {
+                provider: candidate.display_name,
+              })
+            : t("settings.providerUpgraded", {
+                provider: candidate.display_name,
+              }),
       });
       await reload?.();
-    } catch (cause) {
-      setError({ id: providerId, text: t("settings.providerActionFailed", { error: String(cause) }) });
+    } catch (error) {
+      setError({
+        id: providerId,
+        text: t("settings.providerActionFailed", { error: String(error) }),
+      });
     } finally {
       setOperation(null);
     }
@@ -409,12 +495,19 @@ export function ProviderSettingsPage({
       setMessage({
         id: providerId,
         text: enabled
-          ? t("settings.providerEnabledMessage", { provider: candidate.display_name })
-          : t("settings.providerDisabledMessage", { provider: candidate.display_name }),
+          ? t("settings.providerEnabledMessage", {
+              provider: candidate.display_name,
+            })
+          : t("settings.providerDisabledMessage", {
+              provider: candidate.display_name,
+            }),
       });
       await reload?.();
-    } catch (cause) {
-      setError({ id: providerId, text: t("settings.providerActionFailed", { error: String(cause) }) });
+    } catch (error) {
+      setError({
+        id: providerId,
+        text: t("settings.providerActionFailed", { error: String(error) }),
+      });
     } finally {
       setOperation(null);
     }
@@ -422,7 +515,7 @@ export function ProviderSettingsPage({
 
   async function saveConfiguration(
     providerId: string,
-    configuration: ProviderRuntimeOverride,
+    configuration: ProviderRuntimeOverride
   ) {
     if (operation) return;
     const candidate = providers.find((item) => item.id === providerId);
@@ -434,11 +527,16 @@ export function ProviderSettingsPage({
       await configurationSaver(providerId, configuration);
       setMessage({
         id: providerId,
-        text: t("settings.providerConfigured", { provider: candidate.display_name }),
+        text: t("settings.providerConfigured", {
+          provider: candidate.display_name,
+        }),
       });
       await reload?.();
-    } catch (cause) {
-      setError({ id: providerId, text: t("settings.providerActionFailed", { error: String(cause) }) });
+    } catch (error) {
+      setError({
+        id: providerId,
+        text: t("settings.providerActionFailed", { error: String(error) }),
+      });
     } finally {
       setOperation(null);
     }
@@ -454,11 +552,16 @@ export function ProviderSettingsPage({
   }
 
   return (
-    <Page title={t("settings.providers")} description={t("settings.providersHint")}>
+    <Page
+      title={t("settings.providers")}
+      description={t("settings.providersHint")}
+    >
       <div className="mb-2 flex items-center justify-end gap-2">
         {(operation?.action === "refresh" || message?.id === "*") && (
           <span className="text-callout text-muted-foreground">
-            {operation?.action === "refresh" ? t("settings.providerChecking") : message?.text}
+            {operation?.action === "refresh"
+              ? t("settings.providerChecking")
+              : message?.text}
           </span>
         )}
         <Button
@@ -473,10 +576,12 @@ export function ProviderSettingsPage({
           {t("settings.providerRefresh")}
         </Button>
       </div>
-      {error?.id === "*" && <p className="mb-2 text-callout text-destructive">{error.text}</p>}
+      {error?.id === "*" && (
+        <p className="text-callout text-destructive mb-2">{error.text}</p>
+      )}
       <div className="space-y-1">
         {providers.map((provider) => {
-          const enabled = provider.enabled !== false;
+          const { enabled } = provider;
           const management = provider.management ?? {
             installed: provider.available,
             version: null,
@@ -485,24 +590,29 @@ export function ProviderSettingsPage({
             check_error: null,
             install_supported: false,
             upgrade_supported: false,
-            launch_mode: provider.available ? "installed" as const : "unavailable" as const,
+            launch_mode: provider.available
+              ? ("installed" as const)
+              : ("unavailable" as const),
           };
           const isExpanded = expanded.has(provider.id);
-          const activeOperation = operation?.id === provider.id ? operation.action : null;
-          const status = !enabled
-            ? t("settings.providerDisabled")
-            : management.installed
-              ? management.version
-                ? t("settings.providerInstalledVersion", { version: management.version })
+          const activeOperation =
+            operation?.id === provider.id ? operation.action : null;
+          const status = enabled
+            ? management.installed
+              ? management.version != null && management.version !== ""
+                ? t("settings.providerInstalledVersion", {
+                    version: management.version,
+                  })
                 : t("settings.installed")
               : management.launch_mode === "on_demand"
                 ? t("settings.providerReadyOnDemand")
-                : t("settings.notInstalled");
+                : t("settings.notInstalled")
+            : t("settings.providerDisabled");
           return (
             <div
               key={provider.id}
               data-provider-row={provider.id}
-              className="rounded-module bg-fill-quiet/40 px-3 transition-colors hover:bg-fill-quiet/70"
+              className="rounded-module bg-fill-quiet/40 hover:bg-fill-quiet/70 px-3 transition-colors"
             >
               <div className="flex min-h-14 items-center gap-2">
                 <Button
@@ -517,26 +627,46 @@ export function ProviderSettingsPage({
                   onClick={() => toggle(provider.id)}
                 >
                   <span className="relative shrink-0">
-                    <ProviderIcon provider={provider.id} className={cn("size-5", !enabled && "opacity-40")} />
+                    <ProviderIcon
+                      provider={provider.id}
+                      className={cn("size-5", !enabled && "opacity-40")}
+                    />
                     <span
                       className={cn(
-                        "absolute -right-0.5 -top-0.5 size-1.5 rounded-full",
+                        "absolute -top-0.5 -right-0.5 size-1.5 rounded-full",
                         enabled && provider.available && "bg-success",
-                        enabled && !provider.available && management.launch_mode === "on_demand" && "bg-warning",
-                        (!enabled || management.launch_mode === "unavailable") && "bg-border",
+                        enabled &&
+                          !provider.available &&
+                          management.launch_mode === "on_demand" &&
+                          "bg-warning",
+                        (!enabled ||
+                          management.launch_mode === "unavailable") &&
+                          "bg-border"
                       )}
                     />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-body font-medium">{provider.display_name}</span>
-                      {management.version && (
-                        <span className="shrink-0 font-mono text-metadata text-muted-foreground">v{management.version}</span>
-                      )}
+                      <span className="text-body truncate font-medium">
+                        {provider.display_name}
+                      </span>
+                      {management.version != null &&
+                        management.version !== "" && (
+                          <span className="text-metadata text-muted-foreground shrink-0 font-mono">
+                            v{management.version}
+                          </span>
+                        )}
                     </span>
-                    <span className="mt-0.5 block truncate text-callout text-muted-foreground">{status}</span>
+                    <span className="text-callout text-muted-foreground mt-0.5 block truncate">
+                      {status}
+                    </span>
                   </span>
-                  <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
+                  <ChevronDown
+                    className={cn(
+                      "text-muted-foreground size-4 shrink-0 transition-transform",
+                      isExpanded && "rotate-180"
+                    )}
+                  />
                 </Button>
                 {!management.installed && management.install_supported && (
                   <Button
@@ -547,43 +677,72 @@ export function ProviderSettingsPage({
                     onClick={() => void runAction(provider.id, "install")}
                   >
                     {activeOperation === "install" ? <Spinner /> : <Download />}
-                    {activeOperation === "install" ? t("settings.providerInstalling") : t("settings.providerInstall")}
+                    {activeOperation === "install"
+                      ? t("settings.providerInstalling")
+                      : t("settings.providerInstall")}
                   </Button>
                 )}
-                {management.installed && management.upgrade_supported && management.update_available === true && (
-                  <Button
-                    data-provider-action={`${provider.id}:upgrade`}
-                    variant="ghost"
-                    size="xs"
-                    disabled={operation !== null}
-                    onClick={() => void runAction(provider.id, "upgrade")}
-                  >
-                    {activeOperation === "upgrade" ? <Spinner /> : <RefreshCw />}
-                    {activeOperation === "upgrade"
-                      ? t("settings.providerUpgrading")
-                      : management.latest_version
-                        ? t("settings.providerUpgradeVersion", { version: management.latest_version })
-                        : t("settings.providerUpgrade")}
-                  </Button>
-                )}
+                {management.installed &&
+                  management.upgrade_supported &&
+                  management.update_available === true && (
+                    <Button
+                      data-provider-action={`${provider.id}:upgrade`}
+                      variant="ghost"
+                      size="xs"
+                      disabled={operation !== null}
+                      onClick={() => void runAction(provider.id, "upgrade")}
+                    >
+                      {activeOperation === "upgrade" ? (
+                        <Spinner />
+                      ) : (
+                        <RefreshCw />
+                      )}
+                      {activeOperation === "upgrade"
+                        ? t("settings.providerUpgrading")
+                        : management.latest_version != null &&
+                            management.latest_version !== ""
+                          ? t("settings.providerUpgradeVersion", {
+                              version: management.latest_version,
+                            })
+                          : t("settings.providerUpgrade")}
+                    </Button>
+                  )}
                 <Switch
                   data-provider-toggle={provider.id}
                   checked={enabled}
                   disabled={operation !== null}
-                  aria-label={enabled
-                    ? t("settings.providerDisableAria", { provider: provider.display_name })
-                    : t("settings.providerEnableAria", { provider: provider.display_name })}
-                  onCheckedChange={(checked) => void saveEnabled(provider.id, checked)}
+                  aria-label={
+                    enabled
+                      ? t("settings.providerDisableAria", {
+                          provider: provider.display_name,
+                        })
+                      : t("settings.providerEnableAria", {
+                          provider: provider.display_name,
+                        })
+                  }
+                  onCheckedChange={(checked) =>
+                    void saveEnabled(provider.id, checked)
+                  }
                 />
               </div>
               {(message?.id === provider.id || error?.id === provider.id) && (
-                <p className={cn("ml-8 pb-2 text-callout", error?.id === provider.id ? "text-destructive" : "text-muted-foreground")}>
+                <p
+                  className={cn(
+                    "text-callout ml-8 pb-2",
+                    error?.id === provider.id
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                  )}
+                >
                   {error?.id === provider.id ? error.text : message?.text}
                 </p>
               )}
               {isExpanded && (
-                <div id={`provider-details-${provider.id}`} className="ml-8 pb-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-callout text-muted-foreground">
+                <div
+                  id={`provider-details-${provider.id}`}
+                  className="ml-8 pb-3"
+                >
+                  <div className="text-callout text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span className="font-mono">{provider.id}</span>
                     <span>
                       {management.launch_mode === "installed"
@@ -592,39 +751,71 @@ export function ProviderSettingsPage({
                           ? t("settings.providerOnDemandRuntime")
                           : t("settings.providerUnavailableRuntime")}
                     </span>
-                    {provider.needs_node && <span>{t("settings.needsNode")}</span>}
+                    {provider.needs_node && (
+                      <span>{t("settings.needsNode")}</span>
+                    )}
                   </div>
                   <ProviderRuntimeEditor
                     provider={provider}
                     disabled={operation !== null}
                     saving={activeOperation === "configure"}
-                    onSave={(configuration) => saveConfiguration(provider.id, configuration)}
+                    onSave={async (configuration) =>
+                      await saveConfiguration(provider.id, configuration)
+                    }
                   />
                   <ProviderModels provider={provider} />
-                  {provider.capabilities.some((capability) => capability.state !== "unavailable") && (
-                    <GroupHeading>{t("settings.providerCapabilities")}</GroupHeading>
+                  {provider.capabilities.some(
+                    (capability) => capability.state !== "unavailable"
+                  ) && (
+                    <GroupHeading>
+                      {t("settings.providerCapabilities")}
+                    </GroupHeading>
                   )}
-                  {provider.capabilities.filter((capability) => capability.state !== "unavailable").map((capability) => (
-                    <div
-                      key={capability.id}
-                      data-provider-capability={`${provider.id}:${capability.id}`}
-                      className="flex items-start justify-between gap-6 py-module-inset"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5 text-metadata font-medium">
-                          {CAPABILITY_LABELS[capability.id]}
-                          {capability.experimental && <Badge variant="outline">Experimental</Badge>}
-                          {capability.version && <span className="font-mono text-metadata text-muted-foreground">{capability.version}</span>}
+                  {provider.capabilities
+                    .filter((capability) => capability.state !== "unavailable")
+                    .map((capability) => (
+                      <div
+                        key={capability.id}
+                        data-provider-capability={`${provider.id}:${capability.id}`}
+                        className="py-module-inset flex items-start justify-between gap-6"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-metadata flex flex-wrap items-center gap-1.5 font-medium">
+                            {CAPABILITY_LABELS[capability.id]}
+                            {capability.experimental && (
+                              <Badge variant="outline">Experimental</Badge>
+                            )}
+                            {capability.version != null &&
+                              capability.version !== "" && (
+                                <span className="text-metadata text-muted-foreground font-mono">
+                                  {capability.version}
+                                </span>
+                              )}
+                          </div>
+                          {capability.reason != null &&
+                            capability.reason !== "" && (
+                              <p className="text-callout text-muted-foreground mt-0.5">
+                                {capability.reason}
+                              </p>
+                            )}
+                          {capability.fix != null && capability.fix !== "" && (
+                            <p className="text-callout text-foreground/75 mt-0.5">
+                              {capability.fix}
+                            </p>
+                          )}
                         </div>
-                        {capability.reason && <p className="mt-0.5 text-callout text-muted-foreground">{capability.reason}</p>}
-                        {capability.fix && <p className="mt-0.5 text-callout text-foreground/75">{capability.fix}</p>}
+                        <span className="text-callout text-muted-foreground flex shrink-0 items-center gap-1.5 pt-0.5 capitalize">
+                          <span
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              capability.state === "ready" && "bg-success",
+                              capability.state === "unverified" && "bg-warning"
+                            )}
+                          />
+                          {capability.state}
+                        </span>
                       </div>
-                      <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-callout capitalize text-muted-foreground">
-                        <span className={cn("size-1.5 rounded-full", capability.state === "ready" && "bg-success", capability.state === "unverified" && "bg-warning")} />
-                        {capability.state}
-                      </span>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </div>

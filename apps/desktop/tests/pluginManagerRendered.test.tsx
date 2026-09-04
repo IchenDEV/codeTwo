@@ -1,13 +1,26 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+
 import { act as reactAct } from "react";
 
-import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
-const { PluginManagerPage, PluginUiSlot, buildPluginManagerCatalog } = await import("../src/plugins");
-const desktopStyles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const { PluginManagerPage, PluginUiSlot, buildPluginManagerCatalog } =
+  await import("../src/plugins");
+const desktopStyles = readFileSync(
+  new URL("../src/styles.css", import.meta.url),
+  "utf-8"
+);
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -31,7 +44,12 @@ const plugins = [
       effectiveEnabled: true,
       override: "inherit",
       status: "active",
-      config: { endpoint: "local", interval: 15, telemetry: false, mode: "balanced" },
+      config: {
+        endpoint: "local",
+        interval: 15,
+        telemetry: false,
+        mode: "balanced",
+      },
     },
     configSchema: {
       type: "object",
@@ -50,7 +68,11 @@ const plugins = [
     description: "Desktop terminal host.",
     source: "host",
     supportedScopes: ["user", "project"],
-    state: { effectiveEnabled: false, override: "disabled", status: "disabled" },
+    state: {
+      effectiveEnabled: false,
+      override: "disabled",
+      status: "disabled",
+    },
   },
   {
     id: "review-tools",
@@ -174,8 +196,20 @@ function renderManager(overrides = {}) {
           request,
           summary: "The memory worker will stop before the plugin unloads.",
           requiresConfirmation: true,
-          affectedPlugins: [{ id: "memory", name: "Memory", desiredState: request.desiredState }],
-          activeResources: [{ id: "worker-1", label: "Memory capture worker", kind: "background task" }],
+          affectedPlugins: [
+            {
+              id: "memory",
+              name: "Memory",
+              desiredState: request.desiredState,
+            },
+          ],
+          activeResources: [
+            {
+              id: "worker-1",
+              label: "Memory capture worker",
+              kind: "background task",
+            },
+          ],
         };
       }}
       onApplyChange={async (plan) => calls.applied.push(plan)}
@@ -183,25 +217,38 @@ function renderManager(overrides = {}) {
       onInstallMarketplaceItem={async (request) => calls.installs.push(request)}
       onImportGithub={async (repository) => {
         calls.imports.push(repository);
-        return { pluginId: "review-tools", name: "Installed Tools", version: "2.0.0" };
+        return {
+          pluginId: "review-tools",
+          name: "Installed Tools",
+          version: "2.0.0",
+        };
       }}
-      onSetBundleEnabled={async (pluginId, enabled) => calls.bundleEnabled.push({ pluginId, enabled })}
-      onSetBundleTrusted={async (pluginId, trusted) => calls.bundleTrust.push({ pluginId, trusted })}
-      onUninstallBundle={async (pluginId, keepData) => calls.uninstalls.push({ pluginId, keepData })}
+      onSetBundleEnabled={async (pluginId, enabled) =>
+        calls.bundleEnabled.push({ pluginId, enabled })
+      }
+      onSetBundleTrusted={async (pluginId, trusted) =>
+        calls.bundleTrust.push({ pluginId, trusted })
+      }
+      onUninstallBundle={async (pluginId, keepData) =>
+        calls.uninstalls.push({ pluginId, keepData })
+      }
       onApplyScaffold={async (pluginId, scaffoldId) => {
         calls.scaffolds.push({ pluginId, scaffoldId });
         return { files: 2 };
       }}
       onOpenMarketplace={async () => calls.marketplaceOpens.push(true)}
       {...overrides}
-    />,
+    />
   );
   return { view, calls };
 }
 
 async function setInputValue(input, value) {
   await reactAct(async () => {
-    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
+    const setter = Object.getOwnPropertyDescriptor(
+      dom.window.HTMLInputElement.prototype,
+      "value"
+    )?.set;
     setter.call(input, value);
     input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
     input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
@@ -217,9 +264,11 @@ async function openSelect(trigger) {
         cancelable: true,
         button: 0,
         pointerId: 1,
-      }),
+      })
     );
-    trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    trigger.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
@@ -232,7 +281,7 @@ async function selectItem(item) {
         cancelable: true,
         button: 0,
         pointerId: 1,
-      }),
+      })
     );
     item.dispatchEvent(
       new dom.window.PointerEvent("pointerup", {
@@ -240,9 +289,11 @@ async function selectItem(item) {
         cancelable: true,
         button: 0,
         pointerId: 1,
-      }),
+      })
     );
-    item.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    item.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
@@ -263,18 +314,27 @@ describe("PluginManagerPage", () => {
     });
     await flush();
 
-    expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent)
-      .toContain("Review Tools");
-    expect(view.container.querySelector("[data-plugin-details]")?.textContent)
-      .toContain("Review Tools");
-    expect(view.container.querySelector("[data-host-plugin-settings]")?.textContent)
-      .toBe("Feishu connection settings");
+    expect(
+      view.container.querySelector(
+        '[aria-label="Plugin list"] [data-selected="true"]'
+      )?.textContent
+    ).toContain("Review Tools");
+    expect(
+      view.container.querySelector("[data-plugin-details]")?.textContent
+    ).toContain("Review Tools");
+    expect(
+      view.container.querySelector("[data-host-plugin-settings]")?.textContent
+    ).toBe("Feishu connection settings");
 
-    click(Array.from(view.container.querySelectorAll('button')).find((candidate) =>
-      candidate.textContent?.includes("Memory"),
-    ));
+    click(
+      [...view.container.querySelectorAll("button")].find((candidate) =>
+        candidate.textContent?.includes("Memory")
+      )
+    );
     await flush();
-    expect(view.container.querySelector("[data-host-plugin-settings]")).toBeNull();
+    expect(
+      view.container.querySelector("[data-host-plugin-settings]")
+    ).toBeNull();
 
     view.unmount();
   });
@@ -291,16 +351,20 @@ describe("PluginManagerPage", () => {
     });
     await flush();
 
-    const action = view.container.querySelector("[data-plugin-manager-leading-action]");
+    const action = view.container.querySelector(
+      "[data-plugin-manager-leading-action]"
+    );
     const detailAction = view.container.querySelector(
-      "[data-plugin-manager-detail-leading-action]",
+      "[data-plugin-manager-detail-leading-action]"
     );
     expect(action).not.toBeNull();
     expect(action?.textContent).toContain("Expand sidebar");
-    expect(view.container.querySelector(".plugin-manager-list-header")?.className)
-      .toContain("pl-surface-inset");
-    expect(view.container.querySelector(".plugin-manager-list-header h1")?.className)
-      .not.toContain("ms-surface-inset");
+    expect(
+      view.container.querySelector(".plugin-manager-list-header")?.className
+    ).toContain("pl-surface-inset");
+    expect(
+      view.container.querySelector(".plugin-manager-list-header h1")?.className
+    ).not.toContain("ms-surface-inset");
     expect(detailAction).not.toBeNull();
     expect(detailAction?.textContent).toContain("Expand sidebar");
     click(action?.querySelector("button"));
@@ -329,12 +393,15 @@ describe("PluginManagerPage", () => {
         slot="composer.above"
         contributions={[contribution]}
         onInvoke={async (value) => invoked.push(value)}
-      />,
+      />
     );
     await flush();
 
-    expect(view.container.querySelector('[data-plugin-ui-slot="composer.above"]')?.getAttribute("aria-label"))
-      .toBe("Plugin actions");
+    expect(
+      view.container
+        .querySelector('[data-plugin-ui-slot="composer.above"]')
+        ?.getAttribute("aria-label")
+    ).toBe("Plugin actions");
     expect(view.container.textContent).toContain("Review workspace");
     click(button(view.container, "Run"));
     await flush();
@@ -374,31 +441,39 @@ describe("PluginManagerPage", () => {
             onInvoke={async (value) => invoked.push(value)}
           />
         ))}
-      </div>,
+      </div>
     );
     await flush();
 
     for (const [order, slot] of slots.entries()) {
-      const region = view.container.querySelector(`[data-plugin-ui-slot="${slot}"]`);
+      const region = view.container.querySelector(
+        `[data-plugin-ui-slot="${slot}"]`
+      );
       expect(region).not.toBeNull();
-      const action = region.querySelector(`button[aria-label="Review Tools: Action ${order}"]`)
-        ?? button(region, order === 3 ? "Run" : `Action ${order}`);
+      const action =
+        region.querySelector(
+          `button[aria-label="Review Tools: Action ${order}"]`
+        ) ?? button(region, order === 3 ? "Run" : `Action ${order}`);
       expect(action).not.toBeNull();
       if (slot === "session.header") {
-        expect(action.getAttribute("data-variant")).toBe("ghost");
+        expect(action.dataset.variant).toBe("ghost");
         expect(action.classList.contains("text-muted-foreground")).toBe(true);
-        expect(action.classList.contains("hover:text-muted-foreground")).toBe(true);
+        expect(action.classList.contains("hover:text-muted-foreground")).toBe(
+          true
+        );
       }
     }
 
     const railAction = view.container.querySelector(
-      '[data-plugin-ui-slot="rail.features"] button',
+      '[data-plugin-ui-slot="rail.features"] button'
     );
     expect(railAction?.className).toContain("h-control");
     expect(railAction?.className).toContain("text-body");
     expect(railAction?.className).toContain("text-foreground/75");
 
-    const toolbar = view.container.querySelector('[data-plugin-ui-slot="composer.toolbar"]');
+    const toolbar = view.container.querySelector(
+      '[data-plugin-ui-slot="composer.toolbar"]'
+    );
     click(toolbar.querySelector('button[aria-label="Review Tools: Action 4"]'));
     await flush();
     expect(invoked).toEqual([contributions[4]]);
@@ -411,56 +486,149 @@ describe("PluginManagerPage", () => {
     const { view } = renderManager();
     await flush();
 
-    expect(view.container.querySelector("[data-plugin-manager-page]")?.tagName).toBe("MAIN");
-    expect(view.container.querySelector(".plugin-manager-list-header")?.querySelectorAll('[role="tab"]')).toHaveLength(0);
-    expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("@container/plugin-manager")).toBe(true);
-    expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("plugin-manager-page")).toBe(true);
-    expect(view.container.querySelector(".plugin-manager-list-pane")).not.toBeNull();
-    expect(view.container.querySelector(".plugin-manager-list-header")?.className)
-      .toContain("h-layout-titlebar");
-    expect(view.container.querySelector(".plugin-manager-list-header")?.className)
-      .toContain("pl-page-section");
-    expect(view.container.querySelector(".plugin-manager-list-header h1")?.className)
-      .not.toContain("ms-surface-inset");
-    expect(view.container.querySelector(".plugin-manager-detail-header")?.className)
-      .toContain("h-layout-titlebar");
+    expect(
+      view.container.querySelector("[data-plugin-manager-page]")?.tagName
+    ).toBe("MAIN");
+    expect(
+      view.container
+        .querySelector(".plugin-manager-list-header")
+        ?.querySelectorAll('[role="tab"]')
+    ).toHaveLength(0);
+    expect(
+      view.container
+        .querySelector("[data-plugin-manager-page]")
+        ?.classList.contains("@container/plugin-manager")
+    ).toBe(true);
+    expect(
+      view.container
+        .querySelector("[data-plugin-manager-page]")
+        ?.classList.contains("plugin-manager-page")
+    ).toBe(true);
+    expect(
+      view.container.querySelector(".plugin-manager-list-pane")
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector(".plugin-manager-list-header")?.className
+    ).toContain("h-layout-titlebar");
+    expect(
+      view.container.querySelector(".plugin-manager-list-header")?.className
+    ).toContain("pl-page-section");
+    expect(
+      view.container.querySelector(".plugin-manager-list-header h1")?.className
+    ).not.toContain("ms-surface-inset");
+    expect(
+      view.container.querySelector(".plugin-manager-detail-header")?.className
+    ).toContain("h-layout-titlebar");
     expect(view.container.querySelector(".plugin-manager-tabs")).not.toBeNull();
-    expect(view.container.querySelector(".plugin-manager-tabs")?.closest('[data-slot="tabs"]')?.className)
-      .toContain("ms-surface-inset");
-    expect(view.container.querySelector(".plugin-manager-tabs")?.className).toContain("overflow-x-auto");
-    expect(view.container.querySelectorAll(".plugin-manager-tab-count")).toHaveLength(5);
-    expect(view.container.querySelectorAll("[data-plugin-manager-tab-label]")).toHaveLength(5);
-    const listControls = view.container.querySelector("[data-plugin-manager-list-controls]");
+    expect(
+      view.container
+        .querySelector(".plugin-manager-tabs")
+        ?.closest('[data-slot="tabs"]')?.className
+    ).toContain("ms-surface-inset");
+    expect(
+      view.container.querySelector(".plugin-manager-tabs")?.className
+    ).toContain("overflow-x-auto");
+    expect(
+      view.container.querySelectorAll(".plugin-manager-tab-count")
+    ).toHaveLength(5);
+    expect(
+      view.container.querySelectorAll("[data-plugin-manager-tab-label]")
+    ).toHaveLength(5);
+    const listControls = view.container.querySelector(
+      "[data-plugin-manager-list-controls]"
+    );
     expect(listControls?.className).toContain("px-2");
     expect(listControls?.className).not.toContain("px-4");
     expect(listControls?.querySelectorAll('[role="tab"]')).toHaveLength(5);
-    expect(listControls?.querySelector("[data-plugin-manager-search]")).not.toBeNull();
-    expect(listControls?.querySelector("[data-plugin-manager-search-field]")).not.toBeNull();
-    expect(listControls?.querySelector("[data-plugin-manager-search-field]")?.className)
-      .toContain("ms-inline");
-    expect(desktopStyles).toContain("container: plugin-manager-list / inline-size");
-    expect(desktopStyles).toContain("@container plugin-manager-list (max-width: 24rem)");
-    expect(desktopStyles).toMatch(/\.plugin-manager-tabs\s*{[^}]*gap:\s*var\(--ds-space-inline\)/s);
-    expect(desktopStyles).toMatch(/\.plugin-manager-tabs \.plugin-manager-tab\s*{[^}]*padding-inline:\s*var\(--ds-space-inline\)/s);
-    expect(desktopStyles).not.toContain(".plugin-manager-tab:not(:first-of-type)");
-    expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();
-    expect(view.container.querySelector("[data-plugin-manager-page]")?.getAttribute("data-compact-detail")).toBe("true");
-    expect(view.container.querySelector("[data-plugin-manager-scroll]")?.classList.contains("w-full")).toBe(true);
-    expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("w-full")).toBe(true);
-    expect(view.container.querySelector("[data-plugin-details]")?.tagName).toBe("ARTICLE");
-    expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent).toContain("Memory");
-    expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"] > span:first-child')?.className).toContain("text-foreground");
-    expect(view.container.querySelector(".plugin-manager-list-header h1")?.textContent).toBe("Features & plugins");
-    expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"] [data-plugin-status="active"] .bg-success')).not.toBeNull();
+    expect(
+      listControls?.querySelector("[data-plugin-manager-search]")
+    ).not.toBeNull();
+    expect(
+      listControls?.querySelector("[data-plugin-manager-search-field]")
+    ).not.toBeNull();
+    expect(
+      listControls?.querySelector("[data-plugin-manager-search-field]")
+        ?.className
+    ).toContain("ms-inline");
+    expect(desktopStyles).toContain(
+      "container: plugin-manager-list / inline-size"
+    );
+    expect(desktopStyles).toContain(
+      "@container plugin-manager-list (max-width: 24rem)"
+    );
+    expect(desktopStyles).toMatch(
+      /\.plugin-manager-tabs\s*{[^}]*gap:\s*var\(--ds-space-inline\)/s
+    );
+    expect(desktopStyles).toMatch(
+      /\.plugin-manager-tabs \.plugin-manager-tab\s*{[^}]*padding-inline:\s*var\(--ds-space-inline\)/s
+    );
+    expect(desktopStyles).not.toContain(
+      ".plugin-manager-tab:not(:first-of-type)"
+    );
+    expect(
+      view.container.querySelector(".plugin-manager-detail-pane")
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector("[data-plugin-manager-page]")?.dataset
+        .compactDetail
+    ).toBe("true");
+    expect(
+      view.container
+        .querySelector("[data-plugin-manager-scroll]")
+        ?.classList.contains("w-full")
+    ).toBe(true);
+    expect(
+      view.container
+        .querySelector("[data-plugin-manager-search]")
+        ?.classList.contains("w-full")
+    ).toBe(true);
+    expect(view.container.querySelector("[data-plugin-details]")?.tagName).toBe(
+      "ARTICLE"
+    );
+    expect(
+      view.container.querySelector(
+        '[aria-label="Plugin list"] [data-selected="true"]'
+      )?.textContent
+    ).toContain("Memory");
+    expect(
+      view.container.querySelector(
+        '[aria-label="Plugin list"] [data-selected="true"] > span:first-child'
+      )?.className
+    ).toContain("text-foreground");
+    expect(
+      view.container.querySelector(".plugin-manager-list-header h1")
+        ?.textContent
+    ).toBe("Features & plugins");
+    expect(
+      view.container.querySelector(
+        '[aria-label="Plugin list"] [data-selected="true"] [data-plugin-status="active"] .bg-success'
+      )
+    ).not.toBeNull();
     expect(view.container.textContent).toContain("Built-in feature");
     expect(view.container.textContent).toContain("Host feature");
     expect(view.container.textContent).toContain("Bundle · Review Tools");
-    expect(view.container.querySelector('[data-slot="select-trigger"]')?.textContent).toContain("User");
-    expect(view.container.querySelector("[data-plugin-details]")?.textContent).toContain("MemoryCapability");
-    expect(view.container.querySelector("[data-plugin-details] [data-slot='status-badge']")?.getAttribute("data-tone")).toBe("success");
-    expect(view.container.querySelector("#plugin-config-endpoint")).not.toBeNull();
-    expect(view.container.querySelector("#plugin-config-interval")?.getAttribute("step")).toBe("1");
-    expect(view.container.querySelector('[data-slot="checkbox"]')).not.toBeNull();
+    expect(
+      view.container.querySelector('[data-slot="select-trigger"]')?.textContent
+    ).toContain("User");
+    expect(
+      view.container.querySelector("[data-plugin-details]")?.textContent
+    ).toContain("MemoryCapability");
+    expect(
+      view.container.querySelector(
+        "[data-plugin-details] [data-slot='status-badge']"
+      )?.dataset.tone
+    ).toBe("success");
+    expect(
+      view.container.querySelector("#plugin-config-endpoint")
+    ).not.toBeNull();
+    expect(
+      view.container
+        .querySelector("#plugin-config-interval")
+        ?.getAttribute("step")
+    ).toBe("1");
+    expect(
+      view.container.querySelector('[data-slot="checkbox"]')
+    ).not.toBeNull();
     expect(button(view.container, "Install from GitHub")).not.toBeNull();
     expect(button(view.container, "MCPs 1")).not.toBeNull();
     expect(button(view.container, "Skills 1")).not.toBeNull();
@@ -468,9 +636,14 @@ describe("PluginManagerPage", () => {
 
     click(button(view.container, "MCPs 1"));
     await flush();
-    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("docs-search");
-    expect(view.container.querySelector("[data-plugin-manager-search]")?.getAttribute("placeholder"))
-      .toBe("Search MCP servers…");
+    expect(
+      view.container.querySelector("[data-resource-details]")?.textContent
+    ).toContain("docs-search");
+    expect(
+      view.container
+        .querySelector("[data-plugin-manager-search]")
+        ?.getAttribute("placeholder")
+    ).toBe("Search MCP servers…");
 
     click(button(view.container, "Marketplace 1"));
     await flush();
@@ -487,7 +660,11 @@ describe("PluginManagerPage", () => {
 
     click(button(view.container, "MCPs 1"));
     await flush();
-    click(view.container.ownerDocument.getElementById("component-state-skill:docs-search"));
+    click(
+      view.container.ownerDocument.querySelector(
+        "#component-state-skill:docs-search"
+      )
+    );
     await flush();
     expect(calls.planned[0]).toMatchObject({
       targetKind: "component",
@@ -500,14 +677,20 @@ describe("PluginManagerPage", () => {
 
     click(button(view.container, "Skills 1"));
     await flush();
-    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("Release review");
+    expect(
+      view.container.querySelector("[data-resource-details]")?.textContent
+    ).toContain("Release review");
 
     click(button(view.container, "Hooks 1"));
     await flush();
-    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("Unsupported");
+    expect(
+      view.container.querySelector("[data-resource-details]")?.textContent
+    ).toContain("Unsupported");
     click(button(view.container, "Manage plugin"));
     await flush();
-    expect(view.container.querySelector("[data-plugin-details]")?.textContent).toContain("Review Tools");
+    expect(
+      view.container.querySelector("[data-plugin-details]")?.textContent
+    ).toContain("Review Tools");
 
     view.unmount();
   });
@@ -519,36 +702,54 @@ describe("PluginManagerPage", () => {
 
     click(button(view.container, "Install from GitHub"));
     await flush();
-    const installer = view.container.querySelector("[data-plugin-github-installer]");
+    const installer = view.container.querySelector(
+      "[data-plugin-github-installer]"
+    );
     expect(installer).not.toBeNull();
 
     click(button(installer, "Install"));
     await flush();
-    expect(installer.querySelector('[role="alert"]')?.textContent).toContain("owner/repository");
-    expect(installer.querySelector("#plugin-github-repository")?.getAttribute("aria-invalid")).toBe("true");
+    expect(installer.querySelector('[role="alert"]')?.textContent).toContain(
+      "owner/repository"
+    );
+    expect(
+      installer
+        .querySelector("#plugin-github-repository")
+        ?.getAttribute("aria-invalid")
+    ).toBe("true");
 
     view.unmount();
   });
 
   test("maps failed plugin and trusted bundle states independently", async () => {
     activateDom();
-    const trustedPlugins = plugins.map((plugin) => plugin.id === "review-tools"
-      ? { ...plugin, bundle: { ...plugin.bundle, trusted: true } }
-      : plugin);
+    const trustedPlugins = plugins.map((plugin) =>
+      plugin.id === "review-tools"
+        ? { ...plugin, bundle: { ...plugin.bundle, trusted: true } }
+        : plugin
+    );
     const { view } = renderManager({ plugins: trustedPlugins });
     await flush();
 
-    const bundleButton = Array.from(view.container.querySelectorAll("button")).find((candidate) =>
-      candidate.textContent?.includes("Review Tools"),
+    const bundleButton = [...view.container.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent?.includes("Review Tools")
     );
     click(bundleButton);
     await flush();
 
-    const detailsTones = Array.from(
-      view.container.querySelectorAll("[data-plugin-details] [data-slot='status-badge']"),
-    ).map((badge) => badge.getAttribute("data-tone"));
-    expect(detailsTones.filter((tone) => tone === "destructive")).toHaveLength(2);
-    expect(view.container.querySelector("[data-bundle-administration] [data-slot='status-badge']")?.getAttribute("data-tone")).toBe("success");
+    const detailsTones = [
+      ...view.container.querySelectorAll(
+        "[data-plugin-details] [data-slot='status-badge']"
+      ),
+    ].map((badge) => badge.dataset.tone);
+    expect(detailsTones.filter((tone) => tone === "destructive")).toHaveLength(
+      2
+    );
+    expect(
+      view.container.querySelector(
+        "[data-bundle-administration] [data-slot='status-badge']"
+      )?.dataset.tone
+    ).toBe("success");
     view.unmount();
   });
 
@@ -557,39 +758,55 @@ describe("PluginManagerPage", () => {
     const { view, calls } = renderManager();
     await flush();
 
-    const bundleButton = Array.from(view.container.querySelectorAll("button")).find((candidate) =>
-      candidate.textContent?.includes("Review Tools"),
+    const bundleButton = [...view.container.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent?.includes("Review Tools")
     );
     click(bundleButton);
     await flush();
 
-    const administration = view.container.querySelector("[data-bundle-administration]");
+    const administration = view.container.querySelector(
+      "[data-bundle-administration]"
+    );
     const details = view.container.querySelector("[data-plugin-details]");
     expect(administration?.textContent).toContain("Bundle management");
     expect(administration?.textContent).toContain("1 Process runtime");
     expect(administration?.textContent).toContain("Trust before running.");
-    expect(administration?.querySelector('[data-slot="status-badge"]')?.getAttribute("data-tone")).toBe("destructive");
-    expect(details?.querySelector("[data-plugin-trust-gate]")?.textContent).toBe(
-      "Trust required before enabling",
-    );
+    expect(
+      administration?.querySelector('[data-slot="status-badge"]')?.dataset.tone
+    ).toBe("destructive");
+    expect(
+      details?.querySelector("[data-plugin-trust-gate]")?.textContent
+    ).toBe("Trust required before enabling");
     expect(details?.querySelector("#plugin-state-review-tools")).toBeNull();
-    expect(button(administration, "Review source")?.dataset.variant).toBe("secondary");
-    expect(button(administration, "Trust plugin")?.dataset.variant).toBe("default");
+    expect(button(administration, "Review source")?.dataset.variant).toBe(
+      "secondary"
+    );
+    expect(button(administration, "Trust plugin")?.dataset.variant).toBe(
+      "default"
+    );
     expect(button(administration, "Uninstall")?.dataset.variant).toBe("ghost");
 
     click(button(administration, "Trust plugin"));
     await flush();
-    expect(calls.bundleTrust).toEqual([{ pluginId: "review-tools", trusted: true }]);
+    expect(calls.bundleTrust).toEqual([
+      { pluginId: "review-tools", trusted: true },
+    ]);
 
     click(button(administration, "Uninstall"));
     await flush();
-    const dialog = dom.document.body.querySelector('[data-slot="alert-dialog-content"]');
+    const dialog = dom.document.body.querySelector(
+      '[data-slot="alert-dialog-content"]'
+    );
     expect(dialog?.textContent).toContain("Uninstall Review Tools?");
-    expect(dialog?.querySelector("#keep-plugin-data-review-tools")?.checked).toBe(true);
+    expect(
+      dialog?.querySelector("#keep-plugin-data-review-tools")?.checked
+    ).toBe(true);
 
     click(button(dialog, "Uninstall"));
     await flush();
-    expect(calls.uninstalls).toEqual([{ pluginId: "review-tools", keepData: true }]);
+    expect(calls.uninstalls).toEqual([
+      { pluginId: "review-tools", keepData: true },
+    ]);
 
     view.unmount();
   });
@@ -673,7 +890,9 @@ describe("PluginManagerPage", () => {
     click(view.container.querySelector("#plugin-state-review-tools"));
     await flush();
 
-    expect(calls.bundleEnabled).toEqual([{ pluginId: "review-tools", enabled: false }]);
+    expect(calls.bundleEnabled).toEqual([
+      { pluginId: "review-tools", enabled: false },
+    ]);
     expect(calls.planned).toHaveLength(0);
 
     view.unmount();
@@ -687,7 +906,9 @@ describe("PluginManagerPage", () => {
     });
     await flush();
 
-    expect(view.container.querySelector('[data-slot="select-trigger"]')?.textContent).toContain("/tmp/unlisted");
+    expect(
+      view.container.querySelector('[data-slot="select-trigger"]')?.textContent
+    ).toContain("/tmp/unlisted");
 
     view.unmount();
   });
@@ -708,9 +929,10 @@ describe("PluginManagerPage", () => {
       desiredState: "disabled",
       scope: { kind: "user" },
     });
-    expect(dom.document.body.querySelector('[data-slot="alert-dialog-content"]')?.textContent).toContain(
-      "Memory capture worker",
-    );
+    expect(
+      dom.document.body.querySelector('[data-slot="alert-dialog-content"]')
+        ?.textContent
+    ).toContain("Memory capture worker");
 
     click(button(dom.document.body, "Apply change"));
     await flush();
@@ -725,8 +947,14 @@ describe("PluginManagerPage", () => {
     const { view, calls } = renderManager();
     await flush();
 
-    await setInputValue(view.container.querySelector("#plugin-config-endpoint"), "remote");
-    await setInputValue(view.container.querySelector("#plugin-config-interval"), "30");
+    await setInputValue(
+      view.container.querySelector("#plugin-config-endpoint"),
+      "remote"
+    );
+    await setInputValue(
+      view.container.querySelector("#plugin-config-interval"),
+      "30"
+    );
     click(button(view.container, "Save configuration"));
     await flush();
 
@@ -734,27 +962,38 @@ describe("PluginManagerPage", () => {
     expect(calls.configs[0]).toEqual({
       pluginId: "memory",
       scope: { kind: "user" },
-      config: { endpoint: "remote", interval: 30, telemetry: false, mode: "balanced" },
+      config: {
+        endpoint: "remote",
+        interval: 30,
+        telemetry: false,
+        mode: "balanced",
+      },
     });
 
     click(button(view.container, "Advanced JSON"));
     await flush();
-    expect(view.container.querySelector("#plugin-config-json")?.value).toContain('"endpoint": "remote"');
+    expect(
+      view.container.querySelector("#plugin-config-json")?.value
+    ).toContain('"endpoint": "remote"');
 
     view.unmount();
   });
 
   test("uses inherit-enabled-disabled controls for project-scoped entries", async () => {
     activateDom();
-    const { view, calls } = renderManager({ scope: { kind: "project", projectPath: "/tmp/project" } });
+    const { view, calls } = renderManager({
+      scope: { kind: "project", projectPath: "/tmp/project" },
+    });
     await flush();
 
-    const trigger = view.container.querySelector('[aria-label="Memory project state"]');
+    const trigger = view.container.querySelector(
+      '[aria-label="Memory project state"]'
+    );
     expect(trigger?.textContent).toContain("Inherit");
     await openSelect(trigger);
-    const disabled = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]')).find(
-      (item) => item.textContent?.trim() === "Disabled",
-    );
+    const disabled = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ].find((item) => item.textContent?.trim() === "Disabled");
     await selectItem(disabled);
 
     expect(calls.planned[0]).toMatchObject({
@@ -806,29 +1045,39 @@ describe("PluginManagerPage", () => {
         graph_revision: 2,
         config_revision: 1,
         recovery: { kind: "normal" },
-        plugins: [{ ...policy, state: "enabled", enabled: true, running: true, status: "active" }],
+        plugins: [
+          {
+            ...policy,
+            state: "enabled",
+            enabled: true,
+            running: true,
+            status: "active",
+          },
+        ],
       },
-      bundles: [{
-        id: "review",
-        name: "Review Tools",
-        version: "1.0.0",
-        description: "Review bundle",
-        author: "C2",
-        source: "GitHub · c2/review",
-        repository: "https://example.test/review",
-        standard_version: "1.2.0",
-        enabled: true,
-        trusted: true,
-        scope: "user",
-        counts: {},
-        scaffolds: [],
-        extension_components: [],
-        runtime_commands: [],
-        ui_contributions: [],
-        connector_contributions: [],
-        lsp_servers: [],
-        diagnostics: [],
-      }],
+      bundles: [
+        {
+          id: "review",
+          name: "Review Tools",
+          version: "1.0.0",
+          description: "Review bundle",
+          author: "C2",
+          source: "GitHub · c2/review",
+          repository: "https://example.test/review",
+          standard_version: "1.2.0",
+          enabled: true,
+          trusted: true,
+          scope: "user",
+          counts: {},
+          scaffolds: [],
+          extension_components: [],
+          runtime_commands: [],
+          ui_contributions: [],
+          connector_contributions: [],
+          lsp_servers: [],
+          diagnostics: [],
+        },
+      ],
       skills: [],
       market: [],
       scope: { kind: "project", projectPath: "/tmp/project" },
@@ -841,12 +1090,14 @@ describe("PluginManagerPage", () => {
     });
     await flush();
 
-    const trigger = view.container.querySelector('[aria-label="Review Tools project state"]');
+    const trigger = view.container.querySelector(
+      '[aria-label="Review Tools project state"]'
+    );
     expect(trigger?.textContent).toContain("Disabled");
     await openSelect(trigger);
-    const enabled = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]')).find(
-      (item) => item.textContent?.trim() === "Enabled",
-    );
+    const enabled = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ].find((item) => item.textContent?.trim() === "Enabled");
     await selectItem(enabled);
 
     expect(calls.planned[0]).toMatchObject({
@@ -885,13 +1136,15 @@ describe("PluginManagerPage", () => {
     const resets = [];
     const { view } = renderManager({
       recovery: { kind: "safe_mode", error: "invalid JSON" },
-      onResetPlugin: async (pluginId, scope) => resets.push({ pluginId, scope }),
+      onResetPlugin: async (pluginId, scope) =>
+        resets.push({ pluginId, scope }),
     });
     await flush();
 
-    expect(view.container.querySelector('[data-plugin-recovery="safe_mode"]')?.textContent).toContain(
-      "safe mode",
-    );
+    expect(
+      view.container.querySelector('[data-plugin-recovery="safe_mode"]')
+        ?.textContent
+    ).toContain("safe mode");
     expect(view.container.textContent).toContain("invalid JSON");
     click(button(view.container, "Reset to defaults"));
     await flush();

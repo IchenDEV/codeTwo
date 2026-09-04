@@ -1,18 +1,18 @@
-import { Progress } from "@/components/ui/progress"
+import { Progress } from "@/components/ui/progress";
 
-type QuotaProgressDensity = "detail" | "rail"
-type QuotaProgressTone = "success" | "warning" | "destructive"
+type QuotaProgressDensity = "detail" | "rail";
+type QuotaProgressTone = "success" | "warning" | "destructive";
 
 interface QuotaProgressProps {
-  label: string
-  remainingPercent: number
-  density?: QuotaProgressDensity
+  label: string;
+  remainingPercent: number;
+  density?: QuotaProgressDensity;
 }
 
 function quotaTone(remainingPercent: number): QuotaProgressTone {
-  if (remainingPercent <= 5) return "destructive"
-  if (remainingPercent <= 20) return "warning"
-  return "success"
+  if (remainingPercent <= 5) return "destructive";
+  if (remainingPercent <= 20) return "warning";
+  return "success";
 }
 
 function QuotaProgress({
@@ -22,9 +22,9 @@ function QuotaProgress({
 }: QuotaProgressProps) {
   const clampedPercent = Number.isFinite(remainingPercent)
     ? Math.min(100, Math.max(0, remainingPercent))
-    : 0
-  const value = Math.round(clampedPercent)
-  const tone = quotaTone(clampedPercent)
+    : 0;
+  const value = Math.round(clampedPercent);
+  const tone = quotaTone(clampedPercent);
 
   if (density === "rail") {
     return (
@@ -37,7 +37,7 @@ function QuotaProgress({
         data-density="rail"
         className="w-10"
       />
-    )
+    );
   }
 
   return (
@@ -50,7 +50,7 @@ function QuotaProgress({
       tone={tone}
       className="block gap-0"
     />
-  )
+  );
 }
 
 export {
@@ -58,4 +58,4 @@ export {
   type QuotaProgressDensity,
   type QuotaProgressProps,
   type QuotaProgressTone,
-}
+};

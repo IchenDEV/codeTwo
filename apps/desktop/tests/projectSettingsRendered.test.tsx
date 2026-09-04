@@ -1,8 +1,17 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { act as reactAct } from "react";
 
-import { activateDom, button, dom, flush, mount, restoreDom, waitFor } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { SettingsPage } = await import("../src/settings/SettingsPage");
@@ -36,16 +45,18 @@ describe("Project settings", () => {
           bindings={[]}
           capturing={null}
           onCapture={() => {}}
-          providers={[{
-            id: "codex",
-            display_name: "Codex",
-            available: true,
-            needs_node: true,
-            models: [
-              { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", description: null },
-            ],
-            capabilities: [],
-          }]}
+          providers={[
+            {
+              id: "codex",
+              display_name: "Codex",
+              available: true,
+              needs_node: true,
+              models: [
+                { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", description: null },
+              ],
+              capabilities: [],
+            },
+          ]}
           provider="codex"
           projectPath={project.path}
           project={project}
@@ -53,33 +64,51 @@ describe("Project settings", () => {
           onProjectWorktreeMode={async () => {}}
           onProjectRename={async (path, name) => renamed.push([path, name])}
           onProjectIcon={async (path, source) => icons.push([path, source])}
-          onProjectAgentDefaults={async (...values) => agentDefaults.push(values)}
+          onProjectAgentDefaults={async (...values) =>
+            agentDefaults.push(values)
+          }
           projectIconPicker={async () => "/tmp/project.png"}
           projectActionsCount={2}
-          onAddProjectAction={() => { actionsOpened += 1; }}
+          onAddProjectAction={() => {
+            actionsOpened += 1;
+          }}
           memoryEnabled={false}
           initialTab="project"
           onClose={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     await flush();
 
     expect(view.container.textContent).toContain("Project profile");
     expect(view.container.textContent).toContain("New sessions");
     expect(view.container.textContent).toContain("Checkout");
-    expect(view.container.textContent).toContain("2 actions configured for this project.");
+    expect(view.container.textContent).toContain(
+      "2 actions configured for this project."
+    );
     expect(view.container.textContent).toContain("Danger");
     expect(view.container.textContent).toContain("GPT-5.6 Sol");
     expect(view.container.textContent).toContain("Low");
     expect(
-      view.container.querySelectorAll('[data-slot="setting-row"][data-control-size="wide"]').length,
+      view.container.querySelectorAll(
+        '[data-slot="setting-row"][data-control-size="wide"]'
+      ).length
     ).toBeGreaterThanOrEqual(8);
-    expect(view.container.querySelector("[data-project-icon-picker]")).not.toBeNull();
-    expect(view.container.querySelector("[data-project-icon-picker] [data-project-icon]")?.getAttribute("style"))
-      .toContain("width: 24px");
-    const scheduling = [...view.container.querySelectorAll('[data-slot="setting-toggle"]')]
-      .find((row) => row.querySelector('[data-slot="setting-row-label"]')?.textContent === "Scene schedules");
+    expect(
+      view.container.querySelector("[data-project-icon-picker]")
+    ).not.toBeNull();
+    expect(
+      view.container
+        .querySelector("[data-project-icon-picker] [data-project-icon]")
+        ?.getAttribute("style")
+    ).toContain("width: 24px");
+    const scheduling = [
+      ...view.container.querySelectorAll('[data-slot="setting-toggle"]'),
+    ].find(
+      (row) =>
+        row.querySelector('[data-slot="setting-row-label"]')?.textContent ===
+        "Scene schedules"
+    );
     expect(scheduling?.querySelector('[data-slot="switch"]')).not.toBeNull();
 
     const name = view.container.querySelector('input[aria-label="Name"]');
@@ -90,14 +119,22 @@ describe("Project settings", () => {
     });
     await flush();
     await reactAct(async () => {
-      name.dispatchEvent(new dom.window.FocusEvent("focusout", { bubbles: true }));
+      name.dispatchEvent(
+        new dom.window.FocusEvent("focusout", { bubbles: true })
+      );
     });
     await waitFor(() => expect(renamed).toEqual([[project.path, "C2 Studio"]]));
 
     await reactAct(async () => button(view.container, "Choose image").click());
-    await waitFor(() => expect(icons).toEqual([[project.path, "/tmp/project.png"]]));
-    await reactAct(async () => button(view.container, "Use provider default model").click());
-    await waitFor(() => expect(agentDefaults).toEqual([[project.path, "codex", null, "low"]]));
+    await waitFor(() =>
+      expect(icons).toEqual([[project.path, "/tmp/project.png"]])
+    );
+    await reactAct(async () =>
+      button(view.container, "Use provider default model").click()
+    );
+    await waitFor(() =>
+      expect(agentDefaults).toEqual([[project.path, "codex", null, "low"]])
+    );
     button(view.container, "Add action").click();
     expect(actionsOpened).toBe(1);
 
@@ -178,18 +215,31 @@ describe("Worktrees settings", () => {
           initialTab="worktrees"
           onClose={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    await waitFor(() => expect(listed).toEqual(projects.map((project) => project.path)));
+    await waitFor(() =>
+      expect(listed).toEqual(projects.map((project) => project.path))
+    );
     await flush();
-    expect(view.container.textContent).toContain("Review isolated checkouts across your projects");
+    expect(view.container.textContent).toContain(
+      "Review isolated checkouts across your projects"
+    );
     expect(view.container.textContent).toContain("Worktree root");
-    expect(view.container.textContent).toContain("Fetch upstream before creating worktrees");
-    expect(view.container.textContent).toContain("Automatically delete old worktrees");
+    expect(view.container.textContent).toContain(
+      "Fetch upstream before creating worktrees"
+    );
+    expect(view.container.textContent).toContain(
+      "Automatically delete old worktrees"
+    );
     expect(view.container.textContent).toContain("Auto-delete limit");
-    expect(view.container.querySelector('input[aria-label="Auto-delete limit"]')?.disabled).toBe(true);
-    expect(view.container.querySelector('input[aria-label="Worktree root"]')?.value).toBe("/tmp/c2-worktrees");
+    expect(
+      view.container.querySelector('input[aria-label="Auto-delete limit"]')
+        ?.disabled
+    ).toBe(true);
+    expect(
+      view.container.querySelector('input[aria-label="Worktree root"]')?.value
+    ).toBe("/tmp/c2-worktrees");
     expect(view.container.textContent).toContain("codeTwo");
     expect(view.container.textContent).toContain("Docs");
     expect(view.container.textContent).toContain("Fix renderer");
@@ -198,26 +248,46 @@ describe("Worktrees settings", () => {
     expect(view.container.textContent).toContain("No worktrees.");
 
     await reactAct(async () => {
-      view.container.querySelector('[data-slot="switch"][aria-label="Fetch upstream before creating worktrees"]').click();
+      view.container
+        .querySelector(
+          '[data-slot="switch"][aria-label="Fetch upstream before creating worktrees"]'
+        )
+        .click();
     });
-    await waitFor(() => expect(savedSettings.at(-1)?.fetch_upstream).toBe(true));
+    await waitFor(() =>
+      expect(savedSettings.at(-1)?.fetch_upstream).toBe(true)
+    );
 
     await reactAct(async () => {
-      view.container.querySelector('[data-slot="switch"][aria-label="Automatically delete old worktrees"]').click();
+      view.container
+        .querySelector(
+          '[data-slot="switch"][aria-label="Automatically delete old worktrees"]'
+        )
+        .click();
     });
     await waitFor(() => expect(savedSettings.at(-1)?.auto_delete).toBe(true));
     await waitFor(() => {
-      expect(view.container.querySelector('input[aria-label="Auto-delete limit"]')?.disabled).toBe(false);
-      expect(view.container.querySelector('input[aria-label="Worktree root"]')?.disabled).toBe(false);
+      expect(
+        view.container.querySelector('input[aria-label="Auto-delete limit"]')
+          ?.disabled
+      ).toBe(false);
+      expect(
+        view.container.querySelector('input[aria-label="Worktree root"]')
+          ?.disabled
+      ).toBe(false);
     });
 
-    await reactAct(async () => button(view.container, "Open conversation").click());
+    await reactAct(async () =>
+      button(view.container, "Open conversation").click()
+    );
     expect(opened).toEqual(["session-1"]);
 
     await reactAct(async () => button(view.container, "Discard").click());
     await waitFor(() => expect(discarded).toEqual(["session-1"]));
     expect(confirmations[0]).toContain(sessionEntry.path);
-    expect(listed.slice(0, projects.length)).toEqual(projects.map((project) => project.path));
+    expect(listed.slice(0, projects.length)).toEqual(
+      projects.map((project) => project.path)
+    );
     expect(listed.at(-1)).toBe(projects[0].path);
 
     view.unmount();

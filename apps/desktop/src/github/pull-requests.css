@@ -107,7 +107,8 @@
     display: inline-flex;
   }
 
-  .pull-requests-page[data-compact-detail="true"] .pull-request-primary-action-label {
+  .pull-requests-page[data-compact-detail="true"]
+    .pull-request-primary-action-label {
     display: inline;
   }
 }

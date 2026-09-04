@@ -1,23 +1,18 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import {
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-mock.module("electrobun/bun", () => ({
+void mock.module("electrobun/bun", () => ({
   GlobalShortcut: {
     isRegistered: () => false,
     register: () => false,
-    unregister: () => undefined,
+    unregister: () => {},
   },
   Utils: { openExternal: () => true },
 }));
 
-mock.module("../src/electrobun/appshots.native", () => ({
+void mock.module("../src/electrobun/appshots.native", () => ({
   captureMacOSAppshot: () => ({ ok: false }),
   macOSAppshotPermissions: () => ({
     available: false,
@@ -25,7 +20,7 @@ mock.module("../src/electrobun/appshots.native", () => ({
     accessibility: false,
   }),
   macOSCommandKeyState: () => 0,
-  requestMacOSAppshotPermissions: () => undefined,
+  requestMacOSAppshotPermissions: () => {},
 }));
 
 const { AppshotManager } = await import("../src/electrobun/appshots");
@@ -38,22 +33,31 @@ function managerFixture() {
   return {
     dataDir,
     capturesDir: join(dataDir, "appshots"),
-    manager: new AppshotManager(dataDir, "dev.codetwo.test", () => {}, () => {}, () => {}),
+    manager: new AppshotManager(
+      dataDir,
+      "dev.codetwo.test",
+      () => {},
+      () => {},
+      () => {}
+    ),
   };
 }
 
 function writeCapture(capturesDir: string, id: string, metadataId = id) {
   writeFileSync(join(capturesDir, `${id}.png`), Buffer.from([1, 2, 3]));
-  writeFileSync(join(capturesDir, `${id}.json`), JSON.stringify({
-    id: metadataId,
-    app_name: "Preview",
-    window_title: "Draft image",
-    text: "visible text",
-    text_truncated: false,
-    captured_at: "2026-08-27T00:00:00.000Z",
-    width: 320,
-    height: 180,
-  }));
+  writeFileSync(
+    join(capturesDir, `${id}.json`),
+    JSON.stringify({
+      id: metadataId,
+      app_name: "Preview",
+      window_title: "Draft image",
+      text: "visible text",
+      text_truncated: false,
+      captured_at: "2026-08-27T00:00:00.000Z",
+      width: 320,
+      height: 180,
+    })
+  );
 }
 
 afterEach(() => {
@@ -86,20 +90,31 @@ describe("stored Appshots", () => {
 
   test("rejects traversal, mismatched metadata, and symlinked capture files", () => {
     const { dataDir, capturesDir, manager } = managerFixture();
-    expect(() => manager.getCapture("../../escape")).toThrow("Appshot id is invalid");
+    expect(() => manager.getCapture("../../escape")).toThrow(
+      "Appshot id is invalid"
+    );
 
     const mismatched = "00000000-0000-4000-8000-000000000002";
-    writeCapture(capturesDir, mismatched, "00000000-0000-4000-8000-000000000099");
+    writeCapture(
+      capturesDir,
+      mismatched,
+      "00000000-0000-4000-8000-000000000099"
+    );
     expect(() => manager.getCapture(mismatched)).toThrow(
-      "Appshot metadata does not match the image",
+      "Appshot metadata does not match the image"
     );
 
     const linked = "00000000-0000-4000-8000-000000000003";
     const external = join(dataDir, "external.png");
     writeFileSync(external, Buffer.from([4, 5, 6]));
-    writeFileSync(join(capturesDir, `${linked}.json`), JSON.stringify({ id: linked }));
+    writeFileSync(
+      join(capturesDir, `${linked}.json`),
+      JSON.stringify({ id: linked })
+    );
     symlinkSync(external, join(capturesDir, `${linked}.png`));
-    expect(() => manager.getCapture(linked)).toThrow("Appshot image is invalid");
+    expect(() => manager.getCapture(linked)).toThrow(
+      "Appshot image is invalid"
+    );
     manager.shutdown();
   });
 });

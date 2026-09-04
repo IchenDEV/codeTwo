@@ -23,9 +23,14 @@ describe("sidebar Project organization", () => {
     expect(state.collapsed).toEqual({ "/one": true });
 
     const values = new Map<string, string>();
-    saveSidebarProjects({ setItem: (key, value) => values.set(key, value) }, state);
+    saveSidebarProjects(
+      { setItem: (key, value) => values.set(key, value) },
+      state
+    );
     expect(values.has(SIDEBAR_PROJECTS_STORAGE_KEY)).toBe(true);
-    expect(loadSidebarProjects({ getItem: (key) => values.get(key) ?? null })).toEqual(state);
+    expect(
+      loadSidebarProjects({ getItem: (key) => values.get(key) ?? null })
+    ).toEqual(state);
   });
 
   test("releases Projects in order when their Section is deleted", () => {
@@ -36,11 +41,22 @@ describe("sidebar Project organization", () => {
     state = releaseSidebarSectionProjects(state, "work");
 
     expect(state.assignments).toEqual({});
-    expect(state.order[ROOT_PROJECT_ORDER_KEY]).toEqual(["/root", "/one", "/two"]);
+    expect(state.order[ROOT_PROJECT_ORDER_KEY]).toEqual([
+      "/root",
+      "/one",
+      "/two",
+    ]);
     expect(state.order.work).toBeUndefined();
-    expect(sortSidebarProjects(
-      [{ path: "/new" }, { path: "/two" }, { path: "/root" }, { path: "/one" }],
-      state.order[ROOT_PROJECT_ORDER_KEY],
-    ).map((project) => project.path)).toEqual(["/new", "/root", "/one", "/two"]);
+    expect(
+      sortSidebarProjects(
+        [
+          { path: "/new" },
+          { path: "/two" },
+          { path: "/root" },
+          { path: "/one" },
+        ],
+        state.order[ROOT_PROJECT_ORDER_KEY]
+      ).map((project) => project.path)
+    ).toEqual(["/new", "/root", "/one", "/two"]);
   });
 });

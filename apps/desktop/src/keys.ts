@@ -1,6 +1,6 @@
 import type { KeymapEntry } from "./bridge";
 
-const MAC = /mac/i.test(navigator.userAgent);
+const MAC = /mac/iu.test(navigator.userAgent);
 
 /** `Mod` resolves to Cmd on macOS, Ctrl elsewhere. */
 export const MOD_LABEL = MAC ? "⌘" : "Ctrl";
@@ -69,13 +69,12 @@ export function isModifierOnly(e: KeyboardEvent): boolean {
 
 /** Is the user typing into the document, an input, or a dialog field? */
 export function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el || !el.tagName) return false;
+  if (!(target instanceof HTMLElement)) return false;
   return (
-    el.isContentEditable ||
-    el.tagName === "INPUT" ||
-    el.tagName === "TEXTAREA" ||
-    el.tagName === "SELECT"
+    target.isContentEditable ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
   );
 }
 
@@ -85,10 +84,14 @@ export function isTypingTarget(target: EventTarget | null): boolean {
  * Bindings without a modifier (e.g. `Escape`) are allowed, but only fire when the user isn't typing
  * — otherwise binding a bare letter would make the editor unusable.
  */
-export function actionForEvent(e: KeyboardEvent, bindings: KeymapEntry[]): string | null {
+export function actionForEvent(
+  e: KeyboardEvent,
+  bindings: KeymapEntry[]
+): string | null {
   const combo = comboFromEvent(e);
   const hasModifier = combo.includes("Mod+") || combo.includes("Alt+");
-  if (!hasModifier && isTypingTarget(e.target) && e.key !== "Escape") return null;
+  if (!hasModifier && isTypingTarget(e.target) && e.key !== "Escape")
+    return null;
   return bindings.find(([, key]) => key === combo)?.[0] ?? null;
 }
 

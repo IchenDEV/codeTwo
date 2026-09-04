@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  createWebCoreTransport,
-  type WebCoreTransportDependencies,
-} from "../src/coreTransport";
+import { createWebCoreTransport } from "../src/coreTransport";
+import type { WebCoreTransportDependencies } from "../src/coreTransport";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -35,25 +33,29 @@ class FakeSocket {
 }
 
 function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
+  return Response.json(value, {
     status,
     headers: { "Content-Type": "application/json" },
   });
 }
 
-async function waitUntil(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+async function waitUntil(
+  predicate: () => boolean,
+  timeoutMs = 500
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
-    if (Date.now() >= deadline) throw new Error("condition did not become true");
+    if (Date.now() >= deadline)
+      throw new Error("condition did not become true");
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
 
 function dependencies(
   fetcher: WebCoreTransportDependencies["fetch"],
-  storage = new MemoryStorage(),
+  storage = new MemoryStorage()
 ) {
-  const sockets: Array<{ url: string; socket: FakeSocket }> = [];
+  const sockets: { url: string; socket: FakeSocket }[] = [];
   let fragmentClears = 0;
   const value: WebCoreTransportDependencies = {
     clearPairingFragment: () => {
@@ -62,7 +64,9 @@ function dependencies(
     createSocket: (url) => {
       const socket = new FakeSocket();
       sockets.push({ url, socket });
-      queueMicrotask(() => socket.onopen?.call(socket as unknown as WebSocket, {} as Event));
+      queueMicrotask(() =>
+        socket.onopen?.call(socket as unknown as WebSocket, {} as Event)
+      );
       return socket;
     },
     fetch: fetcher,
@@ -84,7 +88,7 @@ function dependencies(
 
 describe("paired Web Core transport", () => {
   test("pairs once and keeps independent command calls concurrent", async () => {
-    const requests: Array<{ input: string; init?: RequestInit }> = [];
+    const requests: { input: string; init?: RequestInit }[] = [];
     const storage = new MemoryStorage();
     storage.setItem("codetwo.remote.bearer", "stale-bearer");
     let releasePairing!: () => void;
@@ -105,18 +109,24 @@ describe("paired Web Core transport", () => {
     const first = transport.call<string>("sessions.list", null, null);
     const second = transport.call<string>("projects.list", null, null);
     await Promise.resolve();
-    expect(requests.filter((request) => request.input === "/api/pair")).toHaveLength(1);
+    expect(
+      requests.filter((request) => request.input === "/api/pair")
+    ).toHaveLength(1);
     releasePairing();
 
-    await expect(Promise.all([first, second])).resolves.toEqual([
+    expect(Promise.all([first, second])).resolves.toEqual([
       "sessions.list",
       "projects.list",
     ]);
     expect(setup.fragmentClears()).toBe(1);
-    expect(requests.filter((request) => request.input === "/api/web-ui/call")).toHaveLength(2);
-    for (const request of requests.filter((item) => item.input === "/api/web-ui/call")) {
+    expect(
+      requests.filter((request) => request.input === "/api/web-ui/call")
+    ).toHaveLength(2);
+    for (const request of requests.filter(
+      (item) => item.input === "/api/web-ui/call"
+    )) {
       expect(new Headers(request.init?.headers).get("Authorization")).toBe(
-        "Bearer paired-bearer",
+        "Bearer paired-bearer"
       );
     }
   });
@@ -124,13 +134,14 @@ describe("paired Web Core transport", () => {
   test("uses a fresh ticket whenever the shared engine event stream reconnects", async () => {
     const storage = new MemoryStorage();
     storage.setItem("codetwo.remote.bearer", "saved-bearer");
-    const requests: Array<{ input: string; init?: RequestInit }> = [];
+    const requests: { input: string; init?: RequestInit }[] = [];
     let ticketRequests = 0;
     const setup = dependencies(async (input, init) => {
       requests.push({ input, init });
       if (input === "/api/ws-ticket") {
         ticketRequests += 1;
-        if (ticketRequests === 2) return jsonResponse({ error: "Core is restarting" }, 503);
+        if (ticketRequests === 2)
+          return jsonResponse({ error: "Core is restarting" }, 503);
         return jsonResponse({ ticket: `single-use-ticket-${ticketRequests}` });
       }
       throw new Error(`unexpected request: ${input}`);
@@ -139,15 +150,17 @@ describe("paired Web Core transport", () => {
     setup.value.onError = () => {};
     const transport = createWebCoreTransport(setup.value);
     const events: unknown[] = [];
-    const unlisten = transport.listen("engine-event", (event) => events.push(event));
+    const unlisten = transport.listen("engine-event", (event) =>
+      events.push(event)
+    );
 
     await waitUntil(() => setup.sockets.length === 1);
     expect(setup.sockets).toHaveLength(1);
     expect(setup.sockets[0]?.url).toBe(
-      "ws://127.0.0.1:1420/ws?ticket=single-use-ticket-1",
+      "ws://127.0.0.1:1420/ws?ticket=single-use-ticket-1"
     );
     expect(new Headers(requests[0]?.init?.headers).get("Authorization")).toBe(
-      "Bearer saved-bearer",
+      "Bearer saved-bearer"
     );
 
     setup.sockets[0]?.socket.onmessage?.({
@@ -162,14 +175,16 @@ describe("paired Web Core transport", () => {
 
     setup.sockets[0]?.socket.onclose?.call(
       setup.sockets[0]?.socket as unknown as WebSocket,
-      {} as CloseEvent,
+      {} as CloseEvent
     );
     await waitUntil(() => setup.sockets.length === 2);
     expect(setup.sockets).toHaveLength(2);
     expect(setup.sockets[1]?.url).toBe(
-      "ws://127.0.0.1:1420/ws?ticket=single-use-ticket-3",
+      "ws://127.0.0.1:1420/ws?ticket=single-use-ticket-3"
     );
-    expect(requests.filter((request) => request.input === "/api/ws-ticket")).toHaveLength(3);
+    expect(
+      requests.filter((request) => request.input === "/api/ws-ticket")
+    ).toHaveLength(3);
 
     unlisten();
     expect(setup.sockets[1]?.socket.closed).toBe(true);
@@ -182,8 +197,8 @@ describe("paired Web Core transport", () => {
     setup.value.location.hash = "";
     const transport = createWebCoreTransport(setup.value);
 
-    await expect(transport.call("sessions.list", null, null)).rejects.toThrow(
-      "not paired",
+    expect(transport.call("sessions.list", null, null)).rejects.toThrow(
+      "not paired"
     );
   });
 });

@@ -19,7 +19,9 @@ import {
 describe("sidebar Task Sections", () => {
   test("fails closed on malformed or unsupported persisted state", () => {
     const malformed = { getItem: () => "{" };
-    const unsupported = { getItem: () => JSON.stringify({ version: 99, sections: [] }) };
+    const unsupported = {
+      getItem: () => JSON.stringify({ version: 99, sections: [] }),
+    };
 
     expect(loadSidebarTaskSections(malformed)).toEqual({
       version: 2,
@@ -37,14 +39,19 @@ describe("sidebar Task Sections", () => {
 
   test("migrates v1 Sections without inventing a fixed Highlight group", () => {
     const values = new Map<string, string>([
-      [LEGACY_SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify({
-        version: 1,
-        sections: [{ id: "highlight", name: "Highlight", collapsed: false }],
-        assignments: { "task-1": "highlight" },
-      })],
+      [
+        LEGACY_SIDEBAR_SECTIONS_STORAGE_KEY,
+        JSON.stringify({
+          version: 1,
+          sections: [{ id: "highlight", name: "Highlight", collapsed: false }],
+          assignments: { "task-1": "highlight" },
+        }),
+      ],
     ]);
 
-    expect(loadSidebarTaskSections({ getItem: (key) => values.get(key) ?? null })).toEqual({
+    expect(
+      loadSidebarTaskSections({ getItem: (key) => values.get(key) ?? null })
+    ).toEqual({
       version: 2,
       sections: [{ id: "highlight", name: "Highlight", collapsed: false }],
       assignments: { "task-1": "highlight" },
@@ -58,7 +65,10 @@ describe("sidebar Task Sections", () => {
     state = assignTaskSection(state, "task-2", "work");
     state = setSidebarTaskSectionCollapsed(state, "work", true);
     state = renameSidebarTaskSection(state, "work", "Deep work");
-    state = moveSidebarTask(state, "task-2", "work", "task-1", ["task-1", "task-2"]);
+    state = moveSidebarTask(state, "task-2", "work", "task-1", [
+      "task-1",
+      "task-2",
+    ]);
 
     const values = new Map<string, string>();
     const storage = {
@@ -78,21 +88,33 @@ describe("sidebar Task Sections", () => {
     const deleted = deleteSidebarTaskSection(state, "work");
     expect(deleted.sections).toEqual([]);
     expect(deleted.assignments).toEqual({});
-    expect(deleted.taskOrder[UNSECTIONED_TASK_ORDER_KEY]).toEqual(["task-2", "task-1"]);
+    expect(deleted.taskOrder[UNSECTIONED_TASK_ORDER_KEY]).toEqual([
+      "task-2",
+      "task-1",
+    ]);
   });
 
   test("reorders Sections and Tasks while preserving recency for new Tasks", () => {
-    let state = createSidebarTaskSection(loadSidebarTaskSections(null), "One", "one");
+    let state = createSidebarTaskSection(
+      loadSidebarTaskSections(null),
+      "One",
+      "one"
+    );
     state = createSidebarTaskSection(state, "Two", "two");
     state = moveSidebarTaskSection(state, "two", "one");
     expect(state.sections.map((section) => section.id)).toEqual(["two", "one"]);
 
     state = moveSidebarTask(state, "older", null, "newer", ["newer", "older"]);
-    expect(state.taskOrder[UNSECTIONED_TASK_ORDER_KEY]).toEqual(["older", "newer"]);
-    expect(sortSidebarTasks(
-      [{ id: "brand-new" }, { id: "newer" }, { id: "older" }],
-      state.taskOrder[UNSECTIONED_TASK_ORDER_KEY],
-    ).map((task) => task.id)).toEqual(["brand-new", "older", "newer"]);
+    expect(state.taskOrder[UNSECTIONED_TASK_ORDER_KEY]).toEqual([
+      "older",
+      "newer",
+    ]);
+    expect(
+      sortSidebarTasks(
+        [{ id: "brand-new" }, { id: "newer" }, { id: "older" }],
+        state.taskOrder[UNSECTIONED_TASK_ORDER_KEY]
+      ).map((task) => task.id)
+    ).toEqual(["brand-new", "older", "newer"]);
 
     state = moveSidebarTask(state, "older", "one", null, []);
     expect(state.assignments.older).toBe("one");
@@ -101,7 +123,11 @@ describe("sidebar Task Sections", () => {
   });
 
   test("deduplicates names and ignores assignments to missing Sections", () => {
-    let state = createSidebarTaskSection(loadSidebarTaskSections(null), "Work", "work");
+    let state = createSidebarTaskSection(
+      loadSidebarTaskSections(null),
+      "Work",
+      "work"
+    );
     state = createSidebarTaskSection(state, "work", "duplicate", "task-1");
     expect(state.sections).toHaveLength(1);
     expect(state.assignments).toEqual({ "task-1": "work" });

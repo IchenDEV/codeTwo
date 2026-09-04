@@ -1,6 +1,12 @@
-import { sanitizeElements } from "./serialize";
+import { isOneOf } from "../lib/jsonValue";
 import type { ExcalidrawElement } from "./excalidrawAdapter";
-import { ALLOWED_ELEMENT_TYPES, type AllowedElementType } from "./types";
+import { sanitizeElements } from "./serialize";
+import { ALLOWED_ELEMENT_TYPES } from "./types";
+import type { AllowedElementType } from "./types";
+
+function isAllowedElementType(type: string): type is AllowedElementType {
+  return isOneOf(type, ALLOWED_ELEMENT_TYPES);
+}
 
 export interface CanvasManifestGeometry {
   x: number;
@@ -34,8 +40,16 @@ function round(value: number): number {
 }
 
 function elementBounds(element: ExcalidrawElement): CanvasManifestGeometry {
-  if ((element.type === "line" || element.type === "arrow" || element.type === "freedraw") && element.points.length > 0) {
-    const points = element.points.map(([x, y]) => [element.x + x, element.y + y]);
+  if (
+    (element.type === "line" ||
+      element.type === "arrow" ||
+      element.type === "freedraw") &&
+    element.points.length > 0
+  ) {
+    const points = element.points.map(([x, y]) => [
+      element.x + x,
+      element.y + y,
+    ]);
     const xs = points.map(([x]) => x);
     const ys = points.map(([, y]) => y);
     const minX = Math.min(...xs);
@@ -55,26 +69,42 @@ function elementBounds(element: ExcalidrawElement): CanvasManifestGeometry {
   };
 }
 
-function endpoint(element: ExcalidrawElement, point: readonly [number, number] | undefined, originX: number, originY: number): CanvasManifestArrowEndpoint | null {
+function endpoint(
+  element: ExcalidrawElement,
+  point: readonly [number, number] | undefined,
+  originX: number,
+  originY: number
+): CanvasManifestArrowEndpoint | null {
   if (!point) return null;
-  return { x: round(element.x + point[0] - originX), y: round(element.y + point[1] - originY) };
+  return {
+    x: round(element.x + point[0] - originX),
+    y: round(element.y + point[1] - originY),
+  };
 }
 
 /**
  * Derives a stable structural summary. It intentionally contains no raw free-draw samples or
  * engine app state so the manifest is safe to send to providers that only need structure.
  */
-export function deriveCanvasManifest(elements: readonly unknown[]): CanvasManifest {
+export function deriveCanvasManifest(
+  elements: readonly unknown[]
+): CanvasManifest {
   const sanitized = sanitizeElements(elements);
   const visible = sanitized
     .filter((element) => !element.isDeleted && element.opacity > 0)
-    .filter((element): element is ExcalidrawElement & { type: AllowedElementType } => ALLOWED_ELEMENT_TYPES.includes(element.type as AllowedElementType));
+    .filter(
+      (element): element is ExcalidrawElement & { type: AllowedElementType } =>
+        isAllowedElementType(element.type)
+    );
   const allBounds = visible.map(elementBounds);
-  const originX = allBounds.length > 0 ? Math.min(...allBounds.map((bounds) => bounds.x)) : 0;
-  const originY = allBounds.length > 0 ? Math.min(...allBounds.map((bounds) => bounds.y)) : 0;
+  const originX =
+    allBounds.length > 0 ? Math.min(...allBounds.map((bounds) => bounds.x)) : 0;
+  const originY =
+    allBounds.length > 0 ? Math.min(...allBounds.map((bounds) => bounds.y)) : 0;
   const objects = visible.map((element, layer) => {
     const bounds = elementBounds(element);
-    const points = (element.type === "line" || element.type === "arrow") ? element.points : [];
+    const points =
+      element.type === "line" || element.type === "arrow" ? element.points : [];
     return {
       id: element.id,
       type: element.type,
@@ -86,8 +116,14 @@ export function deriveCanvasManifest(elements: readonly unknown[]): CanvasManife
         height: round(bounds.height),
       },
       layer,
-      arrowStart: element.type === "arrow" ? endpoint(element, points[0], originX, originY) : null,
-      arrowEnd: element.type === "arrow" ? endpoint(element, points[points.length - 1], originX, originY) : null,
+      arrowStart:
+        element.type === "arrow"
+          ? endpoint(element, points[0], originX, originY)
+          : null,
+      arrowEnd:
+        element.type === "arrow"
+          ? endpoint(element, points.at(-1), originX, originY)
+          : null,
     } satisfies CanvasManifestObject;
   });
   return { schemaVersion: 1, objects };

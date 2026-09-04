@@ -7,7 +7,10 @@ export interface DesktopChannelConfiguration {
   updatesEnabled: boolean;
 }
 
-export const DESKTOP_CHANNELS: Record<DesktopChannel, DesktopChannelConfiguration> = {
+export const DESKTOP_CHANNELS: Record<
+  DesktopChannel,
+  DesktopChannelConfiguration
+> = {
   dev: {
     appName: "C2",
     displayName: "C2 Dev",
@@ -30,17 +33,27 @@ export const DESKTOP_CHANNELS: Record<DesktopChannel, DesktopChannelConfiguratio
 
 export function resolveDesktopChannel(
   requested: string | undefined,
-  electrobunArguments: readonly string[] = [],
+  electrobunArguments: readonly string[] = []
 ): DesktopChannel {
-  const inferred = requested ?? (electrobunArguments.includes("--env=stable") ? "release" : "dev");
-  if (inferred === "dev" || inferred === "nightly" || inferred === "release") return inferred;
+  const inferred =
+    requested ??
+    (electrobunArguments.includes("--env=stable") ? "release" : "dev");
+  if (inferred === "dev" || inferred === "nightly" || inferred === "release") {
+    return inferred;
+  }
   throw new Error(`Unsupported C2 desktop channel: ${inferred}`);
 }
 
-export function desktopChannelForIdentifier(identifier: string | undefined): DesktopChannel | null {
-  if (!identifier) return null;
+export function desktopChannelForIdentifier(
+  identifier: string | undefined
+): DesktopChannel | null {
+  if (identifier == null || identifier === "") {
+    return null;
+  }
   for (const [channel, configuration] of Object.entries(DESKTOP_CHANNELS)) {
-    if (configuration.identifier === identifier) return channel as DesktopChannel;
+    if (configuration.identifier === identifier) {
+      return channel as DesktopChannel;
+    }
   }
   return null;
 }

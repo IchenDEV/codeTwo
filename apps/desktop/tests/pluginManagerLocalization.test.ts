@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { zhCN, type StringKey } from "../src/i18n/strings";
+import { zhCN } from "../src/i18n/strings";
+import type { StringKey } from "../src/i18n/strings";
 import {
   createPluginManagerLabels,
   localizePluginManagerCatalog,
@@ -9,8 +10,8 @@ import {
 const t = (key: StringKey, vars?: Record<string, string | number>) => {
   const template = zhCN[key];
   return vars
-    ? template.replace(/\{(\w+)\}/g, (whole, name) =>
-        name in vars ? String(vars[name]) : whole,
+    ? template.replaceAll(/\{(\w+)\}/gu, (whole, name) =>
+        name in vars ? String(vars[name]) : whole
       )
     : template;
 };
@@ -23,16 +24,16 @@ describe("plugin manager localization", () => {
     expect(labels.status.active).toBe("可用");
     expect(labels.sourceNames.host).toBe("宿主功能");
     expect(labels.contribution("runtime", "Process runtime")).toBe(
-      "进程运行时",
+      "进程运行时"
     );
     expect(labels.contribution("runtime_commands", "Runtime commands")).toBe(
-      "运行时命令",
+      "运行时命令"
     );
     expect(labels.componentKind("composerAction")).toBe("输入区操作");
     expect(labels.reviewSource).toBe("检查源码");
     expect(labels.trustBeforeEnabling).toBe("信任后才能启用");
     expect(labels.changeApplied("记忆", "disabled")).toBe(
-      "记忆 现已设为已停用。",
+      "记忆 现已设为已停用。"
     );
   });
 
@@ -86,7 +87,7 @@ describe("plugin manager localization", () => {
         marketplaceItems: [],
         marketplaceSources: [],
       },
-      t,
+      t
     );
 
     expect(model.plugins[0]).toMatchObject({

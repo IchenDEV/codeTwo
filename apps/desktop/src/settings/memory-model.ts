@@ -36,7 +36,7 @@ export function memoryActivityAt(record: MemoryRecord): number {
 function matchesView(
   record: MemoryRecord,
   view: MemoryView,
-  recentSince: number,
+  recentSince: number
 ): boolean {
   if (record.layer === "L3") return false;
   if (view === "forgotten")
@@ -44,27 +44,36 @@ function matchesView(
   if (view === "conflicts") return record.conflict_with_id !== null;
   if (!record.active || record.conflict_with_id !== null) return false;
   switch (view) {
-    case "pinned":
+    case "pinned": {
       return record.pinned;
-    case "constraints":
+    }
+    case "constraints": {
       return (
         record.category === "constraint" || record.category === "preference"
       );
-    case "facts":
+    }
+    case "facts": {
       return ["fact", "relationship", "event"].includes(record.category);
-    case "episodes":
+    }
+    case "episodes": {
       return record.category === "episode" || record.layer === "L2";
-    case "recent":
+    }
+    case "recent": {
       return record.accessed_at !== null && record.accessed_at >= recentSince;
-    default:
+    }
+    case "all": {
+      throw new Error('Not implemented yet: "all" case');
+    }
+    default: {
       return true;
+    }
   }
 }
 
 export function filterMemories(
   records: readonly MemoryRecord[],
   filter: MemoryFilter,
-  now = Date.now(),
+  now = Date.now()
 ): MemoryRecord[] {
   const query = filter.query.trim().toLocaleLowerCase();
   const recentSince = now - 30 * 24 * 60 * 60 * 1000;
@@ -72,18 +81,18 @@ export function filterMemories(
     .filter((record) => matchesView(record, filter.view, recentSince))
     .filter(
       (record) =>
-        filter.category === "all" || record.category === filter.category,
+        filter.category === "all" || record.category === filter.category
     )
     .filter(
-      (record) => filter.origin === "all" || record.origin === filter.origin,
+      (record) => filter.origin === "all" || record.origin === filter.origin
     )
     .filter((record) => {
       if (!query) return true;
       return [record.content, record.category, record.origin].some((value) =>
-        value.toLocaleLowerCase().includes(query),
+        value.toLocaleLowerCase().includes(query)
       );
     })
-    .sort((left, right) => {
+    .toSorted((left, right) => {
       if (filter.view === "all" && left.pinned !== right.pinned)
         return left.pinned ? -1 : 1;
       if (filter.sort === "used") {
@@ -98,7 +107,7 @@ export function filterMemories(
 }
 
 export function memoryProfile(
-  records: readonly MemoryRecord[],
+  records: readonly MemoryRecord[]
 ): MemoryRecord | null {
   return (
     records.find((record) => record.layer === "L3" && record.active) ?? null
@@ -106,20 +115,27 @@ export function memoryProfile(
 }
 
 export function originLabelKey(
-  origin: MemoryRecord["origin"],
+  origin: MemoryRecord["origin"]
 ):
   | "memory.origin.manual"
   | "memory.origin.automatic"
   | "memory.origin.userCorrection"
   | "memory.origin.profile" {
   switch (origin) {
-    case "manual":
+    case "manual": {
       return "memory.origin.manual";
-    case "user_correction":
+    }
+    case "user_correction": {
       return "memory.origin.userCorrection";
-    case "profile":
+    }
+    case "profile": {
       return "memory.origin.profile";
-    default:
+    }
+    case "automatic": {
+      throw new Error('Not implemented yet: "automatic" case');
+    }
+    default: {
       return "memory.origin.automatic";
+    }
   }
 }

@@ -1,4 +1,9 @@
-import type { ExecutionPolicy, PermissionMode, Sandbox, SessionInfo } from "../bridge";
+import type {
+  ExecutionPolicy,
+  PermissionMode,
+  Sandbox,
+  SessionInfo,
+} from "../bridge";
 
 /**
  * The session's permission posture, as one choice.
@@ -9,6 +14,28 @@ import type { ExecutionPolicy, PermissionMode, Sandbox, SessionInfo } from "../b
  * This control mediates ACP permission requests; it is not OS or filesystem containment.
  */
 export type SessionMode = "read_only" | "ask" | "auto_edit" | "full_access";
+
+const SESSION_MODE_IDS: readonly SessionMode[] = [
+  "read_only",
+  "ask",
+  "auto_edit",
+  "full_access",
+];
+
+export function isSessionMode(value: unknown): value is SessionMode {
+  return (
+    typeof value === "string" &&
+    (SESSION_MODE_IDS as readonly string[]).includes(value)
+  );
+}
+
+/** Narrow a host-reported mode string; unknown values fall back rather than assert. */
+export function toSessionMode(
+  value: unknown,
+  fallback: SessionMode = "ask"
+): SessionMode {
+  return isSessionMode(value) ? value : fallback;
+}
 
 /** What each choice resolves to underneath. Ordered as the picker and the cycle shortcut present it: loosest last. */
 export const SESSION_MODES: readonly {
@@ -28,7 +55,10 @@ export const SESSION_MODES: readonly {
  * Checked restrictive-ceiling-first, mirroring how the engine decides: Read-only rejects reported
  * mutation and unknown tool kinds whatever the approval mode says.
  */
-export function sessionMode(mode: PermissionMode, sandbox: Sandbox): SessionMode {
+export function sessionMode(
+  mode: PermissionMode,
+  sandbox: Sandbox
+): SessionMode {
   if (sandbox === "read_only") return "read_only";
   if (sandbox === "danger_full_access" || mode === "yolo") return "full_access";
   if (mode === "accept_edits") return "auto_edit";
@@ -40,7 +70,7 @@ export function sessionExecutionPolicy(
   session:
     | Pick<SessionInfo, "permission_mode" | "sandbox_policy">
     | null
-    | undefined,
+    | undefined
 ): ExecutionPolicy | null {
   if (!session) return null;
   return { mode: session.permission_mode, sandbox: session.sandbox_policy };
@@ -57,7 +87,7 @@ export function withSessionExecutionPolicy<
           permission_mode: policy.mode,
           sandbox_policy: policy.sandbox,
         }
-      : session,
+      : session
   );
 }
 
@@ -65,9 +95,12 @@ export function withSessionExecutionPolicy<
 export function executionPolicyChangeDisabled(
   pendingCreation: boolean,
   activeSession: string | null,
-  pendingSessions: { has(session: string): boolean },
+  pendingSessions: { has(session: string): boolean }
 ): boolean {
-  return pendingCreation || (activeSession !== null && pendingSessions.has(activeSession));
+  return (
+    pendingCreation ||
+    (activeSession !== null && pendingSessions.has(activeSession))
+  );
 }
 
 /** The next choice along, for the cycle-mode shortcut. Wraps. */

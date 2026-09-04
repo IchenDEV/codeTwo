@@ -1,40 +1,48 @@
+import { afterEach, describe, expect, test } from "bun:test";
+
 // @ts-nocheck
 import { act as reactAct } from "react";
-import { afterEach, describe, expect, test } from "bun:test";
+
 import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
-const { PaneToolbar, PaneLayoutToolbar, PanePreview, PaneDivider } = await import(
-  "../src/session/PaneChrome"
-);
+const { PaneToolbar, PaneLayoutToolbar, PanePreview, PaneDivider } =
+  await import("../src/session/PaneChrome");
 const { TooltipProvider } = await import("../src/components/ui/tooltip");
-const { computeDividers, singlePaneLayout, splitPane } = await import(
-  "../src/session/paneLayout"
-);
+const { computeDividers, singlePaneLayout, splitPane } =
+  await import("../src/session/paneLayout");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
   restoreDom();
 });
 
-const LABELS = { splitRight: "Split right", splitDown: "Split down", close: "Close pane" };
+const LABELS = {
+  splitRight: "Split right",
+  splitDown: "Split down",
+  close: "Close pane",
+};
 const SHORTCUTS = { splitRight: "⌘⌥R", splitDown: "⌘⌥D", sidePanel: "⌘⌥P" };
 
 function click(element: Element) {
   element.dispatchEvent(
-    new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
+    new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
   );
 }
 
 async function press(element: Element) {
   await reactAct(async () => {
-    element.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    element.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    element.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
@@ -49,18 +57,22 @@ describe("PaneChrome", () => {
         onClose={() => calls.push("close")}
         canClose={false}
         labels={LABELS}
-      />,
+      />
     );
     await flush();
 
-    const buttons = Array.from(rendered.container.querySelectorAll("button"));
+    const buttons = [...rendered.container.querySelectorAll("button")];
     // No close button while canClose is false.
     expect(buttons).toHaveLength(2);
     for (const toolbarButton of buttons) {
       expect(toolbarButton.dataset.variant).toBe("ghost");
       expect(toolbarButton.classList.contains("size-7")).toBe(true);
-      expect(toolbarButton.classList.contains("text-muted-foreground")).toBe(true);
-      expect(toolbarButton.classList.contains("hover:text-muted-foreground")).toBe(true);
+      expect(toolbarButton.classList.contains("text-muted-foreground")).toBe(
+        true
+      );
+      expect(
+        toolbarButton.classList.contains("hover:text-muted-foreground")
+      ).toBe(true);
     }
     click(rendered.container.querySelector("[aria-label='Split right']")!);
     click(rendered.container.querySelector("[aria-label='Split down']")!);
@@ -86,18 +98,22 @@ describe("PaneChrome", () => {
           panelActive
           onTogglePanel={() => calls.push("panel")}
         />
-      </TooltipProvider>,
+      </TooltipProvider>
     );
     await flush();
 
     const group = rendered.container.querySelector(
-      '[role="group"][aria-label="Pane and panel layout"]',
+      '[role="group"][aria-label="Pane and panel layout"]'
     );
-    expect(group?.classList.contains("session-header-layout-actions")).toBe(true);
-    const buttons = Array.from(group?.querySelectorAll("button") ?? []);
+    expect(group?.classList.contains("session-header-layout-actions")).toBe(
+      true
+    );
+    const buttons = [...(group?.querySelectorAll("button") ?? [])];
     expect(buttons).toHaveLength(1);
     expect(buttons[0].getAttribute("aria-label")).toBe("View");
-    expect(buttons[0].querySelector(".session-header-layout-label")?.textContent).toBe("View");
+    expect(
+      buttons[0].querySelector(".session-header-layout-label")?.textContent
+    ).toBe("View");
     expect(buttons[0].classList.contains("bg-fill-rest")).toBe(true);
 
     await press(buttons[0]);
@@ -107,17 +123,19 @@ describe("PaneChrome", () => {
     const panel = dom.document.body.querySelector('[role="menuitemcheckbox"]');
     expect(panel?.textContent).toContain("Side panel");
     expect(panel?.querySelector("span")?.textContent).toBe("⌘⌥P");
-    expect(panel?.getAttribute("data-checked")).not.toBeNull();
+    expect(panel?.dataset.checked).not.toBeNull();
     if (!panel) throw new Error("Side panel menu item not found");
     await press(panel);
     expect(calls).toEqual(["panel"]);
 
-    const splitRight = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("Split right"));
+    const splitRight = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Split right"));
     if (!splitRight) throw new Error("Split right menu item not found");
     expect(splitRight.querySelector("span")?.textContent).toBe("⌘⌥R");
-    const splitDown = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("Split down"));
+    const splitDown = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Split down"));
     expect(splitDown?.querySelector("span")?.textContent).toBe("⌘⌥D");
     await press(splitRight);
     expect(calls).toEqual(["panel", "right"]);
@@ -141,13 +159,14 @@ describe("PaneChrome", () => {
           panelActive={false}
           onTogglePanel={() => calls.push("panel")}
         />
-      </TooltipProvider>,
+      </TooltipProvider>
     );
     await flush();
 
     await press(rendered.container.querySelector('[aria-label="View"]')!);
-    const closePane = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("Close pane"));
+    const closePane = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Close pane"));
     if (!closePane) throw new Error("Close pane menu item not found");
     await press(closePane);
     expect(calls).toEqual(["close"]);
@@ -168,7 +187,7 @@ describe("PaneChrome", () => {
           canClose: true,
           labels: LABELS,
         }}
-      />,
+      />
     );
     await flush();
 
@@ -181,39 +200,92 @@ describe("PaneChrome", () => {
 
   test("divider reports a clamped ratio while dragging", async () => {
     // A single horizontal split: one divider at x = 0.5 across the unit square.
-    const layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2");
+    const layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2"
+    );
     const [divider] = computeDividers(layout.root);
     const ratios: number[] = [];
 
     // A fake 1000x500 container so client coordinates map to a known fraction.
-    const container = { current: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 500 }) } };
+    const container = {
+      current: {
+        getBoundingClientRect: () => ({
+          left: 0,
+          top: 0,
+          width: 1000,
+          height: 500,
+        }),
+      },
+    };
 
     const rendered = mount(
-      <PaneDivider divider={divider} containerRef={container} onResize={(r) => ratios.push(r)} />,
+      <PaneDivider
+        divider={divider}
+        containerRef={container}
+        onResize={(r) => ratios.push(r)}
+      />
     );
     await flush();
 
     const handle = rendered.container.querySelector("[data-divider-id]")!;
     let capturedPointer = null;
-    handle.setPointerCapture = (pointerId) => { capturedPointer = pointerId; };
+    handle.setPointerCapture = (pointerId) => {
+      capturedPointer = pointerId;
+    };
     handle.hasPointerCapture = (pointerId) => capturedPointer === pointerId;
-    handle.releasePointerCapture = () => { capturedPointer = null; };
+    handle.releasePointerCapture = () => {
+      capturedPointer = null;
+    };
     expect(handle.getAttribute("role")).toBe("separator");
     expect(handle.getAttribute("aria-valuenow")).toBe("0.5");
-    handle.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    handle.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        bubbles: true,
+        cancelable: true,
+      })
+    );
     expect(ratios.at(-1)).toBeCloseTo(0.52, 5);
 
-    handle.dispatchEvent(new dom.window.PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 7, clientX: 500 }));
+    handle.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 7,
+        clientX: 500,
+      })
+    );
     // Drag to x = 300 → ratio 0.3.
-    handle.dispatchEvent(new dom.window.PointerEvent("pointermove", { bubbles: true, pointerId: 7, clientX: 300, clientY: 250 }));
+    handle.dispatchEvent(
+      new dom.window.PointerEvent("pointermove", {
+        bubbles: true,
+        pointerId: 7,
+        clientX: 300,
+        clientY: 250,
+      })
+    );
     // Drag past the left edge → clamped, never below the minimum.
-    handle.dispatchEvent(new dom.window.PointerEvent("pointermove", { bubbles: true, pointerId: 7, clientX: -100, clientY: 250 }));
-    handle.dispatchEvent(new dom.window.PointerEvent("pointerup", { bubbles: true, pointerId: 7 }));
+    handle.dispatchEvent(
+      new dom.window.PointerEvent("pointermove", {
+        bubbles: true,
+        pointerId: 7,
+        clientX: -100,
+        clientY: 250,
+      })
+    );
+    handle.dispatchEvent(
+      new dom.window.PointerEvent("pointerup", { bubbles: true, pointerId: 7 })
+    );
     await flush();
 
     expect(ratios.length).toBeGreaterThanOrEqual(2);
     expect(ratios).toContainEqual(0.3);
-    expect(ratios[ratios.length - 1]).toBeGreaterThanOrEqual(0.1);
+    expect(ratios.at(-1)).toBeGreaterThanOrEqual(0.1);
     rendered.unmount();
   });
 });

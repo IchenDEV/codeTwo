@@ -8,9 +8,8 @@ import {
   sceneCustomized,
   sceneTitle,
   softApplyPending,
-  type LivePosture,
-  type SceneInfo,
 } from "../src/session/scene";
+import type { LivePosture, SceneInfo } from "../src/session/scene";
 
 function scene(overrides: Partial<SceneInfo> = {}): SceneInfo {
   return {
@@ -44,15 +43,24 @@ describe("sceneCustomized", () => {
   test("only fields the scene sets participate", () => {
     const s = scene({ execution: { session_mode: "ask" } });
     // Memory/plan/provider all differ from nothing — the scene doesn't set them.
-    expect(sceneCustomized(s, { ...live, planFirst: true, provider: "codex" })).toBe(false);
+    expect(
+      sceneCustomized(s, { ...live, planFirst: true, provider: "codex" })
+    ).toBe(false);
     expect(sceneCustomized(s, { ...live, mode: "auto_edit" })).toBe(true);
   });
 
   test("memory preset compares as the (read, write) pair", () => {
     const s = scene({ execution: { memory_preset: "private" } });
-    expect(sceneCustomized(s, { ...live, memoryRead: "deny", memoryWrite: "deny" })).toBe(false);
-    expect(sceneCustomized(s, { ...live, memoryRead: "allow", memoryWrite: "deny" })).toBe(true);
-    expect(MEMORY_PRESET_POLICY.learn_only).toEqual({ read: "deny", write: "allow" });
+    expect(
+      sceneCustomized(s, { ...live, memoryRead: "deny", memoryWrite: "deny" })
+    ).toBe(false);
+    expect(
+      sceneCustomized(s, { ...live, memoryRead: "allow", memoryWrite: "deny" })
+    ).toBe(true);
+    expect(MEMORY_PRESET_POLICY.learn_only).toEqual({
+      read: "deny",
+      write: "allow",
+    });
   });
 });
 
@@ -112,7 +120,10 @@ describe("escalationNeeded", () => {
   test("is asymmetric: loosening needs confirmation, tightening never does", () => {
     const looser = scene({ execution: { session_mode: "full_access" } });
     const tighter = scene({ execution: { session_mode: "read_only" } });
-    expect(escalationNeeded(looser, "ask")).toEqual({ from: "ask", to: "full_access" });
+    expect(escalationNeeded(looser, "ask")).toEqual({
+      from: "ask",
+      to: "full_access",
+    });
     expect(escalationNeeded(tighter, "full_access")).toBeNull();
     expect(escalationNeeded(looser, "full_access")).toBeNull();
     expect(escalationNeeded(scene(), "read_only")).toBeNull();
@@ -127,15 +138,23 @@ describe("nextSceneInRing", () => {
   ];
 
   test("walks listing order and wraps", () => {
-    expect(nextSceneInRing([], scenes, "builtin:research")).toBe("builtin:develop");
-    expect(nextSceneInRing([], scenes, "builtin:test")).toBe("builtin:research");
+    expect(nextSceneInRing([], scenes, "builtin:research")).toBe(
+      "builtin:develop"
+    );
+    expect(nextSceneInRing([], scenes, "builtin:test")).toBe(
+      "builtin:research"
+    );
     expect(nextSceneInRing([], scenes, null)).toBe("builtin:research");
   });
 
   test("an explicit ring wins over listing order", () => {
-    expect(nextSceneInRing(["builtin:test", "builtin:research"], scenes, "builtin:test")).toBe(
-      "builtin:research",
-    );
+    expect(
+      nextSceneInRing(
+        ["builtin:test", "builtin:research"],
+        scenes,
+        "builtin:test"
+      )
+    ).toBe("builtin:research");
   });
 
   test("nothing to cycle to yields null", () => {

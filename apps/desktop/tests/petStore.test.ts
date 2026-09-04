@@ -22,20 +22,31 @@ describe("PetShare catalog", () => {
         displayName: "Columbina",
         description: "A tiny digital companion.",
         source: "petshare",
-        spritesheetUrl: "https://petshare.idevlab.dev/pets/columbina/spritesheet.webp",
+        spritesheetUrl:
+          "https://petshare.idevlab.dev/pets/columbina/spritesheet.webp",
         spriteVersionNumber: 2,
       },
     ]);
   });
 
   test("rejects duplicate ids and off-origin assets", () => {
-    expect(() => parsePetShareCatalog([pet(), pet()])).toThrow("Invalid pet catalog item");
-    expect(() => parsePetShareCatalog([
-      { ...pet(), spritesheetPath: "https://example.com/pets/columbina/spritesheet.webp" },
-    ])).toThrow("Invalid pet catalog asset");
+    expect(() => parsePetShareCatalog([pet(), pet()])).toThrow(
+      "Invalid pet catalog item"
+    );
+    expect(() =>
+      parsePetShareCatalog([
+        {
+          ...pet(),
+          spritesheetPath:
+            "https://example.com/pets/columbina/spritesheet.webp",
+        },
+      ])
+    ).toThrow("Invalid pet catalog asset");
   });
 
   test("falls back to the built-in spritesheet for an invalid saved id", () => {
-    expect(petSpritesheetUrl("petshare", "../escape")).toBe("/pets/naiwa/spritesheet.webp");
+    expect(petSpritesheetUrl("petshare", "../escape")).toBe(
+      "/pets/naiwa/spritesheet.webp"
+    );
   });
 });

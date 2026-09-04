@@ -1,23 +1,30 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+
 import { useState } from "react";
-import { activateDom, button, click, dom, flush, mount } from "./domTestHarness";
+
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+} from "./domTestHarness";
 
 activateDom();
 const { PageHeader } = await import("../src/components/business/page-header");
-const { QuotaProgress } = await import("../src/components/business/quota-progress");
+const { QuotaProgress } =
+  await import("../src/components/business/quota-progress");
 const { SearchField } = await import("../src/components/business/search-field");
-const { SelectableRow } = await import("../src/components/business/selectable-row");
-const { SettingToggle } = await import("../src/components/business/setting-toggle");
+const { SelectableRow } =
+  await import("../src/components/business/selectable-row");
+const { SettingToggle } =
+  await import("../src/components/business/setting-toggle");
 const { StatusBadge } = await import("../src/components/business/status-badge");
-const {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} = await import("../src/components/ui/empty");
+const { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } =
+  await import("../src/components/ui/empty");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -27,21 +34,34 @@ describe("design-system business components", () => {
   test("provides semantic page and empty-state structure", () => {
     const view = mount(
       <>
-        <PageHeader title="Automations" description="Schedule recurring work." />
+        <PageHeader
+          title="Automations"
+          description="Schedule recurring work."
+        />
         <Empty>
           <EmptyHeader>
-            <EmptyMedia variant="icon"><span aria-hidden="true">A</span></EmptyMedia>
+            <EmptyMedia variant="icon">
+              <span aria-hidden="true">A</span>
+            </EmptyMedia>
             <EmptyTitle>No automations</EmptyTitle>
             <EmptyDescription>Create one to get started.</EmptyDescription>
           </EmptyHeader>
         </Empty>
-      </>,
+      </>
     );
 
-    expect(view.container.querySelector('[data-slot="page-header"]')?.tagName).toBe("HEADER");
-    expect(view.container.querySelector('[data-slot="page-header-title"]')?.tagName).toBe("H1");
-    expect(view.container.querySelector('[data-slot="empty-title"]')?.tagName).toBe("H2");
-    expect(view.container.querySelector('[data-slot="empty-description"]')?.tagName).toBe("P");
+    expect(
+      view.container.querySelector('[data-slot="page-header"]')?.tagName
+    ).toBe("HEADER");
+    expect(
+      view.container.querySelector('[data-slot="page-header-title"]')?.tagName
+    ).toBe("H1");
+    expect(
+      view.container.querySelector('[data-slot="empty-title"]')?.tagName
+    ).toBe("H2");
+    expect(
+      view.container.querySelector('[data-slot="empty-description"]')?.tagName
+    ).toBe("P");
 
     view.unmount();
   });
@@ -79,7 +99,9 @@ describe("design-system business components", () => {
     expect(clears).toBe(1);
     expect(input?.value).toBe("");
     expect(dom.document.activeElement).toBe(input);
-    expect(view.container.querySelector('[aria-label="Clear search"]')).toBeNull();
+    expect(
+      view.container.querySelector('[aria-label="Clear search"]')
+    ).toBeNull();
 
     view.unmount();
   });
@@ -95,35 +117,51 @@ describe("design-system business components", () => {
           description="main @ 3befbb7d"
           leading={<span>Git</span>}
           meta={<span>Current</span>}
-          onSelect={() => { selections += 1; }}
+          onSelect={() => {
+            selections += 1;
+          }}
         />
         <SelectableRow
           selected={false}
           disabled
           label="Unavailable ref"
-          onSelect={() => { selections += 1; }}
+          onSelect={() => {
+            selections += 1;
+          }}
         />
-      </>,
+      </>
     );
 
     const selected = button(view.container, "Current ref, Worktree baseline");
     const disabled = button(view.container, "Unavailable ref");
-    const describedBy = selected.getAttribute("aria-describedby")?.split(" ") ?? [];
+    const describedBy =
+      selected.getAttribute("aria-describedby")?.split(" ") ?? [];
 
     expect(selected.getAttribute("type")).toBe("button");
     expect(selected.getAttribute("aria-pressed")).toBe("true");
-    expect(selected.getAttribute("data-selected")).toBe("true");
-    const indicator = selected.querySelector('[data-slot="selectable-row-indicator"]');
-    const leading = selected.querySelector('[data-slot="selectable-row-leading"]');
+    expect(selected.dataset.selected).toBe("true");
+    const indicator = selected.querySelector(
+      '[data-slot="selectable-row-indicator"]'
+    );
+    const leading = selected.querySelector(
+      '[data-slot="selectable-row-leading"]'
+    );
     expect(indicator?.querySelector("svg")).not.toBeNull();
     expect(indicator?.className).toContain("h-[1lh]");
     expect(leading?.textContent).toBe("Git");
     expect(leading?.className).toContain("h-[1lh]");
     expect(leading?.className).toContain("gap-inline");
-    expect(selected.querySelector('[data-slot="selectable-row-description"]')?.textContent).toBe("main @ 3befbb7d");
-    expect(selected.querySelector('[data-slot="selectable-row-meta"]')?.textContent).toBe("Current");
+    expect(
+      selected.querySelector('[data-slot="selectable-row-description"]')
+        ?.textContent
+    ).toBe("main @ 3befbb7d");
+    expect(
+      selected.querySelector('[data-slot="selectable-row-meta"]')?.textContent
+    ).toBe("Current");
     expect(describedBy).toHaveLength(3);
-    expect(describedBy.every((id) => dom.document.getElementById(id))).toBe(true);
+    expect(
+      describedBy.every((id) => dom.document.querySelector(`#${id}`))
+    ).toBe(true);
 
     click(selected);
     click(disabled);
@@ -141,17 +179,21 @@ describe("design-system business components", () => {
         <StatusBadge tone="success">Active</StatusBadge>
         <StatusBadge tone="warning">Pending</StatusBadge>
         <StatusBadge tone="destructive">Failed</StatusBadge>
-      </>,
+      </>
     );
 
-    const badges = [...view.container.querySelectorAll('[data-slot="status-badge"]')];
-    expect(badges.map((badge) => badge.getAttribute("data-tone"))).toEqual([
+    const badges = [
+      ...view.container.querySelectorAll('[data-slot="status-badge"]'),
+    ];
+    expect(badges.map((badge) => badge.dataset.tone)).toEqual([
       "neutral",
       "success",
       "warning",
       "destructive",
     ]);
-    expect(badges.every((badge) => badge.className.includes("bg-canvas"))).toBe(true);
+    expect(badges.every((badge) => badge.className.includes("bg-canvas"))).toBe(
+      true
+    );
     expect(badges[1]?.className).toContain("text-status-success");
     expect(badges[2]?.className).toContain("text-status-warning");
     expect(badges[3]?.className).toContain("text-status-destructive");
@@ -179,20 +221,28 @@ describe("design-system business components", () => {
             label="Unavailable setting"
             checked={false}
             disabled
-            onCheckedChange={() => { changes += 1; }}
+            onCheckedChange={() => {
+              changes += 1;
+            }}
           />
         </>
       );
     }
     const view = mount(<SettingExample />);
-    const rows = view.container.querySelectorAll('[data-slot="setting-toggle"]');
+    const rows = view.container.querySelectorAll(
+      '[data-slot="setting-toggle"]'
+    );
     const control = rows[0]?.querySelector('[data-slot="switch"]');
     const label = rows[0]?.querySelector('[data-slot="setting-row-label"]');
-    const description = rows[0]?.querySelector('[data-slot="setting-row-description"]');
+    const description = rows[0]?.querySelector(
+      '[data-slot="setting-row-description"]'
+    );
     const disabled = rows[1]?.querySelector('[data-slot="switch"]');
 
     expect(rows).toHaveLength(2);
-    const hiddenInput = dom.document.getElementById(label?.getAttribute("for") ?? "");
+    const hiddenInput = dom.document.getElementById(
+      label?.getAttribute("for") ?? ""
+    );
     expect(hiddenInput?.tagName).toBe("INPUT");
     expect(hiddenInput?.getAttribute("type")).toBe("checkbox");
     expect(control?.getAttribute("aria-labelledby")).toBe(label?.id);
@@ -216,12 +266,18 @@ describe("design-system business components", () => {
         <QuotaProgress label="Past critical threshold" remainingPercent={5.4} />
         <QuotaProgress label="Warning quota" remainingPercent={20} />
         <QuotaProgress label="Past warning threshold" remainingPercent={20.4} />
-        <QuotaProgress label="Healthy quota" remainingPercent={72.6} density="rail" />
+        <QuotaProgress
+          label="Healthy quota"
+          remainingPercent={72.6}
+          density="rail"
+        />
         <QuotaProgress label="Full quota" remainingPercent={140} />
         <QuotaProgress label="Invalid quota" remainingPercent={Number.NaN} />
-      </>,
+      </>
     );
-    const meters = [...view.container.querySelectorAll('[data-slot="quota-progress"]')];
+    const meters = [
+      ...view.container.querySelectorAll('[data-slot="quota-progress"]'),
+    ];
 
     expect(meters.map((meter) => meter.getAttribute("aria-valuenow"))).toEqual([
       "0",
@@ -233,7 +289,7 @@ describe("design-system business components", () => {
       "100",
       "0",
     ]);
-    expect(meters.map((meter) => meter.getAttribute("data-tone"))).toEqual([
+    expect(meters.map((meter) => meter.dataset.tone)).toEqual([
       "destructive",
       "destructive",
       "warning",
@@ -243,20 +299,29 @@ describe("design-system business components", () => {
       "success",
       "destructive",
     ]);
-    expect(meters[5]?.getAttribute("data-density")).toBe("rail");
+    expect(meters[5]?.dataset.density).toBe("rail");
     expect(meters[5]?.tagName).toBe("SPAN");
     expect(meters[5]?.getAttribute("aria-hidden")).toBe("true");
     expect(meters[5]?.getAttribute("role")).toBeNull();
     expect(meters[5]?.querySelector("div")).toBeNull();
-    expect(meters[5]?.querySelector('[data-slot="progress-indicator"]')?.getAttribute("style"))
-      .toContain("width: 73%");
+    expect(
+      meters[5]
+        ?.querySelector('[data-slot="progress-indicator"]')
+        ?.getAttribute("style")
+    ).toContain("width: 73%");
 
     view.unmount();
   });
 
   test("removes the legacy picker row implementations", () => {
-    const composer = readFileSync(new URL("../src/session/Composer.tsx", import.meta.url), "utf8");
-    const sceneChip = readFileSync(new URL("../src/session/SceneChip.tsx", import.meta.url), "utf8");
+    const composer = readFileSync(
+      new URL("../src/session/Composer.tsx", import.meta.url),
+      "utf-8"
+    );
+    const sceneChip = readFileSync(
+      new URL("../src/session/SceneChip.tsx", import.meta.url),
+      "utf-8"
+    );
 
     expect(composer).not.toContain("function CheckoutOptionRow");
     expect(composer).not.toContain("function MenuRow");
@@ -265,8 +330,14 @@ describe("design-system business components", () => {
   });
 
   test("removes the legacy setting-toggle rows", () => {
-    const projectAction = readFileSync(new URL("../src/session/ProjectActionDialog.tsx", import.meta.url), "utf8");
-    const memorySettings = readFileSync(new URL("../src/settings/MemorySettings.tsx", import.meta.url), "utf8");
+    const projectAction = readFileSync(
+      new URL("../src/session/ProjectActionDialog.tsx", import.meta.url),
+      "utf-8"
+    );
+    const memorySettings = readFileSync(
+      new URL("../src/settings/MemorySettings.tsx", import.meta.url),
+      "utf-8"
+    );
 
     expect(projectAction).not.toContain("function SwitchRow");
     expect(memorySettings).not.toContain("function ToggleRow");

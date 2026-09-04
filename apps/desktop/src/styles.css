@@ -347,12 +347,14 @@
 /* Product code names the focus contract; token width, color, and offset stay in CSS. */
 @utility focus-ring {
   outline-offset: var(--ds-focus-offset);
-  outline: var(--ds-focus-width) solid color-mix(in srgb, var(--color-ring) 50%, transparent);
+  outline: var(--ds-focus-width) solid
+    color-mix(in srgb, var(--color-ring) 50%, transparent);
 }
 
 @utility focus-ring-inset {
   outline-offset: calc(-1 * var(--ds-focus-width));
-  outline: var(--ds-focus-width) solid color-mix(in srgb, var(--color-ring) 50%, transparent);
+  outline: var(--ds-focus-width) solid
+    color-mix(in srgb, var(--color-ring) 50%, transparent);
 }
 
 @layer base {
@@ -379,7 +381,13 @@
     inset: 0;
     width: 100%;
     color: var(--foreground);
-    font-family: var(--appearance-font-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    font-family: var(
+      --appearance-font-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif
+    );
     font-weight: var(--appearance-font-ui-weight, 400);
     font-synthesis: none;
     text-rendering: optimizeLegibility;
@@ -587,7 +595,8 @@ html[data-appearance-pointer-cursors="false"]
     -webkit-backdrop-filter: var(--ds-material-raised-backdrop);
   }
 
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @supports not
+  ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .raised-material {
       background-color: var(--ds-color-raised);
     }
@@ -611,7 +620,11 @@ html[data-appearance-pointer-cursors="false"]
       linear-gradient(45deg, transparent 75%, var(--checker) 75%),
       linear-gradient(-45deg, transparent 75%, var(--checker) 75%);
     background-size: 16px 16px;
-    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    background-position:
+      0 0,
+      0 8px,
+      8px -8px,
+      -8px 0;
   }
 
   /* ---- motion ------------------------------------------------------------------------------
@@ -1041,7 +1054,11 @@ html[data-appearance-pointer-cursors="false"]
   .bn-annotation-change .from {
     color: var(--muted-foreground);
     text-decoration: line-through;
-    text-decoration-color: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+    text-decoration-color: color-mix(
+      in oklch,
+      var(--muted-foreground) 60%,
+      transparent
+    );
   }
   .bn-annotation-change .arrow {
     color: var(--muted-foreground);
@@ -1093,9 +1110,10 @@ html[data-appearance-pointer-cursors="false"]
     border-radius: var(--ds-radius-module);
     opacity: 0;
     transform: translate(
-      calc(-50% + var(--quick-chat-offset-x, 0px)),
-      calc(-50% + var(--quick-chat-offset-y, 0px) + 8px)
-    ) scale(0.98);
+        calc(-50% + var(--quick-chat-offset-x, 0px)),
+        calc(-50% + var(--quick-chat-offset-y, 0px) + 8px)
+      )
+      scale(0.98);
     transition:
       opacity var(--motion-normal) ease-out,
       transform var(--motion-normal) var(--ease-standard);
@@ -1103,9 +1121,10 @@ html[data-appearance-pointer-cursors="false"]
   .quick-chat-panel[data-open] {
     opacity: 1;
     transform: translate(
-      calc(-50% + var(--quick-chat-offset-x, 0px)),
-      calc(-50% + var(--quick-chat-offset-y, 0px))
-    ) scale(1);
+        calc(-50% + var(--quick-chat-offset-x, 0px)),
+        calc(-50% + var(--quick-chat-offset-y, 0px))
+      )
+      scale(1);
   }
   .quick-chat-panel[data-moving] {
     transition: none;
@@ -1288,15 +1307,18 @@ html[data-reduce-motion="on"] *::after {
   font-size: var(--ds-type-prose-size);
   line-height: var(--ds-type-prose-leading);
 }
-.bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
+.bn-block-content[data-content-type="heading"][data-level="1"]
+  .bn-inline-content {
   font-size: var(--ds-type-page-title-size);
   line-height: var(--ds-type-page-title-leading);
 }
-.bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content {
+.bn-block-content[data-content-type="heading"][data-level="2"]
+  .bn-inline-content {
   font-size: var(--ds-type-section-size);
   line-height: var(--ds-type-section-leading);
 }
-.bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
+.bn-block-content[data-content-type="heading"][data-level="3"]
+  .bn-inline-content {
   font-size: var(--ds-type-dialog-size);
   line-height: var(--ds-type-dialog-leading);
 }
@@ -1419,15 +1441,21 @@ pre {
 .bn-doc-mode .bn-editor [data-node-type="blockContainer"] {
   padding-block: 2px;
 }
-.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
+.bn-doc-mode
+  .bn-block-content[data-content-type="heading"][data-level="1"]
+  .bn-inline-content {
   font-size: var(--ds-type-large-title-size);
   line-height: var(--ds-type-large-title-leading);
 }
-.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content {
+.bn-doc-mode
+  .bn-block-content[data-content-type="heading"][data-level="2"]
+  .bn-inline-content {
   font-size: var(--ds-type-page-title-size);
   line-height: var(--ds-type-page-title-leading);
 }
-.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
+.bn-doc-mode
+  .bn-block-content[data-content-type="heading"][data-level="3"]
+  .bn-inline-content {
   font-size: var(--ds-type-section-size);
   line-height: var(--ds-type-section-leading);
 }
@@ -1549,7 +1577,8 @@ pre {
     display: none;
   }
 
-  .plugin-manager-page[data-compact-detail="false"] .plugin-manager-detail-pane {
+  .plugin-manager-page[data-compact-detail="false"]
+    .plugin-manager-detail-pane {
     display: none;
   }
 
@@ -1628,13 +1657,17 @@ pre {
 .session-header-action-icon,
 .session-header-context-icon,
 .session-header-layout-icon,
-.session-header [data-plugin-ui-slot="session.header"] [data-icon="inline-start"] {
+.session-header
+  [data-plugin-ui-slot="session.header"]
+  [data-icon="inline-start"] {
   display: block;
 }
 
 .session-header-context-label,
 .session-header-layout-label,
-.session-header [data-plugin-ui-slot="session.header"] .session-header-action-label {
+.session-header
+  [data-plugin-ui-slot="session.header"]
+  .session-header-action-label {
   display: none;
 }
 
@@ -1694,5 +1727,4 @@ pre {
   .session-header-actions {
     gap: 0.25rem;
   }
-
 }

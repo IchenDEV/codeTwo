@@ -31,8 +31,10 @@
   --ds-foundation-chrome-46: 46px;
 
   /* Foundation: platform typography. SF is selected by macOS through -apple-system. */
-  --ds-foundation-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --ds-foundation-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Cascadia Code", Consolas,
+  --ds-foundation-font-ui:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ds-foundation-font-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", "Cascadia Code", Consolas,
     monospace;
   --ds-foundation-type-11: 11px;
   --ds-foundation-type-12: 12px;
@@ -177,8 +179,12 @@
   --ds-space-page: var(--ds-foundation-space-24);
   --ds-space-page-section: var(--ds-foundation-space-32);
   --ds-space-page-start: calc(var(--ds-space-page) + var(--ds-space-section));
-  --ds-space-page-start-wide: calc(var(--ds-space-page) + var(--ds-space-page-section));
-  --ds-space-page-end: calc(var(--ds-space-page-section) * 2 + var(--ds-space-section));
+  --ds-space-page-start-wide: calc(
+    var(--ds-space-page) + var(--ds-space-page-section)
+  );
+  --ds-space-page-end: calc(
+    var(--ds-space-page-section) * 2 + var(--ds-space-section)
+  );
 
   /* Semantic type roles. */
   --ds-font-ui: var(--ds-foundation-font-ui);
@@ -289,7 +295,9 @@
   --ds-dialog-radius: var(--ds-radius-modal);
   --ds-dialog-max-height: 86dvh;
   --ds-dialog-content-max-height: 52vh;
-  --ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));
+  --ds-composer-radius: calc(
+    var(--ds-radius-modal) + var(--ds-space-module-inset)
+  );
   --ds-menu-radius: var(--ds-radius-module);
   --ds-menu-item-radius: var(--ds-radius-control);
   --ds-menu-item-height: var(--ds-control-normal);
@@ -298,7 +306,6 @@
   --ds-menu-elevation: var(--ds-elevation-raised);
   --ds-titlebar-height: var(--ds-foundation-chrome-46);
   --ds-panel-strip-height: var(--ds-foundation-chrome-40);
-
 }
 
 /* Explicit preview light mode must override an OS-driven `.dark` class on the document root. */

@@ -1,7 +1,7 @@
 {
   "name": "codetwo-desktop",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "bun scripts/run-electrobun.ts dev --watch",
@@ -17,12 +17,15 @@
     "build:renderer": "bun run lint && tsc --noEmit && vite build",
     "build:canvas:remote": "vite build --config vite.canvas.config.ts",
     "plugin:validate": "bun scripts/validate-plugin.ts",
-    "lint": "bun run lint:code && bun run lint:styles",
-    "lint:code": "eslint src scripts tests *.config.ts eslint.config.mjs stylelint.config.mjs --max-warnings 0",
+    "lint": "ultracite check",
+    "lint:code": "ultracite check",
     "lint:styles": "stylelint 'src/**/*.css'",
     "mutation:taskboard": "stryker run stryker.taskboard.config.json",
     "test": "bun test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check": "ultracite check",
+    "fix": "ultracite fix",
+    "fix:unsafe": "ultracite fix"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -33,8 +36,8 @@
     "@dnd-kit/react": "0.5.0",
     "@excalidraw/excalidraw": "0.18.1",
     "@noble/hashes": "^2.2.0",
-    "@phosphor-icons/react": "^2.1.10",
     "@petx/react": "0.2.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@shikijs/monaco": "^4.4.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.16.0",
@@ -51,7 +54,6 @@
     "thinking-orbs": "^0.2.0"
   },
   "devDependencies": {
-    "@eslint/js": "10.0.1",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/typescript-checker": "^10.0.0",
     "@tailwindcss/vite": "^4.3.3",
@@ -60,17 +62,25 @@
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^4.3.0",
+    "babel-plugin-react-compiler": "^1.0.0",
     "electrobun": "1.18.1",
-    "eslint": "10.9.1",
     "eslint-plugin-better-tailwindcss": "4.7.0",
-    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-github": "6.1.2",
     "eslint-plugin-sonarjs": "^4.2.0",
-    "globals": "^17.11.0",
     "happy-dom": "^20.11.2",
-    "stylelint": "17.14.1",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
+    "oxlint-plugin-eslint": "^1.81.0",
+    "oxlint-plugin-react-doctor": "^0.9.13",
+    "oxlint-tsgolint": "^7.0.2001",
+    "storybook": "^10.4.6",
+    "stylelint": "^17.14.1",
+    "stylelint-config-idiomatic-order": "^10.0.0",
+    "stylelint-config-standard": "^40.0.0",
     "tailwindcss": "^4.3.3",
+    "ts-morph": "^28.0.0",
     "typescript": "^5.6.0",
-    "typescript-eslint": "8.68.0",
+    "ultracite": "7.10.8",
     "vite": "^6.0.0"
   }
 }

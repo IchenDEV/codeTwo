@@ -1,0 +1,14 @@
+timestamp=2026-09-04T06:24:00+00:00
+tsc=clean
+eslint_errors≈2850
+      0 @typescript-eslint/strict-boolean-expressions (was 223)
+      0 unicorn/consistent-boolean-name (was 161)
+      0 prettier/prettier
+
+notes:
+- Hand-fixed remaining call/coalesce/predicate strict-boolean cases
+- Boolean rename resumed after removing file-wide clash preflight
+- Short params (v/on/b) and nativeContextMenusAvailable renamed manually
+- House: eqeqeq null ignored for `== null` / `!= null`
+
+top residual themes remain no-unsafe-*, react-hooks/*, react-doctor/*

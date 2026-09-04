@@ -20,13 +20,15 @@ export type ElicitationValues = Record<string, ElicitationValue>;
 
 /** The fields a user answers. The free-text "Other" boxes hang off these, and aren't questions. */
 export function questionFields(form: ElicitationForm): ElicitationField[] {
-  return form.fields.filter((field) => !field.custom_answer_for);
+  return form.fields.filter(
+    (field) => field.custom_answer_for == null || field.custom_answer_for === ""
+  );
 }
 
 /** The "Other" box belonging to a question, when the agent offered one. */
 export function customFieldFor(
   form: ElicitationForm,
-  key: string,
+  key: string
 ): ElicitationField | undefined {
   return form.fields.find((field) => field.custom_answer_for === key);
 }
@@ -43,7 +45,7 @@ export function selectOption(
   values: ElicitationValues,
   form: ElicitationForm,
   key: string,
-  value: string,
+  value: string
 ): ElicitationValues {
   const next = { ...values, [key]: value };
   const custom = customFieldFor(form, key);
@@ -56,7 +58,7 @@ export function toggleOption(
   values: ElicitationValues,
   form: ElicitationForm,
   key: string,
-  value: string,
+  value: string
 ): ElicitationValues {
   const current = values[key];
   const selected = Array.isArray(current) ? current : [];
@@ -79,11 +81,11 @@ export function toggleOption(
 export function setValue(
   values: ElicitationValues,
   field: ElicitationField,
-  value: ElicitationValue,
+  value: ElicitationValue
 ): ElicitationValues {
   const next = { ...values, [field.key]: value };
   const owner = field.custom_answer_for;
-  if (owner && isAnswered(value)) delete next[owner];
+  if (owner != null && owner !== "" && isAnswered(value)) delete next[owner];
   return next;
 }
 
@@ -91,7 +93,7 @@ export function setValue(
 export function fieldAnswered(
   values: ElicitationValues,
   form: ElicitationForm,
-  field: ElicitationField,
+  field: ElicitationField
 ): boolean {
   if (isAnswered(values[field.key])) return true;
   const custom = customFieldFor(form, field.key);
@@ -101,12 +103,12 @@ export function fieldAnswered(
 /** Only what the user actually filled in; blank fields are omitted rather than sent as empty. */
 export function answerContent(
   form: ElicitationForm,
-  values: ElicitationValues,
+  values: ElicitationValues
 ): ElicitationContent {
   const content: ElicitationContent = {};
   for (const field of form.fields) {
     const value = values[field.key];
-    if (isAnswered(value)) content[field.key] = value as ElicitationValue;
+    if (isAnswered(value)) content[field.key] = value;
   }
   return content;
 }
@@ -115,9 +117,16 @@ export function answerContent(
  * Submit is offered once every required question is answered and the form says *something*. An
  * all-blank accept is indistinguishable from a skip, and Skip already says that more clearly.
  */
-export function canSubmit(form: ElicitationForm, values: ElicitationValues): boolean {
+export function canSubmit(
+  form: ElicitationForm,
+  values: ElicitationValues
+): boolean {
   const questions = questionFields(form);
-  if (!questions.every((field) => !field.required || fieldAnswered(values, form, field))) {
+  if (
+    !questions.every(
+      (field) => !field.required || fieldAnswered(values, form, field)
+    )
+  ) {
     return false;
   }
   return Object.keys(answerContent(form, values)).length > 0;
@@ -125,7 +134,7 @@ export function canSubmit(form: ElicitationForm, values: ElicitationValues): boo
 
 export function acceptAnswer(
   form: ElicitationForm,
-  values: ElicitationValues,
+  values: ElicitationValues
 ): ElicitationAnswer {
   return { action: "accept", content: answerContent(form, values) };
 }

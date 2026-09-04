@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
 
-import { ChevronDown } from "./icons";
-
 import { cn } from "@/lib/utils";
+
+import { Button } from "./button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { Button } from "./button";
+import { ChevronDown } from "./icons";
 
 interface SplitButtonAction {
   label: string;
@@ -17,7 +17,12 @@ interface SplitButtonAction {
   disabled?: boolean;
 }
 
-type SplitButtonVariant = "default" | "destructive" | "outline" | "secondary" | "ghost";
+type SplitButtonVariant =
+  | "default"
+  | "destructive"
+  | "outline"
+  | "secondary"
+  | "ghost";
 type SplitButtonSize = "default" | "sm" | "compact" | "field";
 
 interface SplitButtonProps {
@@ -87,9 +92,9 @@ function SplitButton({
   return (
     <span
       className={cn(
-        "inline-flex items-stretch rounded-control",
+        "rounded-control inline-flex items-stretch",
         disabled && "pointer-events-none opacity-50",
-        className,
+        className
       )}
     >
       <Button
@@ -114,9 +119,9 @@ function SplitButton({
               disabled={disabled}
               aria-label={menuLabel}
               className={cn(
-                "relative rounded-l-none px-1.5 focus-visible:z-10 before:absolute before:left-0 before:h-4 before:w-px",
+                "relative rounded-l-none px-1.5 before:absolute before:left-0 before:h-4 before:w-px focus-visible:z-10",
                 separatorClass[variant],
-                menuButtonClassName,
+                menuButtonClassName
               )}
             >
               <ChevronDown className="size-3.5" />

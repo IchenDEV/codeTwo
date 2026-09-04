@@ -24,7 +24,9 @@ afterEach(() => {
 
 describe("LSP component policy", () => {
   test("adds manifest languages and fails a conflicting provider closed", () => {
-    configurePluginLanguageServers([{ pluginId: "zig-tools", id: "zls", languages: ["zig"] }]);
+    configurePluginLanguageServers([
+      { pluginId: "zig-tools", id: "zls", languages: ["zig"] },
+    ]);
     expect(isLspLanguage("zig")).toBe(true);
 
     configurePluginLanguageServers([
@@ -35,10 +37,11 @@ describe("LSP component policy", () => {
   });
 
   test("disposes live clients and removes language-server routing when disabled", async () => {
-    const client = new LspClient("typescript-language-server:/workspace", "/workspace", [
-      "typescript",
-      "javascript",
-    ]);
+    const client = new LspClient(
+      "typescript-language-server:/workspace",
+      "/workspace",
+      ["typescript", "javascript"]
+    );
     expect(clientForPath("/workspace/src/App.tsx", "typescript")).toBe(client);
 
     setLspRuntimeEnabled(false);
@@ -63,7 +66,9 @@ describe("LSP component policy", () => {
       finishResume = resolve;
     });
     const workspaces: (string | undefined)[] = [];
-    const unsubscribe = onLspRuntimeEnabled((workspace) => workspaces.push(workspace));
+    const unsubscribe = onLspRuntimeEnabled((workspace) =>
+      workspaces.push(workspace)
+    );
 
     const synchronization = synchronizeLspRuntimePolicy(
       {
@@ -76,7 +81,7 @@ describe("LSP component policy", () => {
       async (enabled) => {
         expect(enabled).toBe(true);
         await backendResumed;
-      },
+      }
     );
 
     expect(isLspRuntimeEnabled()).toBe(false);
@@ -106,8 +111,8 @@ describe("LSP component policy", () => {
         projectPath: "/old-project",
         workspace: "/old-project",
       },
-      async () => backendResumed,
-      () => current,
+      async () => await backendResumed,
+      () => current
     );
 
     current = false;
@@ -142,7 +147,7 @@ describe("LSP component policy", () => {
         markFirstStarted?.();
         await firstBackendUpdate;
       },
-      () => firstIsCurrent,
+      () => firstIsCurrent
     );
 
     firstIsCurrent = false;
@@ -156,7 +161,7 @@ describe("LSP component policy", () => {
       },
       async (value) => {
         calls.push(value);
-      },
+      }
     );
 
     await firstStarted;

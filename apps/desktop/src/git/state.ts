@@ -22,37 +22,55 @@ export function gitFileSections(files: readonly GitFile[]): {
 
 /** A rename is one index operation even though Git needs both literal paths. */
 export function gitFilePathspecs(file: GitFile): string[] {
-  return file.original_path && file.original_path !== file.path
+  return file.original_path != null &&
+    file.original_path !== "" &&
+    file.original_path !== file.path
     ? [file.original_path, file.path]
     : [file.path];
 }
 
-export function gitFileDisplayState(file: GitFile, scope: "staged" | "unstaged"): string {
-  return (scope === "staged" ? file.staged_state : file.unstaged_state) ?? file.state;
+export function gitFileDisplayState(
+  file: GitFile,
+  scope: "staged" | "unstaged"
+): string {
+  return (
+    (scope === "staged" ? file.staged_state : file.unstaged_state) ?? file.state
+  );
 }
 
 export function uniquePathspecs(files: readonly GitFile[]): string[] {
   return [...new Set(files.flatMap(gitFilePathspecs))];
 }
 
-export function gitPhaseLabel(phase: GitPhase, changeRequestLabel = "PR"): string {
+export function gitPhaseLabel(
+  phase: GitPhase,
+  changeRequestLabel = "PR"
+): string {
   switch (phase) {
-    case "staging":
+    case "staging": {
       return "Staging…";
-    case "unstaging":
+    }
+    case "unstaging": {
       return "Unstaging…";
-    case "checkpointing":
+    }
+    case "checkpointing": {
       return "Creating checkpoint…";
-    case "reverting":
+    }
+    case "reverting": {
       return "Reverting…";
-    case "committing":
+    }
+    case "committing": {
       return "Committing…";
-    case "pushing":
+    }
+    case "pushing": {
       return "Pushing…";
-    case "creating_pr":
+    }
+    case "creating_pr": {
       return `Creating ${changeRequestLabel}…`;
-    case "idle":
+    }
+    case "idle": {
       return "";
+    }
   }
 }
 
@@ -89,7 +107,7 @@ export interface WorkspaceLoadState<T> {
 export function workspaceStateForCwd<T>(
   state: WorkspaceLoadState<T>,
   cwd: string,
-  emptyValue: T,
+  emptyValue: T
 ): WorkspaceLoadState<T> {
   if (state.cwd === cwd) return state;
   return { cwd, loading: true, value: emptyValue };
@@ -98,7 +116,7 @@ export function workspaceStateForCwd<T>(
 /** Never paint provider metadata fetched for the previous workspace during a cwd switch. */
 export function sourceControlStateForCwd(
   state: SourceControlLoadState,
-  cwd: string,
+  cwd: string
 ): SourceControlLoadState {
   if (state.cwd === cwd) return state;
   return { cwd, loading: true, info: null, error: null };
@@ -114,7 +132,7 @@ export function changeRequestPresentation(
   info: SourceControlInfo | null,
   loading: boolean,
   error: string | null,
-  repositoryAvailable: boolean | null = true,
+  repositoryAvailable: boolean | null = true
 ): ChangeRequestPresentation {
   const label = info?.change_request_label ?? "change request";
   const base = {
@@ -141,7 +159,7 @@ export function changeRequestPresentation(
       statusKind: "unavailable",
     };
   }
-  if (error) {
+  if (error != null && error !== "") {
     return {
       ...base,
       canCreate: false,
@@ -166,7 +184,11 @@ export function changeRequestPresentation(
       statusKind: "unavailable",
     };
   }
-  if (info.required_cli && !info.required_cli_available) {
+  if (
+    info.required_cli != null &&
+    info.required_cli !== "" &&
+    !info.required_cli_available
+  ) {
     return {
       ...base,
       canCreate: false,
@@ -177,19 +199,20 @@ export function changeRequestPresentation(
   return {
     ...base,
     canCreate: true,
-    status: info.required_cli
-      ? `${info.provider_name} ${label} creation is available through ${info.required_cli}.`
-      : `${info.provider_name} ${label} creation is available.`,
+    status:
+      info.required_cli != null && info.required_cli !== ""
+        ? `${info.provider_name} ${label} creation is available through ${info.required_cli}.`
+        : `${info.provider_name} ${label} creation is available.`,
     statusKind: "available",
   };
 }
 
-const MAX_RENDERED_DIFF_LINES = 4_000;
+const MAX_RENDERED_DIFF_LINES = 4000;
 
 /** Keep the DOM bounded even when the core's byte-bounded preview contains many tiny lines. */
 export function diffPreviewLines(
   text: string,
-  limit = MAX_RENDERED_DIFF_LINES,
+  limit = MAX_RENDERED_DIFF_LINES
 ): { lines: string[]; truncated: boolean } {
   const lines = text.split("\n");
   if (lines.length <= limit) return { lines, truncated: false };

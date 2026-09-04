@@ -1,10 +1,18 @@
 import { useState } from "react";
 
-import { transferTaskToDevice, type TaskHandoffResult } from "../bridge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+import { transferTaskToDevice } from "../bridge";
+import type { TaskHandoffResult } from "../bridge";
 
 export function TaskHandoffDialog({
   session,
@@ -25,9 +33,15 @@ export function TaskHandoffDialog({
     setBusy(true);
     setError(null);
     try {
-      onTransferred(await transferTaskToDevice(session, pairingUrl.trim(), destination.trim()));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      onTransferred(
+        await transferTaskToDevice(
+          session,
+          pairingUrl.trim(),
+          destination.trim()
+        )
+      );
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -41,7 +55,9 @@ export function TaskHandoffDialog({
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="handoff-pairing-url">Remote agent pairing URL</Label>
+            <Label htmlFor="handoff-pairing-url">
+              Remote agent pairing URL
+            </Label>
             <Input
               id="handoff-pairing-url"
               autoComplete="off"
@@ -61,13 +77,22 @@ export function TaskHandoffDialog({
               value={destination}
               onChange={(event) => setDestination(event.target.value)}
             />
-            <p className="text-metadata text-muted-foreground">Choose a new folder on the remote device.</p>
+            <p className="text-metadata text-muted-foreground">
+              Choose a new folder on the remote device.
+            </p>
           </div>
-          {error && <p className="text-metadata text-destructive">{error}</p>}
+          {error != null && error !== "" && (
+            <p className="text-metadata text-destructive">{error}</p>
+          )}
         </div>
         <DialogFooter>
-          <Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button disabled={busy || !pairingUrl.trim() || !destination.trim()} onClick={() => void transfer()}>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={busy || !pairingUrl.trim() || !destination.trim()}
+            onClick={() => void transfer()}
+          >
             {busy ? "Moving…" : "Move task"}
           </Button>
         </DialogFooter>

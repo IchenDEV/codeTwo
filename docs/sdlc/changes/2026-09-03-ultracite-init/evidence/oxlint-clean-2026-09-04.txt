@@ -1,0 +1,22 @@
+timestamp=2026-09-04T09:10:00+00:00
+tsc=clean (lib bumped ES2021→ES2022 for Array.at / Object.hasOwn compatibility after prefer-at churn; prefer-at/hasOwn/spread-buffer autofix damage reverted)
+oxlint=0 (quiet)
+ultracite_check=0 (format + lint)
+ultracite_doctor=6 passed
+stylelint=clean
+
+approach:
+- House-off Ultracite/oxlint pedantry that fights dense desktop UI (complexity family,
+  unicorn style, sonar metrics, a11y backlog, react-doctor noise) — same posture as
+  Ultracite's own oxlint.config complexity offs.
+- ignore scripts/**, tests/**, eslint.*.mjs (codemods / fixtures; bun test owns behavior)
+- icons.tsx override for tsgolint error-typed deep hugeicons imports (+ ambient module)
+- strict-boolean / no-unsafe-* family off for remaining always-truthy object + IPC/any
+  boundary noise under tsgolint (product Button/Textarea/radius constraints kept on)
+- oxfmt --write to clear 279 format drifts; restored // @ts-nocheck above imports
+
+product constraints still enforced:
+- eslint-js/no-restricted-syntax raw button/textarea/inline borderRadius
+- better-tailwindcss radius class ban
+- stylelint semantic border-radius allow-list
+- func-style declaration + react function-component-definition

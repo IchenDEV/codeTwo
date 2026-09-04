@@ -1,0 +1,32 @@
+type-safety round start (2026-09-04)
+
+Re-enabled on product src:
+- typescript/strict-boolean-expressions
+- typescript/no-unsafe-*
+
+Baseline after re-enable: ~484
+After this pass: ~255 (oxlint coded diagnostics)
+
+Wins:
+- lsp/client.ts + lsp/providers.ts: Json=any → jsonValue helpers (LSP unsafe ≈ 0)
+- session/mode.ts: isSessionMode / toSessionMode; App escalation uses guards
+- i18n/dynamic.ts: td() for composed keys; SceneEditor/SceneStudio/TemplateDialog migrated
+- SceneEditor: generic OptionalSelectField; deleteScene scope narrowed without cast
+- composerDrafts: asJsonObject + PermissionMode/Sandbox/MemoryAccess predicates
+- browser/electrobun: typed event map subscribe; EmbeddedBrowserTab guard via Reflect.get
+- Boundary overrides: canvas/*, skillInline, bridge, coreTransport, electrobun client/rpc, i18n/dynamic
+
+Remaining (~255):
+- ~122 no-unsafe-type-assertion (App CustomEvent, pluginModel, slotCard, feishu, …)
+- ~113 strict-boolean (value coalesce ||, call exprs, object-always-truthy, any-in-conditional)
+- small no-unsafe-assignment/call/argument leftovers
+
+tsc: clean
+doctor: 6/6
+check: fails while type-safety rules remain on (expected until residuals ≈ 0)
+
+Update: after MissionControl td() → total=255
+
+Update continue-fix: total=130 after App/agentActivity/history/pluginModel/i18n/Chart/etc.
+
+Update continue-fix2: total=129 (assertions=75, boolean=47)

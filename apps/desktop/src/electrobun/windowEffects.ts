@@ -1,4 +1,5 @@
-import { dlopen, FFIType, type Pointer } from "bun:ffi";
+import { dlopen, FFIType } from "bun:ffi";
+import type { Pointer } from "bun:ffi";
 import { join } from "node:path";
 
 const libraryName = "libCodeTwoWindowEffects.dylib";
@@ -22,12 +23,15 @@ let windowEffects:
     >
   | undefined;
 
-export type MacOSWindowEffectsStatus = {
+export interface MacOSWindowEffectsStatus {
   backdrop: boolean;
   shadow: boolean;
-};
+}
 
-const unavailableStatus: MacOSWindowEffectsStatus = { backdrop: false, shadow: false };
+const unavailableStatus: MacOSWindowEffectsStatus = {
+  backdrop: false,
+  shadow: false,
+};
 
 function library() {
   windowEffects ??= dlopen(join(process.cwd(), libraryName), {
@@ -48,12 +52,13 @@ function library() {
 }
 
 export function configureMacOSWindowEffects(
-  windowPointer: Pointer,
+  windowPointer: Pointer
 ): MacOSWindowEffectsStatus {
   if (process.platform !== "darwin") return unavailableStatus;
 
   try {
-    const configuredEffects = library().symbols.codetwoConfigureWindowEffects(windowPointer);
+    const configuredEffects =
+      library().symbols.codetwoConfigureWindowEffects(windowPointer);
     return {
       shadow: (configuredEffects & 1) !== 0,
       backdrop: (configuredEffects & 2) !== 0,
@@ -69,7 +74,7 @@ export function setMacOSSystemBadgeCount(count: number): boolean {
 
   try {
     const normalized = Number.isFinite(count)
-      ? Math.min(Math.max(Math.trunc(count), 0), 0xffff_ffff)
+      ? Math.min(Math.max(Math.trunc(count), 0), 0xff_ff_ff_ff)
       : 0;
     return library().symbols.codetwoSetDockBadgeCount(normalized) !== 0;
   } catch (error) {
@@ -78,13 +83,20 @@ export function setMacOSSystemBadgeCount(count: number): boolean {
   }
 }
 
-export function performMacOSTitlebarDoubleClick(windowPointer: Pointer): boolean {
+export function performMacOSTitlebarDoubleClick(
+  windowPointer: Pointer
+): boolean {
   if (process.platform !== "darwin") return false;
 
   try {
-    return library().symbols.codetwoPerformTitlebarDoubleClick(windowPointer) !== 0;
+    return (
+      library().symbols.codetwoPerformTitlebarDoubleClick(windowPointer) !== 0
+    );
   } catch (error) {
-    console.warn("Could not perform the macOS titlebar double-click action", error);
+    console.warn(
+      "Could not perform the macOS titlebar double-click action",
+      error
+    );
     return false;
   }
 }

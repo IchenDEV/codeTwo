@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 export const MODEL_PREFERENCES_STORAGE_KEY = "codetwo.providerModelPreferences";
 
@@ -7,7 +7,11 @@ const MODEL_PREFERENCES_EVENT = "codetwo:model-preferences-change";
 const MAX_PROVIDERS = 64;
 const MAX_HIDDEN_MODELS = 200;
 const MAX_KEY_LENGTH = 512;
-const RESERVED_PROVIDER_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const RESERVED_PROVIDER_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
 
 export interface ModelPreferencesStorage {
   getItem(key: string): string | null;
@@ -37,7 +41,11 @@ function defaultStorage(): ModelPreferencesStorage | null {
 }
 
 function isSafeKey(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_KEY_LENGTH;
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_KEY_LENGTH
+  );
 }
 
 function isSafeProviderKey(value: unknown): value is string {
@@ -49,25 +57,35 @@ function emptySnapshot(): ModelPreferencesSnapshot {
 }
 
 export function loadModelPreferences(
-  storage: ModelPreferencesStorage | null = defaultStorage(),
+  storage: ModelPreferencesStorage | null = defaultStorage()
 ): ModelPreferencesSnapshot {
   if (!storage) return emptySnapshot();
   try {
     const raw = storage.getItem(MODEL_PREFERENCES_STORAGE_KEY);
-    if (!raw) return emptySnapshot();
+    if (raw == null || raw === "") return emptySnapshot();
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return emptySnapshot();
+    if (parsed == null || typeof parsed !== "object") return emptySnapshot();
     const candidate = parsed as { version?: unknown; providers?: unknown };
     if (candidate.version !== MODEL_PREFERENCES_VERSION) return emptySnapshot();
-    if (!candidate.providers || typeof candidate.providers !== "object") return emptySnapshot();
+    if (candidate.providers == null || typeof candidate.providers !== "object")
+      return emptySnapshot();
 
     const providers: Record<string, ProviderModelPreference> = {};
-    for (const [provider, preference] of Object.entries(candidate.providers).slice(0, MAX_PROVIDERS)) {
-      if (!isSafeProviderKey(provider) || !preference || typeof preference !== "object") continue;
-      const hidden = (preference as { hidden?: unknown }).hidden;
+    for (const [provider, preference] of Object.entries(
+      candidate.providers
+    ).slice(0, MAX_PROVIDERS)) {
+      if (
+        !isSafeProviderKey(provider) ||
+        preference == null ||
+        typeof preference !== "object"
+      )
+        continue;
+      const { hidden } = preference as { hidden?: unknown };
       if (!Array.isArray(hidden)) continue;
       providers[provider] = {
-        hidden: [...new Set(hidden.filter(isSafeKey).slice(0, MAX_HIDDEN_MODELS))],
+        hidden: [
+          ...new Set(hidden.filter(isSafeKey).slice(0, MAX_HIDDEN_MODELS)),
+        ],
       };
     }
     return { version: MODEL_PREFERENCES_VERSION, providers };
@@ -78,7 +96,7 @@ export function loadModelPreferences(
 
 export function hiddenModelsForProvider(
   provider: string,
-  storage: ModelPreferencesStorage | null = defaultStorage(),
+  storage: ModelPreferencesStorage | null = defaultStorage()
 ): string[] {
   if (!isSafeProviderKey(provider)) return [];
   return loadModelPreferences(storage).providers[provider]?.hidden ?? [];
@@ -88,7 +106,7 @@ export function setModelHidden(
   provider: string,
   model: string,
   hidden: boolean,
-  storage: ModelPreferencesStorage | null = defaultStorage(),
+  storage: ModelPreferencesStorage | null = defaultStorage()
 ): string[] {
   if (!isSafeProviderKey(provider) || !isSafeKey(model)) {
     return hiddenModelsForProvider(provider, storage);
@@ -112,7 +130,7 @@ export function setModelHidden(
 
 export function showAllProviderModels(
   provider: string,
-  storage: ModelPreferencesStorage | null = defaultStorage(),
+  storage: ModelPreferencesStorage | null = defaultStorage()
 ): string[] {
   if (!isSafeProviderKey(provider)) return [];
   const snapshot = loadModelPreferences(storage);
@@ -133,7 +151,7 @@ export function useProviderModelPreferences(provider: string) {
   useEffect(() => {
     const syncFromStorage = () => setHidden(hiddenModelsForProvider(provider));
     const syncFromPreference = (event: Event) => {
-      const detail = (event as CustomEvent<ModelPreferencesChangeDetail>).detail;
+      const { detail } = event as CustomEvent<ModelPreferencesChangeDetail>;
       if (detail?.provider === provider) setHidden(detail.hidden);
     };
     syncFromStorage();
@@ -146,25 +164,27 @@ export function useProviderModelPreferences(provider: string) {
     };
   }, [provider]);
 
-  const publish = useCallback((next: string[]) => {
+  const publish = (next: string[]) => {
     setHidden(next);
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent<ModelPreferencesChangeDetail>(MODEL_PREFERENCES_EVENT, {
-        detail: { provider, hidden: next },
-      }));
+      window.dispatchEvent(
+        new CustomEvent<ModelPreferencesChangeDetail>(MODEL_PREFERENCES_EVENT, {
+          detail: { provider, hidden: next },
+        })
+      );
     }
-  }, [provider]);
+  };
 
-  const setVisible = useCallback((model: string, visible: boolean) => {
+  const setVisible = (model: string, visible: boolean) => {
     publish(setModelHidden(provider, model, !visible));
-  }, [provider, publish]);
+  };
 
-  const showAll = useCallback(() => {
+  const showAll = () => {
     publish(showAllProviderModels(provider));
-  }, [provider, publish]);
+  };
 
   return {
-    hidden: useMemo(() => new Set(hidden), [hidden]),
+    hidden: new Set(hidden),
     setVisible,
     showAll,
   };

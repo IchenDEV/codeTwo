@@ -1,19 +1,11 @@
-import {
-  useRef,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useRef } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
-import {
-  computeDividers,
-  computePaneRects,
-  listPanes,
-  type PaneEdge,
-  type PaneLayout,
-  type PaneNode,
-} from "./paneLayout";
+
 import { PaneDivider } from "./PaneDivider";
+import { computeDividers, computePaneRects, listPanes } from "./paneLayout";
+import type { PaneEdge, PaneLayout, PaneNode } from "./paneLayout";
 
 const percent = (value: number): string => `${value * 100}%`;
 
@@ -97,7 +89,9 @@ export function PaneTiles({
               "overflow-hidden",
               entranceEdge && "pane-tile-enter",
               entranceEdge && `pane-tile-enter-${entranceEdge}`,
-              focused && multiPane && "outline outline-1 -outline-offset-1 outline-ring",
+              focused &&
+                multiPane &&
+                "outline-ring outline outline-1 -outline-offset-1"
             )}
             style={style}
             // Focus on press so a click's action targets the pane it lands in.

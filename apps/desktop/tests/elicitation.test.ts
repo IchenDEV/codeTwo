@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+
+import type { ElicitationForm } from "../src/bridge";
 import {
   acceptAnswer,
   answerContent,
@@ -10,7 +12,6 @@ import {
   setValue,
   toggleOption,
 } from "../src/session/elicitation";
-import type { ElicitationForm } from "../src/bridge";
 
 /** The form the Claude adapter builds for a one-question AskUserQuestion call. */
 const ASK: ElicitationForm = {
@@ -50,13 +51,20 @@ const MULTI: ElicitationForm = {
         { value: "b", label: "B" },
       ],
     },
-    { key: "notes", kind: "text", description: "Anything else?", required: false },
+    {
+      key: "notes",
+      kind: "text",
+      description: "Anything else?",
+      required: false,
+    },
   ],
 };
 
 describe("elicitation answers", () => {
   test("the Other box is attached to its question, not listed as one", () => {
-    expect(questionFields(ASK).map((field) => field.key)).toEqual(["question_0"]);
+    expect(questionFields(ASK).map((field) => field.key)).toEqual([
+      "question_0",
+    ]);
     expect(customFieldFor(ASK, "question_0")?.key).toBe("question_0_custom");
     expect(customFieldFor(MULTI, "features")).toBeUndefined();
   });
@@ -73,7 +81,11 @@ describe("elicitation answers", () => {
   });
 
   test("clearing the Other box leaves the question unanswered rather than restoring a choice", () => {
-    const typed = setValue(selectOption({}, ASK, "question_0", "OAuth"), ASK.fields[1], "mTLS");
+    const typed = setValue(
+      selectOption({}, ASK, "question_0", "OAuth"),
+      ASK.fields[1],
+      "mTLS"
+    );
     const cleared = setValue(typed, ASK.fields[1], "");
     expect(answerContent(ASK, cleared)).toEqual({});
     expect(canSubmit(ASK, cleared)).toBe(false);
@@ -110,6 +122,8 @@ describe("elicitation answers", () => {
   test("an all-blank form cannot be accepted — that is what Skip is for", () => {
     expect(canSubmit(ASK, {})).toBe(false);
     expect(canSubmit(ASK, { question_0_custom: "   " })).toBe(false);
-    expect(canSubmit(ASK, selectOption({}, ASK, "question_0", "OAuth"))).toBe(true);
+    expect(canSubmit(ASK, selectOption({}, ASK, "question_0", "OAuth"))).toBe(
+      true
+    );
   });
 });

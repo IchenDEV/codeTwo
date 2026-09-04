@@ -1,4 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { StatusBadge } from "@/components/business/status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
   CircleAlert,
@@ -10,34 +23,6 @@ import {
   RefreshCw,
   XCircle,
 } from "@/components/ui/icons";
-
-import {
-  gitSourceControlInfo,
-  githubCurrentPullRequest,
-  githubMergePullRequest,
-  githubPullRequestDiff,
-  githubReviewPullRequest,
-  openExternal,
-  type GitHubMergeStrategy,
-  type GitHubPullRequest,
-  type GitHubPullRequestCheck,
-  type GitHubPullRequestDiff,
-  type GitHubReviewAction,
-  type SourceControlInfo,
-} from "../bridge";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { StatusBadge } from "@/components/business/status-badge";
 import {
   Select,
   SelectContent,
@@ -47,13 +32,35 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useT } from "../i18n";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+import {
+  gitSourceControlInfo,
+  githubCurrentPullRequest,
+  githubMergePullRequest,
+  githubPullRequestDiff,
+  githubReviewPullRequest,
+  openExternal,
+} from "../bridge";
+import type {
+  GitHubMergeStrategy,
+  GitHubPullRequest,
+  GitHubPullRequestCheck,
+  GitHubPullRequestDiff,
+  GitHubReviewAction,
+  SourceControlInfo,
+} from "../bridge";
+import { useT } from "../i18n";
 import { diffLinePresentation, diffPreviewLines } from "./state";
 
 type PullRequestLoadState =
   | { kind: "loading"; pullRequest: null; error: null }
-  | { kind: "not_github" | "cli_missing" | "empty"; pullRequest: null; error: null }
+  | {
+      kind: "not_github" | "cli_missing" | "empty";
+      pullRequest: null;
+      error: null;
+    }
   | { kind: "error"; pullRequest: null; error: string }
   | { kind: "ready"; pullRequest: GitHubPullRequest; error: null };
 
@@ -62,19 +69,32 @@ type DiffLoadState =
   | { kind: "error"; result: null; error: string }
   | { kind: "ready"; result: GitHubPullRequestDiff; error: null };
 
-type ActionPhase = "idle" | "opening" | "comment" | "approve" | "request_changes" | "merge";
+type ActionPhase =
+  | "idle"
+  | "opening"
+  | "comment"
+  | "approve"
+  | "request_changes"
+  | "merge";
 
 export interface GitHubPullRequestPanelApi {
   sourceControl: (cwd: string) => Promise<SourceControlInfo | null>;
   currentPullRequest: (cwd: string) => Promise<GitHubPullRequest | null>;
-  pullRequestDiff: (cwd: string, number: number) => Promise<GitHubPullRequestDiff>;
+  pullRequestDiff: (
+    cwd: string,
+    number: number
+  ) => Promise<GitHubPullRequestDiff>;
   review: (
     cwd: string,
     number: number,
     action: GitHubReviewAction,
-    body: string,
+    body: string
   ) => Promise<void>;
-  merge: (cwd: string, number: number, strategy: GitHubMergeStrategy) => Promise<void>;
+  merge: (
+    cwd: string,
+    number: number,
+    strategy: GitHubMergeStrategy
+  ) => Promise<void>;
   open: (url: string) => Promise<void>;
 }
 
@@ -87,11 +107,17 @@ const DEFAULT_API: GitHubPullRequestPanelApi = {
   open: openExternal,
 };
 
-const EMPTY_DIFF_STATE: DiffLoadState = { kind: "idle", result: null, error: null };
+const EMPTY_DIFF_STATE: DiffLoadState = {
+  kind: "idle",
+  result: null,
+  error: null,
+};
 
 export type GitHubCheckTone = "success" | "failure" | "pending";
 
-export function githubCheckTone(check: GitHubPullRequestCheck): GitHubCheckTone {
+export function githubCheckTone(
+  check: GitHubPullRequestCheck
+): GitHubCheckTone {
   const conclusion = (check.conclusion ?? "").toLocaleUpperCase();
   if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion)) return "success";
   if (
@@ -112,7 +138,9 @@ export function githubCheckTone(check: GitHubPullRequestCheck): GitHubCheckTone 
 
 export type PullRequestMergeBlock = "not_open" | "draft" | "conflicting" | null;
 
-export function pullRequestMergeBlock(pullRequest: GitHubPullRequest): PullRequestMergeBlock {
+export function pullRequestMergeBlock(
+  pullRequest: GitHubPullRequest
+): PullRequestMergeBlock {
   if (pullRequest.state !== "OPEN") return "not_open";
   if (pullRequest.is_draft) return "draft";
   if (pullRequest.mergeable === "CONFLICTING") return "conflicting";
@@ -121,32 +149,45 @@ export function pullRequestMergeBlock(pullRequest: GitHubPullRequest): PullReque
 
 function DiffPreview({ result }: { result: GitHubPullRequestDiff }) {
   const t = useT();
-  const preview = useMemo(() => diffPreviewLines(result.text), [result.text]);
+  const preview = diffPreviewLines(result.text);
   if (!result.text.trim()) {
-    return <p className="p-3 text-metadata text-muted-foreground">{t("githubPr.noChanges")}</p>;
+    return (
+      <p className="text-metadata text-muted-foreground p-3">
+        {t("githubPr.noChanges")}
+      </p>
+    );
   }
   return (
-    <div className="overflow-x-auto rounded-module bg-muted/40">
+    <div className="rounded-module bg-muted/40 overflow-x-auto">
       {(result.truncated || preview.truncated) && (
-        <p role="status" className="sticky top-0 z-10 bg-warning/10 px-3 py-2 text-metadata text-warning-foreground">
+        <p
+          role="status"
+          className="bg-warning/10 text-metadata text-warning-foreground sticky top-0 z-10 px-3 py-2"
+        >
           {t("githubPr.diffTruncated")}
         </p>
       )}
       <pre className="diff">
         {preview.lines.map((line, index) => {
           const presentation = diffLinePresentation(line);
-          const changedLineLabel = presentation.kind === "add"
-            ? `Added line: ${presentation.content}`
-            : presentation.kind === "del"
-              ? `Removed line: ${presentation.content}`
-              : undefined;
+          const changedLineLabel =
+            presentation.kind === "add"
+              ? `Added line: ${presentation.content}`
+              : presentation.kind === "del"
+                ? `Removed line: ${presentation.content}`
+                : undefined;
           return (
             <div
               key={index}
-              className={cn("diff-line", presentation.kind === "context" ? "" : presentation.kind)}
+              className={cn(
+                "diff-line",
+                presentation.kind === "context" ? "" : presentation.kind
+              )}
               aria-label={changedLineLabel}
             >
-              <span className="diff-line-marker" aria-hidden="true">{presentation.marker}</span>
+              <span className="diff-line-marker" aria-hidden="true">
+                {presentation.marker}
+              </span>
               <span>{presentation.content}</span>
             </div>
           );
@@ -157,9 +198,13 @@ function DiffPreview({ result }: { result: GitHubPullRequestDiff }) {
 }
 
 function CheckStatusIcon({ tone }: { tone: GitHubCheckTone }) {
-  if (tone === "success") return <CheckCircle2 className="size-3.5 text-success" aria-hidden="true" />;
-  if (tone === "failure") return <XCircle className="size-3.5 text-destructive" aria-hidden="true" />;
-  return <CircleDot className="size-3.5 text-warning" aria-hidden="true" />;
+  if (tone === "success")
+    return (
+      <CheckCircle2 className="text-success size-3.5" aria-hidden="true" />
+    );
+  if (tone === "failure")
+    return <XCircle className="text-destructive size-3.5" aria-hidden="true" />;
+  return <CircleDot className="text-warning size-3.5" aria-hidden="true" />;
 }
 
 export function GitHubPullRequestPanel({
@@ -184,7 +229,8 @@ export function GitHubPullRequestPanel({
   const [view, setView] = useState<"overview" | "changes">("overview");
   const [diffState, setDiffState] = useState<DiffLoadState>(EMPTY_DIFF_STATE);
   const [reviewBody, setReviewBody] = useState("");
-  const [mergeStrategy, setMergeStrategy] = useState<GitHubMergeStrategy>("squash");
+  const [mergeStrategy, setMergeStrategy] =
+    useState<GitHubMergeStrategy>("squash");
   const [phase, setPhase] = useState<ActionPhase>("idle");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
@@ -194,41 +240,45 @@ export function GitHubPullRequestPanel({
   const cwdRef = useRef(cwd);
   cwdRef.current = cwd;
 
-  const load = useCallback(
-    async (resetFeedback = true) => {
-      const targetCwd = cwd;
-      const request = ++loadRequestRef.current;
-      if (resetFeedback) {
-        setActionError(null);
-        setActionStatus(null);
+  const load = async (resetFeedback = true) => {
+    const targetCwd = cwd;
+    const request = (loadRequestRef.current += 1);
+    if (resetFeedback) {
+      setActionError(null);
+      setActionStatus(null);
+    }
+    setLoadState({ kind: "loading", pullRequest: null, error: null });
+    try {
+      const sourceControl = await apiRef.current.sourceControl(targetCwd);
+      if (request !== loadRequestRef.current) return;
+      if (sourceControl?.provider !== "github") {
+        setLoadState({ kind: "not_github", pullRequest: null, error: null });
+        return;
       }
-      setLoadState({ kind: "loading", pullRequest: null, error: null });
-      try {
-        const sourceControl = await apiRef.current.sourceControl(targetCwd);
-        if (request !== loadRequestRef.current) return;
-        if (sourceControl?.provider !== "github") {
-          setLoadState({ kind: "not_github", pullRequest: null, error: null });
-          return;
-        }
-        if (sourceControl.required_cli === "gh" && !sourceControl.required_cli_available) {
-          setLoadState({ kind: "cli_missing", pullRequest: null, error: null });
-          return;
-        }
-        const pullRequest = await apiRef.current.currentPullRequest(targetCwd);
-        if (request !== loadRequestRef.current) return;
-        setLoadState(
-          pullRequest
-            ? { kind: "ready", pullRequest, error: null }
-            : { kind: "empty", pullRequest: null, error: null },
-        );
-      } catch (error) {
-        if (request === loadRequestRef.current) {
-          setLoadState({ kind: "error", pullRequest: null, error: String(error) });
-        }
+      if (
+        sourceControl.required_cli === "gh" &&
+        !sourceControl.required_cli_available
+      ) {
+        setLoadState({ kind: "cli_missing", pullRequest: null, error: null });
+        return;
       }
-    },
-    [cwd],
-  );
+      const pullRequest = await apiRef.current.currentPullRequest(targetCwd);
+      if (request !== loadRequestRef.current) return;
+      setLoadState(
+        pullRequest
+          ? { kind: "ready", pullRequest, error: null }
+          : { kind: "empty", pullRequest: null, error: null }
+      );
+    } catch (error) {
+      if (request === loadRequestRef.current) {
+        setLoadState({
+          kind: "error",
+          pullRequest: null,
+          error: String(error),
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     setView("overview");
@@ -255,8 +305,8 @@ export function GitHubPullRequestPanel({
     setView("changes");
     if (diffState.kind !== "idle" || loadState.kind !== "ready") return;
     const targetCwd = cwd;
-    const number = loadState.pullRequest.number;
-    const request = ++diffRequestRef.current;
+    const { number } = loadState.pullRequest;
+    const request = (diffRequestRef.current += 1);
     setDiffState({ kind: "loading", result: null, error: null });
     try {
       const result = await apiRef.current.pullRequestDiff(targetCwd, number);
@@ -289,7 +339,7 @@ export function GitHubPullRequestPanel({
       setActionError(t("githubPr.reviewBodyRequired"));
       return;
     }
-    const pullRequest = loadState.pullRequest;
+    const { pullRequest } = loadState;
     const targetCwd = cwd;
     setPhase(action);
     setActionError(null);
@@ -311,7 +361,7 @@ export function GitHubPullRequestPanel({
 
   const mergePullRequest = async () => {
     if (loadState.kind !== "ready" || phase !== "idle") return;
-    const pullRequest = loadState.pullRequest;
+    const { pullRequest } = loadState;
     if (pullRequestMergeBlock(pullRequest)) return;
     setMergeConfirmOpen(false);
     const targetCwd = cwd;
@@ -323,7 +373,9 @@ export function GitHubPullRequestPanel({
       if (cwdRef.current !== targetCwd) return;
       await load(false);
       onRefreshGit?.();
-      setActionStatus(t("githubPr.mergeComplete", { number: pullRequest.number }));
+      setActionStatus(
+        t("githubPr.mergeComplete", { number: pullRequest.number })
+      );
     } catch (error) {
       if (cwdRef.current === targetCwd) {
         setActionError(t("githubPr.mergeFailed", { error: String(error) }));
@@ -334,15 +386,24 @@ export function GitHubPullRequestPanel({
   };
 
   const pullRequest = loadState.kind === "ready" ? loadState.pullRequest : null;
-  const mergeBlock = pullRequest ? pullRequestMergeBlock(pullRequest) : "not_open";
+  const mergeBlock = pullRequest
+    ? pullRequestMergeBlock(pullRequest)
+    : "not_open";
   const checks = pullRequest?.checks ?? [];
-  const failedChecks = checks.filter((check) => githubCheckTone(check) === "failure").length;
-  const pendingChecks = checks.filter((check) => githubCheckTone(check) === "pending").length;
+  const failedChecks = checks.filter(
+    (check) => githubCheckTone(check) === "failure"
+  ).length;
+  const pendingChecks = checks.filter(
+    (check) => githubCheckTone(check) === "pending"
+  ).length;
 
   return (
     <section aria-label={t("githubPr.title")} className="space-y-3">
       <div className="flex items-center gap-2">
-        <GitPullRequest className="size-4 text-muted-foreground" aria-hidden="true" />
+        <GitPullRequest
+          className="text-muted-foreground size-4"
+          aria-hidden="true"
+        />
         <h3 className="text-body font-semibold">{t("githubPr.title")}</h3>
         <TooltipButton
           label={t("githubPr.refresh")}
@@ -357,7 +418,9 @@ export function GitHubPullRequestPanel({
       </div>
 
       {loadState.kind === "loading" && (
-        <p role="status" className="text-muted-foreground">{t("githubPr.loading")}</p>
+        <p role="status" className="text-muted-foreground">
+          {t("githubPr.loading")}
+        </p>
       )}
       {loadState.kind === "not_github" && (
         <p className="text-muted-foreground">{t("githubPr.notGithub")}</p>
@@ -385,35 +448,52 @@ export function GitHubPullRequestPanel({
                 variant="ghost"
                 size="row"
                 focusStyle="inset"
-                className="h-auto min-w-0 flex-1 justify-start px-0 py-0 font-semibold hover:text-primary"
-                aria-label={t("githubPr.openOnGithub", { number: pullRequest.number })}
+                className="hover:text-primary h-auto min-w-0 flex-1 justify-start px-0 py-0 font-semibold"
+                aria-label={t("githubPr.openOnGithub", {
+                  number: pullRequest.number,
+                })}
                 title={pullRequest.url}
                 disabled={phase !== "idle"}
                 onClick={() => void openPullRequest(pullRequest)}
               >
-                <span className="text-muted-foreground">#{pullRequest.number}</span>{" "}
+                <span className="text-muted-foreground">
+                  #{pullRequest.number}
+                </span>{" "}
                 {pullRequest.title}
-                <ExternalLink className="ms-1 inline size-3 align-baseline" aria-hidden="true" />
+                <ExternalLink
+                  className="ms-1 inline size-3 align-baseline"
+                  aria-hidden="true"
+                />
               </Button>
               <StatusBadge
-                tone={pullRequest.is_draft
-                  ? "neutral"
-                  : pullRequest.state === "OPEN" || pullRequest.state === "MERGED"
-                    ? "success"
-                    : "neutral"}
+                tone={
+                  pullRequest.is_draft
+                    ? "neutral"
+                    : pullRequest.state === "OPEN" ||
+                        pullRequest.state === "MERGED"
+                      ? "success"
+                      : "neutral"
+                }
               >
                 {pullRequest.is_draft
                   ? t("githubPr.state.draft")
-                  : t(`githubPr.state.${pullRequest.state.toLocaleLowerCase() as "open" | "merged" | "closed"}`)}
+                  : t(
+                      `githubPr.state.${pullRequest.state.toLocaleLowerCase() as "open" | "merged" | "closed"}`
+                    )}
               </StatusBadge>
             </div>
-            <p className="truncate font-mono text-metadata text-muted-foreground" title={`${pullRequest.head_ref} → ${pullRequest.base_ref}`}>
+            <p
+              className="text-metadata text-muted-foreground truncate font-mono"
+              title={`${pullRequest.head_ref} → ${pullRequest.base_ref}`}
+            >
               {pullRequest.head_ref} → {pullRequest.base_ref}
             </p>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-metadata text-muted-foreground">
+            <div className="text-metadata text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-success">+{pullRequest.additions}</span>
               <span className="text-destructive">−{pullRequest.deletions}</span>
-              <span>{t("githubPr.files", { count: pullRequest.changed_files })}</span>
+              <span>
+                {t("githubPr.files", { count: pullRequest.changed_files })}
+              </span>
               <span className="inline-flex items-center gap-1">
                 <MessageSquare className="size-3" aria-hidden="true" />
                 {pullRequest.comments_count + pullRequest.reviews_count}
@@ -421,7 +501,7 @@ export function GitHubPullRequestPanel({
             </div>
           </div>
 
-          <div className="flex gap-1 rounded-control bg-fill-quiet p-0.5">
+          <div className="rounded-control bg-fill-quiet flex gap-1 p-0.5">
             <Button
               type="button"
               variant="selectable"
@@ -429,10 +509,10 @@ export function GitHubPullRequestPanel({
               focusStyle="inset"
               data-selected={view === "overview" ? "true" : "false"}
               className={cn(
-                "h-auto px-2 py-1.5 text-metadata",
+                "text-metadata h-auto px-2 py-1.5",
                 view === "overview"
                   ? "bg-fill-hover text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                  : "text-muted-foreground hover:text-foreground"
               )}
               aria-pressed={view === "overview"}
               onClick={() => setView("overview")}
@@ -446,10 +526,10 @@ export function GitHubPullRequestPanel({
               focusStyle="inset"
               data-selected={view === "changes" ? "true" : "false"}
               className={cn(
-                "h-auto px-2 py-1.5 text-metadata",
+                "text-metadata h-auto px-2 py-1.5",
                 view === "changes"
                   ? "bg-fill-hover text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                  : "text-muted-foreground hover:text-foreground"
               )}
               aria-pressed={view === "changes"}
               onClick={() => void showChanges()}
@@ -461,17 +541,17 @@ export function GitHubPullRequestPanel({
           {view === "overview" ? (
             <div className="space-y-3">
               <section className="space-y-1.5">
-                <h4 className="text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
+                <h4 className="text-metadata text-muted-foreground font-semibold tracking-wider uppercase">
                   {t("githubPr.description")}
                 </h4>
-                <p className="whitespace-pre-wrap text-metadata text-muted-foreground">
+                <p className="text-metadata text-muted-foreground whitespace-pre-wrap">
                   {pullRequest.body || t("githubPr.noDescription")}
                 </p>
               </section>
 
               <section className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <h4 className="text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
+                  <h4 className="text-metadata text-muted-foreground font-semibold tracking-wider uppercase">
                     {t("githubPr.checks")}
                   </h4>
                   {checks.length > 0 && (
@@ -479,13 +559,17 @@ export function GitHubPullRequestPanel({
                       {failedChecks > 0
                         ? t("githubPr.checksFailed", { count: failedChecks })
                         : pendingChecks > 0
-                          ? t("githubPr.checksPending", { count: pendingChecks })
+                          ? t("githubPr.checksPending", {
+                              count: pendingChecks,
+                            })
                           : t("githubPr.checksPassed")}
                     </span>
                   )}
                 </div>
                 {checks.length === 0 ? (
-                  <p className="text-metadata text-muted-foreground">{t("githubPr.noChecks")}</p>
+                  <p className="text-metadata text-muted-foreground">
+                    {t("githubPr.noChecks")}
+                  </p>
                 ) : (
                   <div className="space-y-1">
                     {checks.map((check, index) => {
@@ -493,26 +577,34 @@ export function GitHubPullRequestPanel({
                       const content = (
                         <>
                           <CheckStatusIcon tone={tone} />
-                          <span className="min-w-0 flex-1 truncate">{check.name}</span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {check.name}
+                          </span>
                           <span className="text-metadata text-muted-foreground">
                             {check.conclusion ?? check.status ?? "PENDING"}
                           </span>
                         </>
                       );
-                      return check.details_url ? (
+                      return check.details_url != null &&
+                        check.details_url !== "" ? (
                         <Button
                           key={`${check.name}:${index}`}
                           type="button"
                           variant="ghost"
                           size="row"
                           focusStyle="inset"
-                          className="w-full gap-2 bg-fill-quiet px-module-inset py-2 text-metadata"
-                          onClick={() => void apiRef.current.open(check.details_url!)}
+                          className="bg-fill-quiet px-module-inset text-metadata w-full gap-2 py-2"
+                          onClick={() =>
+                            void apiRef.current.open(check.details_url!)
+                          }
                         >
                           {content}
                         </Button>
                       ) : (
-                        <div key={`${check.name}:${index}`} className="flex items-center gap-2 rounded-control bg-fill-quiet px-2.5 py-2 text-metadata">
+                        <div
+                          key={`${check.name}:${index}`}
+                          className="rounded-control bg-fill-quiet text-metadata flex items-center gap-2 px-2.5 py-2"
+                        >
                           {content}
                         </div>
                       );
@@ -524,17 +616,24 @@ export function GitHubPullRequestPanel({
           ) : (
             <div className="space-y-3">
               {diffState.kind === "loading" && (
-                <p role="status" className="text-muted-foreground">{t("githubPr.diffLoading")}</p>
+                <p role="status" className="text-muted-foreground">
+                  {t("githubPr.diffLoading")}
+                </p>
               )}
               {diffState.kind === "error" && (
                 <p role="alert" className="text-destructive">
                   {t("githubPr.diffFailed", { error: diffState.error })}
                 </p>
               )}
-              {diffState.kind === "ready" && <DiffPreview result={diffState.result} />}
+              {diffState.kind === "ready" && (
+                <DiffPreview result={diffState.result} />
+              )}
 
               {pullRequest.state === "OPEN" && (
-                <section className="space-y-2 pt-3" aria-label={t("githubPr.review")}>
+                <section
+                  className="space-y-2 pt-3"
+                  aria-label={t("githubPr.review")}
+                >
                   <Textarea
                     className="min-h-20"
                     value={reviewBody}
@@ -547,14 +646,30 @@ export function GitHubPullRequestPanel({
                     }}
                   />
                   <div className="flex flex-wrap gap-1.5">
-                    <Button size="xs" variant="outline" disabled={phase !== "idle" || !reviewBody.trim()} onClick={() => void submitReview("comment")}>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      disabled={phase !== "idle" || !reviewBody.trim()}
+                      onClick={() => void submitReview("comment")}
+                    >
                       {t("githubPr.comment")}
                     </Button>
-                    <Button size="xs" variant="outline" disabled={phase !== "idle" || !reviewBody.trim()} onClick={() => void submitReview("request_changes")}>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      disabled={phase !== "idle" || !reviewBody.trim()}
+                      onClick={() => void submitReview("request_changes")}
+                    >
                       {t("githubPr.requestChanges")}
                     </Button>
-                    <Button size="xs" disabled={phase !== "idle"} onClick={() => void submitReview("approve")}>
-                      {phase === "approve" ? t("githubPr.submitting") : t("githubPr.approve")}
+                    <Button
+                      size="xs"
+                      disabled={phase !== "idle"}
+                      onClick={() => void submitReview("approve")}
+                    >
+                      {phase === "approve"
+                        ? t("githubPr.submitting")
+                        : t("githubPr.approve")}
                     </Button>
                   </div>
                 </section>
@@ -563,21 +678,34 @@ export function GitHubPullRequestPanel({
           )}
 
           {pullRequest.state === "OPEN" && (
-            <section className="space-y-2 pt-3" aria-label={t("githubPr.mergeSection")}>
+            <section
+              className="space-y-2 pt-3"
+              aria-label={t("githubPr.mergeSection")}
+            >
               <div className="flex gap-2">
                 <Select
                   value={mergeStrategy}
-                  onValueChange={(value) => setMergeStrategy(value as GitHubMergeStrategy)}
+                  onValueChange={(value) => setMergeStrategy(value!)}
                   disabled={phase !== "idle" || Boolean(mergeBlock)}
                 >
-                  <SelectTrigger size="sm" className="min-w-32 flex-1" aria-label={t("githubPr.mergeStrategyLabel")}>
+                  <SelectTrigger
+                    size="sm"
+                    className="min-w-32 flex-1"
+                    aria-label={t("githubPr.mergeStrategyLabel")}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="squash">{t("githubPr.mergeStrategy.squash")}</SelectItem>
-                      <SelectItem value="merge">{t("githubPr.mergeStrategy.merge")}</SelectItem>
-                      <SelectItem value="rebase">{t("githubPr.mergeStrategy.rebase")}</SelectItem>
+                      <SelectItem value="squash">
+                        {t("githubPr.mergeStrategy.squash")}
+                      </SelectItem>
+                      <SelectItem value="merge">
+                        {t("githubPr.mergeStrategy.merge")}
+                      </SelectItem>
+                      <SelectItem value="rebase">
+                        {t("githubPr.mergeStrategy.rebase")}
+                      </SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -587,18 +715,26 @@ export function GitHubPullRequestPanel({
                   onClick={() => setMergeConfirmOpen(true)}
                 >
                   <GitMerge className="size-3.5" aria-hidden="true" />
-                  {phase === "merge" ? t("githubPr.merging") : t("githubPr.merge")}
+                  {phase === "merge"
+                    ? t("githubPr.merging")
+                    : t("githubPr.merge")}
                 </Button>
               </div>
               {mergeBlock === "draft" && (
-                <p className="flex items-start gap-1.5 text-metadata text-muted-foreground">
-                  <CircleAlert className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                <p className="text-metadata text-muted-foreground flex items-start gap-1.5">
+                  <CircleAlert
+                    className="mt-0.5 size-3 shrink-0"
+                    aria-hidden="true"
+                  />
                   {t("githubPr.mergeDraftBlocked")}
                 </p>
               )}
               {mergeBlock === "conflicting" && (
-                <p className="flex items-start gap-1.5 text-metadata text-destructive">
-                  <CircleAlert className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                <p className="text-metadata text-destructive flex items-start gap-1.5">
+                  <CircleAlert
+                    className="mt-0.5 size-3 shrink-0"
+                    aria-hidden="true"
+                  />
                   {t("githubPr.mergeConflictBlocked")}
                 </p>
               )}
@@ -607,8 +743,16 @@ export function GitHubPullRequestPanel({
         </div>
       )}
 
-      {actionError && <p role="alert" className="text-metadata text-destructive">{actionError}</p>}
-      {actionStatus && <p role="status" className="text-metadata text-success">{actionStatus}</p>}
+      {actionError != null && actionError !== "" && (
+        <p role="alert" className="text-metadata text-destructive">
+          {actionError}
+        </p>
+      )}
+      {actionStatus != null && actionStatus !== "" && (
+        <p role="status" className="text-metadata text-success">
+          {actionStatus}
+        </p>
+      )}
 
       <AlertDialog open={mergeConfirmOpen} onOpenChange={setMergeConfirmOpen}>
         <AlertDialogContent>

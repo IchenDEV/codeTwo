@@ -1,34 +1,33 @@
 import { GitBranch } from "@/components/ui/icons";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { SplitButton } from "@/components/ui/split-button";
+import { cn } from "@/lib/utils";
 
 import type { GitStatus } from "../bridge";
-import { SplitButton } from "@/components/ui/split-button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
 import { GitHubPullRequestPanel } from "./GitHubPullRequestPanel";
 import { GitSyncStatus } from "./GitSyncStatus";
 import {
   gitNextActionLabel,
   gitNextActionReason,
   runGitNextAction,
-  type GitNextActionItem,
-  type GitNextActionProjection,
 } from "./nextAction";
+import type { GitNextActionItem, GitNextActionProjection } from "./nextAction";
 
-type GitDockContentProps = {
+interface GitDockContentProps {
   status: GitStatus | null;
   action: GitNextActionProjection;
   onOpenSourceControl: () => void;
   onPush: () => void;
   onOpenPullRequest: () => void;
   onCleanupWorktree: () => void;
-};
+}
 
-type PullRequestDockContentProps = {
+interface PullRequestDockContentProps {
   cwd: string | null;
   status: GitStatus | null;
   onRefresh: () => void;
-};
+}
 
 /** Working-tree summary rendered inside the generic Dock container. */
 export function GitDockContent({
@@ -40,26 +39,40 @@ export function GitDockContent({
   onCleanupWorktree,
 }: GitDockContentProps) {
   const t = useT();
-  const runAction = (item: GitNextActionItem) => runGitNextAction(item, {
-    openSourceControl: onOpenSourceControl,
-    push: onPush,
-    openPullRequest: onOpenPullRequest,
-    cleanupWorktree: onCleanupWorktree,
-  });
-  const primaryLabel = gitNextActionLabel(t, action.primary, action.changeRequestLabel);
+  const runAction = (item: GitNextActionItem) =>
+    runGitNextAction(item, {
+      openSourceControl: onOpenSourceControl,
+      push: onPush,
+      openPullRequest: onOpenPullRequest,
+      cleanupWorktree: onCleanupWorktree,
+    });
+  const primaryLabel = gitNextActionLabel(
+    t,
+    action.primary,
+    action.changeRequestLabel
+  );
 
   return (
     <ScrollArea className="h-full min-h-0 flex-1">
-      <div className="space-y-module-inset p-4 text-metadata">
-        {status?.is_repo ? (
-          <section className="space-y-module-inset" aria-label={t("dock.workingTree")}>
+      <div className="space-y-module-inset text-metadata p-4">
+        {status?.is_repo === true ? (
+          <section
+            className="space-y-module-inset"
+            aria-label={t("dock.workingTree")}
+          >
             <div className="flex items-center gap-2">
               <GitBranch className="size-3.5" />
-              <h3 className="text-body font-semibold">{t("dock.workingTree")}</h3>
-              <span className="min-w-0 truncate font-mono text-metadata text-muted-foreground">
+              <h3 className="text-body font-semibold">
+                {t("dock.workingTree")}
+              </h3>
+              <span className="text-metadata text-muted-foreground min-w-0 truncate font-mono">
                 {status.branch || "?"}
               </span>
-              <GitSyncStatus ahead={status.ahead} behind={status.behind} className="text-primary" />
+              <GitSyncStatus
+                ahead={status.ahead}
+                behind={status.behind}
+                className="text-primary"
+              />
             </div>
 
             {status.files.length === 0 ? (
@@ -70,23 +83,22 @@ export function GitDockContent({
                   <div key={file.path} className="flex items-center gap-2">
                     <span
                       className={cn(
-                        "inline-flex size-4 shrink-0 items-center justify-center rounded-control text-metadata font-bold",
+                        "rounded-control text-metadata inline-flex size-4 shrink-0 items-center justify-center font-bold",
                         file.staged
                           ? "bg-success/15 text-success"
-                          : "bg-warning/15 text-warning",
+                          : "bg-warning/15 text-warning"
                       )}
                       title={file.state}
                     >
                       {file.state.charAt(0).toUpperCase()}
                     </span>
-                    <span className="truncate font-mono text-callout text-muted-foreground">
+                    <span className="text-callout text-muted-foreground truncate font-mono">
                       {file.path}
                     </span>
                   </div>
                 ))}
               </div>
             )}
-
           </section>
         ) : null}
         <div className="space-y-1.5">
@@ -100,7 +112,7 @@ export function GitDockContent({
               disabled: item.disabled,
             }))}
             disabled={action.primary.disabled}
-            variant={action.primary.disabled ? "secondary" : "default"}
+            variant={action.primary.disabled === true ? "secondary" : "default"}
             size="sm"
             className="w-full"
             primaryClassName="flex-1"
@@ -125,8 +137,8 @@ export function PullRequestDockContent({
 
   return (
     <ScrollArea className="h-full min-h-0 flex-1">
-      <div className="p-4 text-metadata">
-        {status?.is_repo ? (
+      <div className="text-metadata p-4">
+        {status?.is_repo === true ? (
           <GitHubPullRequestPanel
             key={`${cwd ?? "."}:${status.branch}`}
             cwd={cwd ?? "."}

@@ -1,14 +1,10 @@
 import { createReactBlockSpec } from "@blocknote/react";
 import { createContext, useContext, useRef } from "react";
-import { X } from "@/components/ui/icons";
 
-import type { DocBlock } from "../bridge";
-import type { SceneSlotDef } from "../session/scene";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "@/components/ui/icons";
+import { X, Sparkles } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,8 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useT } from "../i18n";
+import { Textarea } from "@/components/ui/textarea";
+import { asJsonObject, parseJsonPayload } from "@/lib/jsonValue";
 import { cn } from "@/lib/utils";
+
+import type { DocBlock } from "../bridge";
+import { useT } from "../i18n";
+import type { SceneSlotDef } from "../session/scene";
 
 /**
  * The one slot-card block behind both R1 (parameterized macros) and R5 (scene briefs).
@@ -48,12 +49,16 @@ export interface SlotCardRuntime {
   carriedArtifacts: () => { id: string; title: string }[];
 }
 
-export const SlotCardRuntimeContext = createContext<SlotCardRuntime | null>(null);
+export const SlotCardRuntimeContext = createContext<SlotCardRuntime | null>(
+  null
+);
 
 /** `{{slot-id}}` placeholders (Agent Scenes 1.0.0 slot-id charset). */
 const SLOT_TOKEN = /\{\{([a-z0-9-]+)\}\}/g;
 
-export type TemplateSegment = { kind: "text"; text: string } | { kind: "slot"; id: string };
+export type TemplateSegment =
+  | { kind: "text"; text: string }
+  | { kind: "slot"; id: string };
 
 /** Split a template into prose and slot references, preserving order. */
 export function templateSegments(template: string): TemplateSegment[] {
@@ -61,24 +66,31 @@ export function templateSegments(template: string): TemplateSegment[] {
   let last = 0;
   for (const match of template.matchAll(SLOT_TOKEN)) {
     const at = match.index ?? 0;
-    if (at > last) segments.push({ kind: "text", text: template.slice(last, at) });
+    if (at > last)
+      segments.push({ kind: "text", text: template.slice(last, at) });
     segments.push({ kind: "slot", id: match[1] });
     last = at + match[0].length;
   }
-  if (last < template.length) segments.push({ kind: "text", text: template.slice(last) });
+  if (last < template.length)
+    segments.push({ kind: "text", text: template.slice(last) });
   return segments;
 }
 
 /** Legacy macros stored slots as bare id strings; scenes and new macros store full objects. */
 export function normalizeSlots(
-  raw: readonly (string | (Partial<SceneSlotDef> & { id: string }))[],
+  raw: readonly (string | (Partial<SceneSlotDef> & { id: string }))[]
 ): SceneSlotDef[] {
   return raw
     .map((entry): SceneSlotDef | null => {
       if (typeof entry === "string") {
         return { id: entry, label: "", kind: "text" };
       }
-      if (!entry || typeof entry.id !== "string" || entry.id.length === 0) return null;
+      if (
+        entry == null ||
+        typeof entry.id !== "string" ||
+        entry.id.length === 0
+      )
+        return null;
       const kind =
         entry.kind === "multiline" ||
         entry.kind === "select" ||
@@ -90,7 +102,9 @@ export function normalizeSlots(
         id: entry.id,
         label: typeof entry.label === "string" ? entry.label : "",
         kind,
-        options: Array.isArray(entry.options) ? entry.options.filter((o) => typeof o === "string") : undefined,
+        options: Array.isArray(entry.options)
+          ? entry.options.filter((o) => typeof o === "string")
+          : undefined,
         required: entry.required === true,
         default: typeof entry.default === "string" ? entry.default : undefined,
       };
@@ -101,7 +115,7 @@ export function normalizeSlots(
 /** Corrupt JSON props degrade to an empty slot list, never a crash (canvas-envelope discipline). */
 export function parseSlots(json: string): SceneSlotDef[] {
   try {
-    const parsed = JSON.parse(json);
+    const parsed = parseJsonPayload(json);
     return Array.isArray(parsed) ? normalizeSlots(parsed) : [];
   } catch {
     return [];
@@ -111,10 +125,10 @@ export function parseSlots(json: string): SceneSlotDef[] {
 /** Corrupt JSON props degrade to no values. */
 export function parseValues(json: string): Record<string, string> {
   try {
-    const parsed = JSON.parse(json);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const parsed = asJsonObject(parseJsonPayload(json));
+    if (parsed == null) return {};
     const out: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(parsed)) {
       if (typeof value === "string") out[key] = value;
     }
     return out;
@@ -124,7 +138,10 @@ export function parseValues(json: string): Record<string, string> {
 }
 
 /** The filled value a slot compiles with: user input, else the authored default, else empty. */
-export function effectiveSlotValue(slot: SceneSlotDef, values: Record<string, string>): string {
+export function effectiveSlotValue(
+  slot: SceneSlotDef,
+  values: Record<string, string>
+): string {
   return values[slot.id] ?? slot.default ?? "";
 }
 
@@ -142,7 +159,9 @@ export function slotCardToDocBlocks(props: Partial<SlotCardProps>): DocBlock[] {
       {
         type: "skill",
         skill_id: props.skillId ?? "",
-        params: Object.fromEntries(slots.map((slot) => [slot.id, effectiveSlotValue(slot, values)])),
+        params: Object.fromEntries(
+          slots.map((slot) => [slot.id, effectiveSlotValue(slot, values)])
+        ),
       },
     ];
   }
@@ -185,11 +204,18 @@ export function unfilledRequiredSlots(editor: {
   const out: string[] = [];
   for (const block of editor.document) {
     if (block.type !== "slotCard") continue;
-    const props = block.props as Partial<SlotCardProps> | undefined;
-    const slots = parseSlots(props?.slots ?? "[]");
-    const values = parseValues(props?.values ?? "{}");
+    const propsObject = asJsonObject(block.props);
+    const slots = parseSlots(
+      typeof propsObject?.slots === "string" ? propsObject.slots : "[]"
+    );
+    const values = parseValues(
+      typeof propsObject?.values === "string" ? propsObject.values : "{}"
+    );
     for (const slot of slots) {
-      if (slot.required && effectiveSlotValue(slot, values).trim() === "") {
+      if (
+        slot.required === true &&
+        effectiveSlotValue(slot, values).trim() === ""
+      ) {
         out.push(slot.label || slot.id);
       }
     }
@@ -211,7 +237,9 @@ export function briefOfferVisible(state: {
 /** Move focus into a just-inserted card's first field once BlockNote has rendered it. */
 export function focusSlotCardField(blockId: string): void {
   setTimeout(() => {
-    const field = document.querySelector<HTMLElement>(`[data-id="${blockId}"] [data-slot-field]`);
+    const field = document.querySelector<HTMLElement>(
+      `[data-id="${blockId}"] [data-slot-field]`
+    );
     field?.focus();
   }, 0);
 }
@@ -239,7 +267,9 @@ export function SlotCardView({
   const byId = new Map(slots.map((slot) => [slot.id, slot]));
   const segments = templateSegments(block.props.template);
   const referenced = new Set(
-    segments.filter((s): s is { kind: "slot"; id: string } => s.kind === "slot").map((s) => s.id),
+    segments
+      .filter((s): s is { kind: "slot"; id: string } => s.kind === "slot")
+      .map((s) => s.id)
   );
   // Slots the template never references still get a field, appended after the prose.
   const trailing = slots.filter((slot) => !referenced.has(slot.id));
@@ -247,7 +277,9 @@ export function SlotCardView({
   const write = (id: string, value: string) => {
     const next = { ...values, [id]: value };
     try {
-      editor.updateBlock(block, { props: { ...block.props, values: JSON.stringify(next) } });
+      editor.updateBlock(block, {
+        props: { ...block.props, values: JSON.stringify(next) },
+      });
     } catch {
       /* BlockNote may be tearing down while a field commit lands. */
     }
@@ -255,7 +287,9 @@ export function SlotCardView({
   // Committing on the native `input` event (via onInput) keeps one write per edit in browsers
   // and in happy-dom, whose own-instance `value` property defeats React's change tracker. The
   // noop onChange only satisfies React's controlled-input contract.
-  const noopChange = () => {};
+  const noopChange = () => {
+    /* empty */
+  };
 
   const exitToEditor = () => {
     try {
@@ -276,9 +310,11 @@ export function SlotCardView({
     if (event.key !== "Tab") return;
     const host = containerRef.current;
     if (!host) return;
-    const fields = Array.from(host.querySelectorAll<HTMLElement>("[data-slot-field]"));
-    const index = fields.indexOf(event.target as HTMLElement);
-    if (index < 0) return;
+    const fields = [...host.querySelectorAll<HTMLElement>("[data-slot-field]")];
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target == null) return;
+    const index = fields.indexOf(target);
+    if (index === -1) return;
     event.preventDefault();
     event.stopPropagation();
     const next = index + (event.shiftKey ? -1 : 1);
@@ -294,12 +330,12 @@ export function SlotCardView({
     const value = values[slot.id] ?? slot.default ?? "";
     const label = slot.label || slot.id;
     switch (slot.kind) {
-      case "multiline":
+      case "multiline": {
         return (
           <Textarea
             data-slot-field
             aria-label={label}
-            aria-required={slot.required || undefined}
+            aria-required={slot.required ?? undefined}
             size="compact"
             className="resize-none"
             rows={2}
@@ -315,17 +351,21 @@ export function SlotCardView({
             }}
           />
         );
-      case "select":
+      }
+      case "select": {
         return (
           <Select
-            items={(slot.options ?? []).map((option) => ({ value: option, label: option }))}
+            items={(slot.options ?? []).map((option) => ({
+              value: option,
+              label: option,
+            }))}
             value={value}
             onValueChange={(next) => write(slot.id, next ?? "")}
           >
             <SelectTrigger
               data-slot-field
               aria-label={label}
-              aria-required={slot.required || undefined}
+              aria-required={slot.required ?? undefined}
               className="w-full min-w-0"
             >
               <SelectValue placeholder={t("slotCard.selectPlaceholder")} />
@@ -341,10 +381,15 @@ export function SlotCardView({
             </SelectContent>
           </Select>
         );
-      case "file":
+      }
+      case "file": {
         return runtime ? (
           <span className="inline-flex min-w-0 items-center gap-1.5">
-            {value && <span className="max-w-48 truncate font-mono text-callout text-foreground">{value}</span>}
+            {value && (
+              <span className="text-callout text-foreground max-w-48 truncate font-mono">
+                {value}
+              </span>
+            )}
             <Button
               data-slot-field
               type="button"
@@ -353,7 +398,7 @@ export function SlotCardView({
               aria-label={`${label}: ${t("slotCard.pickFile")}`}
               onClick={() => {
                 void runtime.pickFile().then((path) => {
-                  if (path) write(slot.id, path);
+                  if (path != null && path !== "") write(slot.id, path);
                 });
               }}
             >
@@ -365,7 +410,7 @@ export function SlotCardView({
           <Input
             data-slot-field
             aria-label={label}
-            aria-required={slot.required || undefined}
+            aria-required={slot.required ?? undefined}
             className="inline-flex w-56 flex-none"
             placeholder={label}
             value={value}
@@ -373,11 +418,15 @@ export function SlotCardView({
             onInput={(event) => write(slot.id, event.currentTarget.value)}
           />
         );
+      }
       case "artifact": {
         const artifacts = runtime?.carriedArtifacts() ?? [];
         if (artifacts.length === 0 && !value) {
           return (
-            <span className="text-callout text-muted-foreground" data-slot-empty-artifacts>
+            <span
+              className="text-callout text-muted-foreground"
+              data-slot-empty-artifacts
+            >
               {t("slotCard.noArtifacts")}
             </span>
           );
@@ -394,7 +443,7 @@ export function SlotCardView({
             <SelectTrigger
               data-slot-field
               aria-label={label}
-              aria-required={slot.required || undefined}
+              aria-required={slot.required ?? undefined}
               className="w-full min-w-0"
             >
               <SelectValue placeholder={t("slotCard.selectPlaceholder")} />
@@ -411,12 +460,15 @@ export function SlotCardView({
           </Select>
         );
       }
-      default:
+      case "text": {
+        throw new Error('Not implemented yet: "text" case');
+      }
+      default: {
         return (
           <Input
             data-slot-field
             aria-label={label}
-            aria-required={slot.required || undefined}
+            aria-required={slot.required ?? undefined}
             className="inline-flex w-56 flex-none"
             placeholder={label}
             value={value}
@@ -424,13 +476,14 @@ export function SlotCardView({
             onInput={(event) => write(slot.id, event.currentTarget.value)}
           />
         );
+      }
     }
   };
 
   return (
     <div
       ref={containerRef}
-      className="canvas-ui-module my-2 min-w-0 bg-fill-quiet p-3"
+      className="canvas-ui-module bg-fill-quiet my-2 min-w-0 p-3"
       contentEditable={false}
       data-slot-card
       data-slot-mode={block.props.mode}
@@ -438,23 +491,28 @@ export function SlotCardView({
     >
       <div className="flex items-center gap-1.5 pb-2">
         {block.props.icon.trim() && block.props.icon !== "✦" ? (
-          <span className="shrink-0 text-body" aria-hidden>
+          <span className="text-body shrink-0" aria-hidden>
             {block.props.icon}
           </span>
         ) : (
           <Sparkles className="size-3.5 shrink-0" aria-hidden />
         )}
-        <span className="min-w-0 flex-1 truncate text-body font-medium text-foreground">
+        <span className="text-body text-foreground min-w-0 flex-1 truncate font-medium">
           {block.props.title}
         </span>
-        <Badge variant="outline" className="shrink-0 text-metadata text-muted-foreground">
-          {block.props.mode === "brief" ? t("slotCard.brief") : t("slotCard.macro")}
+        <Badge
+          variant="outline"
+          className="text-metadata text-muted-foreground shrink-0"
+        >
+          {block.props.mode === "brief"
+            ? t("slotCard.brief")
+            : t("slotCard.macro")}
         </Badge>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="size-6 shrink-0 text-muted-foreground"
+          className="text-muted-foreground size-6 shrink-0"
           aria-label={t("slotCard.remove")}
           onClick={() => editor.removeBlocks([block])}
         >
@@ -467,7 +525,7 @@ export function SlotCardView({
             return (
               <span
                 key={`text-${index}`}
-                className="whitespace-pre-wrap text-body text-muted-foreground"
+                className="text-body text-muted-foreground whitespace-pre-wrap"
               >
                 {segment.text}
               </span>
@@ -477,15 +535,34 @@ export function SlotCardView({
           if (!slot) {
             // A placeholder without a slot definition stays visible as prose.
             return (
-              <span key={`orphan-${index}`} className="font-mono text-callout text-muted-foreground">
+              <span
+                key={`orphan-${index}`}
+                className="text-callout text-muted-foreground font-mono"
+              >
                 {`{{${segment.id}}}`}
               </span>
             );
           }
-          return <span key={`slot-${index}`} className={cn("inline-flex min-w-0 items-center", slot.kind === "multiline" && "w-full")}>{renderField(slot)}</span>;
+          return (
+            <span
+              key={`slot-${index}`}
+              className={cn(
+                "inline-flex min-w-0 items-center",
+                slot.kind === "multiline" && "w-full"
+              )}
+            >
+              {renderField(slot)}
+            </span>
+          );
         })}
         {trailing.map((slot) => (
-          <span key={`trail-${slot.id}`} className={cn("inline-flex min-w-0 items-center", slot.kind === "multiline" && "w-full")}>
+          <span
+            key={`trail-${slot.id}`}
+            className={cn(
+              "inline-flex min-w-0 items-center",
+              slot.kind === "multiline" && "w-full"
+            )}
+          >
             {renderField(slot)}
           </span>
         ))}
@@ -516,5 +593,5 @@ export const SlotCardBlock = createReactBlockSpec(
         editor={props.editor as never}
       />
     ),
-  },
+  }
 );

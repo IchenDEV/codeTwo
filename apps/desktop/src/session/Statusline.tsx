@@ -1,21 +1,30 @@
 import { useState } from "react";
-import { Gauge } from "@/components/ui/icons";
 
+import { Button } from "@/components/ui/button";
+import { Gauge } from "@/components/ui/icons";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
+import { useT } from "../i18n";
+import { ContextBreakdown } from "./ContextBreakdown";
 import {
   describeContextWindow,
   formatExactContextTokens,
   formatContextWindowPercentage,
-  type ContextWindow,
 } from "./contextWindow";
-import { ContextBreakdown } from "./ContextBreakdown";
+import type { ContextWindow } from "./contextWindow";
 // Explicit extension: this dir holds both `statusline.ts` (logic) and `Statusline.tsx` (this
 // file), and bun's resolver matches the pair case-insensitively without it.
 import { contextTone, formatCost } from "./statusline.ts";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
-import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
 
 export interface StatuslineUsage {
   costUsd: number | null;
@@ -47,17 +56,19 @@ export function Statusline({
   const t = useT();
   const [open, setOpen] = useState(false);
   const display = describeContextWindow(contextWindow);
-  const cost = usage && usage.costUsd !== null ? formatCost(usage.costUsd) : null;
+  const cost =
+    usage && usage.costUsd !== null ? formatCost(usage.costUsd) : null;
   const burn =
     usage && usage.burnRate !== null && Number.isFinite(usage.burnRate)
       ? t("statusline.burn", { rate: String(Math.round(usage.burnRate)) })
       : null;
   if (!contextWindow || !display) {
-    if (!cost && !burn) return null;
+    if ((cost == null || cost === "") && (burn == null || burn === ""))
+      return null;
     return (
-      <span className="flex shrink-0 items-center gap-1.5 px-0 py-1 text-metadata text-muted-foreground @lg/composer:px-1.5">
-        {cost && <span>{cost}</span>}
-        {burn && <span>{burn}</span>}
+      <span className="text-metadata text-muted-foreground flex shrink-0 items-center gap-1.5 px-0 py-1 @lg/composer:px-1.5">
+        {cost != null && cost !== "" && <span>{cost}</span>}
+        {burn != null && burn !== "" && <span>{burn}</span>}
       </span>
     );
   }
@@ -66,7 +77,9 @@ export function Statusline({
     capacity: formatExactContextTokens(contextWindow.contextWindow),
     percentage: formatContextWindowPercentage(contextWindow),
   });
-  const tone = contextTone(display.percentage !== null ? display.percentage / 100 : null);
+  const tone = contextTone(
+    display.percentage === null ? null : display.percentage / 100
+  );
 
   const chipContent = (
     <>
@@ -75,26 +88,32 @@ export function Statusline({
           aria-hidden="true"
           className={cn(
             "size-1.5 shrink-0 rounded-full",
-            tone === "critical" ? "bg-destructive" : "bg-warning",
+            tone === "critical" ? "bg-destructive" : "bg-warning"
           )}
         />
       )}
-      <Gauge className="hidden size-3.5 shrink-0 @lg/composer:inline" aria-hidden="true" />
+      <Gauge
+        className="hidden size-3.5 shrink-0 @lg/composer:inline"
+        aria-hidden="true"
+      />
       <span className="hidden @lg/composer:inline" aria-hidden="true">
         {display.compact}
       </span>
       <span className="@lg/composer:hidden" aria-hidden="true">
         {display.capacity}
       </span>
-      {usage && (cost || burn) && (
-        <span aria-hidden="true" className="hidden items-center gap-1.5 @lg/composer:flex">
-          {cost && (
+      {usage && (cost ?? burn) != null && (cost ?? burn) !== "" && (
+        <span
+          aria-hidden="true"
+          className="hidden items-center gap-1.5 @lg/composer:flex"
+        >
+          {cost != null && cost !== "" && (
             <>
               <span>·</span>
               <span>{cost}</span>
             </>
           )}
-          {burn && (
+          {burn != null && burn !== "" && (
             <>
               <span>·</span>
               <span>{burn}</span>
@@ -111,26 +130,31 @@ export function Statusline({
         <PopoverTrigger
           render={
             <TooltipTrigger
-              render={<Button
-                type="button"
-                variant="ghost"
-                size="compact"
-                focusStyle="inset"
-                role="meter"
-                aria-valuemin={0}
-                aria-valuemax={contextWindow.contextWindow}
-                aria-valuenow={Math.min(contextWindow.usedTokens, contextWindow.contextWindow)}
-                aria-valuetext={exact}
-                aria-label={exact}
-                className={cn(
-                  "shrink-0 gap-1.5 px-0 text-metadata @lg/composer:px-1.5",
-                  tone === "warn" && "text-warning",
-                  tone === "critical" && "text-destructive",
-                  (tone === "ok" || tone === null) && "text-muted-foreground",
-                )}
-              >
-                {chipContent}
-              </Button>}
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="compact"
+                  focusStyle="inset"
+                  role="meter"
+                  aria-valuemin={0}
+                  aria-valuemax={contextWindow.contextWindow}
+                  aria-valuenow={Math.min(
+                    contextWindow.usedTokens,
+                    contextWindow.contextWindow
+                  )}
+                  aria-valuetext={exact}
+                  aria-label={exact}
+                  className={cn(
+                    "text-metadata shrink-0 gap-1.5 px-0 @lg/composer:px-1.5",
+                    tone === "warn" && "text-warning",
+                    tone === "critical" && "text-destructive",
+                    (tone === "ok" || tone === null) && "text-muted-foreground"
+                  )}
+                >
+                  {chipContent}
+                </Button>
+              }
             />
           }
         />
@@ -139,21 +163,30 @@ export function Statusline({
             <div>
               {t("statusline.contextTitle")}: {exact}
             </div>
-            {cost && <div>{t("statusline.cost", { cost })}</div>}
-            {burn && <div>{burn}</div>}
+            {cost != null && cost !== "" && (
+              <div>{t("statusline.cost", { cost })}</div>
+            )}
+            {burn != null && burn !== "" && <div>{burn}</div>}
           </div>
         </TooltipContent>
       </Tooltip>
-      <PopoverContent align="end" side="top" sideOffset={12} className="w-auto p-3">
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={12}
+        className="w-auto p-3"
+      >
         <ContextBreakdown
           contextWindow={contextWindow}
           onClose={() => setOpen(false)}
-          onCompact={onCompact
-            ? () => {
-                onCompact();
-                setOpen(false);
-              }
-            : undefined}
+          onCompact={
+            onCompact
+              ? () => {
+                  onCompact();
+                  setOpen(false);
+                }
+              : undefined
+          }
           compactDisabled={compactDisabled}
           compactDisabledReason={compactDisabledReason}
         />

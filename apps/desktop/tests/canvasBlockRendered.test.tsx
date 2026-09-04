@@ -1,12 +1,25 @@
 // @ts-nocheck
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+
 import React from "react";
-import { activateDom, button, click, dom, flush, mount, maybeButton, restoreDom } from "./domTestHarness";
+
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  maybeButton,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
-dom.window.HTMLCanvasElement.prototype.getContext = () => ({ filter: "" }) as never;
+dom.window.HTMLCanvasElement.prototype.getContext = () =>
+  ({ filter: "" }) as never;
 
-const { CanvasBlockRuntimeContext, CanvasBlockView } = await import("../src/skillInline");
+const { CanvasBlockRuntimeContext, CanvasBlockView } =
+  await import("../src/skillInline");
 
 function envelope(revision = 3) {
   return JSON.stringify({
@@ -38,13 +51,21 @@ function runtime(events: string[], handleRef: any) {
     getAssets: () => [],
     onAsset: () => {},
     onCanvasActivity: () => {},
-    saveDraft: async () => ({ id: "canvas", revision: 3, title: "Canvas", theme: "light", envelope: { scene: {} }, assets: [] }),
+    saveDraft: async () => ({
+      id: "canvas",
+      revision: 3,
+      title: "Canvas",
+      theme: "light",
+      envelope: { scene: {} },
+      assets: [],
+    }),
     freezeDraft: async () => ({}),
     onCanvasRemoved: () => events.push("removed"),
     onCanvasRestored: () => events.push("restored"),
     onCanvasUnmount: () => events.push("unmounted"),
     onCanvasFrozen: () => events.push("frozen"),
-    onCanvasDeliveryError: (_id: string, message: string, kind?: string) => events.push(`${kind}:${message}`),
+    onCanvasDeliveryError: (_id: string, message: string, kind?: string) =>
+      events.push(`${kind}:${message}`),
     register: (handle: any) => {
       handleRef.current = handle;
       return () => events.push("disposed");
@@ -65,17 +86,33 @@ describe("mounted CanvasBlock host behavior", () => {
     const updates: any[] = [];
     const providerRequests: Event[] = [];
     const providerListener = (event: Event) => providerRequests.push(event);
-    dom.window.addEventListener("codetwo-open-provider-picker", providerListener);
+    dom.window.addEventListener(
+      "codetwo-open-provider-picker",
+      providerListener
+    );
     const view = mount(
       <CanvasBlockRuntimeContext.Provider value={runtime(events, handleRef)}>
         <CanvasBlockView
-          block={{ props: { id: "canvas", revision: 3, title: "Canvas", envelope: envelope(), pixelPolicy: "required" } }}
-          editor={{ updateBlock: (_block: unknown, update: unknown) => updates.push(update) }}
+          block={{
+            props: {
+              id: "canvas",
+              revision: 3,
+              title: "Canvas",
+              envelope: envelope(),
+              pixelPolicy: "required",
+            },
+          }}
+          editor={{
+            updateBlock: (_block: unknown, update: unknown) =>
+              updates.push(update),
+          }}
         />
-      </CanvasBlockRuntimeContext.Provider>,
+      </CanvasBlockRuntimeContext.Provider>
     );
     expect(handleRef.current?.id).toBe("canvas");
-    expect(view.container.querySelector("[data-canvas-theme]")?.getAttribute("data-canvas-theme")).toBe("dark");
+    expect(
+      view.container.querySelector("[data-canvas-theme]")?.dataset.canvasTheme
+    ).toBe("dark");
     expect(maybeButton(view.container, "Send structure only")).toBeNull();
     await flush();
     await (async () => {
@@ -96,6 +133,9 @@ describe("mounted CanvasBlock host behavior", () => {
     expect(maybeButton(view.container, "Send structure only")).toBeNull();
     view.unmount();
     expect(events).toContain("disposed");
-    dom.window.removeEventListener("codetwo-open-provider-picker", providerListener);
+    dom.window.removeEventListener(
+      "codetwo-open-provider-picker",
+      providerListener
+    );
   });
 });

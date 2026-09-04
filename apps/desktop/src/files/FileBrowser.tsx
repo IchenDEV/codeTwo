@@ -1,10 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { AtSign } from "@/components/ui/icons";
-import { listFiles } from "../bridge";
+import { useEffect, useState } from "react";
+
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AtSign } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+import { listFiles } from "../bridge";
 
 // File browser: search the workspace and drop a file into the prompt as an `@` mention.
 export function FileBrowserModal({
@@ -30,10 +38,13 @@ export function FileBrowserModal({
       .catch(() => setLoading(false));
   }, [cwd]);
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     const s = q.trim().toLowerCase();
-    return (s ? all.filter((p) => p.toLowerCase().includes(s)) : all).slice(0, 300);
-  }, [all, q]);
+    return (s ? all.filter((p) => p.toLowerCase().includes(s)) : all).slice(
+      0,
+      300
+    );
+  })();
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -42,8 +53,15 @@ export function FileBrowserModal({
           <DialogTitle>Workspace files</DialogTitle>
         </DialogHeader>
 
-        <Input placeholder="Filter files…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
-        {loading && <p className="text-metadata text-muted-foreground">Scanning…</p>}
+        <Input
+          placeholder="Filter files…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          autoFocus
+        />
+        {loading && (
+          <p className="text-metadata text-muted-foreground">Scanning…</p>
+        )}
 
         <ScrollArea className="max-h-[52vh] pr-3">
           <div className="space-y-0.5">
@@ -56,14 +74,16 @@ export function FileBrowserModal({
                 focusStyle="inset"
                 onClick={() => onInsert(p)}
                 title="Add to prompt"
-                className="w-full justify-between px-module-inset py-1.5 font-mono text-metadata"
+                className="px-module-inset text-metadata w-full justify-between py-1.5 font-mono"
               >
                 <span className="truncate">{p}</span>
-                <AtSign className="size-3.5 shrink-0 text-primary" />
+                <AtSign className="text-primary size-3.5 shrink-0" />
               </Button>
             ))}
             {!loading && filtered.length === 0 && (
-              <p className="p-2 text-body text-muted-foreground">No matching files.</p>
+              <p className="text-body text-muted-foreground p-2">
+                No matching files.
+              </p>
             )}
           </div>
         </ScrollArea>

@@ -1,7 +1,15 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { TooltipProvider } = await import("../src/components/ui/tooltip");
@@ -40,13 +48,10 @@ function renderTurn(onFork = () => {}) {
     <I18nProvider>
       <TooltipProvider>
         <ToastProvider>
-          <TurnCard
-            turn={turn}
-            onFork={onFork}
-          />
+          <TurnCard turn={turn} onFork={onFork} />
         </ToastProvider>
       </TooltipProvider>
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
 
@@ -91,7 +96,7 @@ describe("turn actions", () => {
 
     const actionLabels = Array.from(
       view.container.querySelectorAll('[data-turn-actions="response"] button'),
-      (action) => action.getAttribute("aria-label"),
+      (action) => action.getAttribute("aria-label")
     );
     expect(actionLabels).toEqual(["Copy response", "Branch into a new task"]);
 

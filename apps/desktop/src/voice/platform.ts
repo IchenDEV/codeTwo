@@ -5,6 +5,9 @@
  * therefore never falls back to Web Speech in desktop mode. The Rust desktop host uses the native
  * voice plugin and keeps permission handling inside the signed application boundary.
  */
-export function shouldUseWebSpeech(isDesktop: boolean, hasSpeechRecognition: boolean): boolean {
+export function shouldUseWebSpeech(
+  isDesktop: boolean,
+  hasSpeechRecognition: boolean
+): boolean {
   return !isDesktop && hasSpeechRecognition;
 }

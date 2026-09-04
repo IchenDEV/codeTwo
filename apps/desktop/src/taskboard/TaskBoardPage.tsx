@@ -1,28 +1,36 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { githubCurrentPullRequest } from "@/bridge"
-import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, PanelRight } from "@/components/ui/icons"
-import { Separator } from "@/components/ui/separator"
-import { useLanguage } from "@/i18n"
-import { TaskBoardHeader } from "./TaskBoardHeader"
-import { TaskBoardCollection } from "./TaskBoardCollection"
-import { TaskEditorDialog } from "./TaskEditorDialog"
-import { TaskInspector } from "./TaskInspector"
-import { type BoardTask, type TaskPriority } from "./taskBoard"
-import { useTaskBoardActions } from "./useTaskBoardActions"
-import { useTaskBoardData } from "./useTaskBoardData"
-import { useTaskBoardSelection } from "./useTaskBoardSelection"
-import { useTaskPullRequests } from "./useTaskPullRequests"
-import { useTaskBoardView } from "./useTaskBoardView"
-import { INITIAL_TASK_LIMIT, sessionCheckoutPath } from "./workspaceModel"
-import type { EditorState, InspectorTab, TaskBoardPageProps } from "./workspaceTypes"
-import "./task-board.css"
-export type { TaskBoardSession } from "./workspaceTypes"
-const NARROW_BOARD_WIDTH_REM = 48
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+
+import { githubCurrentPullRequest } from "@/bridge";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight, PanelRight } from "@/components/ui/icons";
+import { Separator } from "@/components/ui/separator";
+import { useLanguage } from "@/i18n";
+
+import type { BoardTask, TaskPriority } from "./taskBoard";
+import { TaskBoardCollection } from "./TaskBoardCollection";
+import { TaskBoardHeader } from "./TaskBoardHeader";
+import { TaskEditorDialog } from "./TaskEditorDialog";
+import { TaskInspector } from "./TaskInspector";
+import { useTaskBoardActions } from "./useTaskBoardActions";
+import { useTaskBoardData } from "./useTaskBoardData";
+import { useTaskBoardSelection } from "./useTaskBoardSelection";
+import { useTaskBoardView } from "./useTaskBoardView";
+import { useTaskPullRequests } from "./useTaskPullRequests";
+import { INITIAL_TASK_LIMIT, sessionCheckoutPath } from "./workspaceModel";
+import type {
+  EditorState,
+  InspectorTab,
+  TaskBoardPageProps,
+} from "./workspaceTypes";
+
+import "./task-board.css";
+
+export type { TaskBoardSession } from "./workspaceTypes";
+const NARROW_BOARD_WIDTH_REM = 48;
 function toggleValue<T extends string>(values: readonly T[], value: T): T[] {
   return values.includes(value)
     ? values.filter((candidate) => candidate !== value)
-    : [...values, value]
+    : [...values, value];
 }
 export function TaskBoardPage({
   sessions = [],
@@ -32,69 +40,85 @@ export function TaskBoardPage({
   headerLeadingAction,
   loadPullRequest = githubCurrentPullRequest,
 }: TaskBoardPageProps) {
-  const { locale, t } = useLanguage()
-  const [query, setQuery] = useState("")
-  const [priorities, setPriorities] = useState<TaskPriority[]>([])
-  const [labels, setLabels] = useState<string[]>([])
-  const [editor, setEditor] = useState<EditorState | null>(null)
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const [view, setView] = useTaskBoardView()
-  const [inspectorOpen, setInspectorOpen] = useState(true)
-  const [isNarrow, setIsNarrow] = useState(false)
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("agent")
-  const [prompt, setPrompt] = useState("")
-  const [visibleTaskLimit, setVisibleTaskLimit] = useState(INITIAL_TASK_LIMIT)
-  const pageRef = useRef<HTMLElement | null>(null)
-  const showInspectorButtonRef = useRef<HTMLButtonElement | null>(null)
-  const backToTasksButtonRef = useRef<HTMLButtonElement | null>(null)
-  const restoreInspectorFocus = useRef(false)
-  const wasNarrow = useRef<boolean | null>(null)
-  const data = useTaskBoardData(locale, t, sessions, query, priorities, labels)
-  const selection = useTaskBoardSelection(data.allProjectedTasks, data.projectedTasks)
-  useEffect(() => setPrompt(""), [selection.selectedSessionId])
-  useEffect(() => setVisibleTaskLimit(INITIAL_TASK_LIMIT), [data.deferredQuery, labels, priorities])
+  const { locale, t } = useLanguage();
+  const [query, setQuery] = useState("");
+  const [priorities, setPriorities] = useState<TaskPriority[]>([]);
+  const [labels, setLabels] = useState<string[]>([]);
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [view, setView] = useTaskBoardView();
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [isNarrow, setIsNarrow] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("agent");
+  const [prompt, setPrompt] = useState("");
+  const [visibleTaskLimit, setVisibleTaskLimit] = useState(INITIAL_TASK_LIMIT);
+  const pageRef = useRef<HTMLElement | null>(null);
+  const showInspectorButtonRef = useRef<HTMLButtonElement | null>(null);
+  const backToTasksButtonRef = useRef<HTMLButtonElement | null>(null);
+  const restoreInspectorFocus = useRef(false);
+  const wasNarrow = useRef<boolean | null>(null);
+  const data = useTaskBoardData(locale, t, sessions, query, priorities, labels);
+  const selection = useTaskBoardSelection(
+    data.allProjectedTasks,
+    data.projectedTasks
+  );
+  useEffect(() => setPrompt(""), [selection.selectedSessionId]);
+  useEffect(
+    () => setVisibleTaskLimit(INITIAL_TASK_LIMIT),
+    [data.deferredQuery, labels, priorities]
+  );
   useLayoutEffect(() => {
-    const page = pageRef.current
-    if (!page || typeof ResizeObserver === "undefined") return
+    const page = pageRef.current;
+    if (!page || typeof ResizeObserver === "undefined") return;
     const updateLayout = (): void => {
-      const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-      const width = page.clientWidth
-      if (width <= 0) return
-      const narrow = width <= NARROW_BOARD_WIDTH_REM * rootFontSize
-      if (narrow && wasNarrow.current !== true) setInspectorOpen(false)
-      if (!narrow) setInspectorOpen(true)
-      setIsNarrow(narrow)
-      wasNarrow.current = narrow
-    }
-    updateLayout()
-    const observer = new ResizeObserver(updateLayout)
-    observer.observe(page)
-    return () => observer.disconnect()
-  }, [])
+      const rootFontSize =
+        Number(getComputedStyle(document.documentElement).fontSize) || 16;
+      const width = page.clientWidth;
+      if (width <= 0) return;
+      const narrow = width <= NARROW_BOARD_WIDTH_REM * rootFontSize;
+      if (narrow && wasNarrow.current !== true) setInspectorOpen(false);
+      if (!narrow) setInspectorOpen(true);
+      setIsNarrow(narrow);
+      wasNarrow.current = narrow;
+    };
+    updateLayout();
+    const observer = new ResizeObserver(updateLayout);
+    observer.observe(page);
+    return () => observer.disconnect();
+  }, []);
   useLayoutEffect(() => {
     if (isNarrow && inspectorOpen) {
-      backToTasksButtonRef.current?.focus()
-      return
+      backToTasksButtonRef.current?.focus();
+      return;
     }
-    if (inspectorOpen || !restoreInspectorFocus.current) return
-    restoreInspectorFocus.current = false
-    showInspectorButtonRef.current?.focus()
-  }, [inspectorOpen, isNarrow])
-  const selectedCheckoutPath = sessionCheckoutPath(selection.selectedSession ?? undefined)
+    if (inspectorOpen || !restoreInspectorFocus.current) return;
+    restoreInspectorFocus.current = false;
+    showInspectorButtonRef.current?.focus();
+  }, [inspectorOpen, isNarrow]);
+  const selectedCheckoutPath = sessionCheckoutPath(
+    selection.selectedSession ?? undefined
+  );
   const pullRequestsByPath = useTaskPullRequests(
     data.allProjectedTasks,
     selectedCheckoutPath,
-    loadPullRequest,
-  )
-  const selectedPullRequest = selectedCheckoutPath ? pullRequestsByPath.get(selectedCheckoutPath) : null
-  const activeFilterCount = (query.trim() ? 1 : 0) + priorities.length + labels.length
-  const renderedTasks = data.projectedTasks.slice(0, visibleTaskLimit)
-  const remainingTaskCount = Math.max(0, data.projectedTasks.length - renderedTasks.length)
+    loadPullRequest
+  );
+  const selectedPullRequest =
+    selectedCheckoutPath != null && selectedCheckoutPath !== ""
+      ? pullRequestsByPath.get(selectedCheckoutPath)
+      : null;
+  const activeFilterCount =
+    (query.trim() ? 1 : 0) + priorities.length + labels.length;
+  const renderedTasks = data.projectedTasks.slice(0, visibleTaskLimit);
+  const remainingTaskCount = Math.max(
+    0,
+    data.projectedTasks.length - renderedTasks.length
+  );
   const clearFilters = (): void => {
-    setQuery("")
-    setPriorities([])
-    setLabels([])
-  }
+    setQuery("");
+    setPriorities([]);
+    setLabels([]);
+  };
   const actions = useTaskBoardActions({
     t,
     toast: data.toast,
@@ -114,53 +138,63 @@ export function TaskBoardPage({
     setPrompt,
     clearFilters,
     keepInspectorInPlace: isNarrow,
-  })
+  });
   const moveTask = (task: BoardTask, status: BoardTask["status"]): void =>
-    data.dispatch({ type: "move", id: task.id, status, now: Date.now() })
+    data.dispatch({ type: "move", id: task.id, status, now: Date.now() });
   const changeInspectorOpen = (open: boolean): void => {
-    if (!open && isNarrow) restoreInspectorFocus.current = true
-    setInspectorOpen(open)
-  }
+    if (!open && isNarrow) restoreInspectorFocus.current = true;
+    setInspectorOpen(open);
+  };
   return (
     <main
       ref={pageRef}
       data-task-board-page
       data-task-board-view={view}
       data-inspector-open={inspectorOpen}
-      className="task-board-page animate-data-page-in min-h-0 min-w-0 flex-1 bg-background text-foreground"
+      className="task-board-page animate-data-page-in bg-background text-foreground min-h-0 min-w-0 flex-1"
     >
-      <div className="task-board-titlebar flex h-layout-titlebar shrink-0 items-center gap-3 px-4 sm:px-6">
-        {headerLeadingAction ? (
-          <div data-taskboard-leading-action className="shrink-0">{headerLeadingAction}</div>
-        ) : null}
-        <nav aria-label={t("taskboard.breadcrumb")} className="flex min-w-0 items-center gap-2 text-body">
+      <div className="task-board-titlebar h-layout-titlebar flex shrink-0 items-center gap-3 px-4 sm:px-6">
+        {headerLeadingAction == null ? null : (
+          <div data-taskboard-leading-action className="shrink-0">
+            {headerLeadingAction}
+          </div>
+        )}
+        <nav
+          aria-label={t("taskboard.breadcrumb")}
+          className="text-body flex min-w-0 items-center gap-2"
+        >
           <span className="text-muted-foreground">{t("taskboard.title")}</span>
-          <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
+          <ChevronRight
+            aria-hidden
+            className="text-muted-foreground size-3.5"
+          />
           <strong className="truncate">{t("taskboard.allTasks")}</strong>
         </nav>
         <div className="flex-1" />
-        {isNarrow ? inspectorOpen ? (
-          <Button
-            ref={backToTasksButtonRef}
-            type="button"
-            variant="ghost"
-            size="compact"
-            onClick={() => changeInspectorOpen(false)}
-          >
-            <ChevronLeft aria-hidden />
-            {t("taskboard.backToTasks")}
-          </Button>
-        ) : (
-          <Button
-            ref={showInspectorButtonRef}
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("taskboard.showInspector")}
-            onClick={() => changeInspectorOpen(true)}
-          >
-            <PanelRight aria-hidden />
-          </Button>
+        {isNarrow ? (
+          inspectorOpen ? (
+            <Button
+              ref={backToTasksButtonRef}
+              type="button"
+              variant="ghost"
+              size="compact"
+              onClick={() => changeInspectorOpen(false)}
+            >
+              <ChevronLeft aria-hidden />
+              {t("taskboard.backToTasks")}
+            </Button>
+          ) : (
+            <Button
+              ref={showInspectorButtonRef}
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("taskboard.showInspector")}
+              onClick={() => changeInspectorOpen(true)}
+            >
+              <PanelRight aria-hidden />
+            </Button>
+          )
         ) : null}
       </div>
       <Separator />
@@ -178,15 +212,22 @@ export function TaskBoardPage({
               query={query}
               onQueryChange={setQuery}
               priorities={priorities}
-              onTogglePriority={(priority) => setPriorities((values) => toggleValue(values, priority))}
+              onTogglePriority={(priority) =>
+                setPriorities((values) => toggleValue(values, priority))
+              }
               labels={labels}
               availableLabels={data.availableLabels}
-              onToggleLabel={(label) => setLabels((values) => toggleValue(values, label))}
+              onToggleLabel={(label) =>
+                setLabels((values) => toggleValue(values, label))
+              }
               onClearFilters={clearFilters}
               onCreateTask={() => actions.openEditor(null, "todo")}
             />
-            {data.warning ? (
-              <p role="alert" className="bg-destructive/10 px-6 py-2 text-metadata text-destructive">
+            {data.warning != null && data.warning !== "" ? (
+              <p
+                role="alert"
+                className="bg-destructive/10 text-metadata text-destructive px-6 py-2"
+              >
                 {data.warning}
               </p>
             ) : null}
@@ -209,14 +250,16 @@ export function TaskBoardPage({
               onDeleteTask={(task) => void actions.deleteTask(task)}
               onMoveTask={moveTask}
               onStartTask={onStartTask}
-              onShowMore={() => setVisibleTaskLimit((limit) => limit + INITIAL_TASK_LIMIT)}
+              onShowMore={() =>
+                setVisibleTaskLimit((limit) => limit + INITIAL_TASK_LIMIT)
+              }
             />
           </section>
         ) : null}
         {!isNarrow || inspectorOpen ? (
           <aside
             aria-label={t("taskboard.inspector")}
-            className="task-board-inspector min-h-0 min-w-0 bg-surface"
+            className="task-board-inspector bg-surface min-h-0 min-w-0"
           >
             <TaskInspector
               t={t}
@@ -245,5 +288,5 @@ export function TaskBoardPage({
         />
       ) : null}
     </main>
-  )
+  );
 }

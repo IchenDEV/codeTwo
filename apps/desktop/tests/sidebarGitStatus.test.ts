@@ -6,7 +6,9 @@ import {
   sidebarPullRequestStatus,
 } from "../src/sidebar/sidebarGitStatus";
 
-function pullRequest(overrides: Partial<GitHubPullRequest> = {}): GitHubPullRequest {
+function pullRequest(
+  overrides: Partial<GitHubPullRequest> = {}
+): GitHubPullRequest {
   return {
     number: 42,
     title: "Sidebar",
@@ -34,17 +36,46 @@ function pullRequest(overrides: Partial<GitHubPullRequest> = {}): GitHubPullRequ
 
 describe("sidebar GitHub status", () => {
   test("distinguishes merged, conflict, failed CI, running CI, open, and closed PRs", () => {
-    expect(sidebarPullRequestStatus(pullRequest({ state: "MERGED" }))?.state).toBe("merged");
-    expect(sidebarPullRequestStatus(pullRequest({ mergeable: "CONFLICTING" }))?.state)
-      .toBe("conflicting");
-    expect(sidebarPullRequestStatus(pullRequest({
-      checks: [{ name: "test", status: "COMPLETED", conclusion: "FAILURE", details_url: null, workflow_name: null }],
-    }))?.state).toBe("ci_failed");
-    expect(sidebarPullRequestStatus(pullRequest({
-      checks: [{ name: "test", status: "IN_PROGRESS", conclusion: null, details_url: null, workflow_name: null }],
-    }))?.state).toBe("ci_running");
+    expect(
+      sidebarPullRequestStatus(pullRequest({ state: "MERGED" }))?.state
+    ).toBe("merged");
+    expect(
+      sidebarPullRequestStatus(pullRequest({ mergeable: "CONFLICTING" }))?.state
+    ).toBe("conflicting");
+    expect(
+      sidebarPullRequestStatus(
+        pullRequest({
+          checks: [
+            {
+              name: "test",
+              status: "COMPLETED",
+              conclusion: "FAILURE",
+              details_url: null,
+              workflow_name: null,
+            },
+          ],
+        })
+      )?.state
+    ).toBe("ci_failed");
+    expect(
+      sidebarPullRequestStatus(
+        pullRequest({
+          checks: [
+            {
+              name: "test",
+              status: "IN_PROGRESS",
+              conclusion: null,
+              details_url: null,
+              workflow_name: null,
+            },
+          ],
+        })
+      )?.state
+    ).toBe("ci_running");
     expect(sidebarPullRequestStatus(pullRequest())?.state).toBe("open");
-    expect(sidebarPullRequestStatus(pullRequest({ state: "CLOSED" }))?.state).toBe("closed");
+    expect(
+      sidebarPullRequestStatus(pullRequest({ state: "CLOSED" }))?.state
+    ).toBe("closed");
     expect(sidebarPullRequestStatus(null)).toBeNull();
   });
 
@@ -57,10 +88,10 @@ describe("sidebar GitHub status", () => {
         if (path === "/two") throw new Error("offline");
         return pullRequest({ number: 7 });
       },
-      2,
+      2
     );
 
-    expect(calls.sort()).toEqual(["/one", "/two"]);
+    expect(calls.toSorted()).toEqual(["/one", "/two"]);
     expect(statuses.get("/one")).toEqual({
       number: 7,
       url: "https://github.com/example/repo/pull/42",

@@ -10,21 +10,24 @@ export interface LspRuntimePolicy {
 
 const backendPolicyQueues = new Map<string, Promise<void>>();
 
-function updateBackendPolicy(
+async function updateBackendPolicy(
   policy: LspRuntimePolicy,
-  setBackendEnabled: (enabled: boolean) => Promise<void>,
+  setBackendEnabled: (enabled: boolean) => Promise<void>
 ): Promise<void> {
   const realm = policy.projectPath ?? "\0global";
   const previous = backendPolicyQueues.get(realm) ?? Promise.resolve();
   const update = previous
-    .catch(() => {})
-    .then(() => setBackendEnabled(policy.componentEnabled));
+    .catch(() => {
+      /* empty */
+    })
+    .then(async () => await setBackendEnabled(policy.componentEnabled));
   backendPolicyQueues.set(realm, update);
   const cleanup = () => {
-    if (backendPolicyQueues.get(realm) === update) backendPolicyQueues.delete(realm);
+    if (backendPolicyQueues.get(realm) === update)
+      backendPolicyQueues.delete(realm);
   };
   void update.then(cleanup, cleanup);
-  return update;
+  return await update;
 }
 
 /**
@@ -36,7 +39,7 @@ function updateBackendPolicy(
 export async function synchronizeLspRuntimePolicy(
   policy: LspRuntimePolicy,
   setBackendEnabled: (enabled: boolean) => Promise<void>,
-  isCurrent: () => boolean = () => true,
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   setLspRuntimeEnabled(false);
   if (!policy.catalogReady || !policy.pluginEnabled) return;

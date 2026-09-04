@@ -1,9 +1,18 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+
+import {
+  activateDom,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
-const { TaskPlanPanel, planChecklistMarkdown } = await import("../src/session/TaskPlanPanel");
+const { TaskPlanPanel, planChecklistMarkdown } =
+  await import("../src/session/TaskPlanPanel");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -39,7 +48,7 @@ function renderPanel(props = {}) {
   return mount(
     <I18nProvider>
       <TaskPlanPanel turns={[finishedTurn()]} {...props} />
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
 
@@ -49,19 +58,23 @@ const OPEN_LABELS = ["Open as document", "planDoc.open"];
 const PIN_LABELS = ["Pin as artifact", "planDoc.pin"];
 
 function buttonByLabel(rendered, labels) {
-  return [...rendered.container.querySelectorAll("button")]
-    .find((el) => labels.includes(el.textContent?.trim()));
+  return [...rendered.container.querySelectorAll("button")].find((el) =>
+    labels.includes(el.textContent?.trim())
+  );
 }
 
 describe("planChecklistMarkdown", () => {
   test("converts entries to a checklist, preserving markers and structured status", () => {
-    expect(planChecklistMarkdown([
-      "Survey the code",
-      "[x] Write the fix",
-      "- [ ] Test it",
-      { content: "Ship it", status: "completed" },
-    ]))
-      .toBe("- [ ] Survey the code\n- [x] Write the fix\n- [ ] Test it\n- [x] Ship it");
+    expect(
+      planChecklistMarkdown([
+        "Survey the code",
+        "[x] Write the fix",
+        "- [ ] Test it",
+        { content: "Ship it", status: "completed" },
+      ])
+    ).toBe(
+      "- [ ] Survey the code\n- [x] Write the fix\n- [ ] Test it\n- [x] Ship it"
+    );
   });
 });
 
@@ -69,7 +82,9 @@ describe("TaskPlanPanel plan-as-document", () => {
   test("offers Open as document and calls the handler with the entries", async () => {
     activateDom();
     const opened = [];
-    const rendered = renderPanel({ onOpenPlanAsDocument: (entries) => opened.push(entries) });
+    const rendered = renderPanel({
+      onOpenPlanAsDocument: (entries) => opened.push(entries),
+    });
 
     const open = buttonByLabel(rendered, OPEN_LABELS);
     expect(open).toBeTruthy();
@@ -78,10 +93,12 @@ describe("TaskPlanPanel plan-as-document", () => {
 
     click(open);
     await flush();
-    expect(opened).toEqual([[
-      { content: "Survey the code", status: "in_progress" },
-      { content: "Write the fix", status: "completed" },
-    ]]);
+    expect(opened).toEqual([
+      [
+        { content: "Survey the code", status: "in_progress" },
+        { content: "Write the fix", status: "completed" },
+      ],
+    ]);
     rendered.unmount();
   });
 

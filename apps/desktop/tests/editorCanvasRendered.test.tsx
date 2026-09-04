@@ -1,12 +1,22 @@
 // @ts-nocheck
 import { afterEach, describe, expect, mock, test } from "bun:test";
+
 import React from "react";
-import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHarness";
+
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 // Canvas/BlockNote imports touch the browser globals at module evaluation; own the shared DOM
 // before loading them so this rendered host test is safe both standalone and in the combined gate.
 activateDom();
-dom.window.HTMLCanvasElement.prototype.getContext = () => ({ filter: "" }) as never;
+dom.window.HTMLCanvasElement.prototype.getContext = () =>
+  ({ filter: "" }) as never;
 
 let fakeEditor: any;
 let latestViewProps: any;
@@ -20,15 +30,25 @@ function newFakeEditor() {
     document: [{ type: "paragraph", content: [] }],
     insertBlocks(blocks: any[], reference: any) {
       const index = editor.document.indexOf(reference);
-      editor.document.splice(index < 0 ? editor.document.length : index + 1, 0, ...blocks);
+      editor.document.splice(
+        index === -1 ? editor.document.length : index + 1,
+        0,
+        ...blocks
+      );
     },
     insertInlineContent() {},
     replaceBlocks(blocks: any[], replacement: any[]) {
       const first = editor.document.indexOf(blocks[0]);
-      editor.document.splice(first < 0 ? 0 : first, blocks.length, ...replacement);
+      editor.document.splice(
+        first === -1 ? 0 : first,
+        blocks.length,
+        ...replacement
+      );
     },
     removeBlocks(blocks: any[]) {
-      editor.document = editor.document.filter((block: any) => !blocks.includes(block));
+      editor.document = editor.document.filter(
+        (block: any) => !blocks.includes(block)
+      );
     },
     updateBlock() {},
     focus() {},
@@ -51,11 +71,11 @@ const realFileMenu = await import("../src/editor/FileMenu");
 const realTheme = await import("../src/theme");
 const realBridge = await import("../src/bridge");
 
-mock.module("@blocknote/core", () => ({
+void mock.module("@blocknote/core", () => ({
   ...realCore,
   filterSuggestionItems: (items: any[]) => items,
 }));
-mock.module("@blocknote/mantine", () => ({
+void mock.module("@blocknote/mantine", () => ({
   ...realMantine,
   BlockNoteView: (props: any) => {
     const runtime = React.useContext(mockedCanvasRuntimeContext);
@@ -67,24 +87,27 @@ mock.module("@blocknote/mantine", () => ({
       React.createElement(
         React.Fragment,
         null,
-        React.createElement("div", { className: "ProseMirror", contentEditable: true }),
+        React.createElement("div", {
+          className: "ProseMirror",
+          contentEditable: true,
+        }),
         props.children,
-        mountedCanvasBlock,
-      ),
+        mountedCanvasBlock
+      )
     );
   },
 }));
-mock.module("@blocknote/react", () => ({
+void mock.module("@blocknote/react", () => ({
   ...realReact,
   SuggestionMenuController: () => null,
   getDefaultReactSlashMenuItems: () => [],
   useCreateBlockNote: () => {
-    if (!fakeEditor) fakeEditor = newFakeEditor();
+    fakeEditor ??= newFakeEditor();
     createCount += 1;
     return fakeEditor;
   },
 }));
-mock.module("../src/skillInline", () => ({
+void mock.module("../src/skillInline", () => ({
   ...realSkillInline,
   CanvasBlockRuntimeContext: mockedCanvasRuntimeContext,
   canvasBlockPropsFromDraft: (draft: any, options: any = {}) => ({
@@ -96,40 +119,71 @@ mock.module("../src/skillInline", () => ({
     deliveryError: options.deliveryError,
     deliveryErrorKind: options.deliveryErrorKind,
   }),
-  docToBlocks: (editor: any) => editor.document.flatMap((block: any) => {
-    if (block.type === "canvas") {
-      return [{ type: "canvas", id: block.props.id, frozen_revision: block.props.revision, pixel_policy: block.props.pixelPolicy }];
-    }
-    // Keep the fake faithful for slot cards: bun module mocks leak across test files, so later
-    // suites exercising slotCard serialization must still see the real behavior.
-    if (block.type === "slotCard") return realSlotCard.slotCardToDocBlocks(block.props);
-    // Same leak rule for issue references (R12): the issueBlock suite must see the real
-    // serialization (header-stripped body, provenance kept off the prompt record).
-    if (block.type === "issueRef") return realDocToBlocks({ document: [block] } as never);
-    // Same leak rule for artifact mentions: delegate the whole paragraph to the real walker so
-    // inline ordering and token emission stay exact for the artifactMention suite.
-    if (Array.isArray(block.content) && block.content.some((inline: any) => inline?.type === "artifactMention")) {
-      return realDocToBlocks({ document: [block] } as never);
-    }
-    if (block.type === "image") return [{ type: "image", path: block.props.url }];
-    const text = typeof block.content === "string"
-      ? block.content
-      : Array.isArray(block.content)
-        ? block.content.filter((inline: any) => inline.type === "text").map((inline: any) => inline.text ?? "").join("")
-        : "";
-    if (text) return [{ type: "text", text }];
-    if (Array.isArray(block.content)) {
-      const inline = block.content.find((item: any) => item?.type && item.type !== "text");
-      if (inline?.type === "skill") return [{ type: "skill", skill_id: inline.props.skillId, params: {} }];
-      if (inline?.type === "fileMention") return [{ type: "file", path: inline.props.path }];
-      if (inline?.type === "sessionMention") return [{ type: "session", session_id: inline.props.sessionId }];
-    }
-    return [];
-  }),
+  docToBlocks: (editor: any) =>
+    editor.document.flatMap((block: any) => {
+      if (block.type === "canvas") {
+        return [
+          {
+            type: "canvas",
+            id: block.props.id,
+            frozen_revision: block.props.revision,
+            pixel_policy: block.props.pixelPolicy,
+          },
+        ];
+      }
+      // Keep the fake faithful for slot cards: bun module mocks leak across test files, so later
+      // suites exercising slotCard serialization must still see the real behavior.
+      if (block.type === "slotCard")
+        return realSlotCard.slotCardToDocBlocks(block.props);
+      // Same leak rule for issue references (R12): the issueBlock suite must see the real
+      // serialization (header-stripped body, provenance kept off the prompt record).
+      if (block.type === "issueRef")
+        return realDocToBlocks({ document: [block] } as never);
+      // Same leak rule for artifact mentions: delegate the whole paragraph to the real walker so
+      // inline ordering and token emission stay exact for the artifactMention suite.
+      if (
+        Array.isArray(block.content) &&
+        block.content.some((inline: any) => inline?.type === "artifactMention")
+      ) {
+        return realDocToBlocks({ document: [block] } as never);
+      }
+      if (block.type === "image")
+        return [{ type: "image", path: block.props.url }];
+      const text =
+        typeof block.content === "string"
+          ? block.content
+          : Array.isArray(block.content)
+            ? block.content
+                .filter((inline: any) => inline.type === "text")
+                .map((inline: any) => inline.text ?? "")
+                .join("")
+            : "";
+      if (text != null) return [{ type: "text", text }];
+      if (Array.isArray(block.content)) {
+        const inline = block.content.find(
+          (item: any) => item?.type != null && item.type !== "text"
+        );
+        if (inline?.type === "skill")
+          return [
+            { type: "skill", skill_id: inline.props.skillId, params: {} },
+          ];
+        if (inline?.type === "fileMention")
+          return [{ type: "file", path: inline.props.path }];
+        if (inline?.type === "sessionMention")
+          return [{ type: "session", session_id: inline.props.sessionId }];
+      }
+      return [];
+    }),
 }));
-mock.module("../src/editor/FileMenu", () => ({ ...realFileMenu, FileMenu: () => null }));
-mock.module("../src/theme", () => ({ ...realTheme, useColorScheme: () => editorScheme }));
-mock.module("../src/bridge", () => ({
+void mock.module("../src/editor/FileMenu", () => ({
+  ...realFileMenu,
+  FileMenu: () => null,
+}));
+void mock.module("../src/theme", () => ({
+  ...realTheme,
+  useColorScheme: () => editorScheme,
+}));
+void mock.module("../src/bridge", () => ({
   ...realBridge,
   listArchivedSessions: async () => [],
   listFiles: async () => [],
@@ -219,15 +273,23 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
         restoreCanvasDocumentRef={{ current: null }}
         freezeCanvasesRef={{ current: null }}
         onEmptyChange={(value) => empty.push(value)}
-      />,
+      />
     );
     expect(createCount).toBe(1);
     await insertDraftRef.current(draft("canvas-a", 1));
     latestViewProps.onChange();
     await insertDraftRef.current(draft("canvas-b", 2));
     latestViewProps.onChange();
-    expect(fakeEditor.document.filter((block: any) => block.type === "canvas").map((block: any) => block.props.id)).toEqual(["canvas-a", "canvas-b"]);
-    expect(getBlocksRef.current().map((block: any) => block.type === "canvas" && block.id)).toEqual(["canvas-a", "canvas-b"]);
+    expect(
+      fakeEditor.document
+        .filter((block: any) => block.type === "canvas")
+        .map((block: any) => block.props.id)
+    ).toEqual(["canvas-a", "canvas-b"]);
+    expect(
+      getBlocksRef
+        .current()
+        .map((block: any) => block.type === "canvas" && block.id)
+    ).toEqual(["canvas-a", "canvas-b"]);
     expect(empty.at(-1)).toBe(false);
     view.unmount();
   });
@@ -335,14 +397,16 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
         insertCanvasDraftRef={insertDraftRef}
         restoreCanvasDocumentRef={{ current: null }}
         onEmptyChange={() => {}}
-      />,
+      />
     );
     insertDraftRef.current(draft("canvas-life", 1));
     latestViewProps.onChange();
     // A mounted CanvasBlock reports this as soon as its scene gains an object; retain that
     // activity signal so removal exercises the nonempty tombstone path.
     latestCanvasRuntime.onCanvasActivity("canvas-life", true);
-    const canvas = fakeEditor.document.find((block: any) => block.type === "canvas");
+    const canvas = fakeEditor.document.find(
+      (block: any) => block.type === "canvas"
+    );
     fakeEditor.removeBlocks([canvas]);
     latestViewProps.onChange();
     expect(events).toContainEqual(["remove", "canvas-life", true]);
@@ -350,7 +414,11 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     latestViewProps.onChange();
     expect(events).toContainEqual(["restore", "canvas-life"]);
     view.unmount();
-    expect(events.some((event) => event[0] === "unmount" && event[1] === "canvas-life")).toBe(true);
+    expect(
+      events.some(
+        (event) => event[0] === "unmount" && event[1] === "canvas-life"
+      )
+    ).toBe(true);
   });
 
   test("accepted send marks clear-triggered head purge while a rejected retry does not", () => {
@@ -402,12 +470,13 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
         insertCanvasDraftRef={insertDraftRef}
         restoreCanvasDocumentRef={{ current: null }}
         onEmptyChange={() => {}}
-      />,
+      />
     );
     insertDraftRef.current(draft("canvas-accepted", 1));
     latestViewProps.onChange();
     latestCanvasRuntime.onCanvasActivity("canvas-accepted", true);
-    for (const id of canvasIdsToPurgeAfterTurnStart(true, ["canvas-accepted"])) purgeRequested.add(id);
+    for (const id of canvasIdsToPurgeAfterTurnStart(true, ["canvas-accepted"]))
+      purgeRequested.add(id);
     clearRef.current();
     latestViewProps.onChange();
     expect(events).toContainEqual(["purge", "canvas-accepted"]);
@@ -415,12 +484,17 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     insertDraftRef.current(draft("canvas-retry", 1));
     latestViewProps.onChange();
     latestCanvasRuntime.onCanvasActivity("canvas-retry", true);
-    const retry = fakeEditor.document.find((block: any) => block.type === "canvas" && block.props.id === "canvas-retry");
+    const retry = fakeEditor.document.find(
+      (block: any) =>
+        block.type === "canvas" && block.props.id === "canvas-retry"
+    );
     fakeEditor.removeBlocks([retry]);
     latestViewProps.onChange();
     expect(events).not.toContainEqual(["purge", "canvas-retry"]);
     expect(canvasIdsToPurgeAfterTurnStart(false, ["canvas-retry"])).toEqual([]);
-    expect(canvasIdsToPurgeAfterTurnStart(true, ["canvas-retry"], false)).toEqual([]);
+    expect(
+      canvasIdsToPurgeAfterTurnStart(true, ["canvas-retry"], false)
+    ).toEqual([]);
     view.unmount();
   });
 
@@ -467,11 +541,13 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
         insertCanvasDraftRef={{ current: null }}
         restoreCanvasDocumentRef={restoreRef}
         onEmptyChange={() => {}}
-      />,
+      />
     );
     // Newer user text must survive an asynchronous provider rejection; recovery appends rather
     // than replacing the live document.
-    fakeEditor.document = [{ type: "paragraph", content: [{ type: "text", text: "newer" }] }];
+    fakeEditor.document = [
+      { type: "paragraph", content: [{ type: "text", text: "newer" }] },
+    ];
     restoreRef.current(
       [
         { type: "text", text: "before" },
@@ -479,15 +555,28 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
         { type: "skill", skill_id: "review", params: {} },
         { type: "file", path: "src/main.rs" },
         { type: "session", session_id: "session-context" },
-        { type: "canvas", id: "dup-a", frozen_revision: 1, pixel_policy: "required" },
+        {
+          type: "canvas",
+          id: "dup-a",
+          frozen_revision: 1,
+          pixel_policy: "required",
+        },
         { type: "text", text: "between" },
-        { type: "canvas", id: "dup-b", frozen_revision: 2, pixel_policy: "required" },
+        {
+          type: "canvas",
+          id: "dup-b",
+          frozen_revision: 2,
+          pixel_policy: "required",
+        },
       ],
       new Map([
         ["dup-a", draft("dup-a", 1)],
         ["dup-b", draft("dup-b", 2)],
       ]),
-      { deliveryError: "provider rejected images", deliveryErrorKind: "provider_image" },
+      {
+        deliveryError: "provider rejected images",
+        deliveryErrorKind: "provider_image",
+      }
     );
     expect(fakeEditor.document.map((block: any) => block.type)).toEqual([
       "paragraph",
@@ -503,7 +592,10 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     ]);
     expect(fakeEditor.document[0].content[0].text).toBe("newer");
     expect(fakeEditor.document[1].content).toBe("before");
-    expect(fakeEditor.document.find((block: any) => block.type === "image")?.props.url).toBe("screens/result.png");
+    expect(
+      fakeEditor.document.find((block: any) => block.type === "image")?.props
+        .url
+    ).toBe("screens/result.png");
     expect(refs.getBlocksRef.current()).toEqual([
       { type: "text", text: "newer" },
       { type: "text", text: "before" },
@@ -511,15 +603,29 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
       { type: "skill", skill_id: "review", params: {} },
       { type: "file", path: "src/main.rs" },
       { type: "session", session_id: "session-context" },
-      { type: "canvas", id: "dup-a", frozen_revision: 1, pixel_policy: "required" },
+      {
+        type: "canvas",
+        id: "dup-a",
+        frozen_revision: 1,
+        pixel_policy: "required",
+      },
       { type: "text", text: "between" },
-      { type: "canvas", id: "dup-b", frozen_revision: 2, pixel_policy: "required" },
+      {
+        type: "canvas",
+        id: "dup-b",
+        frozen_revision: 2,
+        pixel_policy: "required",
+      },
     ]);
-    expect(fakeEditor.document.filter((block: any) => block.type === "canvas").map((block: any) => block.props.id)).toEqual([
-      "dup-a",
-      "dup-b",
-    ]);
-    expect(fakeEditor.document.find((block: any) => block.type === "canvas")?.props.deliveryErrorKind).toBe("provider_image");
+    expect(
+      fakeEditor.document
+        .filter((block: any) => block.type === "canvas")
+        .map((block: any) => block.props.id)
+    ).toEqual(["dup-a", "dup-b"]);
+    expect(
+      fakeEditor.document.find((block: any) => block.type === "canvas")?.props
+        .deliveryErrorKind
+    ).toBe("provider_image");
     view.unmount();
   });
 
@@ -540,12 +646,16 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     };
     const view = mount(
       <DocEditor
-        skills={[{
-          id: "review",
-          name: "Review",
-          macro_template: "Review {{focus}}",
-          macro_slots: [{ id: "focus", label: "Focus", kind: "text", required: true }],
-        }]}
+        skills={[
+          {
+            id: "review",
+            name: "Review",
+            macro_template: "Review {{focus}}",
+            macro_slots: [
+              { id: "focus", label: "Focus", kind: "text", required: true },
+            ],
+          },
+        ]}
         cwd="."
         sessionId={null}
         {...refs}
@@ -557,9 +667,11 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
         restoreCanvasDocumentRef={restoreRef}
         onEmptyChange={() => {}}
         onDocumentChange={(doc) => documentChanges.push(doc)}
-      />,
+      />
     );
-    fakeEditor.document = [{ type: "paragraph", content: [{ type: "text", text: "other draft" }] }];
+    fakeEditor.document = [
+      { type: "paragraph", content: [{ type: "text", text: "other draft" }] },
+    ];
     const restored = [
       { type: "text", text: "Keep me" },
       { type: "skill", skill_id: "review", params: { focus: "correctness" } },
@@ -572,8 +684,16 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
 
     restoreRef.current(restored, new Map(), { mode: "replace" });
 
-    expect(fakeEditor.document.some((block: any) => JSON.stringify(block).includes("other draft"))).toBe(false);
-    expect(fakeEditor.document.some((block: any) => block.type === "appshot" || block.type === "attachment")).toBe(false);
+    expect(
+      fakeEditor.document.some((block: any) =>
+        JSON.stringify(block).includes("other draft")
+      )
+    ).toBe(false);
+    expect(
+      fakeEditor.document.some(
+        (block: any) => block.type === "appshot" || block.type === "attachment"
+      )
+    ).toBe(false);
     expect(refs.getBlocksRef.current()).toEqual([
       { type: "text", text: "Keep me" },
       { type: "skill", skill_id: "review", params: { focus: "correctness" } },
@@ -647,30 +767,47 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
         restoreCanvasDocumentRef={{ current: null }}
         canvasDeliveryErrorRef={canvasDeliveryErrorRef}
         onEmptyChange={() => {}}
-      />,
+      />
     );
     fakeEditor.document = [
       { type: "paragraph", content: [{ type: "text", text: "before" }] },
-      { type: "canvas", props: { id: "canvas-target", revision: 1, pixelPolicy: "required" } },
+      {
+        type: "canvas",
+        props: { id: "canvas-target", revision: 1, pixelPolicy: "required" },
+      },
       { type: "paragraph", content: [{ type: "text", text: "between" }] },
-      { type: "canvas", props: { id: "canvas-other", revision: 2, pixelPolicy: "required" } },
+      {
+        type: "canvas",
+        props: { id: "canvas-other", revision: 2, pixelPolicy: "required" },
+      },
       { type: "paragraph", content: [] },
     ];
     const documentBefore = refs.getBlocksRef.current();
     await flush();
     latestCanvasRuntime.register({
       id: "canvas-other",
-      setError: (...args: any[]) => nonTargetHandleErrors.push(["canvas-other", ...args]),
+      setError: (...args: any[]) =>
+        nonTargetHandleErrors.push(["canvas-other", ...args]),
     });
 
     canvasDeliveryErrorRef.current(
       [
         { type: "text", text: "before" },
-        { type: "canvas", id: "canvas-target", frozen_revision: 1, pixel_policy: "required" },
-        { type: "canvas", id: "not-mounted", frozen_revision: 9, pixel_policy: "required" },
+        {
+          type: "canvas",
+          id: "canvas-target",
+          frozen_revision: 1,
+          pixel_policy: "required",
+        },
+        {
+          type: "canvas",
+          id: "not-mounted",
+          frozen_revision: 9,
+          pixel_policy: "required",
+        },
       ],
       "provider rejected images",
-      "provider_image",
+      "provider_image"
     );
     await flush();
 
@@ -678,8 +815,8 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     expect(button(view.container, "Switch provider")).toBeTruthy();
     expect(
       view.container.querySelectorAll(
-        '[role="alert"] button[data-slot="button"][data-size="compact"]',
-      ),
+        '[role="alert"] button[data-slot="button"][data-size="compact"]'
+      )
     ).toHaveLength(2);
     expect(nonTargetHandleErrors).toEqual([]);
     expect(baseErrors).toEqual([
@@ -715,27 +852,47 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
         freezeCanvasesRef={{ current: null }}
         onPasteImages={(files) => pasted.push([...files])}
         onEmptyChange={() => {}}
-      />,
+      />
     );
-    const editorSurface = view.container.querySelector<HTMLElement>("[data-composer-editor]");
+    const editorSurface = view.container.querySelector<HTMLElement>(
+      "[data-composer-editor]"
+    );
     expect(editorSurface).toBeTruthy();
-    const contentEditable = editorSurface?.querySelector<HTMLElement>(".ProseMirror");
+    const contentEditable =
+      editorSurface?.querySelector<HTMLElement>(".ProseMirror");
     expect(contentEditable?.getAttribute("role")).toBe("textbox");
-    expect(contentEditable?.getAttribute("aria-label")).toBe("composer.documentInput");
+    expect(contentEditable?.getAttribute("aria-label")).toBe(
+      "composer.documentInput"
+    );
     expect(contentEditable?.getAttribute("aria-multiline")).toBe("true");
 
-    const textPaste = new dom.window.Event("paste", { bubbles: true, cancelable: true });
+    const textPaste = new dom.window.Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
     Object.defineProperty(textPaste, "clipboardData", {
-      value: { files: [], items: [], types: ["text/plain"], getData: () => "keep this text" },
+      value: {
+        files: [],
+        items: [],
+        types: ["text/plain"],
+        getData: () => "keep this text",
+      },
     });
     editorSurface?.dispatchEvent(textPaste);
     expect(textPaste.defaultPrevented).toBe(false);
     expect(pasted).toEqual([]);
 
-    const image = new dom.window.File([new Uint8Array([137, 80, 78, 71])], "pasted.png", {
-      type: "image/png",
+    const image = new dom.window.File(
+      [new Uint8Array([137, 80, 78, 71])],
+      "pasted.png",
+      {
+        type: "image/png",
+      }
+    );
+    const imagePaste = new dom.window.Event("paste", {
+      bubbles: true,
+      cancelable: true,
     });
-    const imagePaste = new dom.window.Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(imagePaste, "clipboardData", {
       value: { files: [image], items: [], types: ["Files"], getData: () => "" },
     });
@@ -743,7 +900,9 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     await flush();
 
     expect(imagePaste.defaultPrevented).toBe(true);
-    expect(pasted.map((files) => files.map((file) => file.name))).toEqual([["pasted.png"]]);
+    expect(pasted.map((files) => files.map((file) => file.name))).toEqual([
+      ["pasted.png"],
+    ]);
     view.unmount();
   });
 });

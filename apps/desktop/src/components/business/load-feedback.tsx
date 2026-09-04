@@ -1,11 +1,15 @@
-import { CircleAlert } from "@/components/ui/icons"
-
-import { ActivityOrb } from "@/components/ui/activity-orb"
-import { Button } from "@/components/ui/button"
+import { ActivityOrb } from "@/components/ui/activity-orb";
+import { Button } from "@/components/ui/button";
+import { CircleAlert } from "@/components/ui/icons";
 
 type LoadFeedbackProps =
   | { state: "loading"; message: string }
-  | { state: "error"; message: string; retryLabel: string; onRetry: () => void }
+  | {
+      state: "error";
+      message: string;
+      retryLabel: string;
+      onRetry: () => void;
+    };
 
 function LoadFeedback(props: LoadFeedbackProps) {
   if (props.state === "loading") {
@@ -14,12 +18,12 @@ function LoadFeedback(props: LoadFeedbackProps) {
         data-slot="load-feedback"
         data-state="loading"
         role="status"
-        className="flex min-h-0 w-full flex-1 items-center justify-center gap-control-group py-page text-center text-body text-content-muted"
+        className="gap-control-group py-page text-body text-content-muted flex min-h-0 w-full flex-1 items-center justify-center text-center"
       >
         <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
         <span data-slot="load-feedback-message">{props.message}</span>
       </div>
-    )
+    );
   }
 
   return (
@@ -27,7 +31,7 @@ function LoadFeedback(props: LoadFeedbackProps) {
       data-slot="load-feedback"
       data-state="error"
       role="alert"
-      className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-surface-inset px-page-section py-page text-center text-body text-content-muted"
+      className="gap-surface-inset px-page-section py-page text-body text-content-muted flex min-h-0 w-full flex-1 flex-col items-center justify-center text-center"
     >
       <CircleAlert
         data-slot="load-feedback-icon"
@@ -39,7 +43,7 @@ function LoadFeedback(props: LoadFeedbackProps) {
         {props.retryLabel}
       </Button>
     </div>
-  )
+  );
 }
 
-export { LoadFeedback, type LoadFeedbackProps }
+export { LoadFeedback, type LoadFeedbackProps };

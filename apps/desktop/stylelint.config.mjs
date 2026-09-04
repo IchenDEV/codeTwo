@@ -1,5 +1,11 @@
-const semanticRadius = /^var\(--(?:ds-(?:radius-(?:micro|control|module|modal)|(?:button|input|card|dialog|composer|menu|menu-item)-radius)|canvas-(?:radius-(?:control|module)|button-radius)|tabs-indicator-radius)\)$/;
+const semanticRadius =
+  /^var\(--(?:ds-(?:radius-(?:micro|control|module|modal)|(?:button|input|card|dialog|composer|menu|menu-item)-radius)|canvas-(?:radius-(?:control|module)|button-radius)|tabs-indicator-radius)\)$/;
 
+/**
+ * Stylelint stays product-focused: semantic border-radius allow-list plus a
+ * small CSS hygiene set. Ultracite's Stylelint preset is not used here because
+ * its notation/order rules fight the design-token CSS source of truth.
+ */
 export default {
   ignoreFiles: ["artifacts/**", "dist/**", "node_modules/**"],
   rules: {

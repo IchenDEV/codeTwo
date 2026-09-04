@@ -249,7 +249,8 @@
   border-radius: var(--ds-radius-modal);
   box-shadow: var(--ds-elevation-surface);
   text-decoration: none;
-  transition: border-color var(--ds-motion-feedback) var(--ds-ease-enter),
+  transition:
+    border-color var(--ds-motion-feedback) var(--ds-ease-enter),
     box-shadow var(--ds-motion-feedback) var(--ds-ease-enter),
     transform var(--ds-motion-feedback) var(--ds-ease-enter);
 }
@@ -610,7 +611,6 @@
     width: 100% !important;
     border-inline-start: 0;
   }
-
 }
 
 @media (max-width: 520px) {

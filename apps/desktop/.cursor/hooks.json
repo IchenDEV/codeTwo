@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "bunx prettier --write"
+      },
+      {
+        "command": "bun run fix"
+      }
+    ]
+  }
+}

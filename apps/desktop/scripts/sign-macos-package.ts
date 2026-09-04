@@ -12,7 +12,8 @@ if (
 }
 
 const buildDirectory = process.env.ELECTROBUN_BUILD_DIR;
-if (!buildDirectory) throw new Error("ELECTROBUN_BUILD_DIR is required for final package signing");
+if (buildDirectory == null || buildDirectory === "")
+  throw new Error("ELECTROBUN_BUILD_DIR is required for final package signing");
 
 const bundles = readdirSync(buildDirectory)
   .filter((name) => name.endsWith(".app"))
@@ -33,8 +34,16 @@ for (const bundle of bundles) {
   // metadata writes, so the final seal includes version.json and build.json. Do not enable
   // Hardened Runtime for ad-hoc builds: their components have no shared Team ID for validation.
   const result = Bun.spawnSync(
-    ["/usr/bin/codesign", "--force", "--deep", "--sign", "-", "--timestamp=none", bundle],
-    { stdout: "inherit", stderr: "inherit" },
+    [
+      "/usr/bin/codesign",
+      "--force",
+      "--deep",
+      "--sign",
+      "-",
+      "--timestamp=none",
+      bundle,
+    ],
+    { stdout: "inherit", stderr: "inherit" }
   );
   if (result.exitCode !== 0) process.exit(result.exitCode);
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import { Spinner } from "@/components/ui/spinner";
 
 import { readBinary } from "../bridge";
@@ -41,24 +42,27 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
         if (!alive) return;
         const type = imageTypeOf(path) ?? "application/octet-stream";
         // Copy into a fresh ArrayBuffer: the IPC buffer may be a view into a larger one.
-        objectUrl = URL.createObjectURL(new Blob([bytes.slice().buffer as ArrayBuffer], { type }));
+        objectUrl = URL.createObjectURL(
+          new Blob([Uint8Array.from(bytes).buffer], { type })
+        );
         setSize(bytes.byteLength);
         setUrl(objectUrl);
       })
-      .catch((e) => alive && setError(String(e)));
+      .catch((error: unknown) => alive && setError(String(error)));
 
     return () => {
       alive = false;
       // Revoking is what actually frees the bytes; without it every tab switch leaks the file.
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl != null && objectUrl !== "") URL.revokeObjectURL(objectUrl);
     };
   }, [cwd, path]);
 
-  if (error) return <p className="px-6 py-4 text-body text-destructive">{error}</p>;
+  if (error != null && error !== "")
+    return <p className="text-body text-destructive px-6 py-4">{error}</p>;
 
-  if (!url) {
+  if (url == null || url === "") {
     return (
-      <p className="flex items-center gap-2 px-6 py-4 text-body text-muted-foreground">
+      <p className="text-body text-muted-foreground flex items-center gap-2 px-6 py-4">
         <Spinner className="size-3.5" />
         {t("files.loading")}
       </p>
@@ -72,13 +76,16 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
           src={url}
           alt={path}
           onLoad={(e) =>
-            setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+            setDims({
+              w: e.currentTarget.naturalWidth,
+              h: e.currentTarget.naturalHeight,
+            })
           }
           onError={() => setError(t("files.imageFailed"))}
-          className="image-checker max-h-full max-w-full rounded-control object-contain shadow-sm"
+          className="image-checker rounded-control max-h-full max-w-full object-contain shadow-sm"
         />
       </div>
-      <div className="flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5 text-callout text-muted-foreground">
+      <div className="text-callout text-muted-foreground flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5">
         {dims && (
           <span>
             {dims.w} × {dims.h}

@@ -4,7 +4,7 @@ import { join } from "node:path";
 const libraryName = "libCodeTwoWindowEffects.dylib";
 const resultBufferSize = 1024 * 1024;
 
-type NativeCaptureResult = {
+interface NativeCaptureResult {
   ok: boolean;
   code?: string;
   message?: string;
@@ -14,7 +14,7 @@ type NativeCaptureResult = {
   text_truncated?: boolean;
   width?: number;
   height?: number;
-};
+}
 
 let nativeAppshots:
   | ReturnType<
@@ -74,11 +74,11 @@ function library() {
   return nativeAppshots;
 }
 
-export type MacOSAppshotPermissions = {
+export interface MacOSAppshotPermissions {
   available: boolean;
   screenRecording: boolean;
   accessibility: boolean;
-};
+}
 
 function permissionsFromBits(bits: number): MacOSAppshotPermissions {
   return {
@@ -96,12 +96,14 @@ export function macOSAppshotPermissions(): MacOSAppshotPermissions {
 }
 
 export function requestMacOSAppshotPermissions(
-  kind: "screen-recording" | "accessibility",
+  kind: "screen-recording" | "accessibility"
 ): MacOSAppshotPermissions {
   const loaded = library();
   const requestedPermissions = kind === "screen-recording" ? 1 : 2;
   return loaded
-    ? permissionsFromBits(loaded.symbols.codetwoRequestAppshotPermissions(requestedPermissions))
+    ? permissionsFromBits(
+        loaded.symbols.codetwoRequestAppshotPermissions(requestedPermissions)
+      )
     : { available: false, screenRecording: false, accessibility: false };
 }
 
@@ -111,7 +113,7 @@ export function macOSCommandKeyState(): number {
 
 export function captureMacOSAppshot(
   outputPath: string,
-  excludedBundleIdentifier: string,
+  excludedBundleIdentifier: string
 ): NativeCaptureResult {
   const loaded = library();
   if (!loaded) {
@@ -129,17 +131,22 @@ export function captureMacOSAppshot(
     output,
     excluded,
     ptr(buffer),
-    buffer.byteLength,
+    buffer.byteLength
   );
   const length = buffer.indexOf(0);
-  const json = Buffer.from(buffer.subarray(0, length >= 0 ? length : buffer.length)).toString("utf8");
+  const json = Buffer.from(
+    buffer.subarray(0, length === -1 ? buffer.length : length)
+  ).toString("utf-8");
   try {
     return JSON.parse(json) as NativeCaptureResult;
   } catch {
     return {
       ok: false,
       code: "native_failure",
-      message: status === 0 ? "The Appshot helper returned an unreadable result." : `Appshot capture failed (${status}).`,
+      message:
+        status === 0
+          ? "The Appshot helper returned an unreadable result."
+          : `Appshot capture failed (${status}).`,
     };
   }
 }

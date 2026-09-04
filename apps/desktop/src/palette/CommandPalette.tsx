@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   CommandDialog,
   CommandEmpty,
@@ -10,7 +11,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { Button } from "@/components/ui/button";
+
 import { useT } from "../i18n";
 import { mergeCommandResults } from "./merge";
 
@@ -41,7 +42,9 @@ export function CommandPalette({
   const t = useT();
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<Command[]>([]);
-  const [searchState, setSearchState] = useState<"idle" | "pending" | "loading" | "success" | "error">("idle");
+  const [searchState, setSearchState] = useState<
+    "idle" | "pending" | "loading" | "success" | "error"
+  >("idle");
   const [filter, setFilter] = useState<"all" | CommandCategory>("all");
 
   useEffect(() => {
@@ -76,21 +79,24 @@ export function CommandPalette({
     };
   }, [query, search]);
 
-  const visible = useMemo(() => {
-    return mergeCommandResults(commands, matches);
-  }, [commands, matches]);
+  const visible = mergeCommandResults(commands, matches);
 
-  const groups = useMemo(() => {
-    const filtered = filter === "all"
-      ? visible
-      : visible.filter((command) => (command.category ?? "action") === filter);
+  const groups = (() => {
+    const filtered =
+      filter === "all"
+        ? visible
+        : visible.filter(
+            (command) => (command.category ?? "action") === filter
+          );
     return (["session", "action", "setting"] as const)
       .map((category) => ({
         category,
-        commands: filtered.filter((command) => (command.category ?? "action") === category),
+        commands: filtered.filter(
+          (command) => (command.category ?? "action") === category
+        ),
       }))
       .filter((group) => group.commands.length > 0);
-  }, [filter, visible]);
+  })();
 
   const filters = [
     { id: "all" as const, label: t("palette.filterAll") },
@@ -144,17 +150,23 @@ export function CommandPalette({
             size="compact"
             data-palette-filter={item.id}
             aria-pressed={filter === item.id}
-            className={filter === item.id
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground"}
+            className={
+              filter === item.id
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground"
+            }
             onClick={() => setFilter(item.id)}
           >
             {item.label}
           </Button>
         ))}
       </div>
-      <CommandList className="min-h-0 max-h-none flex-1">
-        <CommandEmpty>{searchStatus ? null : t("palette.empty")}</CommandEmpty>
+      <CommandList className="max-h-none min-h-0 flex-1">
+        <CommandEmpty>
+          {searchStatus != null && searchStatus !== ""
+            ? null
+            : t("palette.empty")}
+        </CommandEmpty>
         {groups.map((group) => (
           <CommandGroup
             key={group.category}
@@ -172,26 +184,43 @@ export function CommandPalette({
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{command.label}</span>
-                  {command.detail && (
-                    <span className="block truncate text-callout text-muted-foreground">{command.detail}</span>
+                  {command.detail != null && command.detail !== "" && (
+                    <span className="text-callout text-muted-foreground block truncate">
+                      {command.detail}
+                    </span>
                   )}
                 </span>
-                {command.hint && <CommandShortcut>{command.hint}</CommandShortcut>}
+                {command.hint != null && command.hint !== "" && (
+                  <CommandShortcut>{command.hint}</CommandShortcut>
+                )}
               </CommandItem>
             ))}
           </CommandGroup>
         ))}
-        {searchStatus && (filter === "all" || filter === "session") && (
-          <p role="status" className="px-3 py-2 text-callout text-muted-foreground">
-            {searchStatus}
-          </p>
-        )}
+        {searchStatus != null &&
+          searchStatus !== "" &&
+          (filter === "all" || filter === "session") && (
+            <p
+              role="status"
+              className="text-callout text-muted-foreground px-3 py-2"
+            >
+              {searchStatus}
+            </p>
+          )}
       </CommandList>
       <CommandSeparator className="mx-0" />
-      <div className="flex items-center gap-4 px-3 py-2 text-callout text-muted-foreground">
-        <span><kbd className="font-mono text-foreground">↑↓</kbd> {t("palette.navigate")}</span>
-        <span><kbd className="font-mono text-foreground">↵</kbd> {t("palette.open")}</span>
-        <span className="ml-auto"><kbd className="font-mono text-foreground">esc</kbd> {t("palette.close")}</span>
+      <div className="text-callout text-muted-foreground flex items-center gap-4 px-3 py-2">
+        <span>
+          <kbd className="text-foreground font-mono">↑↓</kbd>{" "}
+          {t("palette.navigate")}
+        </span>
+        <span>
+          <kbd className="text-foreground font-mono">↵</kbd> {t("palette.open")}
+        </span>
+        <span className="ml-auto">
+          <kbd className="text-foreground font-mono">esc</kbd>{" "}
+          {t("palette.close")}
+        </span>
       </div>
     </CommandDialog>
   );

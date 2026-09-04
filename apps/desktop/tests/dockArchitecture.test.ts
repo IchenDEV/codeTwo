@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
-const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const source = (path: string) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf-8");
 
 describe("Dock container and content seam", () => {
   test("keeps feature implementations out of the Dock container", () => {
@@ -38,7 +39,8 @@ describe("Dock container and content seam", () => {
     expect(files).toContain("<FilePanel");
     expect(git).toContain("export function PullRequestDockContent");
     expect(git).toContain("<GitHubPullRequestPanel");
-    expect(git.indexOf("export function PullRequestDockContent"))
-      .toBeLessThan(git.indexOf("<GitHubPullRequestPanel"));
+    expect(git.indexOf("export function PullRequestDockContent")).toBeLessThan(
+      git.indexOf("<GitHubPullRequestPanel")
+    );
   });
 });

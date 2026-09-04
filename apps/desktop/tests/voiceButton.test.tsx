@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { activateDom, dom, mount, flush, restoreDom } from "./domTestHarness";
 
 activateDom();
@@ -9,7 +10,7 @@ activateDom();
  * end event arrives after `stop()` returns — the ordering the structuring path depends on.
  */
 class FakeRecognition {
-  static instances = [];
+  static readonly instances = [];
   continuous = false;
   interimResults = false;
   onresult = null;
@@ -28,13 +29,17 @@ class FakeRecognition {
     queueMicrotask(() => this.onend?.());
   }
   emitFinal(text) {
-    this.onresult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: text } }] });
+    this.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: text } }],
+    });
   }
 }
 dom.window.SpeechRecognition = FakeRecognition;
 
 // Real bridge: outside Electrobun `isDesktop` is false, so the button picks Web Speech up from window.
-const { VoiceButton, makeTranscriptHandler } = await import("../src/voice/VoiceButton");
+const { VoiceButton, makeTranscriptHandler } =
+  await import("../src/voice/VoiceButton");
 const { TooltipProvider } = await import("../src/components/ui/tooltip");
 
 let restoreCanvasContext: (() => void) | null = null;
@@ -42,7 +47,7 @@ let restoreCanvasContext: (() => void) | null = null;
 function disableCanvasDrawing(): void {
   // The orb's DOM/state is under test, not its third-party painter. Some sibling canvas suites
   // leave partial contexts installed, so force the renderer's supported no-context path here.
-  const getContext = dom.HTMLCanvasElement.prototype.getContext;
+  const { getContext } = dom.HTMLCanvasElement.prototype;
   dom.HTMLCanvasElement.prototype.getContext = () => null;
   restoreCanvasContext = () => {
     dom.HTMLCanvasElement.prototype.getContext = getContext;
@@ -53,19 +58,24 @@ function mountButton(element) {
   return mount(<TooltipProvider>{element}</TooltipProvider>);
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = async (ms) =>
+  await new Promise((resolve) => setTimeout(resolve, ms));
 
 function fire(el, type) {
-  el.dispatchEvent(new dom.window.PointerEvent(type, { bubbles: true, cancelable: true }));
+  el.dispatchEvent(
+    new dom.window.PointerEvent(type, { bubbles: true, cancelable: true })
+  );
 }
 function click(el) {
-  el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  el.dispatchEvent(
+    new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+  );
 }
 function micButton(container) {
   return container.querySelector("button");
 }
 function lastRec() {
-  return FakeRecognition.instances[FakeRecognition.instances.length - 1];
+  return FakeRecognition.instances.at(-1);
 }
 
 beforeEach(() => {
@@ -85,7 +95,10 @@ describe("VoiceButton hold-to-talk", () => {
   test("stops capture without delivering a transcript when policy unmounts the button", async () => {
     const transcripts = [];
     const rendered = mountButton(
-      <VoiceButton onText={() => {}} onTranscript={async (full) => transcripts.push(full)} />,
+      <VoiceButton
+        onText={() => {}}
+        onTranscript={async (full) => transcripts.push(full)}
+      />
     );
     const btn = micButton(rendered.container);
     fire(btn, "pointerdown");
@@ -93,8 +106,10 @@ describe("VoiceButton hold-to-talk", () => {
     const recognition = lastRec();
     recognition.emitFinal("must not reach an unloaded plugin");
 
-    expect(btn.getAttribute("data-voice-mode")).toBe("listening");
-    expect(btn.querySelector("canvas")?.getAttribute("data-activity-state")).toBe("listening");
+    expect(btn.dataset.voiceMode).toBe("listening");
+    expect(btn.querySelector("canvas")?.dataset.activityState).toBe(
+      "listening"
+    );
 
     rendered.unmount();
     await flush();
@@ -115,7 +130,7 @@ describe("VoiceButton hold-to-talk", () => {
           transcripts.push(full);
           await gate;
         }}
-      />,
+      />
     );
     const btn = micButton(container);
 
@@ -140,20 +155,23 @@ describe("VoiceButton hold-to-talk", () => {
     // While the handler runs the button shows the structuring spinner state.
     expect(btn.disabled).toBe(true);
     expect(btn.getAttribute("aria-label")).toBe("voice.structuring");
-    expect(btn.getAttribute("data-voice-mode")).toBe("structuring");
-    expect(btn.querySelector("canvas")?.getAttribute("data-activity-state")).toBe("shaping");
+    expect(btn.dataset.voiceMode).toBe("structuring");
+    expect(btn.querySelector("canvas")?.dataset.activityState).toBe("shaping");
 
     release();
     await flush();
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute("aria-label")).toBe("voice.hold");
-    expect(btn.getAttribute("data-voice-mode")).toBe("idle");
+    expect(btn.dataset.voiceMode).toBe("idle");
   });
 
   test("a short press falls through to click-to-toggle", async () => {
     const transcripts = [];
     const { container } = mountButton(
-      <VoiceButton onText={() => {}} onTranscript={async (full) => transcripts.push(full)} />,
+      <VoiceButton
+        onText={() => {}}
+        onTranscript={async (full) => transcripts.push(full)}
+      />
     );
     const btn = micButton(container);
 
@@ -181,7 +199,9 @@ describe("VoiceButton hold-to-talk", () => {
 
   test("without onTranscript, finals still stream out per chunk", async () => {
     const chunks = [];
-    const { container } = mountButton(<VoiceButton onText={(t) => chunks.push(t)} />);
+    const { container } = mountButton(
+      <VoiceButton onText={(t) => chunks.push(t)} />
+    );
     const btn = micButton(container);
 
     click(btn);
@@ -218,7 +238,10 @@ describe("makeTranscriptHandler (R11 structuring degradation)", () => {
   const scene = {
     reference: "builtin:develop",
     name: "develop",
-    brief: { template: "{{goal}}", slots: [{ id: "goal", label: "Goal", kind: "text" }] },
+    brief: {
+      template: "{{goal}}",
+      slots: [{ id: "goal", label: "Goal", kind: "text" }],
+    },
   };
   function deps(overrides = {}) {
     const calls = { briefs: [], texts: [], degraded: 0 };
@@ -228,14 +251,16 @@ describe("makeTranscriptHandler (R11 structuring degradation)", () => {
       structureBrief: async () => ({ goal: "structured" }),
       insertBrief: (s, values) => calls.briefs.push([s, values]),
       insertText: (t) => calls.texts.push(t),
-      onDegrade: () => calls.degraded++,
+      onDegrade: () => (calls.degraded += 1),
       ...overrides,
     };
   }
 
   test("no scene or no brief → no handler at all (today's behavior)", () => {
     expect(makeTranscriptHandler(deps({ scene: null }))).toBeUndefined();
-    expect(makeTranscriptHandler(deps({ scene: { ...scene, brief: null } }))).toBeUndefined();
+    expect(
+      makeTranscriptHandler(deps({ scene: { ...scene, brief: null } }))
+    ).toBeUndefined();
   });
 
   test("success inserts a pre-filled brief for the scene", async () => {

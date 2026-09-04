@@ -106,7 +106,9 @@ export interface CanvasEditorProps extends CanvasCallbacks {
   initiallyExpanded?: boolean;
   autosaveDebounceMs?: number;
   mediaNormalizer?: import("./media").CanvasMediaNormalizer;
-  assetResolver?: (asset: CanvasAssetRef) => Promise<NormalizedStaticAsset | null>;
+  assetResolver?: (
+    asset: CanvasAssetRef
+  ) => Promise<NormalizedStaticAsset | null>;
   /** Optional caller-rendered PNG/WebP thumbnail shown while the island is collapsed. */
   previewImage?: string | null;
   previewAlt?: string;

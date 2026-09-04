@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { createRef } from "react";
+
 import { activateDom, dom, mount } from "../../../tests/domTestHarness";
 import * as iconExports from "./icons";
-import type { AppIcon } from "./icons";
 
 activateDom();
 
-const icons = Object.entries(iconExports) as Array<[string, AppIcon]>;
+const icons = Object.entries(iconExports);
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -24,7 +25,7 @@ describe("rounded icon adapter", () => {
             data-icon-name={name}
           />
         ))}
-      </div>,
+      </div>
     );
 
     const rendered = [...view.container.querySelectorAll("svg")];
@@ -37,7 +38,7 @@ describe("rounded icon adapter", () => {
       expect(svg.getAttribute("width")).toBe("1em");
       expect(svg.getAttribute("height")).toBe("1em");
       expect(svg.classList.contains("adapter-icon")).toBe(true);
-      expect(svg.getAttribute("aria-label")).toBe(svg.getAttribute("data-icon-name"));
+      expect(svg.getAttribute("aria-label")).toBe(svg.dataset.iconName ?? null);
     }
 
     view.unmount();
@@ -49,19 +50,30 @@ describe("rounded icon adapter", () => {
       <div>
         <iconExports.Search ref={ref} data-search="default" alt="Search" />
         <iconExports.Search data-search="regular" weight="regular" />
-        <iconExports.ChevronDown data-caret="fallback">▼</iconExports.ChevronDown>
+        <iconExports.ChevronDown data-caret="fallback">
+          ▼
+        </iconExports.ChevronDown>
         <iconExports.PanelRight data-panel="right" />
-      </div>,
+      </div>
     );
 
-    const defaultSearch = view.container.querySelector<SVGSVGElement>('[data-search="default"]');
-    const regularSearch = view.container.querySelector<SVGSVGElement>('[data-search="regular"]');
-    const fallbackCaret = view.container.querySelector<SVGSVGElement>('[data-caret="fallback"]');
-    const rightPanel = view.container.querySelector<SVGSVGElement>('[data-panel="right"]');
+    const defaultSearch = view.container.querySelector<SVGSVGElement>(
+      '[data-search="default"]'
+    );
+    const regularSearch = view.container.querySelector<SVGSVGElement>(
+      '[data-search="regular"]'
+    );
+    const fallbackCaret = view.container.querySelector<SVGSVGElement>(
+      '[data-caret="fallback"]'
+    );
+    const rightPanel = view.container.querySelector<SVGSVGElement>(
+      '[data-panel="right"]'
+    );
 
     expect(ref.current).toBe(defaultSearch);
-    expect(defaultSearch?.querySelector("path")?.getAttribute("d"))
-      .toBe(regularSearch?.querySelector("path")?.getAttribute("d"));
+    expect(defaultSearch?.querySelector("path")?.getAttribute("d")).toBe(
+      regularSearch?.querySelector("path")?.getAttribute("d")
+    );
     expect(defaultSearch?.querySelector("title")?.textContent).toBe("Search");
     expect(fallbackCaret?.textContent).toBe("");
     expect(rightPanel?.getAttribute("transform")).toBe("scale(-1, 1)");
@@ -79,10 +91,11 @@ describe("rounded icon adapter", () => {
         <iconExports.Package data-icon="package" />
         <iconExports.PackageCheck data-icon="package-check" />
         <iconExports.PackagePlus data-icon="package-plus" />
-      </div>,
+      </div>
     );
     const markup = (name: string) =>
-      view.container.querySelector<SVGSVGElement>(`[data-icon="${name}"]`)?.innerHTML;
+      view.container.querySelector<SVGSVGElement>(`[data-icon="${name}"]`)
+        ?.innerHTML;
 
     expect(markup("file-clock")).not.toBe(markup("file"));
     expect(markup("folder-down")).not.toBe(markup("folder-open"));

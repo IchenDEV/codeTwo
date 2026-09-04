@@ -1,6 +1,14 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+
+import {
+  activateDom,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { QuestionDialog } = await import("../src/session/QuestionDialog");
@@ -50,15 +58,17 @@ function buttonByLabel(labels) {
 }
 
 function optionByText(text) {
-  const row = [...dom.document.body.querySelectorAll('[data-slot="choice-row"]')].find((el) =>
-    el.textContent?.includes(text),
-  );
+  const row = [
+    ...dom.document.body.querySelectorAll('[data-slot="choice-row"]'),
+  ].find((el) => el.textContent?.includes(text));
   return row?.querySelector('[role="radio"], [role="checkbox"]');
 }
 
 function chooseOption(text) {
   const control = optionByText(text);
-  const input = control?.parentElement?.querySelector('input[type="checkbox"], input[type="radio"]');
+  const input = control?.parentElement?.querySelector(
+    'input[type="checkbox"], input[type="radio"]'
+  );
   // Base UI keeps the native input visually hidden and forwards pointer clicks to it. happy-dom
   // does not implement that forwarding, so exercise the same native input directly in this suite.
   (input ?? control)?.click();
@@ -66,12 +76,15 @@ function chooseOption(text) {
 
 function field(labels) {
   return [...dom.document.body.querySelectorAll("input")].find((el) =>
-    labels.includes(el.getAttribute("aria-label")),
+    labels.includes(el.getAttribute("aria-label"))
   );
 }
 
 function setValue(el, value) {
-  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")?.set;
+  const setter = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(el),
+    "value"
+  )?.set;
   if (setter) setter.call(el, value);
   else el.value = value;
   el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
@@ -82,7 +95,7 @@ function renderDialog(form = ASK) {
   const rendered = mount(
     <I18nProvider>
       <QuestionDialog form={form} onAnswer={(answer) => answers.push(answer)} />
-    </I18nProvider>,
+    </I18nProvider>
   );
   return { rendered, answers };
 }
@@ -92,7 +105,9 @@ describe("QuestionDialog", () => {
     activateDom();
     const { rendered } = renderDialog();
 
-    expect(dom.document.body.textContent).toContain("Which auth method should we use?");
+    expect(dom.document.body.textContent).toContain(
+      "Which auth method should we use?"
+    );
     expect(optionByText("OAuth")).toBeTruthy();
     expect(optionByText("Redirect flow")).toBeTruthy();
     expect(optionByText("API key")).toBeTruthy();
@@ -111,7 +126,9 @@ describe("QuestionDialog", () => {
 
     click(buttonByLabel(SUBMIT_LABELS));
     await flush();
-    expect(answers).toEqual([{ action: "accept", content: { question_0: "OAuth" } }]);
+    expect(answers).toEqual([
+      { action: "accept", content: { question_0: "OAuth" } },
+    ]);
     rendered.unmount();
   });
 
@@ -127,7 +144,9 @@ describe("QuestionDialog", () => {
 
     click(buttonByLabel(SUBMIT_LABELS));
     await flush();
-    expect(answers).toEqual([{ action: "accept", content: { question_0_custom: "mTLS" } }]);
+    expect(answers).toEqual([
+      { action: "accept", content: { question_0_custom: "mTLS" } },
+    ]);
     rendered.unmount();
   });
 
@@ -170,7 +189,9 @@ describe("QuestionDialog", () => {
     await flush();
     click(buttonByLabel(SUBMIT_LABELS));
     await flush();
-    expect(answers).toEqual([{ action: "accept", content: { features: ["a", "b"] } }]);
+    expect(answers).toEqual([
+      { action: "accept", content: { features: ["a", "b"] } },
+    ]);
     rendered.unmount();
   });
 });

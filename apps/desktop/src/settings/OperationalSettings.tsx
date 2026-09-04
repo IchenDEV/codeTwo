@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Bug, Download, Globe, RefreshCw, Trash2 } from "@/components/ui/icons";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { TooltipButton } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import {
   browserPermissions,
@@ -18,24 +34,18 @@ import {
   setDeviceSyncEnabled,
   setPluginDeveloperMode,
   syncDeviceDataNow,
-  type BrowserUseSettings,
-  type ComputerUseSettings,
-  type DiagnosticsExportResult,
-  type DeviceSyncStatus,
-  type PluginDeveloperStatus,
+} from "../bridge";
+import type {
+  BrowserUseSettings,
+  ComputerUseSettings,
+  DiagnosticsExportResult,
+  DeviceSyncStatus,
+  PluginDeveloperStatus,
 } from "../bridge";
 import { useT } from "../i18n";
-import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
-import { SettingToggle } from "@/components/business/setting-toggle";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import { GroupHeading, Page, Row } from "./SettingsPrimitives";
 
-type BackendCopy = {
+interface BackendCopy {
   title: string;
   description: string;
   scope: string;
@@ -50,7 +60,7 @@ type BackendCopy = {
   unavailable: string;
   loadFailed: (error: unknown) => string;
   testId: string;
-};
+}
 
 function BackendSettingsPage({
   copy,
@@ -76,8 +86,8 @@ function BackendSettingsPage({
       .then((next) => {
         if (active) setSettings(next);
       })
-      .catch((cause) => {
-        if (active) setError(copyRef.current.loadFailed(cause));
+      .catch((error: unknown) => {
+        if (active) setError(copyRef.current.loadFailed(error));
       });
     return () => {
       active = false;
@@ -85,19 +95,21 @@ function BackendSettingsPage({
   }, [loader]);
 
   const selection = settings?.selections["*"] ?? "automatic";
-  const selectionLabel = selection === "automatic"
-    ? copy.automatic
-    : selection === "disabled"
-      ? copy.disabled
-      : settings?.backends.find((backend) => backend.id === selection)?.display_name ?? selection;
+  const selectionLabel =
+    selection === "automatic"
+      ? copy.automatic
+      : selection === "disabled"
+        ? copy.disabled
+        : (settings?.backends.find((backend) => backend.id === selection)
+            ?.display_name ?? selection);
 
   async function save(backend: string) {
     setSaving(true);
     setError(null);
     try {
       setSettings(await saver(backend));
-    } catch (cause) {
-      setError(copy.loadFailed(cause));
+    } catch (error) {
+      setError(copy.loadFailed(error));
     } finally {
       setSaving(false);
     }
@@ -109,25 +121,28 @@ function BackendSettingsPage({
     setError(null);
     try {
       setSettings(await accessSaver(enabled));
-    } catch (cause) {
-      setError(copy.loadFailed(cause));
+    } catch (error) {
+      setError(copy.loadFailed(error));
     } finally {
       setSaving(false);
     }
   }
 
-  const accessEnabled = (settings as BrowserUseSettings | null)?.access_enabled ?? false;
+  const accessEnabled =
+    (settings as BrowserUseSettings | null)?.access_enabled ?? false;
 
   return (
     <Page title={copy.title} description={copy.description}>
-      <p className="pb-2 text-metadata text-muted-foreground">{copy.scope}</p>
-      {error && <p className="pb-2 text-metadata text-destructive">{error}</p>}
+      <p className="text-metadata text-muted-foreground pb-2">{copy.scope}</p>
+      {error != null && error !== "" && (
+        <p className="text-metadata text-destructive pb-2">{error}</p>
+      )}
       {settings?.errors.map((message) => (
-        <p key={message} className="pb-2 text-metadata text-destructive">{message}</p>
+        <p key={message} className="text-metadata text-destructive pb-2">
+          {message}
+        </p>
       ))}
-      {!settings ? (
-        <p className="py-section text-body text-muted-foreground">{copy.loading}</p>
-      ) : (
+      {settings ? (
         <>
           {accessSaver && (
             <Row label={copy.access ?? ""} hint={copy.accessHint}>
@@ -145,12 +160,16 @@ function BackendSettingsPage({
               value={selection}
               disabled={saving || (accessSaver !== undefined && !accessEnabled)}
               onValueChange={(backend) => {
-                if (backend) void save(backend);
+                if (backend != null && backend !== "") void save(backend);
               }}
             >
               <SelectTrigger
-                data-computer-use-selection={copy.testId === "computer-use" ? "" : undefined}
-                data-browser-use-selection={copy.testId === "browser-use" ? "" : undefined}
+                data-computer-use-selection={
+                  copy.testId === "computer-use" ? "" : undefined
+                }
+                data-browser-use-selection={
+                  copy.testId === "browser-use" ? "" : undefined
+                }
                 aria-label={copy.backend}
                 size="sm"
                 className="w-52 justify-between"
@@ -162,7 +181,11 @@ function BackendSettingsPage({
                   <SelectItem value="automatic">{copy.automatic}</SelectItem>
                   <SelectItem value="disabled">{copy.disabled}</SelectItem>
                   {settings.backends.map((backend) => (
-                    <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
+                    <SelectItem
+                      key={backend.id}
+                      value={backend.id}
+                      disabled={!backend.available}
+                    >
                       {backend.display_name}
                     </SelectItem>
                   ))}
@@ -177,15 +200,28 @@ function BackendSettingsPage({
               key={backend.id}
               compact
               label={backend.display_name}
-              hint={backend.reason ?? <span className="font-mono">{backend.id}</span>}
+              hint={
+                backend.reason ?? (
+                  <span className="font-mono">{backend.id}</span>
+                )
+              }
             >
-              <span className="flex items-center gap-1.5 text-callout text-muted-foreground">
-                <span className={cn("size-1.5 rounded-full", backend.available ? "bg-success" : "bg-border")} />
+              <span className="text-callout text-muted-foreground flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "size-1.5 rounded-full",
+                    backend.available ? "bg-success" : "bg-border"
+                  )}
+                />
                 {backend.available ? copy.available : copy.unavailable}
               </span>
             </Row>
           ))}
         </>
+      ) : (
+        <p className="py-section text-body text-muted-foreground">
+          {copy.loading}
+        </p>
       )}
     </Page>
   );
@@ -214,7 +250,8 @@ export function ComputerUseSettingsPage({
         loading: t("settings.computerUseLoading"),
         available: t("settings.computerUseAvailable"),
         unavailable: t("settings.computerUseUnavailable"),
-        loadFailed: (error) => t("settings.computerUseLoadFailed", { error: String(error) }),
+        loadFailed: (error) =>
+          t("settings.computerUseLoadFailed", { error: String(error) }),
         testId: "computer-use",
       }}
     />
@@ -249,31 +286,60 @@ export function BrowserUseSettingsPage({
         loading: t("settings.browserUseLoading"),
         available: t("settings.browserUseAvailable"),
         unavailable: t("settings.browserUseUnavailable"),
-        loadFailed: (error) => t("settings.browserUseLoadFailed", { error: String(error) }),
+        loadFailed: (error) =>
+          t("settings.browserUseLoadFailed", { error: String(error) }),
         testId: "browser-use",
       }}
     />
   );
 }
 
-function syncHint(t: ReturnType<typeof useT>, status: DeviceSyncStatus | null): string {
+function syncHint(
+  t: ReturnType<typeof useT>,
+  status: DeviceSyncStatus | null
+): string {
   switch (status?.state) {
-    case "disabled":
-      return status.available ? t("settings.syncReady") : t("settings.syncUnavailable");
-    case "ready":
-      return status.last_success_at
-        ? t("settings.syncLastSuccess", {
-            time: new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })
-              .format(status.last_success_at),
-          })
-        : t("settings.syncReady");
-    case "syncing": return t("settings.syncing");
-    case "signed-out": return t("settings.syncSignedOut");
-    case "restricted": return t("settings.syncRestricted");
-    case "unsupported": return t("settings.syncUnsupported");
-    case "unavailable": return t("settings.syncUnavailable");
-    case "error": return status.message || t("settings.syncUnavailable");
-    default: return status?.available ? t("settings.syncReady") : t("settings.syncLoading");
+    case "disabled": {
+      return status.available
+        ? t("settings.syncReady")
+        : t("settings.syncUnavailable");
+    }
+    case "ready": {
+      return status.last_success_at == null
+        ? t("settings.syncReady")
+        : t("settings.syncLastSuccess", {
+            time: new Intl.DateTimeFormat(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(status.last_success_at),
+          });
+    }
+    case "syncing": {
+      return t("settings.syncing");
+    }
+    case "signed-out": {
+      return t("settings.syncSignedOut");
+    }
+    case "restricted": {
+      return t("settings.syncRestricted");
+    }
+    case "unsupported": {
+      return t("settings.syncUnsupported");
+    }
+    case "unavailable": {
+      return t("settings.syncUnavailable");
+    }
+    case "error": {
+      return status.message ?? t("settings.syncUnavailable");
+    }
+    case undefined: {
+      throw new Error("Not implemented yet: undefined case");
+    }
+    default: {
+      return status?.available === true
+        ? t("settings.syncReady")
+        : t("settings.syncLoading");
+    }
   }
 }
 
@@ -292,21 +358,23 @@ export function DeviceSyncSettingsPage({
 
   useEffect(() => {
     let active = true;
-    void loader().then((next) => {
-      if (active) setStatus(next);
-    }).catch((error) => {
-      if (active) {
-        setStatus({
-          transport: "paired-devices",
-          state: "error",
-          enabled: false,
-          available: false,
-          last_success_at: null,
-          message: String(error),
-          imported: null,
-        });
-      }
-    });
+    void loader()
+      .then((next) => {
+        if (active) setStatus(next);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setStatus({
+            transport: "paired-devices",
+            state: "error",
+            enabled: false,
+            available: false,
+            last_success_at: null,
+            message: String(error),
+            imported: null,
+          });
+        }
+      });
     return () => {
       active = false;
     };
@@ -332,11 +400,17 @@ export function DeviceSyncSettingsPage({
   }
 
   async function startSync() {
-    setStatus((current) => current ? { ...current, state: "syncing" } : current);
+    setStatus((current) =>
+      current ? { ...current, state: "syncing" } : current
+    );
     try {
       setStatus(await syncStarter());
     } catch (error) {
-      setStatus((current) => current ? { ...current, state: "error", message: String(error) } : current);
+      setStatus((current) =>
+        current
+          ? { ...current, state: "error", message: String(error) }
+          : current
+      );
     }
   }
 
@@ -346,7 +420,11 @@ export function DeviceSyncSettingsPage({
         label={t("settings.pairedDeviceSync")}
         description={syncHint(t, status)}
         checked={status?.enabled ?? false}
-        disabled={saving || status?.state === "syncing" || (!(status?.enabled ?? false) && !(status?.available ?? false))}
+        disabled={
+          saving ||
+          status?.state === "syncing" ||
+          (!(status?.enabled ?? false) && !(status?.available ?? false))
+        }
         onCheckedChange={(checked) => void saveEnabled(checked)}
       />
       <Row label={t("settings.syncNow")} hint={t("settings.syncNowHint")}>
@@ -354,15 +432,25 @@ export function DeviceSyncSettingsPage({
           variant="outline"
           size="sm"
           className="gap-1.5"
-          disabled={!status?.enabled || status.state === "syncing" || saving}
+          disabled={
+            status?.enabled !== true || status.state === "syncing" || saving
+          }
           onClick={() => void startSync()}
         >
-          {status?.state === "syncing" ? <Spinner /> : <RefreshCw className="size-3.5" />}
-          {status?.state === "syncing" ? t("settings.syncingButton") : t("settings.syncNowButton")}
+          {status?.state === "syncing" ? (
+            <Spinner />
+          ) : (
+            <RefreshCw className="size-3.5" />
+          )}
+          {status?.state === "syncing"
+            ? t("settings.syncingButton")
+            : t("settings.syncNowButton")}
         </Button>
       </Row>
       <GroupHeading>{t("settings.syncScope")}</GroupHeading>
-      <p className="pt-1.5 text-metadata text-muted-foreground">{t("settings.syncScopeHint")}</p>
+      <p className="text-metadata text-muted-foreground pt-1.5">
+        {t("settings.syncScopeHint")}
+      </p>
     </Page>
   );
 }
@@ -386,20 +474,29 @@ export function DeveloperSettingsPage({
   const [reloading, setReloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [diagnosticsExporting, setDiagnosticsExporting] = useState(false);
-  const [diagnosticsMessage, setDiagnosticsMessage] = useState<string | null>(null);
+  const [diagnosticsMessage, setDiagnosticsMessage] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     let active = true;
-    let unsubscribe = () => {};
+    let unsubscribe = () => {
+      /* empty */
+    };
     const refresh = () => {
-      void loader().then((next) => {
-        if (active) {
-          setStatus(next);
-          setError(null);
-        }
-      }).catch((cause) => {
-        if (active) setError(t("settings.developerLoadFailed", { error: String(cause) }));
-      });
+      void loader()
+        .then((next) => {
+          if (active) {
+            setStatus(next);
+            setError(null);
+          }
+        })
+        .catch((error: unknown) => {
+          if (active)
+            setError(
+              t("settings.developerLoadFailed", { error: String(error) })
+            );
+        });
     };
     refresh();
     void onPluginsChanged(refresh).then((stop) => {
@@ -417,8 +514,8 @@ export function DeveloperSettingsPage({
     setError(null);
     try {
       setStatus(await modeSaver(enabled));
-    } catch (cause) {
-      setError(t("settings.developerSaveFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerSaveFailed", { error: String(error) }));
     } finally {
       setSaving(false);
     }
@@ -429,8 +526,8 @@ export function DeveloperSettingsPage({
     setError(null);
     try {
       setStatus(await reloader());
-    } catch (cause) {
-      setError(t("settings.developerReloadFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerReloadFailed", { error: String(error) }));
     } finally {
       setReloading(false);
     }
@@ -440,8 +537,8 @@ export function DeveloperSettingsPage({
     setError(null);
     try {
       await devtoolsOpener();
-    } catch (cause) {
-      setError(t("settings.developerDevtoolsFailed", { error: String(cause) }));
+    } catch (error) {
+      setError(t("settings.developerDevtoolsFailed", { error: String(error) }));
     }
   }
 
@@ -451,35 +548,49 @@ export function DeveloperSettingsPage({
     setError(null);
     try {
       const result = await diagnosticsExporter();
-      if (result === "saved") setDiagnosticsMessage(t("settings.diagnosticsExported"));
-      else if (result === "unsupported") setError(t("settings.diagnosticsUnsupported"));
-    } catch (cause) {
-      setError(t("settings.diagnosticsExportFailed", { error: String(cause) }));
+      if (result === "saved")
+        setDiagnosticsMessage(t("settings.diagnosticsExported"));
+      else if (result === "unsupported")
+        setError(t("settings.diagnosticsUnsupported"));
+    } catch (error) {
+      setError(t("settings.diagnosticsExportFailed", { error: String(error) }));
     } finally {
       setDiagnosticsExporting(false);
     }
   }
 
-  const statusText = !status
-    ? t("settings.pluginHotReloadLoading")
-    : !status.enabled
-      ? t("settings.pluginHotReloadOff")
-      : !status.watching
-        ? t("settings.pluginHotReloadUnavailable")
-        : t("settings.pluginHotReloadWatching", { path: status.plugins_dir });
+  const statusText = status
+    ? status.enabled
+      ? status.watching
+        ? t("settings.pluginHotReloadWatching", { path: status.plugins_dir })
+        : t("settings.pluginHotReloadUnavailable")
+      : t("settings.pluginHotReloadOff")
+    : t("settings.pluginHotReloadLoading");
   const reloadRecord = status?.last_reload;
-  const reloadDetail = reloadRecord?.success
-    ? t("settings.pluginHotReloadLastSuccess", {
-        plugins: reloadRecord.plugins.length ? reloadRecord.plugins.join(", ") : t("settings.allInstalledPlugins"),
-        time: new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(reloadRecord.at),
-      })
-    : reloadRecord?.error
-      ? t("settings.pluginHotReloadLastError", { error: reloadRecord.error })
-      : null;
+  const reloadDetail =
+    reloadRecord?.success === true
+      ? t("settings.pluginHotReloadLastSuccess", {
+          plugins: reloadRecord.plugins.length
+            ? reloadRecord.plugins.join(", ")
+            : t("settings.allInstalledPlugins"),
+          time: new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(reloadRecord.at),
+        })
+      : reloadRecord?.error != null && reloadRecord.error !== ""
+        ? t("settings.pluginHotReloadLastError", { error: reloadRecord.error })
+        : null;
 
   return (
-    <Page title={t("settings.developer")} description={t("settings.developerHint")}>
-      <Row label={t("settings.developerMode")} hint={t("settings.developerModeHint")}>
+    <Page
+      title={t("settings.developer")}
+      description={t("settings.developerHint")}
+    >
+      <Row
+        label={t("settings.developerMode")}
+        hint={t("settings.developerModeHint")}
+      >
         <Switch
           checked={status?.enabled ?? false}
           disabled={saving}
@@ -490,14 +601,40 @@ export function DeveloperSettingsPage({
       <GroupHeading>{t("settings.pluginDevelopment")}</GroupHeading>
       <Row
         label={t("settings.pluginHotReload")}
-        hint={<span aria-live="polite"><span className="block">{statusText}</span>{reloadDetail && <span className="mt-0.5 block" role={reloadRecord?.success ? undefined : "alert"}>{reloadDetail}</span>}</span>}
+        hint={
+          <span aria-live="polite">
+            <span className="block">{statusText}</span>
+            {reloadDetail != null && reloadDetail !== "" && (
+              <span
+                className="mt-0.5 block"
+                role={reloadRecord?.success === true ? undefined : "alert"}
+              >
+                {reloadDetail}
+              </span>
+            )}
+          </span>
+        }
       >
-        <Button variant="outline" size="sm" disabled={reloading || saving} onClick={() => void reload()}>
-          {reloading ? <Spinner data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
-          {reloading ? t("settings.reloadingPlugins") : t("settings.reloadPlugins")}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={reloading || saving}
+          onClick={() => void reload()}
+        >
+          {reloading ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <RefreshCw data-icon="inline-start" />
+          )}
+          {reloading
+            ? t("settings.reloadingPlugins")
+            : t("settings.reloadPlugins")}
         </Button>
       </Row>
-      <Row label={t("settings.webviewDevtools")} hint={t("settings.webviewDevtoolsHint")}>
+      <Row
+        label={t("settings.webviewDevtools")}
+        hint={t("settings.webviewDevtoolsHint")}
+      >
         <Button variant="outline" size="sm" onClick={() => void showDevtools()}>
           <Bug data-icon="inline-start" />
           {t("settings.openWebviewDevtools")}
@@ -506,7 +643,11 @@ export function DeveloperSettingsPage({
       <GroupHeading>{t("settings.supportDiagnostics")}</GroupHeading>
       <Row
         label={t("settings.exportDiagnostics")}
-        hint={<span aria-live="polite">{diagnosticsMessage ?? t("settings.exportDiagnosticsHint")}</span>}
+        hint={
+          <span aria-live="polite">
+            {diagnosticsMessage ?? t("settings.exportDiagnosticsHint")}
+          </span>
+        }
       >
         <Button
           variant="outline"
@@ -515,13 +656,21 @@ export function DeveloperSettingsPage({
           aria-busy={diagnosticsExporting}
           onClick={() => void exportDiagnostics()}
         >
-          {diagnosticsExporting ? <Spinner data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+          {diagnosticsExporting ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <Download data-icon="inline-start" />
+          )}
           {diagnosticsExporting
             ? t("settings.exportingDiagnostics")
             : t("settings.exportDiagnosticsAction")}
         </Button>
       </Row>
-      {error && <p className="pt-2 text-metadata text-destructive" role="alert">{error}</p>}
+      {error != null && error !== "" && (
+        <p className="text-metadata text-destructive pt-2" role="alert">
+          {error}
+        </p>
+      )}
     </Page>
   );
 }
@@ -545,7 +694,7 @@ export function BrowserPermissionsSettingsPage() {
       description="Experimental website permissions granted permanently to C2 Browser. Sensitive actions and downloads always require one-time approval."
     >
       <Row
-        icon={<Globe className="size-5 text-muted-foreground" />}
+        icon={<Globe className="text-muted-foreground size-5" />}
         label="Default browser adapter"
         hint="Ordinary requests use C2 Browser. Explicit Chrome, existing-tab, or existing-login requests use Chrome."
       >
@@ -553,24 +702,35 @@ export function BrowserPermissionsSettingsPage() {
       </Row>
       <GroupHeading>Permanent website access</GroupHeading>
       {origins.length === 0 ? (
-        <p className="py-section text-body text-muted-foreground">No origins have permanent access.</p>
-      ) : origins.map((origin) => (
-        <Row key={origin} compact label={origin} hint="Website content remains untrusted.">
-          <TooltipButton
-            label="Revoke"
-            variant="ghost"
-            size="icon"
-            className="size-7 text-muted-foreground hover:text-destructive"
-            onClick={() => {
-              void browserRevokePermission(origin).then(() => {
-                setOrigins((current) => current.filter((item) => item !== origin));
-              });
-            }}
+        <p className="py-section text-body text-muted-foreground">
+          No origins have permanent access.
+        </p>
+      ) : (
+        origins.map((origin) => (
+          <Row
+            key={origin}
+            compact
+            label={origin}
+            hint="Website content remains untrusted."
           >
-            <Trash2 className="size-3.5" />
-          </TooltipButton>
-        </Row>
-      ))}
+            <TooltipButton
+              label="Revoke"
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-destructive size-7"
+              onClick={() => {
+                void browserRevokePermission(origin).then(() => {
+                  setOrigins((current) =>
+                    current.filter((item) => item !== origin)
+                  );
+                });
+              }}
+            >
+              <Trash2 className="size-3.5" />
+            </TooltipButton>
+          </Row>
+        ))
+      )}
     </Page>
   );
 }

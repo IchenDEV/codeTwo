@@ -1,18 +1,10 @@
 import { useState } from "react";
-import { ChevronDown, Clapperboard, Copy, Download, Pencil, Plus, RotateCcw, Route, Settings2 } from "@/components/ui/icons";
 
-import type { SessionConfig } from "./config";
-import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
-import { exportSceneSkillMd } from "../bridge";
-import { useToast } from "../ui/toast";
-import { ControlChip as Chip } from "@/components/ui/control-chip";
 import { SelectableRow } from "@/components/business/selectable-row";
 import { StatusBadge } from "@/components/business/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { TooltipButton } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
+import { ControlChip as Chip } from "@/components/ui/control-chip";
 import {
   Dialog,
   DialogContent,
@@ -21,15 +13,43 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useLanguage, useT } from "../i18n";
+import {
+  ChevronDown,
+  Clapperboard,
+  Copy,
+  Download,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Route,
+  Settings2,
+} from "@/components/ui/icons";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+import { exportSceneSkillMd } from "../bridge";
+import { useLanguage, useT } from "../i18n";
+import { td } from "../i18n/dynamic";
+import { useToast } from "../ui/toast";
+import type { SessionConfig } from "./config";
+import { sceneTitle } from "./scene";
+import type { SceneInfo, SceneSource } from "./scene";
 
 /** Source pill naming where the scene came from (builtin / user / project / plugin). */
 export function SourceBadge({ source }: { source: SceneSource }) {
   const t = useT();
   return (
-    <Badge variant="outline" className="shrink-0 text-metadata text-muted-foreground">
-      {t(`scene.source.${source}` as "scene.source.builtin")}
+    <Badge
+      variant="outline"
+      className="text-metadata text-muted-foreground shrink-0"
+    >
+      {t(`scene.source.${source}`)}
     </Badge>
   );
 }
@@ -55,29 +75,33 @@ export function SceneChip({ config }: { config: SessionConfig }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        render={<Chip
-          title={surfaceLabel}
-          aria-label={`${surfaceLabel}: ${label}`}
-          className={cn((active || config.autoScene) && "text-foreground")}
-        >
-          <Clapperboard className="size-3.5 shrink-0" />
-          <span className="max-w-36 truncate">{label}</span>
-          {config.sceneCustomized && (
-            <span
-              className="size-1.5 shrink-0 rounded-full bg-warning"
-              title={t("scene.customized")}
-              aria-label={t("scene.customized")}
-            />
-          )}
-          {partial && (
-            <span
-              className="size-1.5 shrink-0 rounded-full bg-primary"
-              title={t("scene.partial")}
-              aria-label={t("scene.partial")}
-            />
-          )}
-          <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>}
+        render={
+          <Chip
+            title={surfaceLabel}
+            aria-label={`${surfaceLabel}: ${label}`}
+            className={cn(
+              (active ?? config.autoScene) != null && "text-foreground"
+            )}
+          >
+            <Clapperboard className="size-3.5 shrink-0" />
+            <span className="max-w-36 truncate">{label}</span>
+            {config.sceneCustomized && (
+              <span
+                className="bg-warning size-1.5 shrink-0 rounded-full"
+                title={t("scene.customized")}
+                aria-label={t("scene.customized")}
+              />
+            )}
+            {partial && (
+              <span
+                className="bg-primary size-1.5 shrink-0 rounded-full"
+                title={t("scene.partial")}
+                aria-label={t("scene.partial")}
+              />
+            )}
+            <ChevronDown className="size-3 shrink-0 opacity-50" />
+          </Chip>
+        }
       />
       <PopoverContent
         align="start"
@@ -85,16 +109,18 @@ export function SceneChip({ config }: { config: SessionConfig }) {
         className="max-h-(--available-height) w-96 max-w-(--available-width) overflow-y-auto p-2"
       >
         <div className="@container/composer">
-          <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5">
-            <span className="min-w-0 flex-1 truncate text-metadata text-muted-foreground">
+          <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1">
+            <span className="text-metadata text-muted-foreground min-w-0 flex-1 truncate">
               {surfaceLabel}
             </span>
-            {config.scenesEnabled && active && <SourceBadge source={active.source} />}
-            {config.autoScene && <Badge variant="secondary">{t("scene.auto")}</Badge>}
+            {config.scenesEnabled && active && (
+              <SourceBadge source={active.source} />
+            )}
+            {config.autoScene && (
+              <Badge variant="secondary">{t("scene.auto")}</Badge>
+            )}
             {config.sceneCustomized && (
-              <StatusBadge tone="warning">
-                {t("scene.customized")}
-              </StatusBadge>
+              <StatusBadge tone="warning">{t("scene.customized")}</StatusBadge>
             )}
           </div>
 
@@ -102,7 +128,12 @@ export function SceneChip({ config }: { config: SessionConfig }) {
             selected={config.autoScene}
             label={t("scene.auto")}
             description={t("scene.autoHint")}
-            leading={<Route aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
+            leading={
+              <Route
+                aria-hidden="true"
+                className="text-muted-foreground mt-0.5 size-4 shrink-0"
+              />
+            }
             onSelect={() => {
               config.onAutoScene(true);
               setOpen(false);
@@ -121,9 +152,13 @@ export function SceneChip({ config }: { config: SessionConfig }) {
           {config.scenes.map((scene) => (
             <SelectableRow
               key={scene.reference}
-              selected={!config.autoScene && active?.reference === scene.reference}
+              selected={
+                !config.autoScene && active?.reference === scene.reference
+              }
               label={sceneTitle(scene, locale)}
-              description={scene.localizations[locale]?.description ?? scene.description}
+              description={
+                scene.localizations[locale]?.description ?? scene.description
+              }
               leading={<SourceBadge source={scene.source} />}
               onSelect={() => {
                 config.onAutoScene(false);
@@ -136,7 +171,7 @@ export function SceneChip({ config }: { config: SessionConfig }) {
           <Button
             type="button"
             variant="ghost"
-            className="mt-1 w-full justify-start text-muted-foreground"
+            className="text-muted-foreground mt-1 w-full justify-start"
             onClick={() => {
               setOpen(false);
               config.onManageScenes();
@@ -149,9 +184,11 @@ export function SceneChip({ config }: { config: SessionConfig }) {
           {partial && (
             <>
               <Separator className="mx-2 my-1.5 w-auto" />
-              <div className="flex items-center gap-1.5 px-2 pb-1 pt-0.5">
-                <span className="min-w-0 flex-1 text-callout text-muted-foreground">
-                  {t("scene.partialHint", { fields: config.scenePendingFields.join(", ") })}
+              <div className="flex items-center gap-1.5 px-2 pt-0.5 pb-1">
+                <span className="text-callout text-muted-foreground min-w-0 flex-1">
+                  {t("scene.partialHint", {
+                    fields: config.scenePendingFields.join(", "),
+                  })}
                 </span>
                 <Button
                   variant="secondary"
@@ -218,7 +255,12 @@ export function ScenePicker({
         <DialogHeader>
           <div className="flex items-center justify-between gap-3 pr-8">
             <DialogTitle>{t("scene.pickerTitle")}</DialogTitle>
-            <Button type="button" variant="outline" size="sm" onClick={onCreate}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCreate}
+            >
               <Plus data-icon="inline-start" />
               {t("sceneEditor.create")}
             </Button>
@@ -230,7 +272,12 @@ export function ScenePicker({
             selected={auto}
             label={t("scene.auto")}
             description={t("scene.autoHint")}
-            leading={<Route aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
+            leading={
+              <Route
+                aria-hidden="true"
+                className="text-muted-foreground mt-0.5 size-4 shrink-0"
+              />
+            }
             onSelect={() => {
               onAuto(true);
               onClose();
@@ -252,7 +299,10 @@ export function ScenePicker({
                 <SelectableRow
                   selected={!auto && active?.reference === scene.reference}
                   label={sceneTitle(scene, locale)}
-                  description={scene.localizations[locale]?.description ?? scene.description}
+                  description={
+                    scene.localizations[locale]?.description ??
+                    scene.description
+                  }
                   leading={<SourceBadge source={scene.source} />}
                   onSelect={() => {
                     onAuto(false);
@@ -266,7 +316,7 @@ export function ScenePicker({
                 tooltip={t("sceneEditor.duplicate")}
                 variant="ghost"
                 size="icon-sm"
-                className="shrink-0 text-muted-foreground"
+                className="text-muted-foreground shrink-0"
                 onClick={() => onDuplicate(scene)}
               >
                 <Copy />
@@ -277,7 +327,7 @@ export function ScenePicker({
                   tooltip={t("sceneEditor.edit")}
                   variant="ghost"
                   size="icon-sm"
-                  className="shrink-0 text-muted-foreground"
+                  className="text-muted-foreground shrink-0"
                   onClick={() => onEdit(scene)}
                 >
                   <Pencil />
@@ -287,7 +337,7 @@ export function ScenePicker({
                 label={t("scene.exportSkill")}
                 variant="ghost"
                 size="icon-sm"
-                className="shrink-0 text-muted-foreground"
+                className="text-muted-foreground shrink-0"
                 onClick={() => void exportSkill(scene)}
               >
                 <Download />
@@ -318,7 +368,7 @@ export function SceneEscalationDialog({
   onCancel: () => void;
 }) {
   const t = useT();
-  const modeName = (m: string) => t(`mode.${m}` as "mode.ask");
+  const modeName = (m: string) => td(t, `mode.${m}`);
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-w-sm">
