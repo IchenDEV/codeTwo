@@ -5,12 +5,14 @@ import { cn } from "@/lib/utils";
 
 type ThinkingOrbProps = ComponentProps<typeof ThinkingOrb>;
 
-export interface ActivityOrbProps
-  extends Omit<ThinkingOrbProps, "size" | "state" | "style"> {
-  state: OrbState;
+export interface ActivityOrbProps extends Omit<
+  ThinkingOrbProps,
+  "size" | "state" | "style"
+> {
+  readonly state: OrbState;
   /** C2's 14px loading contract, the native 20px inline preset, or the 64px avatar preset. */
-  visualSize?: 14 | 20 | 64;
-  style?: CSSProperties;
+  readonly visualSize?: 14 | 20 | 64;
+  readonly style?: CSSProperties;
 }
 
 /**

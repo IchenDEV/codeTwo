@@ -5,7 +5,11 @@ import { preferredRecordingType, toWav16kMono } from "./wav";
 import { shouldUseWebSpeech } from "./platform";
 import { Button } from "@/components/ui/button";
 import { ActivityOrb } from "@/components/ui/activity-orb";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "../ui/toast";
 import { useT } from "../i18n";
 import type { SceneInfo, SceneSlotDef } from "../session/scene";
@@ -21,8 +25,11 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
     SpeechRecognition?: new () => SpeechRecognitionLike;
     webkitSpeechRecognition?: new () => SpeechRecognitionLike;
   };
-  const SpeechRecognition = w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-  return shouldUseWebSpeech(isDesktop, SpeechRecognition !== null) ? SpeechRecognition : null;
+  const SpeechRecognition =
+    w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+  return shouldUseWebSpeech(isDesktop, SpeechRecognition !== null)
+    ? SpeechRecognition
+    : null;
 }
 
 interface SpeechRecognitionLike {
@@ -44,7 +51,7 @@ export interface TranscriptHandlerDeps {
   scene: SceneInfo | null;
   structureBrief: (
     transcript: string,
-    slots: SceneSlotDef[],
+    slots: SceneSlotDef[]
   ) => Promise<Record<string, string> | null>;
   insertBrief: (scene: SceneInfo, values: Record<string, string>) => void;
   insertText: (text: string) => void;
@@ -59,14 +66,15 @@ export interface TranscriptHandlerDeps {
  * inserting the raw text.
  */
 export function makeTranscriptHandler(
-  deps: TranscriptHandlerDeps,
+  deps: TranscriptHandlerDeps
 ): ((full: string) => Promise<void>) | undefined {
   const { scene } = deps;
   if (!scene?.brief) return undefined;
   const slots = scene.brief.slots ?? [];
   return async (full: string) => {
     const values = await deps.structureBrief(full, slots).catch(() => null);
-    if (values && Object.keys(values).length > 0) deps.insertBrief(scene, values);
+    if (values && Object.keys(values).length > 0)
+      deps.insertBrief(scene, values);
     else {
       deps.insertText(full);
       deps.onDegrade();
@@ -86,15 +94,15 @@ export function makeTranscriptHandler(
  * path, with a "structuring" spinner while the handler runs); without it, behavior is identical to
  * the original per-chunk `onText` dictation.
  */
-export function VoiceButton({
+export const VoiceButton = ({
   onText,
   onTranscript,
   hint,
 }: {
-  onText: (text: string) => void;
-  onTranscript?: (full: string) => Promise<void>;
-  hint?: string;
-}) {
+  readonly onText: (text: string) => void;
+  readonly onTranscript?: (full: string) => Promise<void>;
+  readonly hint?: string;
+}) => {
   const [mode, setMode] = useState<Mode>("idle");
   const [hasLocal, setHasLocal] = useState(false);
   const toast = useToast();
@@ -152,7 +160,8 @@ export function VoiceButton({
       /* already stopped */
     }
     recRef.current = null;
-    if (mediaRef.current && mediaRef.current.state !== "inactive") mediaRef.current.stop();
+    if (mediaRef.current && mediaRef.current.state !== "inactive")
+      mediaRef.current.stop();
   };
 
   /** Deliver a finished capture: structure the buffer when asked to, otherwise just go idle. */
@@ -221,7 +230,9 @@ export function VoiceButton({
       try {
         // Send WAV, not the recorder's native container: whisper.cpp and the other local
         // transcribers read 16 kHz PCM and nothing else.
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType || mimeType });
+        const blob = new Blob(chunksRef.current, {
+          type: mr.mimeType || mimeType,
+        });
         const wav = await toWav16kMono(blob);
         if (!activeRef.current) return;
         const text = (await transcribeAudio(wav, "wav")).trim();
@@ -315,39 +326,41 @@ export function VoiceButton({
   return (
     <Tooltip>
       <TooltipTrigger
-        render={<Button
-          variant={mode === "listening" ? "destructive" : "ghost"}
-          size="icon"
-          aria-label={label}
-          aria-pressed={mode === "listening"}
-          data-voice-mode={mode}
-          className="size-8 shrink-0 rounded-full"
-          onPointerDown={onPointerDown}
-          onPointerUp={() => endPress(true)}
-          onPointerLeave={() => endPress(false)}
-          onClick={onClick}
-          disabled={mode === "transcribing" || mode === "structuring"}
-        >
-          {mode === "idle" ? (
-            <Mic className="size-4" />
-          ) : (
-            <ActivityOrb
-              state={
-                mode === "listening"
-                  ? "listening"
-                  : mode === "transcribing"
-                    ? "composing"
-                    : "shaping"
-              }
-              theme={mode === "listening" ? "dark" : "auto"}
-              aria-hidden="true"
-            />
-          )}
-        </Button>}
+        render={
+          <Button
+            variant={mode === "listening" ? "destructive" : "ghost"}
+            size="icon"
+            aria-label={label}
+            aria-pressed={mode === "listening"}
+            data-voice-mode={mode}
+            className="size-8 shrink-0 rounded-full"
+            onPointerDown={onPointerDown}
+            onPointerUp={() => endPress(true)}
+            onPointerLeave={() => endPress(false)}
+            onClick={onClick}
+            disabled={mode === "transcribing" || mode === "structuring"}
+          >
+            {mode === "idle" ? (
+              <Mic className="size-4" />
+            ) : (
+              <ActivityOrb
+                state={
+                  mode === "listening"
+                    ? "listening"
+                    : mode === "transcribing"
+                      ? "composing"
+                      : "shaping"
+                }
+                theme={mode === "listening" ? "dark" : "auto"}
+                aria-hidden="true"
+              />
+            )}
+          </Button>
+        }
       />
       <TooltipContent>
         {label}
-        {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
+        {hint ? <span className="ml-1.5 opacity-60">{hint}</span> : null}
       </TooltipContent>
     </Tooltip>
   );

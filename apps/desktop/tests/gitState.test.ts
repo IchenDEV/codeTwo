@@ -24,7 +24,9 @@ const file = (overrides: Partial<GitFile>): GitFile => ({
   ...overrides,
 });
 
-const sourceControl = (overrides: Partial<SourceControlInfo> = {}): SourceControlInfo => ({
+const sourceControl = (
+  overrides: Partial<SourceControlInfo> = {}
+): SourceControlInfo => ({
   remote_name: "origin",
   provider: "github",
   provider_name: "GitHub",
@@ -83,14 +85,32 @@ describe("source-control projection", () => {
   });
 
   test("separates diff semantics from their color or symbol presentation", () => {
-    expect(diffLinePresentation("+added")).toEqual({ kind: "add", marker: "+", content: "added" });
-    expect(diffLinePresentation("-removed")).toEqual({ kind: "del", marker: "-", content: "removed" });
-    expect(diffLinePresentation("+++ b/file")).toEqual({ kind: "context", marker: "", content: "+++ b/file" });
-    expect(diffLinePresentation("@@ -1 +1 @@")).toEqual({ kind: "hunk", marker: "", content: "@@ -1 +1 @@" });
+    expect(diffLinePresentation("+added")).toEqual({
+      kind: "add",
+      marker: "+",
+      content: "added",
+    });
+    expect(diffLinePresentation("-removed")).toEqual({
+      kind: "del",
+      marker: "-",
+      content: "removed",
+    });
+    expect(diffLinePresentation("+++ b/file")).toEqual({
+      kind: "context",
+      marker: "",
+      content: "+++ b/file",
+    });
+    expect(diffLinePresentation("@@ -1 +1 @@")).toEqual({
+      kind: "hunk",
+      marker: "",
+      content: "@@ -1 +1 @@",
+    });
   });
 
   test("enables an advertised adapter only when its required CLI is available", () => {
-    expect(changeRequestPresentation(sourceControl(), false, null)).toMatchObject({
+    expect(
+      changeRequestPresentation(sourceControl(), false, null)
+    ).toMatchObject({
       createLabel: "Create PR",
       creatingLabel: "Creating PR…",
       createdLabel: "PR created.",
@@ -101,14 +121,18 @@ describe("source-control projection", () => {
     const missingGh = changeRequestPresentation(
       sourceControl({ required_cli_available: false }),
       false,
-      null,
+      null
     );
     expect(missingGh.canCreate).toBe(false);
     expect(missingGh.status).toContain("requires the gh CLI on PATH");
     expect(missingGh.status).toContain("Push remains available");
 
     expect(
-      changeRequestPresentation(sourceControl({ required_cli: null }), false, null).canCreate,
+      changeRequestPresentation(
+        sourceControl({ required_cli: null }),
+        false,
+        null
+      ).canCreate
     ).toBe(true);
 
     const futureAdapter = changeRequestPresentation(
@@ -120,9 +144,12 @@ describe("source-control projection", () => {
         required_cli_available: true,
       }),
       false,
-      null,
+      null
     );
-    expect(futureAdapter).toMatchObject({ canCreate: true, createLabel: "Create MR" });
+    expect(futureAdapter).toMatchObject({
+      canCreate: true,
+      createLabel: "Create MR",
+    });
     expect(futureAdapter.status).toContain("through glab");
   });
 
@@ -138,7 +165,7 @@ describe("source-control projection", () => {
         required_cli_available: false,
       }),
       false,
-      null,
+      null
     );
     expect(gitlab).toMatchObject({
       createLabel: "Create MR",
@@ -161,11 +188,13 @@ describe("source-control projection", () => {
         required_cli_available: false,
       }),
       false,
-      null,
+      null
     );
     expect(unknown.createLabel).toBe("Create change request");
     expect(unknown.createdLabel).toBe("Change request created.");
-    expect(unknown.status).toContain("git.example.test change request creation");
+    expect(unknown.status).toContain(
+      "git.example.test change request creation"
+    );
   });
 
   test("makes loading, inspection failure, and no-remote states explicit", () => {
@@ -214,11 +243,11 @@ describe("source-control projection", () => {
       value: { status: "repo-a", checkpoints: ["checkpoint-a"] },
     };
 
-    expect(workspaceStateForCwd(status, "/repo/a", { status: null, checkpoints: [] })).toBe(
-      status,
-    );
     expect(
-      workspaceStateForCwd(status, "/repo/b", { status: null, checkpoints: [] }),
+      workspaceStateForCwd(status, "/repo/a", { status: null, checkpoints: [] })
+    ).toBe(status);
+    expect(
+      workspaceStateForCwd(status, "/repo/b", { status: null, checkpoints: [] })
     ).toEqual({
       cwd: "/repo/b",
       loading: true,

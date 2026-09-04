@@ -20,39 +20,57 @@ export function gitFileSections(files: readonly GitFile[]): {
   };
 }
 
-/** A rename is one index operation even though Git needs both literal paths. */
+/**
+A rename is one index operation even though Git needs both literal paths.
+*/
 export function gitFilePathspecs(file: GitFile): string[] {
   return file.original_path && file.original_path !== file.path
     ? [file.original_path, file.path]
     : [file.path];
 }
 
-export function gitFileDisplayState(file: GitFile, scope: "staged" | "unstaged"): string {
-  return (scope === "staged" ? file.staged_state : file.unstaged_state) ?? file.state;
+export function gitFileDisplayState(
+  file: GitFile,
+  scope: "staged" | "unstaged"
+): string {
+  return (
+    (scope === "staged" ? file.staged_state : file.unstaged_state) ?? file.state
+  );
 }
 
 export function uniquePathspecs(files: readonly GitFile[]): string[] {
   return [...new Set(files.flatMap(gitFilePathspecs))];
 }
 
-export function gitPhaseLabel(phase: GitPhase, changeRequestLabel = "PR"): string {
+export function gitPhaseLabel(
+  phase: GitPhase,
+  changeRequestLabel = "PR"
+): string {
   switch (phase) {
-    case "staging":
+    case "staging": {
       return "Staging…";
-    case "unstaging":
+    }
+    case "unstaging": {
       return "Unstaging…";
-    case "checkpointing":
+    }
+    case "checkpointing": {
       return "Creating checkpoint…";
-    case "reverting":
+    }
+    case "reverting": {
       return "Reverting…";
-    case "committing":
+    }
+    case "committing": {
       return "Committing…";
-    case "pushing":
+    }
+    case "pushing": {
       return "Pushing…";
-    case "creating_pr":
+    }
+    case "creating_pr": {
       return `Creating ${changeRequestLabel}…`;
-    case "idle":
+    }
+    case "idle": {
       return "";
+    }
   }
 }
 
@@ -73,7 +91,9 @@ export interface SourceControlLoadState {
   error: string | null;
 }
 
-/** A backend value whose identity is the workspace it was loaded from. */
+/**
+A backend value whose identity is the workspace it was loaded from.
+*/
 export interface WorkspaceLoadState<T> {
   cwd: string;
   loading: boolean;
@@ -89,18 +109,24 @@ export interface WorkspaceLoadState<T> {
 export function workspaceStateForCwd<T>(
   state: WorkspaceLoadState<T>,
   cwd: string,
-  emptyValue: T,
+  emptyValue: T
 ): WorkspaceLoadState<T> {
-  if (state.cwd === cwd) return state;
+  if (state.cwd === cwd) {
+    return state;
+  }
   return { cwd, loading: true, value: emptyValue };
 }
 
-/** Never paint provider metadata fetched for the previous workspace during a cwd switch. */
+/**
+Never paint provider metadata fetched for the previous workspace during a cwd switch.
+*/
 export function sourceControlStateForCwd(
   state: SourceControlLoadState,
-  cwd: string,
+  cwd: string
 ): SourceControlLoadState {
-  if (state.cwd === cwd) return state;
+  if (state.cwd === cwd) {
+    return state;
+  }
   return { cwd, loading: true, info: null, error: null };
 }
 
@@ -114,7 +140,7 @@ export function changeRequestPresentation(
   info: SourceControlInfo | null,
   loading: boolean,
   error: string | null,
-  repositoryAvailable: boolean | null = true,
+  repoAvailable: boolean | null = true
 ): ChangeRequestPresentation {
   const label = info?.change_request_label ?? "change request";
   const base = {
@@ -124,7 +150,7 @@ export function changeRequestPresentation(
     createdLabel: `${label === "change request" ? "Change request" : label} created.`,
   } as const;
 
-  if (repositoryAvailable === null || loading) {
+  if (repoAvailable === null || loading) {
     return {
       ...base,
       canCreate: false,
@@ -132,7 +158,7 @@ export function changeRequestPresentation(
       statusKind: "loading",
     };
   }
-  if (!repositoryAvailable) {
+  if (!repoAvailable) {
     return {
       ...base,
       canCreate: false,
@@ -184,15 +210,19 @@ export function changeRequestPresentation(
   };
 }
 
-const MAX_RENDERED_DIFF_LINES = 4_000;
+const MAX_RENDERED_DIFF_LINES = 4000;
 
-/** Keep the DOM bounded even when the core's byte-bounded preview contains many tiny lines. */
+/**
+Keep the DOM bounded even when the core's byte-bounded preview contains many tiny lines.
+*/
 export function diffPreviewLines(
   text: string,
-  limit = MAX_RENDERED_DIFF_LINES,
+  limit = MAX_RENDERED_DIFF_LINES
 ): { lines: string[]; truncated: boolean } {
   const lines = text.split("\n");
-  if (lines.length <= limit) return { lines, truncated: false };
+  if (lines.length <= limit) {
+    return { lines, truncated: false };
+  }
   return { lines: lines.slice(0, limit), truncated: true };
 }
 
@@ -209,7 +239,9 @@ export function diffLinePresentation(line: string): {
   if (line.startsWith("-") && !line.startsWith("---")) {
     return { kind: "del", marker: "-", content: line.slice(1) || " " };
   }
-  if (line.startsWith("@@")) return { kind: "hunk", marker: "", content: line };
+  if (line.startsWith("@@")) {
+    return { kind: "hunk", marker: "", content: line };
+  }
   if (line.startsWith("diff ") || line.startsWith("index ")) {
     return { kind: "meta", marker: "", content: line };
   }

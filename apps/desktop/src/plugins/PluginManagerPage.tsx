@@ -29,7 +29,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { StatusBadge, type StatusTone } from "@/components/business/status-badge";
+import {
+  StatusBadge,
+  type StatusTone,
+} from "@/components/business/status-badge";
 import { SearchField } from "@/components/business/search-field";
 import { Button } from "@/components/ui/button";
 import { TooltipButton } from "@/components/ui/tooltip";
@@ -71,7 +74,8 @@ import type {
 
 const DEFAULT_LABELS: PluginManagerLabels = {
   title: "Features & plugins",
-  description: "Manage optional C2 features, desktop integrations, and installed plugins.",
+  description:
+    "Manage optional C2 features, desktop integrations, and installed plugins.",
   plugins: "Features",
   components: "Components",
   mcps: "MCPs",
@@ -172,14 +176,14 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   affectedPlugins: "Affected plugins",
   missingCount: (count) => `${count} missing`,
   status: {
-  disabled: "Disabled",
-  pending: "Pending",
-  loading: "Loading",
-  active: "Ready",
-  failed: "Failed",
-  disposed: "Unloaded",
-  requires_auth: "Authentication required",
-  unsupported: "Unsupported",
+    disabled: "Disabled",
+    pending: "Pending",
+    loading: "Loading",
+    active: "Ready",
+    failed: "Failed",
+    disposed: "Unloaded",
+    requires_auth: "Authentication required",
+    unsupported: "Unsupported",
   },
   sourceNames: {
     builtin: "Built-in feature",
@@ -223,7 +227,7 @@ function sourceIcon(source: PluginManagerSource) {
 function sourceLabel(
   source: PluginManagerSource,
   labels: PluginManagerLabels,
-  custom?: string | null,
+  custom?: string | null
 ): string {
   return custom || labels.sourceNames[source];
 }
@@ -240,17 +244,17 @@ function statusDotClass(status: PluginManagerStatus): string {
   return "bg-muted-foreground/50";
 }
 
-function CompactStatus({
+const CompactStatus = ({
   status,
   labels,
 }: {
-  status: PluginManagerStatus;
-  labels: PluginManagerLabels;
-}) {
+  readonly status: PluginManagerStatus;
+  readonly labels: PluginManagerLabels;
+}) => {
   return (
     <span
       data-plugin-status={status}
-      className="flex shrink-0 items-center gap-1.5 text-callout text-muted-foreground"
+      className="text-callout text-muted-foreground flex shrink-0 items-center gap-1.5"
     >
       <span
         className={cn("size-1.5 rounded-full", statusDotClass(status))}
@@ -264,19 +268,23 @@ function CompactStatus({
 function statusTone(status: PluginManagerStatus): StatusTone {
   if (status === "active") return "success";
   if (status === "failed") return "destructive";
-  if (status === "pending" || status === "loading" || status === "requires_auth") {
+  if (
+    status === "pending" ||
+    status === "loading" ||
+    status === "requires_auth"
+  ) {
     return "warning";
   }
   return "neutral";
 }
 
-function StatusSummary({
+const StatusSummary = ({
   state,
   labels,
 }: {
-  state: PluginManagerScopedState;
-  labels: PluginManagerLabels;
-}) {
+  readonly state: PluginManagerScopedState;
+  readonly labels: PluginManagerLabels;
+}) => {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <StatusBadge tone={statusTone(state.status)}>
@@ -293,7 +301,7 @@ function StatusSummary({
 }
 
 function scopeSupportsProject(
-  supportedScopes: Array<"user" | "project">,
+  supportedScopes: Array<"user" | "project">
 ): boolean {
   return supportedScopes.includes("project");
 }
@@ -305,7 +313,7 @@ function isResourceTab(tab: string): tab is PluginResourceTab {
 }
 
 function resourceTabFor(
-  component: PluginManagerComponent,
+  component: PluginManagerComponent
 ): PluginResourceTab | null {
   const kind = component.kind.toLowerCase().replaceAll("-", "_");
   if (kind === "mcp" || kind === "mcp_server" || kind === "mcpserver") {
@@ -326,38 +334,37 @@ function resourceTabFor(
 
 function resourceIcon(tab: PluginResourceTab) {
   if (tab === "mcps") return <Server className="size-4" aria-hidden="true" />;
-  if (tab === "hooks")
-    return <Webhook className="size-4" aria-hidden="true" />;
+  if (tab === "hooks") return <Webhook className="size-4" aria-hidden="true" />;
   return <BookOpen className="size-4" aria-hidden="true" />;
 }
 
 function scopeValue(
   scope: PluginManagerScope,
-  projects: PluginManagerProject[],
+  projects: PluginManagerProject[]
 ): string {
   if (scope.kind === "user") return "user";
   const index = projects.findIndex(
-    (project) => project.path === scope.projectPath,
+    (project) => project.path === scope.projectPath
   );
   return index >= 0 ? `project:${index}` : "project:current";
 }
 
-function ScopeSelector({
+const ScopeSelector = ({
   scope,
   projects,
   labels,
   onChange,
 }: {
-  scope: PluginManagerScope;
-  projects: PluginManagerProject[];
-  labels: PluginManagerLabels;
-  onChange: (scope: PluginManagerScope) => void;
-}) {
+  readonly scope: PluginManagerScope;
+  readonly projects: PluginManagerProject[];
+  readonly labels: PluginManagerLabels;
+  readonly onChange: (scope: PluginManagerScope) => void;
+}) => {
   const currentProject =
     scope.kind === "project" &&
     !projects.some((project) => project.path === scope.projectPath)
-    ? { path: scope.projectPath, label: scope.projectPath }
-    : null;
+      ? { path: scope.projectPath, label: scope.projectPath }
+      : null;
   const items = [
     { value: "user", label: labels.userScope },
     ...projects.map((project, index) => ({
@@ -396,11 +403,7 @@ function ScopeSelector({
           if (project) onChange({ kind: "project", projectPath: project.path });
         }}
       >
-        <SelectTrigger
-          id="plugin-manager-scope"
-          size="sm"
-          className="w-36"
-        >
+        <SelectTrigger id="plugin-manager-scope" size="sm" className="w-36">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" align="end">
@@ -417,7 +420,7 @@ function ScopeSelector({
   );
 }
 
-function GithubInstaller({
+const GithubInstaller = ({
   repository,
   labels,
   busy,
@@ -426,18 +429,18 @@ function GithubInstaller({
   onClose,
   onSubmit,
 }: {
-  repository: string;
-  labels: PluginManagerLabels;
-  busy: boolean;
-  error: string | null;
-  onRepositoryChange: (repository: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
+  readonly repository: string;
+  readonly labels: PluginManagerLabels;
+  readonly busy: boolean;
+  readonly error: string | null;
+  readonly onRepositoryChange: (repository: string) => void;
+  readonly onClose: () => void;
+  readonly onSubmit: () => void;
+}) => {
   return (
     <form
       data-plugin-github-installer
-      className="flex flex-col gap-3 rounded-module bg-fill-quiet p-3"
+      className="rounded-module bg-fill-quiet flex flex-col gap-3 p-3"
       aria-busy={busy}
       onSubmit={(event) => {
         event.preventDefault();
@@ -446,10 +449,12 @@ function GithubInstaller({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <h2 className="text-dialog font-medium">{labels.installFromGithub}</h2>
+          <h2 className="text-dialog font-medium">
+            {labels.installFromGithub}
+          </h2>
           <p
             id="plugin-github-hint"
-            className="max-w-2xl text-callout text-muted-foreground"
+            className="text-callout text-muted-foreground max-w-2xl"
           >
             {labels.githubHint}
           </p>
@@ -495,7 +500,7 @@ function GithubInstaller({
           <p
             id="plugin-github-error"
             role="alert"
-            className="flex items-start gap-2 text-body text-destructive"
+            className="text-body text-destructive flex items-start gap-2"
           >
             <CircleAlert
               className="mt-0.5 size-4 shrink-0"
@@ -509,7 +514,7 @@ function GithubInstaller({
   );
 }
 
-function StateControl({
+const StateControl = ({
   id,
   name,
   kind,
@@ -521,17 +526,17 @@ function StateControl({
   disabled,
   onChange,
 }: {
-  id: string;
-  name: string;
-  kind: "plugin" | "component";
-  required?: boolean;
-  supportedScopes: Array<"user" | "project">;
-  state: PluginManagerScopedState;
-  scope: PluginManagerScope;
-  labels: PluginManagerLabels;
-  disabled: boolean;
-  onChange: (request: PluginManagerChangeRequest) => void;
-}) {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: "plugin" | "component";
+  readonly required?: boolean;
+  readonly supportedScopes: Array<"user" | "project">;
+  readonly state: PluginManagerScopedState;
+  readonly scope: PluginManagerScope;
+  readonly labels: PluginManagerLabels;
+  readonly disabled: boolean;
+  readonly onChange: (request: PluginManagerChangeRequest) => void;
+}) => {
   if (required) return <Badge variant="secondary">{labels.required}</Badge>;
 
   if (scope.kind === "user" && !supportedScopes.includes("user")) {
@@ -612,11 +617,13 @@ function StateControl({
   );
 }
 
-function DetailList({ title, values }: { title: string; values?: string[] }) {
+const DetailList = ({ title, values }: { readonly title: string; readonly values?: string[] }) => {
   if (!values?.length) return null;
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-metadata font-medium text-muted-foreground">{title}</h3>
+      <h3 className="text-metadata text-muted-foreground font-medium">
+        {title}
+      </h3>
       <div className="flex flex-wrap gap-2">
         {values.map((value) => (
           <Badge key={value} variant="secondary">
@@ -628,27 +635,27 @@ function DetailList({ title, values }: { title: string; values?: string[] }) {
   );
 }
 
-function ScaffoldList({
+const ScaffoldList = ({
   pluginId,
   scaffolds,
   labels,
   busyAction,
   onApply,
 }: {
-  pluginId: string;
-  scaffolds: PluginManagerScaffold[];
-  labels: PluginManagerLabels;
-  busyAction: string | null;
-  onApply?: (pluginId: string, scaffoldId: string) => Promise<void>;
-}) {
+  readonly pluginId: string;
+  readonly scaffolds: PluginManagerScaffold[];
+  readonly labels: PluginManagerLabels;
+  readonly busyAction: string | null;
+  readonly onApply?: (pluginId: string, scaffoldId: string) => Promise<void>;
+}) => {
   if (!scaffolds.length || !onApply) return null;
 
   return (
     <section className="flex flex-col gap-2" aria-label={labels.applyScaffold}>
-      <h3 className="text-metadata font-medium text-muted-foreground">
+      <h3 className="text-metadata text-muted-foreground font-medium">
         {labels.contribution("scaffolds", "Scaffolds")}
       </h3>
-      <div className="divide-y rounded-module bg-fill-quiet px-3">
+      <div className="rounded-module bg-fill-quiet divide-y px-3">
         {scaffolds.map((scaffold) => {
           const key = `scaffold:${pluginId}:${scaffold.id}`;
           return (
@@ -657,7 +664,7 @@ function ScaffoldList({
               className="flex flex-col items-start gap-3 py-2.5 @sm/plugin-manager:flex-row @sm/plugin-manager:items-center"
             >
               <FolderDown
-                className="size-4 shrink-0 text-muted-foreground"
+                className="text-muted-foreground size-4 shrink-0"
                 aria-hidden="true"
               />
               <div className="min-w-0 flex-1">
@@ -688,76 +695,81 @@ function ScaffoldList({
   );
 }
 
-function PluginList({
+const PluginList = ({
   plugins,
   selectedId,
   labels,
   onSelect,
 }: {
-  plugins: PluginManagerPlugin[];
-  selectedId: string | null;
-  labels: PluginManagerLabels;
-  onSelect: (id: string) => void;
-}) {
+  readonly plugins: PluginManagerPlugin[];
+  readonly selectedId: string | null;
+  readonly labels: PluginManagerLabels;
+  readonly onSelect: (id: string) => void;
+}) => {
   return (
     <div className="flex flex-col gap-0.5" aria-label={labels.pluginList}>
       {plugins.map((plugin) => {
         const selected = plugin.id === selectedId;
         return (
-        <Button
-          key={plugin.id}
-          type="button"
+          <Button
+            key={plugin.id}
+            type="button"
             variant={selected ? "secondary" : "ghost"}
             data-selected={selected ? "true" : undefined}
             className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
             aria-pressed={selected}
-          onClick={() => onSelect(plugin.id)}
-        >
-          <span className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-control bg-fill-quiet",
-            selected ? "text-foreground" : "text-muted-foreground",
-          )}>
-            {sourceIcon(plugin.source)}
-          </span>
+            onClick={() => onSelect(plugin.id)}
+          >
+            <span
+              className={cn(
+                "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
+                selected ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {sourceIcon(plugin.source)}
+            </span>
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="flex min-w-0 items-center gap-2">
+              <span className="flex min-w-0 items-center gap-2">
                 <span className="min-w-0 flex-1 truncate font-medium">
                   {plugin.name}
                 </span>
-              {plugin.bundle?.requiresTrust && !plugin.bundle.trusted ? (
+                {plugin.bundle?.requiresTrust && !plugin.bundle.trusted ? (
                   <StatusBadge tone="destructive">
                     {labels.notTrusted}
                   </StatusBadge>
                 ) : (
                   <CompactStatus status={plugin.state.status} labels={labels} />
                 )}
-            </span>
-            <span className="truncate text-callout text-muted-foreground">
+              </span>
+              <span className="text-callout text-muted-foreground truncate">
                 {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
+              </span>
             </span>
-          </span>
-        </Button>
+          </Button>
         );
       })}
     </div>
   );
 }
 
-function ResourceList({
+const ResourceList = ({
   resources,
   tab,
   selectedId,
   labels,
   onSelect,
 }: {
-  resources: PluginManagerComponent[];
-  tab: PluginResourceTab;
-  selectedId: string | null;
-  labels: PluginManagerLabels;
-  onSelect: (id: string) => void;
-}) {
+  readonly resources: PluginManagerComponent[];
+  readonly tab: PluginResourceTab;
+  readonly selectedId: string | null;
+  readonly labels: PluginManagerLabels;
+  readonly onSelect: (id: string) => void;
+}) => {
   return (
-    <div className="flex flex-col gap-0.5" aria-label={labels.resourceList(tab)}>
+    <div
+      className="flex flex-col gap-0.5"
+      aria-label={labels.resourceList(tab)}
+    >
       {resources.map((resource) => {
         const selected = resource.id === selectedId;
         return (
@@ -770,10 +782,12 @@ function ResourceList({
             aria-pressed={selected}
             onClick={() => onSelect(resource.id)}
           >
-            <span className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-control bg-fill-quiet",
-              selected ? "text-foreground" : "text-muted-foreground",
-            )}>
+            <span
+              className={cn(
+                "rounded-control bg-fill-quiet flex size-8 shrink-0 items-center justify-center",
+                selected ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
               {resourceIcon(tab)}
             </span>
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -783,7 +797,7 @@ function ResourceList({
                 </span>
                 <CompactStatus status={resource.state.status} labels={labels} />
               </span>
-              <span className="truncate text-callout text-muted-foreground">
+              <span className="text-callout text-muted-foreground truncate">
                 {resource.pluginName}
               </span>
             </span>
@@ -794,7 +808,7 @@ function ResourceList({
   );
 }
 
-function ResourceDetails({
+const ResourceDetails = ({
   resource,
   scope,
   labels,
@@ -803,14 +817,14 @@ function ResourceDetails({
   onRequestChange,
   onManagePlugin,
 }: {
-  resource: PluginManagerComponent;
-  scope: PluginManagerScope;
-  labels: PluginManagerLabels;
-  busy: boolean;
-  canManagePlugin: boolean;
-  onRequestChange: (request: PluginManagerChangeRequest) => void;
-  onManagePlugin: (pluginId: string) => void;
-}) {
+  readonly resource: PluginManagerComponent;
+  readonly scope: PluginManagerScope;
+  readonly labels: PluginManagerLabels;
+  readonly busy: boolean;
+  readonly canManagePlugin: boolean;
+  readonly onRequestChange: (request: PluginManagerChangeRequest) => void;
+  readonly onManagePlugin: (pluginId: string) => void;
+}) => {
   const individuallyManageable =
     resource.manageable !== false && resource.state.status !== "unsupported";
   const definition =
@@ -819,17 +833,17 @@ function ResourceDetails({
   return (
     <article
       data-resource-details
-      className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5"
+      className="mx-auto w-full max-w-5xl px-8 pt-5 pb-12"
     >
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold">
+          <h1 className="text-page flex min-w-0 flex-wrap items-center gap-2 font-semibold">
             <span className="truncate">{resource.name}</span>
             <Badge variant="secondary">
               {labels.componentKind(resource.kind)}
             </Badge>
           </h1>
-          <p className="mt-2 max-w-3xl text-prose text-muted-foreground">
+          <p className="text-prose text-muted-foreground mt-2 max-w-3xl">
             {resource.description || labels.noDescription}
           </p>
         </div>
@@ -864,12 +878,18 @@ function ResourceDetails({
       <div className="mt-8 flex flex-col gap-5">
         <StatusSummary state={resource.state} labels={labels} />
         {resource.state.error ? (
-          <p role="alert" className="flex items-start gap-2 text-body text-destructive">
-            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <p
+            role="alert"
+            className="text-body text-destructive flex items-start gap-2"
+          >
+            <CircleAlert
+              className="mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
             <span>{resource.state.error}</span>
           </p>
         ) : null}
-        <dl className="grid grid-cols-1 gap-x-3 gap-y-2 text-body sm:grid-cols-[8rem_minmax(0,1fr)]">
+        <dl className="text-body grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
           <dt className="text-muted-foreground">{labels.plugin}</dt>
           <dd className="min-w-0 break-words">{resource.pluginName}</dd>
           <dt className="text-muted-foreground">{labels.source}</dt>
@@ -877,11 +897,13 @@ function ResourceDetails({
             {sourceLabel(resource.source, labels, resource.sourceLabel)}
           </dd>
           <dt className="text-muted-foreground">{labels.identifier}</dt>
-          <dd className="min-w-0 break-all font-mono text-callout">{resource.id}</dd>
+          <dd className="text-callout min-w-0 font-mono break-all">
+            {resource.id}
+          </dd>
           {definition ? (
             <>
               <dt className="text-muted-foreground">{labels.definition}</dt>
-              <dd className="min-w-0 break-all font-mono text-callout">
+              <dd className="text-callout min-w-0 font-mono break-all">
                 {definition}
               </dd>
             </>
@@ -889,8 +911,8 @@ function ResourceDetails({
         </dl>
 
         {!individuallyManageable ? (
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-module bg-fill-quiet p-3">
-            <p className="max-w-2xl text-callout text-muted-foreground">
+          <section className="rounded-module bg-fill-quiet flex flex-wrap items-center justify-between gap-3 p-3">
+            <p className="text-callout text-muted-foreground max-w-2xl">
               {labels.managedByPlugin}
             </p>
             {canManagePlugin ? (
@@ -910,7 +932,7 @@ function ResourceDetails({
   );
 }
 
-function PluginDetails({
+const PluginDetails = ({
   plugin,
   detailsExtension,
   scope,
@@ -925,40 +947,43 @@ function PluginDetails({
   onSaveConfig,
   onReset,
 }: {
-  plugin: PluginManagerPlugin;
-  detailsExtension?: ReactNode;
-  scope: PluginManagerScope;
-  labels: PluginManagerLabels;
-  busy: boolean;
-  busyAction: string | null;
-  onRequestChange: (request: PluginManagerChangeRequest) => void;
-  onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
-  onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
-  onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
-  onApplyScaffold?: (pluginId: string, scaffoldId: string) => Promise<void>;
-  onSaveConfig: PluginManagerPageProps["onSaveConfig"];
-  onReset?: (pluginId: string, scope: PluginManagerScope) => void;
-}) {
+  readonly plugin: PluginManagerPlugin;
+  readonly detailsExtension?: ReactNode;
+  readonly scope: PluginManagerScope;
+  readonly labels: PluginManagerLabels;
+  readonly busy: boolean;
+  readonly busyAction: string | null;
+  readonly onRequestChange: (request: PluginManagerChangeRequest) => void;
+  readonly onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
+  readonly onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
+  readonly onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
+  readonly onApplyScaffold?: (pluginId: string, scaffoldId: string) => Promise<void>;
+  readonly onSaveConfig: PluginManagerPageProps["onSaveConfig"];
+  readonly onReset?: (pluginId: string, scope: PluginManagerScope) => void;
+}) => {
   const configurable =
     plugin.configurable ??
     (plugin.configSchema !== undefined || plugin.state.config !== undefined);
   const trustRequired = Boolean(
-    plugin.bundle?.requiresTrust && !plugin.bundle.trusted,
+    plugin.bundle?.requiresTrust && !plugin.bundle.trusted
   );
   return (
-    <article data-plugin-details className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
+    <article
+      data-plugin-details
+      className="mx-auto w-full max-w-5xl px-8 pt-5 pb-12"
+    >
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold">
+          <h1 className="text-page flex min-w-0 flex-wrap items-center gap-2 font-semibold">
             <span className="truncate">{plugin.name}</span>
-          {plugin.version ? (
-            <Badge variant="secondary">v{plugin.version}</Badge>
-          ) : null}
-          <Badge variant="secondary">
-            {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
-          </Badge>
+            {plugin.version ? (
+              <Badge variant="secondary">v{plugin.version}</Badge>
+            ) : null}
+            <Badge variant="secondary">
+              {sourceLabel(plugin.source, labels, plugin.sourceLabel)}
+            </Badge>
           </h1>
-          <p className="mt-2 max-w-3xl text-prose text-muted-foreground">
+          <p className="text-prose text-muted-foreground mt-2 max-w-3xl">
             {plugin.description || labels.noDescription}
           </p>
         </div>
@@ -971,8 +996,8 @@ function PluginDetails({
               {labels.trustBeforeEnabling}
             </span>
           ) : plugin.bundle &&
-          !plugin.bundle.runtimeManaged &&
-          !onSetBundleEnabled ? (
+            !plugin.bundle.runtimeManaged &&
+            !onSetBundleEnabled ? (
             <span className="text-callout text-muted-foreground">
               {labels.bundleManagement}
             </span>
@@ -996,7 +1021,7 @@ function PluginDetails({
                 ) {
                   void onSetBundleEnabled(
                     plugin.bundle.id,
-                    request.desiredState === "enabled",
+                    request.desiredState === "enabled"
                   );
                   return;
                 }
@@ -1013,7 +1038,7 @@ function PluginDetails({
         {plugin.state.error ? (
           <p
             role="alert"
-            className="flex items-start gap-2 text-body text-destructive"
+            className="text-body text-destructive flex items-start gap-2"
           >
             <CircleAlert
               className="mt-0.5 size-4 shrink-0"
@@ -1057,10 +1082,10 @@ function PluginDetails({
         <DetailList title={labels.services} values={plugin.services} />
         {plugin.state.activeResources?.length ? (
           <div className="flex flex-col gap-2">
-            <h3 className="text-metadata font-medium text-muted-foreground">
+            <h3 className="text-metadata text-muted-foreground font-medium">
               {labels.activeResources}
             </h3>
-            <ul className="flex flex-col gap-1 text-body">
+            <ul className="text-body flex flex-col gap-1">
               {plugin.state.activeResources.map((resource) => (
                 <li key={resource.id}>
                   {resource.label}
@@ -1107,7 +1132,7 @@ function PluginDetails({
         ) : null}
       </div>
       <Separator className="mt-8" />
-      <footer className="flex items-center justify-between gap-3 pt-4 text-callout text-muted-foreground">
+      <footer className="text-callout text-muted-foreground flex items-center justify-between gap-3 pt-4">
         <span>
           {plugin.author ? `${plugin.author} · ` : ""}
           {plugin.category || plugin.id}
@@ -1128,30 +1153,38 @@ function PluginDetails({
   );
 }
 
-function MarketplaceSources({
+const MarketplaceSources = ({
   sources,
   labels,
 }: {
-  sources: NonNullable<PluginManagerPageProps["marketplaceSources"]>;
-  labels: PluginManagerLabels;
-}) {
+  readonly sources: NonNullable<PluginManagerPageProps["marketplaceSources"]>;
+  readonly labels: PluginManagerLabels;
+}) => {
   if (!sources.length) return null;
 
   return (
-    <section className="flex flex-col gap-3 pt-5" aria-label={labels.marketplace}>
+    <section
+      className="flex flex-col gap-3 pt-5"
+      aria-label={labels.marketplace}
+    >
       <Separator />
       {sources.map((source) => (
-        <div key={source.id} className="rounded-control bg-fill-quiet px-3 py-2.5">
+        <div
+          key={source.id}
+          className="rounded-control bg-fill-quiet px-3 py-2.5"
+        >
           <h2 className="text-dialog font-medium">{source.name}</h2>
-            {source.description ? (
-            <p className="mt-1 text-callout text-muted-foreground">{source.description}</p>
-            ) : null}
+          {source.description ? (
+            <p className="text-callout text-muted-foreground mt-1">
+              {source.description}
+            </p>
+          ) : null}
           {source.diagnostics.length ? (
             <div className="mt-2 flex flex-col gap-1">
               {source.diagnostics.map((diagnostic) => (
                 <p
                   key={diagnostic}
-                  className="flex items-start gap-2 text-body text-destructive"
+                  className="text-body text-destructive flex items-start gap-2"
                 >
                   <CircleAlert
                     className="mt-0.5 size-4 shrink-0"
@@ -1168,17 +1201,17 @@ function MarketplaceSources({
   );
 }
 
-function MarketplaceList({
+const MarketplaceList = ({
   items,
   selectedId,
   labels,
   onSelect,
 }: {
-  items: PluginManagerMarketplaceItem[];
-  selectedId: string | null;
-  labels: PluginManagerLabels;
-  onSelect: (id: string) => void;
-}) {
+  readonly items: PluginManagerMarketplaceItem[];
+  readonly selectedId: string | null;
+  readonly labels: PluginManagerLabels;
+  readonly onSelect: (id: string) => void;
+}) => {
   return (
     <div className="flex flex-col gap-0.5" aria-label={labels.marketplace}>
       {items.map((item) => (
@@ -1192,18 +1225,24 @@ function MarketplaceList({
           aria-pressed={item.id === selectedId}
           onClick={() => onSelect(item.id)}
           className={cn(
-            "group grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 px-module-inset py-2",
-            item.id === selectedId && "bg-accent text-foreground",
+            "group px-module-inset grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-2 py-2",
+            item.id === selectedId && "bg-accent text-foreground"
           )}
         >
-          <span className="row-span-2 flex size-8 items-center justify-center rounded-control bg-fill-quiet text-muted-foreground">
+          <span className="rounded-control bg-fill-quiet text-muted-foreground row-span-2 flex size-8 items-center justify-center">
             <Store className="size-4" aria-hidden="true" />
           </span>
-          <span className="min-w-0 truncate text-body font-medium">{item.name}</span>
-          <span className="text-callout text-muted-foreground">
-            {item.installed ? labels.installed : item.version ? `v${item.version}` : ""}
+          <span className="text-body min-w-0 truncate font-medium">
+            {item.name}
           </span>
-          <span className="col-start-2 col-end-4 min-w-0 truncate text-callout text-muted-foreground">
+          <span className="text-callout text-muted-foreground">
+            {item.installed
+              ? labels.installed
+              : item.version
+                ? `v${item.version}`
+                : ""}
+          </span>
+          <span className="text-callout text-muted-foreground col-start-2 col-end-4 min-w-0 truncate">
             {[item.kind, item.sourceLabel].filter(Boolean).join(" · ")}
           </span>
         </Button>
@@ -1212,7 +1251,7 @@ function MarketplaceList({
   );
 }
 
-function MarketplaceDetails({
+const MarketplaceDetails = ({
   item,
   scope,
   labels,
@@ -1220,26 +1259,34 @@ function MarketplaceDetails({
   busyId,
   onInstall,
 }: {
-  item: PluginManagerMarketplaceItem;
-  scope: PluginManagerScope;
-  labels: PluginManagerLabels;
-  sources: NonNullable<PluginManagerPageProps["marketplaceSources"]>;
-  busyId: string | null;
-  onInstall: PluginManagerPageProps["onInstallMarketplaceItem"];
-}) {
+  readonly item: PluginManagerMarketplaceItem;
+  readonly scope: PluginManagerScope;
+  readonly labels: PluginManagerLabels;
+  readonly sources: NonNullable<PluginManagerPageProps["marketplaceSources"]>;
+  readonly busyId: string | null;
+  readonly onInstall: PluginManagerPageProps["onInstallMarketplaceItem"];
+}) => {
   const scopeSupported = item.supportedScopes.includes(scope.kind);
   const disabled =
-    item.installed || !item.installable || !scopeSupported || busyId === item.id;
+    item.installed ||
+    !item.installable ||
+    !scopeSupported ||
+    busyId === item.id;
   return (
-    <article data-marketplace-details className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
+    <article
+      data-marketplace-details
+      className="mx-auto w-full max-w-5xl px-8 pt-5 pb-12"
+    >
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold">
+          <h1 className="text-page flex min-w-0 flex-wrap items-center gap-2 font-semibold">
             <span className="truncate">{item.name}</span>
-            {item.version ? <Badge variant="secondary">v{item.version}</Badge> : null}
+            {item.version ? (
+              <Badge variant="secondary">v{item.version}</Badge>
+            ) : null}
             <Badge variant="secondary">{item.kind}</Badge>
           </h1>
-          <p className="mt-2 max-w-3xl text-prose text-muted-foreground">
+          <p className="text-prose text-muted-foreground mt-2 max-w-3xl">
             {item.description || labels.noDescription}
           </p>
         </div>
@@ -1264,19 +1311,27 @@ function MarketplaceDetails({
       </div>
       <div className="mt-8 flex flex-col gap-5">
         {item.diagnostic ? (
-          <p role="status" className="flex items-start gap-2 text-body text-destructive">
-            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <p
+            role="status"
+            className="text-body text-destructive flex items-start gap-2"
+          >
+            <CircleAlert
+              className="mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
             <span>{item.diagnostic}</span>
           </p>
         ) : null}
-        <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 text-body">
+        <div className="text-body grid grid-cols-[9rem_minmax(0,1fr)] gap-3">
           <span className="text-muted-foreground">{labels.source}</span>
           <span>{item.sourceLabel || item.id}</span>
           <span className="text-muted-foreground">{labels.scope}</span>
           <span>{item.supportedScopes.join(" · ")}</span>
           {item.author ? (
             <>
-              <span className="text-muted-foreground">{labels.contribution("author", "Author")}</span>
+              <span className="text-muted-foreground">
+                {labels.contribution("author", "Author")}
+              </span>
               <span>{item.author}</span>
             </>
           ) : null}
@@ -1287,7 +1342,7 @@ function MarketplaceDetails({
   );
 }
 
-function ChangeConfirmation({
+const ChangeConfirmation = ({
   plan,
   labels,
   busy,
@@ -1295,13 +1350,13 @@ function ChangeConfirmation({
   onCancel,
   onConfirm,
 }: {
-  plan: PluginManagerChangePlan | null;
-  labels: PluginManagerLabels;
-  busy: boolean;
-  error: string | null;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
+  readonly plan: PluginManagerChangePlan | null;
+  readonly labels: PluginManagerLabels;
+  readonly busy: boolean;
+  readonly error: string | null;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+}) => {
   return (
     <AlertDialog
       open={Boolean(plan)}
@@ -1314,10 +1369,10 @@ function ChangeConfirmation({
         </AlertDialogHeader>
         {plan?.affectedPlugins?.length ? (
           <div className="flex flex-col gap-2">
-            <h3 className="text-metadata font-medium text-muted-foreground">
+            <h3 className="text-metadata text-muted-foreground font-medium">
               {labels.affectedPlugins}
             </h3>
-            <ul className="flex flex-col gap-1 text-body">
+            <ul className="text-body flex flex-col gap-1">
               {plan.affectedPlugins.map((plugin) => (
                 <li key={plugin.id}>
                   {plugin.name}
@@ -1339,10 +1394,10 @@ function ChangeConfirmation({
         ) : null}
         {plan?.activeResources?.length ? (
           <div className="flex flex-col gap-2">
-            <h3 className="text-metadata font-medium text-muted-foreground">
+            <h3 className="text-metadata text-muted-foreground font-medium">
               {labels.activeResources}
             </h3>
-            <ul className="flex flex-col gap-1 text-body">
+            <ul className="text-body flex flex-col gap-1">
               {plan.activeResources.map((resource) => (
                 <li key={resource.id}>{resource.label}</li>
               ))}
@@ -1370,9 +1425,7 @@ function ChangeConfirmation({
             disabled={busy}
             onClick={() => onConfirm()}
           >
-            {busy ? (
-              <Spinner data-icon="inline-start" />
-            ) : null}
+            {busy ? <Spinner data-icon="inline-start" /> : null}
             {labels.confirm}
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -1385,7 +1438,7 @@ function ChangeConfirmation({
  * Data-only plugin management surface. It never imports or renders code supplied by a bundle;
  * plugin detail extensions are host-owned React content supplied by the desktop app.
  */
-export function PluginManagerPage({
+export const PluginManagerPage = ({
   plugins,
   components = [],
   marketplaceItems,
@@ -1411,10 +1464,10 @@ export function PluginManagerPage({
   onUninstallBundle,
   onApplyScaffold,
   onResetPlugin,
-}: PluginManagerPageProps) {
+}: PluginManagerPageProps) => {
   const labels = useMemo(
     () => ({ ...DEFAULT_LABELS, ...labelOverrides }),
-    [labelOverrides],
+    [labelOverrides]
   );
   const [tab, setTab] = useState(initialTab);
   const [query, setQuery] = useState("");
@@ -1454,9 +1507,9 @@ export function PluginManagerPage({
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
-          .includes(normalizedQuery),
+          .includes(normalizedQuery)
       ),
-    [labels, normalizedQuery, plugins],
+    [labels, normalizedQuery, plugins]
   );
   const visibleMarketplace = useMemo(
     () =>
@@ -1465,9 +1518,9 @@ export function PluginManagerPage({
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
-          .includes(normalizedQuery),
+          .includes(normalizedQuery)
       ),
-    [marketplaceItems, normalizedQuery],
+    [marketplaceItems, normalizedQuery]
   );
   const resourcesByTab = useMemo(() => {
     const grouped: Record<PluginResourceTab, PluginManagerComponent[]> = {
@@ -1494,25 +1547,30 @@ export function PluginManagerPage({
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(normalizedQuery),
+        .includes(normalizedQuery)
     );
   }, [normalizedQuery, resourcesByTab, tab]);
 
-  const selectedPlugin = selectedPluginId === null
-    ? null
-    : visiblePlugins.find((plugin) => plugin.id === selectedPluginId) ??
-      visiblePlugins[0] ??
-      null;
-  const selectedMarketplaceItem = selectedMarketplaceId === null
-    ? null
-    : visibleMarketplace.find((item) => item.id === selectedMarketplaceId) ??
-      visibleMarketplace[0] ??
-      null;
-  const selectedResource = selectedResourceId === null
-    ? null
-    : visibleResources.find((resource) => resource.id === selectedResourceId) ??
-      visibleResources[0] ??
-      null;
+  const selectedPlugin =
+    selectedPluginId === null
+      ? null
+      : (visiblePlugins.find((plugin) => plugin.id === selectedPluginId) ??
+        visiblePlugins[0] ??
+        null);
+  const selectedMarketplaceItem =
+    selectedMarketplaceId === null
+      ? null
+      : (visibleMarketplace.find((item) => item.id === selectedMarketplaceId) ??
+        visibleMarketplace[0] ??
+        null);
+  const selectedResource =
+    selectedResourceId === null
+      ? null
+      : (visibleResources.find(
+          (resource) => resource.id === selectedResourceId
+        ) ??
+        visibleResources[0] ??
+        null);
 
   const requestChange = async (request: PluginManagerChangeRequest) => {
     const key = `${request.targetKind}:${request.targetId}`;
@@ -1526,7 +1584,7 @@ export function PluginManagerPage({
       } else {
         await onApplyChange(plan);
         setActionNotice(
-          labels.changeApplied(request.targetName, request.desiredState),
+          labels.changeApplied(request.targetName, request.desiredState)
         );
       }
     } catch (error) {
@@ -1545,8 +1603,8 @@ export function PluginManagerPage({
       setActionNotice(
         labels.changeApplied(
           pendingPlan.request.targetName,
-          pendingPlan.request.desiredState,
-        ),
+          pendingPlan.request.desiredState
+        )
       );
       setPendingPlan(null);
     } catch (error) {
@@ -1557,7 +1615,7 @@ export function PluginManagerPage({
   };
 
   const install = async (
-    request: Parameters<typeof onInstallMarketplaceItem>[0],
+    request: Parameters<typeof onInstallMarketplaceItem>[0]
   ) => {
     setInstallingId(request.itemId);
     setActionError(null);
@@ -1588,7 +1646,7 @@ export function PluginManagerPage({
 
   const resetPlugin = async (
     pluginId: string,
-    resetScope: PluginManagerScope,
+    resetScope: PluginManagerScope
   ) => {
     if (!onResetPlugin) return;
     setBusyTarget(`plugin:${pluginId}`);
@@ -1607,7 +1665,7 @@ export function PluginManagerPage({
   const runAction = async (
     key: string,
     action: () => Promise<void>,
-    success?: string,
+    success?: string
   ) => {
     setBusyTarget(key);
     setActionError(null);
@@ -1681,24 +1739,22 @@ export function PluginManagerPage({
   return (
     <main
       data-plugin-manager-page
-      data-compact-detail={
-        Boolean(
-          githubInstallerOpen ||
-            (tab === "plugins"
-              ? selectedPlugin
-              : tab === "marketplace"
-                ? selectedMarketplaceItem
-                : selectedResource),
-        )
-      }
-      className="plugin-manager-page animate-data-page-in @container/plugin-manager flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
+      data-compact-detail={Boolean(
+        githubInstallerOpen ||
+        (tab === "plugins"
+          ? selectedPlugin
+          : tab === "marketplace"
+            ? selectedMarketplaceItem
+            : selectedResource)
+      )}
+      className="plugin-manager-page animate-data-page-in bg-background text-foreground @container/plugin-manager flex min-h-0 min-w-0 flex-1"
       aria-label={labels.title}
     >
-      <div className="plugin-manager-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
+      <div className="plugin-manager-list-pane bg-sidebar flex min-h-0 shrink-0 flex-col">
         <header
           className={cn(
-            "plugin-manager-list-header electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-1 pr-surface-inset",
-            headerLeadingAction ? "pl-surface-inset" : "pl-page-section",
+            "plugin-manager-list-header electrobun-webkit-app-region-drag h-layout-titlebar pr-surface-inset flex shrink-0 items-center gap-1",
+            headerLeadingAction ? "pl-surface-inset" : "pl-page-section"
           )}
         >
           {headerLeadingAction ? (
@@ -1706,25 +1762,43 @@ export function PluginManagerPage({
               {headerLeadingAction}
             </div>
           ) : null}
-          <h1 className="shrink-0 text-dialog font-semibold">{labels.title}</h1>
+          <h1 className="text-dialog shrink-0 font-semibold">{labels.title}</h1>
           <div className="electrobun-webkit-app-region-drag flex-1" />
         </header>
-        <div data-plugin-manager-list-controls className="grid shrink-0 gap-2 px-4 pb-3">
-          <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="ms-surface-inset min-w-0 gap-0">
-            <TabsList variant="toolbar" aria-label={labels.title} className="plugin-manager-tabs min-w-0 max-w-full overflow-x-auto">
-            {(["plugins", "mcps", "skills", "hooks", "marketplace"] as const).map((id) => (
-              <TabsTrigger
-                key={id}
-                value={id}
-                className="plugin-manager-tab shrink-0 px-1"
-              >
-                <span data-plugin-manager-tab-label>{labels[id]}</span>{" "}
-                <span className="plugin-manager-tab-count text-callout tabular-nums">{tabCounts[id]}</span>
-              </TabsTrigger>
-            ))}
+        <div
+          data-plugin-manager-list-controls
+          className="grid shrink-0 gap-2 px-4 pb-3"
+        >
+          <Tabs
+            value={tab}
+            onValueChange={(value) => setTab(value as typeof tab)}
+            className="ms-surface-inset min-w-0 gap-0"
+          >
+            <TabsList
+              variant="toolbar"
+              aria-label={labels.title}
+              className="plugin-manager-tabs max-w-full min-w-0 overflow-x-auto"
+            >
+              {(
+                ["plugins", "mcps", "skills", "hooks", "marketplace"] as const
+              ).map((id) => (
+                <TabsTrigger
+                  key={id}
+                  value={id}
+                  className="plugin-manager-tab shrink-0 px-1"
+                >
+                  <span data-plugin-manager-tab-label>{labels[id]}</span>{" "}
+                  <span className="plugin-manager-tab-count text-callout tabular-nums">
+                    {tabCounts[id]}
+                  </span>
+                </TabsTrigger>
+              ))}
             </TabsList>
           </Tabs>
-          <div data-plugin-manager-search-field className="ms-inline min-w-0 flex-1">
+          <div
+            data-plugin-manager-search-field
+            className="ms-inline min-w-0 flex-1"
+          >
             <SearchField
               className="min-w-0"
               data-plugin-manager-search
@@ -1739,22 +1813,54 @@ export function PluginManagerPage({
           <div className="px-3 pb-4">
             {tab === "plugins" ? (
               visiblePlugins.length ? (
-                <PluginList plugins={visiblePlugins} selectedId={selectedPlugin?.id ?? null} labels={labels} onSelect={setSelectedPluginId} />
-              ) : <p className="py-12 text-center text-body text-muted-foreground">{labels.noResults}</p>
-            ) : tab === "marketplace" ? visibleMarketplace.length ? (
-              <MarketplaceList items={visibleMarketplace} selectedId={selectedMarketplaceItem?.id ?? null} labels={labels} onSelect={setSelectedMarketplaceId} />
-            ) : <p className="py-12 text-center text-body text-muted-foreground">{labels.noResults}</p>
-            : isResourceTab(tab) && visibleResources.length ? (
-              <ResourceList resources={visibleResources} tab={tab} selectedId={selectedResource?.id ?? null} labels={labels} onSelect={setSelectedResourceId} />
-            ) : <p className="py-12 text-center text-body text-muted-foreground">{labels.noResults}</p>}
+                <PluginList
+                  plugins={visiblePlugins}
+                  selectedId={selectedPlugin?.id ?? null}
+                  labels={labels}
+                  onSelect={setSelectedPluginId}
+                />
+              ) : (
+                <p className="text-body text-muted-foreground py-12 text-center">
+                  {labels.noResults}
+                </p>
+              )
+            ) : tab === "marketplace" ? (
+              visibleMarketplace.length ? (
+                <MarketplaceList
+                  items={visibleMarketplace}
+                  selectedId={selectedMarketplaceItem?.id ?? null}
+                  labels={labels}
+                  onSelect={setSelectedMarketplaceId}
+                />
+              ) : (
+                <p className="text-body text-muted-foreground py-12 text-center">
+                  {labels.noResults}
+                </p>
+              )
+            ) : isResourceTab(tab) && visibleResources.length ? (
+              <ResourceList
+                resources={visibleResources}
+                tab={tab}
+                selectedId={selectedResource?.id ?? null}
+                labels={labels}
+                onSelect={setSelectedResourceId}
+              />
+            ) : (
+              <p className="text-body text-muted-foreground py-12 text-center">
+                {labels.noResults}
+              </p>
+            )}
           </div>
         </ScrollArea>
       </div>
 
-      <div className="plugin-manager-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <header className="plugin-manager-detail-header electrobun-webkit-app-region-drag flex h-layout-titlebar shrink-0 items-center gap-2 px-4">
+      <div className="plugin-manager-detail-pane bg-background flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="plugin-manager-detail-header electrobun-webkit-app-region-drag h-layout-titlebar flex shrink-0 items-center gap-2 px-4">
           {headerLeadingAction ? (
-            <div data-plugin-manager-detail-leading-action className="plugin-manager-detail-leading-action shrink-0">
+            <div
+              data-plugin-manager-detail-leading-action
+              className="plugin-manager-detail-leading-action shrink-0"
+            >
               {headerLeadingAction}
             </div>
           ) : null}
@@ -1778,7 +1884,12 @@ export function PluginManagerPage({
           >
             <ArrowLeft className="size-3.5" />
           </Button>
-          <ScopeSelector scope={scope} projects={projects} labels={labels} onChange={onScopeChange} />
+          <ScopeSelector
+            scope={scope}
+            projects={projects}
+            labels={labels}
+            onChange={onScopeChange}
+          />
           <div className="electrobun-webkit-app-region-drag flex-1" />
           {tab === "plugins" && onImportGithub ? (
             <Button
@@ -1797,13 +1908,33 @@ export function PluginManagerPage({
             </Button>
           ) : null}
           {tab === "marketplace" && onRefreshMarketplace ? (
-            <TooltipButton label={labels.refresh} variant="ghost" size="icon-xs" disabled={refreshing} onClick={() => void refresh()}>
-              {refreshing ? <Spinner className="size-3.5" /> : <RefreshCw className="size-3.5" />}
+            <TooltipButton
+              label={labels.refresh}
+              variant="ghost"
+              size="icon-xs"
+              disabled={refreshing}
+              onClick={() => void refresh()}
+            >
+              {refreshing ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
             </TooltipButton>
           ) : null}
           {tab === "marketplace" && onOpenMarketplace ? (
-            <Button type="button" variant="secondary" size="compact" disabled={busyTarget === "marketplace-open"} onClick={() => void openMarketplace()}>
-              {busyTarget === "marketplace-open" ? <Spinner data-icon="inline-start" /> : <FolderDown data-icon="inline-start" />}
+            <Button
+              type="button"
+              variant="secondary"
+              size="compact"
+              disabled={busyTarget === "marketplace-open"}
+              onClick={() => void openMarketplace()}
+            >
+              {busyTarget === "marketplace-open" ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <FolderDown data-icon="inline-start" />
+              )}
               {labels.openMarketplace}
             </Button>
           ) : null}
@@ -1811,14 +1942,14 @@ export function PluginManagerPage({
 
         <ScrollArea
           data-plugin-manager-scroll
-          className="min-h-0 min-w-0 w-full flex-1 overflow-hidden [&>[data-slot=scroll-area-viewport]]:min-w-0"
+          className="min-h-0 w-full min-w-0 flex-1 overflow-hidden [&>[data-slot=scroll-area-viewport]]:min-w-0"
         >
-          <div
-            data-plugin-manager-content
-            className="min-w-0 w-full"
-          >
+          <div data-plugin-manager-content className="w-full min-w-0">
             {githubInstallerOpen ? (
-              <div id="plugin-github-installer" className="mx-auto w-full max-w-5xl px-8 pt-5">
+              <div
+                id="plugin-github-installer"
+                className="mx-auto w-full max-w-5xl px-8 pt-5"
+              >
                 <GithubInstaller
                   repository={githubRepository}
                   labels={labels}
@@ -1837,50 +1968,53 @@ export function PluginManagerPage({
               </div>
             ) : null}
             <div className="mx-auto w-full max-w-5xl px-8 pt-4">
-            {recovery && recovery.kind !== "normal" ? (
-              <div
-                role="status"
-                data-plugin-recovery={recovery.kind}
-                className="mb-4 flex items-start gap-2 rounded-control border bg-warning/10 px-3 py-2 text-body"
-              >
-                <CircleAlert
-                  className="mt-0.5 size-4 shrink-0 text-warning"
-                  aria-hidden="true"
-                />
-                <span>
-                  {recovery.kind === "safe_mode"
-                    ? labels.safeMode
-                    : labels.restoredLastGood}
-                  {recovery.error ? (
-                    <span className="mt-0.5 block text-callout text-muted-foreground">
-                      {recovery.error}
-                    </span>
-                  ) : null}
-                </span>
-              </div>
-            ) : null}
-            {actionError && !pendingPlan ? (
-              <p
-                role="alert"
-                className="mb-4 flex items-start gap-2 text-body text-destructive"
-              >
-                <CircleAlert
-                  className="mt-0.5 size-4 shrink-0"
-                  aria-hidden="true"
-                />
-                <span>{actionError}</span>
-              </p>
-            ) : null}
-            {actionNotice ? (
-              <p
-                role="status"
-                aria-live="polite"
-                className="mb-4 flex items-start gap-2 text-body text-success"
-              >
-                <Check className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                <span>{actionNotice}</span>
-              </p>
-            ) : null}
+              {recovery && recovery.kind !== "normal" ? (
+                <div
+                  role="status"
+                  data-plugin-recovery={recovery.kind}
+                  className="rounded-control bg-warning/10 text-body mb-4 flex items-start gap-2 border px-3 py-2"
+                >
+                  <CircleAlert
+                    className="text-warning mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {recovery.kind === "safe_mode"
+                      ? labels.safeMode
+                      : labels.restoredLastGood}
+                    {recovery.error ? (
+                      <span className="text-callout text-muted-foreground mt-0.5 block">
+                        {recovery.error}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+              ) : null}
+              {actionError && !pendingPlan ? (
+                <p
+                  role="alert"
+                  className="text-body text-destructive mb-4 flex items-start gap-2"
+                >
+                  <CircleAlert
+                    className="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>{actionError}</span>
+                </p>
+              ) : null}
+              {actionNotice ? (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="text-body text-success mb-4 flex items-start gap-2"
+                >
+                  <Check
+                    className="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>{actionNotice}</span>
+                </p>
+              ) : null}
             </div>
             {tab === "plugins" && selectedPlugin ? (
               <PluginDetails
@@ -1896,46 +2030,61 @@ export function PluginManagerPage({
                   busyTarget === `plugin:${selectedPlugin.id}` ||
                   Boolean(
                     selectedPlugin.bundle &&
-                      busyTarget?.endsWith(`:${selectedPlugin.bundle.id}`),
+                    busyTarget?.endsWith(`:${selectedPlugin.bundle.id}`)
                   )
                 }
                 busyAction={busyTarget}
                 onRequestChange={(request) => void requestChange(request)}
-                onSetBundleEnabled={onSetBundleEnabled
-                  ? async (pluginId, enabled) => {
-                      await runAction(
-                        `bundle-enabled:${pluginId}`,
-                        () => onSetBundleEnabled(pluginId, enabled),
-                        labels.bundleEnabled(selectedPlugin.name, enabled),
-                      );
-                    }
-                  : undefined}
-                onSetBundleTrusted={onSetBundleTrusted
-                  ? async (pluginId, trusted) => {
-                      await runAction(
-                        `bundle-trust:${pluginId}`,
-                        () => onSetBundleTrusted(pluginId, trusted),
-                        labels.bundleTrusted(selectedPlugin.name, trusted),
-                      );
-                    }
-                  : undefined}
-                onUninstallBundle={onUninstallBundle
-                  ? async (pluginId, keepData) => {
-                      const uninstalled = await runAction(
-                        `bundle-uninstall:${pluginId}`,
-                        () => onUninstallBundle(pluginId, keepData),
-                        labels.bundleUninstalled(selectedPlugin.name, keepData),
-                      );
-                      if (uninstalled) setSelectedPluginId(null);
-                    }
-                  : undefined}
-                onApplyScaffold={onApplyScaffold
-                  ? (pluginId, scaffoldId) => applyScaffold(pluginId, scaffoldId)
-                  : undefined}
+                onSetBundleEnabled={
+                  onSetBundleEnabled
+                    ? async (pluginId, enabled) => {
+                        await runAction(
+                          `bundle-enabled:${pluginId}`,
+                          () => onSetBundleEnabled(pluginId, enabled),
+                          labels.bundleEnabled(selectedPlugin.name, enabled)
+                        );
+                      }
+                    : undefined
+                }
+                onSetBundleTrusted={
+                  onSetBundleTrusted
+                    ? async (pluginId, trusted) => {
+                        await runAction(
+                          `bundle-trust:${pluginId}`,
+                          () => onSetBundleTrusted(pluginId, trusted),
+                          labels.bundleTrusted(selectedPlugin.name, trusted)
+                        );
+                      }
+                    : undefined
+                }
+                onUninstallBundle={
+                  onUninstallBundle
+                    ? async (pluginId, keepData) => {
+                        const uninstalled = await runAction(
+                          `bundle-uninstall:${pluginId}`,
+                          () => onUninstallBundle(pluginId, keepData),
+                          labels.bundleUninstalled(
+                            selectedPlugin.name,
+                            keepData
+                          )
+                        );
+                        if (uninstalled) setSelectedPluginId(null);
+                      }
+                    : undefined
+                }
+                onApplyScaffold={
+                  onApplyScaffold
+                    ? (pluginId, scaffoldId) =>
+                        applyScaffold(pluginId, scaffoldId)
+                    : undefined
+                }
                 onSaveConfig={onSaveConfig}
-                onReset={onResetPlugin
-                  ? (pluginId, resetScope) => void resetPlugin(pluginId, resetScope)
-                  : undefined}
+                onReset={
+                  onResetPlugin
+                    ? (pluginId, resetScope) =>
+                        void resetPlugin(pluginId, resetScope)
+                    : undefined
+                }
               />
             ) : null}
 
@@ -1956,7 +2105,7 @@ export function PluginManagerPage({
                 labels={labels}
                 busy={busyTarget === `component:${selectedResource.id}`}
                 canManagePlugin={plugins.some(
-                  (plugin) => plugin.id === selectedResource.pluginId,
+                  (plugin) => plugin.id === selectedResource.pluginId
                 )}
                 onRequestChange={(request) => void requestChange(request)}
                 onManagePlugin={(pluginId) => {
@@ -1970,7 +2119,7 @@ export function PluginManagerPage({
             ((tab === "plugins" && !selectedPlugin) ||
               (tab === "marketplace" && !selectedMarketplaceItem) ||
               (isResourceTab(tab) && !selectedResource)) ? (
-              <div className="flex min-h-96 items-center justify-center px-6 text-body text-muted-foreground">
+              <div className="text-body text-muted-foreground flex min-h-96 items-center justify-center px-6">
                 {labels.noResults}
               </div>
             ) : null}

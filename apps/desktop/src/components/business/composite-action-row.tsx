@@ -3,23 +3,25 @@ import {
   type KeyboardEventHandler,
   type ReactNode,
   forwardRef,
-} from "react"
+} from "react";
 
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-interface CompositeActionRowProps
-  extends Omit<ComponentProps<"div">, "children" | "onClick"> {
-  accessibilityLabel: string
-  children: ReactNode
-  actions?: ReactNode
-  current?: boolean
-  selected?: boolean
-  disabled?: boolean
-  contentClassName?: string
-  primaryClassName?: string
-  onSelect: () => void
-  onPrimaryKeyDown?: KeyboardEventHandler<HTMLButtonElement>
+interface CompositeActionRowProps extends Omit<
+  ComponentProps<"div">,
+  "children" | "onClick"
+> {
+  readonly accessibilityLabel: string;
+  readonly children: ReactNode;
+  readonly actions?: ReactNode;
+  readonly current?: boolean;
+  readonly selected?: boolean;
+  readonly disabled?: boolean;
+  readonly contentClassName?: string;
+  readonly primaryClassName?: string;
+  readonly onSelect: () => void;
+  readonly onPrimaryKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
 }
 
 /**
@@ -44,7 +46,7 @@ const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
       onPrimaryKeyDown,
       ...props
     },
-    ref,
+    ref
   ) {
     return (
       <div
@@ -65,13 +67,16 @@ const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
           onClick={onSelect}
           onKeyDown={onPrimaryKeyDown}
           className={cn(
-            "absolute inset-0 z-0 h-auto w-full rounded-control p-0 hover:bg-transparent",
-            primaryClassName,
+            "rounded-control absolute inset-0 z-0 h-auto w-full p-0 hover:bg-transparent",
+            primaryClassName
           )}
         />
         <div
           data-slot="composite-action-row-content"
-          className={cn("pointer-events-none relative z-10 min-w-0 flex-1", contentClassName)}
+          className={cn(
+            "pointer-events-none relative z-10 min-w-0 flex-1",
+            contentClassName
+          )}
         >
           {children}
         </div>
@@ -84,8 +89,8 @@ const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
           </div>
         ) : null}
       </div>
-    )
-  },
-)
+    );
+  }
+);
 
-export { CompositeActionRow, type CompositeActionRowProps }
+export { CompositeActionRow, type CompositeActionRowProps };

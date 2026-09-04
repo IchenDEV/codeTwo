@@ -12,21 +12,22 @@ function loadIcon(project: Project): Promise<ProjectIconData | null> {
   if (!request) {
     request = getProjectIcon(project.path).catch(() => null);
     iconRequests.set(key, request);
-    if (iconRequests.size > 64) iconRequests.delete(iconRequests.keys().next().value!);
+    if (iconRequests.size > 64)
+      iconRequests.delete(iconRequests.keys().next().value!);
   }
   return request;
 }
 
 /** Project identity used in settings and the sidebar; custom pixels fall back to the folder mark. */
-export function ProjectIcon({
+export const ProjectIcon = ({
   project,
   size = 20,
   className,
 }: {
-  project: Project;
-  size?: number;
-  className?: string;
-}) {
+  readonly project: Project;
+  readonly size?: number;
+  readonly className?: string;
+}) => {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,7 +39,9 @@ export function ProjectIcon({
     void loadIcon(project).then((icon) => {
       if (!active || !icon) return;
       objectUrl = URL.createObjectURL(
-        new Blob([icon.bytes.slice().buffer as ArrayBuffer], { type: icon.mime_type }),
+        new Blob([icon.bytes.slice().buffer as ArrayBuffer], {
+          type: icon.mime_type,
+        })
       );
       setUrl(objectUrl);
     });
@@ -53,15 +56,18 @@ export function ProjectIcon({
       data-project-icon
       aria-hidden="true"
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-control bg-foreground/[0.055] text-muted-foreground ring-1 ring-foreground/10",
-        className,
+        "rounded-control bg-foreground/[0.055] text-muted-foreground ring-foreground/10 flex shrink-0 items-center justify-center overflow-hidden ring-1",
+        className
       )}
       style={{ width: size, height: size }}
     >
       {url ? (
         <img src={url} alt="" className="size-full object-cover" />
       ) : (
-        <Folder style={{ width: size * 0.52, height: size * 0.52 }} strokeWidth={1.7} />
+        <Folder
+          style={{ width: size * 0.52, height: size * 0.52 }}
+          strokeWidth={1.7}
+        />
       )}
     </span>
   );

@@ -3,23 +3,27 @@ import { Puzzle } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import type { PluginUiSlotId } from "../bridge";
 import type { ActivePluginUiContribution } from "./contributions";
 
-export function PluginUiSlot({
+export const PluginUiSlot = ({
   slot,
   contributions,
   onInvoke,
   activeCommand,
 }: {
-  slot: PluginUiSlotId;
-  contributions: ActivePluginUiContribution[];
-  onInvoke: (contribution: ActivePluginUiContribution) => Promise<void>;
-  activeCommand?: string;
-}) {
+  readonly slot: PluginUiSlotId;
+  readonly contributions: ActivePluginUiContribution[];
+  readonly onInvoke: (contribution: ActivePluginUiContribution) => Promise<void>;
+  readonly activeCommand?: string;
+}) => {
   const [busy, setBusy] = useState<string | null>(null);
   if (contributions.length === 0) return null;
 
@@ -36,7 +40,12 @@ export function PluginUiSlot({
 
   if (slot === "rail.features") {
     return (
-      <div data-plugin-ui-slot={slot} role="group" aria-label="Plugin actions" className="flex flex-col gap-0.5">
+      <div
+        data-plugin-ui-slot={slot}
+        role="group"
+        aria-label="Plugin actions"
+        className="flex flex-col gap-0.5"
+      >
         {contributions.map((contribution) => {
           const key = `${contribution.pluginId}:${contribution.id}`;
           const current = contribution.command === activeCommand;
@@ -50,10 +59,13 @@ export function PluginUiSlot({
               size="row"
               focusStyle="inset"
               className={cn(
-                "h-control w-full gap-2 px-2 text-foreground/75",
-                current && "bg-fill-rest text-foreground",
+                "h-control text-foreground/75 w-full gap-2 px-2",
+                current && "bg-fill-rest text-foreground"
               )}
-              title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
+              title={
+                contribution.description ||
+                `${contribution.pluginName}: ${contribution.label}`
+              }
               aria-label={`${contribution.pluginName}: ${contribution.label}`}
               disabled={busy !== null}
               onClick={() => void invoke(contribution)}
@@ -61,9 +73,14 @@ export function PluginUiSlot({
               {busy === key ? (
                 <Spinner className="size-4 shrink-0" aria-hidden="true" />
               ) : (
-                <Puzzle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <Puzzle
+                  className="text-muted-foreground size-4 shrink-0"
+                  aria-hidden="true"
+                />
               )}
-              <span className="min-w-0 flex-1 truncate">{contribution.label}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {contribution.label}
+              </span>
             </Button>
           );
         })}
@@ -73,7 +90,10 @@ export function PluginUiSlot({
 
   if (slot === "session.header") {
     return (
-      <div data-plugin-ui-slot={slot} className="flex min-w-0 items-center gap-1 overflow-x-auto">
+      <div
+        data-plugin-ui-slot={slot}
+        className="flex min-w-0 items-center gap-1 overflow-x-auto"
+      >
         {contributions.map((contribution) => {
           const key = `${contribution.pluginId}:${contribution.id}`;
           return (
@@ -82,14 +102,23 @@ export function PluginUiSlot({
               type="button"
               variant="ghost"
               size="compact"
-              className="session-header-plugin-action max-w-44 shrink-0 text-muted-foreground hover:text-muted-foreground"
-              title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
+              className="session-header-plugin-action text-muted-foreground hover:text-muted-foreground max-w-44 shrink-0"
+              title={
+                contribution.description ||
+                `${contribution.pluginName}: ${contribution.label}`
+              }
               aria-label={`${contribution.pluginName}: ${contribution.label}`}
               disabled={busy !== null}
               onClick={() => void invoke(contribution)}
             >
-              {busy === key ? <Spinner data-icon="inline-start" /> : <Puzzle data-icon="inline-start" />}
-              <span className="session-header-action-label truncate">{contribution.label}</span>
+              {busy === key ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <Puzzle data-icon="inline-start" />
+              )}
+              <span className="session-header-action-label truncate">
+                {contribution.label}
+              </span>
             </Button>
           );
         })}
@@ -99,8 +128,12 @@ export function PluginUiSlot({
 
   if (slot === "transcript.before") {
     return (
-      <section data-plugin-ui-slot={slot} aria-label="Plugin actions" className="pb-3">
-        <div className="flex flex-wrap items-center gap-1.5 rounded-module bg-card/70 p-2 ring-1 ring-foreground/[0.07]">
+      <section
+        data-plugin-ui-slot={slot}
+        aria-label="Plugin actions"
+        className="pb-3"
+      >
+        <div className="rounded-module bg-card/70 ring-foreground/[0.07] flex flex-wrap items-center gap-1.5 p-2 ring-1">
           {contributions.map((contribution) => {
             const key = `${contribution.pluginId}:${contribution.id}`;
             return (
@@ -109,7 +142,10 @@ export function PluginUiSlot({
                 type="button"
                 variant="ghost"
                 size="compact"
-                title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
+                title={
+                  contribution.description ||
+                  `${contribution.pluginName}: ${contribution.label}`
+                }
                 aria-label={`${contribution.pluginName}: ${contribution.label}`}
                 disabled={busy !== null}
                 onClick={() => void invoke(contribution)}
@@ -130,19 +166,24 @@ export function PluginUiSlot({
 
   if (slot === "composer.toolbar") {
     return (
-      <div data-plugin-ui-slot={slot} role="group" aria-label="Plugin actions" className="flex items-center gap-0.5">
+      <div
+        data-plugin-ui-slot={slot}
+        role="group"
+        aria-label="Plugin actions"
+        className="flex items-center gap-0.5"
+      >
         {contributions.map((contribution) => {
           const key = `${contribution.pluginId}:${contribution.id}`;
           const label = `${contribution.pluginName}: ${contribution.label}`;
           return (
             <Tooltip key={key}>
               <TooltipTrigger
-                render={(
+                render={
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-7 shrink-0 text-muted-foreground"
+                    className="text-muted-foreground size-7 shrink-0"
                     aria-label={label}
                     disabled={busy !== null}
                     onClick={() => void invoke(contribution)}
@@ -153,9 +194,11 @@ export function PluginUiSlot({
                       <Puzzle className="size-3.5" />
                     )}
                   </Button>
-                )}
+                }
               />
-              <TooltipContent>{contribution.description || label}</TooltipContent>
+              <TooltipContent>
+                {contribution.description || label}
+              </TooltipContent>
             </Tooltip>
           );
         })}
@@ -165,20 +208,29 @@ export function PluginUiSlot({
 
   if (slot === "composer.above") {
     return (
-      <section data-plugin-ui-slot={slot} aria-label="Plugin actions" className="shrink-0 px-6 pb-2 pt-3">
+      <section
+        data-plugin-ui-slot={slot}
+        aria-label="Plugin actions"
+        className="shrink-0 px-6 pt-3 pb-2"
+      >
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
           {contributions.map((contribution) => {
             const key = `${contribution.pluginId}:${contribution.id}`;
             return (
               <div
                 key={key}
-                className="flex flex-wrap items-center gap-3 rounded-module bg-card px-4 py-3 ring-1 ring-foreground/[0.07]"
+                className="rounded-module bg-card ring-foreground/[0.07] flex flex-wrap items-center gap-3 px-4 py-3 ring-1"
               >
-                <Puzzle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <Puzzle
+                  className="text-muted-foreground size-4 shrink-0"
+                  aria-hidden="true"
+                />
                 <div className="min-w-0 flex-1">
                   <p className="text-body font-medium">{contribution.label}</p>
                   {contribution.description ? (
-                    <p className="mt-0.5 text-callout text-muted-foreground">{contribution.description}</p>
+                    <p className="text-callout text-muted-foreground mt-0.5">
+                      {contribution.description}
+                    </p>
                   ) : null}
                 </div>
                 <Button

@@ -28,9 +28,9 @@ class MemoryStorage implements StorageLike {
 
 describe("per-project browser history", () => {
   test("normalizes aliases and strips credentials and fragments", () => {
-    expect(normalizeHistoryUrl("http://user:secret@127.0.0.1:3000/path#token")).toBe(
-      "http://localhost:3000/path",
-    );
+    expect(
+      normalizeHistoryUrl("http://user:secret@127.0.0.1:3000/path#token")
+    ).toBe("http://localhost:3000/path");
     expect(normalizeHistoryUrl("file:///tmp/private")).toBeNull();
     expect(normalizeHistoryUrl("not a url")).toBeNull();
   });
@@ -41,13 +41,29 @@ describe("per-project browser history", () => {
       "/repo/a",
       "http://127.0.0.1:3000/",
       "Dashboard",
-      10,
+      10
     );
-    state = recordBrowserVisit(state, "/repo/a", "http://localhost:3000", null, 20);
-    state = recordBrowserVisit(state, "/repo/b", "https://example.com/docs", "Docs", 30);
+    state = recordBrowserVisit(
+      state,
+      "/repo/a",
+      "http://localhost:3000",
+      null,
+      20
+    );
+    state = recordBrowserVisit(
+      state,
+      "/repo/b",
+      "https://example.com/docs",
+      "Docs",
+      30
+    );
 
     expect(recentSitesForProject(state, "/repo/a")).toEqual([
-      { url: "http://localhost:3000/", title: "Dashboard", last_visited_at: 20 },
+      {
+        url: "http://localhost:3000/",
+        title: "Dashboard",
+        last_visited_at: 20,
+      },
     ]);
     expect(recentSitesForProject(state, "/repo/b")[0]?.title).toBe("Docs");
   });
@@ -58,10 +74,21 @@ describe("per-project browser history", () => {
       "/repo/a",
       "https://example.com/",
       null,
-      10,
+      10
     );
-    state = recordBrowserVisit(state, "/repo/b", "https://example.com/", "Other", 20);
-    state = updateBrowserVisitTitle(state, "/repo/a", "https://example.com/", "  Example   Home ");
+    state = recordBrowserVisit(
+      state,
+      "/repo/b",
+      "https://example.com/",
+      "Other",
+      20
+    );
+    state = updateBrowserVisitTitle(
+      state,
+      "/repo/a",
+      "https://example.com/",
+      "  Example   Home "
+    );
     expect(recentSitesForProject(state, "/repo/a")[0]).toEqual({
       url: "https://example.com/",
       title: "Example Home",
@@ -87,12 +114,16 @@ describe("per-project browser history", () => {
             project: "/repo/a",
             sites: [
               { url: "javascript:alert(1)", title: "bad", last_visited_at: 1 },
-              { url: "https://example.com/#secret", title: " Good ", last_visited_at: 2 },
+              {
+                url: "https://example.com/#secret",
+                title: " Good ",
+                last_visited_at: 2,
+              },
             ],
           },
           { project: "", sites: [] },
         ],
-      }),
+      })
     );
 
     const loaded = loadBrowserHistory(storage);
@@ -101,9 +132,13 @@ describe("per-project browser history", () => {
       { url: "https://example.com/", title: "Good", last_visited_at: 2 },
     ]);
     saveBrowserHistory(storage, loaded);
-    expect(sanitizeBrowserHistory(JSON.parse(storage.values.get(BROWSER_HISTORY_STORAGE_KEY)!))).toEqual(
-      loaded,
+    expect(
+      sanitizeBrowserHistory(
+        JSON.parse(storage.values.get(BROWSER_HISTORY_STORAGE_KEY)!)
+      )
+    ).toEqual(loaded);
+    expect(sanitizeBrowserHistory({ ...loaded, version: 99 })).toEqual(
+      EMPTY_BROWSER_HISTORY
     );
-    expect(sanitizeBrowserHistory({ ...loaded, version: 99 })).toEqual(EMPTY_BROWSER_HISTORY);
   });
 });

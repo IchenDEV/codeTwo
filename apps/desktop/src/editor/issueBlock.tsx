@@ -38,8 +38,14 @@ export function issueContextBody(context: string): string {
  * `issues::Issue::to_context` (which the core compile arm renders with state fixed to "open").
  */
 export function issueContextMarkdown(
-  block: { source: string; id: string; title: string; url: string; body: string },
-  state = "open",
+  block: {
+    source: string;
+    id: string;
+    title: string;
+    url: string;
+    body: string;
+  },
+  state = "open"
 ): string {
   const head = `**${block.source} #${block.id}** — ${block.title} (${state})\n${block.url}`;
   const body = block.body.trim();
@@ -63,41 +69,42 @@ export function issueRefToDocBlock(props: IssueRefProps): DocBlock | null {
   };
 }
 
-function IssueRefCard({
+const IssueRefCard = ({
   props,
   onRemove,
 }: {
-  props: IssueRefProps;
-  onRemove: () => void;
-}) {
+  readonly props: IssueRefProps;
+  readonly onRemove: () => void;
+}) => {
   const t = useT();
   return (
-    <div className="canvas-ui-module my-1 flex items-center gap-3 bg-fill-quiet p-2.5" contentEditable={false}>
+    <div
+      className="canvas-ui-module bg-fill-quiet my-1 flex items-center gap-3 p-2.5"
+      contentEditable={false}
+    >
       {/* Same external-link shape as the Issues modal rows: a plain anchor, which Electrobun routes
           to the system browser. */}
       <a
         href={props.url}
         target="_blank"
         rel="noreferrer"
-        className="shrink-0 font-mono text-body font-semibold text-primary no-underline"
+        className="text-body text-primary shrink-0 font-mono font-semibold no-underline"
       >
         #{props.issueId}
       </a>
-      <span className="min-w-0 flex-1 truncate text-body">{props.title}</span>
-      {props.state && (
-        <Badge variant="secondary" className="uppercase">
+      <span className="text-body min-w-0 flex-1 truncate">{props.title}</span>
+      {props.state ? <Badge variant="secondary" className="uppercase">
           {props.state}
-        </Badge>
-      )}
-      {props.delegatedScene && (
-        <Badge variant="outline">{t("issueDeleg.pill", { scene: props.delegatedScene })}</Badge>
-      )}
+        </Badge> : null}
+      {props.delegatedScene ? <Badge variant="outline">
+          {t("issueDeleg.pill", { scene: props.delegatedScene })}
+        </Badge> : null}
       <TooltipButton
         label={t("issueDeleg.remove")}
         type="button"
         variant="ghost"
         size="icon-xs"
-        className="shrink-0 text-muted-foreground"
+        className="text-muted-foreground shrink-0"
         onClick={onRemove}
       >
         ×
@@ -127,5 +134,5 @@ export const IssueRefBlock = createReactBlockSpec(
         onRemove={() => props.editor.removeBlocks([props.block])}
       />
     ),
-  },
+  }
 );

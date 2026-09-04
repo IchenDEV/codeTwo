@@ -14,27 +14,27 @@ import { cn } from "@/lib/utils";
 import { useTranscriptScroll } from "./useTranscriptScroll";
 
 interface TranscriptPaneProps {
-  variant: "main" | "side";
-  turns: readonly Turn[];
-  loading: boolean;
-  hasEarlier: boolean;
-  loadingEarlier: boolean;
-  onLoadEarlier: (scroll: TranscriptScrollController) => void;
+  readonly variant: "main" | "side";
+  readonly turns: readonly Turn[];
+  readonly loading: boolean;
+  readonly hasEarlier: boolean;
+  readonly loadingEarlier: boolean;
+  readonly onLoadEarlier: (scroll: TranscriptScrollController) => void;
   /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
-  onSaveTemplate?: (promptText: string) => void;
-  linkActions?: BuiltinLinkActions;
+  readonly onSaveTemplate?: (promptText: string) => void;
+  readonly linkActions?: BuiltinLinkActions;
   /** Durable source session used for scroll restoration. */
-  sessionId?: string | null;
-  onForkTurn?: (turn: Turn) => void;
-  onAddSelection: (text: string) => void;
-  onExplainSelection: (text: string) => void;
-  onAskSelectionInSideChat: (text: string) => void;
+  readonly sessionId?: string | null;
+  readonly onForkTurn?: (turn: Turn) => void;
+  readonly onAddSelection: (text: string) => void;
+  readonly onExplainSelection: (text: string) => void;
+  readonly onAskSelectionInSideChat: (text: string) => void;
   /** Host-rendered declarative plugin actions above the transcript. */
-  before?: ReactNode;
+  readonly before?: ReactNode;
 }
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
-export function TranscriptPane({
+export const TranscriptPane = ({
   sessionId,
   variant,
   turns,
@@ -49,7 +49,7 @@ export function TranscriptPane({
   onExplainSelection,
   onAskSelectionInSideChat,
   before,
-}: TranscriptPaneProps) {
+}: TranscriptPaneProps) => {
   const t = useT();
   const scroll = useTranscriptScroll(sessionId ?? null, turns);
   const Root = variant === "side" ? "aside" : "section";
@@ -61,8 +61,8 @@ export function TranscriptPane({
       className={cn(
         "relative min-h-0",
         variant === "side"
-          ? "animate-slide-in-right order-2 w-[360px] max-w-[38%] shrink-0 border-s bg-fill-quiet"
-          : "order-1 flex-1",
+          ? "animate-slide-in-right bg-fill-quiet order-2 w-[360px] max-w-[38%] shrink-0 border-s"
+          : "order-1 flex-1"
       )}
     >
       <div
@@ -79,14 +79,14 @@ export function TranscriptPane({
         <div
           className={cn(
             "mx-auto w-full",
-            variant === "side" ? "px-4 pb-6 pt-4" : "max-w-3xl px-8 pb-8 pt-6",
+            variant === "side" ? "px-4 pt-4 pb-6" : "max-w-3xl px-8 pt-6 pb-8"
           )}
         >
           {before}
           {loading ? (
             <p
               role="status"
-              className="flex items-center justify-center gap-2 py-12 text-body text-muted-foreground"
+              className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12"
             >
               <ActivityOrb state="connecting" aria-hidden="true" />
               {t("session.loading")}
@@ -143,7 +143,7 @@ export function TranscriptPane({
           type="button"
           size="sm"
           variant="secondary"
-          className="absolute bottom-4 start-1/2 -translate-x-1/2 rounded-control shadow-lg"
+          className="rounded-control absolute start-1/2 bottom-4 -translate-x-1/2 shadow-lg"
           onClick={scroll.jumpToLatest}
         >
           <ArrowDown data-icon="inline-start" aria-hidden />

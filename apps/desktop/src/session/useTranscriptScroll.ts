@@ -1,19 +1,13 @@
-import {
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEventHandler,
-  type MutableRefObject,
-  type PointerEventHandler,
-  type UIEventHandler,
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { isTranscriptNearEnd, scrollTopAfterPrepend } from "./transcriptScroll";
+import type {
+  KeyboardEventHandler,
+  MutableRefObject,
+  PointerEventHandler,
+  UIEventHandler,
 } from "react";
 
-import {
-  isTranscriptNearEnd,
-  scrollTopAfterPrepend,
-  type TranscriptScrollAnchor,
-} from "./transcriptScroll";
+import type { TranscriptScrollAnchor } from "./transcriptScroll";
 import type { Turn } from "./turns";
 
 export interface TranscriptScrollController {
@@ -28,7 +22,9 @@ export interface TranscriptScrollController {
 }
 
 function prefersReducedMotion(): boolean {
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  return (
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
+  );
 }
 
 /**
@@ -38,40 +34,46 @@ function prefersReducedMotion(): boolean {
  */
 export function useTranscriptScroll(
   sessionId: string | null,
-  turns: readonly Turn[],
+  turns: readonly Turn[]
 ): TranscriptScrollController {
-  const viewportRef = useRef<HTMLElement | null>(null);
-  const followingRef = useRef(true);
-  const pendingPrependRef = useRef<TranscriptScrollAnchor | null>(null);
+  const viewportReference = useRef<HTMLElement | null>(null);
+  const followingReference = useRef(true);
+  const pendingPrependReference = useRef<TranscriptScrollAnchor | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   const syncJumpVisibility = useCallback((element: HTMLElement | null) => {
-    const visible = element ? !isTranscriptNearEnd(element) : false;
-    setShowJumpToLatest((current) => (current === visible ? current : visible));
+    const isVisible = element ? !isTranscriptNearEnd(element) : false;
+    setShowJumpToLatest((current) =>
+      current === isVisible ? current : isVisible
+    );
   }, []);
 
   useLayoutEffect(() => {
-    followingRef.current = true;
-    pendingPrependRef.current = null;
+    followingReference.current = true;
+    pendingPrependReference.current = null;
     setShowJumpToLatest(false);
   }, [sessionId]);
 
   useLayoutEffect(() => {
-    const anchor = pendingPrependRef.current;
+    const anchor = pendingPrependReference.current;
     if (anchor) {
-      pendingPrependRef.current = null;
-      const element = anchor.element.isConnected ? anchor.element : viewportRef.current;
+      pendingPrependReference.current = null;
+      const element = anchor.element.isConnected
+        ? anchor.element
+        : viewportReference.current;
       if (element) {
         element.scrollTop = scrollTopAfterPrepend(anchor, element.scrollHeight);
-        followingRef.current = isTranscriptNearEnd(element);
+        followingReference.current = isTranscriptNearEnd(element);
         syncJumpVisibility(element);
       }
       return;
     }
 
-    const element = viewportRef.current;
-    if (!element) return;
-    if (followingRef.current) {
+    const element = viewportReference.current;
+    if (!element) {
+      return;
+    }
+    if (followingReference.current) {
       // Streaming can update many times a second. Assigning scrollTop avoids stacking smooth-scroll
       // animations and batches the read/write inside the post-render layout phase.
       element.scrollTop = element.scrollHeight;
@@ -81,50 +83,58 @@ export function useTranscriptScroll(
     }
   }, [syncJumpVisibility, turns]);
 
-  const onScroll = useCallback<UIEventHandler<HTMLElement>>(
-    (event) => {
-      const following = isTranscriptNearEnd(event.currentTarget);
-      followingRef.current = following;
-      setShowJumpToLatest((current) => (current === !following ? current : !following));
-    },
-    [],
-  );
+  const onScroll = useCallback<UIEventHandler<HTMLElement>>((event) => {
+    const isFollowing = isTranscriptNearEnd(event.currentTarget);
+    followingReference.current = isFollowing;
+    setShowJumpToLatest((current) =>
+      current === !isFollowing ? current : !isFollowing
+    );
+  }, []);
 
   const pauseFollowing = useCallback(() => {
-    followingRef.current = false;
+    followingReference.current = false;
   }, []);
 
-  const onKeyDownCapture = useCallback<KeyboardEventHandler<HTMLElement>>((event) => {
-    if (["ArrowUp", "Home", "PageUp"].includes(event.key)) {
-      followingRef.current = false;
-    }
-  }, []);
+  const onKeyDownCapture = useCallback<KeyboardEventHandler<HTMLElement>>(
+    (event) => {
+      if (["ArrowUp", "Home", "PageUp"].includes(event.key)) {
+        followingReference.current = false;
+      }
+    },
+    []
+  );
 
   const jumpToLatest = useCallback(() => {
-    followingRef.current = true;
+    followingReference.current = true;
     setShowJumpToLatest(false);
-    viewportRef.current?.scrollTo({
+    viewportReference.current?.scrollTo({
       behavior: prefersReducedMotion() ? "auto" : "smooth",
-      top: viewportRef.current.scrollHeight,
+      top: viewportReference.current.scrollHeight,
     });
   }, []);
 
-  const capturePrependAnchor = useCallback((): TranscriptScrollAnchor | null => {
-    const element = viewportRef.current;
-    if (!element) return null;
-    return {
-      element,
-      scrollHeight: element.scrollHeight,
-      scrollTop: element.scrollTop,
-    };
-  }, []);
+  const capturePrependAnchor =
+    useCallback((): TranscriptScrollAnchor | null => {
+      const element = viewportReference.current;
+      if (!element) {
+        return null;
+      }
+      return {
+        element,
+        scrollHeight: element.scrollHeight,
+        scrollTop: element.scrollTop,
+      };
+    }, []);
 
-  const prepareForPrepend = useCallback((anchor: TranscriptScrollAnchor | null) => {
-    pendingPrependRef.current = anchor;
-  }, []);
+  const prepareForPrepend = useCallback(
+    (anchor: TranscriptScrollAnchor | null) => {
+      pendingPrependReference.current = anchor;
+    },
+    []
+  );
 
   return {
-    viewportRef,
+    viewportRef: viewportReference,
     showJumpToLatest,
     onScroll,
     onPointerDownCapture: pauseFollowing,

@@ -7,7 +7,9 @@ import {
   worktreeStatusBadges,
 } from "../src/settings/worktrees";
 
-const entry = (overrides: Partial<WorktreeStatusEntry>): WorktreeStatusEntry => ({
+const entry = (
+  overrides: Partial<WorktreeStatusEntry>
+): WorktreeStatusEntry => ({
   path: "/repo/.codetwo-worktrees/one",
   kind: "session",
   registered: true,
@@ -28,10 +30,16 @@ describe("project worktree management rows", () => {
     expect(worktreeStatusBadges(entry({}))).toEqual([]);
     expect(
       worktreeStatusBadges(
-        entry({ session_archived: true, worktree_discarded: true, checkout_present: false }),
-      ),
+        entry({
+          session_archived: true,
+          worktree_discarded: true,
+          checkout_present: false,
+        })
+      )
     ).toEqual(["archived", "discarded", "checkoutMissing"]);
-    expect(worktreeStatusBadges(entry({ checkout_present: false }))).toEqual(["checkoutMissing"]);
+    expect(worktreeStatusBadges(entry({ checkout_present: false }))).toEqual([
+      "checkoutMissing",
+    ]);
   });
 
   test("routes session-claimed checkouts through their session and the rest by path", () => {

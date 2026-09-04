@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react"
+} from "react";
 import {
   CheckCircle2,
   ExternalLink,
@@ -19,12 +19,12 @@ import {
   Plus,
   Trash2,
   X,
-} from "@/components/ui/icons"
+} from "@/components/ui/icons";
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { SearchField } from "@/components/business/search-field"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SearchField } from "@/components/business/search-field";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -40,11 +40,11 @@ import {
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
-import { useToast } from "@/ui/toast"
-import { confirmNative, openExternal, type SessionActivity } from "@/bridge"
-import { useLanguage, type Locale, type Translate } from "@/i18n"
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/ui/toast";
+import { confirmNative, openExternal, type SessionActivity } from "@/bridge";
+import { useLanguage, type Locale, type Translate } from "@/i18n";
 
 import {
   CORRUPT_BOARD_WARNING,
@@ -69,48 +69,48 @@ import {
   type TaskBoardLane,
   type TaskPriority,
   type TaskStatus,
-} from "./taskBoard"
+} from "./taskBoard";
 import {
   TaskEditorDialog,
   taskPriorityLabel,
   taskStatusLabel,
   type TaskEditorValue,
-} from "./TaskEditorDialog"
+} from "./TaskEditorDialog";
 
 interface TaskBoardSession {
-  id: string
-  title: string
-  archived?: boolean
-  activity?: SessionActivity
-  running?: boolean
+  id: string;
+  title: string;
+  archived?: boolean;
+  activity?: SessionActivity;
+  running?: boolean;
 }
 
 interface TaskBoardPageProps {
-  sessions?: TaskBoardSession[]
-  onOpenSession?: (id: string) => void
-  onStartTask?: (task: BoardTask) => void
-  headerLeadingAction?: ReactNode
+  readonly sessions?: TaskBoardSession[];
+  readonly onOpenSession?: (id: string) => void;
+  readonly onStartTask?: (task: BoardTask) => void;
+  readonly headerLeadingAction?: ReactNode;
 }
 
 interface EditorState {
-  task: BoardTask | null
-  initialStatus: TaskStatus
+  task: BoardTask | null;
+  initialStatus: TaskStatus;
 }
 
 interface SessionProjection extends TaskBoardSession {
-  archived: boolean
+  archived: boolean;
 }
 
 interface ProjectedTask {
-  task: BoardTask
-  lane: TaskBoardLane
-  latestSession?: SessionProjection
+  task: BoardTask;
+  lane: TaskBoardLane;
+  latestSession?: SessionProjection;
 }
 
 interface AttentionDetail {
-  label: string
-  description: string
-  action: string
+  label: string;
+  description: string;
+  action: string;
 }
 
 const LANE_TONES: Record<TaskBoardLane, string> = {
@@ -118,7 +118,7 @@ const LANE_TONES: Record<TaskBoardLane, string> = {
   running: "text-primary",
   needs_you: "text-warning",
   done: "text-success",
-}
+};
 
 const PRIORITY_TONES: Record<TaskPriority, string> = {
   none: "text-muted-foreground",
@@ -126,127 +126,149 @@ const PRIORITY_TONES: Record<TaskPriority, string> = {
   medium: "text-muted-foreground",
   high: "text-destructive",
   urgent: "text-destructive",
-}
+};
 
-const COLLAPSED_LANE_LIMIT = 3
+const COLLAPSED_LANE_LIMIT = 3;
 
 function formatUpdatedAt(value: number, locale: Locale, t: Translate): string {
-  const elapsed = Math.max(0, Date.now() - value)
-  const hour = 60 * 60 * 1000
-  const day = 24 * hour
-  if (elapsed < hour) return t("taskboard.updatedNow")
-  if (elapsed < day) return t("taskboard.updatedHours", { count: Math.floor(elapsed / hour) })
-  if (elapsed < day * 7) return t("taskboard.updatedDays", { count: Math.floor(elapsed / day) })
-  const date = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(value)
-  return t("taskboard.updatedOn", { date })
+  const elapsed = Math.max(0, Date.now() - value);
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
+  if (elapsed < hour) return t("taskboard.updatedNow");
+  if (elapsed < day)
+    return t("taskboard.updatedHours", { count: Math.floor(elapsed / hour) });
+  if (elapsed < day * 7)
+    return t("taskboard.updatedDays", { count: Math.floor(elapsed / day) });
+  const date = new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+  }).format(value);
+  return t("taskboard.updatedOn", { date });
 }
 
 function warningText(warning: string, t: Translate): string {
-  if (warning === CORRUPT_BOARD_WARNING) return t("taskboard.warning.corrupt")
-  if (warning === LOAD_BOARD_WARNING) return t("taskboard.warning.load")
-  if (warning === SAVE_BOARD_WARNING) return t("taskboard.warning.save")
-  return warning
+  if (warning === CORRUPT_BOARD_WARNING) return t("taskboard.warning.corrupt");
+  if (warning === LOAD_BOARD_WARNING) return t("taskboard.warning.load");
+  if (warning === SAVE_BOARD_WARNING) return t("taskboard.warning.save");
+  return warning;
 }
 
-function nextColumnOrder(tasks: readonly BoardTask[], status: TaskStatus): number {
-  return tasks.filter((task) => task.status === status).length
+function nextColumnOrder(
+  tasks: readonly BoardTask[],
+  status: TaskStatus
+): number {
+  return tasks.filter((task) => task.status === status).length;
 }
 
-function removeFilterValue<T extends string>(values: readonly T[], value: T): T[] {
-  return values.filter((candidate) => candidate !== value)
+function removeFilterValue<T extends string>(
+  values: readonly T[],
+  value: T
+): T[] {
+  return values.filter((candidate) => candidate !== value);
 }
 
-function toggleFilterValue<T extends string>(values: readonly T[], value: T): T[] {
-  return values.includes(value) ? removeFilterValue(values, value) : [...values, value]
+function toggleFilterValue<T extends string>(
+  values: readonly T[],
+  value: T
+): T[] {
+  return values.includes(value)
+    ? removeFilterValue(values, value)
+    : [...values, value];
 }
 
 function laneLabel(t: Translate, lane: TaskBoardLane): string {
-  if (lane === "queue") return t("taskboard.lane.queue")
-  if (lane === "running") return t("taskboard.lane.running")
-  if (lane === "needs_you") return t("taskboard.lane.needsYou")
-  return t("taskboard.lane.done")
+  if (lane === "queue") return t("taskboard.lane.queue");
+  if (lane === "running") return t("taskboard.lane.running");
+  if (lane === "needs_you") return t("taskboard.lane.needsYou");
+  return t("taskboard.lane.done");
 }
 
 function sessionActivityKind(session?: SessionProjection) {
-  const kind = session?.activity?.state.kind ?? "idle"
-  return session?.running && kind === "idle" ? "running" : kind
+  const kind = session?.activity?.state.kind ?? "idle";
+  return session?.running && kind === "idle" ? "running" : kind;
 }
 
 function latestAvailableSession(
   task: BoardTask,
-  sessionsById: ReadonlyMap<string, SessionProjection>,
+  sessionsById: ReadonlyMap<string, SessionProjection>
 ): SessionProjection | undefined {
   for (let index = task.sessionIds.length - 1; index >= 0; index -= 1) {
-    const session = sessionsById.get(task.sessionIds[index]!)
-    if (session && !session.archived) return session
+    const session = sessionsById.get(task.sessionIds[index]!);
+    if (session && !session.archived) return session;
   }
-  return undefined
+  return undefined;
 }
 
 function projectTasks(
   tasks: readonly BoardTask[],
-  sessionsById: ReadonlyMap<string, SessionProjection>,
+  sessionsById: ReadonlyMap<string, SessionProjection>
 ): ProjectedTask[] {
   return tasks.map((task) => {
-    const latestSession = latestAvailableSession(task, sessionsById)
+    const latestSession = latestAvailableSession(task, sessionsById);
     return {
       task,
       lane: taskBoardLane(task, sessionActivityKind(latestSession)),
       latestSession,
-    }
-  })
+    };
+  });
 }
 
-function groupProjectedTasks(tasks: readonly ProjectedTask[]): Record<TaskBoardLane, ProjectedTask[]> {
+function groupProjectedTasks(
+  tasks: readonly ProjectedTask[]
+): Record<TaskBoardLane, ProjectedTask[]> {
   const grouped: Record<TaskBoardLane, ProjectedTask[]> = {
     queue: [],
     running: [],
     needs_you: [],
     done: [],
-  }
-  for (const task of tasks) grouped[task.lane].push(task)
-  return grouped
+  };
+  for (const task of tasks) grouped[task.lane].push(task);
+  return grouped;
 }
 
 function attentionDetail(
   t: Translate,
   task: BoardTask,
-  session?: SessionProjection,
+  session?: SessionProjection
 ): AttentionDetail {
   if (task.status === "in_review") {
     return {
       label: t("taskboard.attention.reviewReady"),
       description: t("taskboard.attention.reviewReadyDescription"),
       action: t("taskboard.reviewTask"),
-    }
+    };
   }
-  const state = session?.activity?.state
+  const state = session?.activity?.state;
   if (state?.kind === "awaiting_input") {
-    const pending = state.pending[0]
-    const isQuestion = pending?.kind === "elicitation"
+    const pending = state.pending[0];
+    const isQuestion = pending?.kind === "elicitation";
     return {
-      label: t(isQuestion
-        ? "taskboard.attention.answerNeeded"
-        : "taskboard.attention.permissionNeeded"),
+      label: t(
+        isQuestion
+          ? "taskboard.attention.answerNeeded"
+          : "taskboard.attention.permissionNeeded"
+      ),
       description: pending?.title ?? t("taskboard.attention.inputDescription"),
-      action: t(isQuestion ? "taskboard.answerTask" : "taskboard.reviewRequest"),
-    }
+      action: t(
+        isQuestion ? "taskboard.answerTask" : "taskboard.reviewRequest"
+      ),
+    };
   }
   if (state?.kind === "failed") {
     return {
       label: t("taskboard.attention.failed"),
       description: state.message,
       action: t("taskboard.reviewFailure"),
-    }
+    };
   }
   return {
     label: t("taskboard.attention.reviewReady"),
     description: t("taskboard.attention.reviewReadyDescription"),
     action: t("taskboard.reviewTask"),
-  }
+  };
 }
 
-function TaskCard({
+const TaskCard = ({
   t,
   locale,
   projected,
@@ -257,37 +279,40 @@ function TaskCard({
   onStartTask,
   onUnlinkPullRequest,
 }: {
-  t: Translate
-  locale: Locale
-  projected: ProjectedTask
-  onEdit: () => void
-  onDelete: () => void
-  onMove: (status: TaskStatus) => void
-  onOpenSession?: (id: string) => void
-  onStartTask?: (task: BoardTask) => void
-  onUnlinkPullRequest?: () => void
-}) {
-  const { task, lane, latestSession } = projected
-  const pullRequest = task.pullRequest
-  const attention = lane === "needs_you" ? attentionDetail(t, task, latestSession) : null
-  const openLatest = latestSession && onOpenSession
-    ? () => onOpenSession(latestSession.id)
-    : undefined
-  const startNew = onStartTask ? () => onStartTask(task) : undefined
-  const primaryAction = openLatest ?? startNew ?? onEdit
-  const primaryActionLabel = lane === "needs_you" && attention
-    ? attention.action
-    : openLatest
-      ? t("taskboard.openRecentSession")
-      : startNew
-        ? t("taskboard.startTask")
-        : t("taskboard.edit")
+  readonly t: Translate;
+  readonly locale: Locale;
+  readonly projected: ProjectedTask;
+  readonly onEdit: () => void;
+  readonly onDelete: () => void;
+  readonly onMove: (status: TaskStatus) => void;
+  readonly onOpenSession?: (id: string) => void;
+  readonly onStartTask?: (task: BoardTask) => void;
+  readonly onUnlinkPullRequest?: () => void;
+}) => {
+  const { task, lane, latestSession } = projected;
+  const pullRequest = task.pullRequest;
+  const attention =
+    lane === "needs_you" ? attentionDetail(t, task, latestSession) : null;
+  const openLatest =
+    latestSession && onOpenSession
+      ? () => onOpenSession(latestSession.id)
+      : undefined;
+  const startNew = onStartTask ? () => onStartTask(task) : undefined;
+  const primaryAction = openLatest ?? startNew ?? onEdit;
+  const primaryActionLabel =
+    lane === "needs_you" && attention
+      ? attention.action
+      : openLatest
+        ? t("taskboard.openRecentSession")
+        : startNew
+          ? t("taskboard.startTask")
+          : t("taskboard.edit");
 
   return (
     <article
       data-task-card={task.id}
       data-task-lane={lane}
-      className="group rounded-module bg-card p-4 shadow-(--ds-elevation-surface) transition-colors hover:bg-accent/30"
+      className="group rounded-module bg-card hover:bg-accent/30 p-4 shadow-(--ds-elevation-surface) transition-colors"
     >
       <div className="flex min-w-0 items-start gap-2">
         <Button
@@ -295,8 +320,11 @@ function TaskCard({
           variant="ghost"
           size="row"
           focusStyle="inset"
-          className="line-clamp-2 h-auto min-w-0 flex-1 justify-start px-0 py-0 text-dialog font-semibold hover:text-primary"
-          aria-label={t("taskboard.cardAction", { action: primaryActionLabel, title: task.title })}
+          className="text-dialog hover:text-primary line-clamp-2 h-auto min-w-0 flex-1 justify-start px-0 py-0 font-semibold"
+          aria-label={t("taskboard.cardAction", {
+            action: primaryActionLabel,
+            title: task.title,
+          })}
           onClick={primaryAction}
         >
           {task.title}
@@ -308,7 +336,7 @@ function TaskCard({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="-mr-1 -mt-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                className="-mt-1 -mr-1 shrink-0 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
                 aria-label={t("taskboard.taskActions", { title: task.title })}
               >
                 <MoreHorizontal data-icon="inline-start" aria-hidden />
@@ -336,7 +364,9 @@ function TaskCard({
                 </DropdownMenuItem>
               ) : null}
               {pullRequest ? (
-                <DropdownMenuItem onClick={() => void openExternal(pullRequest.url)}>
+                <DropdownMenuItem
+                  onClick={() => void openExternal(pullRequest.url)}
+                >
                   <GitPullRequest aria-hidden />
                   {t("taskboard.openPullRequest")}
                 </DropdownMenuItem>
@@ -350,11 +380,15 @@ function TaskCard({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              {TASK_STATUSES.filter((status) => status !== task.status).map((status) => (
-                <DropdownMenuItem key={status} onClick={() => onMove(status)}>
-                  {t("taskboard.moveTo", { status: taskStatusLabel(t, status) })}
-                </DropdownMenuItem>
-              ))}
+              {TASK_STATUSES.filter((status) => status !== task.status).map(
+                (status) => (
+                  <DropdownMenuItem key={status} onClick={() => onMove(status)}>
+                    {t("taskboard.moveTo", {
+                      status: taskStatusLabel(t, status),
+                    })}
+                  </DropdownMenuItem>
+                )
+              )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -372,7 +406,7 @@ function TaskCard({
           type="button"
           variant="link"
           size="compact"
-          className="mt-4 h-auto min-w-0 justify-start gap-1.5 px-0 py-0 text-metadata text-muted-foreground hover:text-primary"
+          className="text-metadata text-muted-foreground hover:text-primary mt-4 h-auto min-w-0 justify-start gap-1.5 px-0 py-0"
           title={pullRequest.url}
           onClick={() => void openExternal(pullRequest.url)}
         >
@@ -385,25 +419,39 @@ function TaskCard({
       ) : null}
 
       {lane === "queue" && (task.priority !== "none" || latestSession) ? (
-        <div className="mt-4 flex min-w-0 items-center gap-2 text-metadata text-muted-foreground">
+        <div className="text-metadata text-muted-foreground mt-4 flex min-w-0 items-center gap-2">
           {task.priority !== "none" ? (
-            <span className={cn("inline-flex items-center gap-1", PRIORITY_TONES[task.priority])}>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1",
+                PRIORITY_TONES[task.priority]
+              )}
+            >
               <Flag aria-hidden className="size-3" />
               {taskPriorityLabel(t, task.priority)}
             </span>
           ) : null}
           {latestSession ? (
-            <span className="ml-auto truncate">{t("taskboard.readyToContinue")}</span>
+            <span className="ml-auto truncate">
+              {t("taskboard.readyToContinue")}
+            </span>
           ) : null}
         </div>
       ) : null}
 
       {lane === "running" ? (
-        <div className="mt-4 grid gap-2 text-metadata text-muted-foreground">
+        <div className="text-metadata text-muted-foreground mt-4 grid gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary animate-pulse" />
-            <span className="font-medium text-primary">{t("taskboard.runningNow")}</span>
-            <span className="ml-auto truncate">{formatUpdatedAt(task.updatedAt, locale, t)}</span>
+            <span
+              aria-hidden
+              className="bg-primary size-2 shrink-0 animate-pulse rounded-full"
+            />
+            <span className="text-primary font-medium">
+              {t("taskboard.runningNow")}
+            </span>
+            <span className="ml-auto truncate">
+              {formatUpdatedAt(task.updatedAt, locale, t)}
+            </span>
           </div>
           {latestSession && latestSession.title.trim() !== task.title.trim() ? (
             <p className="truncate">{latestSession.title}</p>
@@ -415,22 +463,27 @@ function TaskCard({
         <div className="mt-4 grid gap-3">
           <Badge
             variant="secondary"
-            className="w-fit bg-warning/10 text-metadata font-medium text-warning shadow-none"
+            className="bg-warning/10 text-metadata text-warning w-fit font-medium shadow-none"
           >
             {attention.label}
           </Badge>
-          <p className="line-clamp-2 text-metadata text-muted-foreground">
+          <p className="text-metadata text-muted-foreground line-clamp-2">
             {attention.description}
           </p>
-          <Button type="button" size="compact" className="ml-auto" onClick={primaryAction}>
+          <Button
+            type="button"
+            size="compact"
+            className="ml-auto"
+            onClick={primaryAction}
+          >
             {attention.action}
           </Button>
         </div>
       ) : null}
 
       {lane === "done" ? (
-        <div className="mt-4 grid gap-2 text-metadata text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 font-medium text-success">
+        <div className="text-metadata text-muted-foreground mt-4 grid gap-2">
+          <span className="text-success inline-flex items-center gap-1.5 font-medium">
             <CheckCircle2 aria-hidden className="size-3.5" />
             {t("taskboard.completed")}
           </span>
@@ -443,10 +496,10 @@ function TaskCard({
         </div>
       ) : null}
     </article>
-  )
+  );
 }
 
-function BoardColumn({
+const BoardColumn = ({
   t,
   locale,
   lane,
@@ -461,31 +514,31 @@ function BoardColumn({
   onOpenSession,
   onStartTask,
 }: {
-  t: Translate
-  locale: Locale
-  lane: TaskBoardLane
-  tasks: ProjectedTask[]
-  totalCount: number
-  filtered: boolean
-  expanded: boolean
-  onExpandedChange: (expanded: boolean) => void
-  dispatch: (action: BoardAction) => void
-  openEditor: (task: BoardTask | null, status: TaskStatus) => void
-  deleteTask: (task: BoardTask) => void
-  onOpenSession?: (id: string) => void
-  onStartTask?: (task: BoardTask) => void
-}) {
-  const visibleTasks = expanded ? tasks : tasks.slice(0, COLLAPSED_LANE_LIMIT)
-  const hiddenCount = Math.max(0, tasks.length - visibleTasks.length)
-  const visualCount = filtered ? `${tasks.length}/${totalCount}` : totalCount
+  readonly t: Translate;
+  readonly locale: Locale;
+  readonly lane: TaskBoardLane;
+  readonly tasks: ProjectedTask[];
+  readonly totalCount: number;
+  readonly filtered: boolean;
+  readonly expanded: boolean;
+  readonly onExpandedChange: (expanded: boolean) => void;
+  readonly dispatch: (action: BoardAction) => void;
+  readonly openEditor: (task: BoardTask | null, status: TaskStatus) => void;
+  readonly deleteTask: (task: BoardTask) => void;
+  readonly onOpenSession?: (id: string) => void;
+  readonly onStartTask?: (task: BoardTask) => void;
+}) => {
+  const visibleTasks = expanded ? tasks : tasks.slice(0, COLLAPSED_LANE_LIMIT);
+  const hiddenCount = Math.max(0, tasks.length - visibleTasks.length);
+  const visualCount = filtered ? `${tasks.length}/${totalCount}` : totalCount;
 
   return (
     <section
       data-task-column={lane}
       aria-labelledby={`taskboard-column-${lane}`}
-      className="flex min-h-full w-72 min-w-72 flex-1 flex-col rounded-module bg-fill-quiet p-3"
+      className="rounded-module bg-fill-quiet flex min-h-full w-72 min-w-72 flex-1 flex-col p-3"
     >
-      <header className="sticky top-0 z-10 -mx-1 mb-2 flex shrink-0 items-center gap-2 bg-fill-quiet px-1 py-2">
+      <header className="bg-fill-quiet sticky top-0 z-10 -mx-1 mb-2 flex shrink-0 items-center gap-2 px-1 py-2">
         <h2
           id={`taskboard-column-${lane}`}
           className={cn("text-dialog font-semibold", LANE_TONES[lane])}
@@ -493,10 +546,15 @@ function BoardColumn({
           {laneLabel(t, lane)}
         </h2>
         <span
-          className="ml-auto text-metadata tabular-nums text-muted-foreground"
-          aria-label={filtered
-            ? t("taskboard.visibleCount", { visible: tasks.length, total: totalCount })
-            : t("taskboard.taskCount", { count: totalCount })}
+          className="text-metadata text-muted-foreground ml-auto tabular-nums"
+          aria-label={
+            filtered
+              ? t("taskboard.visibleCount", {
+                  visible: tasks.length,
+                  total: totalCount,
+                })
+              : t("taskboard.taskCount", { count: totalCount })
+          }
         >
           {visualCount}
         </span>
@@ -512,29 +570,36 @@ function BoardColumn({
             onEdit={() => openEditor(projected.task, projected.task.status)}
             onDelete={() => deleteTask(projected.task)}
             onMove={(status) => {
-              dispatch({ type: "move", id: projected.task.id, status, now: Date.now() })
+              dispatch({
+                type: "move",
+                id: projected.task.id,
+                status,
+                now: Date.now(),
+              });
             }}
             onOpenSession={onOpenSession}
             onStartTask={onStartTask}
-            onUnlinkPullRequest={projected.task.pullRequest
-              ? () => {
-                  const pullRequest = projected.task.pullRequest
-                  if (!pullRequest) return
-                  const unlinked = unlinkTaskPullRequest(
-                    [projected.task],
-                    projected.task.id,
-                    githubPullRequestIdentity(pullRequest),
-                    projected.task.pullRequestLinkRevision,
-                  )
-                  const updated = unlinked?.[0]
-                  if (updated) dispatch({ type: "update", task: updated })
-                }
-              : undefined}
+            onUnlinkPullRequest={
+              projected.task.pullRequest
+                ? () => {
+                    const pullRequest = projected.task.pullRequest;
+                    if (!pullRequest) return;
+                    const unlinked = unlinkTaskPullRequest(
+                      [projected.task],
+                      projected.task.id,
+                      githubPullRequestIdentity(pullRequest),
+                      projected.task.pullRequestLinkRevision
+                    );
+                    const updated = unlinked?.[0];
+                    if (updated) dispatch({ type: "update", task: updated });
+                  }
+                : undefined
+            }
           />
         ))}
 
         {tasks.length === 0 ? (
-          <p className="px-3 py-8 text-center text-metadata text-muted-foreground">
+          <p className="text-metadata text-muted-foreground px-3 py-8 text-center">
             {filtered && totalCount > 0
               ? t("taskboard.emptyFiltered")
               : t("taskboard.emptyColumn")}
@@ -564,129 +629,145 @@ function BoardColumn({
         ) : null}
       </div>
     </section>
-  )
+  );
 }
 
-export function TaskBoardPage({
+export const TaskBoardPage = ({
   sessions = [],
   onOpenSession,
   onStartTask,
   headerLeadingAction,
-}: TaskBoardPageProps) {
-  const { locale, t } = useLanguage()
-  const toast = useToast()
-  const [state, dispatchBase] = useReducer(
-    boardReducer,
-    undefined,
-    () => loadBoardSnapshot(undefined, locale),
-  )
-  const [query, setQuery] = useState("")
-  const [priorities, setPriorities] = useState<TaskPriority[]>([])
-  const [labels, setLabels] = useState<string[]>([])
-  const [editor, setEditor] = useState<EditorState | null>(null)
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const [expandedLanes, setExpandedLanes] = useState<Partial<Record<TaskBoardLane, boolean>>>({})
-  const didMount = useRef(false)
-  const deferredQuery = useDeferredValue(query)
+}: TaskBoardPageProps) => {
+  const { locale, t } = useLanguage();
+  const toast = useToast();
+  const [state, dispatchBase] = useReducer(boardReducer, undefined, () =>
+    loadBoardSnapshot(undefined, locale)
+  );
+  const [query, setQuery] = useState("");
+  const [priorities, setPriorities] = useState<TaskPriority[]>([]);
+  const [labels, setLabels] = useState<string[]>([]);
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [expandedLanes, setExpandedLanes] = useState<
+    Partial<Record<TaskBoardLane, boolean>>
+  >({});
+  const didMount = useRef(false);
+  const deferredQuery = useDeferredValue(query);
 
   useEffect(() => {
-    if (state.warning) toast(warningText(state.warning, t), "error")
-  }, [state.warning, t, toast])
+    if (state.warning) toast(warningText(state.warning, t), "error");
+  }, [state.warning, t, toast]);
 
   useEffect(() => {
     if (!didMount.current) {
-      didMount.current = true
-      return
+      didMount.current = true;
+      return;
     }
-    const result = saveBoardSnapshot(state.tasks)
-    if (!result.ok) toast(warningText(result.warning, t), "error")
-  }, [state.tasks, t, toast])
+    const result = saveBoardSnapshot(state.tasks);
+    if (!result.ok) toast(warningText(result.warning, t), "error");
+  }, [state.tasks, t, toast]);
 
   const filters: BoardFilters = useMemo(
     () => ({ query: deferredQuery, priorities, labels }),
     [deferredQuery, labels, priorities]
-  )
+  );
   const visibleTasks = useMemo(
     () => sortBoardTasks(filterBoardTasks(state.tasks, filters)),
     [filters, state.tasks]
-  )
-  const availableLabels = useMemo(() => boardLabels(state.tasks), [state.tasks])
+  );
+  const availableLabels = useMemo(
+    () => boardLabels(state.tasks),
+    [state.tasks]
+  );
   const sessionsById = useMemo(
-    () => new Map(sessions.map((session) => [
-      session.id,
-      { ...session, archived: session.archived === true },
-    ] satisfies [string, SessionProjection])),
+    () =>
+      new Map(
+        sessions.map(
+          (session) =>
+            [
+              session.id,
+              { ...session, archived: session.archived === true },
+            ] satisfies [string, SessionProjection]
+        )
+      ),
     [sessions]
-  )
+  );
   const allProjectedTasks = useMemo(
     () => projectTasks(sortBoardTasks(state.tasks), sessionsById),
     [sessionsById, state.tasks]
-  )
+  );
   const visibleProjectedTasks = useMemo(
     () => projectTasks(visibleTasks, sessionsById),
     [sessionsById, visibleTasks]
-  )
+  );
   const allTasksByLane = useMemo(
     () => groupProjectedTasks(allProjectedTasks),
     [allProjectedTasks]
-  )
+  );
   const visibleTasksByLane = useMemo(
     () => groupProjectedTasks(visibleProjectedTasks),
     [visibleProjectedTasks]
-  )
-  const activeFilterCount = (query.trim() ? 1 : 0) + priorities.length + labels.length
-  const filtered = activeFilterCount > 0
-  const attentionCount = allTasksByLane.needs_you.length
+  );
+  const activeFilterCount =
+    (query.trim() ? 1 : 0) + priorities.length + labels.length;
+  const filtered = activeFilterCount > 0;
+  const attentionCount = allTasksByLane.needs_you.length;
 
-  const dispatch = (action: BoardAction) => dispatchBase(action)
+  const dispatch = (action: BoardAction) => dispatchBase(action);
   const openEditor = (task: BoardTask | null, initialStatus: TaskStatus) => {
-    setEditor({ task, initialStatus })
-  }
+    setEditor({ task, initialStatus });
+  };
 
   const clearFilters = () => {
-    setQuery("")
-    setPriorities([])
-    setLabels([])
-  }
+    setQuery("");
+    setPriorities([]);
+    setLabels([]);
+  };
 
   const saveEditor = (value: TaskEditorValue) => {
-    if (!editor) return
+    if (!editor) return;
     if (editor.task) {
       dispatch({
         type: "update",
         task: {
           ...editor.task,
           ...value,
-          updatedAt: Math.max(Date.now(), editor.task.createdAt, editor.task.updatedAt),
+          updatedAt: Math.max(
+            Date.now(),
+            editor.task.createdAt,
+            editor.task.updatedAt
+          ),
         },
-      })
+      });
     } else {
       const task = createBoardTask({
         ...value,
         order: nextColumnOrder(state.tasks, value.status),
-      })
-      dispatch({ type: "create", task })
-      setExpandedLanes((current) => ({ ...current, queue: true }))
+      });
+      dispatch({ type: "create", task });
+      setExpandedLanes((current) => ({ ...current, queue: true }));
       if (filterBoardTasks([task], filters).length === 0) {
         toast(t("taskboard.createdHidden", { title: task.title }), "info", {
           label: t("taskboard.clearFilters"),
           run: clearFilters,
-        })
+        });
       }
     }
-    setEditor(null)
-  }
+    setEditor(null);
+  };
 
   const deleteTask = async (task: BoardTask) => {
-    const confirmed = await confirmNative(t("taskboard.deleteConfirm", { title: task.title }))
-    if (!confirmed) return
-    dispatch({ type: "delete", id: task.id })
-    toast(t("taskboard.deleted", { title: task.title }), "success")
-  }
+    const confirmed = await confirmNative(
+      t("taskboard.deleteConfirm", { title: task.title })
+    );
+    if (!confirmed) return;
+    dispatch({ type: "delete", id: task.id });
+    toast(t("taskboard.deleted", { title: task.title }), "success");
+  };
 
   return (
-    <main className="animate-data-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
-      <header className="shrink-0 bg-background px-6 py-4 sm:px-8">
+    <main className="animate-data-page-in bg-background text-foreground flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="bg-background shrink-0 px-6 py-4 sm:px-8">
         <div
           data-page-header-content
           className="grid min-w-0 items-center gap-3 xl:grid-cols-[minmax(0,auto)_minmax(24rem,1fr)]"
@@ -697,12 +778,15 @@ export function TaskBoardPage({
                 {headerLeadingAction}
               </div>
             ) : null}
-            <h1 className="shrink-0 text-page font-semibold tracking-tight">
+            <h1 className="text-page shrink-0 font-semibold tracking-tight">
               {t("taskboard.title")}
             </h1>
             {attentionCount > 0 ? (
-              <p className="flex min-w-0 items-center gap-2 text-metadata text-muted-foreground">
-                <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
+              <p className="text-metadata text-muted-foreground flex min-w-0 items-center gap-2">
+                <span
+                  aria-hidden
+                  className="bg-warning size-2 shrink-0 rounded-full"
+                />
                 <span className="truncate">
                   {t("taskboard.attentionSummary", { count: attentionCount })}
                 </span>
@@ -710,17 +794,20 @@ export function TaskBoardPage({
             ) : null}
           </div>
 
-          <div data-page-header-controls className="flex min-w-0 items-center gap-2 xl:justify-end">
+          <div
+            data-page-header-controls
+            className="flex min-w-0 items-center gap-2 xl:justify-end"
+          >
             <SearchField
-                className="min-w-0 max-w-sm flex-1"
-                inputClassName="bg-fill-rest shadow-surface"
-                label={t("taskboard.search")}
-                placeholder={t("taskboard.search")}
-                value={query}
-                clearLabel={t("taskboard.clearSearch")}
-                onClear={() => setQuery("")}
-                onChange={(event) => setQuery(event.currentTarget.value)}
-              />
+              className="max-w-sm min-w-0 flex-1"
+              inputClassName="bg-fill-rest shadow-surface"
+              label={t("taskboard.search")}
+              placeholder={t("taskboard.search")}
+              value={query}
+              clearLabel={t("taskboard.clearSearch")}
+              onClear={() => setQuery("")}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+            />
 
             <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
               <PopoverTrigger
@@ -729,7 +816,9 @@ export function TaskBoardPage({
                     <Filter data-icon="inline-start" aria-hidden />
                     {t("taskboard.filter")}
                     {activeFilterCount > 0 ? (
-                      <Badge className="min-w-4 px-1 text-metadata">{activeFilterCount}</Badge>
+                      <Badge className="text-metadata min-w-4 px-1">
+                        {activeFilterCount}
+                      </Badge>
                     ) : null}
                   </Button>
                 }
@@ -740,19 +829,26 @@ export function TaskBoardPage({
               >
                 <PopoverHeader>
                   <PopoverTitle>{t("taskboard.filtersTitle")}</PopoverTitle>
-                  <PopoverDescription>{t("taskboard.filtersDescription")}</PopoverDescription>
+                  <PopoverDescription>
+                    {t("taskboard.filtersDescription")}
+                  </PopoverDescription>
                 </PopoverHeader>
 
                 <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-metadata font-medium">
+                  <legend className="text-metadata mb-1 font-medium">
                     {t("taskboard.priority")}
                   </legend>
                   {PRIORITIES.map((priority) => (
-                    <label key={priority} className="flex items-center gap-2 text-body">
+                    <label
+                      key={priority}
+                      className="text-body flex items-center gap-2"
+                    >
                       <Checkbox
                         checked={priorities.includes(priority)}
                         onCheckedChange={() =>
-                          setPriorities((current) => toggleFilterValue(current, priority))
+                          setPriorities((current) =>
+                            toggleFilterValue(current, priority)
+                          )
                         }
                       />
                       {taskPriorityLabel(t, priority)}
@@ -761,16 +857,21 @@ export function TaskBoardPage({
                 </fieldset>
 
                 <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-metadata font-medium">
+                  <legend className="text-metadata mb-1 font-medium">
                     {t("taskboard.labels")}
                   </legend>
                   {availableLabels.length > 0 ? (
                     availableLabels.map((label) => (
-                      <label key={label} className="flex items-center gap-2 text-body">
+                      <label
+                        key={label}
+                        className="text-body flex items-center gap-2"
+                      >
                         <Checkbox
                           checked={labels.includes(label)}
                           onCheckedChange={() =>
-                            setLabels((current) => toggleFilterValue(current, label))
+                            setLabels((current) =>
+                              toggleFilterValue(current, label)
+                            )
                           }
                         />
                         {label}
@@ -809,7 +910,10 @@ export function TaskBoardPage({
       </header>
 
       {state.warning ? (
-        <p role="alert" className="bg-destructive/10 px-6 py-2 text-metadata text-destructive">
+        <p
+          role="alert"
+          className="bg-destructive/10 text-metadata text-destructive px-6 py-2"
+        >
           {warningText(state.warning, t)}
         </p>
       ) : null}
@@ -818,7 +922,10 @@ export function TaskBoardPage({
         data-task-board-columns
         className="min-h-0 flex-1 overflow-auto px-6 pb-6 sm:px-8"
       >
-        <div data-task-board-content className="flex min-h-full min-w-max gap-4">
+        <div
+          data-task-board-content
+          className="flex min-h-full min-w-max gap-4"
+        >
           {TASK_BOARD_LANES.map((lane) => (
             <BoardColumn
               key={lane}
@@ -830,7 +937,10 @@ export function TaskBoardPage({
               filtered={filtered}
               expanded={expandedLanes[lane] === true}
               onExpandedChange={(expanded) => {
-                setExpandedLanes((current) => ({ ...current, [lane]: expanded }))
+                setExpandedLanes((current) => ({
+                  ...current,
+                  [lane]: expanded,
+                }));
               }}
               dispatch={dispatch}
               openEditor={openEditor}
@@ -852,5 +962,5 @@ export function TaskBoardPage({
         />
       ) : null}
     </main>
-  )
+  );
 }

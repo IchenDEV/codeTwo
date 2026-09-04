@@ -1,15 +1,20 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
-const {
-  CollaborationModePicker,
-  GoalPicker,
-  ModelPicker,
-} = await import("../src/session/Composer");
+const { CollaborationModePicker, GoalPicker, ModelPicker } =
+  await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
-const { hiddenModelsForProvider, setModelHidden } = await import("../src/session/modelPreferences");
+const { hiddenModelsForProvider, setModelHidden } =
+  await import("../src/session/modelPreferences");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -29,26 +34,32 @@ describe("ModelPicker", () => {
           defaultModel="grok-4.6"
           provider="grok"
           onModel={() => {}}
-          configOptions={[{
-            id: "reasoning_effort",
-            name: "Reasoning Effort",
-            category: "thought_level",
-            current: "xhigh",
-            choices: [
-              { id: "low", name: "Low Effort", description: null },
-              { id: "medium", name: "Medium Effort", description: null },
-              { id: "high", name: "High Effort", description: null },
-              { id: "xhigh", name: "Extra High Effort", description: null },
-            ],
-          }]}
+          configOptions={[
+            {
+              id: "reasoning_effort",
+              name: "Reasoning Effort",
+              category: "thought_level",
+              current: "xhigh",
+              choices: [
+                { id: "low", name: "Low Effort", description: null },
+                { id: "medium", name: "Medium Effort", description: null },
+                { id: "high", name: "High Effort", description: null },
+                { id: "xhigh", name: "Extra High Effort", description: null },
+              ],
+            },
+          ]}
           onConfigOption={(configId, value) => selected.push([configId, value])}
           hasSession
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    const modelTrigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
-    const effortTrigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Reasoning"]');
+    const modelTrigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
+    const effortTrigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Reasoning"]'
+    );
     expect(modelTrigger?.textContent).toContain("Grok 4.6");
     expect(effortTrigger?.textContent).toContain("Extra High Effort");
     expect(rendered.container.querySelector('input[type="range"]')).toBeNull();
@@ -57,7 +68,9 @@ describe("ModelPicker", () => {
     click(effortTrigger);
     await flush();
     const low = Array.from(
-      dom.document.body.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button'),
+      dom.document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-slot="popover-content"] button'
+      )
     ).find((button) => button.textContent?.includes("Low Effort"));
     if (!low) throw new Error("low effort option did not render");
     click(low);
@@ -80,7 +93,7 @@ describe("ModelPicker", () => {
           onConfigOption={() => {}}
           hasSession={false}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     const trigger = rendered.container.querySelector('button[title="Model"]');
@@ -102,10 +115,12 @@ describe("ModelPicker", () => {
           onConfigOption={() => {}}
           hasSession={false}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    expect(rendered.container.querySelector('button[title="Model"]')).toBeNull();
+    expect(
+      rendered.container.querySelector('button[title="Model"]')
+    ).toBeNull();
     rendered.unmount();
   });
 
@@ -128,10 +143,12 @@ describe("ModelPicker", () => {
           hasSession
           disabled
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
     expect(trigger?.disabled).toBe(true);
     trigger?.click();
     expect(selected).toEqual([]);
@@ -156,15 +173,19 @@ describe("ModelPicker", () => {
           onConfigOption={() => {}}
           hasSession={false}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
     if (!trigger) throw new Error("model trigger did not render");
     click(trigger);
     await flush();
 
-    const popup = dom.document.body.querySelector('[data-slot="popover-content"]');
+    const popup = dom.document.body.querySelector(
+      '[data-slot="popover-content"]'
+    );
     const modelList = popup?.querySelector("[data-model-picker-list]");
     expect(popup?.className).toContain("max-h-(--available-height)");
     expect(popup?.className).toContain("overflow-hidden");
@@ -185,68 +206,94 @@ describe("ModelPicker", () => {
       { id: "beta-low", name: "Beta (Low)", description: null },
       { id: "beta-high", name: "Beta (High)", description: null },
     ];
-    const renderPicker = (provider: string) => mount(
-      <I18nProvider>
-        <ModelPicker
-          models={models}
-          current="alpha-high"
-          defaultModel="alpha-high"
-          provider={provider}
-          onModel={(model) => selected.push(model)}
-          configOptions={[]}
-          onConfigOption={() => {}}
-          hasSession
-        />
-      </I18nProvider>,
-    );
+    const renderPicker = (provider: string) =>
+      mount(
+        <I18nProvider>
+          <ModelPicker
+            models={models}
+            current="alpha-high"
+            defaultModel="alpha-high"
+            provider={provider}
+            onModel={(model) => selected.push(model)}
+            configOptions={[]}
+            onConfigOption={() => {}}
+            hasSession
+          />
+        </I18nProvider>
+      );
 
     let rendered = renderPicker("opencode");
-    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
     if (!trigger) throw new Error("model trigger did not render");
     click(trigger);
     await flush();
 
     const add = dom.document.body.querySelector<HTMLButtonElement>(
-      'button[aria-label="Add Beta to favorites"]',
+      'button[aria-label="Add Beta to favorites"]'
     );
     if (!add) throw new Error("favorite action did not render");
     click(add);
     await flush();
 
     expect(selected).toEqual([]);
-    expect(dom.document.body.querySelector('[data-slot="popover-content"]')).not.toBeNull();
     expect(
-      dom.document.body.querySelector('button[aria-label="Remove Beta from favorites"]')
-        ?.getAttribute("aria-pressed"),
+      dom.document.body.querySelector('[data-slot="popover-content"]')
+    ).not.toBeNull();
+    expect(
+      dom.document.body
+        .querySelector('button[aria-label="Remove Beta from favorites"]')
+        ?.getAttribute("aria-pressed")
     ).toBe("true");
     expect(
-      Array.from(dom.document.body.querySelectorAll('[data-model-picker-row] [data-slot="selectable-row-label"]'))
-        .map((label) => label.textContent),
+      Array.from(
+        dom.document.body.querySelectorAll(
+          '[data-model-picker-row] [data-slot="selectable-row-label"]'
+        )
+      ).map((label) => label.textContent)
     ).toEqual(["Beta", "Alpha"]);
     expect(
-      Array.from(dom.document.body.querySelectorAll('[data-model-picker-row] [data-slot="selectable-row-label"]'))
-        .filter((label) => label.textContent === "Beta"),
+      Array.from(
+        dom.document.body.querySelectorAll(
+          '[data-model-picker-row] [data-slot="selectable-row-label"]'
+        )
+      ).filter((label) => label.textContent === "Beta")
     ).toHaveLength(1);
 
     rendered.unmount();
     rendered = renderPicker("opencode");
-    const reopened = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    const reopened = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
     if (!reopened) throw new Error("remounted model trigger did not render");
     click(reopened);
     await flush();
     expect(
-      dom.document.body.querySelector('button[aria-label="Remove Beta from favorites"]')
-        ?.getAttribute("aria-pressed"),
+      dom.document.body
+        .querySelector('button[aria-label="Remove Beta from favorites"]')
+        ?.getAttribute("aria-pressed")
     ).toBe("true");
     rendered.unmount();
 
     rendered = renderPicker("cursor");
-    const otherProvider = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
-    if (!otherProvider) throw new Error("other provider model trigger did not render");
+    const otherProvider = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
+    if (!otherProvider)
+      throw new Error("other provider model trigger did not render");
     click(otherProvider);
     await flush();
-    expect(dom.document.body.querySelector('button[aria-label="Add Beta to favorites"]')).not.toBeNull();
-    expect(dom.document.body.querySelector('button[aria-label="Remove Beta from favorites"]')).toBeNull();
+    expect(
+      dom.document.body.querySelector(
+        'button[aria-label="Add Beta to favorites"]'
+      )
+    ).not.toBeNull();
+    expect(
+      dom.document.body.querySelector(
+        'button[aria-label="Remove Beta from favorites"]'
+      )
+    ).toBeNull();
     rendered.unmount();
   });
 
@@ -262,36 +309,43 @@ describe("ModelPicker", () => {
           defaultModel="alpha"
           provider="claude_code"
           onModel={() => {}}
-          configOptions={[{
-            id: "model",
-            name: "Model",
-            category: "model",
-            current: "alpha",
-            choices: [
-              { id: "alpha", name: "Alpha", description: null },
-              { id: "beta", name: "Beta", description: null },
-            ],
-          }]}
+          configOptions={[
+            {
+              id: "model",
+              name: "Model",
+              category: "model",
+              current: "alpha",
+              choices: [
+                { id: "alpha", name: "Alpha", description: null },
+                { id: "beta", name: "Beta", description: null },
+              ],
+            },
+          ]}
           onConfigOption={(configId, value) => selected.push([configId, value])}
           hasSession
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
     if (!trigger) throw new Error("config-option model trigger did not render");
     click(trigger);
     await flush();
     const favorite = dom.document.body.querySelector<HTMLButtonElement>(
-      'button[aria-label="Add Beta to favorites"]',
+      'button[aria-label="Add Beta to favorites"]'
     );
-    if (!favorite) throw new Error("config-option favorite action did not render");
+    if (!favorite)
+      throw new Error("config-option favorite action did not render");
     click(favorite);
     await flush();
     expect(selected).toEqual([]);
 
     const beta = Array.from(
-      dom.document.body.querySelectorAll<HTMLButtonElement>('[data-model-picker-row] [data-slot="selectable-row"]'),
+      dom.document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-model-picker-row] [data-slot="selectable-row"]'
+      )
     ).find((button) => button.getAttribute("aria-label") === "Beta");
     if (!beta) throw new Error("favorite model row did not render");
     click(beta);
@@ -316,13 +370,18 @@ describe("ModelPicker", () => {
           onConfigOption={() => {}}
           hasSession={false}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
-    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="模型"]');
+    const trigger =
+      rendered.container.querySelector<HTMLButtonElement>(
+        'button[title="模型"]'
+      );
     if (!trigger) throw new Error("localized model trigger did not render");
     click(trigger);
     await flush();
-    expect(dom.document.body.querySelector('button[aria-label="收藏模型“模型甲”"]')).not.toBeNull();
+    expect(
+      dom.document.body.querySelector('button[aria-label="收藏模型“模型甲”"]')
+    ).not.toBeNull();
     rendered.unmount();
   });
 
@@ -347,20 +406,27 @@ describe("ModelPicker", () => {
           onConfigOption={() => {}}
           hasSession
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
-    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    const trigger = rendered.container.querySelector<HTMLButtonElement>(
+      'button[title="Model"]'
+    );
     if (!trigger) throw new Error("model trigger did not render");
     expect(hiddenModelsForProvider("opencode")).toEqual(["alpha", "beta"]);
     click(trigger);
     await flush();
 
-    const labels = () => Array.from(
-      dom.document.body.querySelectorAll('[data-model-picker-row] [data-slot="selectable-row-label"]'),
-    ).map((label) => label.textContent);
+    const labels = () =>
+      Array.from(
+        dom.document.body.querySelectorAll(
+          '[data-model-picker-row] [data-slot="selectable-row-label"]'
+        )
+      ).map((label) => label.textContent);
     expect(labels()).toEqual(["Alpha", "Gamma"]);
 
-    const search = dom.document.body.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
+    const search = dom.document.body.querySelector<HTMLInputElement>(
+      'input[aria-label="Search models"]'
+    );
     if (!search) throw new Error("model search did not render");
     expect(search.getAttribute("placeholder")).toBe("Search models");
     rendered.unmount();
@@ -371,27 +437,37 @@ describe("provider-native session controls", () => {
   test("renders collaboration mode only from an advertised provider option", () => {
     activateDom();
     const absent = mount(
-      <CollaborationModePicker options={[]} onChange={() => {}} />,
+      <CollaborationModePicker options={[]} onChange={() => {}} />
     );
     expect(absent.container.querySelector("button")).toBeNull();
     absent.unmount();
 
     const rendered = mount(
       <CollaborationModePicker
-        options={[{
-          id: "collaboration_mode",
-          name: "Collaboration mode",
-          category: "collaboration_mode",
-          current: "plan",
-          choices: [
-            { id: "default", name: "Default", description: null },
-            { id: "plan", name: "Plan", description: "Plan before implementation" },
-          ],
-        }]}
+        options={[
+          {
+            id: "collaboration_mode",
+            name: "Collaboration mode",
+            category: "collaboration_mode",
+            current: "plan",
+            choices: [
+              { id: "default", name: "Default", description: null },
+              {
+                id: "plan",
+                name: "Plan",
+                description: "Plan before implementation",
+              },
+            ],
+          },
+        ]}
         onChange={() => {}}
-      />,
+      />
     );
-    expect(rendered.container.querySelector('button[aria-label="Collaboration mode: Plan"]')).toBeTruthy();
+    expect(
+      rendered.container.querySelector(
+        'button[aria-label="Collaboration mode: Plan"]'
+      )
+    ).toBeTruthy();
     rendered.unmount();
   });
 
@@ -400,7 +476,7 @@ describe("provider-native session controls", () => {
     const absent = mount(
       <I18nProvider>
         <GoalPicker capability={null} goal={null} onGoal={async () => {}} />
-      </I18nProvider>,
+      </I18nProvider>
     );
     expect(absent.container.querySelector("button")).toBeNull();
     absent.unmount();
@@ -412,9 +488,11 @@ describe("provider-native session controls", () => {
           goal={null}
           onGoal={async () => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
-    expect(rendered.container.querySelector('button[aria-label="Goal"]')).toBeTruthy();
+    expect(
+      rendered.container.querySelector('button[aria-label="Goal"]')
+    ).toBeTruthy();
     rendered.unmount();
   });
 });

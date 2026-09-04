@@ -2,13 +2,7 @@ import type { ToolOutput } from "../bridge";
 import type { ToolEntry, Turn, TurnContentEntry } from "./turns";
 
 export type TrajectoryKind =
-  | "user"
-  | "assistant"
-  | "reasoning"
-  | "tool"
-  | "memory"
-  | "plan"
-  | "error";
+  "user" | "assistant" | "reasoning" | "tool" | "memory" | "plan" | "error";
 
 export type TrajectoryLane = "context" | "assistant" | "tool";
 
@@ -30,16 +24,24 @@ export interface TrajectoryRecord {
 }
 
 function compact(value: string, max = 160): string {
-  const text = value.replace(/\s+/g, " ").trim();
-  if (text.length <= max) return text;
+  const text = value.replaceAll(/\s+/g, " ").trim();
+  if (text.length <= max) {
+    return text;
+  }
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
 function toolOutputSummary(outputs: readonly ToolOutput[]): string {
   for (const output of outputs) {
-    if (output.type === "text" && output.text.trim()) return compact(output.text);
-    if (output.type === "image") return output.artifact.display_name;
-    if (output.type === "resource_link") return output.name || output.uri;
+    if (output.type === "text" && output.text.trim()) {
+      return compact(output.text);
+    }
+    if (output.type === "image") {
+      return output.artifact.display_name;
+    }
+    if (output.type === "resource_link") {
+      return output.name || output.uri;
+    }
   }
   return "";
 }
@@ -54,12 +56,13 @@ function toolRecord(
   turn: Turn,
   turnNumber: number,
   step: number,
-  now: number,
+  now: number
 ): TrajectoryRecord {
   const fallback = timeFor(entry, turn.startedAt);
-  const startAt = tool.startedAt && tool.startedAt > 0 ? tool.startedAt : fallback;
-  const running = tool.endedAt === undefined && turn.endedAt === undefined;
-  const endAt = Math.max(startAt, tool.endedAt ?? (running ? now : fallback));
+  const startAt =
+    tool.startedAt && tool.startedAt > 0 ? tool.startedAt : fallback;
+  const isRunning = tool.endedAt === undefined && turn.endedAt === undefined;
+  const endAt = Math.max(startAt, tool.endedAt ?? (isRunning ? now : fallback));
   const output = tool.outputs ?? [];
   return {
     id: `turn:${turn.id}:tool:${tool.id}`,
@@ -73,17 +76,22 @@ function toolRecord(
     status: tool.status,
     startAt,
     endAt,
-    running,
+    running: isRunning,
     input: tool.agentInput,
     output,
   };
 }
 
-/** Build a dense business-event projection. Stream chunks collapse into assistant spans. */
-export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): TrajectoryRecord[] {
+/**
+Build a dense business-event projection. Stream chunks collapse into assistant spans.
+*/
+export function deriveTrajectory(
+  turns: readonly Turn[],
+  now = Date.now()
+): TrajectoryRecord[] {
   const records: TrajectoryRecord[] = [];
 
-  turns.forEach((turn, turnIndex) => {
+  for (const [turnIndex, turn] of turns.entries()) {
     const turnNumber = turnIndex + 1;
     const turnEnd = Math.max(turn.startedAt, turn.endedAt ?? now);
     records.push({
@@ -102,7 +110,8 @@ export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): Traj
     });
 
     if (turn.memory) {
-      const at = turn.memory.created_at > 0 ? turn.memory.created_at : turn.startedAt;
+      const at =
+        turn.memory.created_at > 0 ? turn.memory.created_at : turn.startedAt;
       records.push({
         id: `turn:${turn.id}:memory`,
         index: 0,
@@ -160,12 +169,14 @@ export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): Traj
     let textEntries: Extract<TurnContentEntry, { kind: "text" }>[] = [];
 
     const flushAssistant = (terminal = false) => {
-      if (textEntries.length === 0) return;
+      if (textEntries.length === 0) {
+        return;
+      }
       assistantSegment += 1;
       const text = textEntries.map((entry) => entry.text).join("");
       const startAt = timeFor(textEntries[0], turn.startedAt);
-      const lastAt = timeFor(textEntries[textEntries.length - 1], startAt);
-      const running = !terminal && turn.endedAt === undefined;
+      const lastAt = timeFor(textEntries.at(-1), startAt);
+      const isRunning = !terminal && turn.endedAt === undefined;
       records.push({
         id: `turn:${turn.id}:assistant:${assistantSegment}`,
         index: 0,
@@ -176,8 +187,8 @@ export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): Traj
         title: "Assistant",
         summary: compact(text),
         startAt,
-        endAt: Math.max(startAt, running ? now : lastAt),
-        running,
+        endAt: Math.max(startAt, isRunning ? now : lastAt),
+        running: isRunning,
         output: text,
       });
       textEntries = [];
@@ -190,7 +201,9 @@ export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): Traj
       }
       flushAssistant(true);
       const tool = tools.get(entry.toolId);
-      if (tool) records.push(toolRecord(tool, entry, turn, turnNumber, step, now));
+      if (tool) {
+        records.push(toolRecord(tool, entry, turn, turnNumber, step, now));
+      }
       step += 1;
     }
     flushAssistant(false);
@@ -229,7 +242,7 @@ export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): Traj
         output: turn.error,
       });
     }
-  });
+  }
 
   return records.map((record, index) => ({ ...record, index: index + 1 }));
 }
@@ -237,13 +250,23 @@ export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): Traj
 export function filterTrajectory(
   records: readonly TrajectoryRecord[],
   kind: TrajectoryKind | "all",
-  query: string,
+  query: string
 ): TrajectoryRecord[] {
   const needle = query.trim().toLocaleLowerCase();
   return records.filter((record) => {
-    if (kind !== "all" && record.kind !== kind) return false;
-    if (!needle) return true;
-    return [record.title, record.summary, record.status ?? "", `turn ${record.turn}`, `step ${record.step}`]
+    if (kind !== "all" && record.kind !== kind) {
+      return false;
+    }
+    if (!needle) {
+      return true;
+    }
+    return [
+      record.title,
+      record.summary,
+      record.status ?? "",
+      `turn ${record.turn}`,
+      `step ${record.step}`,
+    ]
       .join(" ")
       .toLocaleLowerCase()
       .includes(needle);
@@ -252,10 +275,16 @@ export function filterTrajectory(
 
 export function formatTrajectoryDuration(milliseconds: number): string {
   const value = Math.max(0, milliseconds);
-  if (value < 1_000) return `${Math.round(value)} ms`;
-  if (value < 10_000) return `${(value / 1_000).toFixed(1)} s`;
-  const roundedSeconds = Math.round(value / 1_000);
-  if (roundedSeconds < 60) return `${roundedSeconds} s`;
+  if (value < 1000) {
+    return `${Math.round(value)} ms`;
+  }
+  if (value < 10_000) {
+    return `${(value / 1000).toFixed(1)} s`;
+  }
+  const roundedSeconds = Math.round(value / 1000);
+  if (roundedSeconds < 60) {
+    return `${roundedSeconds} s`;
+  }
   const minutes = Math.floor(roundedSeconds / 60);
   const seconds = roundedSeconds % 60;
   return `${minutes}m ${seconds}s`;

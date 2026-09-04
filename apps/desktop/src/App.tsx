@@ -462,35 +462,35 @@ import { cn } from "@/lib/utils";
 const TaskBoardPage = lazy(() =>
   import("./taskboard/TaskBoardPage").then((module) => ({
     default: module.TaskBoardPage,
-  })),
+  }))
 );
 const PullRequestsPage = lazy(() =>
   import("./github/PullRequestsPage").then((module) => ({
     default: module.PullRequestsPage,
-  })),
+  }))
 );
 const AutomationsPage = lazy(() =>
   import("./automation/AutomationsPage").then((module) => ({
     default: module.AutomationsPage,
-  })),
+  }))
 );
 const PluginManagerPage = lazy(() =>
   import("./plugins/PluginManagerPage").then((module) => ({
     default: module.PluginManagerPage,
-  })),
+  }))
 );
 const DockerPage = lazy(() =>
   import("./docker/DockerPage").then((module) => ({
     default: module.DockerPage,
-  })),
+  }))
 );
 
-function PageLoadingFallback() {
+const PageLoadingFallback = () => {
   const t = useT();
   return (
     <div
       role="status"
-      className="flex min-h-0 min-w-0 flex-1 items-center justify-center gap-2 bg-background text-body text-muted-foreground"
+      className="bg-background text-body text-muted-foreground flex min-h-0 min-w-0 flex-1 items-center justify-center gap-2"
     >
       <Spinner />
       {t("session.loading")}
@@ -515,7 +515,7 @@ function composerDraftAttachmentKey(scope: ComposerDraftScope): string {
 }
 
 function composerDraftAttachments(
-  captures: readonly AppshotCapture[],
+  captures: readonly AppshotCapture[]
 ): ComposerDraftAttachment[] {
   return captures.map((capture) => ({
     id: capture.id,
@@ -524,16 +524,22 @@ function composerDraftAttachments(
   }));
 }
 
-function promptImagesForTurn(captures: readonly AppshotCapture[]): PromptImage[] {
-  return captures.flatMap((capture) => capture.kind === "attachment"
-    ? [{
-        id: capture.id,
-        name: capture.window_title,
-        previewDataUrl: capture.preview_data_url,
-        width: capture.width,
-        height: capture.height,
-      }]
-    : []);
+function promptImagesForTurn(
+  captures: readonly AppshotCapture[]
+): PromptImage[] {
+  return captures.flatMap((capture) =>
+    capture.kind === "attachment"
+      ? [
+          {
+            id: capture.id,
+            name: capture.window_title,
+            previewDataUrl: capture.preview_data_url,
+            width: capture.width,
+            height: capture.height,
+          },
+        ]
+      : []
+  );
 }
 
 const EMPTY_APPSHOTS: AppshotCapture[] = [];
@@ -592,7 +598,7 @@ interface PendingPolicyRequest {
 }
 
 function localCanvasManifest(
-  envelope: LocalCanvasEnvelope,
+  envelope: LocalCanvasEnvelope
 ): import("./bridge").CanvasManifest {
   const manifest = deriveCanvasManifest(envelope.elements);
   return {
@@ -606,10 +612,10 @@ function localCanvasManifest(
       arrowEnd: object.arrowEnd,
       assetId:
         object.type === "image"
-        ? (() => {
+          ? (() => {
               const fileId = (
                 envelope.elements.find(
-                  (element) => element.id === object.id,
+                  (element) => element.id === object.id
                 ) as { fileId?: string } | undefined
               )?.fileId;
               return (
@@ -618,15 +624,15 @@ function localCanvasManifest(
                 fileId ??
                 null
               );
-          })()
-        : null,
+            })()
+          : null,
     })),
   };
 }
 
 function localCanvasScene(
   envelope: LocalCanvasEnvelope,
-  assets: readonly CanvasStaticAsset[],
+  assets: readonly CanvasStaticAsset[]
 ): CanvasSceneEnvelope {
   return {
     engine: envelope.engine,
@@ -668,38 +674,38 @@ function slug(name: string): string {
 }
 
 /** A header icon with a tooltip — the always-visible way into a dock surface. */
-function IconAction({
+const IconAction = ({
   icon: Icon,
   label,
   hint,
   onClick,
   active,
 }: {
-  icon: typeof Keyboard;
-  label: string;
+  readonly icon: typeof Keyboard;
+  readonly label: string;
   /** Live shortcut from the keymap, so a rebind shows up here too. */
-  hint?: string;
-  onClick: () => void;
-  active?: boolean;
-}) {
+  readonly hint?: string;
+  readonly onClick: () => void;
+  readonly active?: boolean;
+}) => {
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Button
-          variant={active ? "secondary" : "ghost"}
-          size="icon"
-          aria-label={label}
-          className={cn("size-7 shrink-0", active && "text-primary")}
-          onClick={onClick}
-        >
-          <Icon className="size-4" />
+            variant={active ? "secondary" : "ghost"}
+            size="icon"
+            aria-label={label}
+            className={cn("size-7 shrink-0", active && "text-primary")}
+            onClick={onClick}
+          >
+            <Icon className="size-4" />
           </Button>
         }
       />
       <TooltipContent>
         {label}
-        {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
+        {hint ? <span className="ml-1.5 opacity-60">{hint}</span> : null}
       </TooltipContent>
     </Tooltip>
   );
@@ -735,11 +741,10 @@ type PaneEditorRefs = {
     ((a: Annotation, context: string) => void) | null
   >;
   insertFileRef: MutableRefObject<((path: string) => void) | null>;
-  insertSessionRef: MutableRefObject<((session: {
-    id: string;
-    title: string;
-    throughSeq: number;
-  }) => void) | null>;
+  insertSessionRef: MutableRefObject<
+    | ((session: { id: string; title: string; throughSeq: number }) => void)
+    | null
+  >;
   focusRef: MutableRefObject<(() => void) | null>;
   clearRef: MutableRefObject<(() => void) | null>;
   insertMarkdownRef: MutableRefObject<
@@ -758,17 +763,23 @@ type PaneEditorRefs = {
     ((draft: CanvasDraft, options?: CanvasInsertOptions) => void) | null
   >;
   restoreCanvasDocumentRef: MutableRefObject<
-    ((
-      doc: readonly DocBlock[],
-      drafts: ReadonlyMap<string, CanvasDraft>,
-      options?: CanvasInsertOptions,
-    ) => void) | null
+    | ((
+        doc: readonly DocBlock[],
+        drafts: ReadonlyMap<string, CanvasDraft>,
+        options?: CanvasInsertOptions
+      ) => void)
+    | null
   >;
   freezeCanvasesRef: MutableRefObject<
     ((doc: readonly DocBlock[]) => Promise<DocBlock[]>) | null
   >;
   canvasDeliveryErrorRef: MutableRefObject<
-    ((doc: readonly DocBlock[], message: string, kind: "provider_image" | "other") => void) | null
+    | ((
+        doc: readonly DocBlock[],
+        message: string,
+        kind: "provider_image" | "other"
+      ) => void)
+    | null
   >;
 };
 
@@ -843,7 +854,7 @@ export default function App() {
     Set<string>
   >(() => new Set());
   const [worktreeBase, setWorktreeBase] = useState<WorktreeBaselineKind | null>(
-    null,
+    null
   );
   const [worktreeOptions, setWorktreeOptions] = useState<
     WorktreeBaselineOption[]
@@ -859,27 +870,30 @@ export default function App() {
   // real state, driven by the reducer (splitFocused/closePane/focusPane/setSplitRatio); a single
   // pane is just the tree's initial shape, so single-pane behaviour is unchanged.
   const [paneLayout, setPaneLayout] = useState<PaneLayout>(() =>
-    singlePaneLayout(INITIAL_PANE_ID),
+    singlePaneLayout(INITIAL_PANE_ID)
   );
   const [paneContents, setPaneContents] = useState<Record<string, PaneContent>>(
-    () => ({ [INITIAL_PANE_ID]: { sessionId: null } }),
+    () => ({ [INITIAL_PANE_ID]: { sessionId: null } })
   );
   const paneContentsRef = useRef(paneContents);
-  const setPaneSession = useCallback((paneId: string, sessionId: string | null) => {
-    const current = paneContentsRef.current[paneId];
-    if (current?.sessionId === sessionId) return;
-    const next = {
-      ...paneContentsRef.current,
-      [paneId]: { ...current, sessionId },
-    };
-    paneContentsRef.current = next;
-    paneSessionsRef.current = new Set(
-      Object.values(next)
-        .map((content) => content.sessionId)
-        .filter((id): id is string => id !== null),
-    );
-    setPaneContents(next);
-  }, []);
+  const setPaneSession = useCallback(
+    (paneId: string, sessionId: string | null) => {
+      const current = paneContentsRef.current[paneId];
+      if (current?.sessionId === sessionId) return;
+      const next = {
+        ...paneContentsRef.current,
+        [paneId]: { ...current, sessionId },
+      };
+      paneContentsRef.current = next;
+      paneSessionsRef.current = new Set(
+        Object.values(next)
+          .map((content) => content.sessionId)
+          .filter((id): id is string => id !== null)
+      );
+      setPaneContents(next);
+    },
+    []
+  );
   const focusedPaneRef = useRef(paneLayout.focused);
   useEffect(() => {
     focusedPaneRef.current = paneLayout.focused;
@@ -901,9 +915,12 @@ export default function App() {
   // A value-only setter shim: every existing caller assigns a concrete id (or null for a draft),
   // and all of them already mirror it into `activeSessionRef` first, so the ref stays authoritative
   // for the event handler while this points the focused pane at the same session.
-  const setActiveSession = useCallback((id: string | null) => {
-    setPaneSession(focusedPaneRef.current, id);
-  }, [setPaneSession]);
+  const setActiveSession = useCallback(
+    (id: string | null) => {
+      setPaneSession(focusedPaneRef.current, id);
+    },
+    [setPaneSession]
+  );
   const [activeSessionReceipt, setActiveSessionReceipt] = useState<{
     session: string;
     shell: SessionCreationShell;
@@ -913,7 +930,7 @@ export default function App() {
   // pane's slice is what existing focused-session code paths read as `turns`; async work and engine
   // events use the explicit pane/session writers below.
   const [turnsByPane, setTurnsByPane] = useState<Record<string, Turn[]>>(
-    () => ({ [INITIAL_PANE_ID]: [] }),
+    () => ({ [INITIAL_PANE_ID]: [] })
   );
   const turns = turnsByPane[paneLayout.focused] ?? EMPTY_TURNS;
   const setPaneTurns = useCallback(
@@ -928,13 +945,13 @@ export default function App() {
         return { ...prev, [paneId]: next };
       });
     },
-    [],
+    []
   );
   const setFocusedTurns = useCallback(
     (updater: Turn[] | ((prev: Turn[]) => Turn[])) => {
       setPaneTurns(focusedPaneRef.current, updater);
     },
-    [setPaneTurns],
+    [setPaneTurns]
   );
   // The event handler runs outside render and must resolve a live session -> pane mapping. Session
   // selection prevents duplicate bindings, so a session has at most one transcript destination.
@@ -949,7 +966,7 @@ export default function App() {
     (session: string | null, updater: Turn[] | ((prev: Turn[]) => Turn[])) => {
       setPaneTurns(paneForSession(session), updater);
     },
-    [paneForSession, setPaneTurns],
+    [paneForSession, setPaneTurns]
   );
   // The set of sessions currently bound to a pane, so the event handler can accumulate transcript
   // for background panes (not just the focused one). Kept in a ref for the out-of-render listener.
@@ -958,7 +975,7 @@ export default function App() {
     paneSessionsRef.current = new Set(
       Object.values(paneContents)
         .map((content) => content.sessionId)
-        .filter((id): id is string => id !== null),
+        .filter((id): id is string => id !== null)
     );
   }, [paneContents]);
   const [transcriptStateByPane, setTranscriptStateByPane] = useState<
@@ -974,7 +991,7 @@ export default function App() {
       transcriptStateByPaneRef.current = next;
       setTranscriptStateByPane(next);
     },
-    [],
+    []
   );
   // Split whichever pane is passed (focusing it first, so the reducer's focused-relative split
   // lands on that pane), seeding an empty draft for the new leaf.
@@ -996,9 +1013,11 @@ export default function App() {
       focusedPaneRef.current = id;
       activeSessionRef.current = null;
       activeSessionProvenanceRef.current = null;
-      setPaneLayout((layout) => splitFocused(focusPane(layout, targetId), edge, id));
+      setPaneLayout((layout) =>
+        splitFocused(focusPane(layout, targetId), edge, id)
+      );
     },
-    [nextPaneId, updatePaneTranscriptState],
+    [nextPaneId, updatePaneTranscriptState]
   );
   // Closing a pane collapses its parent into the sibling and drops that pane's transcript; the
   // session itself keeps running in the background. The last pane is never closed.
@@ -1019,7 +1038,7 @@ export default function App() {
       paneSessionsRef.current = new Set(
         Object.values(rest)
           .map((content) => content.sessionId)
-          .filter((sessionId): sessionId is string => sessionId !== null),
+          .filter((sessionId): sessionId is string => sessionId !== null)
       );
       setPaneContents(rest);
     }
@@ -1047,20 +1066,22 @@ export default function App() {
     });
   }, []);
   const [permissionQueue, setPermissionQueue] = useState<PermissionQueueItem[]>(
-    [],
+    []
   );
   const [runningSessions, setRunningSessions] = useState<Set<string>>(
-    () => new Set(),
+    () => new Set()
   );
   const systemBadgeCount = useMemo(() => needsMeCount(sessions), [sessions]);
   const [pendingSessionRunning, setPendingSessionRunning] = useState(false);
-  const [pendingCreationPane, setPendingCreationPane] = useState<string | null>(null);
+  const [pendingCreationPane, setPendingCreationPane] = useState<string | null>(
+    null
+  );
   const focusedTranscriptState =
     transcriptStateByPane[paneLayout.focused] ?? EMPTY_PANE_TRANSCRIPT_STATE;
   const sessionLoading = focusedTranscriptState.loading;
   const activePendingInputs = pendingInputsForSession(
     permissionQueue,
-    activeSession,
+    activeSession
   );
   const permission = activePendingInputs[0] ?? null;
   const [skillDraft, setSkillDraft] = useState<{
@@ -1077,7 +1098,9 @@ export default function App() {
     value: EMPTY_GIT_WORKSPACE,
   });
   const [bindings, setBindings] = useState<KeymapEntry[]>([]);
-  const [pendingAppshots, setPendingAppshots] = useState<Record<string, AppshotCapture[]>>({});
+  const [pendingAppshots, setPendingAppshots] = useState<
+    Record<string, AppshotCapture[]>
+  >({});
   // A blank tab, not a landing page: this browser's job is your localhost dev server, which you
   // type in.
   const [browserUrl, setBrowserUrl] = useState("about:blank");
@@ -1089,9 +1112,13 @@ export default function App() {
   const [showPluginManager, setShowPluginManager] = useState(false);
   const [showDocker, setShowDocker] = useState(false);
   const [showFeishu, setShowFeishu] = useState(false);
-  const [feishuRailHost, setFeishuRailHost] = useState<HTMLDivElement | null>(null);
-  const [feishuSettingsHost, setFeishuSettingsHost] = useState<HTMLDivElement | null>(null);
-  const [pluginManagerInitialPluginId, setPluginManagerInitialPluginId] = useState<string | null>(null);
+  const [feishuRailHost, setFeishuRailHost] = useState<HTMLDivElement | null>(
+    null
+  );
+  const [feishuSettingsHost, setFeishuSettingsHost] =
+    useState<HTMLDivElement | null>(null);
+  const [pluginManagerInitialPluginId, setPluginManagerInitialPluginId] =
+    useState<string | null>(null);
   const [market, setMarket] = useState<MarketItem[]>([]);
   const [localPluginMarketplace, setLocalPluginMarketplace] =
     useState<PluginMarketplace | null>(null);
@@ -1114,7 +1141,9 @@ export default function App() {
   const quickQuotaRequestRef = useRef(0);
   const [showMissionControl, setShowMissionControl] = useState(false);
   const [showTaskBoard, setShowTaskBoard] = useState(false);
-  const [activeBoardTask, setActiveBoardTask] = useState<BoardTask | null>(null);
+  const [activeBoardTask, setActiveBoardTask] = useState<BoardTask | null>(
+    null
+  );
   const activeBoardTaskRef = useRef<BoardTask | null>(null);
   const [temporarySession, setTemporarySession] = useState(false);
   const temporarySessionRef = useRef(false);
@@ -1122,14 +1151,16 @@ export default function App() {
   const [pullRequestTasks, setPullRequestTasks] = useState<BoardTask[]>([]);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [quickChatOpen, setQuickChatOpen] = useState(false);
-  const [sideChatSeed, setSideChatSeed] = useState<TransientChatSeed | null>(null);
+  const [sideChatSeed, setSideChatSeed] = useState<TransientChatSeed | null>(
+    null
+  );
   // ---- R10 dock follow (docs/archive/scenes-v1/frontend-implementation-plan.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
   const dockTabRef = useRef<DockTab | null>(null);
   const dockFollowRef = useRef<FollowState>(initialFollowState);
   const [dockAutoHint, setDockAutoHint] = useState<ToolSurfaceHint | null>(
-    null,
+    null
   );
   useEffect(() => {
     void setSystemBadgeCount(systemBadgeCount).catch((error) => {
@@ -1193,24 +1224,20 @@ export default function App() {
   });
   const canvasDraftsRef = useRef(new Map<string, CanvasDraft>());
   const canvasAssetsRef = useRef(
-    new Map<string, Map<string, CanvasStaticAsset>>(),
+    new Map<string, Map<string, CanvasStaticAsset>>()
   );
   const canvasTombstonesRef = useRef(new Set<string>());
   const canvasPurgeRequestedRef = useRef(new Set<string>());
   const canvasFrozenRef = useRef(new Set<string>());
   const insertCanvasRef = useRef<(() => Promise<void>) | null>(null);
   const insertCanvasDraftRef = useRef<
-    | ((
-    draft: CanvasDraft,
-    options?: CanvasInsertOptions,
-      ) => void)
-    | null
+    ((draft: CanvasDraft, options?: CanvasInsertOptions) => void) | null
   >(null);
   const restoreCanvasDocumentRef = useRef<
     | ((
-    doc: readonly DocBlock[],
-    drafts: ReadonlyMap<string, CanvasDraft>,
-    options?: CanvasInsertOptions,
+        doc: readonly DocBlock[],
+        drafts: ReadonlyMap<string, CanvasDraft>,
+        options?: CanvasInsertOptions
       ) => void)
     | null
   >(null);
@@ -1221,7 +1248,7 @@ export default function App() {
     | ((
         doc: readonly DocBlock[],
         message: string,
-        kind: "provider_image" | "other",
+        kind: "provider_image" | "other"
       ) => void)
     | null
   >(null);
@@ -1255,7 +1282,7 @@ export default function App() {
   // Provider-reported context windows are session-level state, not transcript parts. Keeping the
   // map keyed by id prevents a late/background provider event from repainting the active session.
   const [contextWindows, setContextWindows] = useState<ContextWindowBySession>(
-    {},
+    {}
   );
   // Per-session cost/burn for the Composer statusline (R7). The core's `usage_by_session`
   // command lands in a later wave; until then the bridge feature-detects and this stays null,
@@ -1330,16 +1357,21 @@ export default function App() {
     scene: activeSceneName,
     autoScene,
   };
-  const activeAppshotKey = activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
+  const activeAppshotKey =
+    activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
   const activeAppshots = pendingAppshots[activeAppshotKey] ?? EMPTY_APPSHOTS;
   const removePendingAppshots = useCallback((ids: readonly string[]) => {
     if (ids.length === 0) return;
     const removed = new Set(ids);
     setPendingAppshots((current) => {
-      const next = Object.fromEntries(Object.entries(current).flatMap(([key, captures]) => {
-        const retained = captures.filter((capture) => !removed.has(capture.id));
-        return retained.length > 0 ? [[key, retained]] : [];
-      }));
+      const next = Object.fromEntries(
+        Object.entries(current).flatMap(([key, captures]) => {
+          const retained = captures.filter(
+            (capture) => !removed.has(capture.id)
+          );
+          return retained.length > 0 ? [[key, retained]] : [];
+        })
+      );
       pendingAppshotsRef.current = next;
       return next;
     });
@@ -1348,37 +1380,40 @@ export default function App() {
     useState(false);
   useEffect(() => {
     setCallProjectPath(
-      activeProject ? normalizePluginProjectPath(activeProject) : null,
+      activeProject ? normalizePluginProjectPath(activeProject) : null
     );
   }, [activeProject]);
   const workspaceCwd = cwd || ".";
   const currentGitWorkspace = workspaceStateForCwd(
     gitWorkspace,
     workspaceCwd,
-    EMPTY_GIT_WORKSPACE,
+    EMPTY_GIT_WORKSPACE
   );
   const git = currentGitWorkspace.value.status;
   const diffStat = currentGitWorkspace.value.diffStat;
   const currentCheckpointWorkspace = workspaceStateForCwd(
     checkpointWorkspace,
     workspaceCwd,
-    EMPTY_CHECKPOINTS,
+    EMPTY_CHECKPOINTS
   );
   const checkpoints = currentCheckpointWorkspace.value;
   const running = activeSession
     ? runningSessions.has(activeSession)
     : pendingSessionRunning && pendingCreationPane === paneLayout.focused;
-  const interactivePreview = useMemo(() => activeInteractivePreview(turns), [turns]);
+  const interactivePreview = useMemo(
+    () => activeInteractivePreview(turns),
+    [turns]
+  );
   const policyChangeDisabled = executionPolicyChangeDisabled(
     pendingSessionRunning,
     activeSession,
-    pendingPolicySessions,
+    pendingPolicySessions
   );
   const activeRunState = activeSession
     ? sessionActivity(
         sessions.find((session) => session.id === activeSession) ??
           archivedSessions.find((session) => session.id === activeSession) ??
-          {},
+          {}
       ).state
     : null;
   const awaitingInput = activeRunState?.kind === "awaiting_input";
@@ -1393,7 +1428,7 @@ export default function App() {
   const petAnimation = petAnimationForActivity(petActivity);
   const petConversationBubble = petConversationBubbleForActivity(
     petActivity,
-    latestTurn?.text ?? "",
+    latestTurn?.text ?? ""
   );
   // The right panel's file editor: open tabs in open order, and which one is showing. Every tab
   // is directly editable — unsaved-ness lives in files/dirty.ts, which the close guard reads.
@@ -1407,33 +1442,33 @@ export default function App() {
   // composer never drags the others with it.
   const [composerH, setComposerH] = usePersistedNumber(
     "codetwo.composerHeight",
-    190,
+    190
   );
-  const [composerHByPane, setComposerHByPane] = useState<Record<string, number>>(
-    {},
-  );
+  const [composerHByPane, setComposerHByPane] = useState<
+    Record<string, number>
+  >({});
   const [dockWidth, setDockWidth] = usePersistedNumber(
     "codetwo.dockWidth",
-    440,
+    440
   );
   const [railWidth, setRailWidth] = usePersistedNumber(
     "codetwo.railWidth",
-    288,
+    288
   );
   const [railCollapsedRaw, setRailCollapsedRaw] = usePersistedNumber(
     "codetwo.railCollapsed",
-    0,
+    0
   );
   const railCollapsed = railCollapsedRaw !== 0;
   const toggleRail = useCallback(
     () => setRailCollapsedRaw(railCollapsed ? 0 : 1),
-    [railCollapsed, setRailCollapsedRaw],
+    [railCollapsed, setRailCollapsedRaw]
   );
   const appliedRailWidth = Math.min(420, Math.max(220, railWidth));
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const narrowLayout = shouldOverlayRailForWorkspace(
     viewportWidth,
-    appliedRailWidth,
+    appliedRailWidth
   );
   const [narrowRailOpen, setNarrowRailOpen] = useState(false);
   const wasNarrowLayoutRef = useRef(narrowLayout);
@@ -1449,7 +1484,8 @@ export default function App() {
     wasNarrowLayoutRef.current = narrowLayout;
   }, [narrowLayout]);
   const dockForcesRailOverlay =
-    dockTab !== null && shouldOverlayRailForDock(viewportWidth, appliedRailWidth);
+    dockTab !== null &&
+    shouldOverlayRailForDock(viewportWidth, appliedRailWidth);
   const railOverlay = narrowLayout || dockForcesRailOverlay;
   const wasDockRailOverlayRef = useRef(dockForcesRailOverlay);
   useLayoutEffect(() => {
@@ -1459,7 +1495,8 @@ export default function App() {
     wasDockRailOverlayRef.current = dockForcesRailOverlay;
   }, [dockForcesRailOverlay]);
   const displayedRailCollapsed = railOverlay ? !narrowRailOpen : railCollapsed;
-  const railInlineWidth = railOverlay || displayedRailCollapsed ? 0 : appliedRailWidth;
+  const railInlineWidth =
+    railOverlay || displayedRailCollapsed ? 0 : appliedRailWidth;
   const toggleDisplayedRail = useCallback(() => {
     if (railOverlay) setNarrowRailOpen((open) => !open);
     else toggleRail();
@@ -1482,7 +1519,7 @@ export default function App() {
   const docMode = docModeRaw !== 0;
   const setDocMode = useCallback(
     (v: boolean) => setDocModeRaw(v ? 1 : 0),
-    [setDocModeRaw],
+    [setDocModeRaw]
   );
   const mainRef = useRef<HTMLElement | null>(null);
   const sessionWorkspaceRef = useRef<HTMLDivElement | null>(null);
@@ -1503,14 +1540,18 @@ export default function App() {
   const { locale } = useLanguage();
   const localeRef = useRef(locale);
   localeRef.current = locale;
-  const [editorEmptyByPane, setEditorEmptyByPane] = useState<Record<string, boolean>>(
-    () => ({ [INITIAL_PANE_ID]: true }),
+  const [editorEmptyByPane, setEditorEmptyByPane] = useState<
+    Record<string, boolean>
+  >(() => ({ [INITIAL_PANE_ID]: true }));
+  const [editorKeyByPane, setEditorKeyByPane] = useState<
+    Record<string, number>
+  >(() => ({ [INITIAL_PANE_ID]: 0 }));
+  const editorRevisionByPaneRef = useRef(
+    new Map<string, number>([[INITIAL_PANE_ID, 0]])
   );
-  const [editorKeyByPane, setEditorKeyByPane] = useState<Record<string, number>>(
-    () => ({ [INITIAL_PANE_ID]: 0 }),
+  const editorLocaleByPaneRef = useRef(
+    new Map<string, string>([[INITIAL_PANE_ID, locale]])
   );
-  const editorRevisionByPaneRef = useRef(new Map<string, number>([[INITIAL_PANE_ID, 0]]));
-  const editorLocaleByPaneRef = useRef(new Map<string, string>([[INITIAL_PANE_ID, locale]]));
   const docEmpty = editorEmptyByPane[paneLayout.focused] ?? true;
   const desktopPlatform = currentDesktopPlatform();
   const editorLaunchersAvailable = desktopPlatform === "macos";
@@ -1518,12 +1559,15 @@ export default function App() {
     ? t("header.finder")
     : t("header.fileManager");
 
-  const setTaskContext = useCallback((task: BoardTask | null, temporary: boolean) => {
-    activeBoardTaskRef.current = task;
-    temporarySessionRef.current = temporary;
-    setActiveBoardTask(task);
-    setTemporarySession(temporary);
-  }, []);
+  const setTaskContext = useCallback(
+    (task: BoardTask | null, temporary: boolean) => {
+      activeBoardTaskRef.current = task;
+      temporarySessionRef.current = temporary;
+      setActiveBoardTask(task);
+      setTemporarySession(temporary);
+    },
+    []
+  );
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const editorRevisionRef = useRef(0);
@@ -1541,11 +1585,10 @@ export default function App() {
     ((a: Annotation, context: string) => void) | null
   >(null);
   const insertFileRef = useRef<((path: string) => void) | null>(null);
-  const insertSessionRef = useRef<((session: {
-    id: string;
-    title: string;
-    throughSeq: number;
-  }) => void) | null>(null);
+  const insertSessionRef = useRef<
+    | ((session: { id: string; title: string; throughSeq: number }) => void)
+    | null
+  >(null);
   const focusEditorRef = useRef<(() => void) | null>(null);
   const clearEditorRef = useRef<(() => void) | null>(null);
   const insertMarkdownRef = useRef<
@@ -1593,9 +1636,11 @@ export default function App() {
     focusEditorRef.current = () => focused().focusRef.current?.();
     clearEditorRef.current = () => focused().clearRef.current?.();
     insertMarkdownRef.current = (markdown, mode) =>
-      focused().insertMarkdownRef.current?.(markdown, mode) ?? Promise.resolve();
+      focused().insertMarkdownRef.current?.(markdown, mode) ??
+      Promise.resolve();
     openSkillPickerRef.current = () => focused().openSkillPickerRef.current?.();
-    insertSkillRef.current = (skill) => focused().insertSkillRef.current?.(skill);
+    insertSkillRef.current = (skill) =>
+      focused().insertSkillRef.current?.(skill);
     insertBriefRef.current = (scene, values) =>
       focused().insertBriefRef.current?.(scene, values);
     insertIssueRef.current = (issue, context, delegatedScene) =>
@@ -1615,7 +1660,7 @@ export default function App() {
   // as rendered controls. Bootstrap closed: calling an unloadable command before the catalog and
   // active project realm agree is less safe than waiting one render for the policy snapshot.
   const componentEnabledRef = useRef<(id: BuiltinUiComponentId) => boolean>(
-    () => false,
+    () => false
   );
   // ---- R4 plan-as-document (docs/archive/scenes-v1/frontend-implementation-plan.md Item 3) ----
   // Plan markdown waiting on the Replace/Append/Cancel decision because the composer isn't empty.
@@ -1631,7 +1676,7 @@ export default function App() {
         setPlanDocPending(markdown);
       }
     },
-    [docEmpty, setDocMode],
+    [docEmpty, setDocMode]
   );
   const resolvePlanDocPending = useCallback(
     (mode: "replace" | "append" | null) => {
@@ -1641,7 +1686,7 @@ export default function App() {
       void insertMarkdownRef.current?.(markdown, mode);
       setDocMode(true);
     },
-    [planDocPending, setDocMode],
+    [planDocPending, setDocMode]
   );
   const pinPlanArtifact = useCallback(
     (markdown: string) => {
@@ -1653,7 +1698,7 @@ export default function App() {
         else toast(t("planDoc.pinFailed"), "error");
       });
     },
-    [t, toast],
+    [t, toast]
   );
   const canPinPlan = (
     scenes.find((s) => s.reference === activeSceneName)?.artifacts ?? []
@@ -1687,54 +1732,62 @@ export default function App() {
   const memoryReadRef = useRef<MemoryAccess>("inherit");
   const memoryWriteRef = useRef<MemoryAccess>("inherit");
   const memoryReceiptsBySessionRef = useRef(new Map<string, MemoryReceipt[]>());
-  const initializePluginSessionState = useCallback(async (
-    session: string,
-    initial?: {
-      memoryRead: MemoryAccess;
-      memoryWrite: MemoryAccess;
-      autoScene: boolean;
+  const initializePluginSessionState = useCallback(
+    async (
+      session: string,
+      initial?: {
+        memoryRead: MemoryAccess;
+        memoryWrite: MemoryAccess;
+        autoScene: boolean;
+      }
+    ) => {
+      const updates: Promise<unknown>[] = [];
+      if (componentEnabledRef.current("memory.settings")) {
+        updates.push(
+          setSessionMemoryPolicy(
+            session,
+            initial?.memoryRead ?? memoryReadRef.current,
+            initial?.memoryWrite ?? memoryWriteRef.current
+          )
+        );
+      }
+      if (componentEnabledRef.current("scenes.surface")) {
+        updates.push(
+          setSessionAutoScene(
+            session,
+            initial?.autoScene ?? autoSceneRef.current
+          )
+        );
+      }
+      await Promise.all(updates);
     },
-  ) => {
-    const updates: Promise<unknown>[] = [];
-    if (componentEnabledRef.current("memory.settings")) {
-      updates.push(
-        setSessionMemoryPolicy(
-          session,
-          initial?.memoryRead ?? memoryReadRef.current,
-          initial?.memoryWrite ?? memoryWriteRef.current,
-        ),
-      );
-    }
-    if (componentEnabledRef.current("scenes.surface")) {
-      updates.push(setSessionAutoScene(session, initial?.autoScene ?? autoSceneRef.current));
-    }
-    await Promise.all(updates);
-  }, []);
+    []
+  );
   const pendingCreationRef = useRef<PendingCreation | null>(null);
   // A picker change is provisional until the core publishes its durable correlated receipt.
   const pendingPolicyRequestsRef = useRef<Map<string, PendingPolicyRequest>>(
-    new Map(),
+    new Map()
   );
   const pendingPolicyBySessionRef = useRef<Map<string, string>>(new Map());
   // Preserve a policy event that races a list refresh; the event is newer than that request's
   // snapshot and must remain the authoritative rail/session projection.
   const authoritativePoliciesRef = useRef<Map<string, ExecutionPolicy>>(
-    new Map(),
+    new Map()
   );
   const policyVersionsRef = useRef<Map<string, number>>(new Map());
   // Prompt acknowledgements are broadcast to every client. Only the exact request initiated by
   // this window may clear its editor draft.
   const pendingPromptRequestsRef = useRef<Map<string, PendingPromptRequest>>(
-    new Map(),
+    new Map()
   );
-  const pendingDeferredPromptRequestsRef = useRef<Map<string, PendingPromptRequest>>(
-    new Map(),
-  );
+  const pendingDeferredPromptRequestsRef = useRef<
+    Map<string, PendingPromptRequest>
+  >(new Map());
   // TurnStarted consumes the pending entry, but a provider may reject images asynchronously after
   // the Composer has already cleared. Keep immutable refs until the terminal event so retry can
   // duplicate them without recovering a mutable draft.
   const acceptedCanvasRequestsRef = useRef<Map<string, PendingPromptRequest>>(
-    new Map(),
+    new Map()
   );
   // A provider picker selection after an asynchronous Canvas image rejection stages the retry in
   // a fresh session; an existing ACP session keeps its original provider for its lifetime.
@@ -1753,7 +1806,7 @@ export default function App() {
   // A null value means an authoritative TurnStarted arrived without a correlation id. Presence in
   // the map still matters: a later rejection for some local request must not stop that foreign turn.
   const runningPromptRequestsRef = useRef<Map<string, string | null>>(
-    new Map(),
+    new Map()
   );
   const latestTurnRequestIdsRef = useRef<Map<string, string>>(new Map());
   const turnStartVersionsRef = useRef<Map<string, number>>(new Map());
@@ -1762,23 +1815,23 @@ export default function App() {
 
   const finishPolicyRequest = useCallback(
     (requestId: string): PendingPolicyRequest | null => {
-    const pending = pendingPolicyRequestsRef.current.get(requestId);
-    if (!pending) return null;
-    pendingPolicyRequestsRef.current.delete(requestId);
+      const pending = pendingPolicyRequestsRef.current.get(requestId);
+      if (!pending) return null;
+      pendingPolicyRequestsRef.current.delete(requestId);
       if (
         pendingPolicyBySessionRef.current.get(pending.session) === requestId
       ) {
-      pendingPolicyBySessionRef.current.delete(pending.session);
-      setPendingPolicySessions((current) => {
-        if (!current.has(pending.session)) return current;
-        const next = new Set(current);
-        next.delete(pending.session);
-        return next;
-      });
-    }
-    return pending;
+        pendingPolicyBySessionRef.current.delete(pending.session);
+        setPendingPolicySessions((current) => {
+          if (!current.has(pending.session)) return current;
+          const next = new Set(current);
+          next.delete(pending.session);
+          return next;
+        });
+      }
+      return pending;
     },
-    [],
+    []
   );
 
   const applyAuthoritativeExecutionPolicy = useCallback(
@@ -1786,7 +1839,7 @@ export default function App() {
       authoritativePoliciesRef.current.set(session, policy);
       policyVersionsRef.current.set(
         session,
-        (policyVersionsRef.current.get(session) ?? 0) + 1,
+        (policyVersionsRef.current.get(session) ?? 0) + 1
       );
       // If another client wins while our request is in flight, a later local rejection restores
       // this newest acknowledged value, not the value that preceded the remote change.
@@ -1794,26 +1847,26 @@ export default function App() {
         if (pending.session === session) pending.authoritative = policy;
       }
       setSessions((current) =>
-        withSessionExecutionPolicy(current, session, policy),
+        withSessionExecutionPolicy(current, session, policy)
       );
       setArchivedSessions((current) =>
-        withSessionExecutionPolicy(current, session, policy),
+        withSessionExecutionPolicy(current, session, policy)
       );
       if (activeSessionRef.current === session) {
         setMode(policy.mode);
         setSandboxState(policy.sandbox);
       }
     },
-    [],
+    []
   );
 
   const restoreRejectedExecutionPolicy = useCallback(
     (pending: PendingPolicyRequest) => {
-    if (activeSessionRef.current !== pending.session) return;
-    setMode(pending.authoritative.mode);
-    setSandboxState(pending.authoritative.sandbox);
+      if (activeSessionRef.current !== pending.session) return;
+      setMode(pending.authoritative.mode);
+      setSandboxState(pending.authoritative.sandbox);
     },
-    [],
+    []
   );
 
   // Refs are updated before React schedules the render so transcript promises always see the same
@@ -1823,19 +1876,19 @@ export default function App() {
       const next = withRunningSession(
         runningSessionsRef.current,
         session,
-        isRunning,
+        isRunning
       );
-    runningSessionsRef.current = next;
-    setRunningSessions(next);
+      runningSessionsRef.current = next;
+      setRunningSessions(next);
     },
-    [],
+    []
   );
 
   const updateTranscriptCursor = useCallback(
     (paneId: string, nextBefore: number | null) => {
       updatePaneTranscriptState(paneId, { nextBefore });
     },
-    [updatePaneTranscriptState],
+    [updatePaneTranscriptState]
   );
 
   const markSessionStarted = useCallback(
@@ -1848,11 +1901,11 @@ export default function App() {
       }
       turnStartVersionsRef.current.set(
         session,
-        (turnStartVersionsRef.current.get(session) ?? 0) + 1,
+        (turnStartVersionsRef.current.get(session) ?? 0) + 1
       );
       updateRunningSession(session, true);
     },
-    [updateRunningSession],
+    [updateRunningSession]
   );
 
   const markSessionStopped = useCallback(
@@ -1869,7 +1922,7 @@ export default function App() {
       updateRunningSession(session, false);
       return true;
     },
-    [updateRunningSession],
+    [updateRunningSession]
   );
 
   // ---- R10 dock follow ----
@@ -1892,7 +1945,7 @@ export default function App() {
                   ? event.hint.file
                   : undefined,
             }
-          : null,
+          : null
       );
     } else {
       setDockAutoHint(null);
@@ -1916,7 +1969,7 @@ export default function App() {
         dockOpen: dockTabRef.current !== null,
       });
     },
-    [followDockEvent],
+    [followDockEvent]
   );
 
   /** Every user-driven dock change routes here so auto-follow latches off until the run ends. */
@@ -1925,7 +1978,7 @@ export default function App() {
       followDockEvent({ kind: "manual", tab });
       setDockTab(tab);
     },
-    [followDockEvent],
+    [followDockEvent]
   );
 
   /** Restore immutable accepted Canvas refs after a terminal provider-image rejection.  The
@@ -1936,7 +1989,7 @@ export default function App() {
       const refs = canvasRetryRefsForTerminal(
         "error",
         message,
-        request.canvasRefs,
+        request.canvasRefs
       );
       if (refs.length === 0) return;
       const editorRefs = paneEditorRefsFor(request.paneId);
@@ -1958,25 +2011,25 @@ export default function App() {
             } catch {
               /* Best effort cleanup; the primary duplicate failure remains user-visible. */
             }
-          }),
+          })
         );
         throw error;
       }
       const replacements = new Map(
         refs.map((ref, index) => [
-        ref.id,
-        { id: restored[index]!.id, revision: restored[index]!.revision },
-        ]),
+          ref.id,
+          { id: restored[index]!.id, revision: restored[index]!.revision },
+        ])
       );
       const retryDoc = canvasRetryDocument(request.submittedDoc, replacements);
       const restoredDrafts = new Map(
-        restored.map((draft) => [draft.id, draft]),
+        restored.map((draft) => [draft.id, draft])
       );
       for (const draft of restored) {
         canvasDraftsRef.current.set(draft.id, draft);
         canvasAssetsRef.current.set(
           draft.id,
-          new Map(draft.assets.map((asset) => [asset.id, asset])),
+          new Map(draft.assets.map((asset) => [asset.id, asset]))
         );
       }
       editorRefs.restoreCanvasDocumentRef.current(retryDoc, restoredDrafts, {
@@ -1986,34 +2039,40 @@ export default function App() {
       canvasProviderRetrySessionRef.current = session;
       toast(
         "Canvas images are unsupported by this provider. Choose Send structure only in each restored Canvas, or switch provider to stage a new-session retry.",
-        "error",
+        "error"
       );
     },
-    [paneEditorRefsFor, toast],
+    [paneEditorRefsFor, toast]
   );
 
-  const saveComposerDraftCollection = useCallback((drafts: Map<string, ComposerDraft>) => {
-    composerDraftsRef.current = drafts;
-    if (saveComposerDrafts(drafts)) {
-      composerDraftSaveWarningRef.current = false;
-      return;
-    }
-    if (!composerDraftSaveWarningRef.current) {
-      composerDraftSaveWarningRef.current = true;
-      toast(t("toast.draftSaveFailed"), "error");
-    }
-  }, [t, toast]);
+  const saveComposerDraftCollection = useCallback(
+    (drafts: Map<string, ComposerDraft>) => {
+      composerDraftsRef.current = drafts;
+      if (saveComposerDrafts(drafts)) {
+        composerDraftSaveWarningRef.current = false;
+        return;
+      }
+      if (!composerDraftSaveWarningRef.current) {
+        composerDraftSaveWarningRef.current = true;
+        toast(t("toast.draftSaveFailed"), "error");
+      }
+    },
+    [t, toast]
+  );
 
   const persistActiveComposerDraft = useCallback(() => {
     const scope = activeDraftScopeRef.current;
     if (!scope) return;
-    const captures = pendingAppshotsRef.current[composerDraftAttachmentKey(scope)] ?? [];
-    saveComposerDraftCollection(updateComposerDraft(composerDraftsRef.current, {
-      scope,
-      doc: activeEditorDocRef.current,
-      attachments: composerDraftAttachments(captures),
-      posture: composerDraftPostureRef.current,
-    }));
+    const captures =
+      pendingAppshotsRef.current[composerDraftAttachmentKey(scope)] ?? [];
+    saveComposerDraftCollection(
+      updateComposerDraft(composerDraftsRef.current, {
+        scope,
+        doc: activeEditorDocRef.current,
+        attachments: composerDraftAttachments(captures),
+        posture: composerDraftPostureRef.current,
+      })
+    );
   }, [saveComposerDraftCollection]);
 
   const flushActiveComposerDraft = useCallback(() => {
@@ -2025,7 +2084,8 @@ export default function App() {
   }, [persistActiveComposerDraft]);
 
   const scheduleActiveComposerDraftSave = useCallback(() => {
-    if (composerDraftRestoringRef.current || !activeDraftScopeRef.current) return;
+    if (composerDraftRestoringRef.current || !activeDraftScopeRef.current)
+      return;
     if (composerDraftSaveTimerRef.current !== null) {
       window.clearTimeout(composerDraftSaveTimerRef.current);
     }
@@ -2035,170 +2095,205 @@ export default function App() {
     }, 250);
   }, [persistActiveComposerDraft]);
 
-  const applyComposerDraftPosture = useCallback((posture: ComposerDraftPosture) => {
-    setProvider(posture.provider);
-    setCurrentModel(posture.model);
-    setDefaultModel(null);
-    setConfigOptions([]);
-    setMode(posture.mode);
-    setSandboxState(posture.sandbox);
-    setWorktreeBase(posture.worktreeBase);
-    setPlanMode(posture.planMode);
-    memoryReadRef.current = posture.memoryRead;
-    memoryWriteRef.current = posture.memoryWrite;
-    setMemoryRead(posture.memoryRead);
-    setMemoryWrite(posture.memoryWrite);
-    activeSceneNameRef.current = posture.scene;
-    autoSceneRef.current = posture.autoScene;
-    setActiveSceneName(posture.scene);
-    setAutoScene(posture.autoScene);
-  }, []);
+  const applyComposerDraftPosture = useCallback(
+    (posture: ComposerDraftPosture) => {
+      setProvider(posture.provider);
+      setCurrentModel(posture.model);
+      setDefaultModel(null);
+      setConfigOptions([]);
+      setMode(posture.mode);
+      setSandboxState(posture.sandbox);
+      setWorktreeBase(posture.worktreeBase);
+      setPlanMode(posture.planMode);
+      memoryReadRef.current = posture.memoryRead;
+      memoryWriteRef.current = posture.memoryWrite;
+      setMemoryRead(posture.memoryRead);
+      setMemoryWrite(posture.memoryWrite);
+      activeSceneNameRef.current = posture.scene;
+      autoSceneRef.current = posture.autoScene;
+      setActiveSceneName(posture.scene);
+      setAutoScene(posture.autoScene);
+    },
+    []
+  );
 
-  const restoreComposerDraftScope = useCallback((
-    scope: ComposerDraftScope,
-    options: { restorePosture?: boolean } = {},
-  ) => {
-    const generation = ++composerDraftRestoreGenerationRef.current;
-    composerDraftRestoringRef.current = true;
-    activeDraftScopeRef.current = scope;
-    clearEditorRef.current?.();
-    activeEditorDocRef.current = [];
-    const record = composerDraftsRef.current.get(composerDraftScopeKey(scope));
-    const attachmentKey = composerDraftAttachmentKey(scope);
-    if (record && options.restorePosture !== false && scope.kind === "project") {
-      applyComposerDraftPosture(record.posture);
-    }
-
-    const updateAttachments = (captures: AppshotCapture[]) => {
-      if (
-        generation !== composerDraftRestoreGenerationRef.current ||
-        composerDraftScopeKey(activeDraftScopeRef.current ?? scope) !== composerDraftScopeKey(scope)
-      ) {
-        return;
-      }
-      setPendingAppshots((current) => {
-        const next = { ...current };
-        if (captures.length > 0) next[attachmentKey] = captures;
-        else delete next[attachmentKey];
-        pendingAppshotsRef.current = next;
-        return next;
-      });
-    };
-
-    if (!record) {
-      composerDraftRestoringRef.current = false;
-      updateAttachments([]);
-      return;
-    }
-
-    void Promise.all(record.attachments.map(async (attachment) => {
-      try {
-        return attachment.kind === "attachment"
-          ? await getPromptImage(attachment.id)
-          : await getAppshot(attachment.id);
-      } catch {
-        return null;
-      }
-    })).then((loaded) => {
-      const captures = loaded.filter((capture): capture is AppshotCapture => capture !== null);
-      updateAttachments(captures);
-      if (captures.length !== record.attachments.length) {
-        toast(t("toast.draftAttachmentMissing"), "error");
-      }
-    });
-
-    const applyDocument = (drafts: ReadonlyMap<string, CanvasDraft>) => {
-      if (
-        generation !== composerDraftRestoreGenerationRef.current ||
-        composerDraftScopeKey(activeDraftScopeRef.current ?? scope) !== composerDraftScopeKey(scope)
-      ) {
-        return;
-      }
-      const restore = restoreCanvasDocumentRef.current;
-      if (!restore) {
-        composerDraftRestoringRef.current = false;
-        toast(t("toast.draftRestoreFailed"), "error");
-        return;
-      }
+  const restoreComposerDraftScope = useCallback(
+    (scope: ComposerDraftScope, options: { restorePosture?: boolean } = {}) => {
+      const generation = ++composerDraftRestoreGenerationRef.current;
       composerDraftRestoringRef.current = true;
-      try {
-        restore(record.doc, drafts, { mode: "replace" });
-        activeEditorDocRef.current = record.doc.map((block) => (
-          block.type === "skill" ? { ...block, params: { ...block.params } } : { ...block }
-        ));
-      } catch {
-        toast(t("toast.draftRestoreFailed"), "error");
-      } finally {
-        composerDraftRestoringRef.current = false;
+      activeDraftScopeRef.current = scope;
+      clearEditorRef.current?.();
+      activeEditorDocRef.current = [];
+      const record = composerDraftsRef.current.get(
+        composerDraftScopeKey(scope)
+      );
+      const attachmentKey = composerDraftAttachmentKey(scope);
+      if (
+        record &&
+        options.restorePosture !== false &&
+        scope.kind === "project"
+      ) {
+        applyComposerDraftPosture(record.posture);
       }
-    };
 
-    const canvasIds = record.doc.flatMap((block) => block.type === "canvas" ? [block.id] : []);
-    if (canvasIds.length === 0) {
-      applyDocument(new Map());
-      return;
-    }
-    const editorRevision = editorRevisionRef.current;
-    void Promise.all(canvasIds.map(async (id) => {
-      const cached = canvasDraftsRef.current.get(id);
-      if (cached) return cached;
-      const loaded = await canvasGetDraft(id);
-      if (!loaded) throw new Error(`Canvas draft ${id} is unavailable`);
-      return loaded;
-    })).then((drafts) => {
-      if (editorRevisionRef.current !== editorRevision) {
-        if (generation === composerDraftRestoreGenerationRef.current) {
-          composerDraftRestoringRef.current = false;
-          scheduleActiveComposerDraftSave();
+      const updateAttachments = (captures: AppshotCapture[]) => {
+        if (
+          generation !== composerDraftRestoreGenerationRef.current ||
+          composerDraftScopeKey(activeDraftScopeRef.current ?? scope) !==
+            composerDraftScopeKey(scope)
+        ) {
+          return;
         }
-        return;
-      }
-      for (const draft of drafts) {
-        canvasDraftsRef.current.set(draft.id, draft);
-        canvasAssetsRef.current.set(
-          draft.id,
-          new Map(draft.assets.map((asset) => [asset.id, asset])),
-        );
-      }
-      applyDocument(new Map(drafts.map((draft) => [draft.id, draft])));
-    }).catch(() => {
-      if (generation === composerDraftRestoreGenerationRef.current) {
-        composerDraftRestoringRef.current = false;
-        toast(t("toast.draftRestoreFailed"), "error");
-      }
-    });
-  }, [applyComposerDraftPosture, scheduleActiveComposerDraftSave, t, toast]);
-
-  const promoteActiveComposerDraft = useCallback((session: string, projectPath: string | null) => {
-    flushActiveComposerDraft();
-    const from = activeDraftScopeRef.current;
-    const to: ComposerDraftScope = { kind: "session", sessionId: session, projectPath };
-    if (from) {
-      const promotion = promoteComposerDraft(composerDraftsRef.current, from, to);
-      if (promotion.outcome !== "conflict") {
-        saveComposerDraftCollection(promotion.drafts);
-      }
-      const fromAttachmentKey = composerDraftAttachmentKey(from);
-      const toAttachmentKey = composerDraftAttachmentKey(to);
-      if (fromAttachmentKey !== toAttachmentKey) {
         setPendingAppshots((current) => {
-          const source = current[fromAttachmentKey];
-          if (!source || current[toAttachmentKey]?.length) return current;
-          const next = { ...current, [toAttachmentKey]: source };
-          delete next[fromAttachmentKey];
+          const next = { ...current };
+          if (captures.length > 0) next[attachmentKey] = captures;
+          else delete next[attachmentKey];
           pendingAppshotsRef.current = next;
           return next;
         });
+      };
+
+      if (!record) {
+        composerDraftRestoringRef.current = false;
+        updateAttachments([]);
+        return;
       }
-    }
-    activeDraftScopeRef.current = to;
-  }, [flushActiveComposerDraft, saveComposerDraftCollection]);
+
+      void Promise.all(
+        record.attachments.map(async (attachment) => {
+          try {
+            return attachment.kind === "attachment"
+              ? await getPromptImage(attachment.id)
+              : await getAppshot(attachment.id);
+          } catch {
+            return null;
+          }
+        })
+      ).then((loaded) => {
+        const captures = loaded.filter(
+          (capture): capture is AppshotCapture => capture !== null
+        );
+        updateAttachments(captures);
+        if (captures.length !== record.attachments.length) {
+          toast(t("toast.draftAttachmentMissing"), "error");
+        }
+      });
+
+      const applyDocument = (drafts: ReadonlyMap<string, CanvasDraft>) => {
+        if (
+          generation !== composerDraftRestoreGenerationRef.current ||
+          composerDraftScopeKey(activeDraftScopeRef.current ?? scope) !==
+            composerDraftScopeKey(scope)
+        ) {
+          return;
+        }
+        const restore = restoreCanvasDocumentRef.current;
+        if (!restore) {
+          composerDraftRestoringRef.current = false;
+          toast(t("toast.draftRestoreFailed"), "error");
+          return;
+        }
+        composerDraftRestoringRef.current = true;
+        try {
+          restore(record.doc, drafts, { mode: "replace" });
+          activeEditorDocRef.current = record.doc.map((block) =>
+            block.type === "skill"
+              ? { ...block, params: { ...block.params } }
+              : { ...block }
+          );
+        } catch {
+          toast(t("toast.draftRestoreFailed"), "error");
+        } finally {
+          composerDraftRestoringRef.current = false;
+        }
+      };
+
+      const canvasIds = record.doc.flatMap((block) =>
+        block.type === "canvas" ? [block.id] : []
+      );
+      if (canvasIds.length === 0) {
+        applyDocument(new Map());
+        return;
+      }
+      const editorRevision = editorRevisionRef.current;
+      void Promise.all(
+        canvasIds.map(async (id) => {
+          const cached = canvasDraftsRef.current.get(id);
+          if (cached) return cached;
+          const loaded = await canvasGetDraft(id);
+          if (!loaded) throw new Error(`Canvas draft ${id} is unavailable`);
+          return loaded;
+        })
+      )
+        .then((drafts) => {
+          if (editorRevisionRef.current !== editorRevision) {
+            if (generation === composerDraftRestoreGenerationRef.current) {
+              composerDraftRestoringRef.current = false;
+              scheduleActiveComposerDraftSave();
+            }
+            return;
+          }
+          for (const draft of drafts) {
+            canvasDraftsRef.current.set(draft.id, draft);
+            canvasAssetsRef.current.set(
+              draft.id,
+              new Map(draft.assets.map((asset) => [asset.id, asset]))
+            );
+          }
+          applyDocument(new Map(drafts.map((draft) => [draft.id, draft])));
+        })
+        .catch(() => {
+          if (generation === composerDraftRestoreGenerationRef.current) {
+            composerDraftRestoringRef.current = false;
+            toast(t("toast.draftRestoreFailed"), "error");
+          }
+        });
+    },
+    [applyComposerDraftPosture, scheduleActiveComposerDraftSave, t, toast]
+  );
+
+  const promoteActiveComposerDraft = useCallback(
+    (session: string, projectPath: string | null) => {
+      flushActiveComposerDraft();
+      const from = activeDraftScopeRef.current;
+      const to: ComposerDraftScope = {
+        kind: "session",
+        sessionId: session,
+        projectPath,
+      };
+      if (from) {
+        const promotion = promoteComposerDraft(
+          composerDraftsRef.current,
+          from,
+          to
+        );
+        if (promotion.outcome !== "conflict") {
+          saveComposerDraftCollection(promotion.drafts);
+        }
+        const fromAttachmentKey = composerDraftAttachmentKey(from);
+        const toAttachmentKey = composerDraftAttachmentKey(to);
+        if (fromAttachmentKey !== toAttachmentKey) {
+          setPendingAppshots((current) => {
+            const source = current[fromAttachmentKey];
+            if (!source || current[toAttachmentKey]?.length) return current;
+            const next = { ...current, [toAttachmentKey]: source };
+            delete next[fromAttachmentKey];
+            pendingAppshotsRef.current = next;
+            return next;
+          });
+        }
+      }
+      activeDraftScopeRef.current = to;
+    },
+    [flushActiveComposerDraft, saveComposerDraftCollection]
+  );
 
   useEffect(() => {
     const warning = composerDraftLoadWarningRef.current;
     composerDraftLoadWarningRef.current = null;
     if (warning === "corrupt") toast(t("toast.draftCorrupt"), "error");
-    else if (warning === "unavailable") toast(t("toast.draftStorageUnavailable"), "error");
+    else if (warning === "unavailable")
+      toast(t("toast.draftStorageUnavailable"), "error");
   }, [t, toast]);
 
   useEffect(() => {
@@ -2214,66 +2309,82 @@ export default function App() {
     };
   }, [persistActiveComposerDraft]);
 
-  const invalidatePendingCreation = useCallback((paneId = focusedPaneRef.current) => {
-    const pending = pendingCreationRef.current;
-    if (pending && pending.paneId !== paneId) return;
-    awaitingSessionRef.current = null;
-    pendingCreationRef.current = null;
-    setPendingSessionRunning(false);
-    setPendingCreationPane(null);
-    if (pending) {
-      setPaneTurns(pending.paneId, (turns) =>
-        withoutUnacceptedTurn(turns, pending.promptRequestId),
-      );
-    }
-  }, [setPaneTurns]);
+  const invalidatePendingCreation = useCallback(
+    (paneId = focusedPaneRef.current) => {
+      const pending = pendingCreationRef.current;
+      if (pending && pending.paneId !== paneId) return;
+      awaitingSessionRef.current = null;
+      pendingCreationRef.current = null;
+      setPendingSessionRunning(false);
+      setPendingCreationPane(null);
+      if (pending) {
+        setPaneTurns(pending.paneId, (turns) =>
+          withoutUnacceptedTurn(turns, pending.promptRequestId)
+        );
+      }
+    },
+    [setPaneTurns]
+  );
 
-  const handleEditorEmptyChange = useCallback((paneId: string, empty: boolean) => {
-    setEditorEmptyByPane((current) =>
-      current[paneId] === empty ? current : { ...current, [paneId]: empty },
-    );
-    if (empty && editorLocaleByPaneRef.current.get(paneId) !== localeRef.current) {
-      editorLocaleByPaneRef.current.set(paneId, localeRef.current);
-      setEditorKeyByPane((current) => ({
-        ...current,
-        [paneId]: (current[paneId] ?? 0) + 1,
-      }));
-    }
-  }, []);
-  const paneEmptyHandlersRef = useRef(new Map<string, (empty: boolean) => void>());
+  const handleEditorEmptyChange = useCallback(
+    (paneId: string, empty: boolean) => {
+      setEditorEmptyByPane((current) =>
+        current[paneId] === empty ? current : { ...current, [paneId]: empty }
+      );
+      if (
+        empty &&
+        editorLocaleByPaneRef.current.get(paneId) !== localeRef.current
+      ) {
+        editorLocaleByPaneRef.current.set(paneId, localeRef.current);
+        setEditorKeyByPane((current) => ({
+          ...current,
+          [paneId]: (current[paneId] ?? 0) + 1,
+        }));
+      }
+    },
+    []
+  );
+  const paneEmptyHandlersRef = useRef(
+    new Map<string, (empty: boolean) => void>()
+  );
   const paneEmptyHandlerFor = useCallback(
     (paneId: string) => {
       const existing = paneEmptyHandlersRef.current.get(paneId);
       if (existing) return existing;
-      const created = (empty: boolean) => handleEditorEmptyChange(paneId, empty);
+      const created = (empty: boolean) =>
+        handleEditorEmptyChange(paneId, empty);
       paneEmptyHandlersRef.current.set(paneId, created);
       return created;
     },
-    [handleEditorEmptyChange],
+    [handleEditorEmptyChange]
   );
 
-  const handleEditorDocumentChange = useCallback((paneId: string, doc: DocBlock[]) => {
-    editorRevisionByPaneRef.current.set(
-      paneId,
-      (editorRevisionByPaneRef.current.get(paneId) ?? 0) + 1,
-    );
-    if (focusedPaneRef.current !== paneId) return;
-    editorRevisionRef.current += 1;
-    activeEditorDocRef.current = doc;
-    scheduleActiveComposerDraftSave();
-  }, [scheduleActiveComposerDraftSave]);
+  const handleEditorDocumentChange = useCallback(
+    (paneId: string, doc: DocBlock[]) => {
+      editorRevisionByPaneRef.current.set(
+        paneId,
+        (editorRevisionByPaneRef.current.get(paneId) ?? 0) + 1
+      );
+      if (focusedPaneRef.current !== paneId) return;
+      editorRevisionRef.current += 1;
+      activeEditorDocRef.current = doc;
+      scheduleActiveComposerDraftSave();
+    },
+    [scheduleActiveComposerDraftSave]
+  );
   const paneDocumentHandlersRef = useRef(
-    new Map<string, (doc: DocBlock[]) => void>(),
+    new Map<string, (doc: DocBlock[]) => void>()
   );
   const paneDocumentHandlerFor = useCallback(
     (paneId: string) => {
       const existing = paneDocumentHandlersRef.current.get(paneId);
       if (existing) return existing;
-      const created = (doc: DocBlock[]) => handleEditorDocumentChange(paneId, doc);
+      const created = (doc: DocBlock[]) =>
+        handleEditorDocumentChange(paneId, doc);
       paneDocumentHandlersRef.current.set(paneId, created);
       return created;
     },
-    [handleEditorDocumentChange],
+    [handleEditorDocumentChange]
   );
 
   useEffect(() => {
@@ -2311,7 +2422,8 @@ export default function App() {
       .map(([paneId]) => paneId)
       .filter((paneId) => editorLocaleByPaneRef.current.get(paneId) !== locale);
     if (emptyPanes.length === 0) return;
-    for (const paneId of emptyPanes) editorLocaleByPaneRef.current.set(paneId, locale);
+    for (const paneId of emptyPanes)
+      editorLocaleByPaneRef.current.set(paneId, locale);
     setEditorKeyByPane((current) => {
       const next = { ...current };
       for (const paneId of emptyPanes) next[paneId] = (next[paneId] ?? 0) + 1;
@@ -2329,7 +2441,7 @@ export default function App() {
       ]);
       const allIncoming = [...active, ...archived];
       const hasAuthoritativeActivity = allIncoming.some(
-        (session) => session.activity !== undefined,
+        (session) => session.activity !== undefined
       );
       const merge = (items: SessionInfo[]) =>
         items.map((session) => {
@@ -2337,7 +2449,7 @@ export default function App() {
           if (hasAuthoritativeActivity) {
             const activity = latestActivity(
               sessionActivitiesRef.current.get(session.id),
-              session.activity,
+              session.activity
             );
             sessionActivitiesRef.current.set(session.id, activity);
             next = { ...next, activity };
@@ -2370,7 +2482,7 @@ export default function App() {
         const busy = new Set(
           all
             .filter((session) => activityIsBusy(session.activity))
-            .map((session) => session.id),
+            .map((session) => session.id)
         );
         // A locally submitted draft remains optimistic until the core publishes its first
         // activity revision / TurnStarted; a concurrent stale list read cannot undo that shell.
@@ -2409,11 +2521,11 @@ export default function App() {
     async (path: string, nextMode: ProjectWorktreeMode | null) => {
       const patchMode =
         (mode: ProjectWorktreeMode | null) => (items: Project[]) =>
-        items.map((project) =>
+          items.map((project) =>
             project.path === path
               ? { ...project, default_worktree_mode: mode }
-              : project,
-        );
+              : project
+          );
 
       projectMutationVersionRef.current += 1;
       try {
@@ -2426,11 +2538,11 @@ export default function App() {
         projectMutationVersionRef.current += 1;
         toast(
           t("toast.projectDefaultFailed", { error: String(error) }),
-          "error",
+          "error"
         );
       }
     },
-    [t, toast],
+    [t, toast]
   );
 
   const updateProjectName = useCallback(async (path: string, name: string) => {
@@ -2438,62 +2550,88 @@ export default function App() {
     try {
       await renameProject(path, name);
       projectMutationVersionRef.current += 1;
-      setProjects((items) => items.map((project) =>
-        project.path === path ? { ...project, name: name.trim() } : project,
-      ));
+      setProjects((items) =>
+        items.map((project) =>
+          project.path === path ? { ...project, name: name.trim() } : project
+        )
+      );
     } catch (error) {
       projectMutationVersionRef.current += 1;
       throw error;
     }
   }, []);
 
-  const updateProjectIcon = useCallback(async (path: string, source: string | null) => {
-    projectMutationVersionRef.current += 1;
-    try {
-      const iconUpdatedAt = await setProjectIcon(path, source);
+  const updateProjectIcon = useCallback(
+    async (path: string, source: string | null) => {
       projectMutationVersionRef.current += 1;
-      setProjects((items) => items.map((project) =>
-        project.path === path
-          ? { ...project, has_icon: source !== null, icon_updated_at: iconUpdatedAt }
-          : project,
-      ));
-    } catch (error) {
-      projectMutationVersionRef.current += 1;
-      throw error;
-    }
-  }, []);
-
-  const updateProjectAgentDefaults = useCallback(async (
-    path: string,
-    nextProvider: string | null,
-    nextModel: string | null,
-    nextReasoningEffort: string | null,
-  ) => {
-    projectMutationVersionRef.current += 1;
-    try {
-      await setProjectAgentDefaults(path, nextProvider, nextModel, nextReasoningEffort);
-      projectMutationVersionRef.current += 1;
-      setProjects((items) => items.map((project) =>
-        project.path === path
-          ? {
-              ...project,
-              default_provider: nextProvider,
-              default_model: nextProvider ? nextModel : null,
-              default_reasoning_effort: nextProvider ? nextReasoningEffort : null,
-            }
-          : project,
-      ));
-      if (path === activeProjectRef.current && activeSessionRef.current === null) {
-        if (nextProvider) setProvider(nextProvider);
-        setCurrentModel(nextProvider ? nextModel : null);
-        setDefaultModel(null);
-        setConfigOptions([]);
+      try {
+        const iconUpdatedAt = await setProjectIcon(path, source);
+        projectMutationVersionRef.current += 1;
+        setProjects((items) =>
+          items.map((project) =>
+            project.path === path
+              ? {
+                  ...project,
+                  has_icon: source !== null,
+                  icon_updated_at: iconUpdatedAt,
+                }
+              : project
+          )
+        );
+      } catch (error) {
+        projectMutationVersionRef.current += 1;
+        throw error;
       }
-    } catch (error) {
+    },
+    []
+  );
+
+  const updateProjectAgentDefaults = useCallback(
+    async (
+      path: string,
+      nextProvider: string | null,
+      nextModel: string | null,
+      nextReasoningEffort: string | null
+    ) => {
       projectMutationVersionRef.current += 1;
-      throw error;
-    }
-  }, []);
+      try {
+        await setProjectAgentDefaults(
+          path,
+          nextProvider,
+          nextModel,
+          nextReasoningEffort
+        );
+        projectMutationVersionRef.current += 1;
+        setProjects((items) =>
+          items.map((project) =>
+            project.path === path
+              ? {
+                  ...project,
+                  default_provider: nextProvider,
+                  default_model: nextProvider ? nextModel : null,
+                  default_reasoning_effort: nextProvider
+                    ? nextReasoningEffort
+                    : null,
+                }
+              : project
+          )
+        );
+        if (
+          path === activeProjectRef.current &&
+          activeSessionRef.current === null
+        ) {
+          if (nextProvider) setProvider(nextProvider);
+          setCurrentModel(nextProvider ? nextModel : null);
+          setDefaultModel(null);
+          setConfigOptions([]);
+        }
+      } catch (error) {
+        projectMutationVersionRef.current += 1;
+        throw error;
+      }
+    },
+    []
+  );
 
   /** Switch projects: the working directory, the conversation list and the git section all follow. */
   const selectProject = useCallback(
@@ -2507,11 +2645,13 @@ export default function App() {
       setCwd(path);
       const project = projects.find((item) => item.path === path);
       if (project?.default_provider) setProvider(project.default_provider);
-      setCurrentModel(project?.default_provider ? project.default_model ?? null : null);
+      setCurrentModel(
+        project?.default_provider ? (project.default_model ?? null) : null
+      );
       setDefaultModel(null);
       setConfigOptions([]);
       setWorktreeBase(
-        projectSwitchWorktreeBaseline(project?.default_worktree_mode ?? null),
+        projectSwitchWorktreeBaseline(project?.default_worktree_mode ?? null)
       );
       // Selecting a project opens its source-checkout draft. Keeping an active worktree session
       // while `cwd` switches to the source would make file/Git/terminal surfaces show one checkout
@@ -2519,7 +2659,7 @@ export default function App() {
       const paneId = focusedPaneRef.current;
       sessionLoadSeqByPaneRef.current.set(
         paneId,
-        (sessionLoadSeqByPaneRef.current.get(paneId) ?? 0) + 1,
+        (sessionLoadSeqByPaneRef.current.get(paneId) ?? 0) + 1
       );
       updatePaneTranscriptState(paneId, {
         loading: false,
@@ -2551,47 +2691,56 @@ export default function App() {
       refreshProjects,
       restoreComposerDraftScope,
       setTaskContext,
-    ],
+    ]
   );
 
-  const removeProjectEntry = useCallback(async (path: string) => {
-    await removeProject(path);
-    const removedScope: ComposerDraftScope = { kind: "project", projectPath: path };
-    const removedAttachmentKey = composerDraftAttachmentKey(removedScope);
-    const drafts = new Map(composerDraftsRef.current);
-    drafts.delete(composerDraftScopeKey(removedScope));
-    saveComposerDraftCollection(drafts);
-    const removedActiveDraft = path === activeProjectRef.current;
-    if (removedActiveDraft) {
-      // Project removal is the explicit discard boundary for its unsent project draft. Prevent the
-      // next project's navigation flush from recreating the just-deleted record.
-      activeDraftScopeRef.current = null;
-      activeEditorDocRef.current = [];
-    }
-    setPendingAppshots((current) => {
-      if (!(removedAttachmentKey in current)) return current;
-      const next = { ...current };
-      delete next[removedAttachmentKey];
-      pendingAppshotsRef.current = next;
-      return next;
-    });
-    try {
-      const history = loadBrowserHistory(window.localStorage);
-      saveBrowserHistory(window.localStorage, removeBrowserProject(history, path));
-    } catch {
-      // Browser history is a convenience; a blocked local store must not block removal.
-    }
-    refreshProjects();
-    if (!removedActiveDraft) return;
-    const next = projects.find((project) => project.path !== path);
-    if (next) selectProject(next.path);
-    else {
-      clearEditorRef.current?.();
-      activeProjectRef.current = null;
-      setCallProjectPath(null);
-      setActiveProject(null);
-    }
-  }, [projects, refreshProjects, saveComposerDraftCollection, selectProject]);
+  const removeProjectEntry = useCallback(
+    async (path: string) => {
+      await removeProject(path);
+      const removedScope: ComposerDraftScope = {
+        kind: "project",
+        projectPath: path,
+      };
+      const removedAttachmentKey = composerDraftAttachmentKey(removedScope);
+      const drafts = new Map(composerDraftsRef.current);
+      drafts.delete(composerDraftScopeKey(removedScope));
+      saveComposerDraftCollection(drafts);
+      const removedActiveDraft = path === activeProjectRef.current;
+      if (removedActiveDraft) {
+        // Project removal is the explicit discard boundary for its unsent project draft. Prevent the
+        // next project's navigation flush from recreating the just-deleted record.
+        activeDraftScopeRef.current = null;
+        activeEditorDocRef.current = [];
+      }
+      setPendingAppshots((current) => {
+        if (!(removedAttachmentKey in current)) return current;
+        const next = { ...current };
+        delete next[removedAttachmentKey];
+        pendingAppshotsRef.current = next;
+        return next;
+      });
+      try {
+        const history = loadBrowserHistory(window.localStorage);
+        saveBrowserHistory(
+          window.localStorage,
+          removeBrowserProject(history, path)
+        );
+      } catch {
+        // Browser history is a convenience; a blocked local store must not block removal.
+      }
+      refreshProjects();
+      if (!removedActiveDraft) return;
+      const next = projects.find((project) => project.path !== path);
+      if (next) selectProject(next.path);
+      else {
+        clearEditorRef.current?.();
+        activeProjectRef.current = null;
+        setCallProjectPath(null);
+        setActiveProject(null);
+      }
+    },
+    [projects, refreshProjects, saveComposerDraftCollection, selectProject]
+  );
 
   const addProjectFolder = useCallback(async () => {
     const picked = await pickDirectory();
@@ -2611,11 +2760,12 @@ export default function App() {
         sessions.find((s) => s.id === activeSession) ??
         archivedSessions.find((s) => s.id === activeSession)
       )?.title ?? null,
-    [sessions, archivedSessions, activeSession],
+    [sessions, archivedSessions, activeSession]
   );
-  const activeTitle = activeBoardTask?.title
-    ?? activeSessionTitle
-    ?? t(temporarySession ? "rail.newTemporarySession" : "rail.newTask");
+  const activeTitle =
+    activeBoardTask?.title ??
+    activeSessionTitle ??
+    t(temporarySession ? "rail.newTemporarySession" : "rail.newTask");
 
   // A pane's display title for the tiling previews: its session's title, or the draft placeholder.
   const titleForSession = useCallback(
@@ -2628,14 +2778,14 @@ export default function App() {
         )?.title ?? t("rail.newTask")
       );
     },
-    [sessions, archivedSessions, t],
+    [sessions, archivedSessions, t]
   );
 
   // An archived chat is read-only: browsing it is fine, continuing it is not. The composer steps
   // aside for a notice until the session is restored.
   const activeArchived = useMemo(
     () => archivedSessions.some((s) => s.id === activeSession),
-    [archivedSessions, activeSession],
+    [archivedSessions, activeSession]
   );
 
   // Focus-only surfaces (full-page document, trajectory panel, transcript loading) belong to the
@@ -2657,14 +2807,14 @@ export default function App() {
   const persistComposerHeight = setComposerH;
 
   const activeWorktreeState = useMemo(() => {
-      const stored =
-        sessions.find((session) => session.id === activeSession) ??
-        archivedSessions.find((session) => session.id === activeSession);
+    const stored =
+      sessions.find((session) => session.id === activeSession) ??
+      archivedSessions.find((session) => session.id === activeSession);
     return activeSessionWorktreeState(
       activeSession,
       stored,
-      activeSessionReceipt,
-  );
+      activeSessionReceipt
+    );
   }, [sessions, archivedSessions, activeSession, activeSessionReceipt]);
   const activeWorktreeBaseline = activeWorktreeState.baseline;
   const activeWorktreeUnknown = activeWorktreeState.legacyUnknown;
@@ -2672,7 +2822,7 @@ export default function App() {
   // The title bar's project badge — the workspace this session lives in, at a glance.
   const activeProjectRecord = useMemo(
     () => projects.find((project) => project.path === activeProject) ?? null,
-    [projects, activeProject],
+    [projects, activeProject]
   );
   const activeProjectName = activeProjectRecord?.name ?? null;
   // The focused pane keeps the authoritative project/cwd/git (which the app also drives elsewhere);
@@ -2685,34 +2835,33 @@ export default function App() {
   const focusedGit = git;
 
   const taskBoardSessions = useMemo(
-    () =>
-      [
-        ...sessions.map((session) => ({
-          id: session.id,
-          title: session.title,
-          archived: false,
-          activity: session.activity,
-          running: runningSessions.has(session.id),
-        })),
-        ...archivedSessions.map((session) => ({
-          id: session.id,
-          title: session.title,
-          archived: true,
-          activity: session.activity,
-          running: false,
-        })),
-      ],
-    [archivedSessions, runningSessions, sessions],
+    () => [
+      ...sessions.map((session) => ({
+        id: session.id,
+        title: session.title,
+        archived: false,
+        activity: session.activity,
+        running: runningSessions.has(session.id),
+      })),
+      ...archivedSessions.map((session) => ({
+        id: session.id,
+        title: session.title,
+        archived: true,
+        activity: session.activity,
+        running: false,
+      })),
+    ],
+    [archivedSessions, runningSessions, sessions]
   );
 
   const quickQuotaProvider = useMemo(() => {
     const focused = [...sessions, ...archivedSessions].find(
-      (session) => session.id === activeSession,
+      (session) => session.id === activeSession
     );
     return quickQuotaProviderFor(
       providerLabel(provider),
       focused ? providerLabel(focused.provider) : null,
-      sessions.map((session) => providerLabel(session.provider)),
+      sessions.map((session) => providerLabel(session.provider))
     );
   }, [activeSession, archivedSessions, provider, sessions]);
   const quickQuotaProviderName =
@@ -2720,7 +2869,7 @@ export default function App() {
       ?.display_name ?? quickQuotaProvider;
   const railQuickQuota = useMemo(
     () => quickQuotaSummary(quickQuotaReport),
-    [quickQuotaReport],
+    [quickQuotaReport]
   );
 
   const refreshQuickQuota = useCallback(() => {
@@ -2758,83 +2907,96 @@ export default function App() {
       const id = providerLabel(p);
       return providers.find((x) => x.id === id)?.display_name ?? id;
     },
-    [providers],
+    [providers]
   );
 
   // Track whether the user has hand-picked a provider; until then we auto-pick an available one.
   const providerPinned = useRef(false);
 
-  const refreshProviders = useCallback(async (checkUpdates = false): Promise<ProviderInfo[]> => {
-    const request = ++providerRegistryRequestRef.current;
-    setProvidersStatus("loading");
-    try {
-      let list = checkUpdates
-        ? await listProviders(true)
-        : await loadProviderRegistry(listProviders);
-      if (import.meta.env.DEV) {
-        const query = new URLSearchParams(window.location.search);
-        const fixtureProvider = query.get("mockProviderSettings");
-        if (fixtureProvider) {
-          const fixtureModels = [
-            ...new Set(
-              (query.get("mockModels") ?? "gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna")
-                .split(",")
-                .map((id) => id.trim())
-                .filter((id) => id.length > 0 && id.length <= 120),
-            ),
-          ].slice(0, 20).map((id) => ({ id, name: id, description: null }));
-          list = list.map((candidate) => candidate.id === fixtureProvider
-            ? {
-                ...candidate,
-                available: true,
-                models: fixtureModels,
-                management: {
-                  ...candidate.management,
-                  installed: true,
-                  version: "0.151.0",
-                  latest_version: "0.151.0",
-                  update_available: false,
-                  launch_mode: "installed" as const,
-                },
-                configuration: {
-                  ...candidate.configuration,
-                  effective_command: fixtureProvider === "codex" ? "codex-acp" : candidate.configuration.effective_command,
-                  effective_args: ["--stdio"],
-                },
-              }
-            : candidate);
+  const refreshProviders = useCallback(
+    async (checkUpdates = false): Promise<ProviderInfo[]> => {
+      const request = ++providerRegistryRequestRef.current;
+      setProvidersStatus("loading");
+      try {
+        let list = checkUpdates
+          ? await listProviders(true)
+          : await loadProviderRegistry(listProviders);
+        if (import.meta.env.DEV) {
+          const query = new URLSearchParams(window.location.search);
+          const fixtureProvider = query.get("mockProviderSettings");
+          if (fixtureProvider) {
+            const fixtureModels = [
+              ...new Set(
+                (
+                  query.get("mockModels") ??
+                  "gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna"
+                )
+                  .split(",")
+                  .map((id) => id.trim())
+                  .filter((id) => id.length > 0 && id.length <= 120)
+              ),
+            ]
+              .slice(0, 20)
+              .map((id) => ({ id, name: id, description: null }));
+            list = list.map((candidate) =>
+              candidate.id === fixtureProvider
+                ? {
+                    ...candidate,
+                    available: true,
+                    models: fixtureModels,
+                    management: {
+                      ...candidate.management,
+                      installed: true,
+                      version: "0.151.0",
+                      latest_version: "0.151.0",
+                      update_available: false,
+                      launch_mode: "installed" as const,
+                    },
+                    configuration: {
+                      ...candidate.configuration,
+                      effective_command:
+                        fixtureProvider === "codex"
+                          ? "codex-acp"
+                          : candidate.configuration.effective_command,
+                      effective_args: ["--stdio"],
+                    },
+                  }
+                : candidate
+            );
+          }
         }
-      }
-      if (request !== providerRegistryRequestRef.current) return list;
-      setProviders(list);
-      setProvidersStatus("ready");
-      // Default to a provider whose runtime is enabled and launchable. Shipping `grok` as the
-      // default meant a machine without it failed on the first session with a raw spawn error.
-      setProvider((current) => {
-        const selected = list.find((candidate) => candidate.id === current);
-        // Explicitly disabling the selected provider must leave new sessions with a runnable
-        // choice even when that provider had previously been pinned in the Composer.
-        if (selected?.enabled === false) {
-          return list.find((candidate) => candidate.available)?.id ?? current;
+        if (request !== providerRegistryRequestRef.current) return list;
+        setProviders(list);
+        setProvidersStatus("ready");
+        // Default to a provider whose runtime is enabled and launchable. Shipping `grok` as the
+        // default meant a machine without it failed on the first session with a raw spawn error.
+        setProvider((current) => {
+          const selected = list.find((candidate) => candidate.id === current);
+          // Explicitly disabling the selected provider must leave new sessions with a runnable
+          // choice even when that provider had previously been pinned in the Composer.
+          if (selected?.enabled === false) {
+            return list.find((candidate) => candidate.available)?.id ?? current;
+          }
+          if (providerPinned.current) return current;
+          return selected?.available
+            ? current
+            : (list.find((candidate) => candidate.available)?.id ?? current);
+        });
+        return list;
+      } catch (error) {
+        if (request === providerRegistryRequestRef.current) {
+          console.error("Could not load the provider registry", error);
+          setProvidersStatus("error");
         }
-        if (providerPinned.current) return current;
-        return selected?.available
-          ? current
-          : (list.find((candidate) => candidate.available)?.id ?? current);
-      });
-      return list;
-    } catch (error) {
-      if (request === providerRegistryRequestRef.current) {
-        console.error("Could not load the provider registry", error);
-        setProvidersStatus("error");
+        throw error;
       }
-      throw error;
-    }
-  }, []);
+    },
+    []
+  );
 
   const refreshProviderUpdates = useCallback(
     () => refreshProviders(true),
-    [refreshProviders],
+    [refreshProviders]
   );
 
   useEffect(() => {
@@ -2846,8 +3008,12 @@ export default function App() {
 
   useEffect(() => {
     if (activeSession !== null || currentModel === null) return;
-    const availableModels = providers.find((candidate) => candidate.id === provider)?.models ?? [];
-    if (availableModels.length > 0 && !availableModels.some((model) => model.id === currentModel)) {
+    const availableModels =
+      providers.find((candidate) => candidate.id === provider)?.models ?? [];
+    if (
+      availableModels.length > 0 &&
+      !availableModels.some((model) => model.id === currentModel)
+    ) {
       setCurrentModel(null);
     }
   }, [activeSession, currentModel, provider, providers]);
@@ -2860,7 +3026,7 @@ export default function App() {
     const downloads = onBrowserDownloadBlocked(() => {
       toast(
         "Download blocked. Approve it from the agent request or take control of the tab.",
-        "error",
+        "error"
       );
     });
     return () => {
@@ -2885,13 +3051,13 @@ export default function App() {
           if (originFocused) {
             promoteActiveComposerDraft(
               ev.session,
-              ev.project_path ?? activeProjectRef.current,
+              ev.project_path ?? activeProjectRef.current
             );
           }
           pendingCreationRef.current = null;
           sessionLoadSeqByPaneRef.current.set(
             pending.paneId,
-            (sessionLoadSeqByPaneRef.current.get(pending.paneId) ?? 0) + 1,
+            (sessionLoadSeqByPaneRef.current.get(pending.paneId) ?? 0) + 1
           );
           updatePaneTranscriptState(pending.paneId, { loading: false });
           setPaneSession(pending.paneId, ev.session);
@@ -2908,19 +3074,24 @@ export default function App() {
           {
             const stagedTaskId = pending.boardTaskId;
             const stagedTask = stagedTaskId
-              ? loadBoardSnapshot().tasks.find((task) => task.id === stagedTaskId) ?? null
+              ? (loadBoardSnapshot().tasks.find(
+                  (task) => task.id === stagedTaskId
+                ) ?? null)
               : null;
             if (stagedTask) {
               const board = loadBoardSnapshot();
               const associated = associateTaskSession(
                 board.tasks,
                 stagedTask.id,
-                ev.session,
+                ev.session
               );
               if (associated) {
                 const saved = saveBoardSnapshot(associated);
                 if (saved.ok) {
-                  const task = associated.find((candidate) => candidate.id === stagedTask.id) ?? null;
+                  const task =
+                    associated.find(
+                      (candidate) => candidate.id === stagedTask.id
+                    ) ?? null;
                   if (originFocused) setTaskContext(task, false);
                 } else {
                   // The Session exists, but the durable association does not. Keep the UI honest
@@ -2957,16 +3128,16 @@ export default function App() {
                 void bindPipelineSession(
                   bind.instanceId,
                   bind.stageId,
-                  ev.session,
+                  ev.session
                 ).then(async () => {
-                    if (!componentEnabledRef.current("scenes.surface")) return;
-                    const detail = await getPipelineInstance(bind.instanceId);
-                    if (
-                      componentEnabledRef.current("scenes.surface") &&
-                      activeSessionRef.current === ev.session
-                    ) {
-                      setPipelineDetail(detail);
-                    }
+                  if (!componentEnabledRef.current("scenes.surface")) return;
+                  const detail = await getPipelineInstance(bind.instanceId);
+                  if (
+                    componentEnabledRef.current("scenes.surface") &&
+                    activeSessionRef.current === ev.session
+                  ) {
+                    setPipelineDetail(detail);
+                  }
                 });
               }
             }
@@ -2985,7 +3156,7 @@ export default function App() {
                 sceneBySessionRef.current.set(ev.session, pendingScene);
                 void setSessionScene(ev.session, pendingScene, false);
                 const scene = scenesRef.current.find(
-                  (s) => s.reference === pendingScene,
+                  (s) => s.reference === pendingScene
                 );
                 if (scene?.execution?.model) {
                   void setSessionModel(ev.session, scene.execution.model);
@@ -2994,13 +3165,15 @@ export default function App() {
                 // Provider-owned config ids do not exist until the session reports its options,
                 // so scene effort and collaboration posture stay pending until that handshake.
                 const pending: string[] = [];
-                if (scene?.execution?.reasoning_effort) pending.push("reasoning_effort");
-                if (scene?.execution?.plan_first !== undefined) pending.push("plan_first");
+                if (scene?.execution?.reasoning_effort)
+                  pending.push("reasoning_effort");
+                if (scene?.execution?.plan_first !== undefined)
+                  pending.push("plan_first");
                 if (originFocused) setScenePendingFields(pending);
               }
             } else if (originFocused) {
               setActiveSceneName(
-                sceneBySessionRef.current.get(ev.session) ?? null,
+                sceneBySessionRef.current.get(ev.session) ?? null
               );
               setScenePendingFields([]);
             }
@@ -3033,19 +3206,19 @@ export default function App() {
               editorRevision: pending.editorRevision,
               submittedDoc: pending.canvasRetryDoc,
               canvasIds: pending.doc.flatMap((block) =>
-                block.type === "canvas" ? [block.id] : [],
+                block.type === "canvas" ? [block.id] : []
               ),
               canvasRefs: pending.doc.flatMap((block) =>
                 block.type === "canvas"
-                ? [{ id: block.id, revision: block.frozen_revision }]
-                  : [],
+                  ? [{ id: block.id, revision: block.frozen_revision }]
+                  : []
               ),
               appshotIds: pending.appshotIds,
               clearEditor: pending.clearEditor,
             });
             void initializePluginSessionState(ev.session, pending)
               .then(() =>
-                submitPrompt(ev.session, pending.doc, pending.promptRequestId),
+                submitPrompt(ev.session, pending.doc, pending.promptRequestId)
               )
               .then(() => {
                 refreshSessions();
@@ -3066,17 +3239,19 @@ export default function App() {
                     message,
                     terminal: true,
                     request_id: pending.promptRequestId,
-                  }),
+                  })
                 );
                 if (isCanvasProviderImageError(message)) {
-                  paneEditorRefsFor(pending.paneId).canvasDeliveryErrorRef.current?.(
+                  paneEditorRefsFor(
+                    pending.paneId
+                  ).canvasDeliveryErrorRef.current?.(
                     pending.doc,
                     message,
-                    "provider_image",
+                    "provider_image"
                   );
                   toast(
                     "Canvas images are unsupported by this provider. Choose Send structure only in each Canvas or switch provider, then retry.",
-                    "error",
+                    "error"
                   );
                 } else {
                   toast(t("toast.turnFailed", { error: message }), "error");
@@ -3094,7 +3269,7 @@ export default function App() {
                     title: ev.title,
                     title_origin: "automatic" as const,
                   }
-                : session,
+                : session
             );
           setSessions(rename);
           setArchivedSessions(rename);
@@ -3107,7 +3282,7 @@ export default function App() {
             items.map((session) =>
               session.id === ev.session
                 ? { ...session, worktree_discarded: true }
-                : session,
+                : session
             );
           setSessions(markDiscarded);
           setArchivedSessions(markDiscarded);
@@ -3123,7 +3298,7 @@ export default function App() {
             items.map((session) =>
               session.id === ev.session
                 ? { ...session, activity: ev.activity }
-                : session,
+                : session
             );
           setSessions(applyActivity);
           setArchivedSessions(applyActivity);
@@ -3138,7 +3313,7 @@ export default function App() {
           }
 
           setPermissionQueue((previous) =>
-            permissionQueueAfterActivity(previous, ev.session, ev.activity),
+            permissionQueueAfterActivity(previous, ev.session, ev.activity)
           );
           return;
         }
@@ -3193,7 +3368,7 @@ export default function App() {
             (pending || (known !== undefined && ev.current !== known))
           ) {
             setContextWindows((previous) =>
-              clearContextWindow(previous, ev.session),
+              clearContextWindow(previous, ev.session)
             );
           }
           if (ev.current) {
@@ -3202,7 +3377,10 @@ export default function App() {
           }
           // Record every session's model surface so background panes stay accurate.
           if (ev.available.length > 0)
-            setModelsBySession((prev) => ({ ...prev, [ev.session]: ev.available }));
+            setModelsBySession((prev) => ({
+              ...prev,
+              [ev.session]: ev.available,
+            }));
           setCurrentModelBySession((prev) => ({
             ...prev,
             [ev.session]: ev.current || null,
@@ -3211,7 +3389,7 @@ export default function App() {
             setDefaultModelBySession((prev) =>
               prev[ev.session] != null
                 ? prev
-                : { ...prev, [ev.session]: ev.current },
+                : { ...prev, [ev.session]: ev.current }
             );
           if (ev.session !== activeSessionRef.current) return;
           // A switch echoes back the same list; only session/new carries a fresh one.
@@ -3222,26 +3400,34 @@ export default function App() {
         }
         if (ev.event === "config_options") {
           const model = ev.options.find(
-            (o) => o.category === "model" || o.id === "model",
+            (o) => o.category === "model" || o.id === "model"
           );
           if (model?.current) {
             const known = knownModelsRef.current.get(ev.session);
             const pending = pendingModelChangesRef.current.has(ev.session);
             if (pending || (known !== undefined && model.current !== known)) {
               setContextWindows((previous) =>
-                clearContextWindow(previous, ev.session),
+                clearContextWindow(previous, ev.session)
               );
             }
             knownModelsRef.current.set(ev.session, model.current);
             pendingModelChangesRef.current.delete(ev.session);
           }
           // Record every session's config so background panes stay accurate.
-          setConfigOptionsBySession((prev) => ({ ...prev, [ev.session]: ev.options }));
+          setConfigOptionsBySession((prev) => ({
+            ...prev,
+            [ev.session]: ev.options,
+          }));
           if (model?.current) {
             const current = model.current;
-            setCurrentModelBySession((prev) => ({ ...prev, [ev.session]: current }));
+            setCurrentModelBySession((prev) => ({
+              ...prev,
+              [ev.session]: current,
+            }));
             setDefaultModelBySession((prev) =>
-              prev[ev.session] != null ? prev : { ...prev, [ev.session]: current },
+              prev[ev.session] != null
+                ? prev
+                : { ...prev, [ev.session]: current }
             );
           }
           if (ev.session !== activeSessionRef.current) return;
@@ -3250,7 +3436,7 @@ export default function App() {
           const collaboration = ev.options.find(
             (option) =>
               option.category === "collaboration_mode" ||
-              option.id === "collaboration_mode",
+              option.id === "collaboration_mode"
           );
           if (collaboration) setPlanMode(collaboration.current === "plan");
           if (model?.current) {
@@ -3262,7 +3448,7 @@ export default function App() {
             // The scene's reasoning_effort had to pend until the provider named its effort
             // option (binding matrix); the first matching report applies it, once per session.
             const scene = scenesRef.current.find(
-              (s) => s.reference === activeSceneNameRef.current,
+              (s) => s.reference === activeSceneNameRef.current
             );
             const wanted = scene?.execution?.reasoning_effort;
             if (wanted && !sceneEffortAppliedRef.current.has(ev.session)) {
@@ -3272,12 +3458,12 @@ export default function App() {
                 void setConfigOption(ev.session, choice.configId, choice.value)
                   .then(() => {
                     setScenePendingFields((prev) =>
-                      prev.filter((field) => field !== "reasoning_effort"),
+                      prev.filter((field) => field !== "reasoning_effort")
                     );
                   })
                   .catch(() => {
                     sceneEffortAppliedRef.current.delete(ev.session);
-                });
+                  });
               }
             }
           }
@@ -3285,7 +3471,7 @@ export default function App() {
             // `plan_first` is also provider-owned. A scene can request it, but the request is sent
             // only after the adapter advertises the collaboration selector and its native values.
             const scene = scenesRef.current.find(
-              (s) => s.reference === activeSceneNameRef.current,
+              (s) => s.reference === activeSceneNameRef.current
             );
             const wanted = scene?.execution?.plan_first;
             const applied = scenePlanAppliedRef.current.get(ev.session);
@@ -3295,15 +3481,19 @@ export default function App() {
                 if (collaboration?.current === choice.value) {
                   scenePlanAppliedRef.current.set(ev.session, wanted);
                   setScenePendingFields((prev) =>
-                    prev.filter((field) => field !== "plan_first"),
+                    prev.filter((field) => field !== "plan_first")
                   );
                 } else {
                   scenePlanAppliedRef.current.set(ev.session, wanted);
                   setPlanMode(wanted);
-                  void setConfigOption(ev.session, choice.configId, choice.value)
+                  void setConfigOption(
+                    ev.session,
+                    choice.configId,
+                    choice.value
+                  )
                     .then(() => {
                       setScenePendingFields((prev) =>
-                        prev.filter((field) => field !== "plan_first"),
+                        prev.filter((field) => field !== "plan_first")
                       );
                     })
                     .catch(() => {
@@ -3338,7 +3528,7 @@ export default function App() {
             context: ev.context,
           };
           setPermissionQueue((previous) =>
-            enqueuePermission(previous, request),
+            enqueuePermission(previous, request)
           );
           return;
         }
@@ -3352,7 +3542,7 @@ export default function App() {
               title: ev.form.message,
               options: [],
               form: ev.form,
-            }),
+            })
           );
           return;
         }
@@ -3371,12 +3561,12 @@ export default function App() {
                 currentEditor,
                 editorRevisionByPaneRef.current.get(pendingRequest.paneId) ?? 0,
                 pendingRequest.editorSnapshot,
-                pendingRequest.editorRevision,
+                pendingRequest.editorRevision
               )
             ) {
               for (const id of canvasIdsToPurgeAfterTurnStart(
                 true,
-                pendingRequest.canvasIds,
+                pendingRequest.canvasIds
               )) {
                 canvasPurgeRequestedRef.current.add(id);
               }
@@ -3387,7 +3577,7 @@ export default function App() {
               if (pendingRequest.canvasRefs.length > 0) {
                 acceptedCanvasRequestsRef.current.set(
                   `${ev.session}:${requestId}`,
-                  pendingRequest,
+                  pendingRequest
                 );
               }
             }
@@ -3395,7 +3585,9 @@ export default function App() {
           if (ev.event === "steer_accepted") {
             markSessionStarted(ev.session, ev.request_id);
           }
-          setTurnsForSession(ev.session, (previous) => applyEvent(previous, ev));
+          setTurnsForSession(ev.session, (previous) =>
+            applyEvent(previous, ev)
+          );
           return;
         }
         if (ev.event === "turn_started") {
@@ -3407,7 +3599,9 @@ export default function App() {
               : undefined);
           if (pendingRequest && ev.request_id === pendingRequest.requestId) {
             pendingPromptRequestsRef.current.delete(ev.session);
-            pendingDeferredPromptRequestsRef.current.delete(pendingRequest.requestId);
+            pendingDeferredPromptRequestsRef.current.delete(
+              pendingRequest.requestId
+            );
             if (canvasProviderRetrySessionRef.current === ev.session) {
               // An explicit structure-only retry was accepted in the original session; do not
               // force a later unrelated provider selection into a new session.
@@ -3416,7 +3610,7 @@ export default function App() {
             if (pendingRequest.canvasRefs.length > 0) {
               acceptedCanvasRequestsRef.current.set(
                 `${ev.session}:${pendingRequest.requestId}`,
-                pendingRequest,
+                pendingRequest
               );
             }
             removePendingAppshots(pendingRequest.appshotIds);
@@ -3429,7 +3623,7 @@ export default function App() {
                 currentEditor,
                 editorRevisionByPaneRef.current.get(pendingRequest.paneId) ?? 0,
                 pendingRequest.editorSnapshot,
-                pendingRequest.editorRevision,
+                pendingRequest.editorRevision
               )
             ) {
               // Core acceptance makes the frozen revision immutable history. Mark the mutable
@@ -3437,7 +3631,7 @@ export default function App() {
               // about to clear it; otherwise a later ordinary delete must remain undoable.
               for (const id of canvasIdsToPurgeAfterTurnStart(
                 true,
-                pendingRequest.canvasIds,
+                pendingRequest.canvasIds
               )) {
                 canvasPurgeRequestedRef.current.add(id);
               }
@@ -3472,12 +3666,12 @@ export default function App() {
           if (eventSession) {
             const terminalRequestId =
               ev.event === "error"
-              ? (ev.request_id ?? activeTurnRequestId)
-              : activeTurnRequestId;
+                ? (ev.request_id ?? activeTurnRequestId)
+                : activeTurnRequestId;
             if (terminalRequestId) {
               const acceptedKey = canvasAcceptedRequestKey(
                 eventSession,
-                terminalRequestId,
+                terminalRequestId
               );
               const acceptedCanvasRequest =
                 acceptedCanvasRequestsRef.current.get(acceptedKey);
@@ -3490,11 +3684,11 @@ export default function App() {
                   void restoreAcceptedCanvasForProviderError(
                     eventSession,
                     acceptedCanvasRequest,
-                    ev.message,
+                    ev.message
                   ).catch((error) => {
                     toast(
                       `Canvas retry could not be staged: ${String(error)}`,
-                      "error",
+                      "error"
                     );
                   });
                 }
@@ -3502,7 +3696,7 @@ export default function App() {
             }
             if (markSessionStopped(eventSession, terminalRequestId)) {
               setPermissionQueue((previous) =>
-                previous.filter((request) => request.session !== eventSession),
+                previous.filter((request) => request.session !== eventSession)
               );
             }
           } else if (
@@ -3510,7 +3704,9 @@ export default function App() {
             ev.request_id != null &&
             ev.request_id === awaitingSessionRef.current
           ) {
-            invalidatePendingCreation(awaitingCreationPane ?? focusedPaneRef.current);
+            invalidatePendingCreation(
+              awaitingCreationPane ?? focusedPaneRef.current
+            );
           }
           refreshSessions();
         }
@@ -3519,7 +3715,7 @@ export default function App() {
             ev,
             activeSessionRef.current,
             awaitingCreationRequest,
-            paneSessionsRef.current,
+            paneSessionsRef.current
           )
         )
           return;
@@ -3535,7 +3731,7 @@ export default function App() {
           ev.session === null && awaitingCreationPane
             ? awaitingCreationPane
             : paneForSession(ev.session),
-          (prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined),
+          (prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined)
         );
       });
     })();
@@ -3579,7 +3775,7 @@ export default function App() {
       if (event.planFirst !== null) setPlanMode(event.planFirst);
       toast(
         t("scene.autoSwitched", { scene: event.title, reason: event.reason }),
-        "success",
+        "success"
       );
       void refreshSessions();
     }).then((dispose) => {
@@ -3612,12 +3808,13 @@ export default function App() {
         (query.get("mockModels") ?? "")
           .split(",")
           .map((id) => id.trim())
-          .filter((id) => id.length > 0 && id.length <= 120),
+          .filter((id) => id.length > 0 && id.length <= 120)
       ),
     ].slice(0, 20);
-    const mockModels = requestedModels.length > 0
-      ? requestedModels.map((id) => ({ id, name: id, description: null }))
-      : [{ id: "dev-model", name: "Context QA", description: null }];
+    const mockModels =
+      requestedModels.length > 0
+        ? requestedModels.map((id) => ({ id, name: id, description: null }))
+        : [{ id: "dev-model", name: "Context QA", description: null }];
     const mockModel = mockModels[0].id;
     const mockProvider = query.get("mockProviderSettings");
     if (mockProvider) setProvider(mockProvider);
@@ -3638,273 +3835,300 @@ export default function App() {
     }
   }, []);
 
-  const run = useCallback(async (
-    docOverride?: DocBlock[],
-    newSessionTarget?: NewSessionRunTarget,
-    paneId = focusedPaneRef.current,
-    paneAppshots = activeAppshots,
-  ) => {
-    const paneSession = paneContentsRef.current[paneId]?.sessionId ?? null;
-    if ((transcriptStateByPaneRef.current[paneId] ?? EMPTY_PANE_TRANSCRIPT_STATE).loading) {
-      toast(t("toast.sessionLoading"));
-      return;
-    }
-    // The banner is the primary gate; this backstop catches the keyboard path (⌘⏎ and friends).
-    if (
-      paneSession !== null &&
-      archivedSessions.some((session) => session.id === paneSession)
-    ) {
-      toast(t("archived.notice"));
-      return;
-    }
-    const editorRefs = paneEditorRefsFor(paneId);
-    const getBlocks = editorRefs.getBlocksRef.current;
-    if (!getBlocks) return;
-    const editorSnapshot = getBlocks();
-    const editorRevision = editorRevisionByPaneRef.current.get(paneId) ?? 0;
-    const promptAppshots = docOverride ? EMPTY_APPSHOTS : paneAppshots;
-    const appshotIds = promptAppshots.map((capture) => capture.id);
-    const clearEditor = docOverride === undefined;
-    let doc: DocBlock[] = docOverride ?? [
-      ...editorSnapshot,
-      ...promptAppshots.map(privateImageBlock),
-    ];
-    // Running an empty document used to no-op in silence, which is indistinguishable from a broken
-    // button. Say what's missing and put the caret where the fix goes.
-    if (doc.length === 0) {
-      toast(t("toast.emptyDoc"));
-      editorRefs.focusRef.current?.();
-      return;
-    }
-    if (
-      (!newSessionTarget &&
-        paneSession !== null &&
-        runningSessionsRef.current.has(paneSession)) ||
-      pendingCreationRef.current !== null
-    ) {
-      toast(t("toast.alreadyRunning"));
-      return;
-    }
-    const targetSession = newSessionTarget
-      ? null
-      : canvasRetryTargetSession(
-          paneSession,
-          forceNewSessionForCanvasRetryRef.current,
-        );
-    const creationWorktreeBase = newSessionTarget?.worktreeBase ?? worktreeBase;
-    const stagedTask = activeBoardTaskRef.current;
-    const temporary = temporarySessionRef.current;
-    const projectPath = activeProjectRef.current;
-    const submittedMemoryRead = memoryReadRef.current;
-    const submittedMemoryWrite = memoryWriteRef.current;
-    const worktreeBaseSha = newSessionTarget?.worktreeBaseSha ?? (targetSession
-      ? null
-      : sessionCreationBaselineSha(
-          creationWorktreeBase,
-          worktreeOptions,
-          worktreeOptionsLoading,
-        ));
-    if (worktreeBaseSha === undefined) {
-      toast(
-        t(
-          worktreeOptionsLoading
-            ? "worktree.resolving"
-            : "worktree.unavailable",
-        ),
-        "error",
-      );
-      return;
-    }
-    // Freeze every live Canvas before creating the turn or submitting the prompt. The bridge owns
-    // validation/export/CAS; any stale draft, missing pixels, or budget/provider failure aborts the
-    // send with no optimistic turn left behind.
-    try {
-      if (editorRefs.freezeCanvasesRef.current) {
-        doc = await editorRefs.freezeCanvasesRef.current(doc);
-      }
-    } catch (error) {
-      toast(
-        `Canvas could not be frozen: ${error instanceof Error ? error.message : String(error)}`,
-        "error",
-      );
-      return;
-    }
-    const canvasRetryDoc = doc;
-    const canvasIds = doc.flatMap((block) =>
-      block.type === "canvas" ? [block.id] : [],
-    );
-    const canvasRefs = doc.flatMap((block) =>
-      block.type === "canvas"
-      ? [{ id: block.id, revision: block.frozen_revision }]
-        : [],
-    );
-    // Ordinary blank drafts become Tasks on their first real run. Temporary sessions are the only
-    // explicit opt-out, so no durable Session can silently fall through the Task board again.
-    let boardTaskId = stagedTask?.id ?? null;
-    if (!targetSession && !stagedTask && !temporary) {
-      const board = loadBoardSnapshot();
-      if (board.warning) toast(board.warning, "error");
-      const summary = summarizeDoc(doc).replace(/\s+/g, " ").trim();
-      const task = createBoardTask({
-        title: summary.slice(0, 72) || "未命名任务",
-        status: "todo",
-        priority: "none",
-        order: board.tasks.filter((candidate) => candidate.status === "todo").length,
-      });
-      const saved = saveBoardSnapshot([...board.tasks, task]);
-      if (!saved.ok) {
-        toast(saved.warning, "error");
+  const run = useCallback(
+    async (
+      docOverride?: DocBlock[],
+      newSessionTarget?: NewSessionRunTarget,
+      paneId = focusedPaneRef.current,
+      paneAppshots = activeAppshots
+    ) => {
+      const paneSession = paneContentsRef.current[paneId]?.sessionId ?? null;
+      if (
+        (
+          transcriptStateByPaneRef.current[paneId] ??
+          EMPTY_PANE_TRANSCRIPT_STATE
+        ).loading
+      ) {
+        toast(t("toast.sessionLoading"));
         return;
       }
-      boardTaskId = task.id;
-      if (focusedPaneRef.current === paneId) setTaskContext(task, false);
-    }
-    const parallelTask = newSessionTarget?.parallelTask
-      ? {
-          taskId: activeBoardTaskRef.current!.id,
-          goal: summarizeDoc(doc).replace(/\s+/g, " ").trim(),
+      // The banner is the primary gate; this backstop catches the keyboard path (⌘⏎ and friends).
+      if (
+        paneSession !== null &&
+        archivedSessions.some((session) => session.id === paneSession)
+      ) {
+        toast(t("archived.notice"));
+        return;
+      }
+      const editorRefs = paneEditorRefsFor(paneId);
+      const getBlocks = editorRefs.getBlocksRef.current;
+      if (!getBlocks) return;
+      const editorSnapshot = getBlocks();
+      const editorRevision = editorRevisionByPaneRef.current.get(paneId) ?? 0;
+      const promptAppshots = docOverride ? EMPTY_APPSHOTS : paneAppshots;
+      const appshotIds = promptAppshots.map((capture) => capture.id);
+      const clearEditor = docOverride === undefined;
+      let doc: DocBlock[] = docOverride ?? [
+        ...editorSnapshot,
+        ...promptAppshots.map(privateImageBlock),
+      ];
+      // Running an empty document used to no-op in silence, which is indistinguishable from a broken
+      // button. Say what's missing and put the caret where the fix goes.
+      if (doc.length === 0) {
+        toast(t("toast.emptyDoc"));
+        editorRefs.focusRef.current?.();
+        return;
+      }
+      if (
+        (!newSessionTarget &&
+          paneSession !== null &&
+          runningSessionsRef.current.has(paneSession)) ||
+        pendingCreationRef.current !== null
+      ) {
+        toast(t("toast.alreadyRunning"));
+        return;
+      }
+      const targetSession = newSessionTarget
+        ? null
+        : canvasRetryTargetSession(
+            paneSession,
+            forceNewSessionForCanvasRetryRef.current
+          );
+      const creationWorktreeBase =
+        newSessionTarget?.worktreeBase ?? worktreeBase;
+      const stagedTask = activeBoardTaskRef.current;
+      const temporary = temporarySessionRef.current;
+      const projectPath = activeProjectRef.current;
+      const submittedMemoryRead = memoryReadRef.current;
+      const submittedMemoryWrite = memoryWriteRef.current;
+      const worktreeBaseSha =
+        newSessionTarget?.worktreeBaseSha ??
+        (targetSession
+          ? null
+          : sessionCreationBaselineSha(
+              creationWorktreeBase,
+              worktreeOptions,
+              worktreeOptionsLoading
+            ));
+      if (worktreeBaseSha === undefined) {
+        toast(
+          t(
+            worktreeOptionsLoading
+              ? "worktree.resolving"
+              : "worktree.unavailable"
+          ),
+          "error"
+        );
+        return;
+      }
+      // Freeze every live Canvas before creating the turn or submitting the prompt. The bridge owns
+      // validation/export/CAS; any stale draft, missing pixels, or budget/provider failure aborts the
+      // send with no optimistic turn left behind.
+      try {
+        if (editorRefs.freezeCanvasesRef.current) {
+          doc = await editorRefs.freezeCanvasesRef.current(doc);
         }
-      : null;
-    const promptRequestId = globalThis.crypto.randomUUID();
-    const creationRequestId = targetSession ? null : promptRequestId;
-    if (targetSession) {
-      pendingPromptRequestsRef.current.set(targetSession, {
-        requestId: promptRequestId,
-        paneId,
-        editorSnapshot,
-        editorRevision,
-        submittedDoc: canvasRetryDoc,
-        canvasIds,
-        canvasRefs,
-        appshotIds,
-        clearEditor,
-      });
-      updateRunningSession(targetSession, true);
-    } else {
-      awaitingSessionRef.current = creationRequestId;
-      pendingCreationRef.current = {
-        paneId,
-        doc,
-        canvasRetryDoc,
-        promptRequestId,
-        editorSnapshot,
-        editorRevision,
-        appshotIds,
-        clearEditor,
-        boardTaskId,
-        autoScene: autoSceneRef.current,
-        memoryRead: submittedMemoryRead,
-        memoryWrite: submittedMemoryWrite,
-        projectReasoningEffort:
-          projects.find((project) =>
-            project.path === projectPath && project.default_provider === provider
-          )?.default_reasoning_effort ?? null,
-      };
-      setPendingSessionRunning(true);
-      setPendingCreationPane(paneId);
-    }
-    setPaneTurns(paneId, (prev) => [
-      ...prev,
-      newTurn(summarizeDoc(doc), promptRequestId, promptImagesForTurn(promptAppshots)),
-    ]);
-    try {
+      } catch (error) {
+        toast(
+          `Canvas could not be frozen: ${error instanceof Error ? error.message : String(error)}`,
+          "error"
+        );
+        return;
+      }
+      const canvasRetryDoc = doc;
+      const canvasIds = doc.flatMap((block) =>
+        block.type === "canvas" ? [block.id] : []
+      );
+      const canvasRefs = doc.flatMap((block) =>
+        block.type === "canvas"
+          ? [{ id: block.id, revision: block.frozen_revision }]
+          : []
+      );
+      // Ordinary blank drafts become Tasks on their first real run. Temporary sessions are the only
+      // explicit opt-out, so no durable Session can silently fall through the Task board again.
+      let boardTaskId = stagedTask?.id ?? null;
+      if (!targetSession && !stagedTask && !temporary) {
+        const board = loadBoardSnapshot();
+        if (board.warning) toast(board.warning, "error");
+        const summary = summarizeDoc(doc).replace(/\s+/g, " ").trim();
+        const task = createBoardTask({
+          title: summary.slice(0, 72) || "未命名任务",
+          status: "todo",
+          priority: "none",
+          order: board.tasks.filter((candidate) => candidate.status === "todo")
+            .length,
+        });
+        const saved = saveBoardSnapshot([...board.tasks, task]);
+        if (!saved.ok) {
+          toast(saved.warning, "error");
+          return;
+        }
+        boardTaskId = task.id;
+        if (focusedPaneRef.current === paneId) setTaskContext(task, false);
+      }
+      const parallelTask = newSessionTarget?.parallelTask
+        ? {
+            taskId: activeBoardTaskRef.current!.id,
+            goal: summarizeDoc(doc).replace(/\s+/g, " ").trim(),
+          }
+        : null;
+      const promptRequestId = globalThis.crypto.randomUUID();
+      const creationRequestId = targetSession ? null : promptRequestId;
       if (targetSession) {
-        if (componentEnabledRef.current("memory.settings")) {
-          await setSessionMemoryPolicy(
-            targetSession,
-            submittedMemoryRead,
-            submittedMemoryWrite,
+        pendingPromptRequestsRef.current.set(targetSession, {
+          requestId: promptRequestId,
+          paneId,
+          editorSnapshot,
+          editorRevision,
+          submittedDoc: canvasRetryDoc,
+          canvasIds,
+          canvasRefs,
+          appshotIds,
+          clearEditor,
+        });
+        updateRunningSession(targetSession, true);
+      } else {
+        awaitingSessionRef.current = creationRequestId;
+        pendingCreationRef.current = {
+          paneId,
+          doc,
+          canvasRetryDoc,
+          promptRequestId,
+          editorSnapshot,
+          editorRevision,
+          appshotIds,
+          clearEditor,
+          boardTaskId,
+          autoScene: autoSceneRef.current,
+          memoryRead: submittedMemoryRead,
+          memoryWrite: submittedMemoryWrite,
+          projectReasoningEffort:
+            projects.find(
+              (project) =>
+                project.path === projectPath &&
+                project.default_provider === provider
+            )?.default_reasoning_effort ?? null,
+        };
+        setPendingSessionRunning(true);
+        setPendingCreationPane(paneId);
+      }
+      setPaneTurns(paneId, (prev) => [
+        ...prev,
+        newTurn(
+          summarizeDoc(doc),
+          promptRequestId,
+          promptImagesForTurn(promptAppshots)
+        ),
+      ]);
+      try {
+        if (targetSession) {
+          if (componentEnabledRef.current("memory.settings")) {
+            await setSessionMemoryPolicy(
+              targetSession,
+              submittedMemoryRead,
+              submittedMemoryWrite
+            );
+          }
+          await submitPrompt(targetSession, doc, promptRequestId);
+          refreshSessions();
+        } else {
+          await newSession(
+            provider,
+            newSessionTarget?.source ?? ((projectPath ?? cwd) || "."),
+            creationWorktreeBase,
+            creationRequestId!,
+            worktreeBaseSha,
+            { mode, sandbox },
+            currentModel,
+            false,
+            pendingCreationRef.current?.projectReasoningEffort ?? null,
+            parallelTask
           );
         }
-        await submitPrompt(targetSession, doc, promptRequestId);
-        refreshSessions();
-      } else {
-        await newSession(
-          provider,
-          newSessionTarget?.source ?? ((projectPath ?? cwd) || "."),
-          creationWorktreeBase,
-          creationRequestId!,
-          worktreeBaseSha,
-          { mode, sandbox },
-          currentModel,
-          false,
-          pendingCreationRef.current?.projectReasoningEffort ?? null,
-          parallelTask,
-        );
-      }
-    } catch (e) {
-      const message = String(e);
-      if (targetSession) {
-        if (
-          pendingPromptRequestsRef.current.get(targetSession)?.requestId ===
-          promptRequestId
-        ) {
-          pendingPromptRequestsRef.current.delete(targetSession);
+      } catch (e) {
+        const message = String(e);
+        if (targetSession) {
+          if (
+            pendingPromptRequestsRef.current.get(targetSession)?.requestId ===
+            promptRequestId
+          ) {
+            pendingPromptRequestsRef.current.delete(targetSession);
+          }
+          markSessionStopped(targetSession, promptRequestId);
+          setPaneTurns(paneId, (previous) =>
+            applyEvent(previous, {
+              event: "error",
+              session: targetSession,
+              message,
+              terminal: true,
+              request_id: promptRequestId,
+            })
+          );
+        } else {
+          const stillOwned = awaitingSessionRef.current === creationRequestId;
+          if (!stillOwned) return;
+          invalidatePendingCreation(paneId);
+          setPaneTurns(paneId, (previous) =>
+            applyEvent(previous, {
+              event: "error",
+              session: null,
+              message,
+              terminal: true,
+              request_id: promptRequestId,
+            })
+          );
         }
-        markSessionStopped(targetSession, promptRequestId);
-        setPaneTurns(paneId, (previous) =>
-          applyEvent(previous, {
-            event: "error",
-            session: targetSession,
+        if (isCanvasProviderImageError(message)) {
+          editorRefs.canvasDeliveryErrorRef.current?.(
+            doc,
             message,
-            terminal: true,
-            request_id: promptRequestId,
-          }),
-        );
-      } else {
-        const stillOwned = awaitingSessionRef.current === creationRequestId;
-        if (!stillOwned) return;
-        invalidatePendingCreation(paneId);
-        setPaneTurns(paneId, (previous) =>
-          applyEvent(previous, {
-            event: "error",
-            session: null,
-            message,
-            terminal: true,
-            request_id: promptRequestId,
-          }),
-        );
+            "provider_image"
+          );
+          toast(
+            "Canvas images are unsupported by this provider. Choose Send structure only in each Canvas or switch provider, then retry.",
+            "error"
+          );
+        } else {
+          toast(t("toast.turnFailed", { error: message }), "error");
+        }
       }
-      if (isCanvasProviderImageError(message)) {
-        editorRefs.canvasDeliveryErrorRef.current?.(doc, message, "provider_image");
-        toast(
-          "Canvas images are unsupported by this provider. Choose Send structure only in each Canvas or switch provider, then retry.",
-          "error",
-        );
-      } else {
-        toast(t("toast.turnFailed", { error: message }), "error");
-      }
-    }
-  }, [
-    provider,
-    cwd,
-    worktreeBase,
-    worktreeOptions,
-    worktreeOptionsLoading,
-    mode,
-    sandbox,
-    currentModel,
-    toast,
-    t,
-    refreshSessions,
-    invalidatePendingCreation,
-    markSessionStopped,
-    setTaskContext,
-    updateRunningSession,
-    archivedSessions,
-    paneEditorRefsFor,
-    setPaneTurns,
-    projects,
-  ]);
+    },
+    [
+      provider,
+      cwd,
+      worktreeBase,
+      worktreeOptions,
+      worktreeOptionsLoading,
+      mode,
+      sandbox,
+      currentModel,
+      toast,
+      t,
+      refreshSessions,
+      invalidatePendingCreation,
+      markSessionStopped,
+      setTaskContext,
+      updateRunningSession,
+      archivedSessions,
+      paneEditorRefsFor,
+      setPaneTurns,
+      projects,
+    ]
+  );
 
   const sendDuringTurn = useCallback(
     async (
       delivery: "queued" | "steer",
       docOverride?: DocBlock[],
       paneId = focusedPaneRef.current,
-      paneAppshots = activeAppshots,
+      paneAppshots = activeAppshots
     ) => {
-      if ((transcriptStateByPaneRef.current[paneId] ?? EMPTY_PANE_TRANSCRIPT_STATE).loading) {
+      if (
+        (
+          transcriptStateByPaneRef.current[paneId] ??
+          EMPTY_PANE_TRANSCRIPT_STATE
+        ).loading
+      ) {
         toast(t("toast.sessionLoading"));
         return;
       }
@@ -3940,7 +4164,7 @@ export default function App() {
       } catch (error) {
         toast(
           `Canvas could not be frozen: ${error instanceof Error ? error.message : String(error)}`,
-          "error",
+          "error"
         );
         return;
       }
@@ -3951,11 +4175,13 @@ export default function App() {
         editorSnapshot,
         editorRevision,
         submittedDoc: doc,
-        canvasIds: doc.flatMap((block) => (block.type === "canvas" ? [block.id] : [])),
+        canvasIds: doc.flatMap((block) =>
+          block.type === "canvas" ? [block.id] : []
+        ),
         canvasRefs: doc.flatMap((block) =>
           block.type === "canvas"
             ? [{ id: block.id, revision: block.frozen_revision }]
-            : [],
+            : []
         ),
         appshotIds,
         clearEditor: docOverride === undefined,
@@ -3964,7 +4190,7 @@ export default function App() {
       const optimistic = newTurn(
         summarizeDoc(doc),
         requestId,
-        promptImagesForTurn(promptAppshots),
+        promptImagesForTurn(promptAppshots)
       );
       optimistic.delivery = delivery;
       optimistic.queuePosition = delivery === "queued" ? 1 : undefined;
@@ -3984,12 +4210,12 @@ export default function App() {
             message: String(error),
             terminal: false,
             request_id: requestId,
-          }),
+          })
         );
         toast(t("toast.turnFailed", { error: String(error) }), "error");
       }
     },
-    [interactionCapabilities, paneEditorRefsFor, setPaneTurns, t, toast],
+    [interactionCapabilities, paneEditorRefsFor, setPaneTurns, t, toast]
   );
 
   // Composer model/config changes, parameterized by the session they act on so any pane's composer
@@ -4016,7 +4242,7 @@ export default function App() {
         toast(t("toast.modelFailed", { error: String(e) }), "error");
       });
     },
-    [t, toast],
+    [t, toast]
   );
 
   const changeSessionConfigOption = useCallback(
@@ -4045,7 +4271,7 @@ export default function App() {
         setContextWindows((previous) => clearContextWindow(previous, session));
       }
       setConfigOptions((prev) =>
-        prev.map((o) => (o.id === configId ? { ...o, current: value } : o)),
+        prev.map((o) => (o.id === configId ? { ...o, current: value } : o))
       );
       void setConfigOption(session, configId, value).catch((e) => {
         if (option?.category === "model" || configId === "model") {
@@ -4054,7 +4280,7 @@ export default function App() {
         toast(t("toast.modelFailed", { error: String(e) }), "error");
       });
     },
-    [configOptions, t, toast],
+    [configOptions, t, toast]
   );
 
   const createSession = useCallback((): string | null => {
@@ -4065,13 +4291,13 @@ export default function App() {
     const currentSession = sessionShellWithReceipt(
       currentSessionId,
       storedSession,
-      activeSessionProvenanceRef.current,
+      activeSessionProvenanceRef.current
     );
     const source = sessionCreationSource(
       activeProjectRef.current,
       cwd,
       currentSession,
-      currentSessionId !== null,
+      currentSessionId !== null
     );
     if (source === null) {
       toast(t("toast.worktreeSourceUnknown"), "error");
@@ -4087,7 +4313,7 @@ export default function App() {
     const paneId = focusedPaneRef.current;
     sessionLoadSeqByPaneRef.current.set(
       paneId,
-      (sessionLoadSeqByPaneRef.current.get(paneId) ?? 0) + 1,
+      (sessionLoadSeqByPaneRef.current.get(paneId) ?? 0) + 1
     );
     updatePaneTranscriptState(paneId, {
       loading: false,
@@ -4106,7 +4332,8 @@ export default function App() {
     setConfigOptions([]);
     memoryReadRef.current = "inherit";
     memoryWriteRef.current = "inherit";
-    if (currentSessionId) memoryReceiptsBySessionRef.current.delete(currentSessionId);
+    if (currentSessionId)
+      memoryReceiptsBySessionRef.current.delete(currentSessionId);
     setMemoryRead("inherit");
     setMemoryWrite("inherit");
     // A plain new session starts sceneless; the restart-in-scene flow stages its scene first
@@ -4120,15 +4347,19 @@ export default function App() {
     // selection: keep the explicit Composer choice. Leaving a durable session starts a new draft
     // and seeds that draft from the project preference or the prior session's baseline kind.
     if (currentSessionId !== null) {
-      const project = projects.find((item) => item.path === activeProjectRef.current);
+      const project = projects.find(
+        (item) => item.path === activeProjectRef.current
+      );
       const projectMode = project?.default_worktree_mode ?? null;
       const baseline = nextSessionWorktreeBaseline(
         projectMode,
-        sessionCreationBaseline(currentSession),
+        sessionCreationBaseline(currentSession)
       );
       if (baseline !== undefined) setWorktreeBase(baseline);
       if (project?.default_provider) setProvider(project.default_provider);
-      setCurrentModel(project?.default_provider ? project.default_model ?? null : null);
+      setCurrentModel(
+        project?.default_provider ? (project.default_model ?? null) : null
+      );
       restoreComposerDraftScope({
         kind: "project",
         projectPath: (activeProjectRef.current ?? source) || ".",
@@ -4156,28 +4387,34 @@ export default function App() {
     return createSession();
   }, [createSession, setTaskContext]);
 
-  const forkTurnIntoTask = useCallback((turn: Turn) => {
-    const sourceSession = activeSessionRef.current;
-    const throughSeq = turn.transcriptStartSeq;
-    const insertSession = insertSessionRef.current;
-    if (!sourceSession || throughSeq === undefined || !insertSession) {
-      toast(t("turn.forkFailed"), "error");
-      return;
-    }
-    const sourceTitle = activeSessionTitle ?? sourceSession.slice(0, 8);
-    if (!createTaskDraft()) return;
-    insertSession({
-      id: sourceSession,
-      title: sourceTitle,
-      throughSeq,
-    });
-    toast(t("turn.forked"), "success");
-  }, [activeSessionTitle, createTaskDraft, t, toast]);
+  const forkTurnIntoTask = useCallback(
+    (turn: Turn) => {
+      const sourceSession = activeSessionRef.current;
+      const throughSeq = turn.transcriptStartSeq;
+      const insertSession = insertSessionRef.current;
+      if (!sourceSession || throughSeq === undefined || !insertSession) {
+        toast(t("turn.forkFailed"), "error");
+        return;
+      }
+      const sourceTitle = activeSessionTitle ?? sourceSession.slice(0, 8);
+      if (!createTaskDraft()) return;
+      insertSession({
+        id: sourceSession,
+        title: sourceTitle,
+        throughSeq,
+      });
+      toast(t("turn.forked"), "success");
+    },
+    [activeSessionTitle, createTaskDraft, t, toast]
+  );
 
-  const startBoardTask = useCallback((task: BoardTask) => {
-    setTaskContext(task, false);
-    createSession();
-  }, [createSession, setTaskContext]);
+  const startBoardTask = useCallback(
+    (task: BoardTask) => {
+      setTaskContext(task, false);
+      createSession();
+    },
+    [createSession, setTaskContext]
+  );
 
   const startParallelTask = useCallback(() => {
     const session = activeSessionRef.current;
@@ -4188,7 +4425,7 @@ export default function App() {
     const worktreeBaseSha = sessionCreationBaselineSha(
       "current",
       worktreeOptions,
-      worktreeOptionsLoading,
+      worktreeOptionsLoading
     );
     if (!worktreeBaseSha) {
       toast(t("toast.multitaskWorktreeUnavailable"), "error");
@@ -4231,8 +4468,12 @@ export default function App() {
     worktreeOptionsLoading,
   ]);
 
-  const appshotCapturedRef = useRef<(capture: AppshotCapture) => void>(() => {});
-  const appshotFailedRef = useRef<(failure: { message: string }) => void>(() => {});
+  const appshotCapturedRef = useRef<(capture: AppshotCapture) => void>(
+    () => {}
+  );
+  const appshotFailedRef = useRef<(failure: { message: string }) => void>(
+    () => {}
+  );
   appshotCapturedRef.current = (capture) => {
     const needsNewDraft = capture.destination === "new" || activeArchived;
     if (needsNewDraft) createTaskDraft();
@@ -4242,7 +4483,10 @@ export default function App() {
       const existing = current[key] ?? [];
       const next = {
         ...current,
-        [key]: [...existing.filter((candidate) => candidate.id !== capture.id), capture],
+        [key]: [
+          ...existing.filter((candidate) => candidate.id !== capture.id),
+          capture,
+        ],
       };
       pendingAppshotsRef.current = next;
       return next;
@@ -4256,53 +4500,66 @@ export default function App() {
     toast(t("toast.appshotFailed", { error: message }), "error");
   };
 
-  const attachPromptImages = useCallback(async (files: readonly File[]) => {
-    const images = files.filter((file) => file.type.startsWith("image/"));
-    if (images.length === 0) return;
-    const session = activeSessionRef.current;
-    const key = session ?? `draft:${(activeProjectRef.current ?? cwd) || "."}`;
-    const results = await Promise.allSettled(
-      images.map(async (file) =>
-        importPromptImage(
-          new Uint8Array(await file.arrayBuffer()),
-          file.type || null,
-          file.name || "Image.png",
-        )),
-    );
-    const captures = results.flatMap((result) =>
-      result.status === "fulfilled" ? [result.value] : [],
-    );
-    if (captures.length > 0) {
-      setPendingAppshots((current) => {
-        const next = {
-          ...current,
-          [key]: [...(current[key] ?? []), ...captures],
-        };
-        pendingAppshotsRef.current = next;
-        return next;
-      });
-      setTimeout(() => focusEditorRef.current?.(), 0);
-    }
-    const failure = results.find(
-      (result): result is PromiseRejectedResult => result.status === "rejected",
-    );
-    if (failure) {
-      toast(t("toast.imageAttachFailed", { error: String(failure.reason) }), "error");
-    }
-  }, [cwd, t, toast]);
+  const attachPromptImages = useCallback(
+    async (files: readonly File[]) => {
+      const images = files.filter((file) => file.type.startsWith("image/"));
+      if (images.length === 0) return;
+      const session = activeSessionRef.current;
+      const key =
+        session ?? `draft:${(activeProjectRef.current ?? cwd) || "."}`;
+      const results = await Promise.allSettled(
+        images.map(async (file) =>
+          importPromptImage(
+            new Uint8Array(await file.arrayBuffer()),
+            file.type || null,
+            file.name || "Image.png"
+          )
+        )
+      );
+      const captures = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : []
+      );
+      if (captures.length > 0) {
+        setPendingAppshots((current) => {
+          const next = {
+            ...current,
+            [key]: [...(current[key] ?? []), ...captures],
+          };
+          pendingAppshotsRef.current = next;
+          return next;
+        });
+        setTimeout(() => focusEditorRef.current?.(), 0);
+      }
+      const failure = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected"
+      );
+      if (failure) {
+        toast(
+          t("toast.imageAttachFailed", { error: String(failure.reason) }),
+          "error"
+        );
+      }
+    },
+    [cwd, t, toast]
+  );
 
   useEffect(() => {
     let removeCaptured: (() => void) | null = null;
     let removeFailed: (() => void) | null = null;
     let active = true;
-    void onAppshotCaptured((capture) => appshotCapturedRef.current(capture)).then((dispose) => {
+    void onAppshotCaptured((capture) =>
+      appshotCapturedRef.current(capture)
+    ).then((dispose) => {
       if (active) removeCaptured = dispose;
       else dispose();
     });
-    void onAppshotFailed((failure) => appshotFailedRef.current(failure)).then((dispose) => {
-      if (active) removeFailed = dispose;
-      else dispose();
-    });
+    void onAppshotFailed((failure) => appshotFailedRef.current(failure)).then(
+      (dispose) => {
+        if (active) removeFailed = dispose;
+        else dispose();
+      }
+    );
     return () => {
       active = false;
       removeCaptured?.();
@@ -4314,12 +4571,12 @@ export default function App() {
     (text: string) => {
       void insertMarkdownRef.current?.(
         selectedExcerptMarkdown(text),
-        docEmpty ? "replace" : "append",
+        docEmpty ? "replace" : "append"
       );
       setDocMode(true);
       setTimeout(() => focusEditorRef.current?.(), 0);
     },
-    [docEmpty, setDocMode],
+    [docEmpty, setDocMode]
   );
 
   const explainSelectedText = useCallback(
@@ -4327,12 +4584,12 @@ export default function App() {
       const markdown = `${t("selection.moreDetailsPrompt")}\n\n${selectedExcerptMarkdown(text)}`;
       void insertMarkdownRef.current?.(
         markdown,
-        docEmpty ? "replace" : "append",
+        docEmpty ? "replace" : "append"
       );
       setDocMode(true);
       setTimeout(() => focusEditorRef.current?.(), 0);
     },
-    [docEmpty, setDocMode, t],
+    [docEmpty, setDocMode, t]
   );
 
   const askSelectedTextInSideChat = useCallback(
@@ -4341,7 +4598,7 @@ export default function App() {
       setSideChatSeed({ id: globalThis.crypto.randomUUID(), text: markdown });
       manualDockTab("side-chat");
     },
-    [manualDockTab, t],
+    [manualDockTab, t]
   );
 
   const readPullRequestTasks = useCallback((): BoardTask[] | null => {
@@ -4355,104 +4612,110 @@ export default function App() {
     return board.tasks;
   }, [toast]);
 
-  const linkPullRequestToTask = useCallback((
-    detail: GitHubPullRequestDetail,
-    renderedTarget: PullRequestTaskLinkTarget | null,
-  ) => {
-    const current = readPullRequestTasks();
-    if (!current) return;
-    const reference = githubPullRequestReference(detail);
-    if (taskForPullRequest(current, reference)) {
-      toast(t("pullRequests.taskLinkChanged"), "error");
-      return;
-    }
+  const linkPullRequestToTask = useCallback(
+    (
+      detail: GitHubPullRequestDetail,
+      renderedTarget: PullRequestTaskLinkTarget | null
+    ) => {
+      const current = readPullRequestTasks();
+      if (!current) return;
+      const reference = githubPullRequestReference(detail);
+      if (taskForPullRequest(current, reference)) {
+        toast(t("pullRequests.taskLinkChanged"), "error");
+        return;
+      }
 
-    let tasks = current;
-    let target = renderedTarget
-      ? current.find((task) => task.id === renderedTarget.id) ?? null
-      : null;
-    if (
-      renderedTarget
-      && (
-        !target
-        || target.pullRequestLinkRevision !== renderedTarget.revision
-        || target.pullRequest !== null
-      )
-    ) {
-      toast(t("pullRequests.taskLinkChanged"), "error");
-      return;
-    }
+      let tasks = current;
+      let target = renderedTarget
+        ? (current.find((task) => task.id === renderedTarget.id) ?? null)
+        : null;
+      if (
+        renderedTarget &&
+        (!target ||
+          target.pullRequestLinkRevision !== renderedTarget.revision ||
+          target.pullRequest !== null)
+      ) {
+        toast(t("pullRequests.taskLinkChanged"), "error");
+        return;
+      }
 
-    const created = target === null;
-    if (!target) {
-      target = createBoardTask({
-        title: detail.title,
-        description: detail.body.trim().slice(0, 600),
-        status: "in_progress",
-        priority: "none",
-        labels: ["GitHub", "PR"],
-        order: current.filter((task) => task.status === "in_progress").length,
-      });
-      tasks = [...tasks, target];
-    }
-    const targetId = target.id;
-    const associated = associateTaskPullRequest(tasks, targetId, reference);
-    if (!associated) {
-      toast(t("pullRequests.taskLinkChanged"), "error");
-      return;
-    }
-    const linked = associated.find((task) => task.id === targetId);
-    if (!linked) {
-      toast(t("pullRequests.taskLinkChanged"), "error");
-      return;
-    }
-    const saved = saveBoardSnapshot(associated);
-    if (!saved.ok) {
-      toast(saved.warning, "error");
-      return;
-    }
-    setPullRequestTasks(associated);
-    if (activeBoardTaskRef.current?.id === linked.id) setTaskContext(linked, false);
-    toast(
-      t(created ? "pullRequests.taskCreated" : "pullRequests.taskLinked", {
-        title: linked.title,
-      }),
-      "success",
-    );
-  }, [readPullRequestTasks, setTaskContext, t, toast]);
-
-  const unlinkPullRequestFromTask = useCallback((
-    detail: GitHubPullRequestDetail,
-    renderedLink: PullRequestTaskLinkTarget,
-  ) => {
-    const current = readPullRequestTasks();
-    if (!current) return;
-    const reference = githubPullRequestReference(detail);
-    const task = current.find((candidate) => candidate.id === renderedLink.id) ?? null;
-    const unlinked = unlinkTaskPullRequest(
-      current,
-      renderedLink.id,
-      githubPullRequestIdentity(reference),
-      renderedLink.revision,
-    );
-    if (!task || !unlinked) {
-      toast(t("pullRequests.taskLinkChanged"), "error");
-      return;
-    }
-    const saved = saveBoardSnapshot(unlinked);
-    if (!saved.ok) {
-      toast(saved.warning, "error");
-      return;
-    }
-    setPullRequestTasks(unlinked);
-    if (activeBoardTaskRef.current?.id === task.id) {
-      setTaskContext(
-        unlinked.find((candidate) => candidate.id === task.id) ?? null,
-        false,
+      const created = target === null;
+      if (!target) {
+        target = createBoardTask({
+          title: detail.title,
+          description: detail.body.trim().slice(0, 600),
+          status: "in_progress",
+          priority: "none",
+          labels: ["GitHub", "PR"],
+          order: current.filter((task) => task.status === "in_progress").length,
+        });
+        tasks = [...tasks, target];
+      }
+      const targetId = target.id;
+      const associated = associateTaskPullRequest(tasks, targetId, reference);
+      if (!associated) {
+        toast(t("pullRequests.taskLinkChanged"), "error");
+        return;
+      }
+      const linked = associated.find((task) => task.id === targetId);
+      if (!linked) {
+        toast(t("pullRequests.taskLinkChanged"), "error");
+        return;
+      }
+      const saved = saveBoardSnapshot(associated);
+      if (!saved.ok) {
+        toast(saved.warning, "error");
+        return;
+      }
+      setPullRequestTasks(associated);
+      if (activeBoardTaskRef.current?.id === linked.id)
+        setTaskContext(linked, false);
+      toast(
+        t(created ? "pullRequests.taskCreated" : "pullRequests.taskLinked", {
+          title: linked.title,
+        }),
+        "success"
       );
-    }
-    toast(t("pullRequests.taskUnlinked", { title: task.title }), "success");
-  }, [readPullRequestTasks, setTaskContext, t, toast]);
+    },
+    [readPullRequestTasks, setTaskContext, t, toast]
+  );
+
+  const unlinkPullRequestFromTask = useCallback(
+    (
+      detail: GitHubPullRequestDetail,
+      renderedLink: PullRequestTaskLinkTarget
+    ) => {
+      const current = readPullRequestTasks();
+      if (!current) return;
+      const reference = githubPullRequestReference(detail);
+      const task =
+        current.find((candidate) => candidate.id === renderedLink.id) ?? null;
+      const unlinked = unlinkTaskPullRequest(
+        current,
+        renderedLink.id,
+        githubPullRequestIdentity(reference),
+        renderedLink.revision
+      );
+      if (!task || !unlinked) {
+        toast(t("pullRequests.taskLinkChanged"), "error");
+        return;
+      }
+      const saved = saveBoardSnapshot(unlinked);
+      if (!saved.ok) {
+        toast(saved.warning, "error");
+        return;
+      }
+      setPullRequestTasks(unlinked);
+      if (activeBoardTaskRef.current?.id === task.id) {
+        setTaskContext(
+          unlinked.find((candidate) => candidate.id === task.id) ?? null,
+          false
+        );
+      }
+      toast(t("pullRequests.taskUnlinked", { title: task.title }), "success");
+    },
+    [readPullRequestTasks, setTaskContext, t, toast]
+  );
 
   const chatAboutPullRequest = useCallback(
     (detail: GitHubPullRequestDetail) => {
@@ -4461,10 +4724,15 @@ export default function App() {
         `**${detail.repository.nameWithOwner} #${detail.number} — ${detail.title}**`,
         detail.url,
         detail.body,
-      ].filter(Boolean).join("\n\n");
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       const board = loadBoardSnapshot();
       if (!board.warning) {
-        const linkedTask = taskForPullRequest(board.tasks, githubPullRequestReference(detail));
+        const linkedTask = taskForPullRequest(
+          board.tasks,
+          githubPullRequestReference(detail)
+        );
         if (linkedTask) setTaskContext(linkedTask, false);
       }
       setShowPullRequests(false);
@@ -4476,7 +4744,7 @@ export default function App() {
         focusEditorRef.current?.();
       }, 0);
     },
-    [createSession, setDocMode, setTaskContext, t],
+    [createSession, setDocMode, setTaskContext, t]
   );
 
   const answer = useCallback(
@@ -4485,18 +4753,18 @@ export default function App() {
       const accepted = await answerPermission(
         permission.session,
         permission.requestId,
-        optionId,
+        optionId
       );
       setPermissionQueue((previous) =>
         permissionQueueAfterAnswer(
           previous,
           permission.session,
           permission.requestId,
-          accepted,
-        ),
+          accepted
+        )
       );
     },
-    [permission],
+    [permission]
   );
 
   const answerQuestion = useCallback(
@@ -4505,18 +4773,18 @@ export default function App() {
       const accepted = await answerElicitation(
         permission.session,
         permission.requestId,
-        value,
+        value
       );
       setPermissionQueue((previous) =>
         permissionQueueAfterAnswer(
           previous,
           permission.session,
           permission.requestId,
-          accepted,
-        ),
+          accepted
+        )
       );
     },
-    [permission],
+    [permission]
   );
 
   /**
@@ -4533,7 +4801,7 @@ export default function App() {
         executionPolicyChangeDisabled(
           pendingCreationRef.current !== null,
           session,
-          pendingPolicyBySessionRef.current,
+          pendingPolicyBySessionRef.current
         )
       )
         return false;
@@ -4561,7 +4829,7 @@ export default function App() {
           session,
           preset.mode,
           preset.sandbox,
-          requestId,
+          requestId
         ).catch((error) => {
           const rejected = finishPolicyRequest(requestId);
           if (!rejected) return;
@@ -4574,42 +4842,42 @@ export default function App() {
       setSandboxState(preset.sandbox);
       return true;
     },
-    [finishPolicyRequest, mode, restoreRejectedExecutionPolicy, sandbox, toast],
+    [finishPolicyRequest, mode, restoreRejectedExecutionPolicy, sandbox, toast]
   );
 
   const onMemoryPolicyChange = useCallback(
     (read: MemoryAccess, write: MemoryAccess) => {
-    if (!componentEnabledRef.current("memory.settings")) return;
-    const previousRead = memoryReadRef.current;
-    const previousWrite = memoryWriteRef.current;
-    memoryReadRef.current = read;
-    memoryWriteRef.current = write;
-    setMemoryRead(read);
-    setMemoryWrite(write);
-    const session = activeSessionRef.current;
-    if (session) {
+      if (!componentEnabledRef.current("memory.settings")) return;
+      const previousRead = memoryReadRef.current;
+      const previousWrite = memoryWriteRef.current;
+      memoryReadRef.current = read;
+      memoryWriteRef.current = write;
+      setMemoryRead(read);
+      setMemoryWrite(write);
+      const session = activeSessionRef.current;
+      if (session) {
         const update =
           (nextRead: MemoryAccess, nextWrite: MemoryAccess) =>
           (items: SessionInfo[]) =>
-        items.map((item) =>
-          item.id === session
-            ? { ...item, memory_read: nextRead, memory_write: nextWrite }
-            : item,
-        );
-      setSessions(update(read, write));
-      setArchivedSessions(update(read, write));
-      void setSessionMemoryPolicy(session, read, write).catch((error) => {
-        memoryReadRef.current = previousRead;
-        memoryWriteRef.current = previousWrite;
-        setMemoryRead(previousRead);
-        setMemoryWrite(previousWrite);
-        setSessions(update(previousRead, previousWrite));
-        setArchivedSessions(update(previousRead, previousWrite));
-        toast(String(error), "error");
-      });
-    }
+            items.map((item) =>
+              item.id === session
+                ? { ...item, memory_read: nextRead, memory_write: nextWrite }
+                : item
+            );
+        setSessions(update(read, write));
+        setArchivedSessions(update(read, write));
+        void setSessionMemoryPolicy(session, read, write).catch((error) => {
+          memoryReadRef.current = previousRead;
+          memoryWriteRef.current = previousWrite;
+          setMemoryRead(previousRead);
+          setMemoryWrite(previousWrite);
+          setSessions(update(previousRead, previousWrite));
+          setArchivedSessions(update(previousRead, previousWrite));
+          toast(String(error), "error");
+        });
+      }
     },
-    [toast],
+    [toast]
   );
 
   const selectSession = useCallback(
@@ -4617,10 +4885,11 @@ export default function App() {
       id: string,
       requestedPaneId = focusedPaneRef.current,
       reloadTranscript = true,
-      preserveFeaturePages = false,
+      preserveFeaturePages = false
     ) => {
       flushActiveComposerDraft();
-      const alreadyBoundPane = paneBoundToSession(paneContentsRef.current, id) ?? undefined;
+      const alreadyBoundPane =
+        paneBoundToSession(paneContentsRef.current, id) ?? undefined;
       // Selecting a session already visible elsewhere focuses that pane instead of creating two
       // transcript consumers for one event stream.
       const paneId = alreadyBoundPane ?? requestedPaneId;
@@ -4630,7 +4899,8 @@ export default function App() {
       }
       const shouldReloadTranscript =
         reloadTranscript &&
-        (alreadyBoundPane === undefined || alreadyBoundPane === requestedPaneId);
+        (alreadyBoundPane === undefined ||
+          alreadyBoundPane === requestedPaneId);
       // Navigation replaces creation only in this pane. A draft creating in another pane keeps its
       // ownership and may finish while this session is focused.
       if (!preserveFeaturePages) {
@@ -4674,7 +4944,7 @@ export default function App() {
         sessionLoadSeqByPaneRef.current.set(paneId, request);
         earlierLoadSeqByPaneRef.current.set(
           paneId,
-          (earlierLoadSeqByPaneRef.current.get(paneId) ?? 0) + 1,
+          (earlierLoadSeqByPaneRef.current.get(paneId) ?? 0) + 1
         );
         earlierLoadRunningByPaneRef.current.delete(paneId);
         updatePaneTranscriptState(paneId, {
@@ -4731,7 +5001,7 @@ export default function App() {
               sceneBySessionRef.current.set(id, state.reference);
               setActiveSceneName(state.reference);
               if (!state.resolved) toast(t("scene.unresolved"), "error");
-            },
+            }
           );
         }
       }
@@ -4741,7 +5011,7 @@ export default function App() {
       // built-in list and let the agent's own options replace it when the next turn revives the
       // session.
       const forProvider = providers.find(
-        (p) => p.id === providerLabel(stored?.provider ?? ""),
+        (p) => p.id === providerLabel(stored?.provider ?? "")
       );
       setModels(modelsBySession[id] ?? forProvider?.models ?? []);
       setConfigOptions(configOptionsBySession[id] ?? []);
@@ -4775,7 +5045,8 @@ export default function App() {
         if (
           request !== sessionLoadSeqByPaneRef.current.get(paneId) ||
           paneContentsRef.current[paneId]?.sessionId !== id
-        ) return;
+        )
+          return;
         memoryReceiptsBySessionRef.current.set(id, receipts);
         // Optimistic running state exists before TurnStarted/prompt persistence. It must not reopen
         // the previous persisted tail when the user re-selects this session during that window.
@@ -4784,13 +5055,13 @@ export default function App() {
         const tailState = transcriptTailState(
           sessionIsRunning,
           hasAuthoritativeTurn,
-          latestTurnRequestIdsRef.current.get(id),
+          latestTurnRequestIdsRef.current.get(id)
         );
         const loaded = turnsFromTranscript(
           page.entries,
           tailState.running,
           tailState.requestId,
-          receipts,
+          receipts
         );
         updateTranscriptCursor(paneId, page.next_before);
         setPaneTurns(paneId, (live) =>
@@ -4798,8 +5069,8 @@ export default function App() {
             loaded,
             live,
             runningSessionsRef.current.has(id) &&
-              runningPromptRequestsRef.current.has(id),
-          ),
+              runningPromptRequestsRef.current.has(id)
+          )
         );
       } catch (error) {
         if (request !== sessionLoadSeqByPaneRef.current.get(paneId)) return;
@@ -4834,7 +5105,7 @@ export default function App() {
       currentModelBySession,
       defaultModelBySession,
       configOptionsBySession,
-    ],
+    ]
   );
 
   const activatePaneById = useCallback(
@@ -4875,7 +5146,7 @@ export default function App() {
       selectSession,
       setTaskContext,
       updatePaneTranscriptState,
-    ],
+    ]
   );
   const activatedPaneRef = useRef(INITIAL_PANE_ID);
   const focusPaneById = useCallback(
@@ -4884,11 +5155,12 @@ export default function App() {
       focusedPaneRef.current = paneId;
       activatedPaneRef.current = paneId;
       // Set the authoritative ref before the click that follows this mouse-down can run an action.
-      activeSessionRef.current = paneContentsRef.current[paneId]?.sessionId ?? null;
+      activeSessionRef.current =
+        paneContentsRef.current[paneId]?.sessionId ?? null;
       setPaneLayout((layout) => focusPane(layout, paneId));
       activatePaneById(paneId);
     },
-    [activatePaneById],
+    [activatePaneById]
   );
   useEffect(() => {
     if (activatedPaneRef.current === paneLayout.focused) return;
@@ -4911,70 +5183,69 @@ export default function App() {
     return () => dispose?.();
   }, [refreshProjects, refreshSessions, selectSession]);
 
-  const loadEarlierTranscript = useCallback(async (
-    paneId: string,
-    scroll?: TranscriptScrollController,
-  ) => {
-    const session = paneContentsRef.current[paneId]?.sessionId ?? null;
-    const before =
-      (transcriptStateByPaneRef.current[paneId] ?? EMPTY_PANE_TRANSCRIPT_STATE)
-        .nextBefore;
-    if (
-      !session ||
-      before === null ||
-      earlierLoadRunningByPaneRef.current.has(paneId)
-    ) return;
-
-    const sessionGeneration = sessionLoadSeqByPaneRef.current.get(paneId) ?? 0;
-    const loadGeneration = (earlierLoadSeqByPaneRef.current.get(paneId) ?? 0) + 1;
-    earlierLoadSeqByPaneRef.current.set(paneId, loadGeneration);
-    const anchor = scroll?.capturePrependAnchor() ?? null;
-    earlierLoadRunningByPaneRef.current.add(paneId);
-    updatePaneTranscriptState(paneId, { loadingEarlier: true });
-    try {
-      const page = await getTranscriptPage(session, before);
+  const loadEarlierTranscript = useCallback(
+    async (paneId: string, scroll?: TranscriptScrollController) => {
+      const session = paneContentsRef.current[paneId]?.sessionId ?? null;
+      const before = (
+        transcriptStateByPaneRef.current[paneId] ?? EMPTY_PANE_TRANSCRIPT_STATE
+      ).nextBefore;
       if (
-        sessionGeneration !== sessionLoadSeqByPaneRef.current.get(paneId) ||
-        loadGeneration !== earlierLoadSeqByPaneRef.current.get(paneId) ||
-        session !== paneContentsRef.current[paneId]?.sessionId ||
-        before !== transcriptStateByPaneRef.current[paneId]?.nextBefore
-      ) {
+        !session ||
+        before === null ||
+        earlierLoadRunningByPaneRef.current.has(paneId)
+      )
         return;
-      }
-      const older = turnsFromTranscript(
-        page.entries,
-        false,
-        undefined,
-        memoryReceiptsBySessionRef.current.get(session) ?? [],
-      );
-      if (older.length > 0) {
-        scroll?.prepareForPrepend(anchor);
-        setPaneTurns(paneId, (current) => prependTranscriptTurns(current, older));
-      }
-      updateTranscriptCursor(paneId, page.next_before);
-    } catch (error) {
-      if (
-        sessionGeneration === sessionLoadSeqByPaneRef.current.get(paneId) &&
-        loadGeneration === earlierLoadSeqByPaneRef.current.get(paneId)
-      ) {
-        toast(
-          t("toast.transcriptEarlierFailed", { error: String(error) }),
-          "error",
+
+      const sessionGeneration =
+        sessionLoadSeqByPaneRef.current.get(paneId) ?? 0;
+      const loadGeneration =
+        (earlierLoadSeqByPaneRef.current.get(paneId) ?? 0) + 1;
+      earlierLoadSeqByPaneRef.current.set(paneId, loadGeneration);
+      const anchor = scroll?.capturePrependAnchor() ?? null;
+      earlierLoadRunningByPaneRef.current.add(paneId);
+      updatePaneTranscriptState(paneId, { loadingEarlier: true });
+      try {
+        const page = await getTranscriptPage(session, before);
+        if (
+          sessionGeneration !== sessionLoadSeqByPaneRef.current.get(paneId) ||
+          loadGeneration !== earlierLoadSeqByPaneRef.current.get(paneId) ||
+          session !== paneContentsRef.current[paneId]?.sessionId ||
+          before !== transcriptStateByPaneRef.current[paneId]?.nextBefore
+        ) {
+          return;
+        }
+        const older = turnsFromTranscript(
+          page.entries,
+          false,
+          undefined,
+          memoryReceiptsBySessionRef.current.get(session) ?? []
         );
+        if (older.length > 0) {
+          scroll?.prepareForPrepend(anchor);
+          setPaneTurns(paneId, (current) =>
+            prependTranscriptTurns(current, older)
+          );
+        }
+        updateTranscriptCursor(paneId, page.next_before);
+      } catch (error) {
+        if (
+          sessionGeneration === sessionLoadSeqByPaneRef.current.get(paneId) &&
+          loadGeneration === earlierLoadSeqByPaneRef.current.get(paneId)
+        ) {
+          toast(
+            t("toast.transcriptEarlierFailed", { error: String(error) }),
+            "error"
+          );
+        }
+      } finally {
+        if (loadGeneration === earlierLoadSeqByPaneRef.current.get(paneId)) {
+          earlierLoadRunningByPaneRef.current.delete(paneId);
+          updatePaneTranscriptState(paneId, { loadingEarlier: false });
+        }
       }
-    } finally {
-      if (loadGeneration === earlierLoadSeqByPaneRef.current.get(paneId)) {
-        earlierLoadRunningByPaneRef.current.delete(paneId);
-        updatePaneTranscriptState(paneId, { loadingEarlier: false });
-      }
-    }
-  }, [
-    setPaneTurns,
-    t,
-    toast,
-    updatePaneTranscriptState,
-    updateTranscriptCursor,
-  ]);
+    },
+    [setPaneTurns, t, toast, updatePaneTranscriptState, updateTranscriptCursor]
+  );
 
   const searchPaletteCommands = useCallback(
     async (query: string): Promise<Command[]> => {
@@ -5000,7 +5271,7 @@ export default function App() {
         };
       });
     },
-    [projects, sessions, archivedSessions, selectSession, t],
+    [projects, sessions, archivedSessions, selectSession, t]
   );
 
   // Skills depend on the workspace: harness skill directories (.claude/skills …) are rescanned
@@ -5022,7 +5293,7 @@ export default function App() {
   const loadManagedCatalog = useCallback(async (scope: PluginManagerScope) => {
     const normalizedScope: PluginManagerScope =
       scope.kind === "user"
-      ? scope
+        ? scope
         : {
             kind: "project",
             projectPath: normalizePluginProjectPath(scope.projectPath),
@@ -5041,19 +5312,19 @@ export default function App() {
 
   const refreshManagedCatalogs = useCallback(
     async (scope: PluginManagerScope = pluginManagerScope) => {
-    const projectPaths = new Set<string>();
+      const projectPaths = new Set<string>();
       if (scope.kind === "project")
         projectPaths.add(normalizePluginProjectPath(scope.projectPath));
       if (activeProject)
         projectPaths.add(normalizePluginProjectPath(activeProject));
-    await Promise.all([
-      loadManagedCatalog({ kind: "user" }),
-      ...Array.from(projectPaths, (projectPath) =>
-        loadManagedCatalog({ kind: "project", projectPath }),
-      ),
-    ]);
+      await Promise.all([
+        loadManagedCatalog({ kind: "user" }),
+        ...Array.from(projectPaths, (projectPath) =>
+          loadManagedCatalog({ kind: "project", projectPath })
+        ),
+      ]);
     },
-    [activeProject, loadManagedCatalog, pluginManagerScope],
+    [activeProject, loadManagedCatalog, pluginManagerScope]
   );
 
   // Component policy is runtime state, not merely data for the management page. Keep the user
@@ -5069,10 +5340,10 @@ export default function App() {
     let unsubscribe = () => {};
     const refreshBundles = () =>
       listPlugins()
-      .then((next) => {
-        if (!disposed) setPlugins(next);
-      })
-      .catch((error) => console.warn("Could not load plugin bundles", error));
+        .then((next) => {
+          if (!disposed) setPlugins(next);
+        })
+        .catch((error) => console.warn("Could not load plugin bundles", error));
     void refreshBundles();
     void onPluginsChanged(() => {
       void refreshBundles();
@@ -5101,7 +5372,7 @@ export default function App() {
 
   const selectedManagedCatalog =
     pluginManagerScope.kind === "user"
-    ? managedUserCatalog
+      ? managedUserCatalog
       : managedProjectCatalogs[
           normalizePluginProjectPath(pluginManagerScope.projectPath)
         ];
@@ -5120,13 +5391,13 @@ export default function App() {
       buildPluginManagerCatalog({
         catalog:
           selectedManagedCatalog ?? managedUserCatalog ?? EMPTY_MANAGED_CATALOG,
-      userCatalog: managedUserCatalog ?? undefined,
-      bundles: plugins,
-      skills,
-      market,
-      localMarketplace: localPluginMarketplace,
-      scope: pluginManagerScope,
-    }),
+        userCatalog: managedUserCatalog ?? undefined,
+        bundles: plugins,
+        skills,
+        market,
+        localMarketplace: localPluginMarketplace,
+        scope: pluginManagerScope,
+      }),
     [
       managedUserCatalog,
       localPluginMarketplace,
@@ -5135,28 +5406,28 @@ export default function App() {
       plugins,
       selectedManagedCatalog,
       skills,
-    ],
+    ]
   );
   const pluginManagerLabels = useMemo(() => createPluginManagerLabels(t), [t]);
   const localizedPluginManagerModel = useMemo(
     () => localizePluginManagerCatalog(pluginManagerModel, t),
-    [pluginManagerModel, t],
+    [pluginManagerModel, t]
   );
   const activePluginModel = useMemo(
     () =>
       buildPluginManagerCatalog({
-      catalog: activeManagedCatalog ?? EMPTY_MANAGED_CATALOG,
-      userCatalog: managedUserCatalog ?? undefined,
-      bundles: plugins,
-      skills,
-      market,
-      scope: activeProject
+        catalog: activeManagedCatalog ?? EMPTY_MANAGED_CATALOG,
+        userCatalog: managedUserCatalog ?? undefined,
+        bundles: plugins,
+        skills,
+        market,
+        scope: activeProject
           ? {
               kind: "project",
               projectPath: normalizePluginProjectPath(activeProject),
             }
-        : { kind: "user" },
-    }),
+          : { kind: "user" },
+      }),
     [
       activeManagedCatalog,
       activeProject,
@@ -5164,22 +5435,26 @@ export default function App() {
       market,
       plugins,
       skills,
-    ],
+    ]
   );
   const activeSkills = useMemo(() => {
     const enabledById = new Map(
       activePluginModel.components
         .filter((component) => component.skill)
-        .map((component) => [component.id, component.state.effectiveEnabled]),
+        .map((component) => [component.id, component.state.effectiveEnabled])
     );
     return skills.filter(
-      (skill) => enabledById.get(`skill:${skill.id}`) ?? true,
+      (skill) => enabledById.get(`skill:${skill.id}`) ?? true
     );
   }, [activePluginModel.components, skills]);
   const componentEnabled = useCallback(
     (id: BuiltinUiComponentId) =>
-      pluginManagerComponentEnabled(activePluginModel.components, id, activeComponentPolicyReady),
-    [activeComponentPolicyReady, activePluginModel.components],
+      pluginManagerComponentEnabled(
+        activePluginModel.components,
+        id,
+        activeComponentPolicyReady
+      ),
+    [activeComponentPolicyReady, activePluginModel.components]
   );
   componentEnabledRef.current = componentEnabled;
   const voiceComposerEnabled = componentEnabled("voice.composer");
@@ -5195,114 +5470,123 @@ export default function App() {
   const lspProjectPath = activeProject
     ? normalizePluginProjectPath(activeProject)
     : null;
-  const pluginUiActions = useMemo(
-    () => {
-      const actions = activeComponentPolicyReady
+  const pluginUiActions = useMemo(() => {
+    const actions = activeComponentPolicyReady
       ? activePluginUiContributions(
           plugins,
           activePluginModel.plugins,
-          activePluginModel.components,
+          activePluginModel.components
         )
       : activePluginUiContributions([], []);
-      return actions;
-    },
-    [
-      activeComponentPolicyReady,
-      activePluginModel.components,
-      activePluginModel.plugins,
-      plugins,
-    ],
-  );
+    return actions;
+  }, [
+    activeComponentPolicyReady,
+    activePluginModel.components,
+    activePluginModel.plugins,
+    plugins,
+  ]);
   const dockerPlugin = useMemo(
     () => plugins.find((plugin) => plugin.name === "docker-tools") ?? null,
-    [plugins],
+    [plugins]
   );
-  const dockerPluginReady = Boolean(dockerPlugin?.enabled && dockerPlugin.trusted);
+  const dockerPluginReady = Boolean(
+    dockerPlugin?.enabled && dockerPlugin.trusted
+  );
   useEffect(() => {
     if (showDocker && !dockerPlugin) setShowDocker(false);
   }, [dockerPlugin, showDocker]);
   const callDocker = useCallback<DockerCommandCaller>(
     async <T,>(name: string, args?: unknown) => call<T>(name, args, null),
-    [],
+    []
   );
   const collaborationConnector = useMemo(
-    () => activePluginConnectorContributions(
-      plugins,
-      activePluginModel.plugins,
-    ).find((connector) => connector.provider === "feishu") ?? null,
-    [activePluginModel.plugins, plugins],
+    () =>
+      activePluginConnectorContributions(
+        plugins,
+        activePluginModel.plugins
+      ).find((connector) => connector.provider === "feishu") ?? null,
+    [activePluginModel.plugins, plugins]
   );
   const callFeishu = useCallback<CollaborationConnectorCaller>(
     async <T,>(operation: string, input?: unknown) => {
-      if (!collaborationConnector) throw new Error("Collaboration connector is unavailable.");
+      if (!collaborationConnector)
+        throw new Error("Collaboration connector is unavailable.");
       return invokePluginConnector(
         collaborationConnector.pluginId,
         collaborationConnector.id,
         operation,
         input ?? {},
-        lspProjectPath,
+        lspProjectPath
       ) as Promise<T>;
     },
-    [collaborationConnector, lspProjectPath],
+    [collaborationConnector, lspProjectPath]
   );
-  const subscribeFeishuEvents = useCallback<CollaborationConnectorSubscriber>(async (callback) => {
-    if (!collaborationConnector) return () => {};
-    return onPluginConnectorEvent((envelope) => {
-      if (envelope.plugin_id !== collaborationConnector.pluginId) return;
-      const event = envelope.event;
-      if (!event || typeof event !== "object" || Array.isArray(event)) return;
-      const candidate = event as Partial<CollaborationConnectorEvent>;
-      const eventKinds: CollaborationConnectorEvent["kind"][] = [
-        "message.created",
-        "message.changed",
-        "document.changed",
-        "base.changed",
-        "connection.changed",
-      ];
-      if (candidate.connectorId !== collaborationConnector.id
-        || !eventKinds.includes(candidate.kind as CollaborationConnectorEvent["kind"])
-        || typeof candidate.eventId !== "string") return;
-      callback(candidate as CollaborationConnectorEvent);
-    });
-  }, [collaborationConnector]);
+  const subscribeFeishuEvents = useCallback<CollaborationConnectorSubscriber>(
+    async (callback) => {
+      if (!collaborationConnector) return () => {};
+      return onPluginConnectorEvent((envelope) => {
+        if (envelope.plugin_id !== collaborationConnector.pluginId) return;
+        const event = envelope.event;
+        if (!event || typeof event !== "object" || Array.isArray(event)) return;
+        const candidate = event as Partial<CollaborationConnectorEvent>;
+        const eventKinds: CollaborationConnectorEvent["kind"][] = [
+          "message.created",
+          "message.changed",
+          "document.changed",
+          "base.changed",
+          "connection.changed",
+        ];
+        if (
+          candidate.connectorId !== collaborationConnector.id ||
+          !eventKinds.includes(
+            candidate.kind as CollaborationConnectorEvent["kind"]
+          ) ||
+          typeof candidate.eventId !== "string"
+        )
+          return;
+        callback(candidate as CollaborationConnectorEvent);
+      });
+    },
+    [collaborationConnector]
+  );
   const pluginLanguageServers = useMemo(
     () =>
       activeComponentPolicyReady
-      ? activePluginLanguageServers(plugins, activePluginModel.plugins)
-      : [],
-    [activeComponentPolicyReady, activePluginModel.plugins, plugins],
+        ? activePluginLanguageServers(plugins, activePluginModel.plugins)
+        : [],
+    [activeComponentPolicyReady, activePluginModel.plugins, plugins]
   );
   useLayoutEffect(() => {
     configurePluginLanguageServers(pluginLanguageServers);
   }, [pluginLanguageServers]);
   const invokePluginAction = useCallback(
     async (contribution: ActivePluginUiContribution) => {
-    try {
-      const result = await invokePluginUi(
-        contribution.pluginId,
-        contribution.id,
-        {
-          cwd: workspaceCwd,
-          projectPath: lspProjectPath,
-          sessionId: activeSession,
-        },
-        lspProjectPath,
-      );
+      try {
+        const result = await invokePluginUi(
+          contribution.pluginId,
+          contribution.id,
+          {
+            cwd: workspaceCwd,
+            projectPath: lspProjectPath,
+            sessionId: activeSession,
+          },
+          lspProjectPath
+        );
         const message =
           typeof result === "string"
-        ? result
+            ? result
             : result &&
                 typeof result === "object" &&
                 "message" in result &&
                 typeof result.message === "string"
-          ? result.message
-          : `${contribution.label} completed.`;
-      toast(message, "success");
-    } catch (error) {
-      toast(`${contribution.label} failed: ${String(error)}`, "error");
-    }
+              ? result.message
+              : `${contribution.label} completed.`;
+        toast(message, "success");
+      } catch (error) {
+        toast(`${contribution.label} failed: ${String(error)}`, "error");
+      }
     },
-    [activeSession, lspProjectPath, toast, workspaceCwd],
+    [activeSession, lspProjectPath, toast, workspaceCwd]
   );
   // Close the renderer gate synchronously, then reopen it only after this project's backend has
   // resumed. This keeps mounted editor effects from racing a suspended project realm.
@@ -5317,14 +5601,19 @@ export default function App() {
         workspace: workspaceCwd,
       },
       (enabled) => lspSetRuntimeEnabled(enabled, lspProjectPath),
-      () => current && componentEnabledRef.current("lsp.runtime"),
+      () => current && componentEnabledRef.current("lsp.runtime")
     ).catch((error) =>
-      console.warn("Could not update language-server runtime policy", error),
+      console.warn("Could not update language-server runtime policy", error)
     );
     return () => {
       current = false;
     };
-  }, [activeComponentPolicyReady, lspPluginEnabled, lspProjectPath, lspRuntimeEnabled]);
+  }, [
+    activeComponentPolicyReady,
+    lspPluginEnabled,
+    lspProjectPath,
+    lspRuntimeEnabled,
+  ]);
   const availableDockSurfaces = useMemo<DockSurface[]>(
     () => [
       "trajectory",
@@ -5334,7 +5623,7 @@ export default function App() {
       ...(componentEnabled("files.surface") ? ["files" as const] : []),
       ...(componentEnabled("git.surface") ? ["git" as const] : []),
     ],
-    [componentEnabled],
+    [componentEnabled]
   );
 
   // A live disable removes the surface immediately, including already-open dialogs. Runtime
@@ -5479,7 +5768,7 @@ export default function App() {
                         },
                       },
                     }
-                  : current,
+                  : current
               );
             })
             .catch(() => {});
@@ -5529,45 +5818,48 @@ export default function App() {
       });
   }, [cwd]);
 
-  const openPluginManagerFor = useCallback((pluginId: string | null) => {
-    const normalizedActiveProject = activeProject
-      ? normalizePluginProjectPath(activeProject)
-      : null;
-    const scope: PluginManagerScope =
-      normalizedActiveProject &&
-      pluginManagerProjects.some(
-        (project) => project.path === normalizedActiveProject,
-      )
-        ? { kind: "project", projectPath: normalizedActiveProject }
-      : { kind: "user" };
-    setPluginManagerScope(scope);
-    setLocalPluginMarketplace(null);
-    marketCatalog()
-      .then(setMarket)
-      .catch(() => {});
-    listPlugins()
-      .then(setPlugins)
-      .catch(() => {});
-    void refreshManagedCatalogs(scope).catch(() => {});
-    refreshSkills();
-    setPluginManagerInitialPluginId(pluginId);
-    setShowAutomations(false);
-    setShowTaskBoard(false);
-    setShowPullRequests(false);
-    setShowDocker(false);
-    setShowFeishu(false);
-    setShowPluginManager(true);
-    if (railOverlay) setNarrowRailOpen(false);
-    else if (railCollapsed) setRailCollapsedRaw(0);
-  }, [
-    activeProject,
-    pluginManagerProjects,
-    railCollapsed,
-    railOverlay,
-    refreshManagedCatalogs,
-    refreshSkills,
-    setRailCollapsedRaw,
-  ]);
+  const openPluginManagerFor = useCallback(
+    (pluginId: string | null) => {
+      const normalizedActiveProject = activeProject
+        ? normalizePluginProjectPath(activeProject)
+        : null;
+      const scope: PluginManagerScope =
+        normalizedActiveProject &&
+        pluginManagerProjects.some(
+          (project) => project.path === normalizedActiveProject
+        )
+          ? { kind: "project", projectPath: normalizedActiveProject }
+          : { kind: "user" };
+      setPluginManagerScope(scope);
+      setLocalPluginMarketplace(null);
+      marketCatalog()
+        .then(setMarket)
+        .catch(() => {});
+      listPlugins()
+        .then(setPlugins)
+        .catch(() => {});
+      void refreshManagedCatalogs(scope).catch(() => {});
+      refreshSkills();
+      setPluginManagerInitialPluginId(pluginId);
+      setShowAutomations(false);
+      setShowTaskBoard(false);
+      setShowPullRequests(false);
+      setShowDocker(false);
+      setShowFeishu(false);
+      setShowPluginManager(true);
+      if (railOverlay) setNarrowRailOpen(false);
+      else if (railCollapsed) setRailCollapsedRaw(0);
+    },
+    [
+      activeProject,
+      pluginManagerProjects,
+      railCollapsed,
+      railOverlay,
+      refreshManagedCatalogs,
+      refreshSkills,
+      setRailCollapsedRaw,
+    ]
+  );
   const openPluginManager = useCallback(() => {
     openPluginManagerFor(null);
   }, [openPluginManagerFor]);
@@ -5578,35 +5870,35 @@ export default function App() {
 
   const refreshPluginManagerData = useCallback(
     async (scope: PluginManagerScope = pluginManagerScope) => {
-    const [nextMarket, nextPlugins, nextSkills] = await Promise.all([
-      marketCatalog(),
-      listPlugins(),
-      refreshSkills(),
-      refreshManagedCatalogs(scope),
-    ]);
-    setMarket(nextMarket);
-    setPlugins(nextPlugins);
-    setSkills(nextSkills);
+      const [nextMarket, nextPlugins, nextSkills] = await Promise.all([
+        marketCatalog(),
+        listPlugins(),
+        refreshSkills(),
+        refreshManagedCatalogs(scope),
+      ]);
+      setMarket(nextMarket);
+      setPlugins(nextPlugins);
+      setSkills(nextSkills);
     },
-    [pluginManagerScope, refreshManagedCatalogs, refreshSkills],
+    [pluginManagerScope, refreshManagedCatalogs, refreshSkills]
   );
 
   const planManagerChange = useCallback(
     async (
-    request: PluginManagerChangeRequest,
+      request: PluginManagerChangeRequest
     ): Promise<PluginManagerChangePlan> => {
       const plan = await planPluginManagerChange({
-      request,
+        request,
         plugins: localizedPluginManagerModel.plugins,
         components: localizedPluginManagerModel.components,
-      planChange: planPluginChange,
+        planChange: planPluginChange,
       });
       return {
         ...plan,
         summary: pluginManagerLabels.changeSummary(
           request.targetKind,
           request.targetName,
-          request.desiredState,
+          request.desiredState
         ),
       };
     },
@@ -5614,52 +5906,52 @@ export default function App() {
       localizedPluginManagerModel.components,
       localizedPluginManagerModel.plugins,
       pluginManagerLabels,
-    ],
+    ]
   );
 
   const applyManagerChange = useCallback(
     async (plan: PluginManagerChangePlan) => {
-    await applyPluginManagerChange(plan, applyPluginChange);
-    await refreshPluginManagerData(plan.request.scope);
-    toast(
+      await applyPluginManagerChange(plan, applyPluginChange);
+      await refreshPluginManagerData(plan.request.scope);
+      toast(
         pluginManagerLabels.changeApplied(
           plan.request.targetName,
-          plan.request.desiredState,
+          plan.request.desiredState
         ),
-      "success",
-    );
+        "success"
+      );
     },
-    [pluginManagerLabels, refreshPluginManagerData, toast],
+    [pluginManagerLabels, refreshPluginManagerData, toast]
   );
 
   const saveManagerConfig = useCallback(
     async ({
-    pluginId,
-    scope,
-    config,
-  }: {
-    pluginId: string;
-    scope: PluginManagerScope;
-    config: unknown;
-  }) => {
-      const plugin = pluginManagerModel.plugins.find(
-        (item) => item.id === pluginId,
-      );
-    if (!plugin || plugin.source === "bundle") {
-        throw new Error(
-          "This bundle does not expose a host-validated configuration schema.",
-        );
-    }
-    const plan = await planPluginChange({
-      plugin: plugin.id,
-      scope: toManagedPluginScope(scope),
+      pluginId,
+      scope,
       config,
-    });
-    await applyPluginChange(plan.id);
-    await refreshPluginManagerData(scope);
-    toast(`${plugin.name} configuration saved and reloaded.`, "success");
+    }: {
+      pluginId: string;
+      scope: PluginManagerScope;
+      config: unknown;
+    }) => {
+      const plugin = pluginManagerModel.plugins.find(
+        (item) => item.id === pluginId
+      );
+      if (!plugin || plugin.source === "bundle") {
+        throw new Error(
+          "This bundle does not expose a host-validated configuration schema."
+        );
+      }
+      const plan = await planPluginChange({
+        plugin: plugin.id,
+        scope: toManagedPluginScope(scope),
+        config,
+      });
+      await applyPluginChange(plan.id);
+      await refreshPluginManagerData(scope);
+      toast(`${plugin.name} configuration saved and reloaded.`, "success");
     },
-    [pluginManagerModel.plugins, refreshPluginManagerData, toast],
+    [pluginManagerModel.plugins, refreshPluginManagerData, toast]
   );
 
   const openAutomations = useCallback(() => {
@@ -5736,28 +6028,31 @@ export default function App() {
     setShowSourceControl(true);
   }, [componentEnabled, toast]);
 
-  const openWorkingDirectory = useCallback(async (target: WorkspaceOpenTarget) => {
-    const application =
-      target === "cursor"
-        ? t("header.cursor")
-        : target === "antigravity"
-          ? t("header.antigravity")
-          : fileManagerLabel;
-    try {
-      if (!(await openWorkspace(cwd || ".", target))) {
-        throw new Error("Workspace launcher unavailable");
+  const openWorkingDirectory = useCallback(
+    async (target: WorkspaceOpenTarget) => {
+      const application =
+        target === "cursor"
+          ? t("header.cursor")
+          : target === "antigravity"
+            ? t("header.antigravity")
+            : fileManagerLabel;
+      try {
+        if (!(await openWorkspace(cwd || ".", target))) {
+          throw new Error("Workspace launcher unavailable");
+        }
+      } catch {
+        toast(t("header.openFailed", { application }), "error");
       }
-    } catch {
-      toast(t("header.openFailed", { application }), "error");
-    }
-  }, [cwd, fileManagerLabel, t, toast]);
+    },
+    [cwd, fileManagerLabel, t, toast]
+  );
 
   const doCheckpoint = useCallback(async () => {
     try {
       const cp = await gitCheckpoint(cwd || ".", "manual checkpoint");
       toast(
         cp ? "Checkpoint saved." : "Nothing to checkpoint.",
-        cp ? "success" : "info",
+        cp ? "success" : "info"
       );
     } catch (e) {
       toast(`Checkpoint failed: ${e}`, "error");
@@ -5818,7 +6113,7 @@ export default function App() {
       if (componentId && !componentEnabled(componentId)) {
         toast(
           `${t[0]?.toUpperCase()}${t.slice(1)} is disabled in Plugins.`,
-          "info",
+          "info"
         );
         return;
       }
@@ -5826,95 +6121,118 @@ export default function App() {
       manualDockTab(dockTabRef.current === t ? null : t);
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
-    [componentEnabled, manualDockTab, toast],
+    [componentEnabled, manualDockTab, toast]
   );
 
-  const runProjectAction = useCallback((script: ProjectScript) => {
-    if (script.kind === "prompt") {
-      const doc: DocBlock[] = [{ type: "text", text: script.prompt }];
-      const session = activeSessionRef.current;
-      if (session && runningSessionsRef.current.has(session)) {
-        void sendDuringTurn("queued", doc);
-      } else {
-        void run(doc);
+  const runProjectAction = useCallback(
+    (script: ProjectScript) => {
+      if (script.kind === "prompt") {
+        const doc: DocBlock[] = [{ type: "text", text: script.prompt }];
+        const session = activeSessionRef.current;
+        if (session && runningSessionsRef.current.has(session)) {
+          void sendDuringTurn("queued", doc);
+        } else {
+          void run(doc);
+        }
+        return;
       }
-      return;
-    }
-    const name = script.name || script.id;
-    if (script.preview_url && script.open_preview) {
-      if (componentEnabled("browser.dock")) {
-        setBrowserUrl(script.preview_url);
-        void browserRegistryCreate(script.preview_url).catch((error) => {
-          toast(t("actionDialog.failed", { error: String(error) }), "error");
-        });
-        manualDockTab("browser");
-        setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-      } else {
-        toast("Browser preview is disabled in Plugins.", "info");
+      const name = script.name || script.id;
+      if (script.preview_url && script.open_preview) {
+        if (componentEnabled("browser.dock")) {
+          setBrowserUrl(script.preview_url);
+          void browserRegistryCreate(script.preview_url).catch((error) => {
+            toast(t("actionDialog.failed", { error: String(error) }), "error");
+          });
+          manualDockTab("browser");
+          setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+        } else {
+          toast("Browser preview is disabled in Plugins.", "info");
+        }
       }
-    }
-    toast(t("actionDialog.running", { name }));
-    void runProjectScript(cwd || ".", script.id)
-      .then((output) => {
-        const message = output.trim()
-          ? output.trim().slice(-300)
-          : t("actionDialog.finished", { name });
-        toast(message, "success");
-      })
-      .catch((error) => toast(t("actionDialog.failed", { error: String(error) }), "error"));
-  }, [componentEnabled, cwd, manualDockTab, run, sendDuringTurn, t, toast]);
+      toast(t("actionDialog.running", { name }));
+      void runProjectScript(cwd || ".", script.id)
+        .then((output) => {
+          const message = output.trim()
+            ? output.trim().slice(-300)
+            : t("actionDialog.finished", { name });
+          toast(message, "success");
+        })
+        .catch((error) =>
+          toast(t("actionDialog.failed", { error: String(error) }), "error")
+        );
+    },
+    [componentEnabled, cwd, manualDockTab, run, sendDuringTurn, t, toast]
+  );
 
-  const saveProjectAction = useCallback(async (script: ProjectScript) => {
-    const saved = await saveProjectScript(cwd || ".", script);
-    setScripts((current) => {
-      const index = current.findIndex((candidate) => candidate.id === saved.id);
-      if (index < 0) return [...current, saved];
-      return current.map((candidate, candidateIndex) => candidateIndex === index ? saved : candidate);
-    });
-    toast(t("actionDialog.saved", { name: saved.name || saved.id }), "success");
-  }, [cwd, t, toast]);
+  const saveProjectAction = useCallback(
+    async (script: ProjectScript) => {
+      const saved = await saveProjectScript(cwd || ".", script);
+      setScripts((current) => {
+        const index = current.findIndex(
+          (candidate) => candidate.id === saved.id
+        );
+        if (index < 0) return [...current, saved];
+        return current.map((candidate, candidateIndex) =>
+          candidateIndex === index ? saved : candidate
+        );
+      });
+      toast(
+        t("actionDialog.saved", { name: saved.name || saved.id }),
+        "success"
+      );
+    },
+    [cwd, t, toast]
+  );
 
   // Expanding hands the whole column to the document; focus follows so you can just start writing.
-  const toggleDocMode = useCallback((v: boolean) => {
-    const focusDocument = () => {
-      if (v) setTimeout(() => focusEditorRef.current?.(), 0);
-    };
-    const transitionDocument = document as Document & {
-      startViewTransition?: (update: () => void) => { finished: Promise<void> };
-    };
-    const startViewTransition = transitionDocument.startViewTransition?.bind(document);
-    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const toggleDocMode = useCallback(
+    (v: boolean) => {
+      const focusDocument = () => {
+        if (v) setTimeout(() => focusEditorRef.current?.(), 0);
+      };
+      const transitionDocument = document as Document & {
+        startViewTransition?: (update: () => void) => {
+          finished: Promise<void>;
+        };
+      };
+      const startViewTransition =
+        transitionDocument.startViewTransition?.bind(document);
+      const reducedMotion = window.matchMedia?.(
+        "(prefers-reduced-motion: reduce)"
+      ).matches;
 
-    if (!startViewTransition || reducedMotion) {
-      setDocMode(v);
-      focusDocument();
-      return;
-    }
-
-    document.documentElement.dataset.composerModeTransition = "";
-    try {
-      const transition = startViewTransition(() => {
-        flushSync(() => setDocMode(v));
-      });
-      void transition.finished.finally(() => {
-        delete document.documentElement.dataset.composerModeTransition;
+      if (!startViewTransition || reducedMotion) {
+        setDocMode(v);
         focusDocument();
-      });
-    } catch {
-      delete document.documentElement.dataset.composerModeTransition;
-      setDocMode(v);
-      focusDocument();
-    }
-  }, [setDocMode]);
+        return;
+      }
+
+      document.documentElement.dataset.composerModeTransition = "";
+      try {
+        const transition = startViewTransition(() => {
+          flushSync(() => setDocMode(v));
+        });
+        void transition.finished.finally(() => {
+          delete document.documentElement.dataset.composerModeTransition;
+          focusDocument();
+        });
+      } catch {
+        delete document.documentElement.dataset.composerModeTransition;
+        setDocMode(v);
+        focusDocument();
+      }
+    },
+    [setDocMode]
+  );
 
   const getCanvasAssets = useCallback(
     (id: string): readonly CanvasStaticAsset[] => {
-    const current = canvasAssetsRef.current.get(id);
-    if (current) return Array.from(current.values());
-    const draft = canvasDraftsRef.current.get(id);
-    return draft?.assets ?? [];
+      const current = canvasAssetsRef.current.get(id);
+      if (current) return Array.from(current.values());
+      const draft = canvasDraftsRef.current.get(id);
+      return draft?.assets ?? [];
     },
-    [],
+    []
   );
 
   const rememberCanvasDraft = useCallback((draft: CanvasDraft) => {
@@ -5926,31 +6244,31 @@ export default function App() {
   const normalizeCanvasMedia = useCallback(
     async (
       canvasId: string,
-      input: import("./canvas/media").CanvasMediaInput,
+      input: import("./canvas/media").CanvasMediaInput
     ) => {
       const bytes =
         input.bytes instanceof Uint8Array
-      ? input.bytes
-      : input.bytes instanceof ArrayBuffer
-        ? new Uint8Array(input.bytes)
-        : new Uint8Array(await input.bytes.arrayBuffer());
-    const normalized = await canvasNormalizeMedia(bytes, input.mimeType);
-    const media = {
-      ref: normalized.id,
-      bytes: new Uint8Array(normalized.bytes),
-      mimeType: normalized.mimeType,
-      name: input.name,
-      width: normalized.width,
-      height: normalized.height,
-    } as const;
+          ? input.bytes
+          : input.bytes instanceof ArrayBuffer
+            ? new Uint8Array(input.bytes)
+            : new Uint8Array(await input.bytes.arrayBuffer());
+      const normalized = await canvasNormalizeMedia(bytes, input.mimeType);
+      const media = {
+        ref: normalized.id,
+        bytes: new Uint8Array(normalized.bytes),
+        mimeType: normalized.mimeType,
+        name: input.name,
+        width: normalized.width,
+        height: normalized.height,
+      } as const;
       const existing =
         canvasAssetsRef.current.get(canvasId) ??
         new Map<string, CanvasStaticAsset>();
-    existing.set(normalized.id, normalized);
-    canvasAssetsRef.current.set(canvasId, existing);
-    return media;
+      existing.set(normalized.id, normalized);
+      canvasAssetsRef.current.set(canvasId, existing);
+      return media;
     },
-    [],
+    []
   );
 
   const resolveCanvasAsset = useCallback(
@@ -5960,71 +6278,71 @@ export default function App() {
         ref: string;
         fileId: string;
         mimeType: "image/png" | "image/webp";
-      },
+      }
     ) => {
       const stored =
         canvasAssetsRef.current.get(canvasId)?.get(asset.ref) ??
         canvasAssetsRef.current.get(canvasId)?.get(asset.fileId);
-    if (stored) {
-      return {
-        ref: stored.id,
-        fileId: stored.id,
-        mimeType: stored.mimeType,
-        bytes: new Uint8Array(stored.bytes),
-      };
-    }
-    return null;
+      if (stored) {
+        return {
+          ref: stored.id,
+          fileId: stored.id,
+          mimeType: stored.mimeType,
+          bytes: new Uint8Array(stored.bytes),
+        };
+      }
+      return null;
     },
-    [],
+    []
   );
 
   const saveCanvasDraft = useCallback(
     async (
       canvasId: string,
       envelope: LocalCanvasEnvelope,
-      assets: readonly CanvasStaticAsset[],
+      assets: readonly CanvasStaticAsset[]
     ) => {
-    const current = canvasDraftsRef.current.get(canvasId);
-    const update = {
-      title: current?.title ?? "Canvas",
-      theme: envelope.theme,
-      envelope: localCanvasScene(envelope, assets),
-      manifest: localCanvasManifest(envelope),
-      assets: Array.from(assets),
-    };
+      const current = canvasDraftsRef.current.get(canvasId);
+      const update = {
+        title: current?.title ?? "Canvas",
+        theme: envelope.theme,
+        envelope: localCanvasScene(envelope, assets),
+        manifest: localCanvasManifest(envelope),
+        assets: Array.from(assets),
+      };
       const saved = await canvasUpdateDraft(
         canvasId,
         envelope.revision,
-        update,
+        update
       );
-    rememberCanvasDraft(saved);
-    return saved;
+      rememberCanvasDraft(saved);
+      return saved;
     },
-    [rememberCanvasDraft],
+    [rememberCanvasDraft]
   );
 
   const freezeCanvasDraft = useCallback(
     async (
-    canvasId: string,
-    envelope: LocalCanvasEnvelope,
-    assets: readonly CanvasStaticAsset[],
-    exports: readonly CanvasExport[],
-    _pixelPolicy: CanvasPixelPolicy,
-  ): Promise<CanvasSnapshot> => {
-    const current = canvasDraftsRef.current.get(canvasId);
-    const frozen = await canvasFreeze(canvasId, envelope.revision, {
-      title: current?.title ?? "Canvas",
-      theme: envelope.theme,
-      envelope: localCanvasScene(envelope, assets),
-      manifest: localCanvasManifest(envelope),
-      assets: Array.from(assets),
-      // Keep validated PNG exports in the immutable revision for history and later provider
-      // retries. The pixel policy is applied by core lowering, not by dropping evidence here.
-      exports: Array.from(exports),
-    });
-    return frozen;
+      canvasId: string,
+      envelope: LocalCanvasEnvelope,
+      assets: readonly CanvasStaticAsset[],
+      exports: readonly CanvasExport[],
+      _pixelPolicy: CanvasPixelPolicy
+    ): Promise<CanvasSnapshot> => {
+      const current = canvasDraftsRef.current.get(canvasId);
+      const frozen = await canvasFreeze(canvasId, envelope.revision, {
+        title: current?.title ?? "Canvas",
+        theme: envelope.theme,
+        envelope: localCanvasScene(envelope, assets),
+        manifest: localCanvasManifest(envelope),
+        assets: Array.from(assets),
+        // Keep validated PNG exports in the immutable revision for history and later provider
+        // retries. The pixel policy is applied by core lowering, not by dropping evidence here.
+        exports: Array.from(exports),
+      });
+      return frozen;
     },
-    [],
+    []
   );
 
   const forgetCanvasHead = useCallback((canvasId: string) => {
@@ -6040,89 +6358,89 @@ export default function App() {
         canvasAssetsRef.current.has(canvasId);
       const plan = canvasUnmountPlan(
         hasMutableHead,
-        canvasTombstonesRef.current.has(canvasId),
+        canvasTombstonesRef.current.has(canvasId)
       );
-    if (!plan.purge) return;
-    canvasPurgeRequestedRef.current.add(canvasId);
-    if (plan.tombstone) {
-      canvasTombstonesRef.current.add(canvasId);
-      await canvasTombstone(canvasId);
-    }
-    await canvasPurge(canvasId);
-    canvasTombstonesRef.current.delete(canvasId);
-    canvasPurgeRequestedRef.current.delete(canvasId);
-    forgetCanvasHead(canvasId);
+      if (!plan.purge) return;
+      canvasPurgeRequestedRef.current.add(canvasId);
+      if (plan.tombstone) {
+        canvasTombstonesRef.current.add(canvasId);
+        await canvasTombstone(canvasId);
+      }
+      await canvasPurge(canvasId);
+      canvasTombstonesRef.current.delete(canvasId);
+      canvasPurgeRequestedRef.current.delete(canvasId);
+      forgetCanvasHead(canvasId);
     },
-    [forgetCanvasHead],
+    [forgetCanvasHead]
   );
 
   const removeCanvasDraft = useCallback(
     (canvasId: string, nonEmpty: boolean) => {
-    canvasTombstonesRef.current.add(canvasId);
-    if (!nonEmpty) {
-      canvasPurgeRequestedRef.current.delete(canvasId);
-      void canvasPurge(canvasId)
-        .then(() => forgetCanvasHead(canvasId))
-        .catch(() => {});
-      return;
-    }
-    void canvasTombstone(canvasId)
-      .then(() => {
-        if (!canvasPurgeRequestedRef.current.has(canvasId)) return;
-        return purgeCanvasHead(canvasId);
-      })
-      .catch((error) => {
+      canvasTombstonesRef.current.add(canvasId);
+      if (!nonEmpty) {
+        canvasPurgeRequestedRef.current.delete(canvasId);
+        void canvasPurge(canvasId)
+          .then(() => forgetCanvasHead(canvasId))
+          .catch(() => {});
+        return;
+      }
+      void canvasTombstone(canvasId)
+        .then(() => {
+          if (!canvasPurgeRequestedRef.current.has(canvasId)) return;
+          return purgeCanvasHead(canvasId);
+        })
+        .catch((error) => {
           toast(
             `Canvas removal could not be recorded: ${String(error)}`,
-            "error",
+            "error"
           );
-      });
+        });
     },
-    [forgetCanvasHead, purgeCanvasHead, toast],
+    [forgetCanvasHead, purgeCanvasHead, toast]
   );
 
   const restoreCanvasDraft = useCallback(
     (canvasId: string) => {
-    if (!canvasTombstonesRef.current.has(canvasId)) return;
-    canvasTombstonesRef.current.delete(canvasId);
-    void canvasRestore(canvasId).catch((error) => {
-      toast(`Canvas restore failed: ${String(error)}`, "error");
-    });
+      if (!canvasTombstonesRef.current.has(canvasId)) return;
+      canvasTombstonesRef.current.delete(canvasId);
+      void canvasRestore(canvasId).catch((error) => {
+        toast(`Canvas restore failed: ${String(error)}`, "error");
+      });
     },
-    [toast],
+    [toast]
   );
 
   const purgeCanvasOnUnmount = useCallback(
     (canvasId: string) => {
-    void purgeCanvasHead(canvasId).catch(() => {});
+      void purgeCanvasHead(canvasId).catch(() => {});
     },
-    [purgeCanvasHead],
+    [purgeCanvasHead]
   );
 
   const canvasUiEnabled =
     canvasFeature.enabled && componentEnabled("canvas.editor");
   const canvasRuntime = useMemo<CanvasBlockRuntime | null>(
     () => ({
-    enabled: canvasUiEnabled,
-    normalizeMedia: normalizeCanvasMedia,
-    resolveAsset: resolveCanvasAsset,
-    getAssets: getCanvasAssets,
-    onAsset: (canvasId, asset) => {
+      enabled: canvasUiEnabled,
+      normalizeMedia: normalizeCanvasMedia,
+      resolveAsset: resolveCanvasAsset,
+      getAssets: getCanvasAssets,
+      onAsset: (canvasId, asset) => {
         const assets =
           canvasAssetsRef.current.get(canvasId) ??
           new Map<string, CanvasStaticAsset>();
-      assets.set(asset.id, asset);
-      canvasAssetsRef.current.set(canvasId, assets);
-    },
-    onCanvasActivity: () => {},
-    saveDraft: saveCanvasDraft,
-    freezeDraft: freezeCanvasDraft,
-    onCanvasRemoved: removeCanvasDraft,
-    onCanvasRestored: restoreCanvasDraft,
-    onCanvasUnmount: (canvasId) => purgeCanvasOnUnmount(canvasId),
-    onCanvasFrozen: (canvasId) => canvasFrozenRef.current.add(canvasId),
-    onCanvasDeliveryError: (_canvasId, message) => toast(message, "error"),
-    register: () => () => {},
+        assets.set(asset.id, asset);
+        canvasAssetsRef.current.set(canvasId, assets);
+      },
+      onCanvasActivity: () => {},
+      saveDraft: saveCanvasDraft,
+      freezeDraft: freezeCanvasDraft,
+      onCanvasRemoved: removeCanvasDraft,
+      onCanvasRestored: restoreCanvasDraft,
+      onCanvasUnmount: (canvasId) => purgeCanvasOnUnmount(canvasId),
+      onCanvasFrozen: (canvasId) => canvasFrozenRef.current.add(canvasId),
+      onCanvasDeliveryError: (_canvasId, message) => toast(message, "error"),
+      register: () => () => {},
     }),
     [
       canvasUiEnabled,
@@ -6135,7 +6453,7 @@ export default function App() {
       restoreCanvasDraft,
       saveCanvasDraft,
       toast,
-    ],
+    ]
   );
 
   const createCanvas = useCallback(async () => {
@@ -6143,7 +6461,7 @@ export default function App() {
       const error = new Error(
         componentEnabled("canvas.editor")
           ? canvasFeature.status
-          : "Canvas is disabled in Plugins.",
+          : "Canvas is disabled in Plugins."
       );
       toast(error.message, "error");
       throw error;
@@ -6169,7 +6487,7 @@ export default function App() {
           componentEnabled("canvas.editor")
             ? canvasFeature.status
             : "Canvas is disabled in Plugins.",
-          "error",
+          "error"
         );
         return;
       }
@@ -6179,7 +6497,7 @@ export default function App() {
           insertCanvasDraftRef.current?.(draft);
         })
         .catch((error) =>
-          toast(`Canvas duplicate failed: ${String(error)}`, "error"),
+          toast(`Canvas duplicate failed: ${String(error)}`, "error")
         );
     };
     window.addEventListener("codetwo-canvas-duplicate", onDuplicate);
@@ -6196,24 +6514,30 @@ export default function App() {
   useEffect(() => {
     let confirmationOpen = false;
     const onVisualizeFollowUp = (event: Event) => {
-      const detail = (event as CustomEvent<{ prompt?: string; title?: string }>).detail;
+      const detail = (event as CustomEvent<{ prompt?: string; title?: string }>)
+        .detail;
       const prompt = detail?.prompt?.trim();
       if (!prompt || !insertTextRef.current || confirmationOpen) return;
       confirmationOpen = true;
       void confirmNative(
         t("visualization.followUp", { prompt }),
-        detail.title || t("visualization.title"),
-      ).then((accepted) => {
-        if (!accepted) return;
-        insertTextRef.current?.(prompt);
-        setTimeout(() => focusEditorRef.current?.(), 0);
-      }).finally(() => {
-        confirmationOpen = false;
-      });
+        detail.title || t("visualization.title")
+      )
+        .then((accepted) => {
+          if (!accepted) return;
+          insertTextRef.current?.(prompt);
+          setTimeout(() => focusEditorRef.current?.(), 0);
+        })
+        .finally(() => {
+          confirmationOpen = false;
+        });
     };
     window.addEventListener("codetwo-visualize-follow-up", onVisualizeFollowUp);
     return () =>
-      window.removeEventListener("codetwo-visualize-follow-up", onVisualizeFollowUp);
+      window.removeEventListener(
+        "codetwo-visualize-follow-up",
+        onVisualizeFollowUp
+      );
   }, [t]);
 
   /** Open a file as a tab in the right panel's editor, and bring that panel to the front. */
@@ -6233,7 +6557,7 @@ export default function App() {
               column: position.column,
               requestId: ++fileRevealRequestRef.current,
             }
-          : null,
+          : null
       );
       setDockTab("files");
       // The files surface is an editor *and* a tree; at the dock's chat-sized default the code
@@ -6242,7 +6566,7 @@ export default function App() {
         setDockWidth(Math.min(Math.max(300, window.innerWidth - 620), 800));
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
-    [componentEnabled, dockWidth, setDockWidth, toast],
+    [componentEnabled, dockWidth, setDockWidth, toast]
   );
 
   const openBuiltinWebLink = useCallback(
@@ -6258,7 +6582,7 @@ export default function App() {
       manualDockTab("browser");
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
-    [componentEnabled, manualDockTab, t, toast],
+    [componentEnabled, manualDockTab, t, toast]
   );
 
   const openBuiltinFileLink = useCallback(
@@ -6273,19 +6597,23 @@ export default function App() {
         path,
         target.line
           ? { line: target.line, column: target.column ?? 1 }
-          : undefined,
+          : undefined
       );
     },
-    [componentEnabled, cwd, openFileTab, toast],
+    [componentEnabled, cwd, openFileTab, toast]
   );
 
   const builtinLinkActions = useMemo<BuiltinLinkActions>(
     () => ({
       workspaceRoot: cwd || ".",
-      openWebLink: componentEnabled("browser.dock") ? openBuiltinWebLink : undefined,
-      openFileLink: componentEnabled("files.surface") ? openBuiltinFileLink : undefined,
+      openWebLink: componentEnabled("browser.dock")
+        ? openBuiltinWebLink
+        : undefined,
+      openFileLink: componentEnabled("files.surface")
+        ? openBuiltinFileLink
+        : undefined,
     }),
-    [componentEnabled, cwd, openBuiltinFileLink, openBuiltinWebLink],
+    [componentEnabled, cwd, openBuiltinFileLink, openBuiltinWebLink]
   );
 
   const closeFileTab = useCallback(
@@ -6304,7 +6632,7 @@ export default function App() {
         setActiveFile(next[Math.min(Math.max(at, 0), next.length - 1)] ?? null);
       }
     },
-    [openFiles, activeFile, cwd, t],
+    [openFiles, activeFile, cwd, t]
   );
 
   const stepSession = useCallback(
@@ -6314,7 +6642,7 @@ export default function App() {
       const next = sessions[(at + delta + sessions.length) % sessions.length];
       if (next) void selectSession(next.id);
     },
-    [sessions, activeSession, selectSession],
+    [sessions, activeSession, selectSession]
   );
 
   /**
@@ -6381,24 +6709,31 @@ export default function App() {
             options.map((option) =>
               option.id === choice.configId
                 ? { ...option, current: choice.value }
-                : option,
-            ),
+                : option
+            )
           );
-          void setConfigOption(session, choice.configId, choice.value).catch((error) => {
-            scenePlanAppliedRef.current.delete(session);
-            setPlanMode(previousPlanMode);
-            setConfigOptions((options) =>
-              options.map((option) =>
-                option.id === choice.configId
-                  ? { ...option, current: previousPlanMode ? "plan" : "default" }
-                  : option,
-              ),
-            );
-            setScenePendingFields((fields) =>
-              fields.includes("plan_first") ? fields : [...fields, "plan_first"],
-            );
-            toast(t("toast.configFailed", { error: String(error) }), "error");
-          });
+          void setConfigOption(session, choice.configId, choice.value).catch(
+            (error) => {
+              scenePlanAppliedRef.current.delete(session);
+              setPlanMode(previousPlanMode);
+              setConfigOptions((options) =>
+                options.map((option) =>
+                  option.id === choice.configId
+                    ? {
+                        ...option,
+                        current: previousPlanMode ? "plan" : "default",
+                      }
+                    : option
+                )
+              );
+              setScenePendingFields((fields) =>
+                fields.includes("plan_first")
+                  ? fields
+                  : [...fields, "plan_first"]
+              );
+              toast(t("toast.configFailed", { error: String(error) }), "error");
+            }
+          );
         }
       }
       setActiveSceneName(reference);
@@ -6407,18 +6742,18 @@ export default function App() {
         sceneBySessionRef.current.set(session, reference);
         void applySceneToSession(session, reference, confirmed).then(
           (outcome) => {
-          if (!componentEnabledRef.current("scenes.surface")) return;
-          // The core re-checks against the persisted policy; if it disagrees, nothing was
-          // applied there — surface the same dialog instead of drifting.
-          if (outcome?.escalation) {
-            setSceneEscalation({
-              reference,
-              kind: "soft",
-              from: outcome.escalation.from as SessionMode,
-              to: outcome.escalation.to as SessionMode,
-            });
+            if (!componentEnabledRef.current("scenes.surface")) return;
+            // The core re-checks against the persisted policy; if it disagrees, nothing was
+            // applied there — surface the same dialog instead of drifting.
+            if (outcome?.escalation) {
+              setSceneEscalation({
+                reference,
+                kind: "soft",
+                from: outcome.escalation.from as SessionMode,
+                to: outcome.escalation.to as SessionMode,
+              });
+            }
           }
-          },
         );
       } else {
         pendingSceneRef.current = reference;
@@ -6438,7 +6773,7 @@ export default function App() {
       onMemoryPolicyChange,
       toast,
       t,
-    ],
+    ]
   );
 
   const setAutoSceneChoice = useCallback((enabled: boolean) => {
@@ -6479,7 +6814,7 @@ export default function App() {
       applySceneChoice(reference, { confirmed: true });
       pendingSceneRef.current = reference;
     },
-    [applySceneChoice, createSession],
+    [applySceneChoice, createSession]
   );
 
   /** The pinned scene reference a pipeline stage's bare scene name resolves to, when installed. */
@@ -6513,7 +6848,7 @@ export default function App() {
         instanceId,
         toStage,
         session,
-        confirmed,
+        confirmed
       );
       if (!componentEnabledRef.current("scenes.surface") || !outcome) return;
       const escalation =
@@ -6537,7 +6872,7 @@ export default function App() {
       const stage = detail?.stages.find((s) => s.id === toStage);
       toast(t("stage.advanced", { stage: stage?.title ?? toStage }));
     },
-    [pipelineDetail, resolveStageScene, syncSessionScene, toast, t],
+    [pipelineDetail, resolveStageScene, syncSessionScene, toast, t]
   );
 
   /**
@@ -6552,7 +6887,7 @@ export default function App() {
         instanceId,
         toStage,
         null,
-        confirmed,
+        confirmed
       );
       if (!componentEnabledRef.current("scenes.surface") || !outcome) return;
       if (outcome.escalation) {
@@ -6589,7 +6924,7 @@ export default function App() {
       resolveStageScene,
       toast,
       t,
-    ],
+    ]
   );
 
   /** Start a pipeline in the current project, binding the active session to its entry stage. */
@@ -6618,7 +6953,7 @@ export default function App() {
         pipelines.find((p) => p.reference === reference)?.title ?? reference;
       toast(t("stage.started", { pipeline: title }));
     },
-    [cwd, pipelines, resolveStageScene, syncSessionScene, toast, t],
+    [cwd, pipelines, resolveStageScene, syncSessionScene, toast, t]
   );
 
   /**
@@ -6630,7 +6965,7 @@ export default function App() {
     async (issue: Issue, sceneReference: string) => {
       if (!componentEnabledRef.current("scenes.surface")) return;
       const scene = scenesRef.current.find(
-        (s) => s.reference === sceneReference,
+        (s) => s.reference === sceneReference
       );
       if (!scene) return;
       const ctx = await issueContext(issue);
@@ -6654,7 +6989,7 @@ export default function App() {
         issue.id,
         issue.title,
         sceneReference,
-        scene.title,
+        scene.title
       );
       if (!componentEnabledRef.current("scenes.surface")) return;
       pendingSceneRef.current = sceneReference;
@@ -6680,14 +7015,14 @@ export default function App() {
           insertIssueRef.current?.(
             pending.issue,
             pending.context,
-            pending.delegatedScene,
+            pending.delegatedScene
           );
         }
       }, 0);
       setShowIssues(false);
       toast(
         t("issueDeleg.toast", { id: issue.id, scene: scene.title }),
-        "success",
+        "success"
       );
       // Best-effort attribution on the tracker, fire-and-forget. GitHub only: Linear's comment
       // call needs the caller-held API token `listLinearIssues` uses, which this surface does
@@ -6697,21 +7032,26 @@ export default function App() {
           cwd || ".",
           issue.source,
           issue.id,
-          t("issueDeleg.commentBody", { scene: scene.title }),
+          t("issueDeleg.commentBody", { scene: scene.title })
         ).then((url) => {
           if (url && delegationId !== null)
             void setIssueDelegationComment(delegationId, url);
         });
       }
     },
-    [applySceneChoice, createSession, cwd, toast, t],
+    [applySceneChoice, createSession, cwd, toast, t]
   );
 
   const dispatchAction = useCallback(
     (action: string) => {
       switch (action) {
         case "run":
-          void run(undefined, undefined, focusedPaneRef.current, activeAppshots);
+          void run(
+            undefined,
+            undefined,
+            focusedPaneRef.current,
+            activeAppshots
+          );
           break;
         case "new_session":
           setShowTaskBoard(false);
@@ -6818,7 +7158,7 @@ export default function App() {
           const next = nextSceneInRing(
             [],
             scenesRef.current,
-            activeSceneNameRef.current,
+            activeSceneNameRef.current
           );
           if (next) applySceneChoice(next);
           break;
@@ -6857,14 +7197,17 @@ export default function App() {
       toast,
       applySceneChoice,
       componentEnabled,
-    ],
+    ]
   );
 
   // Hints come from the live keymap, so a rebind is reflected everywhere without touching labels.
-  const hint = useCallback((action: string) => keyHint(bindings, action), [bindings]);
+  const hint = useCallback(
+    (action: string) => keyHint(bindings, action),
+    [bindings]
+  );
   const effectiveBindings = useMemo(
     () => [...bindings, ...projectActionBindings(scripts)],
-    [bindings, scripts],
+    [bindings, scripts]
   );
 
   const paletteCommands: Command[] = [
@@ -6880,10 +7223,10 @@ export default function App() {
       label: "New task",
       hint: hint("new_session"),
       run: () => {
-      setShowTaskBoard(false);
-      setShowPluginManager(false);
-      setShowAutomations(false);
-      createTaskDraft();
+        setShowTaskBoard(false);
+        setShowPluginManager(false);
+        setShowAutomations(false);
+        createTaskDraft();
       },
     },
     {
@@ -6987,7 +7330,11 @@ export default function App() {
         : "Collapse the sidebar",
       run: toggleDisplayedRail,
     },
-    { id: "remote", label: t("rail.deviceConnections"), run: () => setShowRemote(true) },
+    {
+      id: "remote",
+      label: t("rail.deviceConnections"),
+      run: () => setShowRemote(true),
+    },
     {
       id: "settings",
       category: "setting" as const,
@@ -7046,8 +7393,8 @@ export default function App() {
       id: "scene-studio",
       label: t("sceneEditor.manage"),
       run: () => {
-      setSceneEditorRequest(null);
-      setShowSceneStudio(true);
+        setSceneEditorRequest(null);
+        setShowSceneStudio(true);
       },
     },
     {
@@ -7068,9 +7415,10 @@ export default function App() {
     })),
     ...scripts.map((s) => ({
       id: `script-${s.id}`,
-      label: s.kind === "prompt"
-        ? `Send prompt: ${s.name || s.id}`
-        : `Run script: ${s.name || s.id}`,
+      label:
+        s.kind === "prompt"
+          ? `Send prompt: ${s.name || s.id}`
+          : `Run script: ${s.name || s.id}`,
       hint: s.kind === "prompt" ? s.prompt : s.command,
       run: () => runProjectAction(s),
     })),
@@ -7130,16 +7478,18 @@ export default function App() {
           // The list is in a fixed order, so "used last" is a property of the rows, not their
           // position — read it off `last_opened_at` rather than taking the first one.
           const last = list.reduce((a, b) =>
-            b.last_opened_at > a.last_opened_at ? b : a,
+            b.last_opened_at > a.last_opened_at ? b : a
           );
           activeProjectRef.current = last.path;
           setCallProjectPath(normalizePluginProjectPath(last.path));
           setActiveProject(last.path);
           setCwd(last.path);
           if (last.default_provider) setProvider(last.default_provider);
-          setCurrentModel(last.default_provider ? last.default_model ?? null : null);
+          setCurrentModel(
+            last.default_provider ? (last.default_model ?? null) : null
+          );
           setWorktreeBase(
-            projectSwitchWorktreeBaseline(last.default_worktree_mode),
+            projectSwitchWorktreeBaseline(last.default_worktree_mode)
           );
           setProjectBootstrapComplete(true);
           return;
@@ -7225,7 +7575,9 @@ export default function App() {
         return;
       e.preventDefault();
       if (action.startsWith("project_action:")) {
-        const script = scripts.find((candidate) => `project_action:${candidate.id}` === action);
+        const script = scripts.find(
+          (candidate) => `project_action:${candidate.id}` === action
+        );
         if (script) runProjectAction(script);
         return;
       }
@@ -7233,7 +7585,14 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [capturing, dispatchAction, effectiveBindings, runProjectAction, scripts, toast]);
+  }, [
+    capturing,
+    dispatchAction,
+    effectiveBindings,
+    runProjectAction,
+    scripts,
+    toast,
+  ]);
 
   // Restore one shortcut to its shipped default.
   const resetBinding = useCallback(
@@ -7244,7 +7603,7 @@ export default function App() {
         .then(() => getKeymap().then(setBindings))
         .catch((err) => toast(`Could not reset shortcut: ${err}`, "error"));
     },
-    [toast],
+    [toast]
   );
 
   // Restore every shortcut — settings' "Restore defaults" on the keybindings tab.
@@ -7269,7 +7628,7 @@ export default function App() {
         toast(t("worktree.discardFailed", { error: String(error) }), "error");
       }
     },
-    [refreshSessions, t, toast],
+    [refreshSessions, t, toast]
   );
 
   const sessionConfig: SessionConfig = {
@@ -7343,17 +7702,17 @@ export default function App() {
     sceneCustomized:
       scenesSurfaceEnabled &&
       (() => {
-      const scene = scenes.find((s) => s.reference === activeSceneName);
-      if (!scene) return false;
-      return sceneCustomized(scene, {
-        mode: sessionMode(mode, sandbox),
-        memoryRead,
-        memoryWrite,
-        planFirst: planMode,
-        provider,
-        model: currentModel,
-      });
-    })(),
+        const scene = scenes.find((s) => s.reference === activeSceneName);
+        if (!scene) return false;
+        return sceneCustomized(scene, {
+          mode: sessionMode(mode, sandbox),
+          memoryRead,
+          memoryWrite,
+          planFirst: planMode,
+          provider,
+          model: currentModel,
+        });
+      })(),
     scenePendingFields: scenesSurfaceEnabled ? scenePendingFields : [],
     onRestartInScene: () => void restartInScene(),
   };
@@ -7362,8 +7721,8 @@ export default function App() {
     if (!componentEnabledRef.current("scenes.surface")) return;
     const previous =
       sceneEditorRequest?.kind === "edit"
-      ? sceneEditorRequest.scene.reference
-      : null;
+        ? sceneEditorRequest.scene.reference
+        : null;
     if (
       previous &&
       previous === activeSceneNameRef.current &&
@@ -7404,8 +7763,11 @@ export default function App() {
   ) : undefined;
 
   return (
-    <div className="app-shell flex h-screen flex-col overflow-hidden text-foreground">
-      <DesktopPetBridge animation={petAnimation} bubble={petConversationBubble} />
+    <div className="app-shell text-foreground flex h-screen flex-col overflow-hidden">
+      <DesktopPetBridge
+        animation={petAnimation}
+        bubble={petConversationBubble}
+      />
       {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
           Back row at its foot is the way home. */}
       {showSettings ? (
@@ -7464,1030 +7826,1181 @@ export default function App() {
           }}
         />
       ) : (
-      // page-in makes the return from settings (which remounts this whole subtree) a transition
-      // rather than a cut, and doubles as the app's own opening animation.
-      <div className="animate-page-in flex min-h-0 flex-1">
-        {/* ---------------- sessions rail ---------------- */}
-        {railOverlay && narrowRailOpen && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={t("rail.collapse")}
-            className="fixed inset-0 z-40 size-auto rounded-none bg-black/35 hover:bg-black/35"
-            onClick={() => setNarrowRailOpen(false)}
-          />
-        )}
-        <SessionRail
-          projects={projects}
-          sessions={sessions}
-          archivedSessions={archivedSessions}
-          previews={previews}
-          activeSession={activeSession}
-          runningSessions={runningSessions}
-          onSelect={(id) => {
-            setShowTaskBoard(false);
-            setShowPluginManager(false);
-            setShowAutomations(false);
-            setShowPullRequests(false);
-            setShowDocker(false);
-            setShowFeishu(false);
-            void selectSession(id);
-            if (railOverlay) setNarrowRailOpen(false);
-          }}
-          onNew={() => {
-            setShowTaskBoard(false);
-            setShowPluginManager(false);
-            setShowAutomations(false);
-            setShowPullRequests(false);
-            setShowDocker(false);
-            setShowFeishu(false);
-            createTaskDraft();
-            if (railOverlay) setNarrowRailOpen(false);
-          }}
-          quickChatOpen={quickChatOpen}
-          onToggleQuickChat={() => {
-            setQuickChatOpen((current) => !current);
-            if (narrowLayout) setNarrowRailOpen(false);
-          }}
-          onRename={(id, title) =>
-            void renameSession(id, title).then(refreshSessions)
-          }
-          onPin={(id, pinned) =>
-            void pinSession(id, pinned).then(refreshSessions)
-          }
-          onArchive={async (id, archived) => {
-            await archiveSession(id, archived);
-            await refreshSessions();
-          }}
-          onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
-          displayProvider={displayProvider}
-          onOpenMarket={() => {
-            setShowTaskBoard(false);
-            openPluginManager();
-          }}
-          onOpenAutomations={openAutomations}
-          deviceConnectionsAvailable={componentEnabled("remote.modal")}
-          deviceConnectionsOpen={showRemote}
-          onOpenDeviceConnections={() => {
-            setShowRemote(true);
-            if (railOverlay) setNarrowRailOpen(false);
-          }}
-          width={railWidth}
-          onWidth={setRailWidth}
-          newHint={hint("new_session")}
-          searchHint={hint("open_command_palette")}
-          onOpenSearch={() => setShowPalette(true)}
-          onOpenSettings={() => {
-            setShowTaskBoard(false);
-            setShowPluginManager(false);
-            setShowAutomations(false);
-            setShowPullRequests(false);
-            setShowDocker(false);
-            setShowFeishu(false);
-            setSettingsInitialTab("general");
-            if (railOverlay) setNarrowRailOpen(false);
-            setShowSettings(true);
-          }}
-          collapsed={displayedRailCollapsed}
-          overlay={railOverlay}
-          onToggleCollapse={toggleDisplayedRail}
-          taskBoardOpen={showTaskBoard}
-          onOpenTaskBoard={() => {
-            if (showTaskBoard) setShowTaskBoard(false);
-            else openTaskBoard();
-            if (railOverlay) setNarrowRailOpen(false);
-          }}
-          pullRequestsOpen={showPullRequests}
-          onOpenPullRequests={() => {
-            if (showPullRequests) setShowPullRequests(false);
-            else openPullRequests();
-            if (railOverlay) setNarrowRailOpen(false);
-          }}
-          automationsOpen={showAutomations}
-          pluginManagerOpen={showPluginManager}
-          dockerAvailable={dockerPlugin !== null}
-          dockerOpen={showDocker}
-          onOpenDocker={() => {
-            if (showDocker) setShowDocker(false);
-            else openDocker();
-            if (railOverlay) setNarrowRailOpen(false);
-          }}
-          quickQuota={railQuickQuota}
-          quickQuotaLoading={quickQuotaLoading}
-          quickQuotaProviderName={quickQuotaProviderName}
-          onOpenUsage={() => {
-            setShowTaskBoard(false);
-            setShowPluginManager(false);
-            setShowAutomations(false);
-            setShowPullRequests(false);
-            setShowDocker(false);
-            setShowFeishu(false);
-            setSettingsInitialTab("usage");
-            if (railOverlay) setNarrowRailOpen(false);
-            setShowSettings(true);
-          }}
-          pluginActions={
-            <PluginUiSlot
-              slot="rail.features"
-              contributions={pluginUiActions["rail.features"]}
-              onInvoke={async (contribution) => {
-                await invokePluginAction(contribution);
-                if (railOverlay) setNarrowRailOpen(false);
-              }}
-            />
-          }
-          resourceSections={collaborationConnector ? <div ref={setFeishuRailHost} /> : null}
-        />
-
-        <Suspense fallback={<PageLoadingFallback />}>
-          {showDocker && dockerPlugin ? (
-            <DockerPage
-              enabled={dockerPluginReady}
-              callCommand={callDocker}
-              onOpenPluginManager={openPluginManager}
-              headerLeadingAction={railExpandAction}
-            />
-          ) : null}
-
-          {collaborationConnector ? (
-            <FeishuWorkspacePage
-              enabled
-              detailVisible={showFeishu}
-              sessionId={activeSession}
-              callCommand={callFeishu}
-              subscribeEvents={subscribeFeishuEvents}
-              onHandoff={async (prompt) => {
-                await run([{ type: "text", text: prompt }]);
-              }}
-              onOpenPluginManager={openFeishuPluginSettings}
-              headerLeadingAction={railExpandAction}
-              navigationHost={feishuRailHost}
-              settingsHost={feishuSettingsHost}
-              onSelectResource={openFeishu}
-            />
-          ) : null}
-
-          {showPullRequests && (
-            <PullRequestsPage
-              headerLeadingAction={railExpandAction}
-              onChat={chatAboutPullRequest}
-              tasks={pullRequestTasks}
-              activeTaskId={activeBoardTask?.id ?? null}
-              onLinkTask={linkPullRequestToTask}
-              onUnlinkTask={unlinkPullRequestFromTask}
-              onOpenTask={() => openTaskBoard()}
-            />
-          )}
-
-          {showAutomations && (
-            componentEnabled("automation.page") ? (
-              <AutomationsPage
-                projects={projects}
-                providers={providers}
-                defaultProject={(activeProject ?? cwd) || "."}
-                defaultProvider={provider}
-                onAddProject={() => void addProjectFolder()}
-                onOpenSession={(session) => {
-                  setShowAutomations(false);
-                  void selectSession(session);
-                }}
-                headerLeadingAction={railExpandAction}
-              />
-            ) : null
-          )}
-
-        {showTaskBoard && (
-          <TaskBoardPage
-            sessions={taskBoardSessions}
-            onOpenSession={(id) => {
+        // page-in makes the return from settings (which remounts this whole subtree) a transition
+        // rather than a cut, and doubles as the app's own opening animation.
+        <div className="animate-page-in flex min-h-0 flex-1">
+          {/* ---------------- sessions rail ---------------- */}
+          {railOverlay && narrowRailOpen ? <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={t("rail.collapse")}
+              className="fixed inset-0 z-40 size-auto rounded-none bg-black/35 hover:bg-black/35"
+              onClick={() => setNarrowRailOpen(false)}
+            /> : null}
+          <SessionRail
+            projects={projects}
+            sessions={sessions}
+            archivedSessions={archivedSessions}
+            previews={previews}
+            activeSession={activeSession}
+            runningSessions={runningSessions}
+            onSelect={(id) => {
               setShowTaskBoard(false);
+              setShowPluginManager(false);
+              setShowAutomations(false);
+              setShowPullRequests(false);
+              setShowDocker(false);
+              setShowFeishu(false);
               void selectSession(id);
+              if (railOverlay) setNarrowRailOpen(false);
             }}
-            onStartTask={startBoardTask}
-            headerLeadingAction={railExpandAction}
-          />
-        )}
-
-        {showPluginManager && (
-          <PluginManagerPage
-            plugins={localizedPluginManagerModel.plugins}
-            components={localizedPluginManagerModel.components}
-            marketplaceItems={localizedPluginManagerModel.marketplaceItems}
-            marketplaceSources={localizedPluginManagerModel.marketplaceSources}
-            headerLeadingAction={railExpandAction}
-            labels={pluginManagerLabels}
-            scope={pluginManagerScope}
-            projects={pluginManagerProjects}
-            initialPluginId={pluginManagerInitialPluginId}
-            pluginDetailsExtension={collaborationConnector ? {
-              pluginId: `bundle:${collaborationConnector.pluginId}`,
-              content: <div ref={setFeishuSettingsHost} />,
-            } : null}
-            recovery={(selectedManagedCatalog ?? managedUserCatalog)?.recovery}
-            onScopeChange={(scope) => {
-              const normalized =
-                scope.kind === "user"
-                  ? scope
-                  : {
-                      kind: "project" as const,
-                      projectPath: normalizePluginProjectPath(
-                        scope.projectPath,
-                      ),
-                    };
-              setPluginManagerScope(normalized);
-              void loadManagedCatalog(normalized).catch((error) => {
-                toast(
-                  t("pluginManager.scopeLoadFailed", {
-                    error: String(error),
-                  }),
-                  "error",
-                );
-              });
+            onNew={() => {
+              setShowTaskBoard(false);
+              setShowPluginManager(false);
+              setShowAutomations(false);
+              setShowPullRequests(false);
+              setShowDocker(false);
+              setShowFeishu(false);
+              createTaskDraft();
+              if (railOverlay) setNarrowRailOpen(false);
             }}
-            onPlanChange={planManagerChange}
-            onApplyChange={applyManagerChange}
-            onSaveConfig={saveManagerConfig}
-            onResetPlugin={async (pluginId, scope) => {
-              await resetManagedPlugin(pluginId, toManagedPluginScope(scope));
-              await refreshPluginManagerData(scope);
-              toast(pluginManagerLabels.settingsReset, "success");
+            quickChatOpen={quickChatOpen}
+            onToggleQuickChat={() => {
+              setQuickChatOpen((current) => !current);
+              if (narrowLayout) setNarrowRailOpen(false);
             }}
-            onInstallMarketplaceItem={async ({ itemId, scope }) => {
-              if (scope.kind !== "user") {
-                throw new Error(t("pluginManager.marketplaceUserOnly"));
-              }
-              const id = itemId.replace(/^market:/, "");
-              const item = pluginManagerModel.marketplaceItems.find(
-                (candidate) => candidate.id === itemId,
-              );
-              if (item?.marketplace) {
-                await installMarketplacePlugin(
-                  item.marketplace.manifestPath,
-                  item.marketplace.pluginName,
-                );
-              } else {
-                await marketInstall(id);
-              }
-              await refreshPluginManagerData(scope);
-              toast(t("pluginHub.componentInstalledToast"), "success");
+            onRename={(id, title) =>
+              void renameSession(id, title).then(refreshSessions)
+            }
+            onPin={(id, pinned) =>
+              void pinSession(id, pinned).then(refreshSessions)
+            }
+            onArchive={async (id, archived) => {
+              await archiveSession(id, archived);
+              await refreshSessions();
             }}
-            onRefreshMarketplace={async () => {
-              await refreshPluginManagerData(pluginManagerScope);
+            onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
+            displayProvider={displayProvider}
+            onOpenMarket={() => {
+              setShowTaskBoard(false);
+              openPluginManager();
             }}
-            onOpenMarketplace={async () => {
-              const selected = await pickPluginMarketplace();
-              if (selected) setLocalPluginMarketplace(selected);
+            onOpenAutomations={openAutomations}
+            deviceConnectionsAvailable={componentEnabled("remote.modal")}
+            deviceConnectionsOpen={showRemote}
+            onOpenDeviceConnections={() => {
+              setShowRemote(true);
+              if (railOverlay) setNarrowRailOpen(false);
             }}
-            onImportGithub={async (repository) => {
-              const result = await githubImportPlugin(repository);
-              await refreshPluginManagerData(pluginManagerScope);
-              toast(
-                t("pluginHub.pluginInstalledToast", {
-                  name: result.plugin.name,
-                }),
-                "success",
-              );
-              return {
-                pluginId: result.plugin.id,
-                name: result.plugin.name,
-                version: result.plugin.version,
-              };
+            width={railWidth}
+            onWidth={setRailWidth}
+            newHint={hint("new_session")}
+            searchHint={hint("open_command_palette")}
+            onOpenSearch={() => setShowPalette(true)}
+            onOpenSettings={() => {
+              setShowTaskBoard(false);
+              setShowPluginManager(false);
+              setShowAutomations(false);
+              setShowPullRequests(false);
+              setShowDocker(false);
+              setShowFeishu(false);
+              setSettingsInitialTab("general");
+              if (railOverlay) setNarrowRailOpen(false);
+              setShowSettings(true);
             }}
-            onSetBundleEnabled={async (pluginId, enabled) => {
-              await setPluginEnabled(pluginId, enabled);
-              await refreshPluginManagerData(pluginManagerScope);
-              toast(
-                t(
-                  enabled
-                    ? "pluginHub.pluginEnabledToast"
-                    : "pluginHub.pluginDisabledToast",
-                ),
-                "success",
-              );
+            collapsed={displayedRailCollapsed}
+            overlay={railOverlay}
+            onToggleCollapse={toggleDisplayedRail}
+            taskBoardOpen={showTaskBoard}
+            onOpenTaskBoard={() => {
+              if (showTaskBoard) setShowTaskBoard(false);
+              else openTaskBoard();
+              if (railOverlay) setNarrowRailOpen(false);
             }}
-            onSetBundleTrusted={async (pluginId, trusted) => {
-              await setPluginTrusted(pluginId, trusted);
-              await refreshPluginManagerData(pluginManagerScope);
-              toast(
-                t(
-                  trusted
-                    ? "pluginHub.pluginTrustedToast"
-                    : "pluginHub.pluginUntrustedToast",
-                ),
-                "success",
-              );
+            pullRequestsOpen={showPullRequests}
+            onOpenPullRequests={() => {
+              if (showPullRequests) setShowPullRequests(false);
+              else openPullRequests();
+              if (railOverlay) setNarrowRailOpen(false);
             }}
-            onUninstallBundle={async (pluginId, keepData) => {
-              await uninstallPlugin(pluginId, keepData);
-              await refreshPluginManagerData(pluginManagerScope);
-              toast(t("pluginHub.pluginUninstalledToast"), "success");
+            automationsOpen={showAutomations}
+            pluginManagerOpen={showPluginManager}
+            dockerAvailable={dockerPlugin !== null}
+            dockerOpen={showDocker}
+            onOpenDocker={() => {
+              if (showDocker) setShowDocker(false);
+              else openDocker();
+              if (railOverlay) setNarrowRailOpen(false);
             }}
-            onApplyScaffold={
-              cwd
-                ? async (pluginId, scaffoldId) => {
-                    const result = await applyPluginScaffold(
-                      pluginId,
-                      scaffoldId,
-                      cwd,
-                    );
-                    toast(
-                      t("pluginHub.scaffoldInstalledToast", {
-                        count: result.files,
-                      }),
-                      "success",
-                    );
-                    return result;
-                  }
-                : undefined
+            quickQuota={railQuickQuota}
+            quickQuotaLoading={quickQuotaLoading}
+            quickQuotaProviderName={quickQuotaProviderName}
+            onOpenUsage={() => {
+              setShowTaskBoard(false);
+              setShowPluginManager(false);
+              setShowAutomations(false);
+              setShowPullRequests(false);
+              setShowDocker(false);
+              setShowFeishu(false);
+              setSettingsInitialTab("usage");
+              if (railOverlay) setNarrowRailOpen(false);
+              setShowSettings(true);
+            }}
+            pluginActions={
+              <PluginUiSlot
+                slot="rail.features"
+                contributions={pluginUiActions["rail.features"]}
+                onInvoke={async (contribution) => {
+                  await invokePluginAction(contribution);
+                  if (railOverlay) setNarrowRailOpen(false);
+                }}
+              />
+            }
+            resourceSections={
+              collaborationConnector ? <div ref={setFeishuRailHost} /> : null
             }
           />
-        )}
-        </Suspense>
 
-        <div
-          ref={sessionWorkspaceRef}
-          aria-hidden={
-            showTaskBoard ||
-            showPluginManager ||
-            showAutomations ||
-            showPullRequests ||
-            showDocker ||
-            showFeishu ||
-            undefined
-          }
-          className={
-            showTaskBoard ||
-            showPluginManager ||
-            showAutomations ||
-            showPullRequests ||
-            showDocker ||
-            showFeishu
-              ? "hidden"
-              : "contents"
-          }
-        >
+          <Suspense fallback={<PageLoadingFallback />}>
+            {showDocker && dockerPlugin ? (
+              <DockerPage
+                enabled={dockerPluginReady}
+                callCommand={callDocker}
+                onOpenPluginManager={openPluginManager}
+                headerLeadingAction={railExpandAction}
+              />
+            ) : null}
+
+            {collaborationConnector ? (
+              <FeishuWorkspacePage
+                enabled
+                detailVisible={showFeishu}
+                sessionId={activeSession}
+                callCommand={callFeishu}
+                subscribeEvents={subscribeFeishuEvents}
+                onHandoff={async (prompt) => {
+                  await run([{ type: "text", text: prompt }]);
+                }}
+                onOpenPluginManager={openFeishuPluginSettings}
+                headerLeadingAction={railExpandAction}
+                navigationHost={feishuRailHost}
+                settingsHost={feishuSettingsHost}
+                onSelectResource={openFeishu}
+              />
+            ) : null}
+
+            {showPullRequests ? <PullRequestsPage
+                headerLeadingAction={railExpandAction}
+                onChat={chatAboutPullRequest}
+                tasks={pullRequestTasks}
+                activeTaskId={activeBoardTask?.id ?? null}
+                onLinkTask={linkPullRequestToTask}
+                onUnlinkTask={unlinkPullRequestFromTask}
+                onOpenTask={() => openTaskBoard()}
+              /> : null}
+
+            {showAutomations ? componentEnabled("automation.page") ? (
+                <AutomationsPage
+                  projects={projects}
+                  providers={providers}
+                  defaultProject={(activeProject ?? cwd) || "."}
+                  defaultProvider={provider}
+                  onAddProject={() => void addProjectFolder()}
+                  onOpenSession={(session) => {
+                    setShowAutomations(false);
+                    void selectSession(session);
+                  }}
+                  headerLeadingAction={railExpandAction}
+                />
+              ) : null : null}
+
+            {showTaskBoard ? <TaskBoardPage
+                sessions={taskBoardSessions}
+                onOpenSession={(id) => {
+                  setShowTaskBoard(false);
+                  void selectSession(id);
+                }}
+                onStartTask={startBoardTask}
+                headerLeadingAction={railExpandAction}
+              /> : null}
+
+            {showPluginManager ? <PluginManagerPage
+                plugins={localizedPluginManagerModel.plugins}
+                components={localizedPluginManagerModel.components}
+                marketplaceItems={localizedPluginManagerModel.marketplaceItems}
+                marketplaceSources={
+                  localizedPluginManagerModel.marketplaceSources
+                }
+                headerLeadingAction={railExpandAction}
+                labels={pluginManagerLabels}
+                scope={pluginManagerScope}
+                projects={pluginManagerProjects}
+                initialPluginId={pluginManagerInitialPluginId}
+                pluginDetailsExtension={
+                  collaborationConnector
+                    ? {
+                        pluginId: `bundle:${collaborationConnector.pluginId}`,
+                        content: <div ref={setFeishuSettingsHost} />,
+                      }
+                    : null
+                }
+                recovery={
+                  (selectedManagedCatalog ?? managedUserCatalog)?.recovery
+                }
+                onScopeChange={(scope) => {
+                  const normalized =
+                    scope.kind === "user"
+                      ? scope
+                      : {
+                          kind: "project" as const,
+                          projectPath: normalizePluginProjectPath(
+                            scope.projectPath
+                          ),
+                        };
+                  setPluginManagerScope(normalized);
+                  void loadManagedCatalog(normalized).catch((error) => {
+                    toast(
+                      t("pluginManager.scopeLoadFailed", {
+                        error: String(error),
+                      }),
+                      "error"
+                    );
+                  });
+                }}
+                onPlanChange={planManagerChange}
+                onApplyChange={applyManagerChange}
+                onSaveConfig={saveManagerConfig}
+                onResetPlugin={async (pluginId, scope) => {
+                  await resetManagedPlugin(
+                    pluginId,
+                    toManagedPluginScope(scope)
+                  );
+                  await refreshPluginManagerData(scope);
+                  toast(pluginManagerLabels.settingsReset, "success");
+                }}
+                onInstallMarketplaceItem={async ({ itemId, scope }) => {
+                  if (scope.kind !== "user") {
+                    throw new Error(t("pluginManager.marketplaceUserOnly"));
+                  }
+                  const id = itemId.replace(/^market:/, "");
+                  const item = pluginManagerModel.marketplaceItems.find(
+                    (candidate) => candidate.id === itemId
+                  );
+                  if (item?.marketplace) {
+                    await installMarketplacePlugin(
+                      item.marketplace.manifestPath,
+                      item.marketplace.pluginName
+                    );
+                  } else {
+                    await marketInstall(id);
+                  }
+                  await refreshPluginManagerData(scope);
+                  toast(t("pluginHub.componentInstalledToast"), "success");
+                }}
+                onRefreshMarketplace={async () => {
+                  await refreshPluginManagerData(pluginManagerScope);
+                }}
+                onOpenMarketplace={async () => {
+                  const selected = await pickPluginMarketplace();
+                  if (selected) setLocalPluginMarketplace(selected);
+                }}
+                onImportGithub={async (repository) => {
+                  const result = await githubImportPlugin(repository);
+                  await refreshPluginManagerData(pluginManagerScope);
+                  toast(
+                    t("pluginHub.pluginInstalledToast", {
+                      name: result.plugin.name,
+                    }),
+                    "success"
+                  );
+                  return {
+                    pluginId: result.plugin.id,
+                    name: result.plugin.name,
+                    version: result.plugin.version,
+                  };
+                }}
+                onSetBundleEnabled={async (pluginId, enabled) => {
+                  await setPluginEnabled(pluginId, enabled);
+                  await refreshPluginManagerData(pluginManagerScope);
+                  toast(
+                    t(
+                      enabled
+                        ? "pluginHub.pluginEnabledToast"
+                        : "pluginHub.pluginDisabledToast"
+                    ),
+                    "success"
+                  );
+                }}
+                onSetBundleTrusted={async (pluginId, trusted) => {
+                  await setPluginTrusted(pluginId, trusted);
+                  await refreshPluginManagerData(pluginManagerScope);
+                  toast(
+                    t(
+                      trusted
+                        ? "pluginHub.pluginTrustedToast"
+                        : "pluginHub.pluginUntrustedToast"
+                    ),
+                    "success"
+                  );
+                }}
+                onUninstallBundle={async (pluginId, keepData) => {
+                  await uninstallPlugin(pluginId, keepData);
+                  await refreshPluginManagerData(pluginManagerScope);
+                  toast(t("pluginHub.pluginUninstalledToast"), "success");
+                }}
+                onApplyScaffold={
+                  cwd
+                    ? async (pluginId, scaffoldId) => {
+                        const result = await applyPluginScaffold(
+                          pluginId,
+                          scaffoldId,
+                          cwd
+                        );
+                        toast(
+                          t("pluginHub.scaffoldInstalledToast", {
+                            count: result.files,
+                          }),
+                          "success"
+                        );
+                        return result;
+                      }
+                    : undefined
+                }
+              /> : null}
+          </Suspense>
+
           <div
-            data-workspace-stack
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
+            ref={sessionWorkspaceRef}
+            aria-hidden={
+              showTaskBoard ||
+              showPluginManager ||
+              showAutomations ||
+              showPullRequests ||
+              showDocker ||
+              showFeishu ||
+              undefined
+            }
+            className={
+              showTaskBoard ||
+              showPluginManager ||
+              showAutomations ||
+              showPullRequests ||
+              showDocker ||
+              showFeishu
+                ? "hidden"
+                : "contents"
+            }
           >
-            {/* ---------------- the session column ---------------- */}
-            <main
-              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
-              ref={mainRef}
+            <div
+              data-workspace-stack
+              className="flex min-h-0 min-w-0 flex-1 flex-col"
             >
-            {/* Tiling workspace: every pane renders the full column body below, so each keeps its
+              {/* ---------------- the session column ---------------- */}
+              <main
+                className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                ref={mainRef}
+              >
+                {/* Tiling workspace: every pane renders the full column body below, so each keeps its
                 own composer draft (its DocEditor is a distinct, stable-keyed instance that survives
                 relayout). PaneTiles focuses a pane on mouse-down, while actions and async receipts
                 carry that pane's id so later focus changes cannot redirect work or clear a draft.
                 Values that shadow App scope here are per-pane; everything else falls through to the
                 focused-session state by closure (a known v1 limitation for background panes). */}
-            <PaneTiles
-              layout={paneLayout}
-              onFocusPane={focusPaneById}
-              onResizeSplit={resizeSplitById}
-              renderPane={(paneId, paneFocused) => {
-                const activeSession = paneContents[paneId]?.sessionId ?? null;
-                const turns = turnsByPane[paneId] ?? EMPTY_TURNS;
-                const running =
-                  activeSession !== null
-                    ? runningSessions.has(activeSession)
-                    : pendingSessionRunning && pendingCreationPane === paneId;
-                const transcriptState =
-                  transcriptStateByPane[paneId] ?? EMPTY_PANE_TRANSCRIPT_STATE;
-                const sessionLoading = transcriptState.loading;
-                const hasConversationContent = turns.length > 0 || running || sessionLoading;
-                const transcriptNextBefore = transcriptState.nextBefore;
-                const loadingEarlier = transcriptState.loadingEarlier;
-                const docEmpty = editorEmptyByPane[paneId] ?? true;
-                const editorKey = editorKeyByPane[paneId] ?? 0;
-                const docMode = paneFocused ? focusedDocMode : false;
-                const activeTitle = paneFocused
-                  ? focusedActiveTitle
-                  : titleForSession(activeSession);
-                const activeArchived =
-                  activeSession !== null &&
-                  archivedSessions.some((s) => s.id === activeSession);
-                const paneRefs = paneEditorRefsFor(paneId);
-                const getBlocksRef = paneRefs.getBlocksRef;
-                const insertTextRef = paneRefs.insertTextRef;
-                const insertAnnotationRef = paneRefs.insertAnnotationRef;
-                const insertFileRef = paneRefs.insertFileRef;
-                const insertSessionRef = paneRefs.insertSessionRef;
-                const focusEditorRef = paneRefs.focusRef;
-                const clearEditorRef = paneRefs.clearRef;
-                const insertMarkdownRef = paneRefs.insertMarkdownRef;
-                const openSkillPickerRef = paneRefs.openSkillPickerRef;
-                const insertSkillRef = paneRefs.insertSkillRef;
-                const insertBriefRef = paneRefs.insertBriefRef;
-                const insertIssueRef = paneRefs.insertIssueRef;
-                const insertCanvasRef = paneRefs.insertCanvasRef;
-                const insertCanvasDraftRef = paneRefs.insertCanvasDraftRef;
-                const restoreCanvasDocumentRef = paneRefs.restoreCanvasDocumentRef;
-                const freezeCanvasesRef = paneRefs.freezeCanvasesRef;
-                const canvasDeliveryErrorRef = paneRefs.canvasDeliveryErrorRef;
-                // Per-session project/cwd/git: the focused pane keeps the app's authoritative values;
-                // a background pane derives its project from its session record and reads git from
-                // the single-slot cache (which yields empty, not another project's status, when the
-                // pane's workspace isn't the one currently loaded).
-                const paneStored =
-                  activeSession !== null
-                    ? sessions.find((s) => s.id === activeSession) ??
-                      archivedSessions.find((s) => s.id === activeSession) ??
-                      null
-                    : null;
-                const bgProjectPath = paneStored
-                  ? sessionProjectPath(paneStored)
-                  : null;
-                const cwd = paneFocused
-                  ? focusedCwd
-                  : paneStored?.cwd ?? focusedCwd;
-                const activeProject = paneFocused
-                  ? focusedActiveProject
-                  : bgProjectPath &&
-                      projects.some((p) => p.path === bgProjectPath)
-                    ? bgProjectPath
-                    : null;
-                const activeProjectRecord = paneFocused
-                  ? focusedActiveProjectRecord
-                  : projects.find((project) => project.path === activeProject) ??
-                    null;
-                const activeProjectName = paneFocused
-                  ? focusedActiveProjectName
-                  : activeProjectRecord?.name ?? null;
-                const git = paneFocused
-                  ? focusedGit
-                  : workspaceStateForCwd(
-                      gitWorkspace,
-                      cwd || ".",
-                      EMPTY_GIT_WORKSPACE,
-                    ).value.status;
-                // Per-session model/config/usage: the focused pane keeps the authoritative single
-                // values; a background pane reads its own session's recorded snapshot.
-                const models = paneFocused
-                  ? focusedModels
-                  : activeSession
-                    ? modelsBySession[activeSession] ?? []
-                    : [];
-                const currentModel = paneFocused
-                  ? focusedCurrentModel
-                  : activeSession
-                    ? currentModelBySession[activeSession] ?? null
-                    : null;
-                const defaultModel = paneFocused
-                  ? focusedDefaultModel
-                  : activeSession
-                    ? defaultModelBySession[activeSession] ?? null
-                    : null;
-                const configOptions = paneFocused
-                  ? focusedConfigOptions
-                  : activeSession
-                    ? configOptionsBySession[activeSession] ?? []
-                    : [];
-                // Usage is polled only for the focused session; a background pane hides its cost
-                // segment rather than borrow the focused figures.
-                const sessionUsage = paneFocused ? focusedSessionUsage : null;
-                // Each pane keeps its own composer height so a resize stays local to that tile.
-                const composerH = composerHByPane[paneId] ?? focusedComposerHeight;
-                const setComposerH = (h: number) => {
-                  setComposerHByPane((prev) => ({ ...prev, [paneId]: h }));
-                  if (paneFocused) persistComposerHeight(h);
-                };
-                const activeInteractionCapabilities = activeSession
-                  ? interactionCapabilities[activeSession] ?? null
-                  : null;
-                const activeGoal = activeSession ? goals[activeSession] ?? null : null;
-                const activeAppshotKey =
-                  activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
-                const activeAppshots =
-                  pendingAppshots[activeAppshotKey] ?? EMPTY_APPSHOTS;
-                return (
-            <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-          {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
+                <PaneTiles
+                  layout={paneLayout}
+                  onFocusPane={focusPaneById}
+                  onResizeSplit={resizeSplitById}
+                  renderPane={(paneId, paneFocused) => {
+                    const activeSession =
+                      paneContents[paneId]?.sessionId ?? null;
+                    const turns = turnsByPane[paneId] ?? EMPTY_TURNS;
+                    const running =
+                      activeSession !== null
+                        ? runningSessions.has(activeSession)
+                        : pendingSessionRunning &&
+                          pendingCreationPane === paneId;
+                    const transcriptState =
+                      transcriptStateByPane[paneId] ??
+                      EMPTY_PANE_TRANSCRIPT_STATE;
+                    const sessionLoading = transcriptState.loading;
+                    const hasConversationContent =
+                      turns.length > 0 || running || sessionLoading;
+                    const transcriptNextBefore = transcriptState.nextBefore;
+                    const loadingEarlier = transcriptState.loadingEarlier;
+                    const docEmpty = editorEmptyByPane[paneId] ?? true;
+                    const editorKey = editorKeyByPane[paneId] ?? 0;
+                    const docMode = paneFocused ? focusedDocMode : false;
+                    const activeTitle = paneFocused
+                      ? focusedActiveTitle
+                      : titleForSession(activeSession);
+                    const activeArchived =
+                      activeSession !== null &&
+                      archivedSessions.some((s) => s.id === activeSession);
+                    const paneRefs = paneEditorRefsFor(paneId);
+                    const getBlocksRef = paneRefs.getBlocksRef;
+                    const insertTextRef = paneRefs.insertTextRef;
+                    const insertAnnotationRef = paneRefs.insertAnnotationRef;
+                    const insertFileRef = paneRefs.insertFileRef;
+                    const insertSessionRef = paneRefs.insertSessionRef;
+                    const focusEditorRef = paneRefs.focusRef;
+                    const clearEditorRef = paneRefs.clearRef;
+                    const insertMarkdownRef = paneRefs.insertMarkdownRef;
+                    const openSkillPickerRef = paneRefs.openSkillPickerRef;
+                    const insertSkillRef = paneRefs.insertSkillRef;
+                    const insertBriefRef = paneRefs.insertBriefRef;
+                    const insertIssueRef = paneRefs.insertIssueRef;
+                    const insertCanvasRef = paneRefs.insertCanvasRef;
+                    const insertCanvasDraftRef = paneRefs.insertCanvasDraftRef;
+                    const restoreCanvasDocumentRef =
+                      paneRefs.restoreCanvasDocumentRef;
+                    const freezeCanvasesRef = paneRefs.freezeCanvasesRef;
+                    const canvasDeliveryErrorRef =
+                      paneRefs.canvasDeliveryErrorRef;
+                    // Per-session project/cwd/git: the focused pane keeps the app's authoritative values;
+                    // a background pane derives its project from its session record and reads git from
+                    // the single-slot cache (which yields empty, not another project's status, when the
+                    // pane's workspace isn't the one currently loaded).
+                    const paneStored =
+                      activeSession !== null
+                        ? (sessions.find((s) => s.id === activeSession) ??
+                          archivedSessions.find(
+                            (s) => s.id === activeSession
+                          ) ??
+                          null)
+                        : null;
+                    const bgProjectPath = paneStored
+                      ? sessionProjectPath(paneStored)
+                      : null;
+                    const cwd = paneFocused
+                      ? focusedCwd
+                      : (paneStored?.cwd ?? focusedCwd);
+                    const activeProject = paneFocused
+                      ? focusedActiveProject
+                      : bgProjectPath &&
+                          projects.some((p) => p.path === bgProjectPath)
+                        ? bgProjectPath
+                        : null;
+                    const activeProjectRecord = paneFocused
+                      ? focusedActiveProjectRecord
+                      : (projects.find(
+                          (project) => project.path === activeProject
+                        ) ?? null);
+                    const activeProjectName = paneFocused
+                      ? focusedActiveProjectName
+                      : (activeProjectRecord?.name ?? null);
+                    const git = paneFocused
+                      ? focusedGit
+                      : workspaceStateForCwd(
+                          gitWorkspace,
+                          cwd || ".",
+                          EMPTY_GIT_WORKSPACE
+                        ).value.status;
+                    // Per-session model/config/usage: the focused pane keeps the authoritative single
+                    // values; a background pane reads its own session's recorded snapshot.
+                    const models = paneFocused
+                      ? focusedModels
+                      : activeSession
+                        ? (modelsBySession[activeSession] ?? [])
+                        : [];
+                    const currentModel = paneFocused
+                      ? focusedCurrentModel
+                      : activeSession
+                        ? (currentModelBySession[activeSession] ?? null)
+                        : null;
+                    const defaultModel = paneFocused
+                      ? focusedDefaultModel
+                      : activeSession
+                        ? (defaultModelBySession[activeSession] ?? null)
+                        : null;
+                    const configOptions = paneFocused
+                      ? focusedConfigOptions
+                      : activeSession
+                        ? (configOptionsBySession[activeSession] ?? [])
+                        : [];
+                    // Usage is polled only for the focused session; a background pane hides its cost
+                    // segment rather than borrow the focused figures.
+                    const sessionUsage = paneFocused
+                      ? focusedSessionUsage
+                      : null;
+                    // Each pane keeps its own composer height so a resize stays local to that tile.
+                    const composerH =
+                      composerHByPane[paneId] ?? focusedComposerHeight;
+                    const setComposerH = (h: number) => {
+                      setComposerHByPane((prev) => ({ ...prev, [paneId]: h }));
+                      if (paneFocused) persistComposerHeight(h);
+                    };
+                    const activeInteractionCapabilities = activeSession
+                      ? (interactionCapabilities[activeSession] ?? null)
+                      : null;
+                    const activeGoal = activeSession
+                      ? (goals[activeSession] ?? null)
+                      : null;
+                    const activeAppshotKey =
+                      activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
+                    const activeAppshots =
+                      pendingAppshots[activeAppshotKey] ?? EMPTY_APPSHOTS;
+                    return (
+                      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+                        {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
-          {/* The shared 40px title line keeps every pane on one baseline. With the rail collapsed,
+                        {/* The shared 40px title line keeps every pane on one baseline. With the rail collapsed,
               the inset clears the traffic lights and the expand button takes the wordmark's place. */}
-          <header
-            data-has-conversation={hasConversationContent ? "true" : undefined}
-            className={cn(
-              "session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4",
-              displayedRailCollapsed ? "window-controls-safe-main" : "pl-4",
-            )}
-          >
-            {railExpandAction}
-            {/* Breadcrumb, reference-style: project / thread. */}
-            <span className="session-header-project-icon flex shrink-0 items-center">
-              {activeProjectRecord ? (
-                <ProjectIcon project={activeProjectRecord} size={18} />
-              ) : (
-                <Folder className="size-3.5 text-muted-foreground" />
-              )}
-            </span>
-            {activeProjectName && (
-              <>
-                <span className="session-header-project-context electrobun-webkit-app-region-drag max-w-40 truncate text-ui text-muted-foreground">
-                  {activeProjectName}
-                </span>
-                    <span className="session-header-project-context shrink-0 text-ui text-muted-foreground/50">
-                      /
-                    </span>
-              </>
-            )}
-            {activeBoardTask ? (
-              <TooltipButton
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="text-primary"
-                label={t("taskboard.open")}
-                tooltip={activeBoardTask.id}
-                onClick={openTaskBoard}
-              >
-                <SquareKanban className="size-3.5" aria-hidden />
-              </TooltipButton>
-            ) : null}
-            <span className="session-header-title electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
-              {activeTitle}
-            </span>
-            {/* The session title trails the task title for context — unless both carry the same
+                        <header
+                          data-has-conversation={
+                            hasConversationContent ? "true" : undefined
+                          }
+                          className={cn(
+                            "session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4",
+                            displayedRailCollapsed
+                              ? "window-controls-safe-main"
+                              : "pl-4"
+                          )}
+                        >
+                          {railExpandAction}
+                          {/* Breadcrumb, reference-style: project / thread. */}
+                          <span className="session-header-project-icon flex shrink-0 items-center">
+                            {activeProjectRecord ? (
+                              <ProjectIcon
+                                project={activeProjectRecord}
+                                size={18}
+                              />
+                            ) : (
+                              <Folder className="text-muted-foreground size-3.5" />
+                            )}
+                          </span>
+                          {activeProjectName ? <>
+                              <span className="session-header-project-context electrobun-webkit-app-region-drag text-ui text-muted-foreground max-w-40 truncate">
+                                {activeProjectName}
+                              </span>
+                              <span className="session-header-project-context text-ui text-muted-foreground/50 shrink-0">
+                                /
+                              </span>
+                            </> : null}
+                          {activeBoardTask ? (
+                            <TooltipButton
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              className="text-primary"
+                              label={t("taskboard.open")}
+                              tooltip={activeBoardTask.id}
+                              onClick={openTaskBoard}
+                            >
+                              <SquareKanban className="size-3.5" aria-hidden />
+                            </TooltipButton>
+                          ) : null}
+                          <span className="session-header-title electrobun-webkit-app-region-drag text-ui max-w-96 truncate font-medium">
+                            {activeTitle}
+                          </span>
+                          {/* The session title trails the task title for context — unless both carry the same
                 name (a task created from a single-prompt thread), which would print it twice. */}
-            {activeBoardTask && activeSessionTitle && activeSessionTitle.trim() !== activeBoardTask.title.trim() ? (
-              <>
-                <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
-                <span className="electrobun-webkit-app-region-drag max-w-64 truncate text-fine text-muted-foreground">
-                  {activeSessionTitle}
-                </span>
-              </>
-            ) : null}
-            {!activeBoardTask && activeSession ? (
-              <span className="rounded-control bg-fill-rest px-2 py-0.5 text-metadata text-muted-foreground">
-                {t("rail.newTemporarySession")}
-              </span>
-            ) : null}
+                          {activeBoardTask &&
+                          activeSessionTitle &&
+                          activeSessionTitle.trim() !==
+                            activeBoardTask.title.trim() ? (
+                            <>
+                              <span className="text-ui text-muted-foreground/50 shrink-0">
+                                /
+                              </span>
+                              <span className="electrobun-webkit-app-region-drag text-fine text-muted-foreground max-w-64 truncate">
+                                {activeSessionTitle}
+                              </span>
+                            </>
+                          ) : null}
+                          {!activeBoardTask && activeSession ? (
+                            <span className="rounded-control bg-fill-rest text-metadata text-muted-foreground px-2 py-0.5">
+                              {t("rail.newTemporarySession")}
+                            </span>
+                          ) : null}
 
-            <div className="electrobun-webkit-app-region-drag flex-1" />
+                          <div className="electrobun-webkit-app-region-drag flex-1" />
 
-            <div className="session-header-toolbar flex min-w-0 shrink-0 items-center gap-4 [&_svg]:text-muted-foreground">
-              {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
+                          <div className="session-header-toolbar [&_svg]:text-muted-foreground flex min-w-0 shrink-0 items-center gap-4">
+                            {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                   is in flight — and the way back to the answer without leaving the mode for good. */}
-              {docMode && hasConversationContent && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="compact"
-                  onClick={() => toggleDocMode(false)}
-                  className="mr-1 shrink-0 gap-1.5 text-callout text-muted-foreground"
-                  title={t("header.showTranscript", { count: turns.length })}
-                >
-                  {(running || sessionLoading) && (
-                    <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-                  )}
-                  {sessionLoading
-                    ? t("session.loading")
-                    : awaitingInput
-                      ? t("session.awaitingInput")
-                      : running
-                        ? t("header.running")
-                        : t("header.turns", { count: turns.length })}
-                </Button>
-              )}
+                            {docMode && hasConversationContent ? <Button
+                                type="button"
+                                variant="ghost"
+                                size="compact"
+                                onClick={() => toggleDocMode(false)}
+                                className="text-callout text-muted-foreground mr-1 shrink-0 gap-1.5"
+                                title={t("header.showTranscript", {
+                                  count: turns.length,
+                                })}
+                              >
+                                {(running || sessionLoading) ? <span className="bg-primary size-1.5 animate-pulse rounded-full" /> : null}
+                                {sessionLoading
+                                  ? t("session.loading")
+                                  : awaitingInput
+                                    ? t("session.awaitingInput")
+                                    : running
+                                      ? t("header.running")
+                                      : t("header.turns", {
+                                          count: turns.length,
+                                        })}
+                              </Button> : null}
 
-              <div className="session-header-context-actions flex min-w-0 shrink-0 items-center gap-2">
-                <PluginUiSlot
-                  slot="session.header"
-                  contributions={pluginUiActions["session.header"]}
-                  onInvoke={invokePluginAction}
-                />
-                <EnvironmentPopover
-                  suppressed={
-                    showTaskBoard ||
-                    showPluginManager ||
-                    showAutomations ||
-                    showPullRequests ||
-                    showDocker ||
-                    showFeishu
-                  }
-                  project={activeProjectName}
-                  projectPath={activeProjectName ? activeProject : null}
-                  projects={projects}
-                  git={git}
-                  diffStat={diffStat}
-                  onRefresh={refreshGit}
-                  onSelectProject={selectProject}
-                  onAddProject={() => void addProjectFolder()}
-                  onOpenSourceControl={openSourceControl}
-                  onOpenSettings={() => {
-                    setSettingsInitialTab("general");
-                    setShowSettings(true);
-                  }}
-                  turns={turns}
-                  onOpenPlanAsDocument={openPlanAsDocument}
-                  onPinPlanArtifact={pinPlanArtifact}
-                  canPinPlan={scenesSurfaceEnabled && canPinPlan}
-                  preview={interactivePreview}
-                />
-              </div>
+                            <div className="session-header-context-actions flex min-w-0 shrink-0 items-center gap-2">
+                              <PluginUiSlot
+                                slot="session.header"
+                                contributions={
+                                  pluginUiActions["session.header"]
+                                }
+                                onInvoke={invokePluginAction}
+                              />
+                              <EnvironmentPopover
+                                suppressed={
+                                  showTaskBoard ||
+                                  showPluginManager ||
+                                  showAutomations ||
+                                  showPullRequests ||
+                                  showDocker ||
+                                  showFeishu
+                                }
+                                project={activeProjectName}
+                                projectPath={
+                                  activeProjectName ? activeProject : null
+                                }
+                                projects={projects}
+                                git={git}
+                                diffStat={diffStat}
+                                onRefresh={refreshGit}
+                                onSelectProject={selectProject}
+                                onAddProject={() => void addProjectFolder()}
+                                onOpenSourceControl={openSourceControl}
+                                onOpenSettings={() => {
+                                  setSettingsInitialTab("general");
+                                  setShowSettings(true);
+                                }}
+                                turns={turns}
+                                onOpenPlanAsDocument={openPlanAsDocument}
+                                onPinPlanArtifact={pinPlanArtifact}
+                                canPinPlan={scenesSurfaceEnabled ? canPinPlan : null}
+                                preview={interactivePreview}
+                              />
+                            </div>
 
-              <SessionHeaderActions
-                canCommit={git?.is_repo === true}
-                actions={scripts}
-                editorLaunchersAvailable={editorLaunchersAvailable}
-                fileManagerLabel={fileManagerLabel}
-                onRunAction={runProjectAction}
-                onAddAction={() => setShowActionDialog(true)}
-                onOpenCursor={() => void openWorkingDirectory("cursor")}
-                onOpenAntigravity={() => void openWorkingDirectory("antigravity")}
-                onOpenFinder={() => void openWorkingDirectory("finder")}
-                finderHint={hint("open_finder")}
-                onCommit={openSourceControl}
-                onCheckpoint={() => void doCheckpoint()}
-                onPush={() => void doPush().catch(() => {})}
-                onMoveTask={() => activeSession && setShowTaskHandoff(true)}
-              />
+                            <SessionHeaderActions
+                              canCommit={git?.is_repo === true}
+                              actions={scripts}
+                              editorLaunchersAvailable={
+                                editorLaunchersAvailable
+                              }
+                              fileManagerLabel={fileManagerLabel}
+                              onRunAction={runProjectAction}
+                              onAddAction={() => setShowActionDialog(true)}
+                              onOpenCursor={() =>
+                                void openWorkingDirectory("cursor")
+                              }
+                              onOpenAntigravity={() =>
+                                void openWorkingDirectory("antigravity")
+                              }
+                              onOpenFinder={() =>
+                                void openWorkingDirectory("finder")
+                              }
+                              finderHint={hint("open_finder")}
+                              onCommit={openSourceControl}
+                              onCheckpoint={() => void doCheckpoint()}
+                              onPush={() => void doPush().catch(() => {})}
+                              onMoveTask={() =>
+                                activeSession && setShowTaskHandoff(true)
+                              }
+                            />
 
-              {/* Keep pane/window layout controls together at the trailing edge. */}
-              <PaneLayoutToolbar
-                onSplitRight={() => splitPaneById(paneId, "right")}
-                onSplitDown={() => splitPaneById(paneId, "bottom")}
-                onClose={() => closePaneById(paneId)}
-                canClose={multiPane}
-                labels={{
-                  splitRight: t("pane.splitRight"),
-                  splitDown: t("pane.splitDown"),
-                  close: t("pane.close"),
-                }}
-                groupLabel={t("pane.layoutActions")}
-                viewLabel={t("pane.viewMenu")}
-                panelLabel={t("pane.sidePanel")}
-                panelActive={dockTab !== null}
-                onTogglePanel={() => {
-                  manualDockTab(dockTab !== null ? null : "home");
-                  setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-                }}
-              />
-            </div>
-          </header>
+                            {/* Keep pane/window layout controls together at the trailing edge. */}
+                            <PaneLayoutToolbar
+                              onSplitRight={() =>
+                                splitPaneById(paneId, "right")
+                              }
+                              onSplitDown={() =>
+                                splitPaneById(paneId, "bottom")
+                              }
+                              onClose={() => closePaneById(paneId)}
+                              canClose={multiPane}
+                              labels={{
+                                splitRight: t("pane.splitRight"),
+                                splitDown: t("pane.splitDown"),
+                                close: t("pane.close"),
+                              }}
+                              groupLabel={t("pane.layoutActions")}
+                              viewLabel={t("pane.viewMenu")}
+                              panelLabel={t("pane.sidePanel")}
+                              panelActive={dockTab !== null}
+                              onTogglePanel={() => {
+                                manualDockTab(dockTab !== null ? null : "home");
+                                setTimeout(
+                                  () =>
+                                    window.dispatchEvent(new Event("resize")),
+                                  0
+                                );
+                              }}
+                            />
+                          </div>
+                        </header>
 
-          {/* Horizontal stage track (R9): rendered above the transcript only while the active
+                        {/* Horizontal stage track (R9): rendered above the transcript only while the active
               session is bound to a pipeline instance. Pipeline state is the focused session's, so a
               background pane never paints it. */}
-          {paneFocused && scenesSurfaceEnabled && pipelineDetail && activeSession && (
-            <StageTrack
-              detail={pipelineDetail}
-              onSelectSession={(id) => void selectSession(id)}
-            />
-          )}
+                        {paneFocused &&
+                          scenesSurfaceEnabled &&
+                          pipelineDetail &&
+                          activeSession ? <StageTrack
+                              detail={pipelineDetail}
+                              onSelectSession={(id) => void selectSession(id)}
+                            /> : null}
 
-          {/* The same transcript tree serves the main column and document side panel. Keeping the
+                        {/* The same transcript tree serves the main column and document side panel. Keeping the
               rendering path unified prevents the two modes from drifting, while the scroll
               controller preserves the reader's position as streamed content arrives. */}
-          <div
-            className={cn(
-              "flex min-h-0 flex-1",
-              docMode ? "flex-row" : "flex-col",
-            )}
-          >
-            {hasConversationContent && (
-              <TranscriptPane
-                sessionId={activeSession}
-                variant={docMode ? "side" : "main"}
-                turns={turns}
-                loading={sessionLoading}
-                hasEarlier={transcriptNextBefore !== null}
-                loadingEarlier={loadingEarlier}
-                onLoadEarlier={(scroll) =>
-                  void loadEarlierTranscript(paneId, scroll)
-                }
-                onSaveTemplate={openTemplateDraft}
-                linkActions={builtinLinkActions}
-                onForkTurn={forkTurnIntoTask}
-                onAddSelection={addSelectedText}
-                onExplainSelection={explainSelectedText}
-                onAskSelectionInSideChat={askSelectedTextInSideChat}
-                before={
-                  <PluginUiSlot
-                    slot="transcript.before"
-                    contributions={pluginUiActions["transcript.before"]}
-                    onInvoke={invokePluginAction}
-                  />
-                }
-              />
-            )}
+                        <div
+                          className={cn(
+                            "flex min-h-0 flex-1",
+                            docMode ? "flex-row" : "flex-col"
+                          )}
+                        >
+                          {hasConversationContent ? <TranscriptPane
+                              sessionId={activeSession}
+                              variant={docMode ? "side" : "main"}
+                              turns={turns}
+                              loading={sessionLoading}
+                              hasEarlier={transcriptNextBefore !== null}
+                              loadingEarlier={loadingEarlier}
+                              onLoadEarlier={(scroll) =>
+                                void loadEarlierTranscript(paneId, scroll)
+                              }
+                              onSaveTemplate={openTemplateDraft}
+                              linkActions={builtinLinkActions}
+                              onForkTurn={forkTurnIntoTask}
+                              onAddSelection={addSelectedText}
+                              onExplainSelection={explainSelectedText}
+                              onAskSelectionInSideChat={
+                                askSelectedTextInSideChat
+                              }
+                              before={
+                                <PluginUiSlot
+                                  slot="transcript.before"
+                                  contributions={
+                                    pluginUiActions["transcript.before"]
+                                  }
+                                  onInvoke={invokePluginAction}
+                                />
+                              }
+                            /> : null}
 
-            {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
+                          {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
                 BlockNote unmounts (and takes the draft with it) if the structure around it changes.
                 Compact, the wrapper is just the composer's slot; expanded, it is the document column
                 inside the outer transcript/document row. Keep this wrapper vertical so banners and
                 plugin contributions remain above the document instead of consuming its width. An empty
                 thread is the hero state: the heading and the card sit together in the centre. */}
-            <div
-              ref={heroScrollRef}
-              className={cn(
-                "flex",
-                docMode
-                  ? "order-1 min-h-0 min-w-0 flex-1 flex-col"
-                  : turns.length === 0 && !sessionLoading
-                    ? "hero-scroll-shell order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-page-end pt-6"
-                    : "order-2 shrink-0 flex-col",
-              )}
-            >
-              {/* "What should we build in <project>?" — the project name is the project switcher. */}
-              {!docMode && turns.length === 0 && !sessionLoading && (
-                <h1 className="animate-rise-in mb-8 px-8 text-center text-[26px] font-semibold tracking-[-0.01em]">
-                  {t("transcript.greetingIn")}{" "}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="link"
-                          size="compact"
-                          className="h-auto px-0 py-0 text-inherit decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]"
-                          title={activeProject ?? undefined}
-                        >
-                          {activeProjectName ?? t("rail.noProject")}
-                        </Button>
-                      }
-                    />
-                    <DropdownMenuContent side="top" align="center" className="w-60">
-                      {projects.length > 0 && (
-                        <>
-                          <DropdownMenuGroup>
-                            {projects.map((project) => (
-                              <DropdownMenuItem
-                                key={project.path}
-                                onClick={() => selectProject(project.path)}
-                              >
-                                <Folder />
-                                <span className="min-w-0 flex-1 truncate" title={project.path}>
-                                  {project.name}
-                                </span>
-                                {project.path === activeProject && <Check />}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuGroup>
-                          <DropdownMenuSeparator />
-                        </>
-                      )}
-                      <DropdownMenuItem onClick={() => void addProjectFolder()}>
-                        <FolderPlus />
-                        {t("rail.addProject")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  {t("transcript.greetingEnd")}
-                </h1>
-              )}
-              {/* An archived chat reads, but doesn't run: the composer yields its slot to this notice
+                          <div
+                            ref={heroScrollRef}
+                            className={cn(
+                              "flex",
+                              docMode
+                                ? "order-1 min-h-0 min-w-0 flex-1 flex-col"
+                                : turns.length === 0 && !sessionLoading
+                                  ? "hero-scroll-shell pb-page-end order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pt-6"
+                                  : "order-2 shrink-0 flex-col"
+                            )}
+                          >
+                            {/* "What should we build in <project>?" — the project name is the project switcher. */}
+                            {!docMode &&
+                              turns.length === 0 &&
+                              !sessionLoading && (
+                                <h1 className="animate-rise-in mb-8 px-8 text-center text-[26px] font-semibold tracking-[-0.01em]">
+                                  {t("transcript.greetingIn")}{" "}
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger
+                                      render={
+                                        <Button
+                                          type="button"
+                                          variant="link"
+                                          size="compact"
+                                          className="decoration-muted-foreground/40 h-auto px-0 py-0 text-inherit decoration-dotted underline-offset-[7px]"
+                                          title={activeProject ?? undefined}
+                                        >
+                                          {activeProjectName ??
+                                            t("rail.noProject")}
+                                        </Button>
+                                      }
+                                    />
+                                    <DropdownMenuContent
+                                      side="top"
+                                      align="center"
+                                      className="w-60"
+                                    >
+                                      {projects.length > 0 && (
+                                        <>
+                                          <DropdownMenuGroup>
+                                            {projects.map((project) => (
+                                              <DropdownMenuItem
+                                                key={project.path}
+                                                onClick={() =>
+                                                  selectProject(project.path)
+                                                }
+                                              >
+                                                <Folder />
+                                                <span
+                                                  className="min-w-0 flex-1 truncate"
+                                                  title={project.path}
+                                                >
+                                                  {project.name}
+                                                </span>
+                                                {project.path ===
+                                                  activeProject && <Check />}
+                                              </DropdownMenuItem>
+                                            ))}
+                                          </DropdownMenuGroup>
+                                          <DropdownMenuSeparator />
+                                        </>
+                                      )}
+                                      <DropdownMenuItem
+                                        onClick={() => void addProjectFolder()}
+                                      >
+                                        <FolderPlus />
+                                        {t("rail.addProject")}
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                  {t("transcript.greetingEnd")}
+                                </h1>
+                              )}
+                            {/* An archived chat reads, but doesn't run: the composer yields its slot to this notice
                   until the session is restored. The composer stays mounted (hidden) — unmounting
                   BlockNote would take an in-progress draft with it. */}
-              {activeArchived && (
-                <div className="shrink-0 px-6 pb-6 pt-3">
-                  <Card
-                    variant="surface"
-                    density="compact"
-                    className="mx-auto w-full max-w-3xl flex-row items-center px-4"
-                  >
-                    <Archive className="size-4 shrink-0 text-muted-foreground" />
-                    <p className="min-w-0 flex-1 text-ui text-muted-foreground">
-                      {t("archived.notice")}
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="shrink-0"
-                      onClick={() =>
-                        activeSession &&
-                            void archiveSession(activeSession, false).then(
-                              refreshSessions,
-                            )
-                      }
-                    >
-                      {t("archived.restore")}
-                    </Button>
-                  </Card>
-                </div>
-              )}
-              {/* Quiet scene banner (R8): stage completion / hook suggestions for the focused
+                            {activeArchived ? <div className="shrink-0 px-6 pt-3 pb-6">
+                                <Card
+                                  variant="surface"
+                                  density="compact"
+                                  className="mx-auto w-full max-w-3xl flex-row items-center px-4"
+                                >
+                                  <Archive className="text-muted-foreground size-4 shrink-0" />
+                                  <p className="text-ui text-muted-foreground min-w-0 flex-1">
+                                    {t("archived.notice")}
+                                  </p>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="shrink-0"
+                                    onClick={() =>
+                                      activeSession &&
+                                      void archiveSession(
+                                        activeSession,
+                                        false
+                                      ).then(refreshSessions)
+                                    }
+                                  >
+                                    {t("archived.restore")}
+                                  </Button>
+                                </Card>
+                              </div> : null}
+                            {/* Quiet scene banner (R8): stage completion / hook suggestions for the focused
                   session, rendered above the composer. Dismissal is remembered by the core. */}
-                  {scenesSurfaceEnabled &&
-                    sceneBanner &&
-                    sceneBanner.session === activeSession &&
-                    !activeArchived && (
-                <SceneBanner
-                  banner={sceneBanner}
-                  scenes={scenes}
-                  onApplyScene={(reference) => {
-                    applySceneChoice(reference);
-                    setSceneBanner(null);
-                  }}
-                  onAdvancePipeline={(instanceId, toStage) => {
-                    void advancePipelineChoice(instanceId, toStage);
-                    setSceneBanner(null);
-                  }}
-                  onAdvancePipelineNewSession={(instanceId, toStage) => {
-                    void advancePipelineInNewSession(instanceId, toStage);
-                    setSceneBanner(null);
-                  }}
-                  onDismiss={() => {
-                          void dismissSceneBanner(
-                            sceneBanner.session,
-                            sceneBanner.stateKey,
-                          );
-                    setSceneBanner(null);
+                            {scenesSurfaceEnabled &&
+                              sceneBanner &&
+                              sceneBanner.session === activeSession &&
+                              !activeArchived ? <SceneBanner
+                                  banner={sceneBanner}
+                                  scenes={scenes}
+                                  onApplyScene={(reference) => {
+                                    applySceneChoice(reference);
+                                    setSceneBanner(null);
+                                  }}
+                                  onAdvancePipeline={(instanceId, toStage) => {
+                                    void advancePipelineChoice(
+                                      instanceId,
+                                      toStage
+                                    );
+                                    setSceneBanner(null);
+                                  }}
+                                  onAdvancePipelineNewSession={(
+                                    instanceId,
+                                    toStage
+                                  ) => {
+                                    void advancePipelineInNewSession(
+                                      instanceId,
+                                      toStage
+                                    );
+                                    setSceneBanner(null);
+                                  }}
+                                  onDismiss={() => {
+                                    void dismissSceneBanner(
+                                      sceneBanner.session,
+                                      sceneBanner.stateKey
+                                    );
+                                    setSceneBanner(null);
+                                  }}
+                                /> : null}
+                            {!activeArchived && (
+                              <PluginUiSlot
+                                slot="composer.above"
+                                contributions={
+                                  pluginUiActions["composer.above"]
+                                }
+                                onInvoke={invokePluginAction}
+                              />
+                            )}
+                            {permission &&
+                              !permission.form &&
+                              !activeArchived ? <PermissionCard
+                                  key={`${permission.session}:${permission.requestId}`}
+                                  request={permission}
+                                  pendingCount={activePendingInputs.length}
+                                  onAnswer={answer}
+                                /> : null}
+                            <div
+                              className={cn(
+                                "contents",
+                                activeArchived && "hidden"
+                              )}
+                            >
+                              <Composer
+                                config={sessionConfig}
+                                hero={turns.length === 0 && !sessionLoading}
+                                checkout={{
+                                  project: activeProjectName ?? cwd,
+                                  branch: git?.is_repo ? git.branch : null,
+                                  dirty: git?.files.length ?? 0,
+                                  onOpen: openSourceControl,
+                                }}
+                                docMode={docMode}
+                                onDocMode={toggleDocMode}
+                                height={composerH}
+                                onHeight={setComposerH}
+                                boundsRef={mainRef}
+                                models={
+                                  activeSession === null
+                                    ? (providers.find(
+                                        (candidate) => candidate.id === provider
+                                      )?.models ?? [])
+                                    : models
+                                }
+                                currentModel={currentModel}
+                                defaultModel={defaultModel}
+                                contextWindow={activeContextWindow(
+                                  contextWindows,
+                                  activeSession
+                                )}
+                                usage={sessionUsage}
+                                {...(activeInteractionCapabilities?.compact_context
+                                  ? {
+                                      onCompactContext: () =>
+                                        void run(
+                                          [{ type: "text", text: "/compact" }],
+                                          undefined,
+                                          paneId,
+                                          activeAppshots
+                                        ),
+                                    }
+                                  : {})}
+                                onModel={(id) =>
+                                  changeSessionModel(activeSession, id)
+                                }
+                                configOptions={configOptions}
+                                onConfigOption={(configId, value) =>
+                                  changeSessionConfigOption(
+                                    activeSession,
+                                    configId,
+                                    value
+                                  )
+                                }
+                                running={running}
+                                loading={sessionLoading}
+                                docEmpty={docEmpty}
+                                appshots={activeAppshots}
+                                onRemoveAppshot={(id) =>
+                                  removePendingAppshots([id])
+                                }
+                                onRun={() =>
+                                  void run(
+                                    undefined,
+                                    undefined,
+                                    paneId,
+                                    activeAppshots
+                                  )
+                                }
+                                onQueue={() =>
+                                  void sendDuringTurn(
+                                    "queued",
+                                    undefined,
+                                    paneId,
+                                    activeAppshots
+                                  )
+                                }
+                                onMultitask={startParallelTask}
+                                onSteer={() =>
+                                  void sendDuringTurn(
+                                    "steer",
+                                    undefined,
+                                    paneId,
+                                    activeAppshots
+                                  )
+                                }
+                                steeringSupported={
+                                  activeInteractionCapabilities?.steering ??
+                                  false
+                                }
+                                goalCapability={
+                                  activeInteractionCapabilities?.goal ?? null
+                                }
+                                goal={activeGoal}
+                                onGoal={async (action, objective) => {
+                                  const session = activeSession;
+                                  if (!session) return;
+                                  try {
+                                    await controlGoal(
+                                      session,
+                                      action,
+                                      objective
+                                    );
+                                  } catch (error) {
+                                    toast(
+                                      t("toast.goalFailed", {
+                                        error: String(error),
+                                      }),
+                                      "error"
+                                    );
+                                    throw error;
+                                  }
+                                }}
+                                onStop={() =>
+                                  activeSession &&
+                                  void cancelTurn(activeSession)
+                                }
+                                onAttachFile={() => {
+                                  if (componentEnabled("files.surface"))
+                                    setShowFiles(true);
+                                  else
+                                    toast(
+                                      "Files are disabled in Plugins.",
+                                      "info"
+                                    );
+                                }}
+                                onAttachImages={attachPromptImages}
+                                onInsertSkill={() =>
+                                  openSkillPickerRef.current?.()
+                                }
+                                onInsertIssue={() => {
+                                  if (componentEnabled("issues.modal"))
+                                    setShowIssues(true);
+                                  else
+                                    toast(
+                                      "Issues are disabled in Plugins.",
+                                      "info"
+                                    );
+                                }}
+                                onOpenMarket={openPluginManager}
+                                onNewSkill={() =>
+                                  setSkillDraft({ name: "", text: "" })
+                                }
+                                canvasEnabled={canvasUiEnabled}
+                                onInsertCanvas={() =>
+                                  void insertCanvasRef.current?.()
+                                }
+                                voiceEnabled={voiceComposerEnabled}
+                                onVoiceText={(t) => insertTextRef.current?.(t)}
+                                // R11: with an active-scene brief, a finished dictation is structured into a
+                                // pre-filled brief card; any failure degrades to the raw-text insert above.
+                                // No brief → the handler is undefined and voice behaves exactly as before.
+                                onVoiceTranscript={
+                                  voiceComposerEnabled && scenesSurfaceEnabled
+                                    ? makeTranscriptHandler({
+                                        scene:
+                                          scenes.find(
+                                            (s) =>
+                                              s.reference === activeSceneName
+                                          ) ?? null,
+                                        structureBrief,
+                                        insertBrief: (scene, values) =>
+                                          insertBriefRef.current?.(
+                                            scene,
+                                            values
+                                          ),
+                                        insertText: (text) =>
+                                          insertTextRef.current?.(text),
+                                        onDegrade: () =>
+                                          toast(
+                                            t("voice.structureFailed"),
+                                            "error"
+                                          ),
+                                      })
+                                    : undefined
+                                }
+                                runHint={hint("run")}
+                                skillHint={hint("open_skill_picker")}
+                                filesHint={hint("open_files")}
+                                pluginActions={
+                                  <PluginUiSlot
+                                    slot="composer.toolbar"
+                                    contributions={
+                                      pluginUiActions["composer.toolbar"]
+                                    }
+                                    onInvoke={invokePluginAction}
+                                  />
+                                }
+                                sessionId={activeSession}
+                                insertBriefRef={insertBriefRef}
+                              >
+                                <DocEditor
+                                  key={editorKey}
+                                  skills={activeSkills}
+                                  cwd={cwd || "."}
+                                  sessionId={activeSession}
+                                  getBlocksRef={getBlocksRef}
+                                  insertTextRef={insertTextRef}
+                                  insertAnnotationRef={insertAnnotationRef}
+                                  insertFileRef={insertFileRef}
+                                  insertSessionRef={insertSessionRef}
+                                  focusRef={focusEditorRef}
+                                  clearRef={clearEditorRef}
+                                  insertMarkdownRef={insertMarkdownRef}
+                                  openSkillPickerRef={openSkillPickerRef}
+                                  sceneSkills={(() => {
+                                    const scene = scenes.find(
+                                      (s) => s.reference === activeSceneName
+                                    );
+                                    return scene?.skills
+                                      ? {
+                                          pinned: scene.skills.pinned ?? [],
+                                          suppressUnpinned:
+                                            scene.skills.suppress_unpinned ??
+                                            false,
+                                        }
+                                      : null;
+                                  })()}
+                                  insertSkillRef={insertSkillRef}
+                                  insertBriefRef={insertBriefRef}
+                                  insertIssueRef={insertIssueRef}
+                                  canvasEnabled={canvasUiEnabled}
+                                  canvasRuntime={canvasRuntime}
+                                  createCanvas={createCanvas}
+                                  insertCanvasRef={insertCanvasRef}
+                                  insertCanvasDraftRef={insertCanvasDraftRef}
+                                  restoreCanvasDocumentRef={
+                                    restoreCanvasDocumentRef
+                                  }
+                                  freezeCanvasesRef={freezeCanvasesRef}
+                                  canvasDeliveryErrorRef={
+                                    canvasDeliveryErrorRef
+                                  }
+                                  onPasteImages={attachPromptImages}
+                                  onEmptyChange={paneEmptyHandlerFor(paneId)}
+                                  onDocumentChange={paneDocumentHandlerFor(
+                                    paneId
+                                  )}
+                                />
+                              </Composer>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
                   }}
                 />
-              )}
-              {!activeArchived && (
-                <PluginUiSlot
-                  slot="composer.above"
-                  contributions={pluginUiActions["composer.above"]}
-                  onInvoke={invokePluginAction}
-                />
-              )}
-              {permission && !permission.form && !activeArchived && (
-                <PermissionCard
-                  key={`${permission.session}:${permission.requestId}`}
-                  request={permission}
-                  pendingCount={activePendingInputs.length}
-                  onAnswer={answer}
-                />
-              )}
-              <div className={cn("contents", activeArchived && "hidden")}>
-                <Composer
-                  config={sessionConfig}
-                  hero={turns.length === 0 && !sessionLoading}
-                  checkout={{
-                    project: activeProjectName ?? cwd,
-                    branch: git?.is_repo ? git.branch : null,
-                    dirty: git?.files.length ?? 0,
-                    onOpen: openSourceControl,
-                  }}
-                  docMode={docMode}
-                  onDocMode={toggleDocMode}
-                  height={composerH}
-                  onHeight={setComposerH}
-                  boundsRef={mainRef}
-                  models={activeSession === null
-                    ? providers.find((candidate) => candidate.id === provider)?.models ?? []
-                    : models}
-                  currentModel={currentModel}
-                  defaultModel={defaultModel}
-                      contextWindow={activeContextWindow(
-                        contextWindows,
-                        activeSession,
-                      )}
-                  usage={sessionUsage}
-                  {...(activeInteractionCapabilities?.compact_context
-                    ? {
-                        onCompactContext: () =>
-                          void run(
-                            [{ type: "text", text: "/compact" }],
-                            undefined,
-                            paneId,
-                            activeAppshots,
-                          ),
-                      }
-                    : {})}
-                  onModel={(id) => changeSessionModel(activeSession, id)}
-                  configOptions={configOptions}
-                  onConfigOption={(configId, value) =>
-                    changeSessionConfigOption(activeSession, configId, value)
-                  }
-                  running={running}
-                  loading={sessionLoading}
-                  docEmpty={docEmpty}
-                  appshots={activeAppshots}
-                  onRemoveAppshot={(id) => removePendingAppshots([id])}
-                  onRun={() =>
-                    void run(undefined, undefined, paneId, activeAppshots)
-                  }
-                  onQueue={() =>
-                    void sendDuringTurn("queued", undefined, paneId, activeAppshots)
-                  }
-                  onMultitask={startParallelTask}
-                  onSteer={() =>
-                    void sendDuringTurn("steer", undefined, paneId, activeAppshots)
-                  }
-                  steeringSupported={activeInteractionCapabilities?.steering ?? false}
-                  goalCapability={activeInteractionCapabilities?.goal ?? null}
-                  goal={activeGoal}
-                  onGoal={async (action, objective) => {
-                    const session = activeSession;
-                    if (!session) return;
-                    try {
-                      await controlGoal(session, action, objective);
-                    } catch (error) {
-                      toast(t("toast.goalFailed", { error: String(error) }), "error");
-                      throw error;
-                    }
-                  }}
-                      onStop={() =>
-                        activeSession && void cancelTurn(activeSession)
-                      }
-                  onAttachFile={() => {
-                        if (componentEnabled("files.surface"))
-                          setShowFiles(true);
-                    else toast("Files are disabled in Plugins.", "info");
-                  }}
-                  onAttachImages={attachPromptImages}
-                  onInsertSkill={() => openSkillPickerRef.current?.()}
-                  onInsertIssue={() => {
-                        if (componentEnabled("issues.modal"))
-                          setShowIssues(true);
-                    else toast("Issues are disabled in Plugins.", "info");
-                  }}
-                  onOpenMarket={openPluginManager}
-                  onNewSkill={() => setSkillDraft({ name: "", text: "" })}
-                  canvasEnabled={canvasUiEnabled}
-                  onInsertCanvas={() => void insertCanvasRef.current?.()}
-                  voiceEnabled={voiceComposerEnabled}
-                  onVoiceText={(t) => insertTextRef.current?.(t)}
-                  // R11: with an active-scene brief, a finished dictation is structured into a
-                  // pre-filled brief card; any failure degrades to the raw-text insert above.
-                  // No brief → the handler is undefined and voice behaves exactly as before.
-                      onVoiceTranscript={
-                        voiceComposerEnabled && scenesSurfaceEnabled
-                    ? makeTranscriptHandler({
-                              scene:
-                                scenes.find(
-                                  (s) => s.reference === activeSceneName,
-                                ) ?? null,
-                        structureBrief,
-                              insertBrief: (scene, values) =>
-                                insertBriefRef.current?.(scene, values),
-                              insertText: (text) =>
-                                insertTextRef.current?.(text),
-                              onDegrade: () =>
-                                toast(t("voice.structureFailed"), "error"),
-                      })
-                          : undefined
-                      }
-                  runHint={hint("run")}
-                  skillHint={hint("open_skill_picker")}
-                  filesHint={hint("open_files")}
-                      pluginActions={
-                    <PluginUiSlot
-                      slot="composer.toolbar"
-                      contributions={pluginUiActions["composer.toolbar"]}
-                      onInvoke={invokePluginAction}
-                    />
-                      }
-                  sessionId={activeSession}
-                  insertBriefRef={insertBriefRef}
-                >
-                  <DocEditor
-                    key={editorKey}
-                    skills={activeSkills}
-                    cwd={cwd || "."}
-                    sessionId={activeSession}
-                    getBlocksRef={getBlocksRef}
-                    insertTextRef={insertTextRef}
-                    insertAnnotationRef={insertAnnotationRef}
-                    insertFileRef={insertFileRef}
-                    insertSessionRef={insertSessionRef}
-                    focusRef={focusEditorRef}
-                    clearRef={clearEditorRef}
-                    insertMarkdownRef={insertMarkdownRef}
-                    openSkillPickerRef={openSkillPickerRef}
-                    sceneSkills={(() => {
-                          const scene = scenes.find(
-                            (s) => s.reference === activeSceneName,
-                          );
-                      return scene?.skills
-                        ? {
-                            pinned: scene.skills.pinned ?? [],
-                                suppressUnpinned:
-                                  scene.skills.suppress_unpinned ?? false,
-                          }
-                        : null;
-                    })()}
-                    insertSkillRef={insertSkillRef}
-                    insertBriefRef={insertBriefRef}
-                    insertIssueRef={insertIssueRef}
-                    canvasEnabled={canvasUiEnabled}
-                    canvasRuntime={canvasRuntime}
-                    createCanvas={createCanvas}
-                    insertCanvasRef={insertCanvasRef}
-                    insertCanvasDraftRef={insertCanvasDraftRef}
-                    restoreCanvasDocumentRef={restoreCanvasDocumentRef}
-                    freezeCanvasesRef={freezeCanvasesRef}
-                    canvasDeliveryErrorRef={canvasDeliveryErrorRef}
-                    onPasteImages={attachPromptImages}
-                    onEmptyChange={paneEmptyHandlerFor(paneId)}
-                    onDocumentChange={paneDocumentHandlerFor(paneId)}
-                  />
-                </Composer>
-              </div>
+              </main>
             </div>
-          </div>
-            </div>
-                );
-              }}
-            />
-            </main>
-
-          </div>
 
             {/* ---------------- right work dock ---------------- */}
             {/* Always mounted: closing animates the width to zero instead of unmounting, which both
@@ -8506,7 +9019,9 @@ export default function App() {
                     usage={focusedSessionUsage}
                     hasEarlier={focusedTranscriptState.nextBefore !== null}
                     loadingEarlier={focusedTranscriptState.loadingEarlier}
-                    onLoadEarlier={() => void loadEarlierTranscript(paneLayout.focused)}
+                    onLoadEarlier={() =>
+                      void loadEarlierTranscript(paneLayout.focused)
+                    }
                   />
                 ),
                 browser: (
@@ -8540,7 +9055,7 @@ export default function App() {
                     seed={sideChatSeed}
                     onSeedHandled={(id) =>
                       setSideChatSeed((current) =>
-                        current?.id === id ? null : current,
+                        current?.id === id ? null : current
                       )
                     }
                     linkActions={builtinLinkActions}
@@ -8576,8 +9091,8 @@ export default function App() {
               onWidth={setDockWidth}
               reservedWidth={railInlineWidth}
             />
+          </div>
         </div>
-      </div>
       )}
 
       <QuickChatPanel
@@ -8596,8 +9111,7 @@ export default function App() {
       />
 
       {/* ---------------- dialogs ---------------- */}
-      {showSourceControl && componentEnabled("git.surface") && (
-        <SourceControlModal
+      {showSourceControl && componentEnabled("git.surface") ? <SourceControlModal
           key={cwd || "."}
           cwd={cwd || "."}
           status={git}
@@ -8626,15 +9140,12 @@ export default function App() {
             refreshCheckpoints();
           }}
           onClose={() => setShowSourceControl(false)}
-        />
-      )}
-      {showPalette && (
-        <CommandPalette
+        /> : null}
+      {showPalette ? <CommandPalette
           commands={paletteCommands}
           search={searchPaletteCommands}
           onClose={() => setShowPalette(false)}
-        />
-      )}
+        /> : null}
       <ProjectActionDialog
         open={showActionDialog}
         actions={scripts}
@@ -8642,11 +9153,8 @@ export default function App() {
         onOpenChange={setShowActionDialog}
         onSave={saveProjectAction}
       />
-      {showRemote && componentEnabled("remote.modal") && (
-        <RemoteModal onClose={() => setShowRemote(false)} />
-      )}
-      {showTaskHandoff && activeSession && (
-        <TaskHandoffDialog
+      {showRemote && componentEnabled("remote.modal") ? <RemoteModal onClose={() => setShowRemote(false)} /> : null}
+      {showTaskHandoff && activeSession ? <TaskHandoffDialog
           session={activeSession}
           onClose={() => setShowTaskHandoff(false)}
           onTransferred={() => {
@@ -8654,10 +9162,8 @@ export default function App() {
             void refreshSessions();
             toast("Task moved to the remote device.", "success");
           }}
-        />
-      )}
-      {showIssues && componentEnabled("issues.modal") && (
-        <IssuesModal
+        /> : null}
+      {showIssues && componentEnabled("issues.modal") ? <IssuesModal
           cwd={cwd || "."}
           scenes={scenesSurfaceEnabled ? scenes : []}
           onInsert={(i) => void insertIssue(i)}
@@ -8669,13 +9175,9 @@ export default function App() {
             void selectSession(session);
           }}
           onClose={() => setShowIssues(false)}
-        />
-      )}
-      {preview && (
-        <PreviewModal preview={preview} onClose={() => setPreview(null)} />
-      )}
-      {showMissionControl && (
-        <MissionControlDialog
+        /> : null}
+      {preview ? <PreviewModal preview={preview} onClose={() => setPreview(null)} /> : null}
+      {showMissionControl ? <MissionControlDialog
           sessions={sessions}
           runningSessions={runningSessions}
           contextWindows={contextWindows}
@@ -8687,10 +9189,8 @@ export default function App() {
           onSelect={(id) => void selectSession(id)}
           onReview={openSourceControl}
           onClose={() => setShowMissionControl(false)}
-        />
-      )}
-      {showScenePicker && scenesSurfaceEnabled && (
-        <ScenePicker
+        /> : null}
+      {showScenePicker && scenesSurfaceEnabled ? <ScenePicker
           scenes={scenes}
           active={scenes.find((s) => s.reference === activeSceneName) ?? null}
           auto={autoScene}
@@ -8712,10 +9212,8 @@ export default function App() {
             setShowSceneStudio(true);
           }}
           onClose={() => setShowScenePicker(false)}
-        />
-      )}
-      {sceneEscalation && scenesSurfaceEnabled && (
-        <SceneEscalationDialog
+        /> : null}
+      {sceneEscalation && scenesSurfaceEnabled ? <SceneEscalationDialog
           sceneLabel={
             scenes.find((s) => s.reference === sceneEscalation.reference)
               ?.title ?? sceneEscalation.reference
@@ -8731,39 +9229,33 @@ export default function App() {
               void advancePipelineChoice(
                 pending.pipeline.instanceId,
                 pending.pipeline.toStage,
-                true,
+                true
               );
             else if (pending.kind === "pipeline_new" && pending.pipeline)
               void advancePipelineInNewSession(
                 pending.pipeline.instanceId,
                 pending.pipeline.toStage,
-                true,
+                true
               );
             else void restartInScene(true);
           }}
           onCancel={() => setSceneEscalation(null)}
-        />
-      )}
-      {showFiles && componentEnabled("files.surface") && (
-        <FileBrowserModal
+        /> : null}
+      {showFiles && componentEnabled("files.surface") ? <FileBrowserModal
           cwd={cwd || "."}
           onInsert={(p) => {
             insertFileRef.current?.(p);
             setShowFiles(false);
           }}
           onClose={() => setShowFiles(false)}
-        />
-      )}
-      {showWorkspaceSearch && componentEnabled("search.modal") && (
-        <WorkspaceSearchModal
+        /> : null}
+      {showWorkspaceSearch && componentEnabled("search.modal") ? <WorkspaceSearchModal
           cwd={cwd || "."}
           onOpen={(match) => openFileTab(match.path, match)}
           onClose={() => setShowWorkspaceSearch(false)}
-        />
-      )}
+        /> : null}
 
-      {planDocPending && (
-        <Dialog open onOpenChange={(o) => !o && resolvePlanDocPending(null)}>
+      {planDocPending ? <Dialog open onOpenChange={(o) => !o && resolvePlanDocPending(null)}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t("planDoc.title")}</DialogTitle>
@@ -8789,11 +9281,9 @@ export default function App() {
               </Button>
             </DialogFooter>
           </DialogContent>
-        </Dialog>
-      )}
+        </Dialog> : null}
 
-      {skillDraft && (
-        <Dialog open onOpenChange={(o) => !o && setSkillDraft(null)}>
+      {skillDraft ? <Dialog open onOpenChange={(o) => !o && setSkillDraft(null)}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>New skill</DialogTitle>
@@ -8819,8 +9309,7 @@ export default function App() {
               <Button onClick={() => void saveDraft()}>Save</Button>
             </DialogFooter>
           </DialogContent>
-        </Dialog>
-      )}
+        </Dialog> : null}
 
       {templateDraft !== null && (
         <TemplateDialog
@@ -8834,14 +9323,11 @@ export default function App() {
         />
       )}
 
-      {permission?.form && (
-        <QuestionDialog
+      {permission?.form ? <QuestionDialog
           key={`${permission.session}:${permission.requestId}`}
           form={permission.form}
           onAnswer={(value) => void answerQuestion(value)}
-        />
-      )}
-
+        /> : null}
     </div>
   );
 }

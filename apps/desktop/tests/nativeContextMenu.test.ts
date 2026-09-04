@@ -16,11 +16,13 @@ describe("native context menu bridge", () => {
             type: "item",
             label: "Copy",
             action: "copy",
-            submenu: [{ type: "item", label: "Session ID", action: "copy-session-id" }],
+            submenu: [
+              { type: "item", label: "Session ID", action: "copy-session-id" },
+            ],
           },
         ],
-        "request-1",
-      ),
+        "request-1"
+      )
     ).toEqual([
       {
         type: "normal",
@@ -59,13 +61,15 @@ describe("native context menu bridge", () => {
           action: "codetwo-context-menu",
           data: { requestId: "request-2", action: "archive" },
         },
-      }),
+      })
     ).toEqual({ requestId: "request-2", action: "archive" });
-    expect(nativeContextMenuAction({ data: { action: "other", data: {} } })).toBeNull();
+    expect(
+      nativeContextMenuAction({ data: { action: "other", data: {} } })
+    ).toBeNull();
     expect(
       nativeContextMenuAction({
         data: { action: "codetwo-context-menu", data: {} },
-      }),
+      })
     ).toBeNull();
   });
 });

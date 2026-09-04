@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "./design/tokens.css";
+@import url("tailwindcss");
+@import url("./design/tokens.css");
 
 /* shadcn/ui — dark variant driven by a `.dark` class on <html> (set from the OS appearance). */
 @custom-variant dark (&:is(.dark *));
@@ -21,41 +21,41 @@
   --motion-layer: 160ms;
   --motion-normal: 220ms;
   --motion-slow: 280ms;
-
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
+  --background: oklch(100% 0 0deg);
+  --foreground: oklch(12.9% 0.042 264.695deg);
+  --card: oklch(100% 0 0deg);
+  --card-foreground: oklch(12.9% 0.042 264.695deg);
+  --popover: oklch(100% 0 0deg);
+  --popover-foreground: oklch(12.9% 0.042 264.695deg);
   --primary: var(--ds-color-primary);
   --primary-foreground: var(--ds-color-primary-text);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(96.8% 0.007 247.896deg);
+  --secondary-foreground: oklch(20.8% 0.042 265.755deg);
+  --muted: oklch(96.8% 0.007 247.896deg);
+  --muted-foreground: oklch(55.4% 0.046 257.417deg);
+  --accent: oklch(96.8% 0.007 247.896deg);
+  --accent-foreground: oklch(20.8% 0.042 265.755deg);
   --destructive: var(--ds-color-destructive);
   --destructive-foreground: var(--ds-color-destructive-text);
-  --success: oklch(0.627 0.194 149.214);
-  --warning: oklch(0.666 0.179 58.318);
+  --success: oklch(62.7% 0.194 149.214deg);
+  --warning: oklch(66.6% 0.179 58.318deg);
   --viz-series-1: var(--primary);
   --viz-series-2: var(--success);
   --viz-series-3: var(--warning);
   --viz-series-4: var(--destructive);
   --viz-series-5: var(--term-ansi-6);
   --viz-series-6: var(--term-ansi-5);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.546 0.215 262.881);
+  --border: oklch(92.9% 0.013 255.508deg);
+  --input: oklch(92.9% 0.013 255.508deg);
+  --ring: oklch(54.6% 0.215 262.881deg);
+
   /* A near-white grey, one visible step off the white content area — the T3-style flat layout
      separates panes with 1px borders rather than depth, so the sidebar only needs a whisper of
      tint to read as chrome. */
-  --sidebar: oklch(0.975 0.002 250);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --terminal: oklch(0.19 0.012 264);
+  --sidebar: oklch(97.5% 0.002 250deg);
+  --sidebar-foreground: oklch(12.9% 0.042 264.695deg);
+  --sidebar-border: oklch(92.9% 0.013 255.508deg);
+  --terminal: oklch(19% 0.012 264deg);
 
   /* The terminal palette is hex, not oklch, unlike every other token here. Two reasons: ANSI
      colours are a fixed 16-slot convention rather than a perceptual scale, and the renderer parses
@@ -68,7 +68,6 @@
   --term-fg: #383a42;
   --term-cursor: #4078f2;
   --term-selection: #4078f233;
-
   --term-ansi-0: #383a42;
   --term-ansi-1: #e45649;
   --term-ansi-2: #50a14f;
@@ -95,40 +94,42 @@
 
      The steps between surfaces matter more than their absolute values: sidebar → background →
      card are 0.145 / 0.178 / 0.212, far enough apart to read as separate planes at a glance. */
-  --background: oklch(0.178 0.005 265);
-  --foreground: oklch(0.955 0.004 250);
-  --card: oklch(0.212 0.006 265);
-  --card-foreground: oklch(0.955 0.004 250);
-  --popover: oklch(0.222 0.006 265);
-  --popover-foreground: oklch(0.955 0.004 250);
+  --background: oklch(17.8% 0.005 265deg);
+  --foreground: oklch(95.5% 0.004 250deg);
+  --card: oklch(21.2% 0.006 265deg);
+  --card-foreground: oklch(95.5% 0.004 250deg);
+  --popover: oklch(22.2% 0.006 265deg);
+  --popover-foreground: oklch(95.5% 0.004 250deg);
   --primary: var(--ds-color-primary);
   --primary-foreground: var(--ds-color-primary-text);
-  --secondary: oklch(0.262 0.007 265);
-  --secondary-foreground: oklch(0.955 0.004 250);
-  --muted: oklch(0.262 0.007 265);
+  --secondary: oklch(26.2% 0.007 265deg);
+  --secondary-foreground: oklch(95.5% 0.004 250deg);
+  --muted: oklch(26.2% 0.007 265deg);
+
   /* Lifted from 0.68: secondary text was the weakest part of the old scheme, and preview lines and
      hints are exactly the text that has to stay readable at 11px. */
-  --muted-foreground: oklch(0.715 0.008 260);
-  --accent: oklch(0.288 0.008 265);
-  --accent-foreground: oklch(0.98 0.003 250);
+  --muted-foreground: oklch(71.5% 0.008 260deg);
+  --accent: oklch(28.8% 0.008 265deg);
+  --accent-foreground: oklch(98% 0.003 250deg);
   --destructive: var(--ds-color-destructive);
   --destructive-foreground: var(--ds-color-destructive-text);
-  --success: oklch(0.74 0.16 152);
-  --warning: oklch(0.8 0.14 82);
+  --success: oklch(74% 0.16 152deg);
+  --warning: oklch(80% 0.14 82deg);
+
   /* Visible enough to define a card edge without drawing a grid over the UI. */
-  --border: oklch(0.318 0.007 265);
-  --input: oklch(0.345 0.008 265);
-  --ring: oklch(0.68 0.15 258);
-  --sidebar: oklch(0.145 0.005 265);
-  --sidebar-foreground: oklch(0.955 0.004 250);
-  --sidebar-border: oklch(0.29 0.007 265);
-  --terminal: oklch(0.135 0.005 265);
+  --border: oklch(31.8% 0.007 265deg);
+  --input: oklch(34.5% 0.008 265deg);
+  --ring: oklch(68% 0.15 258deg);
+  --sidebar: oklch(14.5% 0.005 265deg);
+  --sidebar-foreground: oklch(95.5% 0.004 250deg);
+  --sidebar-border: oklch(29% 0.007 265deg);
+  --terminal: oklch(13.5% 0.005 265deg);
+
   /* Dark scheme: hues pulled toward the app's cool blue rather than warm terminal defaults. */
   --term-bg: #1b1d22;
   --term-fg: #c9cfd9;
   --term-cursor: #79a9f0;
   --term-selection: #3b6ea566;
-
   --term-ansi-0: #3b4048;
   --term-ansi-1: #e5707b;
   --term-ansi-2: #8fbf7f;
@@ -212,7 +213,6 @@
      equivalents — everything drawn *over* the terminal reads from here, not from `white/…`. */
   --color-term-bg: var(--term-bg);
   --color-term-fg: var(--term-fg);
-
   --radius-micro: var(--ds-radius-micro);
   --radius-control: var(--ds-radius-control);
   --radius-module: var(--ds-radius-module);
@@ -221,7 +221,6 @@
   --radius-composer: var(--ds-composer-radius);
   --radius-menu: var(--ds-menu-radius);
   --radius-menu-item: var(--ds-menu-item-radius);
-
   --spacing-optical: var(--ds-space-optical);
   --spacing-inline: var(--ds-space-inline);
   --spacing-control-group: var(--ds-space-control-group);
@@ -256,15 +255,13 @@
   --shadow-raised: var(--ds-elevation-raised);
   --shadow-modal: var(--ds-elevation-modal);
   --shadow-menu: var(--ds-menu-elevation);
-
   --transition-duration-feedback: var(--ds-motion-feedback);
   --transition-duration-layer: var(--ds-motion-layer);
   --transition-duration-dialog: var(--ds-motion-dialog);
   --transition-duration-page: var(--ds-motion-page);
   --ease-enter: var(--ds-ease-enter);
   --ease-exit: var(--ds-ease-exit);
-
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --font-mono: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
 
   /* ---- type roles (see docs/design/system.md) -------------------------------------------------------
      New work uses the semantic role names with their paired line heights. The short names keep
@@ -289,7 +286,6 @@
   --text-caption--line-height: var(--ds-type-caption-leading);
   --text-code: var(--ds-type-code-size);
   --text-code--line-height: var(--ds-type-code-leading);
-
   --text-cap: var(--ds-type-caption-size);
   --text-fine: var(--ds-type-callout-size);
   --text-hint: var(--ds-type-metadata-size);
@@ -305,12 +301,15 @@
 @utility border {
   border-width: var(--hairline-width);
 }
+
 @utility border-x {
   border-inline-width: var(--hairline-width);
 }
+
 @utility border-y {
   border-block-width: var(--hairline-width);
 }
+
 @utility border-s {
   border-inline-start-width: var(--hairline-width);
 }
@@ -318,26 +317,33 @@
 @utility max-w-dialog-viewport {
   max-width: calc(100% - var(--ds-space-page-section));
 }
+
 @utility border-e {
   border-inline-end-width: var(--hairline-width);
 }
+
 @utility border-t {
   border-top-width: var(--hairline-width);
 }
+
 @utility border-r {
   border-right-width: var(--hairline-width);
 }
+
 @utility border-b {
   border-bottom-width: var(--hairline-width);
 }
+
 @utility border-l {
   border-left-width: var(--hairline-width);
 }
+
 @utility divide-x {
   & > :not(:last-child) {
     border-inline-end-width: var(--hairline-width);
   }
 }
+
 @utility divide-y {
   & > :not(:last-child) {
     border-bottom-width: var(--hairline-width);
@@ -346,69 +352,86 @@
 
 /* Product code names the focus contract; token width, color, and offset stay in CSS. */
 @utility focus-ring {
+  outline: var(--ds-focus-width) solid
+    color-mix(in srgb, var(--color-ring) 50%, transparent);
   outline-offset: var(--ds-focus-offset);
-  outline: var(--ds-focus-width) solid color-mix(in srgb, var(--color-ring) 50%, transparent);
 }
 
 @utility focus-ring-inset {
+  outline: var(--ds-focus-width) solid
+    color-mix(in srgb, var(--color-ring) 50%, transparent);
   outline-offset: calc(-1 * var(--ds-focus-width));
-  outline: var(--ds-focus-width) solid color-mix(in srgb, var(--color-ring) 50%, transparent);
 }
 
 @layer base {
   * {
     border-color: var(--border);
   }
+
   [data-slot="search-field"][data-custom-clear="true"]
     input[type="search"]::-webkit-search-cancel-button {
     appearance: none;
   }
+
   html,
   body,
   #root {
+    overflow: hidden;
     height: 100%;
     margin: 0;
-    overflow: hidden;
     overscroll-behavior: none;
   }
+
   /* WKWebView can rubber-band its visual viewport even when the root document has no scroll
      range. Pinning the body to the window removes that outer scrolling surface; intentional
      overflow containers inside the app remain independently scrollable. */
   body {
     position: fixed;
-    inset: 0;
     width: 100%;
     color: var(--foreground);
-    font-family: var(--appearance-font-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-    font-weight: var(--appearance-font-ui-weight, 400);
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
+    font-family: var(
+      --appearance-font-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif
+    );
     -webkit-font-smoothing: antialiased;
+    font-synthesis: none;
+    font-weight: var(--appearance-font-ui-weight, 400);
+    inset: 0;
+    text-rendering: optimizelegibility;
   }
+
   code,
   pre,
   .font-mono {
     font-weight: var(--appearance-font-code-weight, 400);
   }
+
   /* Let `.app-shell` own the window surface and corner radius. */
   html,
   body {
     background: transparent;
   }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
+
   ::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: var(--ds-radius-control);
     border: 3px solid transparent;
+    border-radius: var(--ds-radius-control);
+    background: var(--border);
     background-clip: content-box;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     background: var(--muted-foreground);
     background-clip: content-box;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
@@ -461,49 +484,61 @@ html[data-appearance-pointer-cursors="false"]
      Other platforms and browser previews keep the solid shell. The macOS Electrobun window lets
      the desktop show through only where an individual pane supplies a translucent surface. */
   .app-shell {
-    background: var(--background);
-    border-radius: var(--ds-radius-control);
     overflow: hidden;
+    border-radius: var(--ds-radius-control);
+    background: var(--background);
   }
+
   .macos-window-glass .app-shell {
     background: transparent;
   }
+
   .window-titlebar {
     height: var(--ds-titlebar-height);
     box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--border);
   }
+
   .window-controls-safe-main {
     padding-left: 1rem;
   }
+
   .window-controls-safe-compact-main {
     padding-left: 1rem;
   }
+
   .window-controls-compact-leading-action {
     display: none;
   }
+
   .window-controls-safe-rail,
   .window-controls-safe-scene {
     padding-left: 0.75rem;
   }
+
   html[data-platform="macos"] .window-controls-safe-main {
     /* Keep the collapsed-sidebar control one full spacing step beyond the green traffic light. */
     padding-left: 6rem;
   }
+
   html[data-platform="macos"] .window-controls-safe-rail {
     padding-left: 5rem;
   }
+
   html[data-platform="macos"] .window-controls-safe-scene {
     padding-left: 5rem;
   }
+
   @container (max-width: 44rem) {
     .window-controls-compact-leading-action {
       display: flex;
     }
+
     html[data-platform="macos"] .window-controls-safe-compact-main {
       /* A compact detail pane becomes the window's leftmost surface when its list is hidden. */
       padding-left: 6rem;
     }
   }
+
   /* The sidebar is its own pane — tinted, blurred, and cut off from the content by its border. */
   .glass-rail {
     background: color-mix(
@@ -513,21 +548,26 @@ html[data-appearance-pointer-cursors="false"]
     );
     box-shadow: inset calc(-1 * var(--hairline-width)) 0 0 var(--sidebar-border);
   }
+
   .session-rail [data-rail-header] {
     box-shadow: none;
   }
+
   .session-rail:not([data-dragging]) {
     transition: width var(--motion-slow) var(--ease-standard);
   }
+
   .session-rail-content {
     transition:
       opacity var(--motion-layer) ease-out,
       transform var(--motion-normal) var(--ease-standard);
   }
+
   .session-rail[data-collapsed] .session-rail-content {
     opacity: 0;
     transform: translateX(-8px);
   }
+
   .macos-window-glass .glass-rail {
     background: color-mix(
       in oklch,
@@ -535,6 +575,7 @@ html[data-appearance-pointer-cursors="false"]
       transparent
     );
   }
+
   /* Dock panels use the same appearance control as the rail. Their shell stays translucent while
      content surfaces such as xterm keep their own opaque background for legibility. */
   .glass-panel {
@@ -544,6 +585,7 @@ html[data-appearance-pointer-cursors="false"]
       transparent
     );
   }
+
   .macos-window-glass .glass-panel {
     background: color-mix(
       in oklch,
@@ -551,6 +593,7 @@ html[data-appearance-pointer-cursors="false"]
       transparent
     );
   }
+
   /* The native material behind the glass always follows the *system* scheme. While the app scheme
      disagrees with it (light app on a dark desktop or vice versa), translucency would let the
      other scheme bleed through, so the glass panes go fully tinted until they agree again. */
@@ -558,36 +601,44 @@ html[data-appearance-pointer-cursors="false"]
   .macos-window-glass.scheme-mismatch .glass-panel {
     --appearance-macos-panel-tint-opacity: 100%;
   }
+
   .dock-panel-side:not(.dock-panel-dragging) {
-    transition-property: width;
     transition-duration: var(--motion-slow);
+    transition-property: width;
     transition-timing-function: var(--ease-standard);
   }
+
   .dock-panel-side {
     container-name: dock;
     container-type: inline-size;
   }
+
   .dock-content-tabbar {
     height: calc(var(--ds-control-field) + var(--ds-space-inline));
     box-shadow: inset 0 -1px var(--border);
   }
+
   .dock-content-split {
     box-shadow: inset 1px 0 var(--border);
   }
+
   @container dock (max-width: 359px) {
     .dock-tab-label {
       display: none;
     }
   }
+
   /* One managed material for menu-like transient layers. Shared primitives and the few external
      positioning adapters use this class; feature code never chooses opacity or blur values. */
   .raised-material {
-    background-color: var(--ds-material-raised-background);
     backdrop-filter: var(--ds-material-raised-backdrop);
-    -webkit-backdrop-filter: var(--ds-material-raised-backdrop);
+    backdrop-filter: var(--ds-material-raised-backdrop);
+    background-color: var(--ds-material-raised-background);
   }
 
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
     .raised-material {
       background-color: var(--ds-color-raised);
     }
@@ -595,9 +646,9 @@ html[data-appearance-pointer-cursors="false"]
 
   @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
     .raised-material {
-      background-color: var(--ds-color-raised);
       backdrop-filter: none;
-      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background-color: var(--ds-color-raised);
     }
   }
 
@@ -605,13 +656,18 @@ html[data-appearance-pointer-cursors="false"]
      logo on a plain pane is indistinguishable from a failed load. */
   .image-checker {
     --checker: color-mix(in oklch, var(--muted-foreground) 18%, transparent);
+
     background-image:
       linear-gradient(45deg, var(--checker) 25%, transparent 25%),
       linear-gradient(-45deg, var(--checker) 25%, transparent 25%),
       linear-gradient(45deg, transparent 75%, var(--checker) 75%),
       linear-gradient(-45deg, transparent 75%, var(--checker) 75%);
+    background-position:
+      0 0,
+      0 8px,
+      8px -8px,
+      -8px 0;
     background-size: 16px 16px;
-    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   }
 
   /* ---- motion ------------------------------------------------------------------------------
@@ -622,24 +678,29 @@ html[data-appearance-pointer-cursors="false"]
       opacity: 0;
       transform: translateY(6px);
     }
+
     to {
       opacity: 1;
       transform: none;
     }
   }
+
   @keyframes slide-in-right {
     from {
       opacity: 0;
       transform: translateX(16px);
     }
+
     to {
       opacity: 1;
       transform: none;
     }
   }
+
   .animate-rise-in {
     animation: rise-in var(--motion-normal) var(--ease-standard) both;
   }
+
   .animate-slide-in-right {
     animation: slide-in-right var(--motion-normal) var(--ease-standard) both;
   }
@@ -650,6 +711,7 @@ html[data-appearance-pointer-cursors="false"]
      the first-party replacement. Base UI stamps `data-open` / `data-closed` and delays unmount
      while a close animation runs, so exits play too. Anchored layers grow from the transform
      origin supplied by Base UI's Positioner. */
+
   /* Scale only — no translate. Base UI puts the transform-origin on whichever corner faces the
      trigger, so scaling about it already reads as "growing out of the trigger", and it reads that
      way on every side. A hardcoded `translateY` cannot: on a side="top" layer the origin pins the
@@ -663,30 +725,36 @@ html[data-appearance-pointer-cursors="false"]
       opacity: 0;
       transform: scale(0.96);
     }
+
     to {
       opacity: 1;
       transform: scale(1);
     }
   }
+
   @keyframes layer-out {
     from {
       opacity: 1;
       transform: scale(1);
     }
+
     to {
       opacity: 0;
       transform: scale(0.98);
     }
   }
+
   .pop-layer[data-state="open"],
   .pop-layer[data-state="delayed-open"],
   .pop-layer[data-open] {
     animation: layer-in var(--motion-layer) var(--ease-standard);
   }
+
   .pop-layer[data-state="closed"],
   .pop-layer[data-closed] {
     animation: layer-out var(--motion-fast) ease-in forwards;
   }
+
   /* Material layers re-sample a backdrop blur under a changing transform. Promotion rasterises
      that blur into its own layer once, so the animation is a composite rather than a re-blur. */
   .pop-layer[data-state],
@@ -714,25 +782,30 @@ html[data-appearance-pointer-cursors="false"]
       opacity: 0;
       transform: scale(0.97);
     }
+
     to {
       opacity: 1;
       transform: scale(1);
     }
   }
+
   @keyframes dialog-out {
     from {
       opacity: 1;
       transform: scale(1);
     }
+
     to {
       opacity: 0;
       transform: scale(0.98);
     }
   }
+
   .dialog-layer[data-state="open"],
   .dialog-layer[data-open] {
     animation: dialog-in var(--motion-normal) var(--ease-standard) both;
   }
+
   .dialog-layer[data-state="closed"],
   .dialog-layer[data-closed] {
     animation: dialog-out var(--motion-fast) ease-in forwards;
@@ -742,22 +815,27 @@ html[data-appearance-pointer-cursors="false"]
     from {
       opacity: 0;
     }
+
     to {
       opacity: 1;
     }
   }
+
   @keyframes veil-out {
     from {
       opacity: 1;
     }
+
     to {
       opacity: 0;
     }
   }
+
   .overlay-layer[data-state="open"],
   .overlay-layer[data-open] {
     animation: veil-in var(--motion-normal) ease-out both;
   }
+
   .overlay-layer[data-state="closed"],
   .overlay-layer[data-closed] {
     animation: veil-out var(--motion-fast) ease-in forwards;
@@ -771,11 +849,13 @@ html[data-appearance-pointer-cursors="false"]
       opacity: 0;
       transform: translateY(10px);
     }
+
     to {
       opacity: 1;
       transform: none;
     }
   }
+
   .animate-page-in {
     animation: page-in var(--motion-slow) var(--ease-standard) both;
   }
@@ -787,6 +867,7 @@ html[data-appearance-pointer-cursors="false"]
       opacity: 0;
     }
   }
+
   .animate-data-page-in {
     animation: data-page-in var(--motion-slow) var(--ease-standard) both;
   }
@@ -794,8 +875,8 @@ html[data-appearance-pointer-cursors="false"]
   /* Keep every session in DOM and focus order while allowing WebKit to skip off-screen paint in
      long rails. `auto` lets the browser remember the real height after a row is first revealed. */
   .session-rail-row {
-    content-visibility: auto;
     contain-intrinsic-size: auto 64px;
+    content-visibility: auto;
   }
 
   /* Archiving is reversible but spatial: the row leaves its current collection before the bridge
@@ -807,37 +888,44 @@ html[data-appearance-pointer-cursors="false"]
       transform: translateY(6px) scale(0.985);
     }
   }
+
   @keyframes session-restore-out {
     to {
       opacity: 0;
       transform: translateY(-6px) scale(0.985);
     }
   }
+
   [data-session-archive-motion="archive"] {
-    pointer-events: none;
     animation: session-archive-out var(--motion-normal) ease-in both;
-  }
-  [data-session-archive-motion="restore"] {
     pointer-events: none;
-    animation: session-restore-out var(--motion-normal) ease-in both;
   }
+
+  [data-session-archive-motion="restore"] {
+    animation: session-restore-out var(--motion-normal) ease-in both;
+    pointer-events: none;
+  }
+
   .rail-archive-panel {
-    height: var(--collapsible-panel-height);
     overflow: hidden;
+    height: var(--collapsible-panel-height);
     opacity: 1;
     transition:
       height var(--motion-normal) var(--ease-standard),
       opacity var(--motion-fast) ease-out;
   }
+
   .rail-archive-panel > div {
     transform: none;
     transition: transform var(--motion-normal) var(--ease-standard);
   }
+
   .rail-archive-panel[data-starting-style],
   .rail-archive-panel[data-ending-style] {
     height: 0;
     opacity: 0;
   }
+
   .rail-archive-panel[data-starting-style] > div,
   .rail-archive-panel[data-ending-style] > div {
     transform: translateY(-4px);
@@ -850,17 +938,21 @@ html[data-appearance-pointer-cursors="false"]
   .composer-mode-transition {
     view-transition-name: composer-mode;
   }
+
   html[data-composer-mode-transition]::view-transition-old(root),
   html[data-composer-mode-transition]::view-transition-new(root) {
     animation: none;
   }
+
   html[data-composer-mode-transition]::view-transition-group(composer-mode) {
     animation-duration: var(--motion-slow);
     animation-timing-function: var(--ease-standard);
   }
+
   html[data-composer-mode-transition]::view-transition-old(composer-mode) {
     animation: veil-out var(--motion-layer) ease-in both;
   }
+
   html[data-composer-mode-transition]::view-transition-new(composer-mode) {
     animation: veil-in var(--motion-slow) var(--ease-standard) both;
   }
@@ -868,49 +960,51 @@ html[data-appearance-pointer-cursors="false"]
   .skill-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    border-radius: var(--ds-radius-control);
     padding: 0 6px;
-    font-size: var(--ds-type-metadata-size);
-    font-weight: 600;
-    white-space: nowrap;
-    user-select: none;
+    border-radius: var(--ds-radius-control);
     background: color-mix(in oklch, var(--primary) 14%, transparent);
-    color: var(--primary);
     box-shadow: inset 0 0 0 var(--hairline-width)
       color-mix(in oklch, var(--primary) 35%, transparent);
+    color: var(--primary);
+    font-size: var(--ds-type-metadata-size);
+    font-weight: 600;
+    gap: 4px;
+    user-select: none;
+    white-space: nowrap;
   }
+
   .file-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    border-radius: var(--ds-radius-control);
     padding: 0 6px;
-    font-family: var(--font-mono);
-    font-size: var(--ds-type-metadata-size);
-    white-space: nowrap;
-    user-select: none;
+    border-radius: var(--ds-radius-control);
     background: color-mix(in oklch, var(--success) 14%, transparent);
-    color: var(--success);
     box-shadow: inset 0 0 0 var(--hairline-width)
       color-mix(in oklch, var(--success) 30%, transparent);
+    color: var(--success);
+    font-family: var(--font-mono);
+    font-size: var(--ds-type-metadata-size);
+    gap: 4px;
+    user-select: none;
+    white-space: nowrap;
   }
+
   /* An `@`-mentioned past chat (see SessionMentionInline). Same anatomy as the file chip — it *is*
      a mention — in the warning hue so the three chip kinds stay tellable at a glance. */
   .chat-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    border-radius: var(--ds-radius-control);
     padding: 0 6px;
-    font-size: var(--ds-type-metadata-size);
-    font-weight: 500;
-    white-space: nowrap;
-    user-select: none;
+    border-radius: var(--ds-radius-control);
     background: color-mix(in oklch, var(--warning) 14%, transparent);
-    color: var(--warning);
     box-shadow: inset 0 0 0 var(--hairline-width)
       color-mix(in oklch, var(--warning) 30%, transparent);
+    color: var(--warning);
+    font-size: var(--ds-type-metadata-size);
+    font-weight: 500;
+    gap: 4px;
+    user-select: none;
+    white-space: nowrap;
   }
 
   /* ---- browser annotation cards (see BrowserNoteBlock in skillInline.tsx) ------------------
@@ -918,105 +1012,124 @@ html[data-appearance-pointer-cursors="false"]
      as attachments, not alarms. Same primary family as the skill chip, one step calmer. */
   .bn-annotation {
     width: 100%;
-    margin: 2px 0;
     padding: 6px 10px 7px;
     border-radius: var(--ds-radius-module);
+    border-left: 3px solid color-mix(in oklch, var(--primary) 55%, transparent);
+    margin: 2px 0;
+    background: color-mix(in oklch, var(--primary) 6%, transparent);
     box-shadow: inset 0 0 0 var(--hairline-width)
       color-mix(in oklch, var(--primary) 22%, transparent);
-    border-left: 3px solid color-mix(in oklch, var(--primary) 55%, transparent);
-    background: color-mix(in oklch, var(--primary) 6%, transparent);
     user-select: none;
   }
+
   .bn-annotation-head {
     display: flex;
+    min-width: 0;
     align-items: center;
     gap: 6px;
-    min-width: 0;
   }
+
   .bn-annotation-dot {
-    flex: none;
     width: 6px;
     height: 6px;
+    flex: none;
     border-radius: 50%;
     background: var(--primary);
   }
+
   .bn-annotation-host {
     flex: none;
+    color: var(--primary);
     font-size: var(--ds-type-callout-size);
     font-weight: 600;
-    color: var(--primary);
   }
+
   .bn-annotation-sel {
-    flex: 1 1 auto;
-    min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    flex: 1 1 auto;
+    color: var(--muted-foreground);
     font-family: var(--font-mono);
     font-size: var(--ds-type-caption-size);
-    color: var(--muted-foreground);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
+
   .bn-annotation-x {
     flex: none;
-    margin-left: auto;
-    border: 0;
-    background: none;
     padding: 0 2px;
-    font-size: var(--ds-type-body-size);
-    line-height: 1;
+    border: 0;
+    margin-left: auto;
+    background: none;
     color: var(--muted-foreground);
     cursor: pointer;
+    font-size: var(--ds-type-body-size);
+    line-height: 1;
     opacity: 0;
     transition: opacity var(--motion-fast) ease-out;
   }
+
   .bn-annotation:hover .bn-annotation-x {
     opacity: 1;
   }
+
   .bn-annotation-x:hover {
     color: var(--destructive);
   }
+
   .bn-annotation-quote {
-    margin-top: 3px;
-    font-size: var(--ds-type-callout-size);
-    color: var(--muted-foreground);
     overflow: hidden;
+    margin-top: 3px;
+    color: var(--muted-foreground);
+    font-size: var(--ds-type-callout-size);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .bn-annotation-note {
     margin-top: 3px;
-    font-size: var(--ds-type-metadata-size);
     color: var(--foreground);
+    font-size: var(--ds-type-metadata-size);
   }
+
   .bn-annotation-styles {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
     margin-top: 5px;
+    gap: 4px;
   }
+
   .bn-annotation-change {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    border-radius: var(--ds-radius-control);
     padding: 1px 7px;
-    font-family: var(--font-mono);
-    font-size: var(--ds-type-caption-size);
+    border-radius: var(--ds-radius-control);
     background: color-mix(in oklch, var(--primary) 10%, transparent);
     box-shadow: inset 0 0 0 var(--hairline-width)
       color-mix(in oklch, var(--primary) 20%, transparent);
+    font-family: var(--font-mono);
+    font-size: var(--ds-type-caption-size);
+    gap: 4px;
   }
+
   .bn-annotation-change .prop {
     color: var(--muted-foreground);
   }
+
   .bn-annotation-change .from {
     color: var(--muted-foreground);
     text-decoration: line-through;
-    text-decoration-color: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+    text-decoration-color: color-mix(
+      in oklch,
+      var(--muted-foreground) 60%,
+      transparent
+    );
   }
+
   .bn-annotation-change .arrow {
     color: var(--muted-foreground);
   }
+
   .bn-annotation-change .to {
     color: var(--primary);
     font-weight: 600;
@@ -1025,29 +1138,32 @@ html[data-appearance-pointer-cursors="false"]
   /* The composer's top rim: drag it for any height, double-click for the full column. The grabber
      stays invisible until you're near it, so the resting state reads as a plain card. */
   .composer-grip {
+    position: relative;
     height: 11px;
     flex-shrink: 0;
     cursor: row-resize;
-    position: relative;
     touch-action: none;
     user-select: none;
   }
+
   .composer-grip::after {
-    content: "";
     position: absolute;
-    left: 50%;
     top: 4px;
-    transform: translateX(-50%);
+    left: 50%;
     width: 32px;
     height: 3px;
     border-radius: var(--ds-radius-control);
     background: var(--muted-foreground);
+    content: "";
     opacity: 0;
+    transform: translateX(-50%);
     transition: opacity var(--motion-fast) ease-out;
   }
+
   .composer-card:hover .composer-grip::after {
     opacity: 0.35;
   }
+
   .composer-grip:hover::after {
     opacity: 0.7;
   }
@@ -1056,30 +1172,32 @@ html[data-appearance-pointer-cursors="false"]
      overflow clipping — which the rounded corners need — can't eat it. */
   .dock-grip {
     position: absolute;
-    left: 0;
+    z-index: 20;
     top: 0;
     bottom: 0;
+    left: 0;
     width: 6px;
-    z-index: 20;
     cursor: col-resize;
     touch-action: none;
-    user-select: none;
     transition: background var(--motion-fast) ease-out;
+    user-select: none;
   }
+
   /* The hover affordance is a slim line aligned with the panel edge, not a filled bar — a 6px
      full-height fill reads as a hard blue border on the module edge. */
   .dock-grip::after {
-    content: "";
     position: absolute;
-    left: 0;
     top: 12px;
     bottom: 12px;
+    left: 0;
     width: 2px;
     border-radius: 0;
     background: color-mix(in oklch, var(--primary) 55%, transparent);
+    content: "";
     opacity: 0;
     transition: opacity var(--motion-fast) ease-out;
   }
+
   .dock-grip:hover::after {
     opacity: 1;
   }
@@ -1087,33 +1205,39 @@ html[data-appearance-pointer-cursors="false"]
   /* Quick Chat is a persistent nonmodal panel. Pointer movement writes only these offsets, so the
      conversation tree does not re-render on every drag frame. */
   .quick-chat-panel {
-    inset-inline-start: 50%;
     top: 50%;
     width: min(640px, calc(100vw - 48px));
     height: min(720px, calc(100vh - 80px));
     border-radius: var(--ds-radius-module);
+    inset-inline-start: 50%;
     opacity: 0;
     transform: translate(
-      calc(-50% + var(--quick-chat-offset-x, 0px)),
-      calc(-50% + var(--quick-chat-offset-y, 0px) + 8px)
-    ) scale(0.98);
+        calc(-50% + var(--quick-chat-offset-x, 0px)),
+        calc(-50% + var(--quick-chat-offset-y, 0px) + 8px)
+      )
+      scale(0.98);
     transition:
       opacity var(--motion-normal) ease-out,
       transform var(--motion-normal) var(--ease-standard);
   }
+
   .quick-chat-panel[data-open] {
     opacity: 1;
     transform: translate(
-      calc(-50% + var(--quick-chat-offset-x, 0px)),
-      calc(-50% + var(--quick-chat-offset-y, 0px))
-    ) scale(1);
+        calc(-50% + var(--quick-chat-offset-x, 0px)),
+        calc(-50% + var(--quick-chat-offset-y, 0px))
+      )
+      scale(1);
   }
+
   .quick-chat-panel[data-moving] {
     transition: none;
   }
+
   .transient-chat-header {
     padding: var(--ds-radius-control);
   }
+
   .transient-chat-tab {
     border-radius: var(--ds-radius-control);
   }
@@ -1123,15 +1247,16 @@ html[data-appearance-pointer-cursors="false"]
      easy and preserves the resize cursor. */
   .rail-grip {
     position: absolute;
-    right: 0;
+    z-index: 20;
     top: 0;
+    right: 0;
     bottom: 0;
     width: 6px;
-    z-index: 20;
     cursor: col-resize;
     touch-action: none;
     user-select: none;
   }
+
   .composer-grip:focus-visible,
   .dock-grip:focus-visible,
   .rail-grip:focus-visible {
@@ -1153,40 +1278,48 @@ html[data-appearance-pointer-cursors="false"]
     cursor: row-resize !important;
     user-select: none;
   }
+
   body.resizing-h,
   body.resizing-h * {
     cursor: col-resize !important;
     user-select: none;
   }
+
   .diff {
     margin: 0;
     font-family: var(--font-mono);
-    font-weight: var(--appearance-font-code-weight, 400);
     font-size: var(--ds-type-callout-size);
+    font-weight: var(--appearance-font-code-weight, 400);
     line-height: 1.5;
   }
+
   .diff-line {
     display: flex;
     padding: 0 10px;
     white-space: pre-wrap;
     word-break: break-all;
   }
+
   .diff-line-marker {
     display: none;
     flex: 0 0 1ch;
   }
+
   .diff-line.add {
     background: color-mix(in oklch, var(--success) 16%, transparent);
     color: var(--success);
   }
+
   .diff-line.del {
     background: color-mix(in oklch, var(--destructive) 16%, transparent);
     color: var(--destructive);
   }
+
   .diff-line.hunk {
     background: color-mix(in oklch, var(--primary) 16%, transparent);
     color: var(--primary);
   }
+
   .diff-line.meta {
     color: var(--muted-foreground);
   }
@@ -1194,10 +1327,11 @@ html[data-appearance-pointer-cursors="false"]
   html[data-diff-markers="symbols"] .diff-line-marker {
     display: inline-block;
   }
+
   html[data-diff-markers="symbols"] .diff-line.add,
   html[data-diff-markers="symbols"] .diff-line.del {
-    color: inherit;
     background: transparent;
+    color: inherit;
   }
 
   /* xterm's defaults are a 2015 terminal: text hard against the edge, lines at 1.0, a scrollbar
@@ -1205,36 +1339,43 @@ html[data-appearance-pointer-cursors="false"]
      safe — the grid is measured against the padded box, not the raw one. The background matches
      the renderer's own, so the padding ring is invisible rather than a frame around the canvas. */
   .terminal {
-    flex: 1;
-    height: 100%;
     width: 100%;
+    height: 100%;
+    flex: 1;
     padding: 6px 4px 6px 10px;
     background: var(--term-bg);
   }
+
   .terminal .xterm-viewport {
+    scrollbar-color: transparent transparent;
+
     /* Overlay the gutter instead of reserving a column for it, and let it fade in on hover the way
        the rest of the app's scroll surfaces do. */
     scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
     transition: scrollbar-color var(--motion-fast) ease-out;
   }
+
   .terminal:hover .xterm-viewport {
     scrollbar-color: var(--term-ansi-8) transparent;
   }
+
   .terminal .xterm-viewport::-webkit-scrollbar {
     width: 8px;
   }
+
   .terminal .xterm-viewport::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: var(--ds-radius-control);
     border: 2px solid transparent;
+    border-radius: var(--ds-radius-control);
+    background: transparent;
     background-clip: content-box;
     transition: background-color var(--motion-fast) ease-out;
   }
+
   .terminal:hover .xterm-viewport::-webkit-scrollbar-thumb {
     background: var(--term-ansi-8);
     background-clip: content-box;
   }
+
   .terminal .xterm-viewport::-webkit-scrollbar-track {
     background: transparent;
   }
@@ -1261,14 +1402,14 @@ html[data-reduce-motion="on"] *::after {
   }
 }
 
-@media (max-width: 960px) {
+@media (width <= 960px) {
   .quick-chat-panel {
     width: min(560px, calc(100vw - 32px));
     height: min(680px, calc(100vh - 32px));
   }
 }
 
-@media (max-width: 639px) {
+@media (width <= 639px) {
   .quick-chat-panel {
     width: calc(100vw - 16px);
     height: calc(100vh - 16px);
@@ -1285,56 +1426,70 @@ html[data-reduce-motion="on"] *::after {
   background: transparent !important;
   font-family: inherit;
 }
+
 .bn-editor {
-  padding-inline: 12px;
   font-size: var(--ds-type-prose-size);
   line-height: var(--ds-type-prose-leading);
+  padding-inline: 12px;
 }
-.bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
+
+.bn-block-content[data-content-type="heading"][data-level="1"]
+  .bn-inline-content {
   font-size: var(--ds-type-page-title-size);
   line-height: var(--ds-type-page-title-leading);
 }
-.bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content {
+
+.bn-block-content[data-content-type="heading"][data-level="2"]
+  .bn-inline-content {
   font-size: var(--ds-type-section-size);
   line-height: var(--ds-type-section-leading);
 }
-.bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
+
+.bn-block-content[data-content-type="heading"][data-level="3"]
+  .bn-inline-content {
   font-size: var(--ds-type-dialog-size);
   line-height: var(--ds-type-dialog-leading);
 }
+
 .bn-block-content[data-content-type="paragraph"] {
   line-height: var(--ds-type-prose-leading);
 }
+
 /* The drag handle / + button gutter, tightened to reclaim horizontal space. */
 .bn-block-outer {
   --bn-block-outer-padding: 0;
 }
+
 .bn-editor [data-node-type="blockContainer"] {
   padding-block: 1px;
 }
+
 .bn-block-content code,
 .bn-block-content pre {
   font-family: var(--font-mono);
   font-size: var(--ds-type-code-size);
   line-height: var(--ds-type-code-leading);
 }
+
 /* The `/` picker. Discovered harness skills carry paragraph-length frontmatter descriptions,
    which stretched the menu to the window's width and a row to four lines: cap the menu and clamp
    the description, so every row is its title plus one ellipsised line at the stock row height. */
 .bn-suggestion-menu {
   max-width: 480px;
 }
+
 .bn-mt-suggestion-menu-item-subtitle {
   display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 
 /* Canvas cards use the same semantic radius contracts as the surrounding C2 surfaces. */
 .canvas-ui-module {
   border-radius: var(--ds-radius-module);
 }
+
 .canvas-ui-control {
   border-radius: var(--ds-radius-control);
 }
@@ -1343,24 +1498,26 @@ html[data-reduce-motion="on"] *::after {
    or a narrow app window. The iframe itself remains height-owned by its sandboxed document. */
 .codetwo-visualize.is-wide {
   position: relative;
-  inset-inline-start: 50%;
   width: min(1024px, calc(100vw - 320px));
   min-width: 100%;
+  inset-inline-start: 50%;
   transform: translateX(-50%);
 }
+
 aside .codetwo-visualize.is-wide {
-  inset-inline-start: auto;
   width: 100%;
   min-width: 0;
+  inset-inline-start: auto;
   transform: none;
 }
 
 /* Defer off-screen transcript turns without clipping a deliberate wide-mode visualization back to
    the prose column. Only turns that actually contain a wide artifact opt out of paint containment. */
 .transcript-turn {
-  content-visibility: auto;
   contain-intrinsic-size: auto 180px;
+  content-visibility: auto;
 }
+
 .transcript-turn:has(.codetwo-visualize.is-wide) {
   content-visibility: visible;
 }
@@ -1368,24 +1525,25 @@ aside .codetwo-visualize.is-wide {
 /* Long tool histories stay readable in place while their soft edge signals that more activity is
    available below. Bottom padding keeps the final row clear of the mask after scrolling. */
 .tool-call-history--faded {
-  -webkit-mask-image: linear-gradient(
+  mask-image: linear-gradient(
     to bottom,
-    currentColor 0,
-    currentColor calc(100% - var(--ds-space-page-section)),
+    currentcolor 0,
+    currentcolor calc(100% - var(--ds-space-page-section)),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
-    currentColor 0,
-    currentColor calc(100% - var(--ds-space-page-section)),
+    currentcolor 0,
+    currentcolor calc(100% - var(--ds-space-page-section)),
     transparent 100%
   );
 }
-@media (max-width: 900px) {
+
+@media (width <= 900px) {
   .codetwo-visualize.is-wide {
-    inset-inline-start: auto;
     width: 100%;
     min-width: 0;
+    inset-inline-start: auto;
     transform: none;
   }
 }
@@ -1407,29 +1565,41 @@ pre {
      document must be able to scroll up out from under it. */
   padding-block: 14px 96px;
 }
+
 /* Full-bleed, editor-style: the page owns its column edge to edge. The inline padding is the
    drag/insert handle gutter (left) and a matching breath on the right — not a centring mat; the
    centred-measure look kept a third of a wide pane empty on each side. */
 .bn-doc-mode .bn-editor {
-  padding-inline: 36px 24px;
   font-size: var(--ds-type-prose-size);
   line-height: var(--ds-type-prose-leading);
+  padding-inline: 36px 24px;
 }
+
 .bn-doc-mode .bn-block-content[data-content-type="paragraph"] {
   line-height: var(--ds-type-prose-leading);
 }
+
 .bn-doc-mode .bn-editor [data-node-type="blockContainer"] {
   padding-block: 2px;
 }
-.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
+
+.bn-doc-mode
+  .bn-block-content[data-content-type="heading"][data-level="1"]
+  .bn-inline-content {
   font-size: var(--ds-type-large-title-size);
   line-height: var(--ds-type-large-title-leading);
 }
-.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content {
+
+.bn-doc-mode
+  .bn-block-content[data-content-type="heading"][data-level="2"]
+  .bn-inline-content {
   font-size: var(--ds-type-page-title-size);
   line-height: var(--ds-type-page-title-leading);
 }
-.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
+
+.bn-doc-mode
+  .bn-block-content[data-content-type="heading"][data-level="3"]
+  .bn-inline-content {
   font-size: var(--ds-type-section-size);
   line-height: var(--ds-type-section-leading);
 }
@@ -1439,55 +1609,66 @@ pre {
 .trajectory-view {
   container: trajectory / inline-size;
 }
+
 .trajectory-overview-grid {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
   row-gap: var(--ds-space-inline);
 }
+
 .trajectory-lane {
   position: relative;
-  min-height: 24px;
   overflow: hidden;
+  min-height: 24px;
   border-radius: var(--ds-radius-control);
 }
+
 .trajectory-bar {
   position: absolute;
   min-width: 3px;
   height: 8px;
   border-radius: var(--ds-radius-micro);
-  transition-property: opacity, box-shadow;
   transition-duration: var(--ds-motion-feedback);
+  transition-property: opacity, box-shadow;
   transition-timing-function: var(--ds-ease-enter);
 }
+
 .trajectory-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 32%);
   box-shadow: inset 0 1px 0 var(--border);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 32%);
 }
+
 .trajectory-ledger-row {
   display: grid;
-  grid-template-columns: 48px minmax(112px, 0.7fr) minmax(0, 2fr);
   box-shadow: inset 0 -1px 0 var(--border);
+  grid-template-columns: 48px minmax(112px, 0.7fr) minmax(0, 2fr);
 }
+
 .trajectory-inspector {
   box-shadow: inset 1px 0 0 var(--border);
 }
+
 .trajectory-timing {
   border-radius: var(--ds-radius-control);
   box-shadow: inset 0 0 0 1px var(--border);
 }
+
 .trajectory-timing > div {
   display: grid;
-  grid-template-columns: minmax(80px, 1fr) minmax(0, 1.5fr);
   padding: var(--ds-space-module-inset) var(--ds-space-surface-inset);
   box-shadow: inset 0 -1px 0 var(--border);
+  grid-template-columns: minmax(80px, 1fr) minmax(0, 1.5fr);
 }
+
 .trajectory-timing > div:last-child {
   box-shadow: none;
 }
+
 .trajectory-timing dt {
   color: var(--ds-color-text-muted);
 }
+
 .trajectory-timing dd {
   overflow: hidden;
   color: var(--ds-color-text);
@@ -1496,14 +1677,17 @@ pre {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 @container trajectory (max-width: 700px) {
   .trajectory-workbench {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(140px, 34%);
   }
+
   .trajectory-inspector {
     box-shadow: inset 0 1px 0 var(--border);
   }
+
   .trajectory-ledger-row {
     grid-template-columns: 44px minmax(96px, 0.65fr) minmax(0, 2fr);
   }
@@ -1515,9 +1699,9 @@ pre {
 }
 
 .plugin-manager-list-pane {
-  container: plugin-manager-list / inline-size;
   width: clamp(20rem, 38cqw, 31rem);
   box-shadow: inset -1px 0 0 var(--border);
+  container: plugin-manager-list / inline-size;
 }
 
 .plugin-manager-back {
@@ -1551,7 +1735,8 @@ pre {
     display: none;
   }
 
-  .plugin-manager-page[data-compact-detail="false"] .plugin-manager-detail-pane {
+  .plugin-manager-page[data-compact-detail="false"]
+    .plugin-manager-detail-pane {
     display: none;
   }
 
@@ -1568,16 +1753,16 @@ pre {
    the blur to read as material while the modal token keeps both schemes legible. */
 .command-palette-surface {
   height: min(32rem, calc(100dvh - var(--ds-space-page-section)));
-  background: color-mix(in oklch, var(--ds-color-modal) 78%, transparent);
   backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
-  -webkit-backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
+  backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
+  background: color-mix(in oklch, var(--ds-color-modal) 78%, transparent);
 }
 
 @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
   .command-palette-surface {
-    background: var(--ds-color-modal);
     backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--ds-color-modal);
   }
 }
 
@@ -1588,9 +1773,9 @@ pre {
 
 .dock-surface-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
   margin-top: 1.5rem;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .dock-surface-card {
@@ -1618,8 +1803,8 @@ pre {
 
 /* Header actions retain their accessible names while shedding labels before the title collapses. */
 .session-header {
-  container: session-header / inline-size;
   box-shadow: none;
+  container: session-header / inline-size;
 }
 
 .session-header[data-has-conversation="true"] {
@@ -1630,13 +1815,17 @@ pre {
 .session-header-action-icon,
 .session-header-context-icon,
 .session-header-layout-icon,
-.session-header [data-plugin-ui-slot="session.header"] [data-icon="inline-start"] {
+.session-header
+  [data-plugin-ui-slot="session.header"]
+  [data-icon="inline-start"] {
   display: block;
 }
 
 .session-header-context-label,
 .session-header-layout-label,
-.session-header [data-plugin-ui-slot="session.header"] .session-header-action-label {
+.session-header
+  [data-plugin-ui-slot="session.header"]
+  .session-header-action-label {
   display: none;
 }
 
@@ -1652,10 +1841,10 @@ pre {
 .session-header-context-main,
 .session-header-plugin-action,
 .session-header-layout-main {
-  flex: 0 0 var(--ds-control-normal);
   width: var(--ds-control-normal);
   min-width: var(--ds-control-normal);
   max-width: var(--ds-control-normal);
+  flex: 0 0 var(--ds-control-normal);
   justify-content: center;
   padding-right: 0;
   padding-left: 0;
@@ -1671,10 +1860,10 @@ pre {
   }
 
   .session-header-action-main {
-    flex: 0 0 var(--ds-control-normal);
     width: var(--ds-control-normal);
     min-width: var(--ds-control-normal);
     max-width: var(--ds-control-normal);
+    flex: 0 0 var(--ds-control-normal);
     justify-content: center;
     padding-right: 0;
     padding-left: 0;
@@ -1696,5 +1885,4 @@ pre {
   .session-header-actions {
     gap: 0.25rem;
   }
-
 }

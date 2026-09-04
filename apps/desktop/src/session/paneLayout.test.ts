@@ -15,12 +15,13 @@ import {
   splitFocused,
   splitForEdge,
   splitPane,
-  type PaneLayout,
-  type PaneSplit,
 } from "./paneLayout";
+import type { PaneLayout, PaneSplit } from "./paneLayout";
 
 const rootSplit = (layout: PaneLayout): PaneSplit => {
-  if (layout.root.kind !== "split") throw new Error("expected a split root");
+  if (layout.root.kind !== "split") {
+    throw new Error("expected a split root");
+  }
   return layout.root;
 };
 
@@ -33,7 +34,13 @@ describe("pane layout model", () => {
   });
 
   test("splitting right puts the new pane after and focuses it", () => {
-    const layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2");
+    const layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2"
+    );
     const split = rootSplit(layout);
     expect(split.direction).toBe("row");
     expect(split.a).toEqual({ kind: "leaf", id: "p1" });
@@ -42,7 +49,14 @@ describe("pane layout model", () => {
   });
 
   test("splitting before puts the new pane first and mirrors the ratio", () => {
-    const layout = splitPane(singlePaneLayout("p1"), "p1", "row", "before", "p2", 0.3);
+    const layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "before",
+      "p2",
+      0.3
+    );
     const split = rootSplit(layout);
     expect(split.a).toEqual({ kind: "leaf", id: "p2" });
     expect(split.b).toEqual({ kind: "leaf", id: "p1" });
@@ -73,7 +87,13 @@ describe("pane layout model", () => {
   });
 
   test("closing a pane collapses its parent into the sibling", () => {
-    const layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2");
+    const layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2"
+    );
     const closed = closePane(layout, "p2");
     expect(closed).not.toBeNull();
     expect(closed!.root).toEqual({ kind: "leaf", id: "p1" });
@@ -99,14 +119,26 @@ describe("pane layout model", () => {
   });
 
   test("focusPane ignores unknown ids and no-op self-focus", () => {
-    const layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2");
+    const layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2"
+    );
     expect(focusPane(layout, "ghost")).toBe(layout);
     expect(focusPane(layout, "p2")).toBe(layout);
     expect(focusPane(layout, "p1").focused).toBe("p1");
   });
 
   test("split ratios clamp so no pane collapses to nothing", () => {
-    const layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2");
+    const layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2"
+    );
     const splitId = rootSplit(layout).id;
     const tiny = setSplitRatio(layout, splitId, 0.001);
     expect(rootSplit(tiny).ratio).toBeCloseTo(MIN_RATIO);
@@ -116,7 +148,14 @@ describe("pane layout model", () => {
 
   test("computePaneRects tiles the unit square by direction and ratio", () => {
     // [ p1 | (p2 / p3) ] with the right column split in half vertically.
-    let layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2", 0.5);
+    let layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2",
+      0.5
+    );
     layout = splitPane(layout, "p2", "col", "after", "p3", 0.5);
     const rects = computePaneRects(layout.root);
     expect(rects.get("p1")).toEqual({ x: 0, y: 0, w: 0.5, h: 1 });
@@ -126,7 +165,14 @@ describe("pane layout model", () => {
 
   test("computeDividers emits one boundary per split with its rect and ratio", () => {
     // [ p1 | (p2 / p3) ]: an outer row split and an inner col split on the right column.
-    let layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2", 0.5);
+    let layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2",
+      0.5
+    );
     layout = splitPane(layout, "p2", "col", "after", "p3", 0.5);
     const dividers = computeDividers(layout.root);
     expect(dividers).toHaveLength(2);
@@ -147,7 +193,14 @@ describe("pane layout model", () => {
 
   test("spatial focus finds the neighbor on the requested side", () => {
     // Layout: [ p1 | (p2 top / p3 bottom) ]
-    let layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2", 0.5);
+    let layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2",
+      0.5
+    );
     layout = splitPane(layout, "p2", "col", "after", "p3", 0.5);
 
     layout = focusPane(layout, "p1");
@@ -168,7 +221,14 @@ describe("pane layout model", () => {
   });
 
   test("focusInDirection moves focus, or leaves it put at an edge", () => {
-    let layout = splitPane(singlePaneLayout("p1"), "p1", "row", "after", "p2", 0.5);
+    let layout = splitPane(
+      singlePaneLayout("p1"),
+      "p1",
+      "row",
+      "after",
+      "p2",
+      0.5
+    );
     layout = focusPane(layout, "p1");
     expect(focusInDirection(layout, "right").focused).toBe("p2");
     // No pane to the left of p1: focus is unchanged.

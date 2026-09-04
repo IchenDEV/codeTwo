@@ -5,11 +5,13 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const sourceFiles = (directory: string): string[] =>
-  readdirSync(resolve(root, directory), { withFileTypes: true }).flatMap((entry) => {
-    const relative = `${directory}/${entry.name}`;
-    if (entry.isDirectory()) return sourceFiles(relative);
-    return /\.tsx?$/.test(entry.name) ? [relative] : [];
-  });
+  readdirSync(resolve(root, directory), { withFileTypes: true }).flatMap(
+    (entry) => {
+      const relative = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) return sourceFiles(relative);
+      return /\.tsx?$/.test(entry.name) ? [relative] : [];
+    }
+  );
 
 describe("desktop UI stack", () => {
   test("configures shadcn for Base UI", () => {
@@ -51,10 +53,14 @@ describe("desktop UI stack", () => {
     const dialogSource = read("src/components/ui/dialog.tsx");
     const alertDialogSource = read("src/components/ui/alert-dialog.tsx");
 
-    expect(dialogSource).toContain("flex flex-col gap-2 sm:flex-row sm:justify-end");
-    expect(alertDialogSource).toContain("flex flex-col gap-2 sm:flex-row sm:justify-end");
-    expect(dialogSource).toContain('text-dialog font-semibold');
-    expect(alertDialogSource).toContain('text-dialog font-semibold');
+    expect(dialogSource).toContain(
+      "flex flex-col gap-2 sm:flex-row sm:justify-end"
+    );
+    expect(alertDialogSource).toContain(
+      "flex flex-col gap-2 sm:flex-row sm:justify-end"
+    );
+    expect(dialogSource).toContain("text-dialog font-semibold");
+    expect(alertDialogSource).toContain("text-dialog font-semibold");
     expect(dialogSource).not.toContain("flex-col-reverse");
     expect(alertDialogSource).not.toContain("flex-col-reverse");
   });

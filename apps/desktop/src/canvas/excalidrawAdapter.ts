@@ -9,7 +9,10 @@ export type {
   BinaryFiles,
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
-export type { ExcalidrawProps, ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
+export type {
+  ExcalidrawProps,
+  ExcalidrawInitialDataState,
+} from "@excalidraw/excalidraw/types";
 export type {
   ExcalidrawElement,
   ExcalidrawImageElement,
@@ -45,10 +48,11 @@ export function newImageElement(options: {
   scale: readonly [number, number];
 }): import("@excalidraw/excalidraw/element/types").ExcalidrawImageElement {
   const now = Date.now();
-  const runtimeCrypto = typeof globalThis.crypto === "object" ? globalThis.crypto : null;
-  const randomId = typeof runtimeCrypto?.randomUUID === "function"
-    ? runtimeCrypto.randomUUID()
-    : `canvas-image-${now}-${Math.random().toString(36).slice(2)}`;
+  const runtimeCrypto = typeof crypto === "object" ? crypto : null;
+  const randomId =
+    typeof runtimeCrypto?.randomUUID === "function"
+      ? runtimeCrypto.randomUUID()
+      : `canvas-image-${now}-${Math.random().toString(36).slice(2)}`;
   return {
     id: randomId,
     type: "image",
@@ -76,9 +80,10 @@ export function newImageElement(options: {
     updated: now,
     link: null,
     locked: options.locked,
-    fileId: options.fileId as import("@excalidraw/excalidraw/element/types").FileId,
+    fileId:
+      options.fileId as import("@excalidraw/excalidraw/element/types").FileId,
     status: options.status ?? "saved",
     scale: [options.scale[0], options.scale[1]],
     crop: null,
-  } as import("@excalidraw/excalidraw/element/types").ExcalidrawImageElement;
+  };
 }

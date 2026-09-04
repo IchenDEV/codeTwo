@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FolderOpen, ImagePlus, Plus, RotateCcw, Trash2 } from "@/components/ui/icons";
+import {
+  Copy,
+  FolderOpen,
+  ImagePlus,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "@/components/ui/icons";
 
 import {
   confirmNative,
@@ -19,13 +26,28 @@ import { ModelPicker } from "../session/Composer";
 import { Button } from "@/components/ui/button";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { GroupHeading, Page, ProjectRow } from "./SettingsPrimitives";
 
-const REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const;
+const REASONING_EFFORTS = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+] as const;
 
-export function ProjectSettingsPage({
+export const ProjectSettingsPage = ({
   project,
   providers,
   onWorktreeMode,
@@ -38,27 +60,33 @@ export function ProjectSettingsPage({
   onAddAction = () => {},
   onModeSavingChange = () => {},
 }: {
-  project: Project | null;
-  providers: ProviderInfo[];
-  onWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
-  onRename?: (path: string, name: string) => Promise<void>;
-  onIcon?: (path: string, source: string | null) => Promise<void>;
-  onAgentDefaults?: (
+  readonly project: Project | null;
+  readonly providers: ProviderInfo[];
+  readonly onWorktreeMode: (
+    path: string,
+    mode: ProjectWorktreeMode | null
+  ) => Promise<void>;
+  readonly onRename?: (path: string, name: string) => Promise<void>;
+  readonly onIcon?: (path: string, source: string | null) => Promise<void>;
+  readonly onAgentDefaults?: (
     path: string,
     provider: string | null,
     model: string | null,
-    reasoningEffort: string | null,
+    reasoningEffort: string | null
   ) => Promise<void>;
-  onRemove?: (path: string) => Promise<void>;
-  iconPicker?: () => Promise<string | null>;
-  actionsCount?: number;
-  onAddAction?: () => void;
-  onModeSavingChange?: (saving: boolean) => void;
-}) {
+  readonly onRemove?: (path: string) => Promise<void>;
+  readonly iconPicker?: () => Promise<string | null>;
+  readonly actionsCount?: number;
+  readonly onAddAction?: () => void;
+  readonly onModeSavingChange?: (saving: boolean) => void;
+}) => {
   const t = useT();
   const providerNames = useMemo(
-    () => Object.fromEntries(providers.map((candidate) => [candidate.id, candidate.display_name])),
-    [providers],
+    () =>
+      Object.fromEntries(
+        providers.map((candidate) => [candidate.id, candidate.display_name])
+      ),
+    [providers]
   );
   const [modeSaving, setModeSaving] = useState(false);
   const [nameDraft, setNameDraft] = useState(project?.name ?? "");
@@ -78,7 +106,10 @@ export function ProjectSettingsPage({
     void getProjectScheduling(project.path).then(setSchedulingEnabled);
   }, [project?.path]);
 
-  async function saveWorktreeMode(path: string, mode: ProjectWorktreeMode | null) {
+  async function saveWorktreeMode(
+    path: string,
+    mode: ProjectWorktreeMode | null
+  ) {
     setModeSaving(true);
     onModeSavingChange(true);
     try {
@@ -141,7 +172,7 @@ export function ProjectSettingsPage({
   async function saveAgentDefaults(
     providerId: string | null,
     modelId: string | null,
-    reasoningEffort: string | null,
+    reasoningEffort: string | null
   ) {
     if (!project) return;
     setAgentSaving(true);
@@ -157,7 +188,12 @@ export function ProjectSettingsPage({
 
   async function removeProject() {
     if (!project) return;
-    if (!(await confirmNative(t("settings.removeProjectConfirm", { name: project.name })))) return;
+    if (
+      !(await confirmNative(
+        t("settings.removeProjectConfirm", { name: project.name })
+      ))
+    )
+      return;
     setProfileSaving(true);
     setError(null);
     try {
@@ -171,7 +207,8 @@ export function ProjectSettingsPage({
 
   const projectDefaultProvider = project?.default_provider ?? null;
   const projectDefaultModels = projectDefaultProvider
-    ? providers.find((candidate) => candidate.id === projectDefaultProvider)?.models ?? []
+    ? (providers.find((candidate) => candidate.id === projectDefaultProvider)
+        ?.models ?? [])
     : [];
   return (
     <Page title={t("settings.project")} description={t("settings.projectHint")}>
@@ -188,7 +225,7 @@ export function ProjectSettingsPage({
               disabled={profileSaving}
               maxLength={80}
               size="compact"
-              className="w-full text-body"
+              className="text-body w-full"
               onInput={(event) => setNameDraft(event.currentTarget.value)}
               onBlur={() => void saveName()}
               onKeyDown={(event) => {
@@ -202,13 +239,15 @@ export function ProjectSettingsPage({
           </ProjectRow>
           <ProjectRow
             label={t("settings.projectIcon")}
-            hint={project.has_icon
-              ? t("settings.projectIconCustom")
-              : t("settings.projectIconAutomatic")}
+            hint={
+              project.has_icon
+                ? t("settings.projectIconCustom")
+                : t("settings.projectIconAutomatic")
+            }
           >
             <div
               data-project-icon-picker
-              className="flex h-control-field w-full items-stretch overflow-hidden rounded-control bg-fill-rest"
+              className="h-control-field rounded-control bg-fill-rest flex w-full items-stretch overflow-hidden"
             >
               <Button
                 type="button"
@@ -219,22 +258,29 @@ export function ProjectSettingsPage({
                 disabled={iconSaving}
                 onClick={() => void chooseIcon()}
               >
-                <ProjectIcon project={project} size={24} className="bg-background/70" />
-                <span className="min-w-0 flex-1 truncate text-body font-medium">
+                <ProjectIcon
+                  project={project}
+                  size={24}
+                  className="bg-background/70"
+                />
+                <span className="text-body min-w-0 flex-1 truncate font-medium">
                   {project.has_icon
                     ? t("settings.projectIconChange")
                     : t("settings.projectIconChoose")}
                 </span>
-                <ImagePlus className="size-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+                <ImagePlus className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
               </Button>
               {project.has_icon ? (
                 <>
-                  <span className="my-2 w-px shrink-0 bg-foreground/10" aria-hidden="true" />
+                  <span
+                    className="bg-foreground/10 my-2 w-px shrink-0"
+                    aria-hidden="true"
+                  />
                   <TooltipButton
                     label={t("settings.projectIconRemove")}
                     variant="ghost"
                     size="icon-sm"
-                    className="my-auto mx-1 text-muted-foreground"
+                    className="text-muted-foreground mx-1 my-auto"
                     disabled={iconSaving}
                     onClick={() => void clearIcon()}
                   >
@@ -245,7 +291,9 @@ export function ProjectSettingsPage({
             </div>
           </ProjectRow>
           {error ? (
-            <p className="project-settings-error pt-1 text-metadata text-destructive">{error}</p>
+            <p className="project-settings-error text-metadata text-destructive pt-1">
+              {error}
+            </p>
           ) : null}
 
           <GroupHeading>{t("settings.projectNewSessions")}</GroupHeading>
@@ -260,7 +308,7 @@ export function ProjectSettingsPage({
                 void saveAgentDefaults(
                   value === "automatic" ? null : value,
                   null,
-                  null,
+                  null
                 );
               }}
             >
@@ -273,22 +321,33 @@ export function ProjectSettingsPage({
                 <SelectValue>
                   {projectDefaultProvider ? (
                     <>
-                      <ProviderIcon provider={projectDefaultProvider} className="size-4" />
-                      {providerNames[projectDefaultProvider] ?? projectDefaultProvider}
+                      <ProviderIcon
+                        provider={projectDefaultProvider}
+                        className="size-4"
+                      />
+                      {providerNames[projectDefaultProvider] ??
+                        projectDefaultProvider}
                     </>
-                  ) : t("settings.projectProviderAutomatic")}
+                  ) : (
+                    t("settings.projectProviderAutomatic")
+                  )}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent position="popper" align="end">
                 <SelectGroup>
-                  <SelectItem value="automatic">{t("settings.projectProviderAutomatic")}</SelectItem>
+                  <SelectItem value="automatic">
+                    {t("settings.projectProviderAutomatic")}
+                  </SelectItem>
                   {providers.map((candidate) => (
                     <SelectItem
                       key={candidate.id}
                       value={candidate.id}
                       disabled={!candidate.available}
                     >
-                      <ProviderIcon provider={candidate.id} className="size-4" />
+                      <ProviderIcon
+                        provider={candidate.id}
+                        className="size-4"
+                      />
                       {candidate.display_name}
                     </SelectItem>
                   ))}
@@ -302,7 +361,7 @@ export function ProjectSettingsPage({
           >
             <div className="grid w-full grid-cols-[minmax(0,1fr)_7.5rem] gap-2">
               {projectDefaultProvider && projectDefaultModels.length > 0 ? (
-                <div className="flex min-w-0 items-center rounded-control bg-fill-rest px-1">
+                <div className="rounded-control bg-fill-rest flex min-w-0 items-center px-1">
                   <ModelPicker
                     models={projectDefaultModels}
                     current={project.default_model ?? null}
@@ -312,7 +371,7 @@ export function ProjectSettingsPage({
                       void saveAgentDefaults(
                         projectDefaultProvider,
                         model,
-                        project.default_reasoning_effort ?? null,
+                        project.default_reasoning_effort ?? null
                       );
                     }}
                     configOptions={[]}
@@ -326,18 +385,20 @@ export function ProjectSettingsPage({
                       size="icon-xs"
                       className="ms-auto"
                       disabled={agentSaving}
-                      onClick={() => void saveAgentDefaults(
-                        projectDefaultProvider,
-                        null,
-                        project.default_reasoning_effort ?? null,
-                      )}
+                      onClick={() =>
+                        void saveAgentDefaults(
+                          projectDefaultProvider,
+                          null,
+                          project.default_reasoning_effort ?? null
+                        )
+                      }
                     >
                       <RotateCcw />
                     </TooltipButton>
                   ) : null}
                 </div>
               ) : (
-                <span className="col-span-2 flex h-control-field min-w-0 items-center rounded-control bg-fill-rest px-3 text-metadata text-muted-foreground">
+                <span className="h-control-field rounded-control bg-fill-rest text-metadata text-muted-foreground col-span-2 flex min-w-0 items-center px-3">
                   {t("settings.projectModelDefault")}
                 </span>
               )}
@@ -349,7 +410,7 @@ export function ProjectSettingsPage({
                     void saveAgentDefaults(
                       projectDefaultProvider,
                       project.default_model ?? null,
-                      value === "automatic" ? null : value,
+                      value === "automatic" ? null : value
                     );
                   }}
                 >
@@ -360,13 +421,17 @@ export function ProjectSettingsPage({
                   >
                     <SelectValue>
                       {project.default_reasoning_effort
-                        ? t(`effort.${project.default_reasoning_effort}` as StringKey)
+                        ? t(
+                            `effort.${project.default_reasoning_effort}` as StringKey
+                          )
                         : t("settings.projectModelDefault")}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent position="popper" align="end">
                     <SelectGroup>
-                      <SelectItem value="automatic">{t("settings.projectModelDefault")}</SelectItem>
+                      <SelectItem value="automatic">
+                        {t("settings.projectModelDefault")}
+                      </SelectItem>
                       {REASONING_EFFORTS.map((effort) => (
                         <SelectItem key={effort} value={effort}>
                           {t(`effort.${effort}` as StringKey)}
@@ -388,7 +453,7 @@ export function ProjectSettingsPage({
               onValueChange={(value) => {
                 void saveWorktreeMode(
                   project.path,
-                  value === "inherit" ? null : (value as ProjectWorktreeMode),
+                  value === "inherit" ? null : (value as ProjectWorktreeMode)
                 );
               }}
             >
@@ -405,9 +470,15 @@ export function ProjectSettingsPage({
               </SelectTrigger>
               <SelectContent position="popper" align="end">
                 <SelectGroup>
-                  <SelectItem value="inherit">{t("settings.projectWorkspaceInherit")}</SelectItem>
-                  <SelectItem value="local">{t("settings.projectWorkspaceLocal")}</SelectItem>
-                  <SelectItem value="current">{t("settings.projectWorkspaceCurrent")}</SelectItem>
+                  <SelectItem value="inherit">
+                    {t("settings.projectWorkspaceInherit")}
+                  </SelectItem>
+                  <SelectItem value="local">
+                    {t("settings.projectWorkspaceLocal")}
+                  </SelectItem>
+                  <SelectItem value="current">
+                    {t("settings.projectWorkspaceCurrent")}
+                  </SelectItem>
                   <SelectItem value="origin_default">
                     {t("settings.projectWorkspaceOrigin")}
                   </SelectItem>
@@ -426,18 +497,28 @@ export function ProjectSettingsPage({
                 const enabled = checked;
                 setSchedulingEnabled(enabled);
                 setError(null);
-                void setProjectScheduling(project.path, enabled).catch((error) => {
-                  setSchedulingEnabled(!enabled);
-                  setError(t("settings.projectSaveFailed", { error: String(error) }));
-                });
+                void setProjectScheduling(project.path, enabled).catch(
+                  (error) => {
+                    setSchedulingEnabled(!enabled);
+                    setError(
+                      t("settings.projectSaveFailed", { error: String(error) })
+                    );
+                  }
+                );
               }}
             />
           </ProjectRow>
 
           <GroupHeading>{t("settings.projectCheckout")}</GroupHeading>
-          <ProjectRow label={t("settings.projectPath")} hint={t("settings.projectPathHint")}>
-            <div className="flex h-control-field w-full min-w-0 items-center overflow-hidden rounded-control bg-fill-rest">
-              <span className="min-w-0 flex-1 truncate px-3 font-mono text-callout text-muted-foreground" title={project.path}>
+          <ProjectRow
+            label={t("settings.projectPath")}
+            hint={t("settings.projectPathHint")}
+          >
+            <div className="h-control-field rounded-control bg-fill-rest flex w-full min-w-0 items-center overflow-hidden">
+              <span
+                className="text-callout text-muted-foreground min-w-0 flex-1 truncate px-3 font-mono"
+                title={project.path}
+              >
                 {project.path}
               </span>
               <TooltipButton
@@ -446,9 +527,15 @@ export function ProjectSettingsPage({
                 size="icon-sm"
                 className="text-muted-foreground"
                 onClick={() => {
-                  void navigator.clipboard.writeText(project.path).catch((error) => {
-                    setError(t("settings.projectSaveFailed", { error: String(error) }));
-                  });
+                  void navigator.clipboard
+                    .writeText(project.path)
+                    .catch((error) => {
+                      setError(
+                        t("settings.projectSaveFailed", {
+                          error: String(error),
+                        })
+                      );
+                    });
                 }}
               >
                 <Copy />
@@ -459,11 +546,20 @@ export function ProjectSettingsPage({
                 size="icon-sm"
                 className="text-muted-foreground"
                 onClick={() => {
-                  void openNativePath(project.path).then((opened) => {
-                    if (!opened) throw new Error(t("settings.projectPathRevealUnavailable"));
-                  }).catch((error) => {
-                    setError(t("settings.projectSaveFailed", { error: String(error) }));
-                  });
+                  void openNativePath(project.path)
+                    .then((opened) => {
+                      if (!opened)
+                        throw new Error(
+                          t("settings.projectPathRevealUnavailable")
+                        );
+                    })
+                    .catch((error) => {
+                      setError(
+                        t("settings.projectSaveFailed", {
+                          error: String(error),
+                        })
+                      );
+                    });
                 }}
               >
                 <FolderOpen />
@@ -474,9 +570,11 @@ export function ProjectSettingsPage({
           <GroupHeading>{t("settings.projectActions")}</GroupHeading>
           <ProjectRow
             label={t("settings.projectActions")}
-            hint={actionsCount === 0
-              ? t("settings.projectActionsEmpty")
-              : t("settings.projectActionsCount", { count: actionsCount })}
+            hint={
+              actionsCount === 0
+                ? t("settings.projectActionsEmpty")
+                : t("settings.projectActionsCount", { count: actionsCount })
+            }
           >
             <Button variant="outline" size="sm" onClick={onAddAction}>
               <Plus />
@@ -502,7 +600,9 @@ export function ProjectSettingsPage({
           </ProjectRow>
         </>
       ) : (
-        <p className="py-6 text-body text-muted-foreground">{t("settings.projectNone")}</p>
+        <p className="text-body text-muted-foreground py-6">
+          {t("settings.projectNone")}
+        </p>
       )}
     </Page>
   );

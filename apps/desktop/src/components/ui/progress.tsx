@@ -1,39 +1,39 @@
-import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
+import { Progress as ProgressPrimitive } from "@base-ui/react/progress";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
-type ProgressTone = "primary" | "success" | "warning" | "destructive"
-type ProgressSize = "default" | "compact"
+type ProgressTone = "primary" | "success" | "warning" | "destructive";
+type ProgressSize = "default" | "compact";
 
 interface ProgressVisualProps {
-  className?: string
-  value?: number | null
-  tone?: ProgressTone
-  size?: ProgressSize
+  className?: string;
+  value?: number | null;
+  tone?: ProgressTone;
+  size?: ProgressSize;
 }
 
 interface DecorativeProgressProps extends ProgressVisualProps {
-  decorative: true
-  children?: never
-  "data-slot"?: string
-  "data-density"?: string
+  decorative: true;
+  children?: never;
+  "data-slot"?: string;
+  "data-density"?: string;
 }
 
-type ProgressProps = DecorativeProgressProps | (
-  ProgressPrimitive.Root.Props &
-  ProgressVisualProps & {
-    decorative?: false
-  }
-)
+type ProgressProps =
+  | DecorativeProgressProps
+  | (ProgressPrimitive.Root.Props &
+      ProgressVisualProps & {
+        decorative?: false;
+      });
 
 const indicatorToneClasses: Record<ProgressTone, string> = {
   primary: "bg-primary",
   success: "bg-status-success",
   warning: "bg-status-warning",
   destructive: "bg-status-destructive",
-}
+};
 
-function Progress({
+const Progress = ({
   className,
   children,
   value,
@@ -41,18 +41,22 @@ function Progress({
   size = "default",
   decorative = false,
   ...props
-}: ProgressProps) {
+}: ProgressProps) => {
   const trackClassName = cn(
     size === "compact" ? "h-1" : "h-2 w-full",
-    size === "compact" ? "bg-foreground/10" : "bg-fill-hover",
-  )
-  const indicatorClassName = indicatorToneClasses[tone]
+    size === "compact" ? "bg-foreground/10" : "bg-fill-hover"
+  );
+  const indicatorClassName = indicatorToneClasses[tone];
 
   if (decorative) {
-    const normalizedValue = typeof value === "number" && Number.isFinite(value)
-      ? Math.min(100, Math.max(0, value))
-      : 0
-    const decorativeProps = props as Pick<DecorativeProgressProps, "data-slot" | "data-density">
+    const normalizedValue =
+      typeof value === "number" && Number.isFinite(value)
+        ? Math.min(100, Math.max(0, value))
+        : 0;
+    const decorativeProps = props as Pick<
+      DecorativeProgressProps,
+      "data-slot" | "data-density"
+    >;
     return (
       <span
         data-slot={decorativeProps["data-slot"] ?? "progress"}
@@ -60,15 +64,22 @@ function Progress({
         data-size={size}
         data-tone={tone}
         aria-hidden="true"
-        className={cn("inline-flex overflow-hidden rounded-control", trackClassName, className)}
+        className={cn(
+          "rounded-control inline-flex overflow-hidden",
+          trackClassName,
+          className
+        )}
       >
         <span
           data-slot="progress-indicator"
-          className={cn("block h-full rounded-control transition-all", indicatorClassName)}
+          className={cn(
+            "rounded-control block h-full transition-all",
+            indicatorClassName
+          )}
           style={{ width: `${normalizedValue}%` }}
         />
       </span>
-    )
+    );
   }
 
   return (
@@ -85,53 +96,56 @@ function Progress({
         <ProgressIndicator className={indicatorClassName} />
       </ProgressTrack>
     </ProgressPrimitive.Root>
-  )
+  );
 }
 
-function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
+const ProgressTrack = ({ className, ...props }: ProgressPrimitive.Track.Props) => {
   return (
     <ProgressPrimitive.Track
       data-slot="progress-track"
       className={cn(
-        "relative flex items-center overflow-x-hidden rounded-control",
+        "rounded-control relative flex items-center overflow-x-hidden",
         className
       )}
       {...props}
     />
-  )
+  );
 }
 
-function ProgressIndicator({
+const ProgressIndicator = ({
   className,
   ...props
-}: ProgressPrimitive.Indicator.Props) {
+}: ProgressPrimitive.Indicator.Props) => {
   return (
     <ProgressPrimitive.Indicator
       data-slot="progress-indicator"
-      className={cn("h-full rounded-control transition-all", className)}
+      className={cn("rounded-control h-full transition-all", className)}
       {...props}
     />
-  )
+  );
 }
 
-function ProgressLabel({ className, ...props }: ProgressPrimitive.Label.Props) {
+const ProgressLabel = ({ className, ...props }: ProgressPrimitive.Label.Props) => {
   return (
     <ProgressPrimitive.Label
       data-slot="progress-label"
       className={cn("text-body font-medium", className)}
       {...props}
     />
-  )
+  );
 }
 
-function ProgressValue({ className, ...props }: ProgressPrimitive.Value.Props) {
+const ProgressValue = ({ className, ...props }: ProgressPrimitive.Value.Props) => {
   return (
     <ProgressPrimitive.Value
       data-slot="progress-value"
-      className={cn("ml-auto text-body tabular-nums text-muted-foreground", className)}
+      className={cn(
+        "text-body text-muted-foreground ml-auto tabular-nums",
+        className
+      )}
       {...props}
     />
-  )
+  );
 }
 
 export {
@@ -143,4 +157,4 @@ export {
   type ProgressProps,
   type ProgressSize,
   type ProgressTone,
-}
+};

@@ -2,7 +2,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
 
-import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { SceneEditor } = await import("../src/session/SceneEditor.tsx");
@@ -40,20 +47,40 @@ function renderEditor(props = {}) {
       <SceneEditor
         request={{ kind: "create" }}
         scenes={[]}
-        providers={[{ id: "codex", display_name: "Codex", available: true, needs_node: false, models: [], capabilities: [] }]}
-        skills={[{ id: "reviewer", name: "Reviewer", description: "", icon: null, kind: "fragment", source: null }]}
+        providers={[
+          {
+            id: "codex",
+            display_name: "Codex",
+            available: true,
+            needs_node: false,
+            models: [],
+            capabilities: [],
+          },
+        ]}
+        skills={[
+          {
+            id: "reviewer",
+            name: "Reviewer",
+            description: "",
+            icon: null,
+            kind: "fragment",
+            source: null,
+          },
+        ]}
         cwd="/tmp/project"
         onSaved={() => {}}
         onDeleted={() => {}}
         onClose={() => {}}
         {...props}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
 
 function containsOne(value, alternatives) {
-  expect(alternatives.some((candidate) => value.includes(candidate))).toBe(true);
+  expect(alternatives.some((candidate) => value.includes(candidate))).toBe(
+    true
+  );
 }
 
 function buttonOne(container, alternatives) {
@@ -93,16 +120,26 @@ describe("SceneEditor rendered", () => {
     containsOne(text, ["Outputs", "sceneEditor.tab.outputs"]);
     containsOne(text, ["Automation", "sceneEditor.tab.automation"]);
     containsOne(text, ["Full JSON", "sceneEditor.tab.json"]);
-    expect(dom.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull();
-    expect(dom.document.body.querySelector('[data-slot="tabs"]')?.getAttribute("data-orientation")).toBe("horizontal");
-    expect(dom.document.body.querySelector('[data-slot="tabs"]')?.className).toContain("flex-col");
-    expect(dom.document.body.querySelector('[data-slot="tabs-list"]')?.className).not.toContain("w-40");
+    expect(
+      dom.document.body.querySelector('[data-slot="dialog-content"]')
+    ).toBeNull();
+    expect(
+      dom.document.body
+        .querySelector('[data-slot="tabs"]')
+        ?.getAttribute("data-orientation")
+    ).toBe("horizontal");
+    expect(
+      dom.document.body.querySelector('[data-slot="tabs"]')?.className
+    ).toContain("flex-col");
+    expect(
+      dom.document.body.querySelector('[data-slot="tabs-list"]')?.className
+    ).not.toContain("w-40");
 
     const title = dom.document.body.querySelector("#scene-title");
     await reactAct(async () => {
       const setValue = Object.getOwnPropertyDescriptor(
         dom.window.HTMLInputElement.prototype,
-        "value",
+        "value"
       ).set;
       setValue.call(title, "Release readiness");
       title.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
@@ -143,9 +180,16 @@ describe("SceneEditor rendered", () => {
     });
     await flush();
 
-    expect(dom.document.body.querySelector("#scene-name")?.value).toBe("review-copy");
-    expect(dom.document.body.querySelector("#scene-title")?.value).toBe("Review copy");
-    containsOne(dom.document.body.textContent ?? "", ["Duplicate scene", "sceneEditor.duplicateTitle"]);
+    expect(dom.document.body.querySelector("#scene-name")?.value).toBe(
+      "review-copy"
+    );
+    expect(dom.document.body.querySelector("#scene-title")?.value).toBe(
+      "Review copy"
+    );
+    containsOne(dom.document.body.textContent ?? "", [
+      "Duplicate scene",
+      "sceneEditor.duplicateTitle",
+    ]);
     rendered.unmount();
   });
 });

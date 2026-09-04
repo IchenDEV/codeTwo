@@ -1,26 +1,31 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 type TextareaProps = React.ComponentProps<"textarea"> & {
-  focusRing?: boolean
-  size?: "default" | "compact"
-}
+  readonly focusRing?: boolean;
+  readonly size?: "default" | "compact";
+};
 
-function Textarea({ className, focusRing = true, size = "default", ...props }: TextareaProps) {
+const Textarea = ({
+  className,
+  focusRing = true,
+  size = "default",
+  ...props
+}: TextareaProps) => {
   return (
     <textarea
       data-slot="textarea"
       data-size={size}
       className={cn(
-        "w-full min-w-0 resize-y rounded-control bg-fill-rest px-3 py-2 text-prose transition-[color,box-shadow,background-color] outline-none placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 read-only:bg-fill-quiet data-[size=compact]:min-h-control-field data-[size=default]:min-h-24",
+        "rounded-control bg-fill-rest text-prose placeholder:text-muted-foreground read-only:bg-fill-quiet data-[size=compact]:min-h-control-field w-full min-w-0 resize-y px-3 py-2 transition-[color,box-shadow,background-color] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:min-h-24",
         focusRing && "focus-visible:focus-ring",
-        "aria-invalid:ring-2 aria-invalid:ring-destructive/30",
+        "aria-invalid:ring-destructive/30 aria-invalid:ring-2",
         className
       )}
       {...props}
     />
-  )
+  );
 }
 
-export { Textarea, type TextareaProps }
+export { Textarea, type TextareaProps };

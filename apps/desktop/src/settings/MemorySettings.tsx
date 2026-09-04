@@ -138,7 +138,7 @@ const VIEWS: { value: MemoryView; key: StringKey }[] = [
 function translatedDynamic(
   t: ReturnType<typeof useT>,
   prefix: string,
-  value: string,
+  value: string
 ): string {
   const key = `${prefix}.${value}` as StringKey;
   return key in EN_STRINGS ? t(key) : value;
@@ -146,7 +146,7 @@ function translatedDynamic(
 
 function useNarrowMemoryLayout(): boolean {
   const [narrow, setNarrow] = useState(
-    () => window.matchMedia("(max-width: 1024px)").matches,
+    () => window.matchMedia("(max-width: 1024px)").matches
   );
   useEffect(() => {
     const query = window.matchMedia("(max-width: 1024px)");
@@ -160,7 +160,7 @@ function useNarrowMemoryLayout(): boolean {
 function effectivePolicy(
   globalValue: boolean,
   projectValue: MemoryPolicyValue,
-  masterEnabled: boolean,
+  masterEnabled: boolean
 ): boolean {
   if (!masterEnabled) return false;
   return projectValue === "inherit" ? globalValue : projectValue === "allow";
@@ -169,28 +169,28 @@ function effectivePolicy(
 function formatDate(
   locale: string,
   value: number | null,
-  withTime = false,
+  withTime = false
 ): string {
   if (value === null) return "—";
   return new Intl.DateTimeFormat(
     locale,
     withTime
       ? { dateStyle: "medium", timeStyle: "short" }
-      : { dateStyle: "medium" },
+      : { dateStyle: "medium" }
   ).format(new Date(value));
 }
 
-function PolicySelect({
+const PolicySelect = ({
   label,
   value,
   disabled,
   onChange,
 }: {
-  label: string;
-  value: MemoryPolicyValue;
-  disabled: boolean;
-  onChange: (value: MemoryPolicyValue) => void;
-}) {
+  readonly label: string;
+  readonly value: MemoryPolicyValue;
+  readonly disabled: boolean;
+  readonly onChange: (value: MemoryPolicyValue) => void;
+}) => {
   const t = useT();
   return (
     <SettingRow label={label} density="compact" disabled={disabled}>
@@ -210,7 +210,9 @@ function PolicySelect({
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            <SelectItem value="inherit">{t("memory.policy.inherit")}</SelectItem>
+            <SelectItem value="inherit">
+              {t("memory.policy.inherit")}
+            </SelectItem>
             <SelectItem value="allow">{t("memory.policy.allow")}</SelectItem>
             <SelectItem value="deny">{t("memory.policy.deny")}</SelectItem>
           </SelectGroup>
@@ -220,19 +222,19 @@ function PolicySelect({
   );
 }
 
-function StatButton({
+const StatButton = ({
   value,
   label,
   active,
   warning,
   onClick,
 }: {
-  value: number;
-  label: string;
-  active: boolean;
-  warning?: boolean;
-  onClick: () => void;
-}) {
+  readonly value: number;
+  readonly label: string;
+  readonly active: boolean;
+  readonly warning?: boolean;
+  readonly onClick: () => void;
+}) => {
   return (
     <Button
       type="button"
@@ -243,17 +245,17 @@ function StatButton({
       className={cn(
         "memory-stat",
         active && "is-active",
-        warning && value > 0 && "is-warning",
+        warning && value > 0 && "is-warning"
       )}
       onClick={onClick}
     >
-      <strong className="font-mono text-body tabular-nums">{value}</strong>
+      <strong className="text-body font-mono tabular-nums">{value}</strong>
       <span>{label}</span>
     </Button>
   );
 }
 
-function MemoryRow({
+const MemoryRow = ({
   memory,
   selected,
   checked,
@@ -261,13 +263,13 @@ function MemoryRow({
   onOpen,
   onPin,
 }: {
-  memory: MemoryRecord;
-  selected: boolean;
-  checked: boolean;
-  onCheck: (checked: boolean) => void;
-  onOpen: () => void;
-  onPin: () => void;
-}) {
+  readonly memory: MemoryRecord;
+  readonly selected: boolean;
+  readonly checked: boolean;
+  readonly onCheck: (checked: boolean) => void;
+  readonly onOpen: () => void;
+  readonly onPin: () => void;
+}) => {
   const t = useT();
   const { locale } = useLanguage();
   return (
@@ -275,7 +277,7 @@ function MemoryRow({
       className={cn(
         "memory-row",
         selected && "is-selected",
-        !memory.active && "is-inactive",
+        !memory.active && "is-inactive"
       )}
     >
       <Checkbox
@@ -312,12 +314,10 @@ function MemoryRow({
         </span>
       </Button>
       <div className="memory-row-signals">
-        {memory.conflict_with_id && (
-          <AlertTriangle
+        {memory.conflict_with_id ? <AlertTriangle
             aria-label={t("memory.needsAttention")}
-            className="size-3.5 text-warning"
-          />
-        )}
+            className="text-warning size-3.5"
+          /> : null}
         <TooltipButton
           label={memory.pinned ? t("memory.unpin") : t("memory.pin")}
           variant="ghost"
@@ -341,7 +341,7 @@ function MemoryRow({
 
 type EditorMode = "new" | "edit" | "correct";
 
-function MemoryEditor({
+const MemoryEditor = ({
   open,
   mode,
   record,
@@ -349,13 +349,13 @@ function MemoryEditor({
   onOpenChange,
   onSave,
 }: {
-  open: boolean;
-  mode: EditorMode;
-  record: MemoryRecord | null;
-  saving: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSave: (category: string, content: string, pinned: boolean) => void;
-}) {
+  readonly open: boolean;
+  readonly mode: EditorMode;
+  readonly record: MemoryRecord | null;
+  readonly saving: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onSave: (category: string, content: string, pinned: boolean) => void;
+}) => {
   const t = useT();
   const [category, setCategory] = useState("fact");
   const [content, setContent] = useState("");
@@ -387,7 +387,7 @@ function MemoryEditor({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <label className="block space-y-1.5 text-metadata font-medium">
+          <label className="text-metadata block space-y-1.5 font-medium">
             <span>{t("memory.category")}</span>
             <Select
               value={category}
@@ -409,7 +409,7 @@ function MemoryEditor({
               </SelectContent>
             </Select>
           </label>
-          <label className="block space-y-1.5 text-metadata font-medium">
+          <label className="text-metadata block space-y-1.5 font-medium">
             <span>{t("memory.content")}</span>
             <Textarea
               autoFocus
@@ -420,7 +420,7 @@ function MemoryEditor({
             />
           </label>
           {mode === "new" && (
-            <label className="flex items-center gap-2 text-metadata">
+            <label className="text-metadata flex items-center gap-2">
               <Checkbox
                 checked={pinned}
                 onCheckedChange={(value) => setPinned(value === true)}
@@ -445,7 +445,7 @@ function MemoryEditor({
   );
 }
 
-function DetailPanel({
+const DetailPanel = ({
   memory,
   evidence,
   usages,
@@ -460,20 +460,20 @@ function DetailPanel({
   onCategory,
   onOpenSession,
 }: {
-  memory: MemoryRecord | null;
-  evidence: MemoryEvidence[];
-  usages: MemoryUsage[];
-  loading: boolean;
-  reveal: boolean;
-  onReveal: () => void;
-  onPin: () => void;
-  onForget: () => void;
-  onRestore: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onCategory: (category: string) => void;
-  onOpenSession: (sessionId: string) => void;
-}) {
+  readonly memory: MemoryRecord | null;
+  readonly evidence: MemoryEvidence[];
+  readonly usages: MemoryUsage[];
+  readonly loading: boolean;
+  readonly reveal: boolean;
+  readonly onReveal: () => void;
+  readonly onPin: () => void;
+  readonly onForget: () => void;
+  readonly onRestore: () => void;
+  readonly onEdit: () => void;
+  readonly onDelete: () => void;
+  readonly onCategory: (category: string) => void;
+  readonly onOpenSession: (sessionId: string) => void;
+}) => {
   const t = useT();
   const { locale } = useLanguage();
   if (!memory)
@@ -500,12 +500,10 @@ function DetailPanel({
           {!memory.active && (
             <Badge variant="secondary">{t("memory.status.forgotten")}</Badge>
           )}
-          {memory.pinned && (
-            <Badge variant="secondary">
+          {memory.pinned ? <Badge variant="secondary">
               <Pin className="size-3" />
               {t("memory.pinned")}
-            </Badge>
-          )}
+            </Badge> : null}
         </div>
         <div className="flex items-center gap-1">
           {memory.active ? (
@@ -585,15 +583,13 @@ function DetailPanel({
           </dd>
         </div>
       </dl>
-      {conflictReason && (
-        <aside className="memory-conflict-note">
+      {conflictReason ? <aside className="memory-conflict-note">
           <AlertTriangle className="size-4 shrink-0" />
           <div>
             <strong>{t("memory.needsAttention")}</strong>
             <p>{conflictReason}</p>
           </div>
-        </aside>
-      )}
+        </aside> : null}
       <div className="memory-detail-actions">
         <Button size="sm" variant="outline" onClick={onEdit}>
           {memory.editable ? t("memory.edit") : t("memory.correct")}
@@ -692,20 +688,20 @@ function DetailPanel({
 }
 
 /** An auditable, project-scoped memory console inside Settings. */
-export function MemorySettingsPage({
+export const MemorySettingsPage = ({
   projectPath,
   projects,
   onOpenSession,
 }: {
-  projectPath: string;
-  projects: Project[];
-  onOpenSession: (sessionId: string) => void;
-}) {
+  readonly projectPath: string;
+  readonly projects: Project[];
+  readonly onOpenSession: (sessionId: string) => void;
+}) => {
   const t = useT();
   const toast = useToast();
   const narrow = useNarrowMemoryLayout();
   const [selectedProject, setSelectedProject] = useState(
-    projectPath || projects[0]?.path || "",
+    projectPath || projects[0]?.path || ""
   );
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [policy, setPolicy] = useState(DEFAULT_POLICY(selectedProject));
@@ -749,7 +745,7 @@ export function MemorySettingsPage({
       setSelectedId((current) =>
         current && nextRecords.some((record) => record.id === current)
           ? current
-          : (nextRecords.find((record) => record.layer !== "L3")?.id ?? null),
+          : (nextRecords.find((record) => record.layer !== "L3")?.id ?? null)
       );
     } catch (error) {
       toast(String(error), "error");
@@ -772,12 +768,12 @@ export function MemorySettingsPage({
 
   const selected = useMemo(
     () => records.find((record) => record.id === selectedId) ?? null,
-    [records, selectedId],
+    [records, selectedId]
   );
   const profile = useMemo(() => memoryProfile(records), [records]);
   const visible = useMemo(
     () => filterMemories(records, { ...filter, query: deferredQuery }),
-    [deferredQuery, filter, records],
+    [deferredQuery, filter, records]
   );
 
   const loadDetail = useCallback(
@@ -801,7 +797,7 @@ export function MemorySettingsPage({
         setDetailLoading(false);
       }
     },
-    [toast],
+    [toast]
   );
 
   useEffect(() => {
@@ -829,7 +825,7 @@ export function MemorySettingsPage({
   };
   const patchRecord = (id: string, patch: Partial<MemoryRecord>) =>
     setRecords((items) =>
-      items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      items.map((item) => (item.id === id ? { ...item, ...patch } : item))
     );
   const togglePin = async (memory: MemoryRecord) => {
     const pinned = !memory.pinned;
@@ -898,7 +894,7 @@ export function MemorySettingsPage({
   const saveEditor = async (
     category: string,
     content: string,
-    pinned: boolean,
+    pinned: boolean
   ) => {
     setSaving(true);
     try {
@@ -914,7 +910,7 @@ export function MemorySettingsPage({
       setSelectedId(saved.id);
       toast(
         editorMode === "correct" ? t("memory.corrected") : t("memory.saved"),
-        "success",
+        "success"
       );
     } catch (error) {
       toast(String(error), "error");
@@ -927,7 +923,7 @@ export function MemorySettingsPage({
     if (
       action === "forget" &&
       !(await confirmNative(
-        t("memory.confirmForget", { count: targets.length }),
+        t("memory.confirmForget", { count: targets.length })
       ))
     )
       return;
@@ -936,8 +932,8 @@ export function MemorySettingsPage({
         targets.map((record) =>
           action === "pin" || action === "unpin"
             ? setMemoryPinned(record.id, action === "pin")
-            : setMemoryActive(record.id, action === "restore"),
-        ),
+            : setMemoryActive(record.id, action === "restore")
+        )
       );
       setCheckedIds(new Set());
       await refresh();
@@ -952,14 +948,14 @@ export function MemorySettingsPage({
         capture: effectivePolicy(
           settings.capture,
           policy.capture,
-          settings.enabled,
+          settings.enabled
         )
           ? t("memory.behavior.on")
           : t("memory.behavior.offShort"),
         recall: effectivePolicy(
           settings.inject,
           policy.inject,
-          settings.enabled,
+          settings.enabled
         )
           ? t("memory.behavior.on")
           : t("memory.behavior.offShort"),
@@ -985,14 +981,14 @@ export function MemorySettingsPage({
       onRestore={() => {
         if (selected)
           void restore(selected).catch((error) =>
-            toast(String(error), "error"),
+            toast(String(error), "error")
           );
       }}
       onEdit={() => openEditor(selected?.editable ? "edit" : "correct")}
       onDelete={() => {
         if (selected)
           void removePermanently(selected).catch((error) =>
-            toast(String(error), "error"),
+            toast(String(error), "error")
           );
       }}
       onCategory={(category) => {
@@ -1121,8 +1117,7 @@ export function MemorySettingsPage({
         </div>
       </details>
 
-      {profile && (
-        <details className="memory-disclosure memory-profile-disclosure">
+      {profile ? <details className="memory-disclosure memory-profile-disclosure">
           <summary>
             <span className="memory-disclosure-icon">
               <FileClock />
@@ -1137,8 +1132,7 @@ export function MemorySettingsPage({
           <div className="memory-profile-body" dir="auto">
             {profile.content}
           </div>
-        </details>
-      )}
+        </details> : null}
 
       {!selectedProject ? (
         <p className="memory-empty-state">{t("memory.noProject")}</p>
@@ -1194,7 +1188,10 @@ export function MemorySettingsPage({
             <ViewSwitcher
               label={t("memory.views")}
               value={filter.view}
-              options={VIEWS.map(({ value, key }) => ({ value, label: t(key) }))}
+              options={VIEWS.map(({ value, key }) => ({
+                value,
+                label: t(key),
+              }))}
               onValueChange={(view) =>
                 setFilter((current) => ({ ...current, view }))
               }
@@ -1228,7 +1225,9 @@ export function MemorySettingsPage({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="all">{t("memory.allCategories")}</SelectItem>
+                  <SelectItem value="all">
+                    {t("memory.allCategories")}
+                  </SelectItem>
                   {MEMORY_CATEGORIES.map((value) => (
                     <SelectItem key={value} value={value}>
                       {translatedDynamic(t, "memory.category", value)}
@@ -1361,7 +1360,7 @@ export function MemorySettingsPage({
                         visible.forEach((record) =>
                           value === true
                             ? next.add(record.id)
-                            : next.delete(record.id),
+                            : next.delete(record.id)
                         );
                         return next;
                       })
@@ -1409,7 +1408,7 @@ export function MemorySettingsPage({
         </div>
       )}
 
-      <Dialog open={narrow && detailOpen} onOpenChange={setDetailOpen}>
+      <Dialog open={narrow ? detailOpen : null} onOpenChange={setDetailOpen}>
         <DialogContent
           className="memory-detail-dialog"
           aria-label={t("memory.details")}

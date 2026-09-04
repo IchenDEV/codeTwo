@@ -11,7 +11,11 @@ import {
 } from "../bridge";
 import { useLanguage } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
-import { fmtTokens, stackHistory, type StackedBucket } from "../usage/usageMath";
+import {
+  fmtTokens,
+  stackHistory,
+  type StackedBucket,
+} from "../usage/usageMath";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
@@ -33,12 +37,16 @@ export interface ProfileActivitySummary {
 
 export function summarizeProfileActivity(
   report: UsageReport,
-  history: UsageHistoryReport,
+  history: UsageHistoryReport
 ): ProfileActivitySummary {
   const buckets = stackHistory(history.history).buckets;
   const totals = buckets.map((bucket) => bucket.total);
   let currentStreak = 0;
-  for (let index = totals.length - 1; index >= 0 && totals[index] > 0; index -= 1) {
+  for (
+    let index = totals.length - 1;
+    index >= 0 && totals[index] > 0;
+    index -= 1
+  ) {
     currentStreak += 1;
   }
 
@@ -49,7 +57,9 @@ export function summarizeProfileActivity(
     currentStreak,
     transcripts: report.transcripts,
     buckets,
-    providers: [...history.by_source].sort((left, right) => right.total_tokens - left.total_tokens),
+    providers: [...history.by_source].sort(
+      (left, right) => right.total_tokens - left.total_tokens
+    ),
   };
 }
 
@@ -63,7 +73,9 @@ const EMPTY_PROFILE: ProfileSnapshot = { name: "", handle: "", bio: "" };
 
 function loadProfile(): ProfileSnapshot {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<ProfileSnapshot> | null;
+    const parsed = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) ?? "null"
+    ) as Partial<ProfileSnapshot> | null;
     return {
       name: typeof parsed?.name === "string" ? parsed.name : "",
       handle: typeof parsed?.handle === "string" ? parsed.handle : "",
@@ -76,21 +88,35 @@ function loadProfile(): ProfileSnapshot {
 
 function profileInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length > 1) return words.slice(0, 2).map((word) => Array.from(word)[0]).join("").toUpperCase();
-  return Array.from(words[0] ?? "C2").slice(0, 2).join("").toUpperCase();
+  if (words.length > 1)
+    return words
+      .slice(0, 2)
+      .map((word) => Array.from(word)[0])
+      .join("")
+      .toUpperCase();
+  return Array.from(words[0] ?? "C2")
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
-async function shareProfile(title: string, text: string): Promise<"shared" | "copied" | "cancelled"> {
-  const share = (navigator as Navigator & {
-    share?: (data: { title: string; text: string }) => Promise<void>;
-  }).share;
+async function shareProfile(
+  title: string,
+  text: string
+): Promise<"shared" | "copied" | "cancelled"> {
+  const share = (
+    navigator as Navigator & {
+      share?: (data: { title: string; text: string }) => Promise<void>;
+    }
+  ).share;
 
   if (share) {
     try {
       await share.call(navigator, { title, text });
       return "shared";
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return "cancelled";
+      if (error instanceof DOMException && error.name === "AbortError")
+        return "cancelled";
     }
   }
 
@@ -99,19 +125,22 @@ async function shareProfile(title: string, text: string): Promise<"shared" | "co
   return "copied";
 }
 
-export function ProfileSettings({
+export const ProfileSettings = ({
   providerNames = {},
   reportLoader = usageReport,
   historyLoader = usageHistory,
   avatarLoader = systemProfileAvatar,
   share = shareProfile,
 }: {
-  providerNames?: Record<string, string>;
-  reportLoader?: () => Promise<UsageReport>;
-  historyLoader?: (days: number) => Promise<UsageHistoryReport>;
-  avatarLoader?: () => Promise<string | null>;
-  share?: (title: string, text: string) => Promise<"shared" | "copied" | "cancelled">;
-}) {
+  readonly providerNames?: Record<string, string>;
+  readonly reportLoader?: () => Promise<UsageReport>;
+  readonly historyLoader?: (days: number) => Promise<UsageHistoryReport>;
+  readonly avatarLoader?: () => Promise<string | null>;
+  readonly share?: (
+    title: string,
+    text: string
+  ) => Promise<"shared" | "copied" | "cancelled">;
+}) => {
   const { t, locale } = useLanguage();
   const [profile, setProfile] = useState(loadProfile);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -131,7 +160,9 @@ export function ProfileSettings({
     setLoading(true);
     setLoadFailed(false);
     void Promise.all([reportLoader(), historyLoader(ACTIVITY_DAYS)])
-      .then(([report, history]) => setSummary(summarizeProfileActivity(report, history)))
+      .then(([report, history]) =>
+        setSummary(summarizeProfileActivity(report, history))
+      )
       .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
   }, [historyLoader, reportLoader]);
@@ -152,9 +183,12 @@ export function ProfileSettings({
 
   const dateFormatter = useMemo(
     () => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }),
-    [locale],
+    [locale]
   );
-  const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+  const numberFormatter = useMemo(
+    () => new Intl.NumberFormat(locale),
+    [locale]
+  );
   const leadingCells = summary?.buckets.length
     ? new Date(summary.buckets[0].startMs).getDay()
     : 0;
@@ -192,8 +226,17 @@ export function ProfileSettings({
       sessions: summary.transcripts,
     });
     try {
-      const result = await share(t("profile.shareTitle", { name: displayName }), text);
-      setStatus(result === "shared" ? t("profile.shared") : result === "copied" ? t("profile.copied") : "");
+      const result = await share(
+        t("profile.shareTitle", { name: displayName }),
+        text
+      );
+      setStatus(
+        result === "shared"
+          ? t("profile.shared")
+          : result === "copied"
+            ? t("profile.copied")
+            : ""
+      );
     } catch {
       setStatus(t("profile.shareFailed"));
     }
@@ -213,9 +256,16 @@ export function ProfileSettings({
             )}
           </div>
           <div className="profile-identity-copy">
-            <h1 id="profile-name" className="text-page font-semibold tracking-tight">{displayName}</h1>
-            {handle && <p className="text-body text-muted-foreground">@{handle}</p>}
-            <p className="profile-bio text-metadata text-muted-foreground">{bio}</p>
+            <h1
+              id="profile-name"
+              className="text-page font-semibold tracking-tight"
+            >
+              {displayName}
+            </h1>
+            {handle ? <p className="text-body text-muted-foreground">@{handle}</p> : null}
+            <p className="profile-bio text-metadata text-muted-foreground">
+              {bio}
+            </p>
           </div>
         </section>
 
@@ -251,8 +301,7 @@ export function ProfileSettings({
         </div>
       </header>
 
-      {editing && (
-        <form
+      {editing ? <form
           className="profile-editor"
           noValidate
           onSubmit={(event) => {
@@ -269,18 +318,22 @@ export function ProfileSettings({
                 maxLength={48}
                 required
                 aria-invalid={nameInvalid || undefined}
-                aria-describedby={nameInvalid ? "profile-display-name-error" : undefined}
+                aria-describedby={
+                  nameInvalid ? "profile-display-name-error" : undefined
+                }
                 onInput={(event) => {
                   const name = event.currentTarget.value;
                   setDraft((current) => ({ ...current, name }));
                   if (name.trim()) setNameInvalid(false);
                 }}
               />
-              {nameInvalid && (
-                <p id="profile-display-name-error" role="alert" className="text-callout text-destructive">
+              {nameInvalid ? <p
+                  id="profile-display-name-error"
+                  role="alert"
+                  className="text-callout text-destructive"
+                >
                   {t("profile.nameRequired")}
-                </p>
-              )}
+                </p> : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="profile-handle">{t("profile.handle")}</Label>
@@ -327,69 +380,125 @@ export function ProfileSettings({
               {t("profile.save")}
             </Button>
           </div>
-        </form>
-      )}
+        </form> : null}
 
-      {status && <p role="status" aria-live="polite" className="profile-status text-metadata text-muted-foreground">{status}</p>}
+      {status ? <p
+          role="status"
+          aria-live="polite"
+          className="profile-status text-metadata text-muted-foreground"
+        >
+          {status}
+        </p> : null}
 
-      {loading && !summary && (
-        <div className="flex items-center justify-center gap-2 py-page-section text-metadata text-muted-foreground">
+      {loading && !summary ? <div className="py-page-section text-metadata text-muted-foreground flex items-center justify-center gap-2">
           <Spinner />
           {t("profile.loading")}
-        </div>
-      )}
+        </div> : null}
 
-      {loadFailed && !summary && (
-        <div className="flex flex-col items-center gap-3 py-page-section text-center">
-          <p className="text-metadata text-muted-foreground">{t("profile.loadFailed")}</p>
-          <Button variant="outline" size="sm" onClick={loadActivity}>{t("profile.retry")}</Button>
-        </div>
-      )}
+      {loadFailed && !summary ? <div className="py-page-section flex flex-col items-center gap-3 text-center">
+          <p className="text-metadata text-muted-foreground">
+            {t("profile.loadFailed")}
+          </p>
+          <Button variant="outline" size="sm" onClick={loadActivity}>
+            {t("profile.retry")}
+          </Button>
+        </div> : null}
 
-      {summary && (
-        <section className="profile-activity-surface" aria-labelledby="profile-summary-heading">
-          <h2 id="profile-summary-heading" className="profile-summary-title text-body text-muted-foreground">
+      {summary ? <section
+          className="profile-activity-surface"
+          aria-labelledby="profile-summary-heading"
+        >
+          <h2
+            id="profile-summary-heading"
+            className="profile-summary-title text-body text-muted-foreground"
+          >
             {t("profile.last90Days")}
           </h2>
 
-          <div className="profile-stat-grid" aria-label={t("profile.summary") }>
+          <div className="profile-stat-grid" aria-label={t("profile.summary")}>
             <div className="profile-stat profile-primary-stat">
               <div className="profile-primary-value">
-                <strong className="font-mono tabular-nums">{fmtTokens(summary.totalTokens)}</strong>
-                <span className="text-body text-muted-foreground">{t("profile.tokens")}</span>
+                <strong className="font-mono tabular-nums">
+                  {fmtTokens(summary.totalTokens)}
+                </strong>
+                <span className="text-body text-muted-foreground">
+                  {t("profile.tokens")}
+                </span>
               </div>
             </div>
             {[
-              [numberFormatter.format(summary.activeDays), t("profile.activeDays")],
-              [numberFormatter.format(summary.transcripts), t("profile.sessions")],
-              [numberFormatter.format(summary.currentStreak), t("profile.currentStreak")],
+              [
+                numberFormatter.format(summary.activeDays),
+                t("profile.activeDays"),
+              ],
+              [
+                numberFormatter.format(summary.transcripts),
+                t("profile.sessions"),
+              ],
+              [
+                numberFormatter.format(summary.currentStreak),
+                t("profile.currentStreak"),
+              ],
               [fmtTokens(summary.peakTokens), t("profile.peakDay")],
             ].map(([value, label]) => (
               <div key={label} className="profile-stat">
-                <strong className="font-mono text-body tabular-nums">{value}</strong>
-                <span className="text-callout text-muted-foreground">{label}</span>
+                <strong className="text-body font-mono tabular-nums">
+                  {value}
+                </strong>
+                <span className="text-callout text-muted-foreground">
+                  {label}
+                </span>
               </div>
             ))}
           </div>
 
           <div className="profile-activity-body">
-            <section className="profile-activity-chart" aria-labelledby="profile-activity-heading">
-              <h3 id="profile-activity-heading" className="text-metadata font-medium">{t("profile.tokenActivity")}</h3>
+            <section
+              className="profile-activity-chart"
+              aria-labelledby="profile-activity-heading"
+            >
+              <h3
+                id="profile-activity-heading"
+                className="text-metadata font-medium"
+              >
+                {t("profile.tokenActivity")}
+              </h3>
               <div
                 className="profile-activity-grid"
                 role="img"
-                aria-label={t("profile.activityLabel", { days: summary.activeDays })}
+                aria-label={t("profile.activityLabel", {
+                  days: summary.activeDays,
+                })}
               >
-                {Array.from({ length: leadingCells }, (_, index) => <span key={`leading-${index}`} />)}
+                {Array.from({ length: leadingCells }, (_, index) => (
+                  <span key={`leading-${index}`} />
+                ))}
                 {Array.from({ length: activityCellCount }, (_, index) => {
                   const bucket = summary.buckets[index];
                   return (
                     <span
                       key={bucket?.startMs ?? `empty-${index}`}
                       aria-hidden
-                      title={bucket ? `${dateFormatter.format(bucket.startMs)} · ${fmtTokens(bucket.total)}` : undefined}
-                      className={bucket?.total ? "profile-activity-cell bg-primary" : "profile-activity-cell bg-fill-rest"}
-                      style={bucket?.total ? { opacity: Math.max(0.22, bucket.total / Math.max(1, summary.peakTokens)) } : undefined}
+                      title={
+                        bucket
+                          ? `${dateFormatter.format(bucket.startMs)} · ${fmtTokens(bucket.total)}`
+                          : undefined
+                      }
+                      className={
+                        bucket?.total
+                          ? "profile-activity-cell bg-primary"
+                          : "profile-activity-cell bg-fill-rest"
+                      }
+                      style={
+                        bucket?.total
+                          ? {
+                              opacity: Math.max(
+                                0.22,
+                                bucket.total / Math.max(1, summary.peakTokens)
+                              ),
+                            }
+                          : undefined
+                      }
                     />
                   );
                 })}
@@ -398,26 +507,45 @@ export function ProfileSettings({
 
             {summary.activeDays === 0 ? (
               <div className="profile-empty-state">
-                <strong className="text-body font-semibold">{t("profile.noActivity")}</strong>
-                <p className="max-w-xs text-center text-metadata text-muted-foreground">
+                <strong className="text-body font-semibold">
+                  {t("profile.noActivity")}
+                </strong>
+                <p className="text-metadata text-muted-foreground max-w-xs text-center">
                   {t("profile.noActivityHint")}
                 </p>
               </div>
             ) : (
-              <section className="profile-provider-activity" aria-labelledby="profile-provider-heading">
-                <h2 id="profile-provider-heading" className="text-body font-semibold">{t("profile.providerActivity")}</h2>
+              <section
+                className="profile-provider-activity"
+                aria-labelledby="profile-provider-heading"
+              >
+                <h2
+                  id="profile-provider-heading"
+                  className="text-body font-semibold"
+                >
+                  {t("profile.providerActivity")}
+                </h2>
                 <div className="mt-4 space-y-4">
                   {summary.providers.slice(0, 5).map((provider) => (
                     <div key={provider.source}>
-                      <div className="flex items-center gap-2 text-metadata">
-                        <ProviderIcon provider={provider.source} className="size-3.5" />
-                        <span className="min-w-0 flex-1 truncate">{providerNames[provider.source] ?? provider.source}</span>
-                        <span className="font-mono tabular-nums text-muted-foreground">{fmtTokens(provider.total_tokens)}</span>
+                      <div className="text-metadata flex items-center gap-2">
+                        <ProviderIcon
+                          provider={provider.source}
+                          className="size-3.5"
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          {providerNames[provider.source] ?? provider.source}
+                        </span>
+                        <span className="text-muted-foreground font-mono tabular-nums">
+                          {fmtTokens(provider.total_tokens)}
+                        </span>
                       </div>
-                      <div className="mt-1.5 h-1 overflow-hidden rounded-control bg-fill-rest">
+                      <div className="rounded-control bg-fill-rest mt-1.5 h-1 overflow-hidden">
                         <div
-                          className="h-full rounded-control bg-primary"
-                          style={{ width: `${summary.totalTokens > 0 ? Math.min(100, provider.total_tokens / summary.totalTokens * 100) : 0}%` }}
+                          className="rounded-control bg-primary h-full"
+                          style={{
+                            width: `${summary.totalTokens > 0 ? Math.min(100, (provider.total_tokens / summary.totalTokens) * 100) : 0}%`,
+                          }}
                         />
                       </div>
                     </div>
@@ -426,8 +554,7 @@ export function ProfileSettings({
               </section>
             )}
           </div>
-        </section>
-      )}
+        </section> : null}
     </div>
   );
 }

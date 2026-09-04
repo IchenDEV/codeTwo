@@ -15,23 +15,24 @@ interface SplitButtonAction {
   disabled?: boolean;
 }
 
-type SplitButtonVariant = "default" | "destructive" | "outline" | "secondary" | "ghost";
+type SplitButtonVariant =
+  "default" | "destructive" | "outline" | "secondary" | "ghost";
 type SplitButtonSize = "default" | "sm" | "compact" | "field";
 
 interface SplitButtonProps {
   /** Text shown on the primary (left) half. */
-  label: string;
+  readonly label: string;
   /** Handler for the primary button click. */
-  onClick: () => void;
+  readonly onClick: () => void;
   /** Alternative actions rendered inside the chevron dropdown. */
-  actions: SplitButtonAction[];
-  variant?: SplitButtonVariant;
-  size?: SplitButtonSize;
-  disabled?: boolean;
-  className?: string;
+  readonly actions: SplitButtonAction[];
+  readonly variant?: SplitButtonVariant;
+  readonly size?: SplitButtonSize;
+  readonly disabled?: boolean;
+  readonly className?: string;
   /** Where the dropdown aligns relative to the trigger. */
-  menuAlign?: "start" | "center" | "end";
-  menuSide?: "top" | "bottom";
+  readonly menuAlign?: "start" | "center" | "end";
+  readonly menuSide?: "top" | "bottom";
 }
 
 const separatorClass: Record<SplitButtonVariant, string> = {
@@ -46,7 +47,7 @@ const separatorClass: Record<SplitButtonVariant, string> = {
  * A two-segment button: the left half fires the primary action, the right half opens a dropdown
  * of alternatives. Mirrors the pattern Cursor uses for "Commit & Push ▾".
  */
-function SplitButton({
+const SplitButton = ({
   label,
   onClick,
   actions,
@@ -56,7 +57,7 @@ function SplitButton({
   className,
   menuAlign = "end",
   menuSide = "top",
-}: SplitButtonProps) {
+}: SplitButtonProps) => {
   if (actions.length === 0) {
     return (
       <Button
@@ -75,9 +76,9 @@ function SplitButton({
   return (
     <span
       className={cn(
-        "inline-flex items-stretch rounded-control",
+        "rounded-control inline-flex items-stretch",
         disabled && "pointer-events-none opacity-50",
-        className,
+        className
       )}
     >
       <Button
@@ -101,8 +102,8 @@ function SplitButton({
               disabled={disabled}
               aria-label="More actions"
               className={cn(
-                "relative rounded-l-none px-1.5 focus-visible:z-10 before:absolute before:left-0 before:h-4 before:w-px",
-                separatorClass[variant],
+                "relative rounded-l-none px-1.5 before:absolute before:left-0 before:h-4 before:w-px focus-visible:z-10",
+                separatorClass[variant]
               )}
             >
               <ChevronDown className="size-3.5" />

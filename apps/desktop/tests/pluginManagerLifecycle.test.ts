@@ -22,13 +22,19 @@ describe("unified plugin manager lifecycle", () => {
 
     const plan = await planPluginManagerChange({
       request,
-      plugins: [{
-        id: "bundle:review",
-        name: "Review Tools",
-        source: "bundle",
-        supportedScopes: ["user", "project"],
-        state: { effectiveEnabled: true, override: "inherit", status: "active" },
-      }],
+      plugins: [
+        {
+          id: "bundle:review",
+          name: "Review Tools",
+          source: "bundle",
+          supportedScopes: ["user", "project"],
+          state: {
+            effectiveEnabled: true,
+            override: "inherit",
+            status: "active",
+          },
+        },
+      ],
       components: [],
       planChange: async (managedRequest) => {
         requests.push(managedRequest);
@@ -38,35 +44,45 @@ describe("unified plugin manager lifecycle", () => {
           config_revision: 4,
           request: managedRequest,
           affected: ["bundle:review"],
-          active_resources: [{
-            plugin: "bundle:review",
-            kind: "process",
-            id: "review-worker",
-            label: "Review worker",
-          }],
+          active_resources: [
+            {
+              plugin: "bundle:review",
+              kind: "process",
+              id: "review-worker",
+              label: "Review worker",
+            },
+          ],
           requires_confirmation: true,
         };
       },
     });
 
-    expect(requests).toEqual([{
-      plugin: "bundle:review",
-      scope: { kind: "project", projectPath: "/tmp/demo" },
-      state: "disabled",
-      component: undefined,
-    }]);
+    expect(requests).toEqual([
+      {
+        plugin: "bundle:review",
+        scope: { kind: "project", projectPath: "/tmp/demo" },
+        state: "disabled",
+        component: undefined,
+      },
+    ]);
     expect(plan).toMatchObject({
       confirmationId: "backend-plan-17",
       graphRevision: 17,
       request,
       requiresConfirmation: true,
       affectedPlugins: [{ id: "bundle:review", name: "Review Tools" }],
-      activeResources: [{ id: "review-worker", label: "Review worker", kind: "process" }],
+      activeResources: [
+        { id: "review-worker", label: "Review worker", kind: "process" },
+      ],
     });
 
     await applyPluginManagerChange(plan, async (id) => {
       applied.push(id);
-      return { graph_revision: 18, config_revision: 5, affected: ["bundle:review"] };
+      return {
+        graph_revision: 18,
+        config_revision: 5,
+        affected: ["bundle:review"],
+      };
     });
     expect(applied).toEqual(["backend-plan-17"]);
   });
@@ -83,24 +99,28 @@ describe("unified plugin manager lifecycle", () => {
 
     await planPluginManagerChange({
       request,
-      plugins: [{
-        id: "skills",
-        name: "Skills",
-        source: "builtin",
-        supportedScopes: ["user", "project"],
-        state: { effectiveEnabled: true, status: "active" },
-      }],
-      components: [{
-        id: "skill:docs-search",
-        pluginId: "bundle:docs",
-        pluginName: "Docs",
-        policyPluginId: "skills",
-        name: "docs-search",
-        kind: "mcp",
-        source: "bundle",
-        supportedScopes: ["user", "project"],
-        state: { effectiveEnabled: true, status: "active" },
-      }],
+      plugins: [
+        {
+          id: "skills",
+          name: "Skills",
+          source: "builtin",
+          supportedScopes: ["user", "project"],
+          state: { effectiveEnabled: true, status: "active" },
+        },
+      ],
+      components: [
+        {
+          id: "skill:docs-search",
+          pluginId: "bundle:docs",
+          pluginName: "Docs",
+          policyPluginId: "skills",
+          name: "docs-search",
+          kind: "mcp",
+          source: "bundle",
+          supportedScopes: ["user", "project"],
+          state: { effectiveEnabled: true, status: "active" },
+        },
+      ],
       planChange: async (managedRequest) => {
         requests.push(managedRequest);
         return {
@@ -115,18 +135,26 @@ describe("unified plugin manager lifecycle", () => {
       },
     });
 
-    expect(requests).toEqual([{
-      plugin: "skills",
-      scope: { kind: "user" },
-      state: "disabled",
-      component: "skill:docs-search",
-    }]);
+    expect(requests).toEqual([
+      {
+        plugin: "skills",
+        scope: { kind: "user" },
+        state: "disabled",
+        component: "skill:docs-search",
+      },
+    ]);
   });
 
   test("routes every plugin operation through the single unified App surface", () => {
-    const app = readFileSync(resolve(import.meta.dir, "../src/App.tsx"), "utf8");
+    const app = readFileSync(
+      resolve(import.meta.dir, "../src/App.tsx"),
+      "utf8"
+    );
     const openManagerStart = app.indexOf("const openPluginManager");
-    const openManagerEnd = app.indexOf("const refreshPluginManagerData", openManagerStart);
+    const openManagerEnd = app.indexOf(
+      "const refreshPluginManagerData",
+      openManagerStart
+    );
     const openManager = app.slice(openManagerStart, openManagerEnd);
     const managerStart = app.indexOf("const planManagerChange");
     const managerEnd = app.indexOf("const saveManagerConfig", managerStart);

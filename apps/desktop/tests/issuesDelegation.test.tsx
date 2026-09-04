@@ -1,7 +1,15 @@
 // @ts-nocheck
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, button, dom, flush, maybeButton, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  maybeButton,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 
@@ -52,7 +60,12 @@ function sceneInfo(overrides = {}) {
 
 const SCENES = [
   sceneInfo(),
-  sceneInfo({ reference: "builtin:review", name: "review", title: "Review", icon: "🔍" }),
+  sceneInfo({
+    reference: "builtin:review",
+    name: "review",
+    title: "Review",
+    icon: "🔍",
+  }),
 ];
 
 async function renderModal(props = {}) {
@@ -66,7 +79,7 @@ async function renderModal(props = {}) {
         onClose={() => {}}
         {...props}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
   mountedRoots.push(mounted);
   // The issue list resolves asynchronously after mount.
@@ -81,7 +94,9 @@ async function renderModal(props = {}) {
  * Look controls up under both spellings instead of depending on suite ordering.
  */
 function labeledButton(translated, key) {
-  return maybeButton(dom.document.body, translated) ?? button(dom.document.body, key);
+  return (
+    maybeButton(dom.document.body, translated) ?? button(dom.document.body, key)
+  );
 }
 
 /** Radix menus open on pointerdown (mouse) — the harness click alone is not enough. */
@@ -94,17 +109,19 @@ async function openDelegateMenu() {
         cancelable: true,
         button: 0,
         pointerId: 1,
-      }),
+      })
     );
     trigger.dispatchEvent(
-      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
     );
   });
   await flush();
 }
 
 function menuItems() {
-  return Array.from(dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'));
+  return Array.from(
+    dom.document.body.querySelectorAll('[data-slot="dropdown-menu-item"]')
+  );
 }
 
 describe("IssuesModal delegation", () => {
@@ -121,13 +138,18 @@ describe("IssuesModal delegation", () => {
 
   test("picking a scene reports the issue and that scene's reference", async () => {
     const delegated = [];
-    await renderModal({ onDelegate: (issue, sceneReference) => delegated.push([issue, sceneReference]) });
+    await renderModal({
+      onDelegate: (issue, sceneReference) =>
+        delegated.push([issue, sceneReference]),
+    });
     await openDelegateMenu();
-    const review = menuItems().find((item) => item.textContent?.includes("Review"));
+    const review = menuItems().find((item) =>
+      item.textContent?.includes("Review")
+    );
     expect(review).toBeTruthy();
     await reactAct(async () => {
       review.dispatchEvent(
-        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
       );
     });
     expect(delegated).toEqual([[ISSUE, "builtin:review"]]);
@@ -138,7 +160,9 @@ describe("IssuesModal delegation", () => {
     await openDelegateMenu();
     const items = menuItems();
     expect(items).toHaveLength(1);
-    expect(items[0].textContent).toMatch(/No scenes available|issueDeleg\.noScenes/);
+    expect(items[0].textContent).toMatch(
+      /No scenes available|issueDeleg\.noScenes/
+    );
     expect(items[0].getAttribute("data-disabled")).not.toBeNull();
   });
 });

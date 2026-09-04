@@ -1,4 +1,9 @@
-import type { ExecutionPolicy, PermissionMode, Sandbox, SessionInfo } from "../bridge";
+import type {
+  ExecutionPolicy,
+  PermissionMode,
+  Sandbox,
+  SessionInfo,
+} from "../bridge";
 
 /**
  * The session's permission posture, as one choice.
@@ -10,7 +15,9 @@ import type { ExecutionPolicy, PermissionMode, Sandbox, SessionInfo } from "../b
  */
 export type SessionMode = "read_only" | "ask" | "auto_edit" | "full_access";
 
-/** What each choice resolves to underneath. Ordered as the picker and the cycle shortcut present it: loosest last. */
+/**
+What each choice resolves to underneath. Ordered as the picker and the cycle shortcut present it: loosest last.
+*/
 export const SESSION_MODES: readonly {
   id: SessionMode;
   mode: PermissionMode;
@@ -28,50 +35,69 @@ export const SESSION_MODES: readonly {
  * Checked restrictive-ceiling-first, mirroring how the engine decides: Read-only rejects reported
  * mutation and unknown tool kinds whatever the approval mode says.
  */
-export function sessionMode(mode: PermissionMode, sandbox: Sandbox): SessionMode {
-  if (sandbox === "read_only") return "read_only";
-  if (sandbox === "danger_full_access" || mode === "yolo") return "full_access";
-  if (mode === "accept_edits") return "auto_edit";
+export function sessionMode(
+  mode: PermissionMode,
+  sandbox: Sandbox
+): SessionMode {
+  if (sandbox === "read_only") {
+    return "read_only";
+  }
+  if (sandbox === "danger_full_access" || mode === "yolo") {
+    return "full_access";
+  }
+  if (mode === "accept_edits") {
+    return "auto_edit";
+  }
   return "ask";
 }
 
-/** Restore both axes from the durable session projection when navigation changes sessions. */
+/**
+Restore both axes from the durable session projection when navigation changes sessions.
+*/
 export function sessionExecutionPolicy(
   session:
-    | Pick<SessionInfo, "permission_mode" | "sandbox_policy">
-    | null
-    | undefined,
+    Pick<SessionInfo, "permission_mode" | "sandbox_policy"> | null | undefined
 ): ExecutionPolicy | null {
-  if (!session) return null;
+  if (!session) {
+    return null;
+  }
   return { mode: session.permission_mode, sandbox: session.sandbox_policy };
 }
 
-/** Replace the durable policy projection for one session without disturbing the other rows. */
+/**
+Replace the durable policy projection for one session without disturbing the other rows.
+*/
 export function withSessionExecutionPolicy<
   T extends Pick<SessionInfo, "id" | "permission_mode" | "sandbox_policy">,
 >(sessions: readonly T[], sessionId: string, policy: ExecutionPolicy): T[] {
-  return sessions.map((session) =>
-    session.id === sessionId
+  return sessions.map((session) => session.id === sessionId
       ? {
           ...session,
           permission_mode: policy.mode,
           sandbox_policy: policy.sandbox,
         }
-      : session,
+      : session
   );
 }
 
-/** The picker cannot truthfully change while creation or a durable policy write is pending. */
+/**
+The picker cannot truthfully change while creation or a durable policy write is pending.
+*/
 export function executionPolicyChangeDisabled(
   pendingCreation: boolean,
   activeSession: string | null,
-  pendingSessions: { has(session: string): boolean },
+  pendingSessions: { has: (session: string) => boolean }
 ): boolean {
-  return pendingCreation || (activeSession !== null && pendingSessions.has(activeSession));
+  return (
+    pendingCreation ||
+    (activeSession !== null && pendingSessions.has(activeSession))
+  );
 }
 
-/** The next choice along, for the cycle-mode shortcut. Wraps. */
+/**
+The next choice along, for the cycle-mode shortcut. Wraps.
+*/
 export function nextSessionMode(current: SessionMode): SessionMode {
-  const i = SESSION_MODES.findIndex((m) => m.id === current);
-  return SESSION_MODES[(i + 1) % SESSION_MODES.length].id;
+  const index = SESSION_MODES.findIndex((m) => m.id === current);
+  return SESSION_MODES[(index + 1) % SESSION_MODES.length].id;
 }

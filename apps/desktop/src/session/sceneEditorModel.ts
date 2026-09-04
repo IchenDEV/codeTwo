@@ -5,7 +5,9 @@ import type {
   SceneInfo,
 } from "./scene";
 
-/** Frozen schema id shared by structured and raw-JSON editing. */
+/**
+Frozen schema id shared by structured and raw-JSON editing.
+*/
 export const SCENE_SCHEMA_ID =
   "https://agent-scenes.org/schemas/1.0.0/scene.schema.json";
 
@@ -33,24 +35,33 @@ export function slugSceneName(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9.-]+/g, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/\.{2,}/g, ".")
-    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
+    .replaceAll(/[^a-z0-9.-]+/g, "-")
+    .replaceAll(/-{2,}/g, "-")
+    .replaceAll(/\.{2,}/g, ".")
+    .replaceAll(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
     .slice(0, 64);
 }
 
-function nextAvailableName(base: string, existing: ReadonlySet<string>): string {
+function nextAvailableName(
+  base: string,
+  existing: ReadonlySet<string>
+): string {
   const seed = slugSceneName(base) || "custom-scene";
-  if (!existing.has(seed)) return seed;
+  if (!existing.has(seed)) {
+    return seed;
+  }
   for (let suffix = 2; suffix < 10_000; suffix += 1) {
     const candidate = `${seed}-${suffix}`.slice(0, 64).replace(/-$/, "");
-    if (!existing.has(candidate)) return candidate;
+    if (!existing.has(candidate)) {
+      return candidate;
+    }
   }
   return `custom-${Date.now()}`;
 }
 
-export function createSceneDocument(existingScenes: readonly SceneInfo[]): SceneDocument {
+export function createSceneDocument(
+  existingScenes: readonly SceneInfo[]
+): SceneDocument {
   const existing = new Set(existingScenes.map((scene) => scene.name));
   return {
     $schema: SCENE_SCHEMA_ID,
@@ -71,7 +82,7 @@ export function createSceneDocument(existingScenes: readonly SceneInfo[]): Scene
 
 export function duplicateSceneDocument(
   source: SceneDocument,
-  existingScenes: readonly SceneInfo[],
+  existingScenes: readonly SceneInfo[]
 ): SceneDocument {
   const copy = structuredClone(source);
   const existing = new Set(existingScenes.map((scene) => scene.name));
@@ -106,7 +117,10 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   const slotIds = new Set<string>();
   if (scene.brief) {
     if (!scene.brief.template.trim()) {
-      issues.push({ field: "brief.template", key: "sceneEditor.errorBriefTemplate" });
+      issues.push({
+        field: "brief.template",
+        key: "sceneEditor.errorBriefTemplate",
+      });
     }
     for (const [index, slot] of (scene.brief.slots ?? []).entries()) {
       if (!SLUG_PATTERN.test(slot.id) || slot.id.length > 64) {
@@ -181,28 +195,49 @@ export function validateSceneDocument(scene: SceneDocument): SceneDraftIssue[] {
   }
 
   for (const [index, hook] of (scene.hooks ?? []).entries()) {
-    if (hook.on === "schedule" && hook.schedule?.trim().split(/\s+/).length !== 5) {
-      issues.push({ field: `hooks.${index}.schedule`, key: "sceneEditor.errorSchedule" });
+    if (
+      hook.on === "schedule" &&
+      hook.schedule?.trim().split(/\s+/).length !== 5
+    ) {
+      issues.push({
+        field: `hooks.${index}.schedule`,
+        key: "sceneEditor.errorSchedule",
+      });
     }
     if (hook.action.kind === "suggest_scene" && !hook.action.scene?.trim()) {
-      issues.push({ field: `hooks.${index}.action.scene`, key: "sceneEditor.errorHookScene" });
+      issues.push({
+        field: `hooks.${index}.action.scene`,
+        key: "sceneEditor.errorHookScene",
+      });
     }
     if (hook.action.kind === "run_macro" && !hook.action.macro?.trim()) {
-      issues.push({ field: `hooks.${index}.action.macro`, key: "sceneEditor.errorHookMacro" });
+      issues.push({
+        field: `hooks.${index}.action.macro`,
+        key: "sceneEditor.errorHookMacro",
+      });
     }
     if (hook.action.kind === "notify" && !hook.action.message?.trim()) {
-      issues.push({ field: `hooks.${index}.action.message`, key: "sceneEditor.errorHookMessage" });
+      issues.push({
+        field: `hooks.${index}.action.message`,
+        key: "sceneEditor.errorHookMessage",
+      });
     }
   }
   return issues;
 }
 
-export function parseSceneJson(value: string): { scene: SceneDocument | null; error: string | null } {
+export function parseSceneJson(value: string): {
+  scene: SceneDocument | null;
+  error: string | null;
+} {
   try {
     const scene = JSON.parse(value) as SceneDocument;
     return { scene, error: null };
   } catch (error) {
-    return { scene: null, error: error instanceof Error ? error.message : String(error) };
+    return {
+      scene: null,
+      error: Error.isError(error) ? error.message : String(error),
+    };
   }
 }
 

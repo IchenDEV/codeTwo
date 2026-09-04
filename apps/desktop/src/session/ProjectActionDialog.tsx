@@ -41,19 +41,19 @@ const EMPTY_ACTION: ProjectActionDraft = {
   open_preview: false,
 };
 
-export function ProjectActionDialog({
+export const ProjectActionDialog = ({
   open,
   actions,
   bindings,
   onOpenChange,
   onSave,
 }: {
-  open: boolean;
-  actions: ProjectScript[];
-  bindings: KeymapEntry[];
-  onOpenChange: (open: boolean) => void;
-  onSave: (action: ProjectScript) => Promise<void>;
-}) {
+  readonly open: boolean;
+  readonly actions: ProjectScript[];
+  readonly bindings: KeymapEntry[];
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onSave: (action: ProjectScript) => Promise<void>;
+}) => {
   const t = useT();
   const [draft, setDraft] = useState<ProjectActionDraft>(EMPTY_ACTION);
   const [submitted, setSubmitted] = useState(false);
@@ -70,7 +70,7 @@ export function ProjectActionDialog({
 
   const validation = useMemo(
     () => projectActionIssue(draft, bindings, actions),
-    [actions, bindings, draft],
+    [actions, bindings, draft]
   );
   let validationMessage: string | null = null;
   switch (validation?.issue) {
@@ -125,7 +125,9 @@ export function ProjectActionDialog({
         <form className="flex min-h-0 flex-col gap-5" onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>{t("actionDialog.title")}</DialogTitle>
-            <DialogDescription>{t("actionDialog.description")}</DialogDescription>
+            <DialogDescription>
+              {t("actionDialog.description")}
+            </DialogDescription>
           </DialogHeader>
 
           <FieldGroup className="gap-4">
@@ -140,7 +142,8 @@ export function ProjectActionDialog({
                     run_on_worktree_create:
                       kind === "command" && current.run_on_worktree_create,
                     open_preview: kind === "command" && current.open_preview,
-                  }))}
+                  }))
+                }
               >
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="command">
@@ -157,15 +160,17 @@ export function ProjectActionDialog({
                 {t(
                   draft.kind === "prompt"
                     ? "actionDialog.kindPromptHint"
-                    : "actionDialog.kindCommandHint",
+                    : "actionDialog.kindCommandHint"
                 )}
               </FieldDescription>
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="action-name">{t("actionDialog.name")}</FieldLabel>
+              <FieldLabel htmlFor="action-name">
+                {t("actionDialog.name")}
+              </FieldLabel>
               <div className="flex gap-2">
-                <div className="grid size-9 shrink-0 place-items-center rounded-control bg-fill-quiet text-muted-foreground">
+                <div className="rounded-control bg-fill-quiet text-muted-foreground grid size-9 shrink-0 place-items-center">
                   {draft.kind === "prompt" ? (
                     <MessageSquareText className="size-4" aria-hidden />
                   ) : (
@@ -177,7 +182,9 @@ export function ProjectActionDialog({
                   autoFocus
                   value={draft.name}
                   placeholder={t("actionDialog.namePlaceholder")}
-                  aria-invalid={submitted && validation?.issue === "name_required"}
+                  aria-invalid={
+                    submitted ? validation?.issue === "name_required" : null
+                  }
                   onInput={(event) => {
                     const name = event.currentTarget.value;
                     setDraft((current) => ({ ...current, name }));
@@ -206,39 +213,55 @@ export function ProjectActionDialog({
                   setDraft((current) => ({ ...current, keybinding }));
                 }}
               >
-                {draft.keybinding
-                  ? formatCombo(draft.keybinding)
-                  : <span className="text-muted-foreground">{t("actionDialog.keybindingPlaceholder")}</span>}
+                {draft.keybinding ? (
+                  formatCombo(draft.keybinding)
+                ) : (
+                  <span className="text-muted-foreground">
+                    {t("actionDialog.keybindingPlaceholder")}
+                  </span>
+                )}
               </Button>
-              <FieldDescription>{t("actionDialog.keybindingHint")}</FieldDescription>
+              <FieldDescription>
+                {t("actionDialog.keybindingHint")}
+              </FieldDescription>
             </Field>
 
             {draft.kind === "prompt" ? (
               <Field>
-                <FieldLabel htmlFor="action-prompt">{t("actionDialog.prompt")}</FieldLabel>
+                <FieldLabel htmlFor="action-prompt">
+                  {t("actionDialog.prompt")}
+                </FieldLabel>
                 <Textarea
                   id="action-prompt"
                   className="min-h-32"
                   value={draft.prompt}
                   placeholder={t("actionDialog.promptPlaceholder")}
-                  aria-invalid={submitted && validation?.issue === "prompt_required"}
+                  aria-invalid={
+                    submitted ? validation?.issue === "prompt_required" : null
+                  }
                   onInput={(event) => {
                     const prompt = event.currentTarget.value;
                     setDraft((current) => ({ ...current, prompt }));
                   }}
                 />
-                <FieldDescription>{t("actionDialog.promptHint")}</FieldDescription>
+                <FieldDescription>
+                  {t("actionDialog.promptHint")}
+                </FieldDescription>
               </Field>
             ) : (
               <>
                 <Field>
-                  <FieldLabel htmlFor="action-command">{t("actionDialog.command")}</FieldLabel>
+                  <FieldLabel htmlFor="action-command">
+                    {t("actionDialog.command")}
+                  </FieldLabel>
                   <Textarea
                     id="action-command"
                     className="min-h-20 font-mono"
                     value={draft.command}
                     placeholder={t("actionDialog.commandPlaceholder")}
-                    aria-invalid={submitted && validation?.issue === "command_required"}
+                    aria-invalid={
+                      submitted ? validation?.issue === "command_required" : null
+                    }
                     onInput={(event) => {
                       const command = event.currentTarget.value;
                       setDraft((current) => ({ ...current, command }));
@@ -247,23 +270,31 @@ export function ProjectActionDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="action-preview-url">{t("actionDialog.previewUrl")}</FieldLabel>
+                  <FieldLabel htmlFor="action-preview-url">
+                    {t("actionDialog.previewUrl")}
+                  </FieldLabel>
                   <Input
                     id="action-preview-url"
                     type="url"
                     value={draft.preview_url}
                     placeholder={t("actionDialog.previewPlaceholder")}
-                    aria-invalid={submitted && validation?.issue === "preview_invalid"}
+                    aria-invalid={
+                      submitted ? validation?.issue === "preview_invalid" : null
+                    }
                     onInput={(event) => {
                       const preview_url = event.currentTarget.value;
                       setDraft((current) => ({
                         ...current,
                         preview_url,
-                        open_preview: preview_url ? current.open_preview : false,
+                        open_preview: preview_url
+                          ? current.open_preview
+                          : false,
                       }));
                     }}
                   />
-                  <FieldDescription>{t("actionDialog.previewHint")}</FieldDescription>
+                  <FieldDescription>
+                    {t("actionDialog.previewHint")}
+                  </FieldDescription>
                 </Field>
 
                 <div className="flex flex-col gap-2">
@@ -271,26 +302,33 @@ export function ProjectActionDialog({
                     label={t("actionDialog.runOnWorktree")}
                     checked={draft.run_on_worktree_create}
                     onCheckedChange={(run_on_worktree_create) =>
-                      setDraft((current) => ({ ...current, run_on_worktree_create }))}
+                      setDraft((current) => ({
+                        ...current,
+                        run_on_worktree_create,
+                      }))
+                    }
                   />
                   <SettingToggle
                     label={t("actionDialog.openPreview")}
                     checked={draft.open_preview}
                     disabled={!draft.preview_url.trim()}
                     onCheckedChange={(open_preview) =>
-                      setDraft((current) => ({ ...current, open_preview }))}
+                      setDraft((current) => ({ ...current, open_preview }))
+                    }
                   />
                 </div>
               </>
             )}
           </FieldGroup>
 
-          {(saveError || (submitted && validationMessage)) && (
-            <FieldError>{saveError ?? validationMessage}</FieldError>
-          )}
+          {(saveError || (submitted && validationMessage)) ? <FieldError>{saveError ?? validationMessage}</FieldError> : null}
 
-          <DialogFooter className="-mx-6 -mb-6 bg-fill-quiet px-6 py-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="bg-fill-quiet -mx-6 -mb-6 px-6 py-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               {t("actionDialog.cancel")}
             </Button>
             <Button type="submit" disabled={saving}>

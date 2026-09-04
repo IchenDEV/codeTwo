@@ -3,12 +3,12 @@ import { describe, expect, test } from "bun:test";
 import { activateDom, dom } from "./domTestHarness";
 
 activateDom();
-dom.window.HTMLCanvasElement.prototype.getContext = () => ({ filter: "" }) as never;
+dom.window.HTMLCanvasElement.prototype.getContext = () =>
+  ({ filter: "" }) as never;
 
 const { docToBlocks } = await import("../src/skillInline");
-const { issueContextBody, issueContextMarkdown, issueRefToDocBlock } = await import(
-  "../src/editor/issueBlock"
-);
+const { issueContextBody, issueContextMarkdown, issueRefToDocBlock } =
+  await import("../src/editor/issueBlock");
 
 const CONTEXT =
   "**github #42** — Fix login (open)\nhttps://github.com/o/r/issues/42\n\nSteps to reproduce…";
@@ -54,7 +54,11 @@ describe("docToBlocks issueRef", () => {
 
   test("flushes surrounding text into separate blocks, preserving order", () => {
     const blocks = docToBlocks(
-      editorWith(paragraph("Please handle this:"), issueRef(), paragraph("Thanks!")),
+      editorWith(
+        paragraph("Please handle this:"),
+        issueRef(),
+        paragraph("Thanks!")
+      )
     );
     expect(blocks.map((b) => b.type)).toEqual(["text", "issue", "text"]);
     expect(blocks[0].text).toBe("Please handle this:");
@@ -62,7 +66,9 @@ describe("docToBlocks issueRef", () => {
   });
 
   test("delegation provenance stays on the block, never in the prompt record", () => {
-    const blocks = docToBlocks(editorWith(issueRef({ delegatedScene: "Develop" })));
+    const blocks = docToBlocks(
+      editorWith(issueRef({ delegatedScene: "Develop" }))
+    );
     expect(blocks).toHaveLength(1);
     expect(blocks[0].type).toBe("issue");
     expect("delegatedScene" in blocks[0]).toBe(false);
@@ -72,7 +78,14 @@ describe("docToBlocks issueRef", () => {
   test("a header-only context (issue without body) serializes an empty body", () => {
     const headerOnly = "**github #7** — Bug (open)\nhttps://x/7";
     const blocks = docToBlocks(
-      editorWith(issueRef({ issueId: "7", title: "Bug", url: "https://x/7", context: headerOnly })),
+      editorWith(
+        issueRef({
+          issueId: "7",
+          title: "Bug",
+          url: "https://x/7",
+          context: headerOnly,
+        })
+      )
     );
     expect(blocks[0].body).toBe("");
   });
@@ -85,7 +98,9 @@ describe("docToBlocks issueRef", () => {
 describe("issue context helpers", () => {
   test("issueContextBody strips exactly the two-line header", () => {
     expect(issueContextBody(CONTEXT)).toBe("Steps to reproduce…");
-    expect(issueContextBody("**github #7** — Bug (open)\nhttps://x/7")).toBe("");
+    expect(issueContextBody("**github #7** — Bug (open)\nhttps://x/7")).toBe(
+      ""
+    );
   });
 
   test("issueContextMarkdown round-trips through issueRefToDocBlock", () => {

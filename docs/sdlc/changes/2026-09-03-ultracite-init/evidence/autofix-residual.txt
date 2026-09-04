@@ -1,0 +1,5 @@
+After bun run fix + second eslint --fix on src:
+ESLint src: ~8117 errors + 27 warnings (309 still fixable)
+Top residual: sort-keys, func-style, react-doctor/react-compiler-no-manual-memoization, prettier/prettier, unsafe-*
+Stylelint: ~53 (selector-class-pattern, custom-property-pattern, nesting, duplicates)
+Restored generated icon.json and src-tauri/gen/schemas/*

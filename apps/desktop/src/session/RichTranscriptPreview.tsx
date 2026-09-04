@@ -18,7 +18,8 @@ const previewTurn: Turn = {
   transcriptStartSeq: 1,
   accepted: true,
   streamBoundaryKnown: true,
-  prompt: "检查新的对话渲染：文本、工具调用、图表和交互式可视化应当在同一条流里按顺序出现。",
+  prompt:
+    "检查新的对话渲染：文本、工具调用、图表和交互式可视化应当在同一条流里按顺序出现。",
   text:
     `我先核对转录事件和渲染入口，确认现有流式边界。\n\n` +
     `入口已经确认，下面验证图表在真实内容宽度下的排版。\n\n${chart}\n\n` +
@@ -29,7 +30,9 @@ const previewTurn: Turn = {
   observedThoughtDeltas: 0,
   pendingTextDeltaSkips: 0,
   pendingThoughtDeltaSkips: 0,
-  thoughts: ["I should inspect the shared renderer before changing the presentation."],
+  thoughts: [
+    "I should inspect the shared renderer before changing the presentation.",
+  ],
   tools: [
     {
       id: "inspect-transcript",
@@ -101,16 +104,36 @@ const previewTurn: Turn = {
       text: "我先核对转录事件和渲染入口，确认现有流式边界。\n\n",
       createdAt: previewStartedAt + 1_000,
     },
-    { kind: "tool", toolId: "inspect-transcript", createdAt: previewStartedAt + 11_000 },
+    {
+      kind: "tool",
+      toolId: "inspect-transcript",
+      createdAt: previewStartedAt + 11_000,
+    },
     {
       kind: "text",
       text: `入口已经确认，下面验证图表在真实内容宽度下的排版。\n\n${chart}\n\n`,
       createdAt: previewStartedAt + 13_000,
     },
-    { kind: "tool", toolId: "renderer-tests", createdAt: previewStartedAt + 21_000 },
-    { kind: "tool", toolId: "agent-accessibility", createdAt: previewStartedAt + 22_000 },
-    { kind: "tool", toolId: "agent-layout", createdAt: previewStartedAt + 23_000 },
-    { kind: "tool", toolId: "agent-tests", createdAt: previewStartedAt + 24_000 },
+    {
+      kind: "tool",
+      toolId: "renderer-tests",
+      createdAt: previewStartedAt + 21_000,
+    },
+    {
+      kind: "tool",
+      toolId: "agent-accessibility",
+      createdAt: previewStartedAt + 22_000,
+    },
+    {
+      kind: "tool",
+      toolId: "agent-layout",
+      createdAt: previewStartedAt + 23_000,
+    },
+    {
+      kind: "tool",
+      toolId: "agent-tests",
+      createdAt: previewStartedAt + 24_000,
+    },
     {
       kind: "text",
       text:
@@ -129,18 +152,26 @@ const previewTurn: Turn = {
 };
 const previewTurns = [previewTurn] as const;
 
-export function RichTranscriptPreview() {
+export const RichTranscriptPreview = () => {
   const [trajectory, setTrajectory] = useState(false);
   return (
-    <div className="flex h-screen min-h-0 flex-col bg-background text-foreground">
-      <header className="flex shrink-0 items-center gap-2 bg-fill-quiet px-5 py-3">
+    <div className="bg-background text-foreground flex h-screen min-h-0 flex-col">
+      <header className="bg-fill-quiet flex shrink-0 items-center gap-2 px-5 py-3">
         <p className="text-body font-medium">Rich conversation</p>
-        <span className="ms-auto text-callout text-muted-foreground">Streaming</span>
+        <span className="text-callout text-muted-foreground ms-auto">
+          Streaming
+        </span>
         <EnvironmentPopover
           project="codeTwo"
           projectPath="/tmp/codeTwo"
           projects={[]}
-          git={{ is_repo: true, branch: "codex/tasks", ahead: 0, behind: 0, files: [] }}
+          git={{
+            is_repo: true,
+            branch: "codex/tasks",
+            ahead: 0,
+            behind: 0,
+            files: [],
+          }}
           diffStat={{ added: 42, deleted: 8 }}
           onRefresh={() => {}}
           onSelectProject={() => {}}
@@ -185,7 +216,7 @@ export function RichTranscriptPreview() {
         )}
       </main>
       <footer className="shrink-0 px-5 pb-4">
-        <div className="mx-auto max-w-3xl rounded-module border bg-card px-4 py-3 text-body text-muted-foreground shadow-(--ds-elevation-surface)">
+        <div className="rounded-module bg-card text-body text-muted-foreground mx-auto max-w-3xl border px-4 py-3 shadow-(--ds-elevation-surface)">
           Ask a follow-up…
         </div>
       </footer>

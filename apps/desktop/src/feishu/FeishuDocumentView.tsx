@@ -33,9 +33,11 @@ function componentLocale(locale: string): "en-US" | "zh-CN" | "ja-JP" {
 function isComponentMessage(value: unknown): value is ComponentMessage {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<ComponentMessage>;
-  return candidate.type === "codetwo-feishu-doc-component"
-    && typeof candidate.id === "string"
-    && ["ready", "auth-error", "error"].includes(candidate.state ?? "");
+  return (
+    candidate.type === "codetwo-feishu-doc-component" &&
+    typeof candidate.id === "string" &&
+    ["ready", "auth-error", "error"].includes(candidate.state ?? "")
+  );
 }
 
 function readableFailure(cause: unknown): string {
@@ -46,17 +48,17 @@ function readableFailure(cause: unknown): string {
     .trim();
 }
 
-export function FeishuDocumentView({
+export const FeishuDocumentView = ({
   callCommand,
   documentUrl,
   markdown,
   markdownLoading,
 }: {
-  callCommand: CollaborationConnectorCaller;
-  documentUrl: string;
-  markdown: string;
-  markdownLoading: boolean;
-}) {
+  readonly callCommand: CollaborationConnectorCaller;
+  readonly documentUrl: string;
+  readonly markdown: string;
+  readonly markdownLoading: boolean;
+}) => {
   const t = useT();
   const { locale } = useLanguage();
   const theme = useColorScheme();
@@ -106,7 +108,7 @@ export function FeishuDocumentView({
         setView(next);
         mountTimer = window.setTimeout(
           () => fail(t("feishu.documentComponentTimeout")),
-          MOUNT_TIMEOUT_MS,
+          MOUNT_TIMEOUT_MS
         );
       } catch (cause) {
         fail(readableFailure(cause));
@@ -114,7 +116,11 @@ export function FeishuDocumentView({
     };
 
     const onMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow || !isComponentMessage(event.data)) return;
+      if (
+        event.source !== iframeRef.current?.contentWindow ||
+        !isComponentMessage(event.data)
+      )
+        return;
       if (event.data.id !== activeId) return;
       if (event.data.state === "ready") {
         clearMountTimer();
@@ -141,27 +147,51 @@ export function FeishuDocumentView({
   if (phase === "failed") {
     return (
       <ScrollArea className="min-h-0 flex-1" data-feishu-document-fallback>
-        <article className="mx-auto w-full max-w-4xl px-page py-section">
-          <div className="mb-section flex items-start justify-between gap-section rounded-module bg-fill-quiet px-section py-module-inset text-ui">
+        <article className="px-page py-section mx-auto w-full max-w-4xl">
+          <div className="mb-section gap-section rounded-module bg-fill-quiet px-section py-module-inset text-ui flex items-start justify-between">
             <div className="min-w-0">
-              <p className="font-medium text-foreground">{t("feishu.documentComponentFallback")}</p>
-              {failure ? <p className="mt-inline break-words text-fine text-muted-foreground">{failure}</p> : null}
+              <p className="text-foreground font-medium">
+                {t("feishu.documentComponentFallback")}
+              </p>
+              {failure ? (
+                <p className="mt-inline text-fine text-muted-foreground break-words">
+                  {failure}
+                </p>
+              ) : null}
             </div>
-            <div className="flex shrink-0 gap-inline">
-              <Button size="compact" variant="secondary" onClick={() => setGeneration((current) => current + 1)}>
-                <RefreshCw />{t("feishu.retry")}
+            <div className="gap-inline flex shrink-0">
+              <Button
+                size="compact"
+                variant="secondary"
+                onClick={() => setGeneration((current) => current + 1)}
+              >
+                <RefreshCw />
+                {t("feishu.retry")}
               </Button>
-              <Button size="compact" variant="secondary" onClick={() => void openExternal(documentUrl)}>
-                <ExternalLink />{t("feishu.openInFeishu")}
+              <Button
+                size="compact"
+                variant="secondary"
+                onClick={() => void openExternal(documentUrl)}
+              >
+                <ExternalLink />
+                {t("feishu.openInFeishu")}
               </Button>
             </div>
           </div>
           {markdownLoading ? (
-            <div role="status" className="flex items-center justify-center gap-module-inset py-section text-ui text-muted-foreground">
-              <Spinner />{t("feishu.loadingDocument")}
+            <div
+              role="status"
+              className="gap-module-inset py-section text-ui text-muted-foreground flex items-center justify-center"
+            >
+              <Spinner />
+              {t("feishu.loadingDocument")}
             </div>
           ) : (
-            <div data-feishu-document dir="auto" className="feishu-document text-body text-foreground">
+            <div
+              data-feishu-document
+              dir="auto"
+              className="feishu-document text-body text-foreground"
+            >
               <MarkdownContent text={markdown || t("feishu.emptyDocument")} />
             </div>
           )}
@@ -171,22 +201,29 @@ export function FeishuDocumentView({
   }
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden bg-surface" data-feishu-document-component>
+    <div
+      className="bg-surface relative min-h-0 flex-1 overflow-hidden"
+      data-feishu-document-component
+    >
       {view ? (
         <iframe
           ref={iframeRef}
           key={view.id}
           src={view.url}
           title={t("feishu.documentComponentFrameTitle")}
-          className="h-full w-full border-0 bg-surface"
+          className="bg-surface h-full w-full border-0"
           sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
           allow="clipboard-read; clipboard-write; fullscreen"
           referrerPolicy="no-referrer"
         />
       ) : null}
       {phase === "loading" ? (
-        <div role="status" className="absolute inset-0 flex items-center justify-center gap-module-inset bg-surface text-ui text-muted-foreground">
-          <Spinner />{t("feishu.documentComponentLoading")}
+        <div
+          role="status"
+          className="gap-module-inset bg-surface text-ui text-muted-foreground absolute inset-0 flex items-center justify-center"
+        >
+          <Spinner />
+          {t("feishu.documentComponentLoading")}
         </div>
       ) : null}
     </div>

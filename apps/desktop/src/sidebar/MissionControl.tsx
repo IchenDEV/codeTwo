@@ -9,7 +9,11 @@ import {
 } from "../bridge";
 // Explicit extension: Bun's directory cache is case-insensitive, and `missionControl` without an
 // extension resolves against `MissionControl.tsx` (this file) when both live in one directory.
-import { missionRows, type MissionRow, type MissionState } from "./missionControl.ts";
+import {
+  missionRows,
+  type MissionRow,
+  type MissionState,
+} from "./missionControl.ts";
 import {
   describeContextWindow,
   type ContextWindowBySession,
@@ -49,17 +53,17 @@ function sceneLabel(reference: string): string {
 const diffStatCache = new Map<string, SessionDiffStat | null>();
 
 /** Spinner → `+a −d · n files` → em dash when the checkout is gone or not a repo. */
-export function DiffStatCell({
+export const DiffStatCell = ({
   session,
   fetchStat = sessionDiffStat,
 }: {
-  session: string;
+  readonly session: string;
   /** Injectable for tests; defaults to the bridge call. */
-  fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
-}) {
+  readonly fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
+}) => {
   const t = useT();
   const [stat, setStat] = useState<SessionDiffStat | null | undefined>(() =>
-    diffStatCache.has(session) ? diffStatCache.get(session) : undefined,
+    diffStatCache.has(session) ? diffStatCache.get(session) : undefined
   );
   useEffect(() => {
     if (diffStatCache.has(session)) {
@@ -77,14 +81,17 @@ export function DiffStatCell({
   }, [session, fetchStat]);
 
   if (stat === undefined) {
-    return <Spinner className="size-3 text-muted-foreground" />;
+    return <Spinner className="text-muted-foreground size-3" />;
   }
   if (stat === null) return <span className="text-muted-foreground">—</span>;
   return (
-    <span className="whitespace-nowrap text-callout tabular-nums">
+    <span className="text-callout whitespace-nowrap tabular-nums">
       <span className="text-success">+{stat.additions}</span>{" "}
       <span className="text-destructive">−{stat.deletions}</span>
-      <span className="text-muted-foreground"> · {t("mission.files", { n: stat.files })}</span>
+      <span className="text-muted-foreground">
+        {" "}
+        · {t("mission.files", { n: stat.files })}
+      </span>
     </span>
   );
 }
@@ -93,7 +100,7 @@ export function DiffStatCell({
  * R6 (docs/roadmap.md): the cross-session overview answering "what needs me" — every session's
  * state, scene, working-tree diff, and context occupancy, with one click into review.
  */
-export function MissionControlDialog({
+export const MissionControlDialog = ({
   sessions,
   runningSessions,
   contextWindows,
@@ -103,18 +110,23 @@ export function MissionControlDialog({
   onClose,
   fetchStat,
 }: {
-  sessions: SessionInfo[];
-  runningSessions: ReadonlySet<string>;
-  contextWindows: ContextWindowBySession;
-  sceneBySession: ReadonlyMap<string, string>;
-  onSelect: (id: string) => void;
-  onReview: (id: string) => void;
-  onClose: () => void;
+  readonly sessions: SessionInfo[];
+  readonly runningSessions: ReadonlySet<string>;
+  readonly contextWindows: ContextWindowBySession;
+  readonly sceneBySession: ReadonlyMap<string, string>;
+  readonly onSelect: (id: string) => void;
+  readonly onReview: (id: string) => void;
+  readonly onClose: () => void;
   /** Injectable for tests; defaults to the bridge call. */
-  fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
-}) {
+  readonly fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
+}) => {
   const t = useT();
-  const rows = missionRows(sessions, runningSessions, contextWindows, sceneBySession);
+  const rows = missionRows(
+    sessions,
+    runningSessions,
+    contextWindows,
+    sceneBySession
+  );
 
   const row = (r: MissionRow) => {
     const s = r.session;
@@ -127,7 +139,7 @@ export function MissionControlDialog({
           onSelect(s.id);
           onClose();
         }}
-        className="gap-3 rounded-control px-2 py-1.5 transition-colors hover:bg-accent/50 focus-within:bg-accent/50"
+        className="rounded-control hover:bg-accent/50 focus-within:bg-accent/50 gap-3 px-2 py-1.5 transition-colors"
         contentClassName="flex items-center gap-3"
         actions={
           <Button
@@ -151,24 +163,27 @@ export function MissionControlDialog({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="min-w-0 truncate text-body">{s.title}</span>
-            {r.scene && (
-              <Badge variant="outline" className="shrink-0 text-metadata text-muted-foreground">
+            <span className="text-body min-w-0 truncate">{s.title}</span>
+            {r.scene ? <Badge
+                variant="outline"
+                className="text-metadata text-muted-foreground shrink-0"
+              >
                 {sceneLabel(r.scene)}
-              </Badge>
-            )}
+              </Badge> : null}
           </div>
-          <div className="flex items-center gap-1 text-callout text-muted-foreground">
+          <div className="text-callout text-muted-foreground flex items-center gap-1">
             <ProviderIcon
               provider={providerLabel(s.provider)}
               className="size-3 shrink-0 opacity-70"
             />
-            <span className="min-w-0 truncate">{t(`mission.state.${r.state}` as "mission.state.idle")}</span>
+            <span className="min-w-0 truncate">
+              {t(`mission.state.${r.state}` as "mission.state.idle")}
+            </span>
           </div>
         </div>
         <DiffStatCell session={s.id} fetchStat={fetchStat} />
         <span
-          className="w-10 shrink-0 text-right text-callout tabular-nums text-muted-foreground"
+          className="text-callout text-muted-foreground w-10 shrink-0 text-right tabular-nums"
           title={context?.exact}
         >
           {r.contextPct === null ? "—" : `${Math.round(r.contextPct)}%`}
@@ -185,9 +200,13 @@ export function MissionControlDialog({
           <DialogDescription>{t("mission.hint")}</DialogDescription>
         </DialogHeader>
         {rows.length === 0 ? (
-          <p className="px-2 py-4 text-callout text-muted-foreground">{t("mission.empty")}</p>
+          <p className="text-callout text-muted-foreground px-2 py-4">
+            {t("mission.empty")}
+          </p>
         ) : (
-          <div className="max-h-96 space-y-px overflow-y-auto">{rows.map(row)}</div>
+          <div className="max-h-96 space-y-px overflow-y-auto">
+            {rows.map(row)}
+          </div>
         )}
       </DialogContent>
     </Dialog>

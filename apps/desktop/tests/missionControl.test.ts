@@ -11,13 +11,17 @@ let counter = 0;
 
 function session(
   id: string,
-  activityKind: "running" | "awaiting_input" | "failed" | "idle" | null = null,
+  activityKind: "running" | "awaiting_input" | "failed" | "idle" | null = null
 ): SessionInfo {
   const state =
     activityKind === "awaiting_input"
       ? { kind: "awaiting_input" as const, turn_id: "t1", pending: [] }
       : activityKind === "failed"
-        ? { kind: "failed" as const, reason: "provider_error" as const, message: "boom" }
+        ? {
+            kind: "failed" as const,
+            reason: "provider_error" as const,
+            message: "boom",
+          }
         : activityKind === "running"
           ? { kind: "running" as const, turn_id: "t1" }
           : { kind: "idle" as const };
@@ -46,7 +50,9 @@ const noScenes = new Map<string, string>();
 
 describe("missionState", () => {
   test("mirrors the rail: activity first, then the frontend running set", () => {
-    expect(missionState(session("a", "awaiting_input"), none)).toBe("awaiting_input");
+    expect(missionState(session("a", "awaiting_input"), none)).toBe(
+      "awaiting_input"
+    );
     expect(missionState(session("b", "failed"), none)).toBe("failed");
     expect(missionState(session("c", "running"), none)).toBe("running");
     expect(missionState(session("d", "idle"), none)).toBe("idle");
@@ -60,7 +66,9 @@ describe("missionState", () => {
   });
 
   test("awaiting input and failed win over the running set", () => {
-    expect(missionState(session("a", "awaiting_input"), new Set(["a"]))).toBe("awaiting_input");
+    expect(missionState(session("a", "awaiting_input"), new Set(["a"]))).toBe(
+      "awaiting_input"
+    );
     expect(missionState(session("b", "failed"), new Set(["b"]))).toBe("failed");
   });
 });
@@ -68,10 +76,15 @@ describe("missionState", () => {
 describe("missionRows", () => {
   test("needsMe is exactly awaiting input or failed", () => {
     const rows = missionRows(
-      [session("run", "running"), session("ask", "awaiting_input"), session("bad", "failed"), session("idle", "idle")],
+      [
+        session("run", "running"),
+        session("ask", "awaiting_input"),
+        session("bad", "failed"),
+        session("idle", "idle"),
+      ],
       none,
       {},
-      noScenes,
+      noScenes
     );
     const byId = Object.fromEntries(rows.map((r) => [r.session.id, r]));
     expect(byId.ask.needsMe).toBe(true);
@@ -92,7 +105,7 @@ describe("missionRows", () => {
       ],
       none,
       {},
-      noScenes,
+      noScenes
     );
     expect(rows.map((r) => r.session.id)).toEqual([
       "ask1",
@@ -109,7 +122,7 @@ describe("missionRows", () => {
       [session("a", "idle"), session("b", "idle")],
       none,
       { a: { usedTokens: 50_000, contextWindow: 200_000 }, b: null },
-      new Map([["a", "builtin:develop"]]),
+      new Map([["a", "builtin:develop"]])
     );
     expect(rows[0].scene).toBe("builtin:develop");
     expect(rows[0].contextPct).toBe(25);
@@ -127,7 +140,7 @@ describe("needsMeCount", () => {
         session("c", "failed"),
         session("d", "idle"),
         session("e", null),
-      ]),
+      ])
     ).toBe(2);
     expect(needsMeCount([])).toBe(0);
   });

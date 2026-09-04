@@ -19,7 +19,9 @@ describe("project worktree defaults", () => {
   });
 
   test("project preference wins while automatic mode preserves the previous baseline kind", () => {
-    expect(nextSessionWorktreeBaseline(null, "origin_default")).toBe("origin_default");
+    expect(nextSessionWorktreeBaseline(null, "origin_default")).toBe(
+      "origin_default"
+    );
     expect(nextSessionWorktreeBaseline("local", "origin_default")).toBeNull();
     expect(nextSessionWorktreeBaseline("current", null)).toBe("current");
   });

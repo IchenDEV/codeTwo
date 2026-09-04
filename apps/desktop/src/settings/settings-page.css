@@ -7,9 +7,9 @@
 }
 
 .settings-page {
-  container: settings-page / inline-size;
   max-width: 48rem;
   padding: 2rem 2rem var(--ds-space-page-end);
+  container: settings-page / inline-size;
 }
 
 .session-import-result {
@@ -17,12 +17,12 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ds-space-page-section);
-  margin-top: var(--ds-space-module-inset);
   padding: var(--ds-space-surface-inset);
   border-radius: var(--ds-radius-module);
+  margin-top: var(--ds-space-module-inset);
   background: var(--ds-color-fill-quiet);
   box-shadow: var(--ds-elevation-surface);
+  gap: var(--ds-space-page-section);
 }
 
 .project-settings-row {
@@ -35,8 +35,8 @@
 }
 
 .project-settings-control {
-  gap: var(--ds-space-module-inset);
   justify-content: flex-end;
+  gap: var(--ds-space-module-inset);
 }
 
 .project-settings-error {
@@ -54,8 +54,8 @@
 
 .worktree-policy-card {
   overflow: hidden;
-  margin-top: var(--ds-space-module-inset);
   border-radius: var(--ds-radius-module);
+  margin-top: var(--ds-space-module-inset);
   background: var(--ds-color-fill-quiet);
   box-shadow: var(--ds-elevation-surface);
 }
@@ -66,7 +66,8 @@
 }
 
 .worktree-policy-row:not(:last-child) {
-  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0
+    var(--ds-color-fill-rest);
 }
 
 .worktree-root-input {
@@ -85,8 +86,8 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--ds-space-module-inset);
   padding: 0 var(--ds-space-surface-inset) var(--ds-space-module-inset);
+  gap: var(--ds-space-module-inset);
 }
 
 .worktree-project-card {
@@ -97,9 +98,9 @@
 }
 
 .worktree-settings-row {
-  gap: var(--ds-space-section);
   padding-right: var(--ds-space-surface-inset);
   padding-left: var(--ds-space-surface-inset);
+  gap: var(--ds-space-section);
   transition: background-color var(--ds-motion-feedback) ease;
 }
 
@@ -122,8 +123,8 @@
   min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--ds-space-section);
   padding: 1.5rem 0 0.5rem;
+  gap: var(--ds-space-section);
 }
 
 .profile-identity {
@@ -146,18 +147,18 @@
 
 .profile-avatar {
   display: flex;
+  overflow: hidden;
   width: 5rem;
   height: 5rem;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   border-radius: 50%;
   background: var(--ds-color-fill-hover);
+  box-shadow: var(--ds-elevation-surface);
   color: var(--ds-color-text);
   font-size: 1.25rem;
   font-weight: 600;
-  box-shadow: var(--ds-elevation-surface);
 }
 
 .profile-avatar img {
@@ -169,8 +170,8 @@
 .profile-actions {
   display: flex;
   flex: 0 0 auto;
-  align-items: flex-end;
   flex-direction: column;
+  align-items: flex-end;
   gap: var(--ds-space-module-inset);
 }
 
@@ -194,9 +195,9 @@
 .profile-editor {
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-page-section);
   padding: var(--ds-space-page-section);
   box-shadow: var(--ds-elevation-surface);
+  gap: var(--ds-space-page-section);
 }
 
 .profile-activity-surface {
@@ -209,18 +210,18 @@
 
 .profile-stat-grid {
   display: grid;
-  grid-template-columns: minmax(9rem, 1.4fr) repeat(4, minmax(0, 1fr));
   padding: var(--ds-space-page-section);
+  grid-template-columns: minmax(9rem, 1.4fr) repeat(4, minmax(0, 1fr));
 }
 
 .profile-stat {
   display: flex;
-  align-items: center;
-  flex-direction: column;
-  gap: 0.25rem;
-  justify-content: center;
   min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 0.5rem var(--ds-space-module-inset);
+  gap: 0.25rem;
   text-align: center;
 }
 
@@ -248,8 +249,8 @@
 .profile-activity-body {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 2.2fr) minmax(14rem, 1fr);
   box-shadow: inset 0 var(--hairline-width) 0 var(--ds-color-fill-rest);
+  grid-template-columns: minmax(0, 2.2fr) minmax(14rem, 1fr);
 }
 
 .profile-activity-chart,
@@ -267,38 +268,38 @@
 .profile-activity-grid {
   display: grid;
   margin-top: var(--ds-space-module-inset);
+  gap: 0.25rem;
   grid-auto-columns: 1rem;
   grid-auto-flow: column;
   grid-template-rows: repeat(7, minmax(0, 1fr));
-  gap: 0.25rem;
 }
 
 .profile-activity-cell {
-  aspect-ratio: 1;
   min-width: 0;
   border-radius: var(--ds-radius-micro);
+  aspect-ratio: 1;
 }
 
 .profile-empty-state {
   display: flex;
   min-height: 11rem;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex-direction: column;
   gap: var(--ds-space-module-inset);
 }
 
-@media (max-width: 44rem) {
+@media (width <= 44rem) {
   .settings-sidebar {
     width: 4rem;
   }
 
   [data-settings-back] {
     justify-content: center;
-    margin-right: 0.75rem;
-    margin-left: 0.75rem;
     padding-right: 0;
     padding-left: 0;
+    margin-right: 0.75rem;
+    margin-left: 0.75rem;
   }
 
   .settings-sidebar nav {
@@ -323,8 +324,8 @@
   }
 
   .project-settings-row {
-    align-items: stretch;
     flex-direction: column;
+    align-items: stretch;
     gap: var(--ds-space-module-inset);
   }
 
@@ -346,8 +347,8 @@
   }
 
   .session-import-result {
-    align-items: stretch;
     flex-direction: column;
+    align-items: stretch;
   }
 
   .settings-worktrees-page {
@@ -355,14 +356,14 @@
   }
 
   .worktree-settings-row {
-    align-items: stretch;
     flex-direction: column;
+    align-items: stretch;
     gap: var(--ds-space-module-inset);
   }
 
   .worktree-policy-row {
-    align-items: stretch;
     flex-direction: column;
+    align-items: stretch;
     gap: var(--ds-space-module-inset);
   }
 
@@ -385,8 +386,8 @@
    leave a narrow detail pane even while the window itself remains above the compact breakpoint. */
 @container settings-page (max-width: 40rem) {
   .profile-header {
-    align-items: stretch;
     flex-direction: column;
+    align-items: stretch;
     padding-right: 0;
     padding-left: 0;
   }
@@ -438,8 +439,8 @@
 
 @container settings-page (max-width: 36rem) {
   .settings-row:not([data-compact]) {
-    align-items: stretch;
     flex-direction: column;
+    align-items: stretch;
     gap: var(--ds-space-module-inset);
   }
 

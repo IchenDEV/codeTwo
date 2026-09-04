@@ -3,17 +3,27 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { act as reactAct } from "react";
 
-import { activateDom, button, click, dom, flush, mount, waitFor } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const { I18nProvider } = await import("../src/i18n");
 const { PullRequestsPage } = await import("../src/github/PullRequestsPage");
-const { associateTaskPullRequest, createBoardTask } = await import("../src/taskboard/taskBoard");
-const { githubPullRequestReference } = await import("../src/github/pullRequests");
+const { associateTaskPullRequest, createBoardTask } =
+  await import("../src/taskboard/taskBoard");
+const { githubPullRequestReference } =
+  await import("../src/github/pullRequests");
 const layoutSpec = JSON.parse(
-  readFileSync(new URL("../layout-spec.json", import.meta.url), "utf8"),
+  readFileSync(new URL("../layout-spec.json", import.meta.url), "utf8")
 );
 
 const mounted = [];
@@ -28,7 +38,8 @@ function disableCanvasDrawing() {
 }
 
 afterEach(async () => {
-  for (const view of mounted.splice(0)) await reactAct(async () => view.unmount());
+  for (const view of mounted.splice(0))
+    await reactAct(async () => view.unmount());
   await flush();
   restoreCanvasContext?.();
   restoreCanvasContext = null;
@@ -65,8 +76,22 @@ const detail = {
   mergeable: "MERGEABLE",
   reviewDecision: "",
   reviewers: [],
-  checks: [{ name: "test", status: "COMPLETED", conclusion: "SUCCESS", detailsUrl: null }],
-  files: [{ path: "src/github.ts", additions: 120, deletions: 8, changeType: "MODIFIED" }],
+  checks: [
+    {
+      name: "test",
+      status: "COMPLETED",
+      conclusion: "SUCCESS",
+      detailsUrl: null,
+    },
+  ],
+  files: [
+    {
+      path: "src/github.ts",
+      additions: 120,
+      deletions: 8,
+      changeType: "MODIFIED",
+    },
+  ],
 };
 
 const reviewingSummary = {
@@ -96,18 +121,28 @@ describe("PullRequestsPage", () => {
         <PullRequestsPage
           loadPullRequests={async () => [summary]}
           loadPullRequest={async () => detail}
-          onChat={(value) => { chatted = value; }}
+          onChat={(value) => {
+            chatted = value;
+          }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     mounted.push(view);
 
-    const listHeader = view.container.querySelector("[data-pull-requests-list-header]");
-    const listControls = view.container.querySelector("[data-pull-requests-list-controls]");
+    const listHeader = view.container.querySelector(
+      "[data-pull-requests-list-header]"
+    );
+    const listControls = view.container.querySelector(
+      "[data-pull-requests-list-controls]"
+    );
     const views = view.container.querySelector("[data-pull-requests-views]");
     const search = view.container.querySelector("[data-pull-requests-search]");
-    expect(view.container.querySelector(".pull-requests-list-pane h1")?.textContent).toBe("Pull requests");
-    expect(view.container.querySelector(".pull-requests-list-pane h1")?.className).toContain("text-dialog");
+    expect(
+      view.container.querySelector(".pull-requests-list-pane h1")?.textContent
+    ).toBe("Pull requests");
+    expect(
+      view.container.querySelector(".pull-requests-list-pane h1")?.className
+    ).toContain("text-dialog");
     expect(layoutSpec.content.workbench).toMatchObject({
       listContentLine: 32,
       listControlsOuterInset: 16,
@@ -124,7 +159,9 @@ describe("PullRequestsPage", () => {
       expect(dom.document.body.textContent).toContain("feature/github-panel");
     });
     expect(dom.document.body.textContent).toContain("1 checks passed");
-    expect(dom.document.body.textContent).toContain("Added real pull request data");
+    expect(dom.document.body.textContent).toContain(
+      "Added real pull request data"
+    );
 
     click(button(dom.document.body, "Code"));
     await flush();
@@ -146,30 +183,48 @@ describe("PullRequestsPage", () => {
           loadPullRequest={async () => detail}
           onChat={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     mounted.push(view);
 
-    await waitFor(() => expect(dom.document.body.textContent).toContain("Build the GitHub panel"));
+    await waitFor(() =>
+      expect(dom.document.body.textContent).toContain("Build the GitHub panel")
+    );
 
     const page = view.container.querySelector(".pull-requests-page");
-    const listHeader = view.container.querySelector("[data-pull-requests-list-header]");
-    const detailHeader = view.container.querySelector("[data-pull-request-detail-header]");
+    const listHeader = view.container.querySelector(
+      "[data-pull-requests-list-header]"
+    );
+    const detailHeader = view.container.querySelector(
+      "[data-pull-request-detail-header]"
+    );
     expect(page?.getAttribute("data-compact-detail")).toBe("false");
     expect(listHeader?.className).toContain("window-controls-safe-main");
     expect(listHeader?.querySelector("[role='tablist']")).toBeNull();
-    expect(view.container.querySelector("[data-pull-requests-list-controls] [role='tablist']"))
-      .not.toBeNull();
-    expect(detailHeader?.className).toContain("window-controls-safe-compact-main");
-    expect(view.container.querySelector("[data-pull-request-detail-leading-action] button")?.getAttribute("aria-label")).toBe("Expand the sidebar");
+    expect(
+      view.container.querySelector(
+        "[data-pull-requests-list-controls] [role='tablist']"
+      )
+    ).not.toBeNull();
+    expect(detailHeader?.className).toContain(
+      "window-controls-safe-compact-main"
+    );
+    expect(
+      view.container
+        .querySelector("[data-pull-request-detail-leading-action] button")
+        ?.getAttribute("aria-label")
+    ).toBe("Expand the sidebar");
 
-    const row = [...view.container.querySelectorAll("button")]
-      .find((candidate) => candidate.textContent?.includes("Build the GitHub panel"));
+    const row = [...view.container.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent?.includes("Build the GitHub panel")
+    );
     expect(row).not.toBeUndefined();
     await reactAct(async () => click(row));
     expect(page?.getAttribute("data-compact-detail")).toBe("true");
 
-    await reactAct(async () => click(button(view.container, "Back to pull requests")));
+    await reactAct(async () =>
+      click(button(view.container, "Back to pull requests"))
+    );
     expect(page?.getAttribute("data-compact-detail")).toBe("false");
   });
 
@@ -181,19 +236,27 @@ describe("PullRequestsPage", () => {
       <I18nProvider>
         <PullRequestsPage
           loadPullRequests={async () => [summary, reviewingSummary]}
-          loadPullRequest={async (item) => item.id === reviewingSummary.id ? reviewingDetail : detail}
+          loadPullRequest={async (item) =>
+            item.id === reviewingSummary.id ? reviewingDetail : detail
+          }
           onChat={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     mounted.push(view);
 
-    await waitFor(() => expect(dom.document.body.textContent).toContain("feature/github-panel"));
+    await waitFor(() =>
+      expect(dom.document.body.textContent).toContain("feature/github-panel")
+    );
     click(button(dom.document.body, "Reviewing"));
 
     await waitFor(() => {
-      expect(dom.document.body.textContent).toContain("Review the GitHub panel");
-      expect(dom.document.body.textContent).toContain("Uses the filtered selection");
+      expect(dom.document.body.textContent).toContain(
+        "Review the GitHub panel"
+      );
+      expect(dom.document.body.textContent).toContain(
+        "Uses the filtered selection"
+      );
     });
   });
 
@@ -203,7 +266,7 @@ describe("PullRequestsPage", () => {
     dom.window.localStorage.setItem("codetwo.language", "en");
     const activeTask = createBoardTask(
       { title: "Ship the GitHub panel" },
-      { id: "task-active", now: 1 },
+      { id: "task-active", now: 1 }
     );
     let command = null;
     const view = mount(
@@ -214,13 +277,17 @@ describe("PullRequestsPage", () => {
           onChat={() => {}}
           tasks={[activeTask]}
           activeTaskId={activeTask.id}
-          onLinkTask={(value, target) => { command = { value, target }; }}
+          onLinkTask={(value, target) => {
+            command = { value, target };
+          }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     mounted.push(view);
 
-    await waitFor(() => expect(dom.document.body.textContent).toContain("feature/github-panel"));
+    await waitFor(() =>
+      expect(dom.document.body.textContent).toContain("feature/github-panel")
+    );
     click(button(dom.document.body, "Link to task"));
     expect(command).toEqual({
       value: detail,
@@ -234,13 +301,13 @@ describe("PullRequestsPage", () => {
     dom.window.localStorage.setItem("codetwo.language", "en");
     const task = createBoardTask(
       { title: "Ship the GitHub panel" },
-      { id: "task-linked", now: 1 },
+      { id: "task-linked", now: 1 }
     );
     const linked = associateTaskPullRequest(
       [task],
       task.id,
       githubPullRequestReference(detail),
-      2,
+      2
     )[0];
     let opened = null;
     let unlinked = null;
@@ -251,14 +318,20 @@ describe("PullRequestsPage", () => {
           loadPullRequest={async () => detail}
           onChat={() => {}}
           tasks={[linked]}
-          onOpenTask={(id) => { opened = id; }}
-          onUnlinkTask={(value, link) => { unlinked = { value, link }; }}
+          onOpenTask={(id) => {
+            opened = id;
+          }}
+          onUnlinkTask={(value, link) => {
+            unlinked = { value, link };
+          }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     mounted.push(view);
 
-    await waitFor(() => expect(dom.document.body.textContent).toContain("feature/github-panel"));
+    await waitFor(() =>
+      expect(dom.document.body.textContent).toContain("feature/github-panel")
+    );
     click(button(dom.document.body, "Open task"));
     expect(opened).toBe("task-linked");
     click(button(dom.document.body, "Unlink task"));

@@ -6,7 +6,8 @@ import react from "ultracite/eslint/react";
 
 const sourceFiles = ["src/**/*.{js,jsx,ts,tsx}"];
 const inlineRadiusRestriction = {
-  message: "Express border radius through a semantic class or CSS rule, not inline style.",
+  message:
+    "Express border radius through a semantic class or CSS rule, not inline style.",
   selector: "Property[key.name='borderRadius']",
 };
 const rawTextareaRestriction = {
@@ -14,7 +15,8 @@ const rawTextareaRestriction = {
   selector: "JSXOpeningElement[name.name='textarea']",
 };
 const rawButtonRestriction = {
-  message: "Use the shared Button or TooltipButton component instead of a raw button.",
+  message:
+    "Use the shared Button or TooltipButton component instead of a raw button.",
   selector: "JSXOpeningElement[name.name='button']",
 };
 
@@ -36,7 +38,13 @@ export default [
     },
   },
   {
-    ignores: ["artifacts/**", "build/**", "dist/**", "node_modules/**", "src-host/**"],
+    ignores: [
+      "artifacts/**",
+      "build/**",
+      "dist/**",
+      "node_modules/**",
+      "src-host/**",
+    ],
   },
   {
     files: sourceFiles,
@@ -50,7 +58,8 @@ export default [
           entryPoint: "src/styles.css",
           restrict: [
             {
-              message: "Use a semantic radius class such as rounded-control or rounded-module.",
+              message:
+                "Use a semantic radius class such as rounded-control or rounded-module.",
               pattern:
                 "^rounded(?:-(?:[trblse]{1,2}-)?(?:sm|md|lg|xl|2xl|3xl)|-(?:[trblse]{1,2}-)?(?:\\[.+\\]|\\(.+\\)))?$",
             },
@@ -74,7 +83,11 @@ export default [
   {
     files: ["src/**/*.test.{ts,tsx}"],
     rules: {
-      "no-restricted-syntax": ["error", rawTextareaRestriction, inlineRadiusRestriction],
+      "no-restricted-syntax": [
+        "error",
+        rawTextareaRestriction,
+        inlineRadiusRestriction,
+      ],
     },
   },
 ];

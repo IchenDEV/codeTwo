@@ -36,7 +36,12 @@ import {
   parseCanvasHistoryPrompt,
   type CanvasHistoryMarker,
 } from "./promptPreview";
-import { isRunning, type PromptImage, type ToolEntry, type Turn } from "./turns";
+import {
+  isRunning,
+  type PromptImage,
+  type ToolEntry,
+  type Turn,
+} from "./turns";
 import {
   canvasGetSnapshot,
   getArtifact,
@@ -50,7 +55,11 @@ import {
 import { StatusBadge } from "@/components/business/status-badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,7 +75,8 @@ import { MarkdownContent, type BuiltinLinkActions } from "./MarkdownContent";
 const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
 const SEARCH_TOOL_PATTERN = /\b(?:search|searched|find|found|grep|rg)\b/i;
 const READ_TOOL_PATTERN = /\b(?:read|reading|open|view|inspect)\b/i;
-const COMMAND_TOOL_PATTERN = /\b(?:command|exec|execute|run|shell|terminal|test)\b/i;
+const COMMAND_TOOL_PATTERN =
+  /\b(?:command|exec|execute|run|shell|terminal|test)\b/i;
 
 function duration(t: Turn): string | null {
   if (!t.endedAt) return null;
@@ -76,15 +86,15 @@ function duration(t: Turn): string | null {
 
 type CopyTarget = "prompt" | "response";
 
-function TurnActionButton({
+const TurnActionButton = ({
   label,
   onClick,
   children,
 }: {
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly children: React.ReactNode;
+}) => {
   return (
     <TooltipButton
       label={label}
@@ -122,7 +132,10 @@ function prettySize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function promptTextWithoutImageMarkers(prompt: string, images: readonly PromptImage[]): string {
+function promptTextWithoutImageMarkers(
+  prompt: string,
+  images: readonly PromptImage[]
+): string {
   let visible = prompt;
   const markers = new Set<string>();
   for (const image of images) {
@@ -133,8 +146,10 @@ function promptTextWithoutImageMarkers(prompt: string, images: readonly PromptIm
   return visible.replace(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
 }
 
-function PromptImageThumbnail({ image }: { image: PromptImage }) {
-  const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof getPromptImage>> | null>(null);
+const PromptImageThumbnail = ({ image }: { readonly image: PromptImage }) => {
+  const [loaded, setLoaded] = useState<Awaited<
+    ReturnType<typeof getPromptImage>
+  > | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (image.previewDataUrl) return;
@@ -159,7 +174,7 @@ function PromptImageThumbnail({ image }: { image: PromptImage }) {
   return (
     <figure
       data-prompt-image={image.id}
-      className="flex min-h-24 min-w-0 max-w-80 items-center justify-center overflow-hidden rounded-module bg-background/25 ring-[0.5px] ring-foreground/10"
+      className="rounded-module bg-background/25 ring-foreground/10 flex min-h-24 max-w-80 min-w-0 items-center justify-center overflow-hidden ring-[0.5px]"
     >
       {src && !failed ? (
         <img
@@ -175,13 +190,17 @@ function PromptImageThumbnail({ image }: { image: PromptImage }) {
         <div
           role="img"
           aria-label={`${name} unavailable`}
-          className="flex min-w-0 items-center gap-2 px-3 py-8 text-callout text-muted-foreground"
+          className="text-callout text-muted-foreground flex min-w-0 items-center gap-2 px-3 py-8"
         >
           <CircleAlert className="size-4 shrink-0" aria-hidden />
           <span className="truncate">{name}</span>
         </div>
       ) : (
-        <div role="status" aria-label={`Loading ${name}`} className="px-3 py-8 text-muted-foreground">
+        <div
+          role="status"
+          aria-label={`Loading ${name}`}
+          className="text-muted-foreground px-3 py-8"
+        >
           <Spinner />
         </div>
       )}
@@ -189,7 +208,9 @@ function PromptImageThumbnail({ image }: { image: PromptImage }) {
   );
 }
 
-export function safeResourceLink(uri: string): { uri: string; host: string } | null {
+export function safeResourceLink(
+  uri: string
+): { uri: string; host: string } | null {
   try {
     const parsed = new URL(uri);
     if (
@@ -205,7 +226,7 @@ export function safeResourceLink(uri: string): { uri: string; host: string } | n
   }
 }
 
-function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
+const ArtifactImage = ({ artifact }: { readonly artifact: ArtifactRef }) => {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -216,7 +237,9 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
       .then((bytes) => {
         if (!alive) return;
         objectUrl = URL.createObjectURL(
-          new Blob([bytes.slice().buffer as ArrayBuffer], { type: artifact.mime_type }),
+          new Blob([bytes.slice().buffer as ArrayBuffer], {
+            type: artifact.mime_type,
+          })
         );
         setUrl(objectUrl);
       })
@@ -228,7 +251,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   }, [artifact.id, artifact.mime_type]);
 
   return (
-    <figure className="min-w-0 overflow-hidden rounded-module border bg-fill-quiet">
+    <figure className="rounded-module bg-fill-quiet min-w-0 overflow-hidden border">
       <div className="image-checker flex min-h-32 items-center justify-center">
         {url ? (
           <img
@@ -238,14 +261,23 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
             onError={() => setError(true)}
           />
         ) : (
-          <span className={cn("px-4 py-10 text-callout text-muted-foreground", error && "text-destructive")}>
+          <span
+            className={cn(
+              "text-callout text-muted-foreground px-4 py-10",
+              error && "text-destructive"
+            )}
+          >
             {error ? "Image unavailable" : "Loading image…"}
           </span>
         )}
       </div>
-      <figcaption className="flex flex-wrap items-center gap-2 bg-background/60 px-2.5 py-2 text-callout text-muted-foreground">
-        <span className="min-w-0 flex-1 truncate text-foreground">{artifact.display_name}</span>
-        <span>{artifact.width} × {artifact.height}</span>
+      <figcaption className="bg-background/60 text-callout text-muted-foreground flex flex-wrap items-center gap-2 px-2.5 py-2">
+        <span className="text-foreground min-w-0 flex-1 truncate">
+          {artifact.display_name}
+        </span>
+        <span>
+          {artifact.width} × {artifact.height}
+        </span>
         <span>{prettySize(artifact.bytes)}</span>
         <TooltipButton
           type="button"
@@ -255,7 +287,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
           onClick={() => {
             setActionError(null);
             void saveArtifactAs(artifact.id, artifact.display_name).catch(() =>
-              setActionError("Could not save image"),
+              setActionError("Could not save image")
             );
           }}
         >
@@ -268,30 +300,39 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
           label="Reveal in file manager"
           onClick={() => {
             setActionError(null);
-            void revealArtifact(artifact.id).catch(() => setActionError("Could not reveal image"));
+            void revealArtifact(artifact.id).catch(() =>
+              setActionError("Could not reveal image")
+            );
           }}
         >
           <FolderOpen className="size-3.5" />
         </TooltipButton>
-        {actionError && <span className="basis-full text-destructive">{actionError}</span>}
+        {actionError ? <span className="text-destructive basis-full">{actionError}</span> : null}
       </figcaption>
     </figure>
   );
 }
 
-function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: boolean }) {
+const ToolCallBlock = ({
+  tool,
+  compact = false,
+}: {
+  readonly tool: ToolEntry;
+  readonly compact?: boolean;
+}) => {
   const textOutputs = (tool.outputs ?? []).flatMap((output) =>
-    output.type === "text" ? [output.text] : [],
+    output.type === "text" ? [output.text] : []
   );
   const images = (tool.outputs ?? []).flatMap((output) =>
-    output.type === "image" ? [output.artifact] : [],
+    output.type === "image" ? [output.artifact] : []
   );
   const resourceLinks = (tool.outputs ?? []).flatMap((output) => {
     if (output.type !== "resource_link") return [];
     const safe = safeResourceLink(output.uri);
     return safe ? [{ ...output, ...safe }] : [];
   });
-  const hasOutput = textOutputs.length + images.length + resourceLinks.length > 0;
+  const hasOutput =
+    textOutputs.length + images.length + resourceLinks.length > 0;
   const [open, setOpen] = useState(false);
   const ToolIcon = toolIcon(tool);
   const header = (
@@ -300,18 +341,23 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
       <span
         className={cn(
           "min-w-0 flex-1 truncate",
-          compact ? "text-muted-foreground" : "font-medium text-foreground",
+          compact ? "text-muted-foreground" : "text-foreground font-medium"
         )}
         title={tool.title}
       >
         {tool.title}
       </span>
       {!compact && tool.kind ? (
-        <span className="shrink-0 font-mono text-metadata text-muted-foreground">{tool.kind}</span>
+        <span className="text-metadata text-muted-foreground shrink-0 font-mono">
+          {tool.kind}
+        </span>
       ) : null}
       {!compact || tool.status !== "completed" ? (
-        <span className="flex shrink-0 items-center gap-1.5 text-callout">
-          <span className={cn("size-1.5 rounded-full", toolStatusDot(tool.status))} aria-hidden />
+        <span className="text-callout flex shrink-0 items-center gap-1.5">
+          <span
+            className={cn("size-1.5 rounded-full", toolStatusDot(tool.status))}
+            aria-hidden
+          />
           {tool.status}
         </span>
       ) : null}
@@ -322,8 +368,8 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
     return (
       <div
         className={cn(
-          "flex min-w-0 items-center gap-2 px-1 text-body text-muted-foreground",
-          compact ? "py-1" : "my-3 py-1.5",
+          "text-body text-muted-foreground flex min-w-0 items-center gap-2 px-1",
+          compact ? "py-1" : "my-3 py-1.5"
         )}
         data-tool-call={tool.id}
       >
@@ -340,64 +386,82 @@ function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: b
       data-tool-call={tool.id}
     >
       <CollapsibleTrigger
-        render={<Button type="button" variant="ghost" size="compact" focusStyle="inset" />}
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="compact"
+            focusStyle="inset"
+          />
+        }
         className={cn(
-          "group h-auto w-full min-w-0 justify-start gap-2 text-muted-foreground hover:text-foreground",
-          compact ? "py-1" : "py-1.5",
+          "group text-muted-foreground hover:text-foreground h-auto w-full min-w-0 justify-start gap-2",
+          compact ? "py-1" : "py-1.5"
         )}
       >
         {header}
-        <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
+        <ChevronRight
+          className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90"
+          aria-hidden
+        />
       </CollapsibleTrigger>
       <CollapsibleContent
         className={cn(
-          "min-w-0 divide-y divide-border overflow-hidden rounded-module border bg-fill-quiet",
-          compact ? "mb-1 ms-5 mt-0.5" : "mt-1.5",
+          "divide-border rounded-module bg-fill-quiet min-w-0 divide-y overflow-hidden border",
+          compact ? "ms-5 mt-0.5 mb-1" : "mt-1.5"
         )}
       >
-          {textOutputs.map((output, index) => (
-            <pre
-              key={index}
-              className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-code"
-            >
-              <code>{output}</code>
-            </pre>
-          ))}
-          {images.length > 0 ? (
-            <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2" aria-label="Generated images">
-              {images.map((artifact) => (
-                <ArtifactImage key={artifact.id} artifact={artifact} />
-              ))}
-            </div>
-          ) : null}
-          {resourceLinks.length > 0 ? (
-            <div className="flex flex-col gap-1.5 p-2" aria-label="Tool links">
-              {resourceLinks.map((link) => (
-                <Button
-                  key={link.uri}
-                  type="button"
-                  variant="ghost"
-                  size="row"
-                  focusStyle="inset"
-                  className="min-w-0 gap-2 px-2 py-1.5 text-callout"
-                  title={link.uri}
-                  onClick={() => void openExternal(link.uri)}
-                >
-                  <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate font-medium text-foreground">{link.name}</span>
-                  <span className="max-w-52 truncate font-mono text-metadata text-muted-foreground">
-                    {link.host}
-                  </span>
-                </Button>
-              ))}
-            </div>
-          ) : null}
+        {textOutputs.map((output, index) => (
+          <pre
+            key={index}
+            className="text-code max-h-80 overflow-auto p-3 font-mono break-words whitespace-pre-wrap"
+          >
+            <code>{output}</code>
+          </pre>
+        ))}
+        {images.length > 0 ? (
+          <div
+            className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2"
+            aria-label="Generated images"
+          >
+            {images.map((artifact) => (
+              <ArtifactImage key={artifact.id} artifact={artifact} />
+            ))}
+          </div>
+        ) : null}
+        {resourceLinks.length > 0 ? (
+          <div className="flex flex-col gap-1.5 p-2" aria-label="Tool links">
+            {resourceLinks.map((link) => (
+              <Button
+                key={link.uri}
+                type="button"
+                variant="ghost"
+                size="row"
+                focusStyle="inset"
+                className="text-callout min-w-0 gap-2 px-2 py-1.5"
+                title={link.uri}
+                onClick={() => void openExternal(link.uri)}
+              >
+                <ExternalLink
+                  className="text-muted-foreground size-3.5 shrink-0"
+                  aria-hidden
+                />
+                <span className="text-foreground min-w-0 flex-1 truncate font-medium">
+                  {link.name}
+                </span>
+                <span className="text-metadata text-muted-foreground max-w-52 truncate font-mono">
+                  {link.host}
+                </span>
+              </Button>
+            ))}
+          </div>
+        ) : null}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
+const ToolCallGroup = ({ tools }: { readonly tools: ToolEntry[] }) => {
   const t = useT();
   let status = "completed";
   for (const tool of tools) {
@@ -405,7 +469,8 @@ function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
       status = tool.status;
       break;
     }
-    if (status === "completed" && tool.status !== "completed") status = tool.status;
+    if (status === "completed" && tool.status !== "completed")
+      status = tool.status;
   }
   const active = status !== "completed" && status !== "failed";
   const latest = tools[tools.length - 1];
@@ -426,29 +491,47 @@ function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
       data-tool-call-group={tools[0].id}
     >
       <CollapsibleTrigger
-        render={<Button type="button" variant="ghost" size="compact" focusStyle="inset" />}
-        className="group h-auto w-full min-w-0 justify-start gap-2 py-1.5 text-muted-foreground hover:text-foreground"
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="compact"
+            focusStyle="inset"
+          />
+        }
+        className="group text-muted-foreground hover:text-foreground h-auto w-full min-w-0 justify-start gap-2 py-1.5"
       >
         <LatestIcon className="size-3.5 shrink-0" aria-hidden />
         <span className="min-w-0 flex-1 truncate" title={latest.title}>
           {latest.title}
         </span>
-        <span className="sr-only">{t("turn.tools")} ({tools.length}), {status}</span>
+        <span className="sr-only">
+          {t("turn.tools")} ({tools.length}), {status}
+        </span>
         {status === "failed" ? (
-          <span className="flex shrink-0 items-center gap-1.5 text-callout text-destructive">
+          <span className="text-callout text-destructive flex shrink-0 items-center gap-1.5">
             <CircleAlert className="size-3.5" aria-hidden />
             {status}
           </span>
         ) : active ? (
-          <span className={cn("size-1.5 shrink-0 rounded-full", toolStatusDot(status))} aria-hidden />
+          <span
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              toolStatusDot(status)
+            )}
+            aria-hidden
+          />
         ) : null}
-        <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
+        <ChevronRight
+          className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90"
+          aria-hidden
+        />
       </CollapsibleTrigger>
       <CollapsibleContent className="min-w-0">
         <div
           className={cn(
-            "max-h-56 min-w-0 overflow-y-auto overscroll-contain py-1 pe-2 ps-5",
-            historyIsLong && "tool-call-history--faded pb-8",
+            "max-h-56 min-w-0 overflow-y-auto overscroll-contain py-1 ps-5 pe-2",
+            historyIsLong && "tool-call-history--faded pb-8"
           )}
           data-tool-call-history
           data-faded={historyIsLong || undefined}
@@ -463,13 +546,14 @@ function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
 }
 
 type RenderBlock =
-  | { kind: "text"; text: string }
-  | { kind: "tools"; tools: ToolEntry[] };
+  { kind: "text"; text: string } | { kind: "tools"; tools: ToolEntry[] };
 
 /** Join adjacent streamed chunks and tool runs while retaining their exact event boundaries. */
 function orderedBlocks(turn: Turn): RenderBlock[] {
   const tools = new Map(
-    turn.tools.filter((tool) => !isAgentActivityTool(tool)).map((tool) => [tool.id, tool]),
+    turn.tools
+      .filter((tool) => !isAgentActivityTool(tool))
+      .map((tool) => [tool.id, tool])
   );
   const seenTools = new Set<string>();
   const blocks: RenderBlock[] = [];
@@ -491,7 +575,8 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
     appendTool(tool);
   }
   // Compatibility for turns produced by older renderers and manually constructed fixtures.
-  if (blocks.length === 0 && turn.text) blocks.push({ kind: "text", text: turn.text });
+  if (blocks.length === 0 && turn.text)
+    blocks.push({ kind: "text", text: turn.text });
   for (const tool of tools.values()) {
     if (!seenTools.has(tool.id)) appendTool(tool);
   }
@@ -502,8 +587,13 @@ function canvasKey(canvas: CanvasHistoryMarker): string {
   return `${canvas.id}:${canvas.revision}`;
 }
 
-function downloadCanvasPng(canvas: CanvasHistoryMarker, snapshot: CanvasSnapshot | undefined): void {
-  const exportItem = snapshot?.exports.find((item) => item.kind === "overview") ?? snapshot?.exports[0];
+function downloadCanvasPng(
+  canvas: CanvasHistoryMarker,
+  snapshot: CanvasSnapshot | undefined
+): void {
+  const exportItem =
+    snapshot?.exports.find((item) => item.kind === "overview") ??
+    snapshot?.exports[0];
   if (!exportItem || typeof document === "undefined") return;
   const anchor = document.createElement("a");
   anchor.href = canvasExportDataUrl(exportItem);
@@ -516,12 +606,12 @@ function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
   window.dispatchEvent(
     new CustomEvent("codetwo-canvas-duplicate", {
       detail: { id: canvas.id, revision: canvas.revision },
-    }),
+    })
   );
 }
 
 /** A collapsible group of secondary detail (agents / thinking / plan / memory). */
-function Detail({
+const Detail = ({
   icon: Icon,
   label,
   count,
@@ -529,19 +619,24 @@ function Detail({
   wide = false,
   defaultOpen = false,
 }: {
-  icon: typeof Brain;
-  label: string;
-  count: number;
-  children: React.ReactNode;
-  wide?: boolean;
-  defaultOpen?: boolean;
-}) {
+  readonly icon: typeof Brain;
+  readonly label: string;
+  readonly count: number;
+  readonly children: React.ReactNode;
+  readonly wide?: boolean;
+  readonly defaultOpen?: boolean;
+}) => {
   if (count === 0) return null;
   return (
-    <Collapsible defaultOpen={defaultOpen} className={cn("min-w-0", wide && "basis-full")}>
+    <Collapsible
+      defaultOpen={defaultOpen}
+      className={cn("min-w-0", wide && "basis-full")}
+    >
       <CollapsibleTrigger
-        render={<Button type="button" variant="ghost" size="xs" focusStyle="inset" />}
-        className="group -ms-1 h-auto gap-1.5 font-normal text-muted-foreground hover:text-foreground"
+        render={
+          <Button type="button" variant="ghost" size="xs" focusStyle="inset" />
+        }
+        className="group text-muted-foreground hover:text-foreground -ms-1 h-auto gap-1.5 font-normal"
       >
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
@@ -552,7 +647,10 @@ function Detail({
   );
 }
 
-function agentStatusLabel(state: AgentActivityState, t: ReturnType<typeof useT>): string {
+function agentStatusLabel(
+  state: AgentActivityState,
+  t: ReturnType<typeof useT>
+): string {
   return t(`turn.agentStatus.${state}`);
 }
 
@@ -560,7 +658,7 @@ function agentElapsed(agent: AgentActivity, now: number): string | null {
   if (agent.startedAt === undefined) return null;
   const totalSeconds = Math.max(
     0,
-    Math.floor(((agent.endedAt ?? now) - agent.startedAt) / 1000),
+    Math.floor(((agent.endedAt ?? now) - agent.startedAt) / 1000)
   );
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -570,37 +668,37 @@ function agentElapsed(agent: AgentActivity, now: number): string | null {
   return `${seconds}s`;
 }
 
-function AgentStateIcon({ state }: { state: AgentActivityState }) {
+const AgentStateIcon = ({ state }: { readonly state: AgentActivityState }) => {
   if (state === "active") {
     return <ActivityOrb state="working" visualSize={20} aria-hidden="true" />;
   }
   if (state === "completed") {
-    return <CircleCheck className="size-4 text-success" aria-hidden />;
+    return <CircleCheck className="text-success size-4" aria-hidden />;
   }
   if (state === "failed") {
-    return <CircleAlert className="size-4 text-destructive" aria-hidden />;
+    return <CircleAlert className="text-destructive size-4" aria-hidden />;
   }
-  return <Clock3 className="size-4 text-warning" aria-hidden />;
+  return <Clock3 className="text-warning size-4" aria-hidden />;
 }
 
-function AgentRosterSection({
+const AgentRosterSection = ({
   agents,
   label,
   now,
 }: {
-  agents: readonly AgentActivity[];
-  label: string;
-  now: number;
-}) {
+  readonly agents: readonly AgentActivity[];
+  readonly label: string;
+  readonly now: number;
+}) => {
   const t = useT();
   if (agents.length === 0) return null;
   return (
     <div role="group" aria-label={label}>
-      <div className="flex items-center gap-2 px-2 py-1 text-metadata font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="text-metadata text-muted-foreground flex items-center gap-2 px-2 py-1 font-medium tracking-wide uppercase">
         <span>{label}</span>
         <span className="tabular-nums">{agents.length}</span>
       </div>
-      <ul className="divide-y divide-border">
+      <ul className="divide-border divide-y">
         {agents.map((agent) => {
           const state = agentActivityState(agent.status);
           const elapsed = agentElapsed(agent, now);
@@ -616,22 +714,22 @@ function AgentRosterSection({
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="min-w-0 flex-1 truncate text-body font-medium text-foreground">
+                  <span className="text-body text-foreground min-w-0 flex-1 truncate font-medium">
                     {agent.title}
                   </span>
-                  <span className="shrink-0 text-metadata text-muted-foreground">{agent.role}</span>
+                  <span className="text-metadata text-muted-foreground shrink-0">
+                    {agent.role}
+                  </span>
                 </div>
-                {agent.task && (
-                  <p className="mt-0.5 line-clamp-2 text-callout text-muted-foreground">
+                {agent.task ? <p className="text-callout text-muted-foreground mt-0.5 line-clamp-2">
                     {agent.task}
-                  </p>
-                )}
+                  </p> : null}
               </div>
-              <div className="shrink-0 text-right text-metadata text-muted-foreground">
+              <div className="text-metadata text-muted-foreground shrink-0 text-right">
                 <span className="block" aria-live="polite" aria-atomic="true">
                   {agentStatusLabel(state, t)}
                 </span>
-                {elapsed && <time className="block tabular-nums">{elapsed}</time>}
+                {elapsed ? <time className="block tabular-nums">{elapsed}</time> : null}
               </div>
             </li>
           );
@@ -641,7 +739,7 @@ function AgentRosterSection({
   );
 }
 
-function AgentRoster({ agents }: { agents: readonly AgentActivity[] }) {
+const AgentRoster = ({ agents }: { readonly agents: readonly AgentActivity[] }) => {
   const t = useT();
   const active = agents.filter((agent) => {
     const state = agentActivityState(agent.status);
@@ -660,8 +758,16 @@ function AgentRoster({ agents }: { agents: readonly AgentActivity[] }) {
 
   return (
     <div data-agent-roster className="flex flex-col gap-1.5">
-      <AgentRosterSection agents={active} label={t("turn.agentGroup.active")} now={now} />
-      <AgentRosterSection agents={finished} label={t("turn.agentGroup.finished")} now={now} />
+      <AgentRosterSection
+        agents={active}
+        label={t("turn.agentGroup.active")}
+        now={now}
+      />
+      <AgentRosterSection
+        agents={finished}
+        label={t("turn.agentGroup.finished")}
+        now={now}
+      />
     </div>
   );
 }
@@ -681,14 +787,14 @@ export const TurnCard = memo(function TurnCard({
   linkActions,
   onFork,
 }: {
-  turn: Turn;
-  canvasSnapshotLoader?: typeof canvasGetSnapshot;
+  readonly turn: Turn;
+  readonly canvasSnapshotLoader?: typeof canvasGetSnapshot;
   /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
-  onSaveTemplate?: (promptText: string) => void;
+  readonly onSaveTemplate?: (promptText: string) => void;
   /** Native context-menu actions for links rendered inside the assistant response. */
-  linkActions?: BuiltinLinkActions;
+  readonly linkActions?: BuiltinLinkActions;
   /** Starts a new task whose referenced context ends at this completed turn. */
-  onFork?: (turn: Turn) => void;
+  readonly onFork?: (turn: Turn) => void;
 }) {
   const t = useT();
   const toast = useToast();
@@ -703,16 +809,23 @@ export const TurnCard = memo(function TurnCard({
     const state = agentActivityState(agent.status);
     return state === "active" || state === "pending";
   }).length;
-  const blocks = useMemo(() => orderedBlocks(turn), [turn.content, turn.text, turn.tools]);
-  const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
+  const blocks = useMemo(
+    () => orderedBlocks(turn),
+    [turn.content, turn.text, turn.tools]
+  );
+  const history = useMemo(
+    () => parseCanvasHistoryPrompt(turn.prompt),
+    [turn.prompt]
+  );
   const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
   const promptText = useMemo(
     () => promptTextWithoutImageMarkers(history.visiblePrompt, promptImages),
-    [history.visiblePrompt, promptImages],
+    [history.visiblePrompt, promptImages]
   );
   const clock = useMemo(
-    () => new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }),
-    [locale],
+    () =>
+      new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }),
+    [locale]
   );
   useEffect(() => {
     if (!copied) return;
@@ -730,7 +843,9 @@ export const TurnCard = memo(function TurnCard({
       .catch(() => toast(t("turn.copyFailed"), "error"));
   };
   const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
-  const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
+  const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>(
+    {}
+  );
   useEffect(() => {
     let cancelled = false;
     for (const canvas of history.canvases) {
@@ -738,7 +853,10 @@ export const TurnCard = memo(function TurnCard({
         .then((snapshot) => {
           if (cancelled || !snapshot) return;
           historySnapshots.set(canvasKey(canvas), snapshot);
-          setSnapshots((current) => ({ ...current, [canvasKey(canvas)]: snapshot }));
+          setSnapshots((current) => ({
+            ...current,
+            [canvasKey(canvas)]: snapshot,
+          }));
         })
         .catch(() => {
           // Browser/dev fallback has no native bridge; marker metadata remains read-only.
@@ -750,76 +868,74 @@ export const TurnCard = memo(function TurnCard({
     };
   }, [canvasSnapshotLoader, history.canvases, historySnapshots]);
   const hasDetail =
-    agents.length +
-      turn.thoughts.length +
-      (turn.memory?.items.length ?? 0) >
-    0;
+    agents.length + turn.thoughts.length + (turn.memory?.items.length ?? 0) > 0;
   const promptIsLong = isLongPrompt(promptText);
-  const visiblePrompt = promptIsLong && !promptExpanded
-    ? collapsedPrompt(promptText)
-    : promptText;
+  const visiblePrompt =
+    promptIsLong && !promptExpanded ? collapsedPrompt(promptText) : promptText;
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
     // conversation advancing rather than the list redrawing.
-    <article aria-busy={running && !queued} className="animate-rise-in py-7">
+    <article aria-busy={running ? !queued : null} className="animate-rise-in py-7">
       {/* prompt */}
       <div className="group/prompt flex flex-col items-end">
         <div className="flex items-start justify-end gap-1">
           {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
               button so future turn actions slot in beside "Save as template…". */}
-          {onSaveTemplate && (
-            <DropdownMenu>
+          {onSaveTemplate ? <DropdownMenu>
               <DropdownMenuTrigger
-                render={<Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={t("templateFrom.menu")}
-                  className="mt-1 text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
-                >
-                  <MoreHorizontal className="size-3.5" aria-hidden />
-                </Button>}
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={t("templateFrom.menu")}
+                    className="text-muted-foreground mt-1 opacity-0 transition-opacity group-hover/prompt:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                  >
+                    <MoreHorizontal className="size-3.5" aria-hidden />
+                  </Button>
+                }
               />
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
+                <DropdownMenuItem
+                  onClick={() => onSaveTemplate(history.visiblePrompt)}
+                >
                   {t("templateFrom.saveAs")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          <div className="max-w-[86%] rounded-module bg-secondary px-3.5 py-2 text-prose text-secondary-foreground">
+            </DropdownMenu> : null}
+          <div className="rounded-module bg-secondary text-prose text-secondary-foreground max-w-[86%] px-3.5 py-2">
             {promptImages.length > 0 && (
               <div
                 data-prompt-images
                 className={cn(
                   "grid min-w-0 gap-1.5",
                   visiblePrompt && "mb-2",
-                  promptImages.length > 1 && "grid-cols-2",
+                  promptImages.length > 1 && "grid-cols-2"
                 )}
               >
                 {promptImages.map((image, index) => (
-                  <PromptImageThumbnail key={`${image.id}-${index}`} image={image} />
+                  <PromptImageThumbnail
+                    key={`${image.id}-${index}`}
+                    image={image}
+                  />
                 ))}
               </div>
             )}
-            {visiblePrompt && <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>}
-            {turn.delivery && (
-              <p className="mt-1.5 text-metadata font-medium uppercase text-muted-foreground">
+            {visiblePrompt ? <p className="break-words whitespace-pre-wrap">{visiblePrompt}</p> : null}
+            {turn.delivery ? <p className="text-metadata text-muted-foreground mt-1.5 font-medium uppercase">
                 {turn.delivery === "queued"
                   ? t("turn.queued", { position: turn.queuePosition ?? 1 })
                   : t("turn.steered")}
-              </p>
-            )}
-            {promptIsLong && (
-              <Button
+              </p> : null}
+            {promptIsLong ? <Button
                 type="button"
                 variant="ghost"
                 size="compact"
                 focusStyle="inset"
                 aria-expanded={promptExpanded}
                 onClick={() => setPromptExpanded((value) => !value)}
-                className="mt-1.5 h-auto gap-1 px-0 py-0 text-callout font-medium text-muted-foreground"
+                className="text-callout text-muted-foreground mt-1.5 h-auto gap-1 px-0 py-0 font-medium"
               >
                 {promptExpanded ? (
                   <ChevronUp className="size-3" aria-hidden />
@@ -827,25 +943,28 @@ export const TurnCard = memo(function TurnCard({
                   <ChevronDown className="size-3" aria-hidden />
                 )}
                 {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
-              </Button>
-            )}
+              </Button> : null}
           </div>
         </div>
         <div
           data-turn-actions="prompt"
-          className="mt-1 flex min-h-(--ds-control-mini) items-center gap-1 text-callout text-muted-foreground"
+          className="text-callout text-muted-foreground mt-1 flex min-h-(--ds-control-mini) items-center gap-1"
         >
           <time dateTime={new Date(turn.startedAt).toISOString()}>
             {clock.format(turn.startedAt)}
           </time>
-          {promptText && (
-            <TurnActionButton
-              label={t(copied === "prompt" ? "turn.copiedPrompt" : "turn.copyPrompt")}
+          {promptText ? <TurnActionButton
+              label={t(
+                copied === "prompt" ? "turn.copiedPrompt" : "turn.copyPrompt"
+              )}
               onClick={() => copyText("prompt", promptText)}
             >
-              {copied === "prompt" ? <Check aria-hidden /> : <Copy aria-hidden />}
-            </TurnActionButton>
-          )}
+              {copied === "prompt" ? (
+                <Check aria-hidden />
+              ) : (
+                <Copy aria-hidden />
+              )}
+            </TurnActionButton> : null}
         </div>
       </div>
 
@@ -853,26 +972,33 @@ export const TurnCard = memo(function TurnCard({
         <div className="mt-3 flex flex-col gap-2" aria-label="Canvas history">
           {history.canvases.map((canvas) => {
             const snapshot = snapshots[canvasKey(canvas)];
-            const thumbnail = snapshot?.exports.find((item) => item.kind === "overview") ?? snapshot?.exports[0];
+            const thumbnail =
+              snapshot?.exports.find((item) => item.kind === "overview") ??
+              snapshot?.exports[0];
             return (
-              <section key={canvasKey(canvas)} className="canvas-ui-module border bg-fill-quiet p-2.5 text-callout">
+              <section
+                key={canvasKey(canvas)}
+                className="canvas-ui-module bg-fill-quiet text-callout border p-2.5"
+              >
                 <div className="flex items-start gap-2">
-                  {thumbnail && (
-                    <img
+                  {thumbnail ? <img
                       src={canvasExportDataUrl(thumbnail)}
                       alt={`${canvas.title} thumbnail`}
-                      className="size-14 shrink-0 rounded-control border object-cover"
-                    />
-                  )}
+                      className="rounded-control size-14 shrink-0 border object-cover"
+                    /> : null}
                   <div className="min-w-0 flex-1">
-                    <h3 className="truncate font-medium text-foreground">{canvas.title}</h3>
+                    <h3 className="text-foreground truncate font-medium">
+                      {canvas.title}
+                    </h3>
                     <p className="text-muted-foreground">
                       rev {canvas.revision}
                       {snapshot ? ` · ${snapshot.objectCount} objects` : ""}
-                      {snapshot?.frozenAt ? ` · ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(snapshot.frozenAt)}` : ""}
+                      {snapshot?.frozenAt
+                        ? ` · ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(snapshot.frozenAt)}`
+                        : ""}
                     </p>
                     {canvas.textOriginals.length > 0 && (
-                      <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
+                      <p className="text-muted-foreground mt-1 break-words whitespace-pre-wrap">
                         {canvas.textOriginals.join("\n")}
                       </p>
                     )}
@@ -913,42 +1039,41 @@ export const TurnCard = memo(function TurnCard({
               <MarkdownContent
                 key={`text-${index}`}
                 text={block.text}
-                streaming={running && index === blocks.length - 1}
+                streaming={running ? index === blocks.length - 1 : null}
                 linkActions={linkActions}
               />
             ) : block.tools.length === 1 ? (
               <ToolCallBlock key={block.tools[0].id} tool={block.tools[0]} />
             ) : (
               <ToolCallGroup key={block.tools[0].id} tools={block.tools} />
-            ),
+            )
           )}
         </div>
       ) : null}
 
-      {running && !queued && !turn.text && (
-        <p
+      {running && !queued && !turn.text ? <p
           role="status"
           aria-live="polite"
-          className="mt-3.5 flex items-center gap-2 text-body text-muted-foreground"
+          className="text-body text-muted-foreground mt-3.5 flex items-center gap-2"
         >
           <ActivityOrb
             state={turn.thoughts.length > 0 ? "solving" : "working"}
             aria-hidden="true"
           />
           {t("turn.working")}
-        </p>
-      )}
+        </p> : null}
 
-      {turn.error && (
-        <p className="mt-3.5 flex items-start gap-1.5 rounded-control bg-destructive/10 px-3 py-2 text-body text-destructive">
+      {turn.error ? <p className="rounded-control bg-destructive/10 text-body text-destructive mt-3.5 flex items-start gap-1.5 px-3 py-2">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
-        </p>
-      )}
+        </p> : null}
 
       {/* secondary detail + outcome, on one quiet line */}
-      {(hasDetail || dur || turn.stopReason || queued || (running && turn.text)) && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      {(hasDetail ||
+        dur ||
+        turn.stopReason ||
+        queued ||
+        (running && turn.text)) ? <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
           <Detail
             icon={Bot}
             label={t("turn.agents")}
@@ -959,8 +1084,12 @@ export const TurnCard = memo(function TurnCard({
             <AgentRoster agents={agents} />
           </Detail>
 
-          <Detail icon={Brain} label={t("turn.thinking")} count={turn.thoughts.length}>
-            <div className="flex flex-col gap-1 text-callout italic text-muted-foreground">
+          <Detail
+            icon={Brain}
+            label={t("turn.thinking")}
+            count={turn.thoughts.length}
+          >
+            <div className="text-callout text-muted-foreground flex flex-col gap-1 italic">
               {turn.thoughts.map((thought, i) => (
                 <p key={i} className="whitespace-pre-wrap">
                   {thought}
@@ -969,12 +1098,17 @@ export const TurnCard = memo(function TurnCard({
             </div>
           </Detail>
 
-          <Detail icon={BrainCircuit} label={t("turn.memory")} count={turn.memory?.items.length ?? 0}>
-            {turn.memory && (
-              <div className="flex flex-col gap-2 text-callout">
+          <Detail
+            icon={BrainCircuit}
+            label={t("turn.memory")}
+            count={turn.memory?.items.length ?? 0}
+          >
+            {turn.memory ? <div className="text-callout flex flex-col gap-2">
                 <p className="text-muted-foreground">
                   {t("turn.memoryTokens", {
-                    count: new Intl.NumberFormat(locale).format(turn.memory.estimated_tokens),
+                    count: new Intl.NumberFormat(locale).format(
+                      turn.memory.estimated_tokens
+                    ),
                   })}
                 </p>
                 <ul className="flex flex-col gap-1.5">
@@ -983,22 +1117,27 @@ export const TurnCard = memo(function TurnCard({
                       ? `${item.source.session_id.slice(0, 8)}:${item.source.part_seq}`
                       : t("memory.manual");
                     return (
-                      <li key={item.id} className="rounded-control bg-fill-quiet px-2 py-1.5">
-                        <div className="flex items-center gap-1.5 text-metadata text-muted-foreground">
+                      <li
+                        key={item.id}
+                        className="rounded-control bg-fill-quiet px-2 py-1.5"
+                      >
+                        <div className="text-metadata text-muted-foreground flex items-center gap-1.5">
                           <span className="font-mono">{item.layer}</span>
                           <span aria-hidden="true">·</span>
                           <span>{item.category}</span>
                           <span className="ms-auto font-mono">{source}</span>
                         </div>
-                        <p dir="auto" className="mt-1 whitespace-pre-wrap break-words text-foreground/80">
+                        <p
+                          dir="auto"
+                          className="text-foreground/80 mt-1 break-words whitespace-pre-wrap"
+                        >
                           {item.content}
                         </p>
                       </li>
                     );
                   })}
                 </ul>
-              </div>
-            )}
+              </div> : null}
           </Detail>
 
           <span className="ms-auto flex shrink-0 items-center gap-1.5">
@@ -1011,42 +1150,48 @@ export const TurnCard = memo(function TurnCard({
                 <Spinner className="size-2.5" /> {t("turn.running")}
               </StatusBadge>
             ) : turn.error ? (
-              <StatusBadge tone="destructive">
-                {t("turn.failed")}
-              </StatusBadge>
+              <StatusBadge tone="destructive">{t("turn.failed")}</StatusBadge>
             ) : (
               turn.stopReason && (
-                <StatusBadge tone="neutral">
-                  {turn.stopReason}
-                </StatusBadge>
+                <StatusBadge tone="neutral">{turn.stopReason}</StatusBadge>
               )
             )}
-            {dur && <span className="font-mono text-metadata text-muted-foreground">{dur}</span>}
+            {dur ? <span className="text-metadata text-muted-foreground font-mono">
+                {dur}
+              </span> : null}
           </span>
-        </div>
-      )}
+        </div> : null}
 
-      {!running && turn.text && (
-        <div
+      {!running && turn.text ? <div
           data-turn-actions="response"
-          className="mt-2 flex min-h-(--ds-control-mini) items-center gap-1 text-callout text-muted-foreground"
+          className="text-callout text-muted-foreground mt-2 flex min-h-(--ds-control-mini) items-center gap-1"
         >
           <TurnActionButton
-            label={t(copied === "response" ? "turn.copiedResponse" : "turn.copyResponse")}
+            label={t(
+              copied === "response"
+                ? "turn.copiedResponse"
+                : "turn.copyResponse"
+            )}
             onClick={() => copyText("response", turn.text)}
           >
-            {copied === "response" ? <Check aria-hidden /> : <Copy aria-hidden />}
+            {copied === "response" ? (
+              <Check aria-hidden />
+            ) : (
+              <Copy aria-hidden />
+            )}
           </TurnActionButton>
-          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined && (
-            <TurnActionButton label={t("turn.fork")} onClick={() => onFork(turn)}>
+          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined ? <TurnActionButton
+              label={t("turn.fork")}
+              onClick={() => onFork(turn)}
+            >
               <GitFork aria-hidden />
-            </TurnActionButton>
-          )}
-          <time dateTime={new Date(turn.endedAt ?? turn.startedAt).toISOString()}>
+            </TurnActionButton> : null}
+          <time
+            dateTime={new Date(turn.endedAt ?? turn.startedAt).toISOString()}
+          >
             {clock.format(turn.endedAt ?? turn.startedAt)}
           </time>
-        </div>
-      )}
+        </div> : null}
     </article>
   );
 });

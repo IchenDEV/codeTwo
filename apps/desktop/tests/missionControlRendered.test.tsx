@@ -1,6 +1,14 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, button, click, dom, mount, restoreDom, waitFor } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { MissionControlDialog } = await import("../src/sidebar/MissionControl");
@@ -60,7 +68,7 @@ function renderDialog(overrides = {}) {
   const rendered = mount(
     <I18nProvider>
       <MissionControlDialog {...props} />
-    </I18nProvider>,
+    </I18nProvider>
   );
   return { rendered, calls };
 }

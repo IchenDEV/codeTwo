@@ -18,12 +18,25 @@ run(["bun", "run", "build:renderer"], desktopRoot);
 run(["bun", "run", "build:tool-broker"], desktopRoot);
 
 import { existsSync } from "node:fs";
-const hostExecutable = process.platform === "win32" ? "codetwo-desktop-host.exe" : "codetwo-desktop-host";
-const hostBinaryPath = resolve(repositoryRoot, "target", "release", hostExecutable);
+const hostExecutable =
+  process.platform === "win32"
+    ? "codetwo-desktop-host.exe"
+    : "codetwo-desktop-host";
+const hostBinaryPath = resolve(
+  repositoryRoot,
+  "target",
+  "release",
+  hostExecutable
+);
 if (existsSync(hostBinaryPath)) {
-  console.log(`Skipping cargo build: ${hostExecutable} already exists at ${hostBinaryPath}`);
+  console.log(
+    `Skipping cargo build: ${hostExecutable} already exists at ${hostBinaryPath}`
+  );
 } else {
-  run(["cargo", "build", "--release", "-p", "codetwo-desktop-host"], repositoryRoot);
+  run(
+    ["cargo", "build", "--release", "-p", "codetwo-desktop-host"],
+    repositoryRoot
+  );
 }
 
 if (process.platform === "darwin") {
@@ -45,7 +58,7 @@ if (process.platform === "darwin") {
       "-o",
       resolve(windowEffectsBuild, "libCodeTwoWindowEffects.dylib"),
     ],
-    desktopRoot,
+    desktopRoot
   );
   run(
     [
@@ -57,7 +70,7 @@ if (process.platform === "darwin") {
       "--package-path",
       resolve(desktopRoot, "native", "update-helper"),
     ],
-    desktopRoot,
+    desktopRoot
   );
   run(
     [
@@ -69,6 +82,6 @@ if (process.platform === "darwin") {
       "--package-path",
       resolve(desktopRoot, "native", "cloud-sync-helper"),
     ],
-    desktopRoot,
+    desktopRoot
   );
 }

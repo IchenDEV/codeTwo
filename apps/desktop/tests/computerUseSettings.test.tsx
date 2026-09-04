@@ -1,7 +1,14 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, dom, flush, mount, restoreDom, waitFor } from "./domTestHarness";
+import {
+  activateDom,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { SettingsPage } = await import("../src/settings/SettingsPage");
@@ -78,32 +85,42 @@ function settings(loader, saver) {
 
 async function openSelect(trigger) {
   await reactAct(async () => {
-    trigger.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    trigger.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    trigger.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
 
 async function selectItem(item) {
   await reactAct(async () => {
-    item.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    item.dispatchEvent(new dom.window.PointerEvent("pointerup", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    item.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    item.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    item.dispatchEvent(
+      new dom.window.PointerEvent("pointerup", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    item.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
@@ -111,30 +128,40 @@ async function selectItem(item) {
 describe("Computer Use settings", () => {
   test("lets the user choose one global backend and explains session scope", async () => {
     const saved = [];
-    const view = mount(settings(
-      async () => initialSettings,
-      async (backend) => {
-        saved.push(backend);
-        return { ...initialSettings, selections: { "*": backend } };
-      },
-    ));
+    const view = mount(
+      settings(
+        async () => initialSettings,
+        async (backend) => {
+          saved.push(backend);
+          return { ...initialSettings, selections: { "*": backend } };
+        }
+      )
+    );
 
     await waitFor(() => {
-      expect(view.container.textContent).toContain("Changes apply to new sessions");
+      expect(view.container.textContent).toContain(
+        "Changes apply to new sessions"
+      );
       expect(view.container.textContent).toContain("Cua Driver");
       expect(view.container.textContent).toContain("Remote Lab is not running");
     });
 
-    expect(view.container.querySelectorAll("[data-computer-use-selection]")).toHaveLength(1);
+    expect(
+      view.container.querySelectorAll("[data-computer-use-selection]")
+    ).toHaveLength(1);
     expect(view.container.textContent).not.toContain("Claude Code");
-    const trigger = view.container.querySelector("[data-computer-use-selection]");
+    const trigger = view.container.querySelector(
+      "[data-computer-use-selection]"
+    );
     expect(trigger?.textContent).toContain("Automatic");
     await openSelect(trigger);
-    const remote = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
-      .find((item) => item.textContent?.trim() === "Remote Lab");
+    const remote = Array.from(
+      dom.document.body.querySelectorAll('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.trim() === "Remote Lab");
     expect(remote?.getAttribute("data-disabled")).not.toBeNull();
-    const cua = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
-      .find((item) => item.textContent?.trim() === "Cua Driver");
+    const cua = Array.from(
+      dom.document.body.querySelectorAll('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.trim() === "Cua Driver");
     await selectItem(cua);
 
     expect(saved).toEqual(["cua"]);
@@ -153,7 +180,8 @@ describe("Browser Use settings", () => {
           id: "openai-browser",
           display_name: "OpenAI Browser / Chrome",
           available: true,
-          reason: "The signed Codex-native OpenAI Browser runtime is available.",
+          reason:
+            "The signed Codex-native OpenAI Browser runtime is available.",
           providers: ["codex"],
           exclude_providers: [],
         },
@@ -194,24 +222,32 @@ describe("Browser Use settings", () => {
             return { ...browserSettings, access_enabled: enabled };
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     await waitFor(() => {
       expect(view.container.textContent).toContain("OpenAI Browser / Chrome");
       expect(view.container.textContent).toContain("Playwright MCP");
-      expect(view.container.textContent).toContain("Control browser access for agents");
+      expect(view.container.textContent).toContain(
+        "Control browser access for agents"
+      );
     });
-    expect(view.container.querySelectorAll("[data-browser-use-selection]")).toHaveLength(1);
+    expect(
+      view.container.querySelectorAll("[data-browser-use-selection]")
+    ).toHaveLength(1);
     expect(view.container.textContent).not.toContain("Claude Code");
-    const trigger = view.container.querySelector("[data-browser-use-selection]");
+    const trigger = view.container.querySelector(
+      "[data-browser-use-selection]"
+    );
     await openSelect(trigger);
     expect(dom.document.body.textContent).toContain("No external backend");
-    const openAiBrowser = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
-      .find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
+    const openAiBrowser = Array.from(
+      dom.document.body.querySelectorAll('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
     expect(openAiBrowser).toBeDefined();
-    const playwright = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
-      .find((item) => item.textContent?.trim() === "Playwright MCP");
+    const playwright = Array.from(
+      dom.document.body.querySelectorAll('[data-slot="select-item"]')
+    ).find((item) => item.textContent?.trim() === "Playwright MCP");
     await selectItem(playwright);
 
     expect(saved).toEqual(["playwright"]);
@@ -220,7 +256,9 @@ describe("Browser Use settings", () => {
     const access = view.container.querySelector("[data-agent-browser-access]");
     expect(access?.getAttribute("aria-checked")).toBe("true");
     await reactAct(async () => {
-      access?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      access?.dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+      );
     });
     await flush();
     expect(accessSaved).toEqual([false]);

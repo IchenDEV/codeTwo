@@ -6,15 +6,20 @@ import { MIN_RATIO, type DividerRect } from "./paneLayout";
 const percent = (value: number): string => `${value * 100}%`;
 
 interface PaneDividerProps {
-  divider: DividerRect;
+  readonly divider: DividerRect;
   /** The tiling container the normalized rectangles are measured against. */
-  containerRef: RefObject<HTMLElement | null>;
-  onResize: (ratio: number) => void;
-  className?: string;
+  readonly containerRef: RefObject<HTMLElement | null>;
+  readonly onResize: (ratio: number) => void;
+  readonly className?: string;
 }
 
 /** Shared pointer-and-keyboard boundary for every tiled-pane host. */
-export function PaneDivider({ divider, containerRef, onResize, className = "group z-20" }: PaneDividerProps) {
+export const PaneDivider = ({
+  divider,
+  containerRef,
+  onResize,
+  className = "group z-20",
+}: PaneDividerProps) => {
   const vertical = divider.direction === "row";
   const boundary = vertical
     ? divider.rect.x + divider.rect.w * divider.ratio
@@ -88,7 +93,10 @@ export function PaneDivider({ divider, containerRef, onResize, className = "grou
       className={className}
       style={handleStyle}
     >
-      <div className="bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary" style={lineStyle} />
+      <div
+        className="bg-border group-hover:bg-primary group-focus-visible:bg-primary transition-colors"
+        style={lineStyle}
+      />
     </div>
   );
 }

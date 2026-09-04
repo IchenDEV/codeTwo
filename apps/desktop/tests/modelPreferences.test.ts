@@ -24,7 +24,9 @@ class MemoryStorage implements ModelPreferencesStorage {
 describe("provider model preferences", () => {
   it("stores hidden models per provider and restores all without touching another provider", () => {
     const storage = new MemoryStorage();
-    expect(setModelHidden("codex", "gpt-5.6-sol", true, storage)).toEqual(["gpt-5.6-sol"]);
+    expect(setModelHidden("codex", "gpt-5.6-sol", true, storage)).toEqual([
+      "gpt-5.6-sol",
+    ]);
     setModelHidden("claude_code", "opus", true, storage);
     expect(hiddenModelsForProvider("codex", storage)).toEqual(["gpt-5.6-sol"]);
 
@@ -36,7 +38,9 @@ describe("provider model preferences", () => {
   it("deduplicates entries and removes the provider record when the final model is shown", () => {
     const storage = new MemoryStorage();
     setModelHidden("codex", "gpt-5.6-sol", true, storage);
-    expect(setModelHidden("codex", "gpt-5.6-sol", true, storage)).toEqual(["gpt-5.6-sol"]);
+    expect(setModelHidden("codex", "gpt-5.6-sol", true, storage)).toEqual([
+      "gpt-5.6-sol",
+    ]);
     expect(setModelHidden("codex", "gpt-5.6-sol", false, storage)).toEqual([]);
     expect(loadModelPreferences(storage).providers.codex).toBeUndefined();
   });
@@ -46,13 +50,16 @@ describe("provider model preferences", () => {
     storage.values.set(MODEL_PREFERENCES_STORAGE_KEY, "not json");
     expect(loadModelPreferences(storage).providers).toEqual({});
 
-    storage.values.set(MODEL_PREFERENCES_STORAGE_KEY, JSON.stringify({
-      version: 1,
-      providers: {
-        codex: { hidden: ["safe", "safe", 42, ""] },
-        constructor: { hidden: ["unsafe"] },
-      },
-    }));
+    storage.values.set(
+      MODEL_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        providers: {
+          codex: { hidden: ["safe", "safe", 42, ""] },
+          constructor: { hidden: ["unsafe"] },
+        },
+      })
+    );
     expect(hiddenModelsForProvider("codex", storage)).toEqual(["safe"]);
     expect(hiddenModelsForProvider("constructor", storage)).toEqual([]);
   });

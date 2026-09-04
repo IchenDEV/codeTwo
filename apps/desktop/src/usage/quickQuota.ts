@@ -10,10 +10,14 @@ export interface QuickQuotaSummary {
 export function quickQuotaProviderFor(
   currentProvider: string,
   activeProvider: string | null,
-  recentProviders: readonly string[],
+  recentProviders: readonly string[]
 ): string {
-  if (activeProvider) return activeProvider;
-  if (currentProvider === "codex") return currentProvider;
+  if (activeProvider) {
+    return activeProvider;
+  }
+  if (currentProvider === "codex") {
+    return currentProvider;
+  }
   return recentProviders.includes("codex") ? "codex" : currentProvider;
 }
 
@@ -22,11 +26,15 @@ export function quickQuotaProviderFor(
  * easier to scan than two competing percentages, while Settings > Usage keeps every window and
  * its reset time available for inspection.
  */
-export function quickQuotaSummary(report: ProviderQuotaReport | null): QuickQuotaSummary | null {
-  if (report?.status !== "available" || report.windows.length === 0) return null;
+export function quickQuotaSummary(
+  report: ProviderQuotaReport | null
+): QuickQuotaSummary | null {
+  if (report?.status !== "available" || report.windows.length === 0) {
+    return null;
+  }
 
   const window = report.windows.reduce((lowest, candidate) =>
-    remainingPercent(candidate) < remainingPercent(lowest) ? candidate : lowest,
+    remainingPercent(candidate) < remainingPercent(lowest) ? candidate : lowest
   );
 
   return {

@@ -16,21 +16,21 @@ import { TurnCard } from "./TurnCard";
 import type { Turn } from "./turns";
 
 interface PaneToolbarProps {
-  onSplitRight: () => void;
-  onSplitDown: () => void;
-  onClose: () => void;
-  canClose: boolean;
-  labels: { splitRight: string; splitDown: string; close: string };
+  readonly onSplitRight: () => void;
+  readonly onSplitDown: () => void;
+  readonly onClose: () => void;
+  readonly canClose: boolean;
+  readonly labels: { splitRight: string; splitDown: string; close: string };
 }
 
 /** The split / close controls shown on every tiled pane. */
-export function PaneToolbar({
+export const PaneToolbar = ({
   onSplitRight,
   onSplitDown,
   onClose,
   canClose,
   labels,
-}: PaneToolbarProps) {
+}: PaneToolbarProps) => {
   return (
     <div className="flex shrink-0 items-center gap-1">
       <TooltipButton
@@ -38,7 +38,7 @@ export function PaneToolbar({
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="size-7 text-muted-foreground hover:text-muted-foreground"
+        className="text-muted-foreground hover:text-muted-foreground size-7"
         onClick={onSplitRight}
       >
         <PanelRight className="size-4" aria-hidden />
@@ -48,7 +48,7 @@ export function PaneToolbar({
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="size-7 text-muted-foreground hover:text-muted-foreground"
+        className="text-muted-foreground hover:text-muted-foreground size-7"
         onClick={onSplitDown}
       >
         <PanelBottom className="size-4" aria-hidden />
@@ -59,7 +59,7 @@ export function PaneToolbar({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="size-7 text-muted-foreground hover:text-muted-foreground"
+          className="text-muted-foreground hover:text-muted-foreground size-7"
           onClick={onClose}
         >
           <X className="size-4" aria-hidden />
@@ -70,15 +70,15 @@ export function PaneToolbar({
 }
 
 interface PaneLayoutToolbarProps extends PaneToolbarProps {
-  panelActive: boolean;
-  onTogglePanel: () => void;
-  panelLabel: string;
-  groupLabel: string;
-  viewLabel: string;
+  readonly panelActive: boolean;
+  readonly onTogglePanel: () => void;
+  readonly panelLabel: string;
+  readonly groupLabel: string;
+  readonly viewLabel: string;
 }
 
 /** Pane and panel controls grouped at the trailing edge of the focused session titlebar. */
-export function PaneLayoutToolbar({
+export const PaneLayoutToolbar = ({
   panelActive,
   onTogglePanel,
   panelLabel,
@@ -89,7 +89,7 @@ export function PaneLayoutToolbar({
   onClose,
   canClose,
   labels,
-}: PaneLayoutToolbarProps) {
+}: PaneLayoutToolbarProps) => {
   return (
     <div
       className="session-header-layout-actions flex shrink-0 items-center"
@@ -98,22 +98,25 @@ export function PaneLayoutToolbar({
     >
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={(
+          render={
             <Button
               type="button"
               variant="ghost"
               size="compact"
               className={cn(
                 "session-header-layout-main text-foreground hover:text-foreground",
-                panelActive && "bg-fill-rest",
+                panelActive && "bg-fill-rest"
               )}
               title={viewLabel}
               aria-label={viewLabel}
             >
-              <PanelRight className="session-header-layout-icon size-4 text-muted-foreground" aria-hidden />
+              <PanelRight
+                className="session-header-layout-icon text-muted-foreground size-4"
+                aria-hidden
+              />
               <span className="session-header-layout-label">{viewLabel}</span>
             </Button>
-          )}
+          }
         />
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
@@ -147,11 +150,11 @@ export function PaneLayoutToolbar({
 }
 
 interface PanePreviewProps {
-  title: string;
-  running: boolean;
-  turns: readonly Turn[];
-  emptyLabel: string;
-  toolbar: PaneToolbarProps;
+  readonly title: string;
+  readonly running: boolean;
+  readonly turns: readonly Turn[];
+  readonly emptyLabel: string;
+  readonly toolbar: PaneToolbarProps;
 }
 
 /**
@@ -159,35 +162,40 @@ interface PanePreviewProps {
  * session-routed event handler, so this mirrors a background agent's progress. Pressing anywhere
  * focuses the pane (handled by the tiling host) — this component only renders.
  */
-export function PanePreview({
+export const PanePreview = ({
   title,
   running,
   turns,
   emptyLabel,
   toolbar,
-}: PanePreviewProps) {
+}: PanePreviewProps) => {
   return (
-    <div className="flex size-full flex-col bg-background">
-      <header className="flex shrink-0 items-center gap-2 bg-fill-quiet px-3 py-2">
+    <div className="bg-background flex size-full flex-col">
+      <header className="bg-fill-quiet flex shrink-0 items-center gap-2 px-3 py-2">
         {running ? (
           <span
-            className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary"
+            className="bg-primary size-1.5 shrink-0 animate-pulse rounded-full"
             aria-hidden
           />
         ) : null}
-        <span className="min-w-0 flex-1 truncate text-callout font-medium">{title}</span>
+        <span className="text-callout min-w-0 flex-1 truncate font-medium">
+          {title}
+        </span>
         <PaneToolbar {...toolbar} />
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {turns.length === 0 ? (
-          <p className="px-3 py-6 text-center text-callout text-muted-foreground">
+          <p className="text-callout text-muted-foreground px-3 py-6 text-center">
             {emptyLabel}
           </p>
         ) : (
-          <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-3">
+          <div className="mx-auto w-full max-w-3xl px-4 pt-3 pb-6">
             <ol className="m-0 list-none p-0">
               {turns.map((turn) => (
-                <li key={turn.transcriptStartSeq ?? turn.id} className="transcript-turn">
+                <li
+                  key={turn.transcriptStartSeq ?? turn.id}
+                  className="transcript-turn"
+                >
                   <TurnCard turn={turn} />
                 </li>
               ))}

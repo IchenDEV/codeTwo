@@ -1,12 +1,26 @@
 import { describe, expect, test } from "bun:test";
 
 import type { UsageHistory } from "../src/bridge";
-import { fmtCost, fmtReset, fmtTokens, seriesColorClass, stackHistory } from "../src/usage/usageMath";
+import {
+  fmtCost,
+  fmtReset,
+  fmtTokens,
+  seriesColorClass,
+  stackHistory,
+} from "../src/usage/usageMath";
 
 const HOUR = 3600;
 
-function history(series: { source: string; totals: number[] }[], bucketCount: number): UsageHistory {
-  return { bucket_secs: HOUR, bucket_count: bucketCount, start_ms: 1_000_000_000_000, series };
+function history(
+  series: { source: string; totals: number[] }[],
+  bucketCount: number
+): UsageHistory {
+  return {
+    bucket_secs: HOUR,
+    bucket_count: bucketCount,
+    start_ms: 1_000_000_000_000,
+    series,
+  };
 }
 
 describe("stackHistory", () => {
@@ -17,8 +31,8 @@ describe("stackHistory", () => {
           { source: "claude", totals: [100, 0, 40] },
           { source: "codex", totals: [50, 0, 200] },
         ],
-        3,
-      ),
+        3
+      )
     );
     expect(stacked.max).toBe(240);
     expect(stacked.buckets).toHaveLength(3);
@@ -30,11 +44,15 @@ describe("stackHistory", () => {
     expect(stacked.buckets[1].total).toBe(0);
     expect(stacked.buckets[1].parts).toEqual([]);
     // Bucket timestamps advance by bucket_secs from start_ms.
-    expect(stacked.buckets[2].startMs - stacked.buckets[0].startMs).toBe(2 * HOUR * 1000);
+    expect(stacked.buckets[2].startMs - stacked.buckets[0].startMs).toBe(
+      2 * HOUR * 1000
+    );
   });
 
   test("missing series values are treated as zero rather than NaN", () => {
-    const stacked = stackHistory(history([{ source: "claude", totals: [7] }], 3));
+    const stacked = stackHistory(
+      history([{ source: "claude", totals: [7] }], 3)
+    );
     expect(stacked.buckets.map((b) => b.total)).toEqual([7, 0, 0]);
     expect(stacked.max).toBe(7);
   });

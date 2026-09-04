@@ -1,7 +1,15 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { CheckoutBar } = await import("../src/session/Composer");
@@ -82,15 +90,21 @@ function checkout(overrides = {}) {
 }
 
 async function openPicker(container) {
-  const trigger = container.querySelector('[aria-label="Checkout: Project checkout"]');
+  const trigger = container.querySelector(
+    '[aria-label="Checkout: Project checkout"]'
+  );
   await reactAct(async () => {
-    trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    trigger?.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    trigger?.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
   return dom.document.body.querySelector('[data-slot="popover-content"]');
@@ -103,19 +117,32 @@ describe("CheckoutBar", () => {
     const rendered = mount(
       <I18nProvider>
         <CheckoutBar
-          config={config({ onWorktreeBase: (value) => { selected = value; } })}
-          checkout={checkout({ onOpen: () => { sourceControlOpens += 1; } })}
+          config={config({
+            onWorktreeBase: (value) => {
+              selected = value;
+            },
+          })}
+          checkout={checkout({
+            onOpen: () => {
+              sourceControlOpens += 1;
+            },
+          })}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     try {
-      const checkoutBar = rendered.container.querySelector("[data-checkout-bar]");
+      const checkoutBar = rendered.container.querySelector(
+        "[data-checkout-bar]"
+      );
       expect(checkoutBar?.className).toContain("mx-page");
       expect(checkoutBar?.className).toContain("mt-2");
       expect(checkoutBar?.className).not.toContain("-mt-");
 
-      const sourceControl = button(rendered.container, "Open source control for main");
+      const sourceControl = button(
+        rendered.container,
+        "Open source control for main"
+      );
       click(sourceControl);
       expect(sourceControlOpens).toBe(1);
 
@@ -126,7 +153,9 @@ describe("CheckoutBar", () => {
       expect(popup?.textContent).toContain("origin/main");
       expect(popup?.textContent).toContain("current");
       expect(popup?.textContent).toContain("worktree");
-      expect(button(popup, "codeTwo, Project checkout").getAttribute("aria-pressed")).toBe("true");
+      expect(
+        button(popup, "codeTwo, Project checkout").getAttribute("aria-pressed")
+      ).toBe("true");
       const currentRef = button(popup, "main, From the current ref");
       expect(currentRef.getAttribute("title")).toBeNull();
       expect(currentRef.textContent).toContain("main @ 3befbb7d");
@@ -145,18 +174,28 @@ describe("CheckoutBar", () => {
         <CheckoutBar
           config={config({
             worktreeOptions: [
-              { kind: "current", resolved: null, unavailable_reason: "HEAD is unavailable" },
-              { kind: "origin_default", resolved: null, unavailable_reason: "origin/HEAD is missing" },
+              {
+                kind: "current",
+                resolved: null,
+                unavailable_reason: "HEAD is unavailable",
+              },
+              {
+                kind: "origin_default",
+                resolved: null,
+                unavailable_reason: "origin/HEAD is missing",
+              },
             ],
           })}
           checkout={checkout({ project: ".", branch: null, dirty: 0 })}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     try {
       const popup = await openPicker(rendered.container);
-      expect(button(popup, "No project selected, Project checkout").disabled).toBe(false);
+      expect(
+        button(popup, "No project selected, Project checkout").disabled
+      ).toBe(false);
       expect(button(popup, "From the current ref").disabled).toBe(true);
       expect(button(popup, "From the origin default ref").disabled).toBe(true);
       expect(rendered.container.textContent).not.toContain("main");
@@ -182,27 +221,38 @@ describe("CheckoutBar", () => {
           })}
           checkout={checkout({ branch: "codetwo/session-123", dirty: 0 })}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     try {
-      const trigger = rendered.container.querySelector('[aria-label="Checkout: Session worktree"]');
+      const trigger = rendered.container.querySelector(
+        '[aria-label="Checkout: Session worktree"]'
+      );
       await reactAct(async () => {
-        trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-          bubbles: true,
-          cancelable: true,
-          button: 0,
-          pointerId: 1,
-        }));
-        trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+        trigger?.dispatchEvent(
+          new dom.window.PointerEvent("pointerdown", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            pointerId: 1,
+          })
+        );
+        trigger?.dispatchEvent(
+          new dom.window.MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+          })
+        );
       });
       await flush();
 
-      const popup = dom.document.body.querySelector('[data-slot="popover-content"]');
+      const popup = dom.document.body.querySelector(
+        '[data-slot="popover-content"]'
+      );
       const selected = button(popup, "main, Session worktree");
       expect(selected.getAttribute("aria-pressed")).toBe("true");
       expect(selected.className).toContain(
-        "disabled:data-[selected=true]:opacity-100",
+        "disabled:data-[selected=true]:opacity-100"
       );
       expect(popup?.textContent).toContain("main");
       expect(selected.getAttribute("title")).toBeNull();

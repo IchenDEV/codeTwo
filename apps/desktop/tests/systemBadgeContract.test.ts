@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 const source = (relativePath: string) =>
-  readFileSync(new URL(relativePath, import.meta.url), "utf8").replaceAll("\r\n", "\n");
+  readFileSync(new URL(relativePath, import.meta.url), "utf8").replaceAll(
+    "\r\n",
+    "\n"
+  );
 
 const app = source("../src/App.tsx");
 const bridge = source("../src/bridge.ts");
@@ -20,8 +23,12 @@ describe("system badge contract", () => {
     expect(app).toContain("setSystemBadgeCount(systemBadgeCount)");
     expect(bridge).toContain("desktopSetSystemBadgeCount(count)");
     expect(client).toContain("request.systemBadgeSet({ count })");
-    expect(rpc).toContain("systemBadgeSet: { params: { count: number }; response: boolean }");
-    expect(host).toContain("systemBadgeSet: ({ count }) => setMacOSSystemBadgeCount(count)");
+    expect(rpc).toContain(
+      "systemBadgeSet: { params: { count: number }; response: boolean }"
+    );
+    expect(host).toContain(
+      "systemBadgeSet: ({ count }) => setMacOSSystemBadgeCount(count)"
+    );
   });
 
   test("uses the native macOS Dock badge and clears it at zero", () => {
@@ -36,9 +43,15 @@ describe("system badge contract", () => {
     expect(profile).toContain("avatarLoader = systemProfileAvatar");
     expect(bridge).toContain("desktopSystemProfileAvatar()");
     expect(client).toContain("request.systemProfileAvatar()");
-    expect(rpc).toContain("systemProfileAvatar: { params: undefined; response: string | null }");
+    expect(rpc).toContain(
+      "systemProfileAvatar: { params: undefined; response: string | null }"
+    );
     expect(host).toContain("systemProfileAvatar: readSystemProfileAvatar");
-    expect(systemProfile).toContain('["/usr/bin/dscl", ".", "-read", record, "JPEGPhoto"]');
-    expect(systemProfile).toContain('["/usr/bin/sips", "-s", "format", "png", path');
+    expect(systemProfile).toContain(
+      '["/usr/bin/dscl", ".", "-read", record, "JPEGPhoto"]'
+    );
+    expect(systemProfile).toContain(
+      '["/usr/bin/sips", "-s", "format", "png", path'
+    );
   });
 });

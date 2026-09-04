@@ -7,13 +7,18 @@ import {
   pullRequestCheckState,
   shortPullRequestAge,
 } from "../src/github/pullRequests";
-import type { GitHubPullRequestDetail, GitHubPullRequestSummary } from "../src/bridge";
+import type {
+  GitHubPullRequestDetail,
+  GitHubPullRequestSummary,
+} from "../src/bridge";
 
 const NOW = Date.UTC(2026, 7, 24, 12);
 
 function summary(
   id: string,
-  relation: Partial<Pick<GitHubPullRequestSummary, "authored" | "reviewRequested" | "reviewed">>,
+  relation: Partial<
+    Pick<GitHubPullRequestSummary, "authored" | "reviewRequested" | "reviewed">
+  >
 ): GitHubPullRequestSummary {
   return {
     id,
@@ -42,18 +47,24 @@ describe("GitHub pull request projections", () => {
   ];
 
   test("filters by relationship, readiness, and searchable repository metadata", () => {
-    expect(filterPullRequests(items, "reviewing", "all", "").map((item) => item.id))
-      .toEqual(["1", "2"]);
-    expect(filterPullRequests(items, "authored", "draft", "").map((item) => item.id))
-      .toEqual(["3"]);
-    expect(filterPullRequests(items, "all", "all", "ACME/REPO")).toHaveLength(3);
+    expect(
+      filterPullRequests(items, "reviewing", "all", "").map((item) => item.id)
+    ).toEqual(["1", "2"]);
+    expect(
+      filterPullRequests(items, "authored", "draft", "").map((item) => item.id)
+    ).toEqual(["3"]);
+    expect(filterPullRequests(items, "all", "all", "ACME/REPO")).toHaveLength(
+      3
+    );
   });
 
   test("assigns each pull request to the highest-priority visible group once", () => {
-    expect(groupPullRequests(items, "all").map((group) => [
-      group.id,
-      group.items.map((item) => item.id),
-    ])).toEqual([
+    expect(
+      groupPullRequests(items, "all").map((group) => [
+        group.id,
+        group.items.map((item) => item.id),
+      ])
+    ).toEqual([
       ["review-requested", ["1"]],
       ["reviewed", ["2"]],
       ["authored", ["3"]],
@@ -61,9 +72,15 @@ describe("GitHub pull request projections", () => {
   });
 
   test("formats compact ages at stable boundaries", () => {
-    expect(shortPullRequestAge(new Date(NOW - 30_000).toISOString(), NOW)).toBe("now");
-    expect(shortPullRequestAge(new Date(NOW - 2 * 3_600_000).toISOString(), NOW)).toBe("2h");
-    expect(shortPullRequestAge(new Date(NOW - 15 * 86_400_000).toISOString(), NOW)).toBe("2w");
+    expect(shortPullRequestAge(new Date(NOW - 30_000).toISOString(), NOW)).toBe(
+      "now"
+    );
+    expect(
+      shortPullRequestAge(new Date(NOW - 2 * 3_600_000).toISOString(), NOW)
+    ).toBe("2h");
+    expect(
+      shortPullRequestAge(new Date(NOW - 15 * 86_400_000).toISOString(), NOW)
+    ).toBe("2w");
   });
 
   test("reports failed and pending checks before success", () => {
@@ -83,8 +100,32 @@ describe("GitHub pull request projections", () => {
       files: [],
     } satisfies Omit<GitHubPullRequestDetail, "checks">;
     expect(pullRequestCheckState({ ...base, checks: [] })).toBe("none");
-    expect(pullRequestCheckState({ ...base, checks: [{ name: "test", status: "IN_PROGRESS", conclusion: "", detailsUrl: null }] })).toBe("pending");
-    expect(pullRequestCheckState({ ...base, checks: [{ name: "test", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: null }] })).toBe("failed");
+    expect(
+      pullRequestCheckState({
+        ...base,
+        checks: [
+          {
+            name: "test",
+            status: "IN_PROGRESS",
+            conclusion: "",
+            detailsUrl: null,
+          },
+        ],
+      })
+    ).toBe("pending");
+    expect(
+      pullRequestCheckState({
+        ...base,
+        checks: [
+          {
+            name: "test",
+            status: "COMPLETED",
+            conclusion: "FAILURE",
+            detailsUrl: null,
+          },
+        ],
+      })
+    ).toBe("failed");
   });
 
   test("projects the stable GitHub identity stored by task links", () => {

@@ -15,9 +15,9 @@ function sourceFiles(directory: string): string[] {
 function isDesktopImplementation(path: string): boolean {
   const name = relative(sourceRoot, path).replaceAll("\\", "/");
   return (
-    name === "container.ts"
-    || name === "browser/electrobun.ts"
-    || name.startsWith("electrobun/")
+    name === "container.ts" ||
+    name === "browser/electrobun.ts" ||
+    name.startsWith("electrobun/")
   );
 }
 
@@ -27,12 +27,17 @@ describe("desktop container boundary", () => {
       .filter((path) => !isDesktopImplementation(path))
       .flatMap((path) => {
         const source = readFileSync(path, "utf8");
-        return [...source.matchAll(/\b(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g)]
+        return [
+          ...source.matchAll(
+            /\b(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g
+          ),
+        ]
           .map((match) => match[1])
-          .filter((specifier) =>
-            specifier === "electrobun"
-            || specifier.startsWith("electrobun/")
-            || /(?:^|\/)electrobun(?:\/|$)/.test(specifier)
+          .filter(
+            (specifier) =>
+              specifier === "electrobun" ||
+              specifier.startsWith("electrobun/") ||
+              /(?:^|\/)electrobun(?:\/|$)/.test(specifier)
           )
           .map((specifier) => `${relative(sourceRoot, path)} -> ${specifier}`);
       });

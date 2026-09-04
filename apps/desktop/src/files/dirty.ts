@@ -17,11 +17,18 @@ export function dirtyKey(cwd: string, path: string): string {
 }
 
 export function markDirty(key: string, value: boolean): void {
-  if (value === dirty.has(key)) return;
-  if (value) dirty.add(key);
-  else dirty.delete(key);
+  if (value === dirty.has(key)) {
+    return;
+  }
+  if (value) {
+    dirty.add(key);
+  } else {
+    dirty.delete(key);
+  }
   snapshot = new Set(dirty);
-  for (const fn of subs) fn();
+  for (const function_ of subs) {
+    function_();
+  }
 }
 
 export function isDirty(key: string): boolean {
@@ -30,10 +37,10 @@ export function isDirty(key: string): boolean {
 
 export function useDirtyPaths(): ReadonlySet<string> {
   return useSyncExternalStore(
-    (fn) => {
-      subs.add(fn);
-      return () => subs.delete(fn);
+    (function_) => {
+      subs.add(function_);
+      return () => subs.delete(function_);
     },
-    () => snapshot,
+    () => snapshot
   );
 }

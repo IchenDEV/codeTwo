@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { activateDom, dom } from "./domTestHarness";
 
 activateDom();
-dom.window.HTMLCanvasElement.prototype.getContext = () => ({ filter: "" }) as never;
+dom.window.HTMLCanvasElement.prototype.getContext = () =>
+  ({ filter: "" }) as never;
 
 const { docToBlocks } = await import("../src/skillInline");
 
@@ -20,9 +21,12 @@ describe("docToBlocks artifactMention", () => {
     const editor = editorWith(
       paragraph(
         { type: "text", text: "Follow " },
-        { type: "artifactMention", props: { artifactId: "42", title: "Plan", kind: "plan" } },
-        { type: "text", text: " exactly." },
-      ),
+        {
+          type: "artifactMention",
+          props: { artifactId: "42", title: "Plan", kind: "plan" },
+        },
+        { type: "text", text: " exactly." }
+      )
     );
     expect(docToBlocks(editor)).toEqual([
       { type: "text", text: "Follow " },
@@ -33,8 +37,13 @@ describe("docToBlocks artifactMention", () => {
 
   test("a mention on its own line compiles to just the token", () => {
     const editor = editorWith(
-      paragraph({ type: "artifactMention", props: { artifactId: "7", title: "Report", kind: "report" } }),
+      paragraph({
+        type: "artifactMention",
+        props: { artifactId: "7", title: "Report", kind: "report" },
+      })
     );
-    expect(docToBlocks(editor)).toEqual([{ type: "text", text: "{{artifact:7}}" }]);
+    expect(docToBlocks(editor)).toEqual([
+      { type: "text", text: "{{artifact:7}}" },
+    ]);
   });
 });

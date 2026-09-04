@@ -16,14 +16,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusIndicator } from "@/components/business/status-indicator";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function defaultEndpointId(status: RemoteStatus | null): string | null {
   if (!status) return null;
   return (
-    status.endpoints.find((endpoint) => endpoint.id.startsWith("lan-") && endpoint.qr_shareable)?.id ??
+    status.endpoints.find(
+      (endpoint) => endpoint.id.startsWith("lan-") && endpoint.qr_shareable
+    )?.id ??
     status.endpoints.find((endpoint) => endpoint.qr_shareable)?.id ??
     status.endpoints[0]?.id ??
     null
@@ -51,12 +66,15 @@ function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
   return "Devices on the same network can use this address.";
 }
 
-export function RemoteModal({ onClose }: { onClose: () => void }) {
+export const RemoteModal = ({ onClose }: { readonly onClose: () => void }) => {
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [link, setLink] = useState<RemotePairingLink | null>(null);
-  const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(null);
-  const [clientProtocol, setClientProtocol] = useState<RemoteClientProtocol>("c2");
+  const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(
+    null
+  );
+  const [clientProtocol, setClientProtocol] =
+    useState<RemoteClientProtocol>("c2");
   const [pairingUrl, setPairingUrl] = useState("");
   const [pairedMessage, setPairedMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,20 +87,30 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
   const applyStatus = useCallback((next: RemoteStatus | null) => {
     setStatus(next);
     setSelectedEndpointId((current) => {
-      if (current && next?.endpoints.some((endpoint) => endpoint.id === current)) return current;
+      if (
+        current &&
+        next?.endpoints.some((endpoint) => endpoint.id === current)
+      )
+        return current;
       return defaultEndpointId(next);
     });
     if (next) {
       const protocols = supportedProtocols(next);
-      setClientProtocol((current) => protocols.includes(current) ? current : protocols[0] ?? "c2");
+      setClientProtocol((current) =>
+        protocols.includes(current) ? current : (protocols[0] ?? "c2")
+      );
     } else {
       setLink(null);
     }
   }, []);
 
   const refresh = useCallback(() => {
-    remoteStatus().then(applyStatus).catch(() => {});
-    remoteDevices().then(setDevices).catch(() => {});
+    remoteStatus()
+      .then(applyStatus)
+      .catch(() => {});
+    remoteDevices()
+      .then(setDevices)
+      .catch(() => {});
   }, [applyStatus]);
 
   useEffect(refresh, [refresh]);
@@ -93,7 +121,10 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
       setLinkBusy(true);
       setErr(null);
       try {
-        const next = await remotePairingLink(endpointId ?? undefined, requestedProtocol);
+        const next = await remotePairingLink(
+          endpointId ?? undefined,
+          requestedProtocol
+        );
         if (request !== linkRequest.current) return;
         setLink(next);
         if (next) setSelectedEndpointId(next.endpoint_id);
@@ -104,7 +135,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         if (request === linkRequest.current) setLinkBusy(false);
       }
     },
-    [clientProtocol],
+    [clientProtocol]
   );
 
   const turnOn = async () => {
@@ -173,11 +204,13 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     try {
       const result = await pairRemoteDevice(pairingUrl);
       setPairingUrl("");
-      setPairedMessage(result.sync.state === "ready"
-        ? `Paired with ${result.device.name}. First sync complete.`
-        : result.sync.state === "disabled"
-          ? `Paired with ${result.device.name}. Device Sync is off.`
-          : `Paired with ${result.device.name}. Sync will retry: ${result.sync.message ?? result.sync.state}.`);
+      setPairedMessage(
+        result.sync.state === "ready"
+          ? `Paired with ${result.device.name}. First sync complete.`
+          : result.sync.state === "disabled"
+            ? `Paired with ${result.device.name}. Device Sync is off.`
+            : `Paired with ${result.device.name}. Sync will retry: ${result.sync.message ?? result.sync.state}.`
+      );
       setDevices(await remoteDevices());
     } catch (error) {
       setErr(String(error));
@@ -196,8 +229,12 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const selectedEndpoint = status?.endpoints.find((endpoint) => endpoint.id === selectedEndpointId);
-  const linkEndpoint = status?.endpoints.find((endpoint) => endpoint.id === link?.endpoint_id);
+  const selectedEndpoint = status?.endpoints.find(
+    (endpoint) => endpoint.id === selectedEndpointId
+  );
+  const linkEndpoint = status?.endpoints.find(
+    (endpoint) => endpoint.id === link?.endpoint_id
+  );
   const protocols = status ? supportedProtocols(status) : ["c2" as const];
 
   return (
@@ -208,9 +245,12 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         </DialogHeader>
 
         <Card variant="flat" density="compact" className="p-3">
-          <p className="text-body font-medium">Pair this C2 with another device</p>
+          <p className="text-body font-medium">
+            Pair this C2 with another device
+          </p>
           <p className="text-metadata text-muted-foreground">
-            Paste a one-time link created on the other C2 device. Conversations, projects, and saved memory sync after pairing.
+            Paste a one-time link created on the other C2 device. Conversations,
+            projects, and saved memory sync after pairing.
           </p>
           <div className="flex gap-2">
             <Input
@@ -219,34 +259,63 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
               aria-label="C2 pairing link"
               onChange={(event) => setPairingUrl(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && pairingUrl.trim() && !pairBusy) void pair();
+                if (event.key === "Enter" && pairingUrl.trim() && !pairBusy)
+                  void pair();
               }}
             />
-            <Button disabled={!pairingUrl.trim() || pairBusy} onClick={() => void pair()}>
+            <Button
+              disabled={!pairingUrl.trim() || pairBusy}
+              onClick={() => void pair()}
+            >
               {pairBusy ? "Pairing…" : "Pair"}
             </Button>
           </div>
-          {pairedMessage && <p className="text-metadata text-foreground">{pairedMessage}</p>}
+          {pairedMessage ? <p className="text-metadata text-foreground">{pairedMessage}</p> : null}
         </Card>
 
         {status ? (
           <>
             <div className="flex items-center justify-between">
-              <StatusIndicator tone="success" label={`Incoming connections are on — port ${status.port}`} />
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => void turnOff()}>
+              <StatusIndicator
+                tone="success"
+                label={`Incoming connections are on — port ${status.port}`}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => void turnOff()}
+              >
                 Turn off
               </Button>
             </div>
 
             {protocols.length > 1 && (
               <div className="space-y-1.5">
-                <label id="remote-client-label" className="text-body font-medium">Client</label>
-                <Select value={clientProtocol} onValueChange={(value) => value && selectClientProtocol(value)}>
-                  <SelectTrigger className="w-full" aria-labelledby="remote-client-label"><SelectValue /></SelectTrigger>
+                <label
+                  id="remote-client-label"
+                  className="text-body font-medium"
+                >
+                  Client
+                </label>
+                <Select
+                  value={clientProtocol}
+                  onValueChange={(value) =>
+                    value && selectClientProtocol(value)
+                  }
+                >
+                  <SelectTrigger
+                    className="w-full"
+                    aria-labelledby="remote-client-label"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
                       {protocols.map((protocol) => (
-                        <SelectItem key={protocol} value={protocol}>{protocolLabel(protocol)}</SelectItem>
+                        <SelectItem key={protocol} value={protocol}>
+                          {protocolLabel(protocol)}
+                        </SelectItem>
                       ))}
                     </SelectGroup>
                   </SelectContent>
@@ -255,11 +324,18 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="space-y-1.5">
-              <label id="remote-endpoint-label" className="text-body font-medium">Pairing address</label>
+              <label
+                id="remote-endpoint-label"
+                className="text-body font-medium"
+              >
+                Pairing address
+              </label>
               <Select
                 value={selectedEndpointId ?? undefined}
                 disabled={status.endpoints.length === 0}
-                onValueChange={(endpointId) => endpointId && selectEndpoint(endpointId)}
+                onValueChange={(endpointId) =>
+                  endpointId && selectEndpoint(endpointId)
+                }
               >
                 <SelectTrigger
                   className="w-full"
@@ -271,18 +347,28 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 <SelectContent>
                   <SelectGroup>
                     {status.endpoints.map((endpoint) => (
-                      <SelectItem key={endpoint.id} value={endpoint.id}>{endpoint.label}</SelectItem>
+                      <SelectItem key={endpoint.id} value={endpoint.id}>
+                        {endpoint.label}
+                      </SelectItem>
                     ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <p id="remote-endpoint-help" className="text-metadata text-muted-foreground">
+              <p
+                id="remote-endpoint-help"
+                className="text-metadata text-muted-foreground"
+              >
                 {endpointHelp(selectedEndpoint)}
               </p>
             </div>
 
             {link ? (
-              <Card variant="flat" density="compact" className="p-3" aria-busy={linkBusy}>
+              <Card
+                variant="flat"
+                density="compact"
+                className="p-3"
+                aria-busy={linkBusy}
+              >
                 <p className="text-metadata text-muted-foreground">
                   {clientProtocol === "c2"
                     ? "Paste this complete link into Device connections on the other C2 device. "
@@ -291,20 +377,26 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                         ? "Scan this inside T3 Code mobile. "
                         : "Choose a LAN or verified tailnet address for T3 Code mobile. "
                       : "Open this link in the C2 browser client. "}
-                  The link is one-time and expires in {Math.round(link.expires_in / 60)} minutes.
+                  The link is one-time and expires in{" "}
+                  {Math.round(link.expires_in / 60)} minutes.
                 </p>
-                {link.qr_svg && (
-                  <div className="mx-auto w-fit rounded-control bg-qr-surface p-2">
+                {link.qr_svg ? <div className="rounded-control bg-qr-surface mx-auto w-fit p-2">
                     <img
                       className="block size-44"
                       alt="Pairing QR code"
                       src={`data:image/svg+xml;utf8,${encodeURIComponent(link.qr_svg)}`}
                     />
-                  </div>
-                )}
-                <div className="break-all rounded-control bg-fill-rest px-3 py-2 font-mono text-metadata">{link.url}</div>
+                  </div> : null}
+                <div className="rounded-control bg-fill-rest text-metadata px-3 py-2 font-mono break-all">
+                  {link.url}
+                </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={linkBusy} onClick={() => void copy()}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={linkBusy}
+                    onClick={() => void copy()}
+                  >
                     {copied ? "Copied ✓" : "Copy link"}
                   </Button>
                   <Button
@@ -312,7 +404,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                     size="sm"
                     aria-disabled={linkBusy}
                     className="aria-disabled:opacity-50"
-                    onClick={() => !linkBusy && void mintLink(selectedEndpointId)}
+                    onClick={() =>
+                      !linkBusy && void mintLink(selectedEndpointId)
+                    }
                   >
                     {linkBusy ? "Creating…" : "New link"}
                   </Button>
@@ -333,7 +427,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <p className="text-metadata text-muted-foreground">
-              Allow another C2 device, T3 Code mobile, or a browser remote to connect over the same LAN or Tailscale tailnet. Access requires a short-lived, one-time link and can be revoked at any time.
+              Allow another C2 device, T3 Code mobile, or a browser remote to
+              connect over the same LAN or Tailscale tailnet. Access requires a
+              short-lived, one-time link and can be revoked at any time.
             </p>
             <Button disabled={busy} onClick={() => void turnOn()}>
               {busy ? "Starting…" : "Allow incoming connections"}
@@ -345,7 +441,10 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-1.5">
             <p className="text-body font-medium">Paired devices</p>
             {devices.map((device) => (
-              <div key={device.id} className="flex items-center justify-between rounded-control border px-3 py-1.5">
+              <div
+                key={device.id}
+                className="rounded-control flex items-center justify-between border px-3 py-1.5"
+              >
                 <div>
                   <p className="text-body">{device.name}</p>
                   <p className="text-metadata text-muted-foreground">
@@ -353,12 +452,18 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                       ? "Syncs with this C2"
                       : device.protocol === "c2"
                         ? "Can sync into this C2"
-                        : "Can control this C2"} · paired{" "}
-                    {new Date(device.created_at * 1000).toLocaleDateString()} · last seen{" "}
+                        : "Can control this C2"}{" "}
+                    · paired{" "}
+                    {new Date(device.created_at * 1000).toLocaleDateString()} ·
+                    last seen{" "}
                     {new Date(device.last_seen * 1000).toLocaleString()}
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => void revoke(device.id)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void revoke(device.id)}
+                >
                   {device.direction === "outgoing" ? "Disconnect" : "Revoke"}
                 </Button>
               </div>
@@ -366,10 +471,12 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {err && <p className="text-metadata text-destructive">{err}</p>}
+        {err ? <p className="text-metadata text-destructive">{err}</p> : null}
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Done</Button>
+          <Button variant="outline" onClick={onClose}>
+            Done
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

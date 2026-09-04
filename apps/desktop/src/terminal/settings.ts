@@ -6,7 +6,9 @@ import { useSyncExternalStore } from "react";
  * indifferent to fonts. Scrollback is the exception — it's passed to the core on first attach.
  */
 export interface TerminalSettings {
-  /** Empty means "use the app's mono stack" (`--font-mono`). */
+  /**
+  Empty means "use the app's mono stack" (`--font-mono`).
+  */
   fontFamily: string;
   fontSize: number;
   scrollback: number;
@@ -17,25 +19,43 @@ const STORAGE_KEY = "codetwo.terminal";
 export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   fontFamily: "",
   fontSize: 13,
-  scrollback: 10000,
+  scrollback: 10_000,
 };
 
 function read(): TerminalSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_TERMINAL_SETTINGS;
+    if (!raw) {
+      return DEFAULT_TERMINAL_SETTINGS;
+    }
     const parsed = JSON.parse(raw) as Partial<TerminalSettings>;
     return {
-      fontFamily: typeof parsed.fontFamily === "string" ? parsed.fontFamily : "",
-      fontSize: clamp(parsed.fontSize, 8, 32, DEFAULT_TERMINAL_SETTINGS.fontSize),
-      scrollback: clamp(parsed.scrollback, 100, 200000, DEFAULT_TERMINAL_SETTINGS.scrollback),
+      fontFamily:
+        typeof parsed.fontFamily === "string" ? parsed.fontFamily : "",
+      fontSize: clamp(
+        parsed.fontSize,
+        8,
+        32,
+        DEFAULT_TERMINAL_SETTINGS.fontSize
+      ),
+      scrollback: clamp(
+        parsed.scrollback,
+        100,
+        200_000,
+        DEFAULT_TERMINAL_SETTINGS.scrollback
+      ),
     };
   } catch {
     return DEFAULT_TERMINAL_SETTINGS;
   }
 }
 
-function clamp(value: unknown, min: number, max: number, fallback: number): number {
+function clamp(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.min(max, Math.max(min, Math.round(value)))
     : fallback;
@@ -45,9 +65,9 @@ function clamp(value: unknown, min: number, max: number, fallback: number): numb
 const listeners = new Set<() => void>();
 let snapshot = read();
 
-function subscribe(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
+function subscribe(function_: () => void): () => void {
+  listeners.add(function_);
+  return () => listeners.delete(function_);
 }
 
 export function setTerminalSettings(patch: Partial<TerminalSettings>): void {
@@ -55,9 +75,13 @@ export function setTerminalSettings(patch: Partial<TerminalSettings>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   } catch {
-    /* private mode — the choice just won't survive a restart */
+    /*
+    private mode — the choice just won't survive a restart
+    */
   }
-  for (const fn of listeners) fn();
+  for (const function_ of listeners) {
+    function_();
+  }
 }
 
 export function useTerminalSettings(): TerminalSettings {

@@ -1,7 +1,14 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
@@ -23,7 +30,7 @@ describe("provider-native context compaction", () => {
     const unavailable = mount(
       <I18nProvider>
         <Statusline contextWindow={contextWindow} usage={null} />
-      </I18nProvider>,
+      </I18nProvider>
     );
     click(unavailable.container.querySelector('[role="meter"]'));
     await flush();
@@ -36,14 +43,15 @@ describe("provider-native context compaction", () => {
         <Statusline
           contextWindow={contextWindow}
           usage={null}
-          onCompact={() => compacted += 1}
+          onCompact={() => (compacted += 1)}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     click(available.container.querySelector('[role="meter"]'));
     await flush();
-    const action = Array.from(dom.document.body.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Compact context"));
+    const action = Array.from(
+      dom.document.body.querySelectorAll("button")
+    ).find((button) => button.textContent?.includes("Compact context"));
     expect(action).toBeDefined();
     click(action);
     await flush();
@@ -61,15 +69,16 @@ describe("provider-native context compaction", () => {
           compactDisabled
           compactDisabledReason="Send or clear the current draft before compacting."
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     click(rendered.container.querySelector('[role="meter"]'));
     await flush();
-    const action = Array.from(dom.document.body.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Compact context"));
+    const action = Array.from(
+      dom.document.body.querySelectorAll("button")
+    ).find((button) => button.textContent?.includes("Compact context"));
     expect(action?.hasAttribute("disabled")).toBe(true);
     expect(dom.document.body.textContent).toContain(
-      "Send or clear the current draft before compacting.",
+      "Send or clear the current draft before compacting."
     );
     rendered.unmount();
   });

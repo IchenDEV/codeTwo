@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function SessionHeaderActions({
+export const SessionHeaderActions = ({
   canCommit,
   onAddAction,
   onOpenCursor,
@@ -42,27 +42,26 @@ export function SessionHeaderActions({
   onPush,
   onMoveTask,
 }: {
-  canCommit: boolean;
-  onAddAction: () => void;
-  onOpenCursor: () => void;
-  onOpenAntigravity: () => void;
-  onOpenFinder: () => void;
-  editorLaunchersAvailable: boolean;
-  fileManagerLabel: string;
-  finderHint: string;
-  actions?: ProjectScript[];
-  onRunAction?: (action: ProjectScript) => void;
-  onCommit: () => void;
-  onCheckpoint: () => void;
-  onPush: () => void;
-  onMoveTask: () => void;
-}) {
+  readonly canCommit: boolean;
+  readonly onAddAction: () => void;
+  readonly onOpenCursor: () => void;
+  readonly onOpenAntigravity: () => void;
+  readonly onOpenFinder: () => void;
+  readonly editorLaunchersAvailable: boolean;
+  readonly fileManagerLabel: string;
+  readonly finderHint: string;
+  readonly actions?: ProjectScript[];
+  readonly onRunAction?: (action: ProjectScript) => void;
+  readonly onCommit: () => void;
+  readonly onCheckpoint: () => void;
+  readonly onPush: () => void;
+  readonly onMoveTask: () => void;
+}) => {
   const t = useT();
   const renderOpenMenu = () => (
     <DropdownMenuContent align="end">
       <DropdownMenuGroup>
-        {editorLaunchersAvailable && (
-          <>
+        {editorLaunchersAvailable ? <>
             <DropdownMenuItem onClick={onOpenCursor}>
               <Box aria-hidden />
               {t("header.cursor")}
@@ -71,12 +70,11 @@ export function SessionHeaderActions({
               <Orbit aria-hidden />
               {t("header.antigravity")}
             </DropdownMenuItem>
-          </>
-        )}
+          </> : null}
         <DropdownMenuItem onClick={onOpenFinder}>
           <Folder aria-hidden />
           {fileManagerLabel}
-          {finderHint && <DropdownMenuShortcut>{finderHint}</DropdownMenuShortcut>}
+          {finderHint ? <DropdownMenuShortcut>{finderHint}</DropdownMenuShortcut> : null}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onMoveTask}>
           <Send aria-hidden />
@@ -118,8 +116,13 @@ export function SessionHeaderActions({
         aria-label={t("header.addAction")}
         onClick={onAddAction}
       >
-        <Plus className="session-header-action-icon size-4 text-muted-foreground" aria-hidden />
-        <span className="session-header-action-label">{t("header.addAction")}</span>
+        <Plus
+          className="session-header-action-icon text-muted-foreground size-4"
+          aria-hidden
+        />
+        <span className="session-header-action-label">
+          {t("header.addAction")}
+        </span>
       </Button>
 
       {actions.slice(0, 2).map((action) => (
@@ -128,48 +131,59 @@ export function SessionHeaderActions({
           type="button"
           variant="ghost"
           size="compact"
-          className="session-header-action-main max-w-36 bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
+          className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground max-w-36"
           aria-label={action.name || action.id}
           title={action.kind === "prompt" ? action.prompt : action.command}
           onClick={() => onRunAction?.(action)}
         >
           {action.kind === "prompt" ? (
-            <MessageSquareText className="session-header-action-icon size-3.5 text-muted-foreground" aria-hidden />
+            <MessageSquareText
+              className="session-header-action-icon text-muted-foreground size-3.5"
+              aria-hidden
+            />
           ) : (
-            <Play className="session-header-action-icon size-3.5 text-muted-foreground" aria-hidden />
+            <Play
+              className="session-header-action-icon text-muted-foreground size-3.5"
+              aria-hidden
+            />
           )}
-          <span className="session-header-action-label truncate">{action.name || action.id}</span>
+          <span className="session-header-action-label truncate">
+            {action.name || action.id}
+          </span>
         </Button>
       ))}
 
       {actions.length > 2 && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={(
+            render={
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground hover:text-muted-foreground"
+                className="text-muted-foreground hover:text-muted-foreground size-7"
                 aria-label={t("actionDialog.moreActions")}
               >
                 <Ellipsis className="size-4" aria-hidden />
               </Button>
-            )}
+            }
           />
           <DropdownMenuContent align="end">
             <DropdownMenuGroup>
               {actions.slice(2).map((action) => (
-                <DropdownMenuItem key={action.id} onClick={() => onRunAction?.(action)}>
+                <DropdownMenuItem
+                  key={action.id}
+                  onClick={() => onRunAction?.(action)}
+                >
                   {action.kind === "prompt" ? (
                     <MessageSquareText aria-hidden />
                   ) : (
                     <Play aria-hidden />
                   )}
                   {action.name || action.id}
-                  {action.keybinding && (
-                    <DropdownMenuShortcut>{formatCombo(action.keybinding)}</DropdownMenuShortcut>
-                  )}
+                  {action.keybinding ? <DropdownMenuShortcut>
+                      {formatCombo(action.keybinding)}
+                    </DropdownMenuShortcut> : null}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
@@ -179,7 +193,7 @@ export function SessionHeaderActions({
 
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={(
+          render={
             <Button
               type="button"
               variant="ghost"
@@ -187,17 +201,22 @@ export function SessionHeaderActions({
               className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
               aria-label={t("header.open")}
             >
-              <Folder className="session-header-action-icon size-4 text-muted-foreground" aria-hidden />
-              <span className="session-header-action-label">{t("header.open")}</span>
+              <Folder
+                className="session-header-action-icon text-muted-foreground size-4"
+                aria-hidden
+              />
+              <span className="session-header-action-label">
+                {t("header.open")}
+              </span>
             </Button>
-          )}
+          }
         />
         {renderOpenMenu()}
       </DropdownMenu>
 
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={(
+          render={
             <Button
               type="button"
               variant="ghost"
@@ -206,10 +225,15 @@ export function SessionHeaderActions({
               className="session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground disabled:opacity-60"
               aria-label={t("header.commit")}
             >
-              <GitCommitHorizontal className="session-header-action-icon size-4 text-muted-foreground" aria-hidden />
-              <span className="session-header-action-label">{t("header.commit")}</span>
+              <GitCommitHorizontal
+                className="session-header-action-icon text-muted-foreground size-4"
+                aria-hidden
+              />
+              <span className="session-header-action-label">
+                {t("header.commit")}
+              </span>
             </Button>
-          )}
+          }
         />
         {renderCommitMenu()}
       </DropdownMenu>

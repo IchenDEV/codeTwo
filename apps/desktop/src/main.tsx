@@ -14,16 +14,17 @@ import "./styles.css";
 document.documentElement.dataset.platform = currentDesktopPlatform();
 
 const searchParams = new URLSearchParams(window.location.search);
-const showDesktopPet = document.querySelector(
-  'meta[name="codetwo-surface"][content="desktop-pet"]',
-) !== null;
+const showDesktopPet =
+  document.querySelector(
+    'meta[name="codetwo-surface"][content="desktop-pet"]'
+  ) !== null;
 const showDesignSystem =
   import.meta.env.DEV && searchParams.has("design-system");
-const showPetPreview =
-  import.meta.env.DEV && searchParams.has("pet-preview");
+const showPetPreview = import.meta.env.DEV && searchParams.has("pet-preview");
 const showRichTranscript =
   import.meta.env.DEV && searchParams.has("rich-transcript");
-if (showDesktopPet) document.documentElement.classList.add("desktop-pet-window-root");
+if (showDesktopPet)
+  document.documentElement.classList.add("desktop-pet-window-root");
 
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
@@ -43,19 +44,24 @@ const interactiveSelector =
   "button, input, textarea, select, a, summary, [role='button'], [contenteditable='true']";
 const protectInteractiveNode = (node: Node) => {
   if (!(node instanceof Element)) return;
-  if (node.matches(interactiveSelector)) node.classList.add("electrobun-webkit-app-region-no-drag");
+  if (node.matches(interactiveSelector))
+    node.classList.add("electrobun-webkit-app-region-no-drag");
   for (const element of node.querySelectorAll(interactiveSelector)) {
     element.classList.add("electrobun-webkit-app-region-no-drag");
   }
 };
 protectInteractiveNode(document.documentElement);
 new MutationObserver((records) => {
-  for (const record of records) for (const node of record.addedNodes) protectInteractiveNode(node);
+  for (const record of records)
+    for (const node of record.addedNodes) protectInteractiveNode(node);
 }).observe(document.documentElement, { childList: true, subtree: true });
 
 if (!showDesktopPet && currentDesktopPlatform() === "macos") {
   installDesktopTitlebarDoubleClick(document, (error) => {
-    console.warn("Could not perform the macOS titlebar double-click action", error);
+    console.warn(
+      "Could not perform the macOS titlebar double-click action",
+      error
+    );
   });
 }
 
@@ -66,7 +72,8 @@ async function render() {
     : showPetPreview
       ? (await import("./pet/PetPreview")).PetPreview
       : showRichTranscript
-        ? (await import("./session/RichTranscriptPreview")).RichTranscriptPreview
+        ? (await import("./session/RichTranscriptPreview"))
+            .RichTranscriptPreview
         : showDesignSystem
           ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
           : App;
@@ -84,7 +91,7 @@ async function render() {
           </ErrorBoundary>
         </I18nProvider>
       </ThemeProvider>
-    </React.StrictMode>,
+    </React.StrictMode>
   );
 }
 

@@ -1,11 +1,11 @@
-import { Loader2, type IconProps } from "@/components/ui/icons"
-import { cn } from "@/lib/utils"
+import { Loader2, type IconProps } from "@/components/ui/icons";
+import { cn } from "@/lib/utils";
 
 type SpinnerProps = Omit<IconProps, "aria-hidden" | "aria-label" | "role"> & {
-  label?: string
-}
+  readonly label?: string;
+};
 
-function Spinner({ className, label, ...props }: SpinnerProps) {
+const Spinner = ({ className, label, ...props }: SpinnerProps) => {
   return (
     <Loader2
       data-slot="spinner"
@@ -15,7 +15,7 @@ function Spinner({ className, label, ...props }: SpinnerProps) {
       className={cn("size-4 animate-spin", className)}
       {...props}
     />
-  )
+  );
 }
 
-export { Spinner, type SpinnerProps }
+export { Spinner, type SpinnerProps };

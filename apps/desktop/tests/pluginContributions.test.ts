@@ -61,29 +61,38 @@ const bundle = {
     input: null,
     order,
   })),
-  connector_contributions: [{
-    id: "workspace",
-    provider: "test-chat",
-    command: "review.connector",
-    capabilities: ["conversations" as const],
-  }],
-  lsp_servers: [{
-    id: "zls",
-    languages: ["zig"],
-    command: "zls",
-    args: [],
-    env: {},
-  }],
+  connector_contributions: [
+    {
+      id: "workspace",
+      provider: "test-chat",
+      command: "review.connector",
+      capabilities: ["conversations" as const],
+    },
+  ],
+  lsp_servers: [
+    {
+      id: "zls",
+      languages: ["zig"],
+      command: "zls",
+      args: [],
+      env: {},
+    },
+  ],
 };
 
-function managed(status: "active" | "loading" | "disabled", effectiveEnabled = true) {
-  return [{
-    id: "bundle:review",
-    name: "Review Tools",
-    source: "bundle" as const,
-    supportedScopes: ["user" as const],
-    state: { effectiveEnabled, status },
-  }];
+function managed(
+  status: "active" | "loading" | "disabled",
+  effectiveEnabled = true
+) {
+  return [
+    {
+      id: "bundle:review",
+      name: "Review Tools",
+      source: "bundle" as const,
+      supportedScopes: ["user" as const],
+      state: { effectiveEnabled, status },
+    },
+  ];
 }
 
 describe("plugin UI and LSP contribution policy", () => {
@@ -91,37 +100,63 @@ describe("plugin UI and LSP contribution policy", () => {
     const active = activePluginUiContributions([bundle], managed("active"));
     expect(Object.keys(active)).toEqual(uiSlots);
     for (const [order, slot] of uiSlots.entries()) {
-      expect(active[slot])
-        .toContainEqual(expect.objectContaining({ pluginId: "review", id: `review-${order}` }));
+      expect(active[slot]).toContainEqual(
+        expect.objectContaining({ pluginId: "review", id: `review-${order}` })
+      );
     }
-    expect(activePluginLanguageServers([bundle], managed("active")))
-      .toContainEqual(expect.objectContaining({ pluginId: "review", id: "zls" }));
-    expect(activePluginConnectorContributions([bundle], managed("active")))
-      .toContainEqual(expect.objectContaining({ pluginId: "review", id: "workspace" }));
+    expect(
+      activePluginLanguageServers([bundle], managed("active"))
+    ).toContainEqual(
+      expect.objectContaining({ pluginId: "review", id: "zls" })
+    );
+    expect(
+      activePluginConnectorContributions([bundle], managed("active"))
+    ).toContainEqual(
+      expect.objectContaining({ pluginId: "review", id: "workspace" })
+    );
 
-    expect(Object.values(activePluginUiContributions([bundle], managed("loading"))).every(
-      (contributions) => contributions.length === 0,
-    )).toBe(true);
-    expect(activePluginLanguageServers([{ ...bundle, trusted: false }], managed("active"))).toEqual([]);
-    expect(activePluginLanguageServers([{ ...bundle, enabled: false }], managed("active"))).toEqual([]);
-    expect(activePluginConnectorContributions([bundle], managed("loading"))).toEqual([]);
+    expect(
+      Object.values(
+        activePluginUiContributions([bundle], managed("loading"))
+      ).every((contributions) => contributions.length === 0)
+    ).toBe(true);
+    expect(
+      activePluginLanguageServers(
+        [{ ...bundle, trusted: false }],
+        managed("active")
+      )
+    ).toEqual([]);
+    expect(
+      activePluginLanguageServers(
+        [{ ...bundle, enabled: false }],
+        managed("active")
+      )
+    ).toEqual([]);
+    expect(
+      activePluginConnectorContributions([bundle], managed("loading"))
+    ).toEqual([]);
   });
 
   test("applies component policy to UI actions", () => {
-    const components = [{
-      id: "bundle:review:ui:review-1",
-      pluginId: "bundle:review",
-      pluginName: "Review Tools",
-      name: "Review 1",
-      kind: "uiAction",
-      slot: "session.header",
-      source: "bundle" as const,
-      supportedScopes: ["user" as const],
-      state: { effectiveEnabled: false, status: "disabled" as const },
-    }];
-    const active = activePluginUiContributions([bundle], managed("active"), components);
+    const components = [
+      {
+        id: "bundle:review:ui:review-1",
+        pluginId: "bundle:review",
+        pluginName: "Review Tools",
+        name: "Review 1",
+        kind: "uiAction",
+        slot: "session.header",
+        source: "bundle" as const,
+        supportedScopes: ["user" as const],
+        state: { effectiveEnabled: false, status: "disabled" as const },
+      },
+    ];
+    const active = activePluginUiContributions(
+      [bundle],
+      managed("active"),
+      components
+    );
     expect(active["session.header"]).toEqual([]);
     expect(active["rail.features"]).toHaveLength(1);
-
   });
 });

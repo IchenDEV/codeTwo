@@ -12,7 +12,11 @@ import {
   type ContextWindowBySession,
 } from "../src/session/contextWindow";
 
-const usage = (session: string, used_tokens: number, context_window: number) => ({
+const usage = (
+  session: string,
+  used_tokens: number,
+  context_window: number
+) => ({
   event: "context_window" as const,
   session,
   used_tokens,
@@ -45,24 +49,43 @@ describe("context window projection", () => {
     };
     state = clearContextWindow(state, "active");
     expect(state.active).toBeNull();
-    expect(state.background).toEqual({ usedTokens: 2_000, contextWindow: 16_000, breakdown: null });
+    expect(state.background).toEqual({
+      usedTokens: 2_000,
+      contextWindow: 16_000,
+      breakdown: null,
+    });
   });
 
   test("formats compact values and occupancy percentage", () => {
     const value = contextWindowFromEvent(usage("s", 53_000, 200_000));
-    expect(value).toEqual({ usedTokens: 53_000, contextWindow: 200_000, breakdown: null });
+    expect(value).toEqual({
+      usedTokens: 53_000,
+      contextWindow: 200_000,
+      breakdown: null,
+    });
     expect(formatContextTokens(53_000)).toBe("53k");
     expect(formatContextTokens(200_000)).toBe("200k");
     expect(contextWindowPercentage(value!)).toBe(26.5);
     expect(formatContextWindowPercentage(value!)).toBe("26.5%");
-    expect(describeContextWindow(value)).toMatchObject({ compact: "53k / 200k", percentage: 26.5 });
+    expect(describeContextWindow(value)).toMatchObject({
+      compact: "53k / 200k",
+      percentage: 26.5,
+    });
   });
 
   test("hides invalid or unsupported capacities", () => {
     expect(contextWindowFromEvent(usage("s", 1, 0))).toBeNull();
     expect(contextWindowFromEvent(usage("s", -1, 200_000))).toBeNull();
-    expect(contextWindowFromEvent(usage("s", Number.MAX_SAFE_INTEGER + 1, 200_000))).toBeNull();
-    expect(describeContextWindow({ usedTokens: 1, contextWindow: 0, breakdown: null })).toBeNull();
+    expect(
+      contextWindowFromEvent(usage("s", Number.MAX_SAFE_INTEGER + 1, 200_000))
+    ).toBeNull();
+    expect(
+      describeContextWindow({
+        usedTokens: 1,
+        contextWindow: 0,
+        breakdown: null,
+      })
+    ).toBeNull();
   });
 
   test("parses breakdown categories from the event", () => {
@@ -83,7 +106,10 @@ describe("context window projection", () => {
     };
     const value = contextWindowFromEvent(event);
     expect(value?.breakdown).toHaveLength(7);
-    expect(value?.breakdown?.[0]).toEqual({ id: "system_prompt", tokens: 3_500 });
+    expect(value?.breakdown?.[0]).toEqual({
+      id: "system_prompt",
+      tokens: 3_500,
+    });
   });
 
   test("ignores malformed breakdown entries", () => {

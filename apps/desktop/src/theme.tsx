@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   applyAppearanceSettings,
   setAppearanceSettings,
@@ -10,7 +17,8 @@ import {
 export type { ColorScheme, ThemePreference } from "./appearance";
 
 function systemScheme(): ColorScheme {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches
+  return typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
 }
@@ -36,7 +44,7 @@ const ThemeContext = createContext<ThemeValue>({
  * at sunset while the app is open. An explicit light/dark must *stop* listening, or the user's
  * choice would be silently overridden the next time the OS changed its mind.
  */
-export function ThemeProvider({ children }: { children: ReactNode }) {
+export const ThemeProvider = ({ children }: { readonly children: ReactNode }) => {
   const appearance = useAppearanceSettings();
   const preference = appearance.preference;
   const [system, setSystem] = useState<ColorScheme>(systemScheme);
@@ -44,7 +52,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
     if (!mq) return;
-    const onChange = (e: MediaQueryListEvent) => setSystem(e.matches ? "dark" : "light");
+    const onChange = (e: MediaQueryListEvent) =>
+      setSystem(e.matches ? "dark" : "light");
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
@@ -63,7 +72,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // Tells the webview to render form controls and scrollbars in the matching scheme, so the bits
     // the OS draws don't stay light while the app goes dark.
     root.style.colorScheme = scheme;
-
   }, [scheme, system]);
 
   // Palette, type, and surface settings remain independent from the resolved color scheme.
@@ -76,7 +84,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ preference, scheme, setPreference }}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={{ preference, scheme, setPreference }}>
+      {children}
+    </ThemeContext.Provider>
   );
 }
 

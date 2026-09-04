@@ -14,7 +14,13 @@ import {
   type WorkspaceSearchResult,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -45,15 +51,15 @@ export function workspaceSearchTruncationLabel(reason: string | null): string {
     .join(", ");
 }
 
-export function WorkspaceSearchModal({
+export const WorkspaceSearchModal = ({
   cwd,
   onOpen,
   onClose,
 }: {
-  cwd: string;
-  onOpen: (match: WorkspaceContentMatch) => void;
-  onClose: () => void;
-}) {
+  readonly cwd: string;
+  readonly onOpen: (match: WorkspaceContentMatch) => void;
+  readonly onClose: () => void;
+}) => {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
@@ -129,19 +135,27 @@ export function WorkspaceSearchModal({
     if (event.key === "ArrowDown" && matches.length > 0) {
       event.preventDefault();
       focusResult(activeIndex < 0 ? 0 : activeIndex);
-    } else if (event.key === "Enter" && activeIndex >= 0 && matches[activeIndex]) {
+    } else if (
+      event.key === "Enter" &&
+      activeIndex >= 0 &&
+      matches[activeIndex]
+    ) {
       event.preventDefault();
       openResult(matches[activeIndex]);
     }
   };
 
-  const onResultKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+  const onResultKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number
+  ) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
       focusResult(index + 1);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      if (index === 0) document.getElementById("workspace-content-query")?.focus();
+      if (index === 0)
+        document.getElementById("workspace-content-query")?.focus();
       else focusResult(index - 1);
     }
   };
@@ -153,7 +167,7 @@ export function WorkspaceSearchModal({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="flex max-h-dialog-max min-h-0 flex-col sm:max-w-3xl"
+        className="max-h-dialog-max flex min-h-0 flex-col sm:max-w-3xl"
         aria-busy={visibleLoading}
         initialFocus={queryInputRef}
       >
@@ -162,7 +176,10 @@ export function WorkspaceSearchModal({
         </DialogHeader>
 
         <div className="space-y-2">
-          <label htmlFor="workspace-content-query" className="text-body font-medium">
+          <label
+            htmlFor="workspace-content-query"
+            className="text-body font-medium"
+          >
             Search text
           </label>
           <Input
@@ -174,7 +191,11 @@ export function WorkspaceSearchModal({
             autoComplete="off"
             spellCheck={false}
             aria-describedby="workspace-search-status"
-            placeholder={options.regex ? "Enter a regular expression…" : "Find text in workspace files…"}
+            placeholder={
+              options.regex
+                ? "Enter a regular expression…"
+                : "Find text in workspace files…"
+            }
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onInputKeyDown}
           />
@@ -216,20 +237,16 @@ export function WorkspaceSearchModal({
           aria-live="polite"
         >
           {!hasQuery && "Enter text to search file contents."}
-          {hasQuery && visibleLoading && "Searching…"}
-          {hasQuery && !visibleLoading && !error && result && (
-            <>
+          {hasQuery && visibleLoading ? "Searching…" : null}
+          {hasQuery && !visibleLoading && !error && result ? <>
               {matches.length} {matches.length === 1 ? "result" : "results"}.
-              {result.truncated && ` Results were truncated by ${workspaceSearchTruncationLabel(result.truncation_reason)}.`}
-            </>
-          )}
+              {result.truncated ? ` Results were truncated by ${workspaceSearchTruncationLabel(result.truncation_reason)}.` : null}
+            </> : null}
         </div>
 
-        {error && (
-          <p role="alert" className="text-metadata text-destructive">
+        {error ? <p role="alert" className="text-metadata text-destructive">
             Search failed: {error}
-          </p>
-        )}
+          </p> : null}
 
         <ScrollArea className="min-h-0 flex-1 pe-3">
           <ul className="space-y-1" aria-label="Workspace search results">
@@ -244,27 +261,33 @@ export function WorkspaceSearchModal({
                   size="row"
                   focusStyle="inset"
                   data-selected={activeIndex === index ? "true" : "false"}
-                  className="min-w-0 flex-col items-stretch gap-optical"
+                  className="gap-optical min-w-0 flex-col items-stretch"
                   onFocus={() => setActiveIndex(index)}
                   onKeyDown={(event) => onResultKeyDown(event, index)}
                   onClick={() => openResult(match)}
                 >
-                  <span className="flex min-w-0 items-baseline gap-2 text-metadata">
-                    <span className="truncate font-mono font-medium text-foreground">{match.path}</span>
-                    <span className="shrink-0 text-muted-foreground">
+                  <span className="text-metadata flex min-w-0 items-baseline gap-2">
+                    <span className="text-foreground truncate font-mono font-medium">
+                      {match.path}
+                    </span>
+                    <span className="text-muted-foreground shrink-0">
                       {match.line}:{match.column}
                     </span>
                   </span>
-                  <span className="mt-0.5 block truncate font-mono text-metadata text-muted-foreground">
+                  <span className="text-metadata text-muted-foreground mt-0.5 block truncate font-mono">
                     {match.preview || "Blank matching line"}
                   </span>
                 </Button>
               </li>
             ))}
           </ul>
-          {hasQuery && !visibleLoading && !error && result && matches.length === 0 && (
-            <p className="py-6 text-center text-body text-muted-foreground">No matching content.</p>
-          )}
+          {hasQuery &&
+            !visibleLoading &&
+            !error &&
+            result &&
+            matches.length === 0 ? <p className="text-body text-muted-foreground py-6 text-center">
+                No matching content.
+              </p> : null}
         </ScrollArea>
 
         <DialogFooter>

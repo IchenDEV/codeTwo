@@ -1,7 +1,15 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, button, dom, flush, mount, restoreDom, waitFor } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { SettingsPage } = await import("../src/settings/SettingsPage");
@@ -60,20 +68,32 @@ describe("Developer settings", () => {
             return "saved";
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
-    await waitFor(() => expect(rendered.container.textContent).toContain("Hot reload is off"));
+    await waitFor(() =>
+      expect(rendered.container.textContent).toContain("Hot reload is off")
+    );
 
-    const toggle = rendered.container.querySelector('[aria-label="Developer mode"]');
+    const toggle = rendered.container.querySelector(
+      '[aria-label="Developer mode"]'
+    );
     expect(toggle).not.toBeNull();
     await reactAct(async () => toggle.click());
-    await waitFor(() => expect(rendered.container.textContent).toContain("/tmp/codetwo/plugins"));
+    await waitFor(() =>
+      expect(rendered.container.textContent).toContain("/tmp/codetwo/plugins")
+    );
 
-    await reactAct(async () => button(rendered.container, "Reload plugins").click());
+    await reactAct(async () =>
+      button(rendered.container, "Reload plugins").click()
+    );
     await flush();
-    await reactAct(async () => button(rendered.container, "Open WebView DevTools").click());
+    await reactAct(async () =>
+      button(rendered.container, "Open WebView DevTools").click()
+    );
     await flush();
-    await reactAct(async () => button(rendered.container, "Export diagnostics").click());
+    await reactAct(async () =>
+      button(rendered.container, "Export diagnostics").click()
+    );
     await flush();
 
     expect(enabled).toBe(true);

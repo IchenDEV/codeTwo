@@ -12,7 +12,9 @@ const VISUALIZE_START = "visualize";
 const VISUALIZE_END = "";
 
 function visualizationReference(value: unknown): VisualizationReference | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
   const candidate = value as Record<string, unknown>;
   if (
     typeof candidate.path !== "string" ||
@@ -23,7 +25,9 @@ function visualizationReference(value: unknown): VisualizationReference | null {
   ) {
     return null;
   }
-  if (candidate.mode !== undefined && candidate.mode !== "wide") return null;
+  if (candidate.mode !== undefined && candidate.mode !== "wide") {
+    return null;
+  }
   if (
     candidate.title !== undefined &&
     (typeof candidate.title !== "string" || candidate.title.length > 250)
@@ -32,36 +36,51 @@ function visualizationReference(value: unknown): VisualizationReference | null {
   }
   return {
     path: candidate.path,
-    ...(candidate.mode === "wide" ? { mode: "wide" as const } : {}),
-    ...(typeof candidate.title === "string" && candidate.title.trim()
-      ? { title: candidate.title.trim() }
-      : {}),
+    ...(candidate.mode === "wide" && { mode: "wide" as const }),
+    ...(typeof candidate.title === "string" &&
+      candidate.title.trim() && { title: candidate.title.trim() }),
   };
 }
 
-/** Split complete visualize directives from streamed Markdown without exposing partial JSON. */
-export function splitRichText(source: string, streaming = false): RichTextSegment[] {
+/**
+Split complete visualize directives from streamed Markdown without exposing partial JSON.
+*/
+export function splitRichText(
+  source: string,
+  streaming = false
+): RichTextSegment[] {
   const output: RichTextSegment[] = [];
   let cursor = 0;
   while (cursor < source.length) {
     const start = source.indexOf(VISUALIZE_START, cursor);
-    if (start < 0) {
+    if (start === -1) {
       const tail = source.slice(cursor);
-      if (tail) output.push({ kind: "markdown", text: tail });
+      if (tail) {
+        output.push({ kind: "markdown", text: tail });
+      }
       break;
     }
-    if (start > cursor) output.push({ kind: "markdown", text: source.slice(cursor, start) });
+    if (start > cursor) {
+      output.push({ kind: "markdown", text: source.slice(cursor, start) });
+    }
     const payloadStart = start + VISUALIZE_START.length;
     const end = source.indexOf(VISUALIZE_END, payloadStart);
-    if (end < 0) {
-      if (!streaming) output.push({ kind: "markdown", text: source.slice(start) });
+    if (end === -1) {
+      if (!streaming) {
+        output.push({ kind: "markdown", text: source.slice(start) });
+      }
       break;
     }
     const literal = source.slice(start, end + VISUALIZE_END.length);
     try {
-      const reference = visualizationReference(JSON.parse(source.slice(payloadStart, end)));
-      if (reference) output.push({ kind: "visualization", reference });
-      else output.push({ kind: "markdown", text: literal });
+      const reference = visualizationReference(
+        JSON.parse(source.slice(payloadStart, end))
+      );
+      if (reference) {
+        output.push({ kind: "visualization", reference });
+      } else {
+        output.push({ kind: "markdown", text: literal });
+      }
     } catch {
       output.push({ kind: "markdown", text: literal });
     }
@@ -104,7 +123,7 @@ export const VISUALIZATION_THEME_VARIABLES = [
 ] as const;
 
 function safeCssValue(value: string): string {
-  return value.replace(/[;{}]/g, "").trim();
+  return value.replaceAll(/[;{}]/g, "").trim();
 }
 
 const VISUALIZATION_BASE_CSS = String.raw`
@@ -152,11 +171,13 @@ svg text{font-family:inherit}
 @media(max-width:420px){.viz-controls{align-items:stretch}.viz-controls>.form-label{width:100%}}
 `;
 
-/** Wrap one trusted-by-path, untrusted-by-content fragment in a tightly sandboxed document. */
+/**
+Wrap one trusted-by-path, untrusted-by-content fragment in a tightly sandboxed document.
+*/
 export function visualizationDocument(
   fragment: string,
   theme: Readonly<Record<string, string>>,
-  token: string,
+  token: string
 ): string {
   const variables = VISUALIZATION_THEME_VARIABLES.map((name) => {
     const value = safeCssValue(theme[name] ?? "");

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AtSign,
   ChevronRight,
@@ -14,7 +21,16 @@ import {
   Trash2,
 } from "@/components/ui/icons";
 
-import { confirmNative, copyPath, createDir, createFile, deletePath, listDir, renamePath, type DirEntry } from "../bridge";
+import {
+  confirmNative,
+  copyPath,
+  createDir,
+  createFile,
+  deletePath,
+  listDir,
+  renamePath,
+  type DirEntry,
+} from "../bridge";
 import { useToast } from "../ui/toast";
 import { useT } from "../i18n";
 import { CompositeActionRow } from "@/components/business/composite-action-row";
@@ -67,7 +83,7 @@ function copyName(path: string): string {
  *
  * Children stay mounted while closed — something has to still be there to animate on the way out.
  */
-function Branch({ open, children }: { open: boolean; children: ReactNode }) {
+const Branch = ({ open, children }: { readonly open: boolean; readonly children: ReactNode }) => {
   const inner = useRef<HTMLDivElement | null>(null);
   /** `null` is "no explicit height" — the subtree sizes itself. */
   const [height, setHeight] = useState<number | null>(0);
@@ -91,7 +107,8 @@ function Branch({ open, children }: { open: boolean; children: ReactNode }) {
       // guards are load-bearing: `transitionend` bubbles, and every row in here has its own colour
       // transition, so hovering one mid-open would otherwise snap the branch to its full height.
       onTransitionEnd={(e) => {
-        if (open && e.target === e.currentTarget && e.propertyName === "height") setHeight(null);
+        if (open && e.target === e.currentTarget && e.propertyName === "height")
+          setHeight(null);
       }}
       className={cn("tree-branch", open ? "opacity-100" : "opacity-0")}
     >
@@ -100,20 +117,20 @@ function Branch({ open, children }: { open: boolean; children: ReactNode }) {
   );
 }
 
-export function FilePanel({
+export const FilePanel = ({
   cwd,
   onInsert,
   onOpen,
   openPath,
 }: {
-  cwd: string | null;
+  readonly cwd: string | null;
   /** Drop an `@` mention into the prompt. */
-  onInsert: (path: string) => void;
+  readonly onInsert: (path: string) => void;
   /** Show the file in the built-in viewer — what a plain click does. */
-  onOpen: (path: string) => void;
+  readonly onOpen: (path: string) => void;
   /** Which file the viewer is showing, so the tree can mark it. */
-  openPath: string | null;
-}) {
+  readonly openPath: string | null;
+}) => {
   const t = useT();
   const toast = useToast();
   const [loaded, setLoaded] = useState<Loaded>({});
@@ -135,7 +152,7 @@ export function FilePanel({
         setError(String(e));
       }
     },
-    [cwd],
+    [cwd]
   );
 
   /** Reload every directory currently open, so the tree matches disk after a mutation. */
@@ -143,7 +160,9 @@ export function FilePanel({
     if (!cwd) return;
     const paths = ["", ...expanded];
     const entries = await Promise.all(
-      paths.map(async (p) => [p, await listDir(cwd, p).catch(() => [])] as const),
+      paths.map(
+        async (p) => [p, await listDir(cwd, p).catch(() => [])] as const
+      )
     );
     setLoaded(Object.fromEntries(entries));
   }, [cwd, expanded]);
@@ -172,7 +191,7 @@ export function FilePanel({
         return next;
       });
     },
-    [loaded, load],
+    [loaded, load]
   );
 
   /** Open a directory (without collapsing it) so a new child is visible where it lands. */
@@ -182,7 +201,7 @@ export function FilePanel({
       setExpanded((prev) => new Set(prev).add(dir));
       if (!(dir in loaded)) void load(dir);
     },
-    [loaded, load],
+    [loaded, load]
   );
 
   const run = useCallback(
@@ -197,7 +216,7 @@ export function FilePanel({
         return false;
       }
     },
-    [reload, toast],
+    [reload, toast]
   );
 
   const commitDraft = useCallback(async () => {
@@ -211,8 +230,14 @@ export function FilePanel({
     if (draft.kind === "rename") {
       // The field holds a path, not a name, so typing `src/x.ts` moves it. That's `mv`, and it's
       // why rename and move don't need to be two commands.
-      const to = value.includes("/") ? value : [parentOf(draft.path), value].filter(Boolean).join("/");
-      if (to !== draft.path) await run(renamePath(cwd, draft.path, to), t("files.renamed", { path: to }));
+      const to = value.includes("/")
+        ? value
+        : [parentOf(draft.path), value].filter(Boolean).join("/");
+      if (to !== draft.path)
+        await run(
+          renamePath(cwd, draft.path, to),
+          t("files.renamed", { path: to })
+        );
     } else {
       const path = [draft.parent, value].filter(Boolean).join("/");
       const made =
@@ -233,10 +258,13 @@ export function FilePanel({
       const q = filter.trim().toLowerCase();
       return !q || entry.is_dir || entry.name.toLowerCase().includes(q);
     },
-    [filter],
+    [filter]
   );
 
-  const roots = useMemo(() => (loaded[""] ?? []).filter(visible), [loaded, visible]);
+  const roots = useMemo(
+    () => (loaded[""] ?? []).filter(visible),
+    [loaded, visible]
+  );
 
   const menuFor = (entry: DirEntry) => (
     <ContextMenuContent>
@@ -278,25 +306,35 @@ export function FilePanel({
 
       <ContextMenuGroup>
         <ContextMenuItem
-          onClick={() => setDraft({ kind: "rename", path: entry.path, value: entry.name })}
+          onClick={() =>
+            setDraft({ kind: "rename", path: entry.path, value: entry.name })
+          }
         >
           <Pencil className="size-3.5" /> {t("files.rename")}
         </ContextMenuItem>
         <ContextMenuItem
-          onClick={() => setDraft({ kind: "rename", path: entry.path, value: entry.path })}
+          onClick={() =>
+            setDraft({ kind: "rename", path: entry.path, value: entry.path })
+          }
         >
           <CornerUpRight className="size-3.5" /> {t("files.move")}
         </ContextMenuItem>
         {!entry.is_dir && (
           <ContextMenuItem
             onClick={() => {
-              if (cwd) void run(copyPath(cwd, entry.path, copyName(entry.path)), t("files.duplicated"));
+              if (cwd)
+                void run(
+                  copyPath(cwd, entry.path, copyName(entry.path)),
+                  t("files.duplicated")
+                );
             }}
           >
             <Copy className="size-3.5" /> {t("files.duplicate")}
           </ContextMenuItem>
         )}
-        <ContextMenuItem onClick={() => void navigator.clipboard?.writeText(entry.path)}>
+        <ContextMenuItem
+          onClick={() => void navigator.clipboard?.writeText(entry.path)}
+        >
           <Copy className="size-3.5" /> {t("files.copyPath")}
         </ContextMenuItem>
       </ContextMenuGroup>
@@ -312,7 +350,11 @@ export function FilePanel({
               ? t("files.confirmDeleteFolder", { name: entry.name })
               : t("files.confirmDelete", { name: entry.name });
             if (!(await confirmNative(message))) return;
-            if (cwd) void run(deletePath(cwd, entry.path), t("files.deleted", { name: entry.name }));
+            if (cwd)
+              void run(
+                deletePath(cwd, entry.path),
+                t("files.deleted", { name: entry.name })
+              );
           }}
         >
           <Trash2 className="size-3.5" /> {t("files.delete")}
@@ -332,7 +374,11 @@ export function FilePanel({
   const level = (path: string, depth: number): ReactNode =>
     (loaded[path] ?? []).filter(visible).map((entry) => {
       const isRenaming = draft?.kind === "rename" && draft.path === entry.path;
-      const Icon = entry.is_dir ? (expanded.has(entry.path) ? FolderOpen : Folder) : File;
+      const Icon = entry.is_dir
+        ? expanded.has(entry.path)
+          ? FolderOpen
+          : Folder
+        : File;
 
       return (
         <div key={entry.path}>
@@ -341,77 +387,89 @@ export function FilePanel({
           ) : (
             <ContextMenu>
               <ContextMenuTrigger
-                render={<CompositeActionRow
-                  accessibilityLabel={entry.name}
-                  onSelect={() => {
-                    setSelected(entry.path);
-                    // A plain click opens a directory or *views* a file. It never edits —
-                    // editing is a deliberate act, so it lives in the menu.
-                    if (entry.is_dir) toggle(entry.path);
-                    else onOpen(entry.path);
-                  }}
-                  onContextMenu={() => setSelected(entry.path)}
-                  className={cn(
-                    "gap-1 rounded-control pr-1 transition-colors focus-within:bg-accent",
-                    openPath === entry.path
-                      ? "bg-accent"
-                      : selected === entry.path
-                        ? "bg-accent/70"
-                        : "hover:bg-accent/50",
-                  )}
-                  style={{ paddingLeft: depth * 12 }}
-                  contentClassName="flex items-center gap-1"
-                  actions={!entry.is_dir ? (
-                    <TooltipButton
-                      label={t("files.insert")}
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => onInsert(entry.path)}
-                      className="ml-auto hidden shrink-0 text-muted-foreground hover:text-primary group-hover:inline-flex group-focus-within:inline-flex"
-                    >
-                      <AtSign className="size-3" />
-                    </TooltipButton>
-                  ) : null}
-                >
-                  <ChevronRight
+                render={
+                  <CompositeActionRow
+                    accessibilityLabel={entry.name}
+                    onSelect={() => {
+                      setSelected(entry.path);
+                      // A plain click opens a directory or *views* a file. It never edits —
+                      // editing is a deliberate act, so it lives in the menu.
+                      if (entry.is_dir) toggle(entry.path);
+                      else onOpen(entry.path);
+                    }}
+                    onContextMenu={() => setSelected(entry.path)}
                     className={cn(
-                      "size-3 shrink-0 text-muted-foreground transition-transform",
-                      !entry.is_dir && "opacity-0",
-                      expanded.has(entry.path) && "rotate-90",
+                      "rounded-control focus-within:bg-accent gap-1 pr-1 transition-colors",
+                      openPath === entry.path
+                        ? "bg-accent"
+                        : selected === entry.path
+                          ? "bg-accent/70"
+                          : "hover:bg-accent/50"
                     )}
-                  />
-                  <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate py-1 text-metadata">{entry.name}</span>
-
-                </CompositeActionRow>}
+                    style={{ paddingLeft: depth * 12 }}
+                    contentClassName="flex items-center gap-1"
+                    actions={
+                      !entry.is_dir ? (
+                        <TooltipButton
+                          label={t("files.insert")}
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => onInsert(entry.path)}
+                          className="text-muted-foreground hover:text-primary ml-auto hidden shrink-0 group-focus-within:inline-flex group-hover:inline-flex"
+                        >
+                          <AtSign className="size-3" />
+                        </TooltipButton>
+                      ) : null
+                    }
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "text-muted-foreground size-3 shrink-0 transition-transform",
+                        !entry.is_dir && "opacity-0",
+                        expanded.has(entry.path) && "rotate-90"
+                      )}
+                    />
+                    <Icon className="text-muted-foreground size-3.5 shrink-0" />
+                    <span className="text-metadata truncate py-1">
+                      {entry.name}
+                    </span>
+                  </CompositeActionRow>
+                }
               />
               {menuFor(entry)}
             </ContextMenu>
           )}
 
-          {entry.is_dir && entry.path in loaded && (
-            <Branch open={expanded.has(entry.path)}>{level(entry.path, depth + 1)}</Branch>
-          )}
+          {entry.is_dir && entry.path in loaded ? <Branch open={expanded.has(entry.path)}>
+              {level(entry.path, depth + 1)}
+            </Branch> : null}
 
           {/* A new child appears indented under the folder it's going into. */}
-          {draft && draft.kind !== "rename" && draft.parent === entry.path && draftRow(depth + 1)}
+          {draft &&
+            draft.kind !== "rename" &&
+            draft.parent === entry.path ? draftRow(depth + 1) : null}
         </div>
       );
     });
 
   const draftRow = (depth: number) => (
-    <div className="flex items-center gap-1 py-0.5" style={{ paddingLeft: depth * 12 + 18 }}>
+    <div
+      className="flex items-center gap-1 py-0.5"
+      style={{ paddingLeft: depth * 12 + 18 }}
+    >
       {draft?.kind === "new-folder" ? (
-        <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+        <Folder className="text-muted-foreground size-3.5 shrink-0" />
       ) : (
-        <File className="size-3.5 shrink-0 text-muted-foreground" />
+        <File className="text-muted-foreground size-3.5 shrink-0" />
       )}
       <Input
         ref={draftInput}
-        className="h-6 font-mono text-metadata"
+        className="text-metadata h-6 font-mono"
         value={draft?.value ?? ""}
-        onChange={(e) => setDraft((d) => (d ? { ...d, value: e.target.value } : d))}
+        onChange={(e) =>
+          setDraft((d) => (d ? { ...d, value: e.target.value } : d))
+        }
         onBlur={() => void commitDraft()}
         onKeyDown={(e) => {
           if (e.key === "Enter") void commitDraft();
@@ -424,9 +482,9 @@ export function FilePanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* The shared panel strip matches the viewer's file tabs across one continuous separator. */}
-      <div className="flex h-panel-strip shrink-0 items-center gap-1 px-2">
+      <div className="h-panel-strip flex shrink-0 items-center gap-1 px-2">
         <Input
-          className="h-(--ds-control-mini) text-metadata"
+          className="text-metadata h-(--ds-control-mini)"
           placeholder={t("files.filter")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -447,7 +505,9 @@ export function FilePanel({
           size="icon"
           className="size-7 shrink-0"
           disabled={!cwd}
-          onClick={() => setDraft({ kind: "new-folder", parent: "", value: "" })}
+          onClick={() =>
+            setDraft({ kind: "new-folder", parent: "", value: "" })
+          }
         >
           <FolderPlus className="size-3.5" />
         </TooltipButton>
@@ -465,12 +525,14 @@ export function FilePanel({
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-1">
-          {draft && draft.kind !== "rename" && draft.parent === "" && draftRow(0)}
+          {draft &&
+            draft.kind !== "rename" &&
+            draft.parent === "" ? draftRow(0) : null}
 
           {error ? (
-            <p className="px-2 py-3 text-callout text-destructive">{error}</p>
+            <p className="text-callout text-destructive px-2 py-3">{error}</p>
           ) : roots.length === 0 && !draft ? (
-            <p className="px-2 py-3 text-callout text-muted-foreground">
+            <p className="text-callout text-muted-foreground px-2 py-3">
               {cwd ? t("files.empty") : t("files.noProject")}
             </p>
           ) : (

@@ -1,4 +1,5 @@
-export type AutomationCadence = "hourly" | "daily" | "weekdays" | "weekly" | "custom";
+export type AutomationCadence =
+  "hourly" | "daily" | "weekdays" | "weekly" | "custom";
 
 export interface ScheduleDraft {
   cadence: AutomationCadence;
@@ -23,22 +24,27 @@ function timeParts(time: string): [number, number] {
 export function cronFromSchedule(schedule: ScheduleDraft): string {
   const [hour, minute] = timeParts(schedule.time);
   switch (schedule.cadence) {
-    case "hourly":
+    case "hourly": {
       return `${minute} * * * *`;
-    case "daily":
+    }
+    case "daily": {
       return `${minute} ${hour} * * *`;
-    case "weekdays":
+    }
+    case "weekdays": {
       return `${minute} ${hour} * * 1-5`;
-    case "weekly":
+    }
+    case "weekly": {
       return `${minute} ${hour} * * ${Math.min(6, Math.max(0, schedule.weekday))}`;
-    case "custom":
-      return schedule.customCron.trim().replace(/\s+/g, " ");
+    }
+    case "custom": {
+      return schedule.customCron.trim().replaceAll(/\s+/g, " ");
+    }
   }
 }
 
 export function scheduleFromCron(cron: string): ScheduleDraft {
-  const normalized = cron.trim().replace(/\s+/g, " ");
-  let match = normalized.match(HOURLY);
+  const normalized = cron.trim().replaceAll(/\s+/g, " ");
+  let match = HOURLY.exec(normalized);
   if (match) {
     return {
       cadence: "hourly",
@@ -47,7 +53,7 @@ export function scheduleFromCron(cron: string): ScheduleDraft {
       customCron: normalized,
     };
   }
-  match = normalized.match(WEEKDAYS);
+  match = WEEKDAYS.exec(normalized);
   if (match) {
     return {
       cadence: "weekdays",
@@ -56,7 +62,7 @@ export function scheduleFromCron(cron: string): ScheduleDraft {
       customCron: normalized,
     };
   }
-  match = normalized.match(WEEKLY);
+  match = WEEKLY.exec(normalized);
   if (match) {
     return {
       cadence: "weekly",
@@ -65,7 +71,7 @@ export function scheduleFromCron(cron: string): ScheduleDraft {
       customCron: normalized,
     };
   }
-  match = normalized.match(DAILY);
+  match = DAILY.exec(normalized);
   if (match) {
     return {
       cadence: "daily",
@@ -74,9 +80,14 @@ export function scheduleFromCron(cron: string): ScheduleDraft {
       customCron: normalized,
     };
   }
-  return { cadence: "custom", time: "09:00", weekday: 1, customCron: normalized };
+  return {
+    cadence: "custom",
+    time: "09:00",
+    weekday: 1,
+    customCron: normalized,
+  };
 }
 
 export function localTimezone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  return new Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }

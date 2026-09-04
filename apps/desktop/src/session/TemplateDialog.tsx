@@ -38,7 +38,13 @@ import { useT } from "../i18n";
  * v1: raw edit keeps the {{token}} ↔ slot-row contract obvious and testable).
  */
 
-export const SLOT_KINDS = ["text", "multiline", "select", "file", "artifact"] as const;
+export const SLOT_KINDS = [
+  "text",
+  "multiline",
+  "select",
+  "file",
+  "artifact",
+] as const;
 
 /** One editable slot row. Options ride as a raw comma list so typing stays free-form. */
 export interface SlotRow {
@@ -68,9 +74,11 @@ export function splitOptions(raw: string): string[] {
 type DraftError = { key: string; vars: Record<string, string | number> };
 
 const DRAFT_ERROR_EN: Record<string, string> = {
-  "templateFrom.errSlug": 'Slot {index}: id "{id}" is not a slug (lowercase letters, digits, - or _).',
+  "templateFrom.errSlug":
+    'Slot {index}: id "{id}" is not a slug (lowercase letters, digits, - or _).',
   "templateFrom.errDuplicate": 'Slot {index}: duplicate id "{id}".',
-  "templateFrom.errNoToken": 'Slot "{id}" never appears in the template as {token}.',
+  "templateFrom.errNoToken":
+    'Slot "{id}" never appears in the template as {token}.',
   "templateFrom.errNoOptions": 'Slot "{id}" is a select but lists no options.',
   "templateFrom.errNoRow": "Template token {token} has no slot row.",
 };
@@ -87,7 +95,7 @@ function formatDraftError(error: DraftError): string {
 export function validateMacroDraft(
   template: string,
   slots: readonly Pick<SlotRow, "id" | "kind" | "options">[],
-  translate?: (key: string, vars: Record<string, string | number>) => string,
+  translate?: (key: string, vars: Record<string, string | number>) => string
 ): string[] {
   const errors: DraftError[] = [];
   const tokens = new Set<string>();
@@ -96,11 +104,20 @@ export function validateMacroDraft(
   for (const [index, slot] of slots.entries()) {
     const id = slot.id.trim();
     if (!ID_PATTERN.test(id)) {
-      errors.push({ key: "templateFrom.errSlug", vars: { index: index + 1, id } });
+      errors.push({
+        key: "templateFrom.errSlug",
+        vars: { index: index + 1, id },
+      });
     } else if (ids.has(id)) {
-      errors.push({ key: "templateFrom.errDuplicate", vars: { index: index + 1, id } });
+      errors.push({
+        key: "templateFrom.errDuplicate",
+        vars: { index: index + 1, id },
+      });
     } else if (!tokens.has(id)) {
-      errors.push({ key: "templateFrom.errNoToken", vars: { id, token: `{{${id}}}` } });
+      errors.push({
+        key: "templateFrom.errNoToken",
+        vars: { id, token: `{{${id}}}` },
+      });
     }
     ids.add(id);
     if (slot.kind === "select" && splitOptions(slot.options).length === 0) {
@@ -109,17 +126,23 @@ export function validateMacroDraft(
   }
   for (const token of tokens) {
     if (!ids.has(token)) {
-      errors.push({ key: "templateFrom.errNoRow", vars: { token: `{{${token}}}` } });
+      errors.push({
+        key: "templateFrom.errNoRow",
+        vars: { token: `{{${token}}}` },
+      });
     }
   }
   return errors.map((error) =>
-    translate ? translate(error.key, error.vars) : formatDraftError(error),
+    translate ? translate(error.key, error.vars) : formatDraftError(error)
   );
 }
 
 /** Same id derivation the App's skill-draft flow uses. */
 function slugName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function toRow(slot: SceneSlotDef): SlotRow {
@@ -133,20 +156,20 @@ function toRow(slot: SceneSlotDef): SlotRow {
   };
 }
 
-export function TemplateDialog({
+export const TemplateDialog = ({
   source,
   onClose,
   onSaved,
   propose = bridgePropose,
   save = bridgeSave,
 }: {
-  source: string;
-  onClose: () => void;
-  onSaved: () => void;
+  readonly source: string;
+  readonly onClose: () => void;
+  readonly onSaved: () => void;
   /** Test seams; both default to the bridge functions. */
-  propose?: typeof bridgePropose;
-  save?: (skill: Skill) => Promise<void>;
-}) {
+  readonly propose?: typeof bridgePropose;
+  readonly save?: (skill: Skill) => Promise<void>;
+}) => {
   const t = useT();
   const [proposing, setProposing] = useState(true);
   const [manual, setManual] = useState(false);
@@ -178,7 +201,9 @@ export function TemplateDialog({
     };
   }, [propose, source]);
 
-  const errors = validateMacroDraft(template, slots, (key, vars) => t(key as never, vars));
+  const errors = validateMacroDraft(template, slots, (key, vars) =>
+    t(key as never, vars)
+  );
 
   // Committing on the native `input` event (slotCard idiom) keeps one write per edit in browsers
   // and in happy-dom, whose own-instance `value` property defeats React's change tracker. The
@@ -186,13 +211,22 @@ export function TemplateDialog({
   const noopChange = () => {};
 
   const updateSlot = (index: number, patch: Partial<SlotRow>) => {
-    setSlots((current) => current.map((row, at) => (at === index ? { ...row, ...patch } : row)));
+    setSlots((current) =>
+      current.map((row, at) => (at === index ? { ...row, ...patch } : row))
+    );
   };
 
   const addSlot = () => {
     setSlots((current) => [
       ...current,
-      { id: `slot-${current.length + 1}`, label: "", kind: "text", options: "", required: false, default: "" },
+      {
+        id: `slot-${current.length + 1}`,
+        label: "",
+        kind: "text",
+        options: "",
+        required: false,
+        default: "",
+      },
     ]);
   };
 
@@ -211,7 +245,9 @@ export function TemplateDialog({
             id: row.id.trim(),
             label: row.label.trim(),
             kind: row.kind,
-            ...(row.kind === "select" ? { options: splitOptions(row.options) } : {}),
+            ...(row.kind === "select"
+              ? { options: splitOptions(row.options) }
+              : {}),
             ...(row.required ? { required: true } : {}),
             ...(row.default.trim() ? { default: row.default } : {}),
           })),
@@ -232,12 +268,12 @@ export function TemplateDialog({
 
         {proposing ? (
           <div className="relative">
-            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-control border bg-fill-quiet px-3 py-2 text-callout text-muted-foreground">
+            <pre className="rounded-control bg-fill-quiet text-callout text-muted-foreground max-h-64 overflow-y-auto border px-3 py-2 whitespace-pre-wrap">
               {source}
             </pre>
             <span
               role="status"
-              className="absolute inset-0 flex items-center justify-center gap-2 bg-background/60 text-body text-muted-foreground"
+              className="bg-background/60 text-body text-muted-foreground absolute inset-0 flex items-center justify-center gap-2"
             >
               <Spinner className="size-4" />
               {t("templateFrom.proposing")}
@@ -245,9 +281,9 @@ export function TemplateDialog({
           </div>
         ) : (
           <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-            {manual && (
-              <p className="text-callout text-muted-foreground">{t("templateFrom.manualHint")}</p>
-            )}
+            {manual ? <p className="text-callout text-muted-foreground">
+                {t("templateFrom.manualHint")}
+              </p> : null}
 
             <div className="flex gap-2">
               <Input
@@ -275,7 +311,7 @@ export function TemplateDialog({
             />
 
             <label className="flex flex-col gap-1">
-              <span className="text-metadata font-medium uppercase text-muted-foreground">
+              <span className="text-metadata text-muted-foreground font-medium uppercase">
                 {t("templateFrom.template")}
               </span>
               <Textarea
@@ -288,7 +324,7 @@ export function TemplateDialog({
             </label>
 
             <div className="flex items-center justify-between">
-              <span className="text-metadata font-medium uppercase text-muted-foreground">
+              <span className="text-metadata text-muted-foreground font-medium uppercase">
                 {t("templateFrom.slots")}
               </span>
               <Button type="button" variant="ghost" size="sm" onClick={addSlot}>
@@ -309,23 +345,34 @@ export function TemplateDialog({
                       className="font-mono"
                       value={row.id}
                       onChange={noopChange}
-                      onInput={(e) => updateSlot(index, { id: e.currentTarget.value })}
+                      onInput={(e) =>
+                        updateSlot(index, { id: e.currentTarget.value })
+                      }
                     />
                     <Input
                       aria-label={t("templateFrom.label")}
                       placeholder={t("templateFrom.label")}
                       value={row.label}
                       onChange={noopChange}
-                      onInput={(e) => updateSlot(index, { label: e.currentTarget.value })}
+                      onInput={(e) =>
+                        updateSlot(index, { label: e.currentTarget.value })
+                      }
                     />
                     <Select
-                      items={SLOT_KINDS.map((kind) => ({ value: kind, label: kind }))}
+                      items={SLOT_KINDS.map((kind) => ({
+                        value: kind,
+                        label: kind,
+                      }))}
                       value={row.kind}
                       onValueChange={(next) =>
-                        next && updateSlot(index, { kind: next as SlotRow["kind"] })
+                        next &&
+                        updateSlot(index, { kind: next as SlotRow["kind"] })
                       }
                     >
-                      <SelectTrigger aria-label={t("templateFrom.kind")} className="min-w-0">
+                      <SelectTrigger
+                        aria-label={t("templateFrom.kind")}
+                        className="min-w-0"
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -344,7 +391,9 @@ export function TemplateDialog({
                       disabled={row.kind !== "select"}
                       value={row.options}
                       onChange={noopChange}
-                      onInput={(e) => updateSlot(index, { options: e.currentTarget.value })}
+                      onInput={(e) =>
+                        updateSlot(index, { options: e.currentTarget.value })
+                      }
                     />
                     <Checkbox
                       aria-label={t("templateFrom.required")}
@@ -358,7 +407,9 @@ export function TemplateDialog({
                       placeholder={t("templateFrom.default")}
                       value={row.default}
                       onChange={noopChange}
-                      onInput={(e) => updateSlot(index, { default: e.currentTarget.value })}
+                      onInput={(e) =>
+                        updateSlot(index, { default: e.currentTarget.value })
+                      }
                     />
                     <Button
                       type="button"
@@ -367,7 +418,9 @@ export function TemplateDialog({
                       aria-label={t("templateFrom.removeSlot")}
                       className="text-muted-foreground"
                       onClick={() =>
-                        setSlots((current) => current.filter((_, at) => at !== index))
+                        setSlots((current) =>
+                          current.filter((_, at) => at !== index)
+                        )
                       }
                     >
                       <Trash2 className="size-3.5" aria-hidden />
@@ -378,7 +431,7 @@ export function TemplateDialog({
             )}
 
             {errors.length > 0 && (
-              <ul className="flex flex-col gap-0.5 text-callout text-destructive">
+              <ul className="text-callout text-destructive flex flex-col gap-0.5">
                 {errors.map((error) => (
                   <li key={error}>{error}</li>
                 ))}
@@ -392,7 +445,12 @@ export function TemplateDialog({
             {t("templateFrom.cancel")}
           </Button>
           <Button
-            disabled={proposing || saving || errors.length > 0 || name.trim().length === 0}
+            disabled={
+              proposing ||
+              saving ||
+              errors.length > 0 ||
+              name.trim().length === 0
+            }
             onClick={() => void saveDraft()}
           >
             {t("templateFrom.save")}

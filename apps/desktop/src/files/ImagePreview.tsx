@@ -22,7 +22,7 @@ function prettySize(bytes: number): string {
  * Checkerboard behind the image, because transparent PNGs are most of what a UI project contains
  * and "white logo on white pane" looks like a failed load.
  */
-export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
+export const ImagePreview = ({ cwd, path }: { readonly cwd: string; readonly path: string }) => {
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [size, setSize] = useState(0);
@@ -41,7 +41,9 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
         if (!alive) return;
         const type = imageTypeOf(path) ?? "application/octet-stream";
         // Copy into a fresh ArrayBuffer: the IPC buffer may be a view into a larger one.
-        objectUrl = URL.createObjectURL(new Blob([bytes.slice().buffer as ArrayBuffer], { type }));
+        objectUrl = URL.createObjectURL(
+          new Blob([bytes.slice().buffer as ArrayBuffer], { type })
+        );
         setSize(bytes.byteLength);
         setUrl(objectUrl);
       })
@@ -54,11 +56,12 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
     };
   }, [cwd, path]);
 
-  if (error) return <p className="px-6 py-4 text-body text-destructive">{error}</p>;
+  if (error)
+    return <p className="text-body text-destructive px-6 py-4">{error}</p>;
 
   if (!url) {
     return (
-      <p className="flex items-center gap-2 px-6 py-4 text-body text-muted-foreground">
+      <p className="text-body text-muted-foreground flex items-center gap-2 px-6 py-4">
         <Spinner className="size-3.5" />
         {t("files.loading")}
       </p>
@@ -72,18 +75,19 @@ export function ImagePreview({ cwd, path }: { cwd: string; path: string }) {
           src={url}
           alt={path}
           onLoad={(e) =>
-            setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+            setDims({
+              w: e.currentTarget.naturalWidth,
+              h: e.currentTarget.naturalHeight,
+            })
           }
           onError={() => setError(t("files.imageFailed"))}
-          className="image-checker max-h-full max-w-full rounded-control object-contain shadow-sm"
+          className="image-checker rounded-control max-h-full max-w-full object-contain shadow-sm"
         />
       </div>
-      <div className="flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5 text-callout text-muted-foreground">
-        {dims && (
-          <span>
+      <div className="text-callout text-muted-foreground flex shrink-0 items-center justify-center gap-3 border-t px-3 py-1.5">
+        {dims ? <span>
             {dims.w} × {dims.h}
-          </span>
-        )}
+          </span> : null}
         <span>{prettySize(size)}</span>
       </div>
     </div>

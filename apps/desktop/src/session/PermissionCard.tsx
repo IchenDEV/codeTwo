@@ -25,7 +25,7 @@ function contextLabel(kind: PermissionContextKind, t: Translate): string {
   }
 }
 
-function PermissionDetails({ context }: { context: PermissionContext }) {
+const PermissionDetails = ({ context }: { readonly context: PermissionContext }) => {
   const t = useT();
   const details = [
     [t("permission.server"), context.server],
@@ -37,8 +37,10 @@ function PermissionDetails({ context }: { context: PermissionContext }) {
 
   if (context.kind === "acp") return null;
   return (
-    <div className="space-y-1 text-metadata text-muted-foreground">
-      <p className="font-medium text-foreground">{contextLabel(context.kind, t)}</p>
+    <div className="text-metadata text-muted-foreground space-y-1">
+      <p className="text-foreground font-medium">
+        {contextLabel(context.kind, t)}
+      </p>
       {details.map(([label, value]) => (
         <p key={label}>
           {label}: {value}
@@ -50,15 +52,15 @@ function PermissionDetails({ context }: { context: PermissionContext }) {
 }
 
 /** A non-modal approval surface anchored to the chat that owns the request. */
-export function PermissionCard({
+export const PermissionCard = ({
   request,
   pendingCount,
   onAnswer,
 }: {
-  request: PermissionQueueItem;
-  pendingCount: number;
-  onAnswer: (optionId: string | null) => Promise<void> | void;
-}) {
+  readonly request: PermissionQueueItem;
+  readonly pendingCount: number;
+  readonly onAnswer: (optionId: string | null) => Promise<void> | void;
+}) => {
   const t = useT();
   const [answering, setAnswering] = useState(false);
 
@@ -73,19 +75,25 @@ export function PermissionCard({
   };
 
   return (
-    <div className="shrink-0 px-6 pb-1 pt-3" data-testid="permission-card">
+    <div className="shrink-0 px-6 pt-3 pb-1" data-testid="permission-card">
       <section
-        className="mx-auto w-full max-w-3xl rounded-module border bg-card px-4 py-3 shadow-raised"
+        className="rounded-module bg-card shadow-raised mx-auto w-full max-w-3xl border px-4 py-3"
         aria-labelledby="permission-card-title"
         aria-busy={answering}
         aria-live="polite"
       >
         <div className="flex items-start gap-3">
-          <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+          <CircleAlert
+            className="text-warning mt-0.5 size-4 shrink-0"
+            aria-hidden
+          />
           <div className="min-w-0 flex-1 space-y-3">
             <div className="space-y-0.5">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <h2 id="permission-card-title" className="text-body font-semibold">
+                <h2
+                  id="permission-card-title"
+                  className="text-body font-semibold"
+                >
                   {t("permission.requested")}
                 </h2>
                 {pendingCount > 1 && (
@@ -99,11 +107,11 @@ export function PermissionCard({
               </p>
             </div>
 
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control bg-fill-quiet px-3 py-2 font-mono text-body">
+            <pre className="rounded-control bg-fill-quiet text-body max-h-40 overflow-auto px-3 py-2 font-mono break-words whitespace-pre-wrap">
               {request.title}
             </pre>
 
-            {request.context && <PermissionDetails context={request.context} />}
+            {request.context ? <PermissionDetails context={request.context} /> : null}
 
             <div className="flex flex-wrap items-center gap-2">
               {request.options.map(([id, label]) => (

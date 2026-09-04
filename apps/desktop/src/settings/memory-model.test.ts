@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import { filterMemories, memoryProfile } from "./memory-model";
+import type { MemoryFilter } from "./memory-model";
 import type { MemoryRecord } from "../bridge";
-import {
-  filterMemories,
-  memoryProfile,
-  type MemoryFilter,
-} from "./memory-model";
 
 const NOW = 2_000_000_000_000;
 
@@ -22,7 +19,7 @@ function record(patch: Partial<MemoryRecord> = {}): MemoryRecord {
     pinned: false,
     active: true,
     created_at: NOW - 10_000,
-    updated_at: NOW - 5_000,
+    updated_at: NOW - 5000,
     accessed_at: null,
     access_count: 0,
     origin: "automatic",
@@ -60,8 +57,8 @@ describe("memory management filtering", () => {
     });
     expect(
       filterMemories([ordinary, profile, pinned], base, NOW).map(
-        (item) => item.id,
-      ),
+        (item) => item.id
+      )
     ).toEqual(["pinned", "ordinary"]);
     expect(memoryProfile([ordinary, profile])).toEqual(profile);
   });
@@ -82,15 +79,15 @@ describe("memory management filtering", () => {
       filterMemories(
         [forgotten, conflict],
         { ...base, view: "forgotten" },
-        NOW,
-      ).map((item) => item.id),
+        NOW
+      ).map((item) => item.id)
     ).toEqual(["forgotten"]);
     expect(
       filterMemories(
         [forgotten, conflict],
         { ...base, view: "conflicts" },
-        NOW,
-      ).map((item) => item.id),
+        NOW
+      ).map((item) => item.id)
     ).toEqual(["conflict"]);
   });
 
@@ -110,15 +107,15 @@ describe("memory management filtering", () => {
       filterMemories(
         [constraint, episode],
         { ...base, view: "constraints" },
-        NOW,
-      ).map((item) => item.id),
+        NOW
+      ).map((item) => item.id)
     ).toEqual(["constraint"]);
     expect(
       filterMemories(
         [constraint, episode],
         { ...base, query: "renderer" },
-        NOW,
-      ).map((item) => item.id),
+        NOW
+      ).map((item) => item.id)
     ).toEqual(["episode"]);
   });
 });

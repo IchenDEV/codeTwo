@@ -1,11 +1,11 @@
-import { forwardRef, type ComponentProps } from "react"
+import { forwardRef, type ComponentProps } from "react";
 
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type ControlChipProps = ComponentProps<typeof Button> & {
-  tone?: "neutral" | "warning"
-}
+  readonly tone?: "neutral" | "warning";
+};
 
 /** Compact text control for composer and toolbar status rows. */
 const ControlChip = forwardRef<HTMLButtonElement, ControlChipProps>(
@@ -18,16 +18,18 @@ const ControlChip = forwardRef<HTMLButtonElement, ControlChipProps>(
       focusStyle="inset"
       data-slot="control-chip"
       className={cn(
-        "shrink-0 gap-1.5 text-metadata",
-        tone === "warning" ? "text-warning" : "text-muted-foreground hover:text-foreground",
-        className,
+        "text-metadata shrink-0 gap-1.5",
+        tone === "warning"
+          ? "text-warning"
+          : "text-muted-foreground hover:text-foreground",
+        className
       )}
       {...props}
     >
       {children}
     </Button>
-  ),
-)
-ControlChip.displayName = "ControlChip"
+  )
+);
+ControlChip.displayName = "ControlChip";
 
-export { ControlChip, type ControlChipProps }
+export { ControlChip, type ControlChipProps };

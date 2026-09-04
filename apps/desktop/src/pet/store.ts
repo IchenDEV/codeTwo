@@ -35,23 +35,29 @@ export const BUILTIN_PET: PetCatalogItem = {
 };
 
 function isExactPetShareUrl(value: unknown, path: string): value is string {
-  if (typeof value !== "string") return false;
+  if (typeof value !== "string") {
+    return false;
+  }
   try {
     const url = new URL(value, PETSHARE_ORIGIN);
-    return url.origin === PETSHARE_ORIGIN
-      && url.pathname === path
-      && url.search === ""
-      && url.hash === ""
-      && url.username === ""
-      && url.password === "";
+    return (
+      url.origin === PETSHARE_ORIGIN &&
+      url.pathname === path &&
+      url.search === "" &&
+      url.hash === "" &&
+      url.username === "" &&
+      url.password === ""
+    );
   } catch {
     return false;
   }
 }
 
 function safeCatalogText(value: unknown, maxLength: number): string | null {
-  if (typeof value !== "string") return null;
-  const text = value.trim().replace(/\s+/g, " ");
+  if (typeof value !== "string") {
+    return null;
+  }
+  const text = value.trim().replaceAll(/\s+/g, " ");
   return text && text.length <= maxLength ? text : null;
 }
 
@@ -62,18 +68,32 @@ export function parsePetShareCatalog(value: unknown): PetCatalogItem[] {
 
   const seen = new Set<string>();
   return value.map((raw) => {
-    if (!raw || typeof raw !== "object") throw new Error("Invalid pet catalog item");
+    if (!raw || typeof raw !== "object") {
+      throw new Error("Invalid pet catalog item");
+    }
     const item = raw as PetShareCatalogEntry;
-    const id = typeof item.id === "string" && PET_ID_PATTERN.test(item.id) ? item.id : null;
+    const id =
+      typeof item.id === "string" && PET_ID_PATTERN.test(item.id)
+        ? item.id
+        : null;
     const displayName = safeCatalogText(item.displayName, 80);
     const description = safeCatalogText(item.description, 240);
-    if (!id || !displayName || !description || item.spriteVersionNumber !== 2 || seen.has(id)) {
+    if (
+      !id ||
+      !displayName ||
+      !description ||
+      item.spriteVersionNumber !== 2 ||
+      seen.has(id)
+    ) {
       throw new Error("Invalid pet catalog item");
     }
     if (
-      !isExactPetShareUrl(item.spritesheetPath, `/pets/${id}/spritesheet.webp`)
-      || !isExactPetShareUrl(item.manifestPath, `/pets/${id}/pet.json`)
-      || !isExactPetShareUrl(item.downloadPath, `/downloads/${id}.zip`)
+      !isExactPetShareUrl(
+        item.spritesheetPath,
+        `/pets/${id}/spritesheet.webp`
+      ) ||
+      !isExactPetShareUrl(item.manifestPath, `/pets/${id}/pet.json`) ||
+      !isExactPetShareUrl(item.downloadPath, `/downloads/${id}.zip`)
     ) {
       throw new Error("Invalid pet catalog asset");
     }
@@ -91,13 +111,17 @@ export function parsePetShareCatalog(value: unknown): PetCatalogItem[] {
 
 export async function fetchPetShareCatalog(): Promise<PetCatalogItem[]> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), CATALOG_TIMEOUT_MS);
+  const timeout = window.setTimeout(() => {
+    controller.abort();
+  }, CATALOG_TIMEOUT_MS);
   try {
     const response = await fetch(PETSHARE_CATALOG_URL, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`Pet catalog returned ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Pet catalog returned ${response.status}`);
+    }
     return parsePetShareCatalog(await response.json());
   } finally {
     window.clearTimeout(timeout);

@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { LOCALES, type Locale, type StringKey } from "./strings";
 
@@ -9,32 +16,48 @@ const STORAGE_KEY = "codetwo.language";
 
 /** The closest locale we have to what the OS asked for, falling back to English. */
 export function resolveSystemLocale(): Locale {
-  const tags = typeof navigator !== "undefined" ? navigator.languages ?? [navigator.language] : [];
+  const tags =
+    typeof navigator !== "undefined"
+      ? (navigator.languages ?? [navigator.language])
+      : [];
   for (const tag of tags) {
     if (!tag) continue;
     // Exact first ("zh-CN"), then the base language ("zh" → the first zh-* we ship).
     if (tag in LOCALES) return tag as Locale;
     const base = tag.split("-")[0];
-    const match = (Object.keys(LOCALES) as Locale[]).find((l) => l.split("-")[0] === base);
+    const match = (Object.keys(LOCALES) as Locale[]).find(
+      (l) => l.split("-")[0] === base
+    );
     if (match) return match;
   }
   return "en";
 }
 
 function storedPreference(): LanguagePreference {
-  const raw = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-  return raw === "system" || (raw && raw in LOCALES) ? (raw as LanguagePreference) : "system";
+  const raw =
+    typeof localStorage !== "undefined"
+      ? localStorage.getItem(STORAGE_KEY)
+      : null;
+  return raw === "system" || (raw && raw in LOCALES)
+    ? (raw as LanguagePreference)
+    : "system";
 }
 
 /** Substitute `{name}` placeholders. Missing values are left visible rather than blanked. */
-function interpolate(template: string, vars?: Record<string, string | number>): string {
+function interpolate(
+  template: string,
+  vars?: Record<string, string | number>
+): string {
   if (!vars) return template;
   return template.replace(/\{(\w+)\}/g, (whole, key) =>
-    key in vars ? String(vars[key]) : whole,
+    key in vars ? String(vars[key]) : whole
   );
 }
 
-export type Translate = (key: StringKey, vars?: Record<string, string | number>) => string;
+export type Translate = (
+  key: StringKey,
+  vars?: Record<string, string | number>
+) => string;
 
 interface I18nValue {
   preference: LanguagePreference;
@@ -50,10 +73,12 @@ const I18nContext = createContext<I18nValue>({
   t: (k) => k,
 });
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] = useState<LanguagePreference>(storedPreference);
+export const I18nProvider = ({ children }: { readonly children: ReactNode }) => {
+  const [preference, setPreferenceState] =
+    useState<LanguagePreference>(storedPreference);
 
-  const locale: Locale = preference === "system" ? resolveSystemLocale() : preference;
+  const locale: Locale =
+    preference === "system" ? resolveSystemLocale() : preference;
 
   const t = useMemo<Translate>(() => {
     const table = LOCALES[locale].strings;

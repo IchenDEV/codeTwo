@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const source = (path: string) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 describe("Appshots desktop contract", () => {
   test("offers the requested settings and routes a capture into the Composer", () => {
@@ -10,13 +11,17 @@ describe("Appshots desktop contract", () => {
     const app = source("src/App.tsx");
     const composer = source("src/session/Composer.tsx");
 
-    expect(settingsShell).toContain('{ id: "appshots", icon: ScanText, labelKey: "settings.appshots" }');
+    expect(settingsShell).toContain(
+      '{ id: "appshots", icon: ScanText, labelKey: "settings.appshots" }'
+    );
     expect(settingsShell).toContain("<AppshotsSettingsPage");
     expect(settings).toContain('<SelectItem value="both-command">');
     expect(settings).toContain('<SelectItem value="automatic">');
     expect(settings).toContain('label={t("settings.appshotsFrontmost")}');
-    expect(settings).toContain('leading={<ScanText className="size-5 text-primary" />}');
-    expect(settings).toContain('checked={appshotSettings.play_sound}');
+    expect(settings).toContain(
+      'leading={<ScanText className="size-5 text-primary" />}'
+    );
+    expect(settings).toContain("checked={appshotSettings.play_sound}");
     expect(app).toContain("onAppshotCaptured");
     expect(app).toContain('type: "appshot"');
     expect(composer).toContain("data-appshot-attachments");
@@ -32,7 +37,9 @@ describe("Appshots desktop contract", () => {
     expect(manager).toContain("chmodSync(this.capturesDir, 0o700)");
     expect(compiler).toContain('data_dir.join("appshots")');
     expect(compiler).toContain('"appshot id is invalid"');
-    expect(compiler).toContain('Accessible window text (may include content outside the visible scroll area)');
+    expect(compiler).toContain(
+      "Accessible window text (may include content outside the visible scroll area)"
+    );
   });
 
   test("uses native screen capture, Accessibility text, and a real global hotkey", () => {

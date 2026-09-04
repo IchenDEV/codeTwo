@@ -1,8 +1,8 @@
-type StatusIndicatorTone = "neutral" | "success" | "warning" | "destructive"
+type StatusIndicatorTone = "neutral" | "success" | "warning" | "destructive";
 
 interface StatusIndicatorProps {
-  tone: StatusIndicatorTone
-  label: string
+  readonly tone: StatusIndicatorTone;
+  readonly label: string;
 }
 
 const dotToneClasses: Record<StatusIndicatorTone, string> = {
@@ -10,14 +10,14 @@ const dotToneClasses: Record<StatusIndicatorTone, string> = {
   success: "bg-status-success",
   warning: "bg-status-warning",
   destructive: "bg-status-destructive",
-}
+};
 
-function StatusIndicator({ tone, label }: StatusIndicatorProps) {
+const StatusIndicator = ({ tone, label }: StatusIndicatorProps) => {
   return (
     <span
       data-slot="status-indicator"
       data-tone={tone}
-      className="inline-flex items-center gap-control-group text-metadata text-muted-foreground"
+      className="gap-control-group text-metadata text-muted-foreground inline-flex items-center"
     >
       <span
         data-slot="status-indicator-dot"
@@ -26,7 +26,7 @@ function StatusIndicator({ tone, label }: StatusIndicatorProps) {
       />
       <span data-slot="status-indicator-label">{label}</span>
     </span>
-  )
+  );
 }
 
-export { StatusIndicator, type StatusIndicatorProps, type StatusIndicatorTone }
+export { StatusIndicator, type StatusIndicatorProps, type StatusIndicatorTone };

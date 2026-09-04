@@ -1,4 +1,5 @@
-import { SESSION_MODES, type SessionMode } from "./mode";
+import { SESSION_MODES } from "./mode";
+import type { SessionMode } from "./mode";
 import type { MemoryAccess } from "../bridge";
 
 /**
@@ -10,7 +11,9 @@ import type { MemoryAccess } from "../bridge";
 
 export type SceneSource = "builtin" | "user" | "project" | "plugin";
 
-/** One typed fill-in slot — shared vocabulary between Macro skills and scene briefs. */
+/**
+One typed fill-in slot — shared vocabulary between Macro skills and scene briefs.
+*/
 export interface SceneSlotDef {
   id: string;
   label: string;
@@ -29,7 +32,15 @@ export interface SceneBrief {
 export interface SceneArtifactDef {
   id: string;
   title: string;
-  kind: "document" | "plan" | "report" | "test_report" | "checklist" | "diff" | "link" | "custom";
+  kind:
+    | "document"
+    | "plan"
+    | "report"
+    | "test_report"
+    | "checklist"
+    | "diff"
+    | "link"
+    | "custom";
   required?: boolean;
   template?: string;
   description?: string;
@@ -94,7 +105,8 @@ export type SceneHookEvent =
   | "tests_failed"
   | "schedule";
 
-export type SceneHookActionKind = "suggest_scene" | "suggest_next" | "run_macro" | "notify";
+export type SceneHookActionKind =
+  "suggest_scene" | "suggest_next" | "run_macro" | "notify";
 
 export interface SceneHook {
   on: SceneHookEvent;
@@ -114,7 +126,9 @@ export interface SceneConstraints {
   tools?: { allow?: string[]; deny?: string[] };
 }
 
-/** Lossless Agent Scenes 1.0 document used by the editor and desktop bridge. */
+/**
+Lossless Agent Scenes 1.0 document used by the editor and desktop bridge.
+*/
 export interface SceneDocument {
   $schema: string;
   name: string;
@@ -138,7 +152,9 @@ export interface SceneDocument {
   extensions?: Record<string, Record<string, unknown>>;
 }
 
-/** One resolved scene as `list_scenes` reports it. */
+/**
+One resolved scene as `list_scenes` reports it.
+*/
 export interface SceneInfo {
   reference: string;
   name: string;
@@ -154,20 +170,27 @@ export interface SceneInfo {
   brief?: SceneBrief | null;
   artifacts: SceneArtifactDef[];
   skills?: SceneSkills | null;
-  /** Appended for R8's completion banner: exit criteria and next-scene suggestions. */
+  /**
+  Appended for R8's completion banner: exit criteria and next-scene suggestions.
+  */
   exit?: SceneExit | null;
 }
 
-/** One `exit.next` entry — a suggested follow-up scene with its carry set. */
+/**
+One `exit.next` entry — a suggested follow-up scene with its carry set.
+*/
 export interface SceneNextSuggestion {
   scene: string;
   label?: string | null;
   carry?: string[];
 }
 
-export type MemoryPresetId = "standard" | "read_only" | "private" | "learn_only";
+export type MemoryPresetId =
+  "standard" | "read_only" | "private" | "learn_only";
 
-/** Mirrors core `memory_preset_policy`, in the frontend's (read, write) vocabulary. */
+/**
+Mirrors core `memory_preset_policy`, in the frontend's (read, write) vocabulary.
+*/
 export const MEMORY_PRESET_POLICY: Record<
   MemoryPresetId,
   { read: MemoryAccess; write: MemoryAccess }
@@ -178,7 +201,9 @@ export const MEMORY_PRESET_POLICY: Record<
   learn_only: { read: "deny", write: "allow" },
 };
 
-/** The live per-session posture a scene's set fields are compared against. */
+/**
+The live per-session posture a scene's set fields are compared against.
+*/
 export interface LivePosture {
   mode: SessionMode;
   memoryRead: MemoryAccess;
@@ -188,7 +213,9 @@ export interface LivePosture {
   model: string | null;
 }
 
-/** Display title for the UI locale, falling back to the authored title. */
+/**
+Display title for the UI locale, falling back to the authored title.
+*/
 export function sceneTitle(scene: SceneInfo, locale: string): string {
   return scene.localizations[locale]?.title ?? scene.title;
 }
@@ -198,14 +225,28 @@ export function sceneTitle(scene: SceneInfo, locale: string): string {
  * never count as customized.
  */
 export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
-  const execution = scene.execution;
-  if (!execution) return false;
-  if (execution.session_mode !== undefined && execution.session_mode !== live.mode) return true;
+  const { execution } = scene;
+  if (!execution) {
+    return false;
+  }
+  if (
+    execution.session_mode !== undefined &&
+    execution.session_mode !== live.mode
+  ) {
+    return true;
+  }
   if (execution.memory_preset !== undefined) {
     const preset = MEMORY_PRESET_POLICY[execution.memory_preset];
-    if (preset.read !== live.memoryRead || preset.write !== live.memoryWrite) return true;
+    if (preset.read !== live.memoryRead || preset.write !== live.memoryWrite) {
+      return true;
+    }
   }
-  if (execution.plan_first !== undefined && execution.plan_first !== live.planFirst) return true;
+  if (
+    execution.plan_first !== undefined &&
+    execution.plan_first !== live.planFirst
+  ) {
+    return true;
+  }
   if (
     execution.providers !== undefined &&
     execution.providers.length > 0 &&
@@ -213,7 +254,11 @@ export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
   ) {
     return true;
   }
-  if (execution.model !== undefined && live.model !== null && execution.model !== live.model) {
+  if (
+    execution.model !== undefined &&
+    live.model !== null &&
+    execution.model !== live.model
+  ) {
     return true;
   }
   return false;
@@ -224,18 +269,32 @@ export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
  * providers/model/reasoning_effort bind at session creation; worktree is immutable per session.
  * When the live value already matches, the field is not pending.
  */
-export function softApplyPending(scene: SceneInfo, live: LivePosture | null): string[] {
-  const execution = scene.execution;
-  if (!execution) return [];
+export function softApplyPending(
+  scene: SceneInfo,
+  live: LivePosture | null
+): string[] {
+  const { execution } = scene;
+  if (!execution) {
+    return [];
+  }
   const pending: string[] = [];
-  if (execution.providers !== undefined && execution.providers.length > 0) {
-    if (!live || execution.providers[0] !== live.provider) pending.push("providers");
+  if (
+    execution.providers !== undefined &&
+    execution.providers.length > 0 &&
+    (!live || execution.providers[0] !== live.provider)
+  )
+    {pending.push("providers");}
+  if (
+    execution.model !== undefined &&
+    (!live || live.model === null || execution.model !== live.model)
+  )
+    {pending.push("model");}
+  if (execution.reasoning_effort !== undefined) {
+    pending.push("reasoning_effort");
   }
-  if (execution.model !== undefined) {
-    if (!live || live.model === null || execution.model !== live.model) pending.push("model");
+  if (execution.worktree !== undefined) {
+    pending.push("worktree");
   }
-  if (execution.reasoning_effort !== undefined) pending.push("reasoning_effort");
-  if (execution.worktree !== undefined) pending.push("worktree");
   return pending;
 }
 
@@ -245,12 +304,17 @@ export function softApplyPending(scene: SceneInfo, live: LivePosture | null): st
  */
 export function escalationNeeded(
   scene: SceneInfo,
-  currentMode: SessionMode,
+  currentMode: SessionMode
 ): { from: SessionMode; to: SessionMode } | null {
   const target = scene.execution?.session_mode;
-  if (!target) return null;
-  const rank = (m: SessionMode) => SESSION_MODES.findIndex((entry) => entry.id === m);
-  if (rank(target) > rank(currentMode)) return { from: currentMode, to: target };
+  if (!target) {
+    return null;
+  }
+  const rank = (m: SessionMode) =>
+    SESSION_MODES.findIndex((entry) => entry.id === m);
+  if (rank(target) > rank(currentMode)) {
+    return { from: currentMode, to: target };
+  }
   return null;
 }
 
@@ -261,16 +325,20 @@ export function escalationNeeded(
 export function nextSceneInRing(
   ring: readonly string[],
   scenes: readonly SceneInfo[],
-  active: string | null,
+  active: string | null
 ): string | null {
   const order = ring.length > 0 ? ring : scenes.map((s) => s.reference);
-  if (order.length === 0) return null;
+  if (order.length === 0) {
+    return null;
+  }
   const index = active === null ? -1 : order.indexOf(active);
   const next = order[(index + 1) % order.length];
   return next === active ? null : next;
 }
 
-/** The slice of a session config option the effort matcher needs (mirrors bridge's shape). */
+/**
+The slice of a session config option the effort matcher needs (mirrors bridge's shape).
+*/
 export interface EffortOptionLike {
   id: string;
   category?: string | null;
@@ -284,15 +352,19 @@ export interface EffortOptionLike {
  */
 export function sceneEffortChoice(
   options: readonly EffortOptionLike[],
-  effort: string,
+  effort: string
 ): { configId: string; value: string } | null {
-  const option = options.find(
-    (o) => o.category === "thought_level" || o.id === "effort" || o.id === "reasoning_effort",
-  );
-  if (!option) return null;
+  const option = options.find((o) => o.category === "thought_level" ||
+      o.id === "effort" ||
+      o.id === "reasoning_effort"
+  });
+  if (!option) {
+    return null;
+  }
   const wanted = effort.toLowerCase();
   const choice = option.choices.find(
-    (c) => c.id.toLowerCase() === wanted || (c.name ?? "").toLowerCase() === wanted,
+    (c) =>
+      c.id.toLowerCase() === wanted || (c.name ?? "").toLowerCase() === wanted
   );
   return choice ? { configId: option.id, value: choice.id } : null;
 }
@@ -304,18 +376,24 @@ export function sceneEffortChoice(
  */
 export function sceneCollaborationChoice(
   options: readonly EffortOptionLike[],
-  planFirst: boolean,
+  planFirst: boolean
 ): { configId: string; value: string } | null {
   const option = options.find(
-    (o) => o.category === "collaboration_mode" || o.id === "collaboration_mode",
+    (o) => o.category === "collaboration_mode" || o.id === "collaboration_mode"
   );
-  if (!option) return null;
+  if (!option) {
+    return null;
+  }
   const wanted = planFirst ? "plan" : "default";
-  const choice = option.choices.find((candidate) => candidate.id.toLowerCase() === wanted);
+  const choice = option.choices.find(
+    (candidate) => candidate.id.toLowerCase() === wanted
+  );
   return choice ? { configId: option.id, value: choice.id } : null;
 }
 
-/** The slice of a skill listing the scene-aware `/` picker needs. */
+/**
+The slice of a skill listing the scene-aware `/` picker needs.
+*/
 export interface SkillLike {
   id: string;
 }
@@ -329,10 +407,12 @@ export interface SkillLike {
 export function orderSkillsForScene<T extends SkillLike>(
   skills: readonly T[],
   scene: SceneInfo | null,
-  showAll: boolean,
+  showAll: boolean
 ): { items: T[]; hiddenCount: number } {
   const pinned = scene?.skills?.pinned ?? [];
-  if (pinned.length === 0) return { items: [...skills], hiddenCount: 0 };
+  if (pinned.length === 0) {
+    return { items: [...skills], hiddenCount: 0 };
+  }
   const rank = new Map(pinned.map((id, index) => [id, index]));
   const front = [...skills]
     .filter((s) => rank.has(s.id))

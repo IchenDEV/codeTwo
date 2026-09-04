@@ -1,6 +1,15 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, button, click, dom, flush, mount, restoreDom, text } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+  text,
+} from "./domTestHarness";
 activateDom();
 const { PreviewModal } = await import("../src/editor/Preview");
 
@@ -54,7 +63,7 @@ describe("Canvas compiled preview rendered behavior", () => {
           ],
         }}
         onClose={() => closed.push(true)}
-      />,
+      />
     );
     await flush();
     expect(text(dom.document.body, "Exact backend summary")).toBeTruthy();

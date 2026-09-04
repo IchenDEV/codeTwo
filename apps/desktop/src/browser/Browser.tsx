@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -47,7 +53,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { CompositeActionRow } from "@/components/business/composite-action-row";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
@@ -127,7 +137,10 @@ function useDragging(): boolean {
   const [dragging, set] = useState(false);
   useEffect(() => {
     const read = () =>
-      set(document.body.classList.contains("resizing-h") || document.body.classList.contains("resizing-v"));
+      set(
+        document.body.classList.contains("resizing-h") ||
+          document.body.classList.contains("resizing-v")
+      );
     read();
     const mo = new MutationObserver(read);
     mo.observe(document.body, { attributes: true, attributeFilter: ["class"] });
@@ -137,17 +150,17 @@ function useDragging(): boolean {
 }
 
 /** A menu row. The popover-of-buttons shape, styled like a native context menu. */
-function MenuItem({
+const MenuItem = ({
   icon: Icon,
   label,
   onClick,
   checked,
 }: {
-  icon: typeof Globe;
-  label: string;
-  onClick: () => void;
-  checked?: boolean;
-}) {
+  readonly icon: typeof Globe;
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly checked?: boolean;
+}) => {
   return (
     <Button
       type="button"
@@ -155,27 +168,27 @@ function MenuItem({
       size="row"
       focusStyle="inset"
       onClick={onClick}
-      className="w-full gap-module-inset px-module-inset py-1.5 text-metadata"
+      className="gap-module-inset px-module-inset text-metadata w-full py-1.5"
     >
-      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <Icon className="text-muted-foreground size-3.5 shrink-0" />
       <span className="flex-1">{label}</span>
-      {checked && <Check className="size-3.5 shrink-0 text-primary" />}
+      {checked ? <Check className="text-primary size-3.5 shrink-0" /> : null}
     </Button>
   );
 }
 
-function BrowserWebview({
+const BrowserWebview = ({
   label,
   url,
   visible,
 }: {
-  label: string;
-  url: string;
-  visible: boolean;
-}) {
+  readonly label: string;
+  readonly url: string;
+  readonly visible: boolean;
+}) => {
   const connect = useCallback(
     (element: HTMLElement | null) => registerBrowserWebview(label, element),
-    [label],
+    [label]
   );
   return (
     <electrobun-webview
@@ -186,7 +199,7 @@ function BrowserWebview({
       sandbox=""
       className={cn(
         "absolute inset-0 h-full! w-full! bg-transparent",
-        !visible && "invisible",
+        !visible && "invisible"
       )}
     />
   );
@@ -204,23 +217,23 @@ function BrowserWebview({
  * page area's geometry has to be pushed to the native side whenever it changes, and the page is
  * *above* the DOM, so anything we want to draw over it means hiding it first.
  */
-export function BrowserPanel({
+export const BrowserPanel = ({
   url,
   projectPath,
   visible,
   onNavigate,
   onAnnotate,
 }: {
-  url: string;
+  readonly url: string;
   /** Logical source project. Worktree sessions keep browser history with their source project. */
-  projectPath: string | null;
+  readonly projectPath: string | null;
   /** The dock's open state. It closes by sweeping its width to zero without unmounting, and a
    *  child webview has no idea it is inside a collapsed box — it would keep painting over the app. */
-  visible: boolean;
-  onNavigate: (u: string) => void;
+  readonly visible: boolean;
+  readonly onNavigate: (u: string) => void;
   /** Everything the user marked up on the page, one entry per annotated element. */
-  onAnnotate: (notes: Annotation[]) => void;
-}) {
+  readonly onAnnotate: (notes: Annotation[]) => void;
+}) => {
   const t = useT();
   const toast = useToast();
   const [tabs, setTabs] = useState<Tab[]>([{ id: 1, url, title: "" }]);
@@ -236,7 +249,9 @@ export function BrowserPanel({
   const [annotating, setAnnotating] = useState(false);
   const [pending, setPending] = useState(0);
   const [historyState, setHistoryState] = useState<BrowserHistoryState>(() =>
-    loadBrowserHistory(typeof window === "undefined" ? null : localHistoryStorage()),
+    loadBrowserHistory(
+      typeof window === "undefined" ? null : localHistoryStorage()
+    )
   );
 
   const active = tabs.find((x) => x.id === activeId) ?? tabs[0];
@@ -253,24 +268,30 @@ export function BrowserPanel({
   const annotatingRef = useRef(annotating);
   annotatingRef.current = annotating;
 
-  const applyRegistry = useCallback((registry: import("../bridge").BrowserTab[]) => {
-    const restored = registry
-      .map((tab) => ({
-        id: Number(tab.id.replace(/^browser-/, "")),
-        url: tab.url,
-        title: tab.title,
-        agentActive: tab.agent_active,
-        leaseSession: tab.lease_session,
-      }))
-      .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
-    if (restored.length === 0) return;
-    const selected = registry.find((tab) => tab.active);
-    const selectedId = selected ? Number(selected.id.replace(/^browser-/, "")) : restored[0].id;
-    const selectedTab = restored.find((tab) => tab.id === selectedId) ?? restored[0];
-    setTabs(restored);
-    setActiveId(selectedTab.id);
-    setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
-  }, []);
+  const applyRegistry = useCallback(
+    (registry: import("../bridge").BrowserTab[]) => {
+      const restored = registry
+        .map((tab) => ({
+          id: Number(tab.id.replace(/^browser-/, "")),
+          url: tab.url,
+          title: tab.title,
+          agentActive: tab.agent_active,
+          leaseSession: tab.lease_session,
+        }))
+        .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
+      if (restored.length === 0) return;
+      const selected = registry.find((tab) => tab.active);
+      const selectedId = selected
+        ? Number(selected.id.replace(/^browser-/, ""))
+        : restored[0].id;
+      const selectedTab =
+        restored.find((tab) => tab.id === selectedId) ?? restored[0];
+      setTabs(restored);
+      setActiveId(selectedTab.id);
+      setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
+    },
+    []
+  );
 
   useEffect(() => {
     void browserRegistrySnapshot().then(applyRegistry);
@@ -292,7 +313,7 @@ export function BrowserPanel({
       saveBrowserHistory(storage, next);
       setHistoryState(next);
     },
-    [],
+    []
   );
 
   const patch = (id: number, f: (t: Tab) => Tab) =>
@@ -319,7 +340,8 @@ export function BrowserPanel({
   /* Hide every other tab's page: they stay alive (and keep their scroll position) but must not
      paint over the one in front. */
   useEffect(() => {
-    for (const x of tabs) if (x.id !== activeId) void browserVisible(labelOf(x.id), false);
+    for (const x of tabs)
+      if (x.id !== activeId) void browserVisible(labelOf(x.id), false);
   }, [tabs, activeId]);
 
   /* The dock is resizable and the window is not, so a size change of the placeholder is the common
@@ -421,24 +443,34 @@ export function BrowserPanel({
         }
         const project = projectPathRef.current;
         if (!project) return;
-        const title = tabsRef.current.find((tab) => labelOf(tab.id) === label)?.title ?? null;
+        const title =
+          tabsRef.current.find((tab) => labelOf(tab.id) === label)?.title ??
+          null;
         updateHistory((current) =>
-          recordBrowserVisit(current, project, loadedUrl, title, Date.now()),
+          recordBrowserVisit(current, project, loadedUrl, title, Date.now())
         );
       }),
       onBrowserNav(({ label, url: to }) => {
-        setTabs((prev) => prev.map((x) => (labelOf(x.id) === label ? { ...x, url: to } : x)));
+        setTabs((prev) =>
+          prev.map((x) => (labelOf(x.id) === label ? { ...x, url: to } : x))
+        );
         if (label === labelOf(activeId)) {
           setAddr(to);
           onNavigate(to);
         }
       }),
       onBrowserTitle(({ label, title }) => {
-        const tab = tabsRef.current.find((entry) => labelOf(entry.id) === label);
-        setTabs((prev) => prev.map((x) => (labelOf(x.id) === label ? { ...x, title } : x)));
+        const tab = tabsRef.current.find(
+          (entry) => labelOf(entry.id) === label
+        );
+        setTabs((prev) =>
+          prev.map((x) => (labelOf(x.id) === label ? { ...x, title } : x))
+        );
         const project = projectPathRef.current;
         if (project && tab) {
-          updateHistory((current) => updateBrowserVisitTitle(current, project, tab.url, title));
+          updateHistory((current) =>
+            updateBrowserVisitTitle(current, project, tab.url, title)
+          );
         }
       }),
       onBrowserPopup(({ url: to }) => openTab(to)),
@@ -470,7 +502,8 @@ export function BrowserPanel({
     act();
   };
 
-  const zoomBy = (d: number) => setZoom((z) => Math.min(2, Math.max(0.5, Math.round((z + d) * 10) / 10)));
+  const zoomBy = (d: number) =>
+    setZoom((z) => Math.min(2, Math.max(0.5, Math.round((z + d) * 10) / 10)));
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -486,34 +519,38 @@ export function BrowserPanel({
               selected={x.id === activeId}
               onSelect={() => selectTab(x)}
               className={cn(
-                "min-w-0 max-w-44 gap-1.5 rounded-control px-2 py-1 text-callout transition-colors focus-within:bg-accent",
+                "rounded-control text-callout focus-within:bg-accent max-w-44 min-w-0 gap-1.5 px-2 py-1 transition-colors",
                 x.id === activeId
                   ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50",
+                  : "text-muted-foreground hover:bg-accent/50"
               )}
               contentClassName="flex items-center gap-1.5"
-              actions={tabs.length > 1 ? (
-                <TooltipButton
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  label={t("browser.closeTab")}
-                  className="hidden shrink-0 group-hover:inline-flex group-focus-within:inline-flex"
-                  onClick={() => closeTab(x.id)}
-                >
-                  <X className="size-3" />
-                </TooltipButton>
-              ) : null}
+              actions={
+                tabs.length > 1 ? (
+                  <TooltipButton
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    label={t("browser.closeTab")}
+                    className="hidden shrink-0 group-focus-within:inline-flex group-hover:inline-flex"
+                    onClick={() => closeTab(x.id)}
+                  >
+                    <X className="size-3" />
+                  </TooltipButton>
+                ) : null
+              }
             >
               <Globe className="size-3 shrink-0 opacity-60" />
-              <span className="min-w-0 flex-1 truncate">{name ?? t("browser.newTab")}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {name ?? t("browser.newTab")}
+              </span>
             </CompositeActionRow>
           );
         })}
         <TooltipButton
           variant="ghost"
           size="icon"
-          className="size-6 shrink-0 text-muted-foreground"
+          className="text-muted-foreground size-6 shrink-0"
           label={t("browser.newTab")}
           onClick={() => openTab(BLANK)}
         >
@@ -527,7 +564,7 @@ export function BrowserPanel({
         <TooltipButton
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground disabled:opacity-30"
+          className="text-muted-foreground size-7 disabled:opacity-30"
           label={t("browser.back")}
           disabled={blank}
           onClick={() => void browserHistory(activeLabel, -1)}
@@ -537,7 +574,7 @@ export function BrowserPanel({
         <TooltipButton
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground disabled:opacity-30"
+          className="text-muted-foreground size-7 disabled:opacity-30"
           label={t("browser.forward")}
           disabled={blank}
           onClick={() => void browserHistory(activeLabel, 1)}
@@ -547,7 +584,7 @@ export function BrowserPanel({
         <TooltipButton
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground disabled:opacity-30"
+          className="text-muted-foreground size-7 disabled:opacity-30"
           label={t("browser.reload")}
           disabled={blank}
           onClick={() => void browserReload(activeLabel)}
@@ -559,8 +596,8 @@ export function BrowserPanel({
           variant="ghost"
           size="icon"
           className={cn(
-            "size-7 text-muted-foreground disabled:opacity-30",
-            annotating && "bg-primary/15 text-primary hover:bg-primary/20",
+            "text-muted-foreground size-7 disabled:opacity-30",
+            annotating && "bg-primary/15 text-primary hover:bg-primary/20"
           )}
           label={t("browser.annotateMode")}
           aria-pressed={annotating}
@@ -573,7 +610,7 @@ export function BrowserPanel({
         <Input
           ref={addrRef}
           size="compact"
-          className="min-w-0 flex-1 bg-fill-quiet text-metadata focus:bg-transparent"
+          className="bg-fill-quiet text-metadata min-w-0 flex-1 focus:bg-transparent"
           value={addr}
           onChange={(e) => setAddr(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addr.trim() && go(addr)}
@@ -581,29 +618,29 @@ export function BrowserPanel({
           spellCheck={false}
         />
 
-        {active.agentActive && (
-          <Button
+        {active.agentActive ? <Button
             variant="outline"
             size="sm"
-            className="h-(--ds-control-normal) gap-1.5 px-2 text-callout"
+            className="text-callout h-(--ds-control-normal) gap-1.5 px-2"
             title="Stop the agent lease and take control of this tab"
             onClick={() => void browserTakeControl(activeLabel)}
           >
             <SquareDashedMousePointer className="size-3.5" />
             Take Control
-          </Button>
-        )}
+          </Button> : null}
 
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverTrigger
-            render={<Button
-              variant="ghost"
-              size="icon"
-              className="size-7 text-muted-foreground"
-              aria-label={t("browser.more")}
-            >
-              <MoreVertical className="size-3.5" />
-            </Button>}
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground size-7"
+                aria-label={t("browser.more")}
+              >
+                <MoreVertical className="size-3.5" />
+              </Button>
+            }
           />
           <PopoverContent align="end" className="w-60 p-1">
             <MenuItem
@@ -625,10 +662,12 @@ export function BrowserPanel({
               icon={Copy}
               label={t("browser.copyUrl")}
               onClick={menu(() => {
-                void navigator.clipboard.writeText(active.url).then(() => toast(t("browser.copied")));
+                void navigator.clipboard
+                  .writeText(active.url)
+                  .then(() => toast(t("browser.copied")));
               })}
             />
-            <div className="my-1 h-px bg-border" />
+            <div className="bg-border my-1 h-px" />
             <MenuItem
               icon={MonitorSmartphone}
               label={t("browser.deviceToolbar")}
@@ -640,22 +679,34 @@ export function BrowserPanel({
                 });
               }}
             />
-            <div className="flex items-center gap-1 px-2.5 py-1.5 text-metadata">
+            <div className="text-metadata flex items-center gap-1 px-2.5 py-1.5">
               <span className="flex-1">{t("browser.zoom")}</span>
-              <TooltipButton label={t("browser.zoomOut")} variant="outline" size="icon" className="size-5" onClick={() => zoomBy(-0.1)}>
+              <TooltipButton
+                label={t("browser.zoomOut")}
+                variant="outline"
+                size="icon"
+                className="size-5"
+                onClick={() => zoomBy(-0.1)}
+              >
                 <Minus className="size-3" />
               </TooltipButton>
               <Button
                 type="button"
                 variant="ghost"
                 size="compact"
-                className="w-11 px-0 font-mono text-callout text-muted-foreground"
+                className="text-callout text-muted-foreground w-11 px-0 font-mono"
                 aria-label={t("browser.zoomReset")}
                 onClick={() => setZoom(1)}
               >
                 {Math.round(zoom * 100)}%
               </Button>
-              <TooltipButton label={t("browser.zoomIn")} variant="outline" size="icon" className="size-5" onClick={() => zoomBy(0.1)}>
+              <TooltipButton
+                label={t("browser.zoomIn")}
+                variant="outline"
+                size="icon"
+                className="size-5"
+                onClick={() => zoomBy(0.1)}
+              >
                 <Plus className="size-3" />
               </TooltipButton>
             </div>
@@ -667,10 +718,9 @@ export function BrowserPanel({
       {/* The whole annotate flow lives inside the page (the picker, the card, the style wells);
           this strip only says the mode is on and, once notes exist, offers the one action that
           matters — send them to the prompt. Nothing else, so the page keeps the room. */}
-      {annotating && !blank && (
-        <div className="flex h-8 items-center gap-2 border-y border-primary/20 bg-primary/[0.06] px-2.5">
-          <span className="size-1.5 shrink-0 rounded-full bg-primary" />
-          <span className="min-w-0 flex-1 truncate text-callout text-muted-foreground">
+      {annotating && !blank ? <div className="border-primary/20 bg-primary/[0.06] flex h-8 items-center gap-2 border-y px-2.5">
+          <span className="bg-primary size-1.5 shrink-0 rounded-full" />
+          <span className="text-callout text-muted-foreground min-w-0 flex-1 truncate">
             {pending === 0
               ? t("browser.annotateHint")
               : t("browser.annotateCount").replace("{n}", String(pending))}
@@ -681,23 +731,25 @@ export function BrowserPanel({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="shrink-0 text-muted-foreground hover:text-destructive"
+                className="text-muted-foreground hover:text-destructive shrink-0"
                 label={t("browser.clearAnnotations")}
                 onClick={() => void clearMarks()}
               >
                 <Trash2 className="size-3.5" />
               </TooltipButton>
-              <Button size="compact" className="px-module-inset text-callout" onClick={() => void annotate()}>
+              <Button
+                size="compact"
+                className="px-module-inset text-callout"
+                onClick={() => void annotate()}
+              >
                 {t("browser.addToPrompt")}
               </Button>
             </>
           )}
-        </div>
-      )}
+        </div> : null}
 
       {/* ---- device toolbar --------------------------------------------------------------- */}
-      {deviceBar && (
-        <div className="flex items-center gap-1 px-2 py-1">
+      {deviceBar ? <div className="flex items-center gap-1 px-2 py-1">
           {(
             [
               { w: null, label: t("browser.responsive") },
@@ -714,18 +766,19 @@ export function BrowserPanel({
               data-selected={device === d.w ? "true" : "false"}
               onClick={() => setDevice(d.w)}
               className={cn(
-                "h-auto px-2 py-0.5 text-callout",
-                device === d.w ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                "text-callout h-auto px-2 py-0.5",
+                device === d.w
+                  ? "bg-accent text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               {d.label}
             </Button>
           ))}
-          {device && (
-            <span className="ml-auto font-mono text-metadata text-muted-foreground">{device}px</span>
-          )}
-        </div>
-      )}
+          {device ? <span className="text-metadata text-muted-foreground ml-auto font-mono">
+              {device}px
+            </span> : null}
+        </div> : null}
 
       {/* ---- the page --------------------------------------------------------------------- */}
       {/* Electrobun keeps each sandboxed child webview aligned to its custom element. A device
@@ -733,11 +786,13 @@ export function BrowserPanel({
       <div className={cn("relative min-h-0 flex-1", device && "bg-muted/40")}>
         <div
           ref={hostRef}
-          className={cn("relative h-full", device && "mx-auto shadow-lg ring-1 ring-foreground/15")}
+          className={cn(
+            "relative h-full",
+            device && "ring-foreground/15 mx-auto shadow-lg ring-1"
+          )}
           style={device ? { width: device } : undefined}
         >
-          {isDesktop &&
-            tabs
+          {isDesktop ? tabs
               .filter((tab) => tab.url !== BLANK)
               .map((tab) => (
                 <BrowserWebview
@@ -746,53 +801,59 @@ export function BrowserPanel({
                   url={tab.url}
                   visible={tab.id === activeId && showPage}
                 />
-              ))}
+              )) : null}
         </div>
-        {blank && (
-          // No webview for a blank tab: an empty native page paints a white sheet, which in dark
-          // mode reads as a rendering bug rather than an empty tab.
-          <div className="absolute inset-0 flex items-start justify-center overflow-y-auto px-6 pt-[14vh]">
+        {blank ? <div className="absolute inset-0 flex items-start justify-center overflow-y-auto px-6 pt-[14vh]">
             {recentSites.length > 0 ? (
               <div className="w-full max-w-md">
                 <div className="mb-3 flex items-center gap-2">
-                  <Globe className="size-4 text-muted-foreground" />
-                  <h3 className="text-body font-semibold">{t("browser.recent")}</h3>
+                  <Globe className="text-muted-foreground size-4" />
+                  <h3 className="text-body font-semibold">
+                    {t("browser.recent")}
+                  </h3>
                 </div>
                 <div className="space-y-1">
                   {recentSites.map((site) => (
                     <CompositeActionRow
                       key={site.url}
-                      accessibilityLabel={site.title || hostOf(site.url) || site.url}
+                      accessibilityLabel={
+                        site.title || hostOf(site.url) || site.url
+                      }
                       onSelect={() => go(site.url)}
-                      className="min-w-0 gap-module-inset rounded-control px-module-inset py-module-inset transition-colors hover:bg-fill-hover"
+                      className="gap-module-inset rounded-control px-module-inset py-module-inset hover:bg-fill-hover min-w-0 transition-colors"
                       contentClassName="flex min-w-0 flex-1 flex-col"
-                      actions={(
+                      actions={
                         <TooltipButton
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                          className="text-muted-foreground hover:text-destructive opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                           label={t("browser.removeRecent")}
                           onClick={() => {
                             const project = projectPathRef.current;
                             if (!project) return;
-                            updateHistory((current) => removeBrowserVisit(current, project, site.url));
+                            updateHistory((current) =>
+                              removeBrowserVisit(current, project, site.url)
+                            );
                           }}
                         >
                           <X className="size-3.5" />
                         </TooltipButton>
-                      )}
+                      }
                     >
-                      <span className="block truncate text-body font-medium">
+                      <span className="text-body block truncate font-medium">
                         {site.title || hostOf(site.url) || site.url}
                       </span>
-                      <span className="mt-0.5 flex min-w-0 items-center gap-2 text-callout text-muted-foreground">
+                      <span className="text-callout text-muted-foreground mt-0.5 flex min-w-0 items-center gap-2">
                         <span className="truncate font-mono">{site.url}</span>
                         <span
                           className="shrink-0"
-                          title={new Date(site.last_visited_at).toLocaleString()}
+                          title={new Date(
+                            site.last_visited_at
+                          ).toLocaleString()}
                         >
-                          {visitAge(site.last_visited_at) ?? t("browser.justNow")}
+                          {visitAge(site.last_visited_at) ??
+                            t("browser.justNow")}
                         </span>
                       </span>
                     </CompositeActionRow>
@@ -801,20 +862,22 @@ export function BrowserPanel({
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 pt-[8vh]">
-                <Globe className="size-8 text-muted-foreground/40" />
-                <p className="text-metadata text-muted-foreground">{t("browser.urlPlaceholder")}</p>
+                <Globe className="text-muted-foreground/40 size-8" />
+                <p className="text-metadata text-muted-foreground">
+                  {t("browser.urlPlaceholder")}
+                </p>
               </div>
             )}
-          </div>
-        )}
+          </div> : null}
         {!blank && !isDesktop && (
           // The standalone Vite renderer has no native side. Say so rather than showing a void.
           <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-            <p className="text-metadata text-muted-foreground">{t("browser.desktopOnly")}</p>
+            <p className="text-metadata text-muted-foreground">
+              {t("browser.desktopOnly")}
+            </p>
           </div>
         )}
       </div>
-
     </div>
   );
 }

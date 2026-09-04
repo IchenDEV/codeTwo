@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { CheckCircle2, CircleAlert, Info, X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,7 +25,9 @@ interface Toast {
   action?: ToastAction;
 }
 
-const ToastContext = createContext<(text: string, tone?: Tone, action?: ToastAction) => void>(() => {});
+const ToastContext = createContext<
+  (text: string, tone?: Tone, action?: ToastAction) => void
+>(() => {});
 
 /**
  * Transient feedback. Several actions used to fail silently — a click that hits a disabled
@@ -34,13 +43,16 @@ export function useToast() {
 
 let nextId = 1;
 
-export function ToastProvider({ children }: { children: ReactNode }) {
+export const ToastProvider = ({ children }: { readonly children: ReactNode }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const push = useCallback((text: string, tone: Tone = "info", action?: ToastAction) => {
-    const id = nextId++;
-    setToasts((t) => [...t.slice(-3), { id, text, tone, action }]);
-  }, []);
+  const push = useCallback(
+    (text: string, tone: Tone = "info", action?: ToastAction) => {
+      const id = nextId++;
+      setToasts((t) => [...t.slice(-3), { id, text, tone, action }]);
+    },
+    []
+  );
 
   const dismiss = useCallback((id: number) => {
     setToasts((t) => t.filter((x) => x.id !== id));
@@ -60,7 +72,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 const ICONS = { info: Info, success: CheckCircle2, error: CircleAlert };
 
-function ToastRow({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+const ToastRow = ({
+  toast,
+  onDismiss,
+}: {
+  readonly toast: Toast;
+  readonly onDismiss: () => void;
+}) => {
   useEffect(() => {
     // Errors linger — they usually carry something worth reading. So does an undo: the offer is
     // only real if it outlives the moment you notice you needed it.
@@ -73,19 +91,18 @@ function ToastRow({ toast, onDismiss }: { toast: Toast; onDismiss: () => void })
   return (
     <div
       role={toast.tone === "error" ? "alert" : "status"}
-      className="animate-rise-in pointer-events-auto flex w-fit max-w-full items-start gap-2 rounded-module bg-raised px-3 py-2 text-body text-content shadow-raised"
+      className="animate-rise-in rounded-module bg-raised text-body text-content shadow-raised pointer-events-auto flex w-fit max-w-full items-start gap-2 px-3 py-2"
     >
       <Icon
         className={cn(
           "mt-0.5 size-3.5 shrink-0",
           toast.tone === "error" && "text-destructive",
           toast.tone === "success" && "text-success",
-          toast.tone === "info" && "text-muted-foreground",
+          toast.tone === "info" && "text-muted-foreground"
         )}
       />
       <span className="min-w-0 flex-1 break-words">{toast.text}</span>
-      {toast.action && (
-        <Button
+      {toast.action ? <Button
           type="button"
           variant="ghost"
           size="xs"
@@ -96,9 +113,15 @@ function ToastRow({ toast, onDismiss }: { toast: Toast; onDismiss: () => void })
           className="shrink-0"
         >
           {toast.action.label}
-        </Button>
-      )}
-      <Button type="button" variant="ghost" size="icon-xs" onClick={onDismiss} className="shrink-0" aria-label="Dismiss">
+        </Button> : null}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        onClick={onDismiss}
+        className="shrink-0"
+        aria-label="Dismiss"
+      >
         <X className="size-3.5" />
       </Button>
     </div>

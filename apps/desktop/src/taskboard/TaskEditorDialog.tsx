@@ -1,6 +1,6 @@
-import { useId, useState, type FormEvent } from "react"
+import { useId, useState, type FormEvent } from "react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,15 +8,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -24,9 +24,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { useT, type Translate } from "@/i18n"
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useT, type Translate } from "@/i18n";
 
 import {
   PRIORITIES,
@@ -34,21 +34,21 @@ import {
   type BoardTask,
   type TaskPriority,
   type TaskStatus,
-} from "./taskBoard"
+} from "./taskBoard";
 
 export interface TaskEditorValue {
-  title: string
-  description: string
-  status: TaskStatus
-  priority: TaskPriority
-  labels: string[]
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  labels: string[];
 }
 
 interface TaskEditorDialogProps {
-  task?: BoardTask | null
-  initialStatus?: TaskStatus
-  onCancel: () => void
-  onSave: (value: TaskEditorValue) => void
+  readonly task?: BoardTask | null;
+  readonly initialStatus?: TaskStatus;
+  readonly onCancel: () => void;
+  readonly onSave: (value: TaskEditorValue) => void;
 }
 
 const STATUS_LABEL_KEYS = {
@@ -56,7 +56,7 @@ const STATUS_LABEL_KEYS = {
   in_progress: "taskboard.status.inProgress",
   in_review: "taskboard.status.inReview",
   done: "taskboard.status.done",
-} as const
+} as const;
 
 const PRIORITY_LABEL_KEYS = {
   none: "taskboard.priority.none",
@@ -64,54 +64,61 @@ const PRIORITY_LABEL_KEYS = {
   medium: "taskboard.priority.medium",
   high: "taskboard.priority.high",
   urgent: "taskboard.priority.urgent",
-} as const
+} as const;
 
 export function taskStatusLabel(t: Translate, status: TaskStatus): string {
-  return t(STATUS_LABEL_KEYS[status])
+  return t(STATUS_LABEL_KEYS[status]);
 }
 
-export function taskPriorityLabel(t: Translate, priority: TaskPriority): string {
-  return t(PRIORITY_LABEL_KEYS[priority])
+export function taskPriorityLabel(
+  t: Translate,
+  priority: TaskPriority
+): string {
+  return t(PRIORITY_LABEL_KEYS[priority]);
 }
 
 function normalizeLabels(value: string): string[] {
-  const labels: string[] = []
-  const seen = new Set<string>()
+  const labels: string[] = [];
+  const seen = new Set<string>();
   for (const part of value.split(/[,，]/)) {
-    const label = part.trim()
-    if (!label || seen.has(label)) continue
-    seen.add(label)
-    labels.push(label)
+    const label = part.trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    labels.push(label);
   }
-  return labels
+  return labels;
 }
 
-export function TaskEditorDialog({
+export const TaskEditorDialog = ({
   task = null,
   initialStatus = "todo",
   onCancel,
   onSave,
-}: TaskEditorDialogProps) {
-  const t = useT()
-  const formId = useId()
-  const titleId = `${formId}-title`
-  const titleErrorId = `${formId}-title-error`
-  const descriptionId = `${formId}-description`
-  const labelsId = `${formId}-labels`
-  const [title, setTitle] = useState(task?.title ?? "")
-  const [description, setDescription] = useState(task?.description ?? "")
-  const [status, setStatus] = useState<TaskStatus>(task?.status ?? initialStatus)
-  const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "medium")
-  const [labels, setLabels] = useState(task?.labels.join("，") ?? "")
-  const [submitted, setSubmitted] = useState(false)
+}: TaskEditorDialogProps) => {
+  const t = useT();
+  const formId = useId();
+  const titleId = `${formId}-title`;
+  const titleErrorId = `${formId}-title-error`;
+  const descriptionId = `${formId}-description`;
+  const labelsId = `${formId}-labels`;
+  const [title, setTitle] = useState(task?.title ?? "");
+  const [description, setDescription] = useState(task?.description ?? "");
+  const [status, setStatus] = useState<TaskStatus>(
+    task?.status ?? initialStatus
+  );
+  const [priority, setPriority] = useState<TaskPriority>(
+    task?.priority ?? "medium"
+  );
+  const [labels, setLabels] = useState(task?.labels.join("，") ?? "");
+  const [submitted, setSubmitted] = useState(false);
 
-  const titleMissing = submitted && title.trim().length === 0
+  const titleMissing = submitted && title.trim().length === 0;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setSubmitted(true)
-    const normalizedTitle = title.trim()
-    if (!normalizedTitle) return
+    event.preventDefault();
+    setSubmitted(true);
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return;
 
     onSave({
       title: normalizedTitle,
@@ -119,22 +126,28 @@ export function TaskEditorDialog({
       status,
       priority,
       labels: normalizeLabels(labels),
-    })
-  }
+    });
+  };
 
-  const editing = Boolean(task)
+  const editing = Boolean(task);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-h-dvh overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {t(editing ? "taskboard.editor.editTitle" : "taskboard.editor.newTitle")}
+            {t(
+              editing
+                ? "taskboard.editor.editTitle"
+                : "taskboard.editor.newTitle"
+            )}
           </DialogTitle>
           <DialogDescription>
-            {t(editing
-              ? "taskboard.editor.editDescription"
-              : "taskboard.editor.newDescription")}
+            {t(
+              editing
+                ? "taskboard.editor.editDescription"
+                : "taskboard.editor.newDescription"
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -142,7 +155,10 @@ export function TaskEditorDialog({
           <FieldGroup>
             <Field data-invalid={titleMissing || undefined}>
               <FieldLabel htmlFor={titleId}>
-                {t("taskboard.editor.title")} <span aria-hidden className="text-destructive">*</span>
+                {t("taskboard.editor.title")}{" "}
+                <span aria-hidden className="text-destructive">
+                  *
+                </span>
               </FieldLabel>
               <Input
                 id={titleId}
@@ -160,7 +176,9 @@ export function TaskEditorDialog({
             </Field>
 
             <Field>
-              <FieldLabel htmlFor={descriptionId}>{t("taskboard.editor.description")}</FieldLabel>
+              <FieldLabel htmlFor={descriptionId}>
+                {t("taskboard.editor.description")}
+              </FieldLabel>
               <Textarea
                 id={descriptionId}
                 rows={3}
@@ -177,7 +195,9 @@ export function TaskEditorDialog({
                 </FieldLabel>
                 <Select
                   value={status}
-                  onValueChange={(value) => value && setStatus(value as TaskStatus)}
+                  onValueChange={(value) =>
+                    value && setStatus(value as TaskStatus)
+                  }
                 >
                   <SelectTrigger
                     size="sm"
@@ -204,7 +224,9 @@ export function TaskEditorDialog({
                 </FieldLabel>
                 <Select
                   value={priority}
-                  onValueChange={(value) => value && setPriority(value as TaskPriority)}
+                  onValueChange={(value) =>
+                    value && setPriority(value as TaskPriority)
+                  }
                 >
                   <SelectTrigger
                     size="sm"
@@ -227,7 +249,9 @@ export function TaskEditorDialog({
             </div>
 
             <Field>
-              <FieldLabel htmlFor={labelsId}>{t("taskboard.editor.labels")}</FieldLabel>
+              <FieldLabel htmlFor={labelsId}>
+                {t("taskboard.editor.labels")}
+              </FieldLabel>
               <Input
                 id={labelsId}
                 size="compact"
@@ -235,14 +259,20 @@ export function TaskEditorDialog({
                 value={labels}
                 onChange={(event) => setLabels(event.currentTarget.value)}
               />
-              <FieldDescription>{t("taskboard.editor.labelsHint")}</FieldDescription>
+              <FieldDescription>
+                {t("taskboard.editor.labelsHint")}
+              </FieldDescription>
             </Field>
-
           </FieldGroup>
         </form>
 
         <DialogFooter>
-          <Button type="button" variant="ghost" size="compact" onClick={onCancel}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="compact"
+            onClick={onCancel}
+          >
             {t("taskboard.editor.cancel")}
           </Button>
           <Button type="submit" size="compact" form={formId}>
@@ -251,5 +281,5 @@ export function TaskEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

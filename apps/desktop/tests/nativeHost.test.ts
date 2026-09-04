@@ -41,7 +41,10 @@ class FakeKernel implements NativeHostProcess {
         method: "event",
         params: {
           name: "host-ready",
-          payload: { protocol_version: protocolVersion, commands: ["demo.echo"] },
+          payload: {
+            protocol_version: protocolVersion,
+            commands: ["demo.echo"],
+          },
         },
       });
     });
@@ -54,7 +57,9 @@ class FakeKernel implements NativeHostProcess {
 
   emit(message: unknown): void {
     if (!this.closed) {
-      this.controller.enqueue(new TextEncoder().encode(`${JSON.stringify(message)}\n`));
+      this.controller.enqueue(
+        new TextEncoder().encode(`${JSON.stringify(message)}\n`)
+      );
     }
   }
 
@@ -120,21 +125,29 @@ describe("Electrobun Plugin Kernel adapter", () => {
 
     try {
       await host.start();
-      expect(commands).toEqual([[
-        "/fixture/codetwo-desktop-host",
-        "--data-dir",
-        dataDir,
-      ]]);
-      await expect(host.call("demo.echo", { value: 7 }, "/repo")).resolves.toEqual({
+      expect(commands).toEqual([
+        ["/fixture/codetwo-desktop-host", "--data-dir", dataDir],
+      ]);
+      await expect(
+        host.call("demo.echo", { value: 7 }, "/repo")
+      ).resolves.toEqual({
         name: "demo.echo",
         args: { value: 7 },
         project_path: "/repo",
       });
-      await expect(host.call("demo.error", null, null)).rejects.toThrow("fixture failure");
+      await expect(host.call("demo.error", null, null)).rejects.toThrow(
+        "fixture failure"
+      );
 
-      kernel.emit({ method: "event", params: { name: "demo-event", payload: { ok: true } } });
+      kernel.emit({
+        method: "event",
+        params: { name: "demo-event", payload: { ok: true } },
+      });
       await Promise.resolve();
-      expect(events).toContainEqual({ name: "demo-event", payload: { ok: true } });
+      expect(events).toContainEqual({
+        name: "demo-event",
+        payload: { ok: true },
+      });
 
       await host.shutdown();
       expect(kernel.requests.map((request) => request.method)).toEqual([
@@ -183,7 +196,9 @@ describe("Electrobun Plugin Kernel adapter", () => {
       await host.start();
       const pending = host.call("demo.hang", null, null);
       kernel.closeOutput();
-      await expect(pending).rejects.toThrow("output stream closed unexpectedly");
+      await expect(pending).rejects.toThrow(
+        "output stream closed unexpectedly"
+      );
       expect(kernel.killed).toBe(true);
       await host.shutdown();
     } finally {

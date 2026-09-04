@@ -1,24 +1,28 @@
-import { type ReactNode } from "react"
+import { type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface NavigationRowProps {
-  label: string
-  leading: ReactNode
-  meta?: ReactNode
-  current?: boolean
-  disabled?: boolean
-  busy?: boolean
-  accessibilityLabel?: string
-  tooltip?: string
-  className?: string
-  labelClassName?: string
-  onSelect: () => void
+  readonly label: string;
+  readonly leading: ReactNode;
+  readonly meta?: ReactNode;
+  readonly current?: boolean;
+  readonly disabled?: boolean;
+  readonly busy?: boolean;
+  readonly accessibilityLabel?: string;
+  readonly tooltip?: string;
+  readonly className?: string;
+  readonly labelClassName?: string;
+  readonly onSelect: () => void;
 }
 
-function NavigationRow({
+const NavigationRow = ({
   label,
   leading,
   meta,
@@ -30,7 +34,7 @@ function NavigationRow({
   className,
   labelClassName,
   onSelect,
-}: NavigationRowProps) {
+}: NavigationRowProps) => {
   const row = (
     <Button
       type="button"
@@ -50,7 +54,7 @@ function NavigationRow({
         data-slot="navigation-row-leading"
         className={cn(
           "flex shrink-0 items-center justify-center",
-          current ? "text-current" : "text-muted-foreground",
+          current ? "text-current" : "text-muted-foreground"
         )}
         aria-hidden="true"
       >
@@ -65,21 +69,21 @@ function NavigationRow({
       {meta ? (
         <span
           data-slot="navigation-row-meta"
-          className="flex shrink-0 items-center gap-control-group"
+          className="gap-control-group flex shrink-0 items-center"
         >
           {meta}
         </span>
       ) : null}
     </Button>
-  )
+  );
 
-  if (!tooltip) return row
+  if (!tooltip) return row;
   return (
     <Tooltip>
       <TooltipTrigger render={row} />
       <TooltipContent side="right">{tooltip}</TooltipContent>
     </Tooltip>
-  )
+  );
 }
 
-export { NavigationRow, type NavigationRowProps }
+export { NavigationRow, type NavigationRowProps };

@@ -25,7 +25,11 @@ describe("workspaceOpenCommand", () => {
     expect(workspaceOpenCommand("/tmp/project", "finder", "darwin")).toBeNull();
     expect(workspaceOpenCommand("/tmp/project", "cursor", "linux")).toBeNull();
     expect(
-      workspaceOpenCommand("/tmp/project", "unsupported" as WorkspaceOpenTarget, "darwin"),
+      workspaceOpenCommand(
+        "/tmp/project",
+        "unsupported" as WorkspaceOpenTarget,
+        "darwin"
+      )
     ).toBeNull();
   });
 });

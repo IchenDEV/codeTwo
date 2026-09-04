@@ -11,7 +11,11 @@ import {
   toggleOption,
   type ElicitationValues,
 } from "./elicitation";
-import type { ElicitationAnswer, ElicitationField, ElicitationForm } from "../bridge";
+import type {
+  ElicitationAnswer,
+  ElicitationField,
+  ElicitationForm,
+} from "../bridge";
 import { Button } from "@/components/ui/button";
 import { ChoiceRow } from "@/components/business/choice-row";
 import {
@@ -28,39 +32,41 @@ import { useT } from "../i18n";
 /** happy-dom and React disagree about controlled inputs; the repo's fields drive them via onInput. */
 function noopChange() {}
 
-function Question({
+const Question = ({
   form,
   field,
   values,
   onChange,
 }: {
-  form: ElicitationForm;
-  field: ElicitationField;
-  values: ElicitationValues;
-  onChange: (next: ElicitationValues) => void;
-}) {
+  readonly form: ElicitationForm;
+  readonly field: ElicitationField;
+  readonly values: ElicitationValues;
+  readonly onChange: (next: ElicitationValues) => void;
+}) => {
   const t = useT();
   const custom = customFieldFor(form, field.key);
   const value = values[field.key];
-  const selected = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const selected = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? [value]
+      : [];
   const multi = field.kind === "multi_select";
   const numeric = field.kind === "number" || field.kind === "integer";
 
   return (
     <section className="flex min-w-0 flex-col gap-2">
-      {field.title && (
-        <h3 className="text-metadata font-medium uppercase text-muted-foreground">{field.title}</h3>
-      )}
-      {field.description && (
-        <p className="text-body text-foreground/90">{field.description}</p>
-      )}
+      {field.title ? <h3 className="text-metadata text-muted-foreground font-medium uppercase">
+          {field.title}
+        </h3> : null}
+      {field.description ? <p className="text-body text-foreground/90">{field.description}</p> : null}
 
       {(field.options?.length ?? 0) > 0 ? (
         multi ? (
           <div
             role="group"
             aria-label={field.title ?? field.description ?? field.key}
-            className="flex flex-col gap-control-group"
+            className="gap-control-group flex flex-col"
           >
             {field.options?.map((option) => {
               const optionSelected = selected.includes(option.value);
@@ -73,14 +79,18 @@ function Question({
                   selected={optionSelected}
                   onCheckedChange={(checked) => {
                     if (checked !== optionSelected) {
-                      onChange(toggleOption(values, form, field.key, option.value));
+                      onChange(
+                        toggleOption(values, form, field.key, option.value)
+                      );
                     }
                   }}
-                  details={option.preview && optionSelected ? (
-                    <pre className="mt-inline max-h-40 w-full overflow-auto whitespace-pre-wrap rounded-micro bg-fill-quiet px-module-inset py-control-group font-mono text-metadata text-muted-foreground">
-                      {option.preview}
-                    </pre>
-                  ) : null}
+                  details={
+                    option.preview && optionSelected ? (
+                      <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
+                        {option.preview}
+                      </pre>
+                    ) : null
+                  }
                 />
               );
             })}
@@ -103,11 +113,13 @@ function Question({
                   label={option.label}
                   description={option.description}
                   selected={optionSelected}
-                  details={option.preview && optionSelected ? (
-                    <pre className="mt-inline max-h-40 w-full overflow-auto whitespace-pre-wrap rounded-micro bg-fill-quiet px-module-inset py-control-group font-mono text-metadata text-muted-foreground">
-                      {option.preview}
-                    </pre>
-                  ) : null}
+                  details={
+                    option.preview && optionSelected ? (
+                      <pre className="mt-inline rounded-micro bg-fill-quiet px-module-inset py-control-group text-metadata text-muted-foreground max-h-40 w-full overflow-auto font-mono whitespace-pre-wrap">
+                        {option.preview}
+                      </pre>
+                    ) : null
+                  }
                 />
               );
             })}
@@ -119,7 +131,9 @@ function Question({
           label={field.title ?? field.key}
           description={field.description}
           selected={value === true}
-          onCheckedChange={(checked) => onChange(setValue(values, field, checked))}
+          onCheckedChange={(checked) =>
+            onChange(setValue(values, field, checked))
+          }
         />
       ) : (
         <Input
@@ -135,26 +149,33 @@ function Question({
             }
             // A half-typed number ("-", "1.") parses to NaN; keep the draft as text and let the
             // core drop it if the user leaves it that way, rather than fighting their typing.
-            const parsed = field.kind === "integer" ? parseInt(text, 10) : parseFloat(text);
-            onChange(setValue(values, field, Number.isNaN(parsed) ? text : parsed));
+            const parsed =
+              field.kind === "integer" ? parseInt(text, 10) : parseFloat(text);
+            onChange(
+              setValue(values, field, Number.isNaN(parsed) ? text : parsed)
+            );
           }}
         />
       )}
 
-      {custom && (
-        <label className="flex flex-col gap-1">
-          <span className="text-metadata uppercase text-muted-foreground">
+      {custom ? <label className="flex flex-col gap-1">
+          <span className="text-metadata text-muted-foreground uppercase">
             {custom.title || t("question.other")}
           </span>
           <Input
             aria-label={custom.title || t("question.other")}
             placeholder={t("question.otherPlaceholder")}
-            value={typeof values[custom.key] === "string" ? (values[custom.key] as string) : ""}
+            value={
+              typeof values[custom.key] === "string"
+                ? (values[custom.key] as string)
+                : ""
+            }
             onChange={noopChange}
-            onInput={(event) => onChange(setValue(values, custom, event.currentTarget.value))}
+            onInput={(event) =>
+              onChange(setValue(values, custom, event.currentTarget.value))
+            }
           />
-        </label>
-      )}
+        </label> : null}
     </section>
   );
 }
@@ -167,13 +188,13 @@ function Question({
  *
  * Mount with `key={requestId}` so a second question never inherits the first one's draft answers.
  */
-export function QuestionDialog({
+export const QuestionDialog = ({
   form,
   onAnswer,
 }: {
-  form: ElicitationForm;
-  onAnswer: (answer: ElicitationAnswer) => void;
-}) {
+  readonly form: ElicitationForm;
+  readonly onAnswer: (answer: ElicitationAnswer) => void;
+}) => {
   const t = useT();
   const [values, setValues] = useState<ElicitationValues>({});
   const questions = questionFields(form);
@@ -182,12 +203,20 @@ export function QuestionDialog({
   const single = questions.length === 1;
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onAnswer({ action: "cancel" })}>
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onAnswer({ action: "cancel" })}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-start gap-2">
-            <MessageCircleQuestion className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-            <span className="min-w-0 whitespace-pre-wrap break-words">{form.message}</span>
+            <MessageCircleQuestion
+              className="text-primary mt-0.5 size-4 shrink-0"
+              aria-hidden
+            />
+            <span className="min-w-0 break-words whitespace-pre-wrap">
+              {form.message}
+            </span>
           </DialogTitle>
         </DialogHeader>
 
@@ -204,10 +233,16 @@ export function QuestionDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onAnswer({ action: "cancel" })}>
+          <Button
+            variant="ghost"
+            onClick={() => onAnswer({ action: "cancel" })}
+          >
             {t("question.cancel")}
           </Button>
-          <Button variant="outline" onClick={() => onAnswer({ action: "decline" })}>
+          <Button
+            variant="outline"
+            onClick={() => onAnswer({ action: "decline" })}
+          >
             {t("question.skip")}
           </Button>
           <Button

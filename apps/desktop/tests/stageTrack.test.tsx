@@ -1,6 +1,13 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { StageTrack } = await import("../src/session/StageTrack");
@@ -73,31 +80,44 @@ const DETAIL = {
       artifacts: [
         artifact({ id: 2, version: 2 }),
         artifact({ id: 1, version: 1 }),
-        artifact({ id: 3, artifact_key: "coverage", title: "Coverage", version: 1 }),
+        artifact({
+          id: 3,
+          artifact_key: "coverage",
+          title: "Coverage",
+          version: 1,
+        }),
       ],
     }),
     stage({ id: "fix", title: "Fix", state: "pending" }),
-    stage({ id: "acceptance", title: "Acceptance", state: "pending", gate: "confirm" }),
+    stage({
+      id: "acceptance",
+      title: "Acceptance",
+      state: "pending",
+      gate: "confirm",
+    }),
   ],
 };
 
 function renderTrack(handlers = {}) {
   return mount(
     <I18nProvider>
-      <StageTrack detail={DETAIL} onSelectSession={handlers.onSelectSession ?? (() => {})} />
-    </I18nProvider>,
+      <StageTrack
+        detail={DETAIL}
+        onSelectSession={handlers.onSelectSession ?? (() => {})}
+      />
+    </I18nProvider>
   );
 }
 
 describe("StageTrack", () => {
   test("renders one chip per stage with its done/current/pending state", () => {
     const rendered = renderTrack();
-    const chips = [...rendered.container.querySelectorAll("[data-testid^='stage-']")].filter(
-      (el) => el.hasAttribute("data-state"),
-    );
+    const chips = [
+      ...rendered.container.querySelectorAll("[data-testid^='stage-']"),
+    ].filter((el) => el.hasAttribute("data-state"));
     expect(chips.length).toBe(5);
     const states = Object.fromEntries(
-      chips.map((chip) => [chip.dataset.testid, chip.dataset.state]),
+      chips.map((chip) => [chip.dataset.testid, chip.dataset.state])
     );
     expect(states["stage-research"]).toBe("done");
     expect(states["stage-develop"]).toBe("done");
@@ -111,20 +131,28 @@ describe("StageTrack", () => {
 
   test("loop badge appears only when a stage was entered more than once", () => {
     const rendered = renderTrack();
-    const badge = rendered.container.querySelector("[data-testid='stage-loop-test']");
+    const badge = rendered.container.querySelector(
+      "[data-testid='stage-loop-test']"
+    );
     expect(badge).not.toBeNull();
     // Another suite mocks useT to echo raw keys, so assert the count via the data attribute and
     // accept either the translated "×3" or the echoed key for the text itself.
     expect(badge.dataset.count).toBe("3");
     expect(["×3", "stage.loop"]).toContain(badge.textContent);
     // Single visits render no badge.
-    expect(rendered.container.querySelector("[data-testid='stage-loop-research']")).toBeNull();
-    expect(rendered.container.querySelector("[data-testid='stage-loop-fix']")).toBeNull();
+    expect(
+      rendered.container.querySelector("[data-testid='stage-loop-research']")
+    ).toBeNull();
+    expect(
+      rendered.container.querySelector("[data-testid='stage-loop-fix']")
+    ).toBeNull();
   });
 
   test("confirm-gated stages carry the lock glyph", () => {
     const rendered = renderTrack();
-    const locked = rendered.container.querySelector("[data-testid='stage-acceptance']");
+    const locked = rendered.container.querySelector(
+      "[data-testid='stage-acceptance']"
+    );
     expect(locked.querySelector("svg")).not.toBeNull();
     // Suggest-gated pending stages have no glyph at all.
     const plain = rendered.container.querySelector("[data-testid='stage-fix']");
@@ -133,12 +161,18 @@ describe("StageTrack", () => {
 
   test("clicking a stage opens its popover with artifact titles and sessions", async () => {
     const selected: string[] = [];
-    const rendered = renderTrack({ onSelectSession: (id) => selected.push(id) });
-    expect(dom.document.body.querySelector("[data-testid='stage-popover-test']")).toBeNull();
+    const rendered = renderTrack({
+      onSelectSession: (id) => selected.push(id),
+    });
+    expect(
+      dom.document.body.querySelector("[data-testid='stage-popover-test']")
+    ).toBeNull();
 
     click(rendered.container.querySelector("[data-testid='stage-test']"));
     await flush();
-    const popover = dom.document.body.querySelector("[data-testid='stage-popover-test']");
+    const popover = dom.document.body.querySelector(
+      "[data-testid='stage-popover-test']"
+    );
     expect(popover).not.toBeNull();
     expect(popover.dataset.slot).toBe("popover-content");
     // Newest version per artifact key; both keys listed once.
@@ -151,13 +185,17 @@ describe("StageTrack", () => {
     click(popover.querySelector("[data-testid='stage-session-s2']"));
     await flush();
     expect(selected).toEqual(["s2"]);
-    expect(dom.document.body.querySelector("[data-testid='stage-popover-test']")).toBeNull();
+    expect(
+      dom.document.body.querySelector("[data-testid='stage-popover-test']")
+    ).toBeNull();
 
     // The standard trigger remains a toggle after the portalled layer closes.
     click(rendered.container.querySelector("[data-testid='stage-test']"));
     await flush();
     click(rendered.container.querySelector("[data-testid='stage-test']"));
     await flush();
-    expect(dom.document.body.querySelector("[data-testid='stage-popover-test']")).toBeNull();
+    expect(
+      dom.document.body.querySelector("[data-testid='stage-popover-test']")
+    ).toBeNull();
   });
 });

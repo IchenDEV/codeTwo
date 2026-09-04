@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const source = (path: string) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 describe("Dock container and content seam", () => {
   test("keeps feature implementations out of the Dock container", () => {

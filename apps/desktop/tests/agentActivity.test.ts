@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import { deriveAgentRoster, isAgentActivityTool } from "../src/session/agentActivity";
-import { applyEvent, newTurn, turnsFromTranscript, type ToolEntry } from "../src/session/turns";
+import {
+  deriveAgentRoster,
+  isAgentActivityTool,
+} from "../src/session/agentActivity";
+import {
+  applyEvent,
+  newTurn,
+  turnsFromTranscript,
+  type ToolEntry,
+} from "../src/session/turns";
 
 describe("agent activity projection", () => {
   test("keeps launch metadata across status-only live updates", () => {
@@ -140,10 +148,25 @@ describe("agent activity projection", () => {
   test("does not promote generic task tools or prose mentions", () => {
     const ordinary: ToolEntry[] = [
       { id: "1", title: "Task", status: "completed", kind: "execute" },
-      { id: "2", title: "Task: compile assets", status: "completed", kind: "tool" },
+      {
+        id: "2",
+        title: "Task: compile assets",
+        status: "completed",
+        kind: "tool",
+      },
       { id: "3", title: "Run task", status: "completed", kind: "tool" },
-      { id: "4", title: "Run agent tests", status: "completed", kind: "execute" },
-      { id: "5", title: "Start workflow server", status: "completed", kind: "execute" },
+      {
+        id: "4",
+        title: "Run agent tests",
+        status: "completed",
+        kind: "execute",
+      },
+      {
+        id: "5",
+        title: "Start workflow server",
+        status: "completed",
+        kind: "execute",
+      },
       {
         id: "6",
         title: "shell",
@@ -153,6 +176,13 @@ describe("agent activity projection", () => {
       },
     ];
 
-    expect(ordinary.map(isAgentActivityTool)).toEqual([false, false, false, false, false, false]);
+    expect(ordinary.map(isAgentActivityTool)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 });

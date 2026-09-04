@@ -4,26 +4,41 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const entrypoint = fileURLToPath(new URL("../src/electrobun/toolBrokerRpc.ts", import.meta.url));
+const entrypoint = fileURLToPath(
+  new URL("../src/electrobun/toolBrokerRpc.ts", import.meta.url)
+);
 
 describe("Tool Broker JSON-RPC adapter", () => {
   test("resolves configured MCP backends through the real subprocess boundary", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-rpc-"));
     try {
-      writeFileSync(join(dataDir, "host-tools.json"), JSON.stringify({
-        schema_version: 1,
-        computer_use_selection: { "*": "cua" },
-        computer_use: [{
-          id: "cua",
-          enabled: true,
-          server: { name: "cua-driver", command: process.execPath, env: { CUA_MODE: "mcp" } },
-        }],
-      }));
+      writeFileSync(
+        join(dataDir, "host-tools.json"),
+        JSON.stringify({
+          schema_version: 1,
+          computer_use_selection: { "*": "cua" },
+          computer_use: [
+            {
+              id: "cua",
+              enabled: true,
+              server: {
+                name: "cua-driver",
+                command: process.execPath,
+                env: { CUA_MODE: "mcp" },
+              },
+            },
+          ],
+        })
+      );
       const request = {
         jsonrpc: "2.0",
         id: 7,
         method: "tool.resolve",
-        params: { data_dir: dataDir, provider_id: "claude_code", environment: {} },
+        params: {
+          data_dir: dataDir,
+          provider_id: "claude_code",
+          environment: {},
+        },
       };
       const child = Bun.spawnSync(["bun", entrypoint], {
         stdin: new TextEncoder().encode(JSON.stringify(request)),
@@ -36,19 +51,23 @@ describe("Tool Broker JSON-RPC adapter", () => {
       expect(response.id).toBe(7);
       expect(response.result.browser_access_enabled).toBe(true);
       expect(response.result.native_capabilities).toEqual([]);
-      expect(response.result.mcp_servers).toEqual([{
-        name: "cua-driver",
-        command: process.execPath,
-        args: [],
-        env: [["CUA_MODE", "mcp"]],
-      }]);
+      expect(response.result.mcp_servers).toEqual([
+        {
+          name: "cua-driver",
+          command: process.execPath,
+          args: [],
+          env: [["CUA_MODE", "mcp"]],
+        },
+      ]);
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }
   });
 
   test("persists Computer Use as one global selection without a provider id", () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-global-selection-"));
+    const dataDir = mkdtempSync(
+      join(tmpdir(), "codetwo-tool-broker-global-selection-")
+    );
     try {
       const request = {
         jsonrpc: "2.0",
@@ -68,16 +87,22 @@ describe("Tool Broker JSON-RPC adapter", () => {
       });
 
       expect(child.exitCode).toBe(0);
-      expect(JSON.parse(child.stdout.toString()).result.computer_use.selections).toEqual({ "*": "automatic" });
-      expect(JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8")).computer_use_selection)
-        .toEqual({ "*": "automatic" });
+      expect(
+        JSON.parse(child.stdout.toString()).result.computer_use.selections
+      ).toEqual({ "*": "automatic" });
+      expect(
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
+          .computer_use_selection
+      ).toEqual({ "*": "automatic" });
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }
   }, 10_000);
 
   test("persists Browser Use as one global selection without a provider id", () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-global-browser-selection-"));
+    const dataDir = mkdtempSync(
+      join(tmpdir(), "codetwo-tool-broker-global-browser-selection-")
+    );
     try {
       const request = {
         jsonrpc: "2.0",
@@ -97,16 +122,22 @@ describe("Tool Broker JSON-RPC adapter", () => {
       });
 
       expect(child.exitCode).toBe(0);
-      expect(JSON.parse(child.stdout.toString()).result.browser_use.selections).toEqual({ "*": "automatic" });
-      expect(JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8")).browser_use_selection)
-        .toEqual({ "*": "automatic" });
+      expect(
+        JSON.parse(child.stdout.toString()).result.browser_use.selections
+      ).toEqual({ "*": "automatic" });
+      expect(
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
+          .browser_use_selection
+      ).toEqual({ "*": "automatic" });
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }
   }, 10_000);
 
   test("persists the Agent browser access gate and projects a Codex blocker", () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-browser-access-"));
+    const dataDir = mkdtempSync(
+      join(tmpdir(), "codetwo-tool-broker-browser-access-")
+    );
     try {
       const setRequest = {
         jsonrpc: "2.0",
@@ -120,9 +151,13 @@ describe("Tool Broker JSON-RPC adapter", () => {
         stderr: "pipe",
       });
       expect(setChild.exitCode).toBe(0);
-      expect(JSON.parse(setChild.stdout.toString()).result.browser_use.access_enabled).toBe(false);
-      expect(JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8")).agent_browser_access)
-        .toBe(false);
+      expect(
+        JSON.parse(setChild.stdout.toString()).result.browser_use.access_enabled
+      ).toBe(false);
+      expect(
+        JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8"))
+          .agent_browser_access
+      ).toBe(false);
 
       const resolveRequest = {
         jsonrpc: "2.0",
@@ -137,7 +172,9 @@ describe("Tool Broker JSON-RPC adapter", () => {
       });
       const plan = JSON.parse(resolveChild.stdout.toString()).result;
       expect(plan.browser_access_enabled).toBe(false);
-      expect(plan.mcp_servers.map((server) => server.name)).toEqual(["node_repl"]);
+      expect(plan.mcp_servers.map((server) => server.name)).toEqual([
+        "node_repl",
+      ]);
       expect(plan.instructions).toEqual([]);
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
@@ -146,17 +183,28 @@ describe("Tool Broker JSON-RPC adapter", () => {
 
   test("the browser blocker is a valid MCP server with no tools", () => {
     const requests = [
-      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-06-18" },
+      },
       { jsonrpc: "2.0", method: "notifications/initialized" },
       { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
     ];
     const child = Bun.spawnSync(["bun", entrypoint, "--empty-mcp"], {
-      stdin: new TextEncoder().encode(`${requests.map((request) => JSON.stringify(request)).join("\n")}\n`),
+      stdin: new TextEncoder().encode(
+        `${requests.map((request) => JSON.stringify(request)).join("\n")}\n`
+      ),
       stdout: "pipe",
       stderr: "pipe",
     });
     expect(child.exitCode).toBe(0);
-    const responses = child.stdout.toString().trim().split("\n").map((line) => JSON.parse(line));
+    const responses = child.stdout
+      .toString()
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
     expect(responses).toHaveLength(2);
     expect(responses[0].result).toMatchObject({
       protocolVersion: "2025-06-18",

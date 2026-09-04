@@ -3,7 +3,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
-const { VisualizationFrame } = await import("../src/session/VisualizationFrame");
+const { VisualizationFrame } =
+  await import("../src/session/VisualizationFrame");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -17,7 +18,7 @@ describe("visualization frame", () => {
       <VisualizationFrame
         reference={{ path: "/tmp/plot.html", title: "Latency" }}
         loader={async () => '<div id="plot">Latency</div>'}
-      />,
+      />
     );
     await Promise.resolve();
     await flush();
@@ -26,7 +27,9 @@ describe("visualization frame", () => {
     expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
     expect(iframe?.getAttribute("title")).toBe("Latency");
     expect(iframe?.getAttribute("srcdoc")).toContain("connect-src 'none'");
-    expect(iframe?.getAttribute("srcdoc")).toContain('<div id="plot">Latency</div>');
+    expect(iframe?.getAttribute("srcdoc")).toContain(
+      '<div id="plot">Latency</div>'
+    );
     rendered.unmount();
   });
 
@@ -36,19 +39,21 @@ describe("visualization frame", () => {
       <VisualizationFrame
         reference={{ path: "/tmp/plot.html", title: "Latency" }}
         loader={async () => '<button id="follow">Follow up</button>'}
-      />,
+      />
     );
     await Promise.resolve();
     await flush();
     const iframe = rendered.container.querySelector("iframe");
-    const token = /const token="([^"]+)"/.exec(iframe?.getAttribute("srcdoc") ?? "")?.[1];
+    const token = /const token="([^"]+)"/.exec(
+      iframe?.getAttribute("srcdoc") ?? ""
+    )?.[1];
     let detail: unknown;
     dom.window.addEventListener(
       "codetwo-visualize-follow-up",
       (event) => {
         detail = (event as CustomEvent).detail;
       },
-      { once: true },
+      { once: true }
     );
     dom.window.dispatchEvent(
       new dom.window.MessageEvent("message", {
@@ -59,7 +64,7 @@ describe("visualization frame", () => {
           prompt: "Compare with last week",
           title: "Latency follow-up",
         },
-      }),
+      })
     );
     expect(detail).toEqual({
       prompt: "Compare with last week",
@@ -73,8 +78,10 @@ describe("visualization frame", () => {
     const rendered = mount(
       <VisualizationFrame
         reference={{ path: "/tmp/missing.html" }}
-        loader={async () => { throw new Error("missing"); }}
-      />,
+        loader={async () => {
+          throw new Error("missing");
+        }}
+      />
     );
     await Promise.resolve();
     await flush();

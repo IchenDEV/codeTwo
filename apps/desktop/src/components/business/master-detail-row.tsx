@@ -1,21 +1,21 @@
-import { useId, type ReactNode } from "react"
+import { useId, type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface MasterDetailRowProps {
-  label: string
-  description?: ReactNode
-  leading?: ReactNode
-  meta?: ReactNode
-  selected: boolean
-  disabled?: boolean
-  className?: string
-  descriptionClassName?: string
-  onSelect: () => void
+  readonly label: string;
+  readonly description?: ReactNode;
+  readonly leading?: ReactNode;
+  readonly meta?: ReactNode;
+  readonly selected: boolean;
+  readonly disabled?: boolean;
+  readonly className?: string;
+  readonly descriptionClassName?: string;
+  readonly onSelect: () => void;
 }
 
-function MasterDetailRow({
+const MasterDetailRow = ({
   label,
   description,
   leading,
@@ -25,13 +25,13 @@ function MasterDetailRow({
   className,
   descriptionClassName,
   onSelect,
-}: MasterDetailRowProps) {
-  const descriptionId = useId()
-  const metaId = useId()
+}: MasterDetailRowProps) => {
+  const descriptionId = useId();
+  const metaId = useId();
   const describedBy =
     [description ? descriptionId : null, meta ? metaId : null]
       .filter(Boolean)
-      .join(" ") || undefined
+      .join(" ") || undefined;
 
   return (
     <Button
@@ -65,7 +65,10 @@ function MasterDetailRow({
           <span
             id={descriptionId}
             data-slot="master-detail-row-description"
-            className={cn("mt-1 block truncate text-callout text-muted-foreground", descriptionClassName)}
+            className={cn(
+              "text-callout text-muted-foreground mt-1 block truncate",
+              descriptionClassName
+            )}
           >
             {description}
           </span>
@@ -81,7 +84,7 @@ function MasterDetailRow({
         </span>
       ) : null}
     </Button>
-  )
+  );
 }
 
-export { MasterDetailRow, type MasterDetailRowProps }
+export { MasterDetailRow, type MasterDetailRowProps };

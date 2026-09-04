@@ -1,20 +1,20 @@
-export type ColorScheme = "light" | "dark"
+export type ColorScheme = "light" | "dark";
 
 export interface ThemePalette {
-  accent: string
-  background: string
-  foreground: string
+  accent: string;
+  background: string;
+  foreground: string;
 }
 
 interface ToneScale {
-  surface: number
-  raised: number
-  sidebar: number
-  muted: number
-  fillQuiet: number
-  fillRest: number
-  fillHover: number
-  terminal: number
+  surface: number;
+  raised: number;
+  sidebar: number;
+  muted: number;
+  fillQuiet: number;
+  fillRest: number;
+  fillHover: number;
+  terminal: number;
 }
 
 const TONE_SCALE: Record<ColorScheme, ToneScale> = {
@@ -38,10 +38,10 @@ const TONE_SCALE: Record<ColorScheme, ToneScale> = {
     fillHover: 9,
     terminal: 3,
   },
-}
+};
 
 function mix(foreground: string, amount: number, background: string): string {
-  return `color-mix(in oklch, ${foreground} ${amount}%, ${background})`
+  return `color-mix(in oklch, ${foreground} ${amount}%, ${background})`;
 }
 
 /**
@@ -53,17 +53,25 @@ function mix(foreground: string, amount: number, background: string): string {
 export function resolveThemeColorProperties(
   source: ThemePalette,
   scheme: ColorScheme,
-  contrast: number,
+  contrast: number
 ): Record<string, string> {
-  const { accent, background, foreground } = source
-  const tones = TONE_SCALE[scheme]
-  const surface = mix(foreground, tones.surface, background)
-  const raised = mix(foreground, tones.raised, background)
-  const sidebar = mix(foreground, tones.sidebar, background)
-  const muted = mix(foreground, tones.muted, background)
-  const mutedForeground = mix(foreground, 58 + Math.round(contrast * 0.2), background)
-  const border = mix(foreground, 8 + Math.round(contrast * 0.12), background)
-  const accentSurface = mix(accent, 12 + Math.round(contrast * 0.04), background)
+  const { accent, background, foreground } = source;
+  const tones = TONE_SCALE[scheme];
+  const surface = mix(foreground, tones.surface, background);
+  const raised = mix(foreground, tones.raised, background);
+  const sidebar = mix(foreground, tones.sidebar, background);
+  const muted = mix(foreground, tones.muted, background);
+  const mutedForeground = mix(
+    foreground,
+    58 + Math.round(contrast * 0.2),
+    background
+  );
+  const border = mix(foreground, 8 + Math.round(contrast * 0.12), background);
+  const accentSurface = mix(
+    accent,
+    12 + Math.round(contrast * 0.04),
+    background
+  );
 
   return {
     "--background": background,
@@ -101,5 +109,5 @@ export function resolveThemeColorProperties(
     "--ds-color-primary-hover": mix(foreground, 8, accent),
     "--ds-color-primary-text": background,
     "--ds-color-focus": foreground,
-  }
+  };
 }

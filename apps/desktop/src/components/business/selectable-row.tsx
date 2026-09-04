@@ -1,20 +1,20 @@
-import { useId, type ReactNode } from "react"
-import { Check } from "@/components/ui/icons"
+import { useId, type ReactNode } from "react";
+import { Check } from "@/components/ui/icons";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 
 interface SelectableRowProps {
-  label: string
-  accessibilityContext?: string
-  description?: string | null
-  leading?: ReactNode
-  meta?: ReactNode
-  selected: boolean
-  disabled?: boolean
-  onSelect: () => void
+  readonly label: string;
+  readonly accessibilityContext?: string;
+  readonly description?: string | null;
+  readonly leading?: ReactNode;
+  readonly meta?: ReactNode;
+  readonly selected: boolean;
+  readonly disabled?: boolean;
+  readonly onSelect: () => void;
 }
 
-function SelectableRow({
+const SelectableRow = ({
   label,
   accessibilityContext,
   description,
@@ -23,20 +23,22 @@ function SelectableRow({
   selected,
   disabled = false,
   onSelect,
-}: SelectableRowProps) {
-  const descriptionId = useId()
-  const leadingId = useId()
-  const metaId = useId()
-  const describedBy = [
-    leading ? leadingId : null,
-    description ? descriptionId : null,
-    meta ? metaId : null,
-  ]
-    .filter(Boolean)
-    .join(" ") || undefined
-  const accessibleName = accessibilityContext && accessibilityContext !== label
-    ? `${label}, ${accessibilityContext}`
-    : label
+}: SelectableRowProps) => {
+  const descriptionId = useId();
+  const leadingId = useId();
+  const metaId = useId();
+  const describedBy =
+    [
+      leading ? leadingId : null,
+      description ? descriptionId : null,
+      meta ? metaId : null,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
+  const accessibleName =
+    accessibilityContext && accessibilityContext !== label
+      ? `${label}, ${accessibilityContext}`
+      : label;
 
   return (
     <Button
@@ -63,7 +65,7 @@ function SelectableRow({
         <span
           id={leadingId}
           data-slot="selectable-row-leading"
-          className="flex h-[1lh] shrink-0 items-center gap-inline"
+          className="gap-inline flex h-[1lh] shrink-0 items-center"
         >
           {leading}
         </span>
@@ -76,7 +78,7 @@ function SelectableRow({
           <span
             id={descriptionId}
             data-slot="selectable-row-description"
-            className="line-clamp-2 whitespace-normal break-words"
+            className="line-clamp-2 break-words whitespace-normal"
           >
             {description}
           </span>
@@ -92,7 +94,7 @@ function SelectableRow({
         </span>
       ) : null}
     </Button>
-  )
+  );
 }
 
-export { SelectableRow, type SelectableRowProps }
+export { SelectableRow, type SelectableRowProps };

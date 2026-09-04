@@ -5,9 +5,13 @@ import { useEffect, useState } from "react";
  * dock width) — re-dragging them on every launch is exactly the kind of thing an app should
  * remember.
  */
-export function usePersistedNumber(key: string, fallback: number): [number, (n: number) => void] {
+export function usePersistedNumber(
+  key: string,
+  fallback: number
+): [number, (n: number) => void] {
   const [value, setValue] = useState(() => {
-    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
+    const raw =
+      typeof localStorage === "undefined" ? null : localStorage.getItem(key);
     const n = raw === null ? NaN : Number(raw);
     return Number.isFinite(n) ? n : fallback;
   });
@@ -16,7 +20,9 @@ export function usePersistedNumber(key: string, fallback: number): [number, (n: 
     try {
       localStorage.setItem(key, String(value));
     } catch {
-      /* private mode / no storage — the size just won't persist */
+      /*
+      private mode / no storage — the size just won't persist
+      */
     }
   }, [key, value]);
 
@@ -27,9 +33,13 @@ export function usePersistedNumber(key: string, fallback: number): [number, (n: 
  * A yes/no that survives a restart. Used for the fold states the user toggles (the archived
  * group in the rail) — reopening them on every launch would undo the point of folding them.
  */
-export function usePersistedBoolean(key: string, fallback: boolean): [boolean, (b: boolean) => void] {
+export function usePersistedBoolean(
+  key: string,
+  fallback: boolean
+): [boolean, (b: boolean) => void] {
   const [value, setValue] = useState(() => {
-    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
+    const raw =
+      typeof localStorage === "undefined" ? null : localStorage.getItem(key);
     return raw === null ? fallback : raw === "1";
   });
 
@@ -37,7 +47,9 @@ export function usePersistedBoolean(key: string, fallback: boolean): [boolean, (
     try {
       localStorage.setItem(key, value ? "1" : "0");
     } catch {
-      /* private mode / no storage — the fold just won't persist */
+      /*
+      private mode / no storage — the fold just won't persist
+      */
     }
   }, [key, value]);
 

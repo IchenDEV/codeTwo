@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -11,40 +18,46 @@ interface CapturedSelection {
 }
 
 interface SelectionActionsProps {
-  scopeRef: RefObject<HTMLElement | null>;
-  onAdd: (text: string) => void;
-  onDetails: (text: string) => void;
-  onAskInSideChat: (text: string) => void;
+  readonly scopeRef: RefObject<HTMLElement | null>;
+  readonly onAdd: (text: string) => void;
+  readonly onDetails: (text: string) => void;
+  readonly onAskInSideChat: (text: string) => void;
 }
 
 interface SelectionToolbarProps {
-  text: string;
-  onAdd: (text: string) => void;
-  onDetails: (text: string) => void;
-  onAskInSideChat: (text: string) => void;
+  readonly text: string;
+  readonly onAdd: (text: string) => void;
+  readonly onDetails: (text: string) => void;
+  readonly onAskInSideChat: (text: string) => void;
 }
 
 /** Presentational seam kept independent from Range positioning so its actions stay easy to test. */
-export function SelectionToolbar({
+export const SelectionToolbar = ({
   text,
   onAdd,
   onDetails,
   onAskInSideChat,
-}: SelectionToolbarProps) {
+}: SelectionToolbarProps) => {
   const t = useT();
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const [tabStop, setTabStop] = useState(0);
 
   const onToolbarKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const buttons = Array.from(
-      toolbarRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [],
+      toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
+        "button:not(:disabled)"
+      ) ?? []
     );
     if (buttons.length === 0) return;
 
-    const current = Math.max(0, buttons.indexOf(document.activeElement as HTMLButtonElement));
+    const current = Math.max(
+      0,
+      buttons.indexOf(document.activeElement as HTMLButtonElement)
+    );
     let next: number | null = null;
     if (event.key === "ArrowRight") next = (current + 1) % buttons.length;
-    else if (event.key === "ArrowLeft") next = (current - 1 + buttons.length) % buttons.length;
+    else if (event.key === "ArrowLeft")
+      next = (current - 1 + buttons.length) % buttons.length;
     else if (event.key === "Home") next = 0;
     else if (event.key === "End") next = buttons.length - 1;
     if (next === null) return;
@@ -105,7 +118,8 @@ export function SelectionToolbar({
 /** Read a non-empty selection only when it belongs to this transcript. */
 function readSelection(scope: HTMLElement): CapturedSelection | null {
   const selection = window.getSelection();
-  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0)
+    return null;
 
   const text = selection.toString().trim();
   if (!text) return null;
@@ -123,12 +137,12 @@ function readSelection(scope: HTMLElement): CapturedSelection | null {
  * popup lifecycle, collision handling, outside press and Escape behavior; this component only
  * captures the selected text and exposes the three product actions.
  */
-export function SelectionActions({
+export const SelectionActions = ({
   scopeRef,
   onAdd,
   onDetails,
   onAskInSideChat,
-}: SelectionActionsProps) {
+}: SelectionActionsProps) => {
   const [captured, setCaptured] = useState<CapturedSelection | null>(null);
 
   useEffect(() => {
@@ -172,7 +186,7 @@ export function SelectionActions({
             getBoundingClientRect: () => captured.rect,
           }
         : null,
-    [captured],
+    [captured]
   );
 
   const run = (action: (text: string) => void) => {

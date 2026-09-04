@@ -1,7 +1,14 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { SettingsPage } = await import("../src/settings/SettingsPage");
@@ -46,11 +53,15 @@ describe("Settings memory component policy", () => {
     await reactAct(async () => button(rendered.container, "Memory").click());
     await flush();
     expect(rendered.container.textContent).toContain("Enable memory");
-    const views = rendered.container.querySelector('[data-slot="view-switcher"]');
+    const views = rendered.container.querySelector(
+      '[data-slot="view-switcher"]'
+    );
     expect(views?.getAttribute("role")).toBe("group");
-    expect(views?.querySelectorAll('button[aria-pressed]')).toHaveLength(8);
+    expect(views?.querySelectorAll("button[aria-pressed]")).toHaveLength(8);
     expect(
-      rendered.container.querySelectorAll('[data-slot="setting-row"][data-density="compact"]'),
+      rendered.container.querySelectorAll(
+        '[data-slot="setting-row"][data-density="compact"]'
+      )
     ).toHaveLength(3);
 
     rendered.rerender(settings(false));

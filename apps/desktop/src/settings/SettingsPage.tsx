@@ -135,7 +135,11 @@ const NAV_GROUPS: {
     labelKey: "settings.navIntegrations",
     items: [
       { id: "providers", icon: Package, labelKey: "settings.providers" },
-      { id: "computer-use", icon: MousePointer2, labelKey: "settings.computerUse" },
+      {
+        id: "computer-use",
+        icon: MousePointer2,
+        labelKey: "settings.computerUse",
+      },
       { id: "appshots", icon: ScanText, labelKey: "settings.appshots" },
       { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
       { id: "browser", icon: Globe, labelKey: "settings.browser" },
@@ -153,7 +157,7 @@ const EMPTY_PROJECTS: Project[] = [];
  * window-wide takeover is deliberate — a settings surface with its own sidebar reads as a *place*
  * you went to, which is what earns the explicit way back.
  */
-export function SettingsPage({
+export const SettingsPage = ({
   sidebarWidth = 288,
   bindings,
   capturing,
@@ -213,95 +217,114 @@ export function SettingsPage({
   diagnosticsExporter,
 }: {
   /** Matches the persisted width of the main session rail. */
-  sidebarWidth?: number;
-  bindings: KeymapEntry[];
-  capturing: string | null;
-  onCapture: (action: string) => void;
-  onReset?: (action: string) => void;
+  readonly sidebarWidth?: number;
+  readonly bindings: KeymapEntry[];
+  readonly capturing: string | null;
+  readonly onCapture: (action: string) => void;
+  readonly onReset?: (action: string) => void;
   /** Restore every shortcut to the shipped default — the header's "Restore defaults" on that tab. */
-  onResetAll?: () => void;
-  providers: ProviderInfo[];
-  provider: string;
-  projectPath: string;
-  project: Project | null;
-  projects?: Project[];
-  onProjectWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
-  onProjectRename?: (path: string, name: string) => Promise<void>;
-  onProjectIcon?: (path: string, source: string | null) => Promise<void>;
-  onProjectAgentDefaults?: (
+  readonly onResetAll?: () => void;
+  readonly providers: ProviderInfo[];
+  readonly provider: string;
+  readonly projectPath: string;
+  readonly project: Project | null;
+  readonly projects?: Project[];
+  readonly onProjectWorktreeMode: (
+    path: string,
+    mode: ProjectWorktreeMode | null
+  ) => Promise<void>;
+  readonly onProjectRename?: (path: string, name: string) => Promise<void>;
+  readonly onProjectIcon?: (path: string, source: string | null) => Promise<void>;
+  readonly onProjectAgentDefaults?: (
     path: string,
     provider: string | null,
     model: string | null,
-    reasoningEffort: string | null,
+    reasoningEffort: string | null
   ) => Promise<void>;
-  onProjectRemove?: (path: string) => Promise<void>;
-  projectIconPicker?: () => Promise<string | null>;
-  projectActionsCount?: number;
-  onAddProjectAction?: () => void;
-  onOpenSession?: (sessionId: string) => void;
-  sessionImporter?: (fallbackCwd: string) => Promise<SessionImportResult | null>;
-  onSessionsImported?: () => void | Promise<unknown>;
-  worktreeLister?: typeof listProjectWorktrees;
-  worktreeSettingsLoader?: () => Promise<WorktreeSettings>;
-  worktreeSettingsSaver?: (settings: WorktreeSettings) => Promise<WorktreeSettings>;
-  sessionWorktreeDiscarder?: typeof discardSessionWorktree;
-  orphanWorktreeDiscarder?: typeof discardOrphanWorktree;
-  worktreeDiscardConfirmer?: typeof confirmNative;
-  onReloadProviders?: () => void | Promise<ProviderInfo[]>;
-  memoryEnabled: boolean;
-  deviceSyncEnabled?: boolean;
-  initialTab?: SettingsTab;
-  onClose: () => void;
-  updateStatusLoader?: () => Promise<AppUpdateStatus>;
-  updateCheckStarter?: () => Promise<AppUpdateStatus>;
-  computerUseSettingsLoader?: () => Promise<ComputerUseSettings>;
-  computerUseSelectionSaver?: (backend: string) => Promise<ComputerUseSettings>;
-  browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
-  browserUseSelectionSaver?: (backend: string) => Promise<BrowserUseSettings>;
-  browserUseAccessSaver?: (enabled: boolean) => Promise<BrowserUseSettings>;
-  appshotSettingsLoader?: () => Promise<AppshotSettings>;
-  appshotSettingsSaver?: (
-    patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>,
+  readonly onProjectRemove?: (path: string) => Promise<void>;
+  readonly projectIconPicker?: () => Promise<string | null>;
+  readonly projectActionsCount?: number;
+  readonly onAddProjectAction?: () => void;
+  readonly onOpenSession?: (sessionId: string) => void;
+  readonly sessionImporter?: (
+    fallbackCwd: string
+  ) => Promise<SessionImportResult | null>;
+  readonly onSessionsImported?: () => void | Promise<unknown>;
+  readonly worktreeLister?: typeof listProjectWorktrees;
+  readonly worktreeSettingsLoader?: () => Promise<WorktreeSettings>;
+  readonly worktreeSettingsSaver?: (
+    settings: WorktreeSettings
+  ) => Promise<WorktreeSettings>;
+  readonly sessionWorktreeDiscarder?: typeof discardSessionWorktree;
+  readonly orphanWorktreeDiscarder?: typeof discardOrphanWorktree;
+  readonly worktreeDiscardConfirmer?: typeof confirmNative;
+  readonly onReloadProviders?: () => void | Promise<ProviderInfo[]>;
+  readonly memoryEnabled: boolean;
+  readonly deviceSyncEnabled?: boolean;
+  readonly initialTab?: SettingsTab;
+  readonly onClose: () => void;
+  readonly updateStatusLoader?: () => Promise<AppUpdateStatus>;
+  readonly updateCheckStarter?: () => Promise<AppUpdateStatus>;
+  readonly computerUseSettingsLoader?: () => Promise<ComputerUseSettings>;
+  readonly computerUseSelectionSaver?: (backend: string) => Promise<ComputerUseSettings>;
+  readonly browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
+  readonly browserUseSelectionSaver?: (backend: string) => Promise<BrowserUseSettings>;
+  readonly browserUseAccessSaver?: (enabled: boolean) => Promise<BrowserUseSettings>;
+  readonly appshotSettingsLoader?: () => Promise<AppshotSettings>;
+  readonly appshotSettingsSaver?: (
+    patch: Partial<
+      Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">
+    >
   ) => Promise<AppshotSettings>;
-  appshotPermissionRequester?: (
-    kind: "screen-recording" | "accessibility",
+  readonly appshotPermissionRequester?: (
+    kind: "screen-recording" | "accessibility"
   ) => Promise<AppshotSettings>;
-  appshotPrivacyOpener?: (kind: "screen-recording" | "accessibility") => Promise<boolean>;
-  appshotCapturer?: () => Promise<unknown>;
-  providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
-  providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
-  providerEnabledSaver?: (provider: string, enabled: boolean) => Promise<ProviderInfo[]>;
-  providerConfigurationSaver?: (
+  readonly appshotPrivacyOpener?: (
+    kind: "screen-recording" | "accessibility"
+  ) => Promise<boolean>;
+  readonly appshotCapturer?: () => Promise<unknown>;
+  readonly providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
+  readonly providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
+  readonly providerEnabledSaver?: (
     provider: string,
-    configuration: ProviderRuntimeOverride,
+    enabled: boolean
   ) => Promise<ProviderInfo[]>;
-  deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
-  deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
-  deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
-  pluginDeveloperStatusLoader?: () => Promise<PluginDeveloperStatus>;
-  pluginDeveloperModeSaver?: (enabled: boolean) => Promise<PluginDeveloperStatus>;
-  pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
-  devtoolsOpener?: () => Promise<void>;
-  diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
-}) {
+  readonly providerConfigurationSaver?: (
+    provider: string,
+    configuration: ProviderRuntimeOverride
+  ) => Promise<ProviderInfo[]>;
+  readonly deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
+  readonly deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
+  readonly deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
+  readonly pluginDeveloperStatusLoader?: () => Promise<PluginDeveloperStatus>;
+  readonly pluginDeveloperModeSaver?: (
+    enabled: boolean
+  ) => Promise<PluginDeveloperStatus>;
+  readonly pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
+  readonly devtoolsOpener?: () => Promise<void>;
+  readonly diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
+}) => {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const { setPreference: setLanguage } = useLanguage();
   const providerNames = useMemo(
-    () => Object.fromEntries(providers.map((candidate) => [candidate.id, candidate.display_name])),
-    [providers],
+    () =>
+      Object.fromEntries(
+        providers.map((candidate) => [candidate.id, candidate.display_name])
+      ),
+    [providers]
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [projectNavigationLocked, setProjectNavigationLocked] = useState(false);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
-      setTab((current) => current === "memory" ? "general" : current);
+      setTab((current) => (current === "memory" ? "general" : current));
     }
   }, [memoryEnabled]);
   useEffect(() => {
     if (!deviceSyncEnabled) {
-      setTab((current) => current === "sync" ? "general" : current);
+      setTab((current) => (current === "sync" ? "general" : current));
     }
   }, [deviceSyncEnabled]);
 
@@ -339,62 +362,69 @@ export function SettingsPage({
           onClick={onClose}
           aria-label={t("settings.back")}
           title={t("settings.back")}
-          className="mx-3 mb-2 w-auto text-muted-foreground"
+          className="text-muted-foreground mx-3 mb-2 w-auto"
         >
           <ArrowLeft className="size-3.5 shrink-0" />
           <span className="settings-back-label">{t("settings.back")}</span>
         </Button>
         <nav
           aria-label={t("settings.title")}
-          className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-6 pt-2"
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pt-2 pb-6"
         >
           <div className="space-y-6">
-          {NAV_GROUPS.map((group) => {
-            const items = group.items.filter(({ id }) => memoryEnabled || id !== "memory")
-              .filter(({ id }) => deviceSyncEnabled || id !== "sync");
-            const headingId = `settings-nav-${group.id}`;
-            return (
-              <section key={group.id} aria-label={t(group.labelKey)} aria-labelledby={headingId}>
-                <h2
-                  id={headingId}
-                  className="settings-nav-heading px-2 pb-2 text-metadata font-medium text-muted-foreground"
+            {NAV_GROUPS.map((group) => {
+              const items = group.items
+                .filter(({ id }) => memoryEnabled || id !== "memory")
+                .filter(({ id }) => deviceSyncEnabled || id !== "sync");
+              const headingId = `settings-nav-${group.id}`;
+              return (
+                <section
+                  key={group.id}
+                  aria-label={t(group.labelKey)}
+                  aria-labelledby={headingId}
                 >
-                  {t(group.labelKey)}
-                </h2>
-                <div className="space-y-1">
-                  {items.map(({ id, icon: Icon, labelKey }) => (
-                    <NavigationRow
-                      key={id}
-                      className="settings-nav-item"
-                      labelClassName="settings-nav-label"
-                      label={t(labelKey)}
-                      leading={<Icon />}
-                      current={id === tab}
-                      accessibilityLabel={t(labelKey)}
-                      tooltip={t(labelKey)}
-                      onSelect={() => setTab(id)}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+                  <h2
+                    id={headingId}
+                    className="settings-nav-heading text-metadata text-muted-foreground px-2 pb-2 font-medium"
+                  >
+                    {t(group.labelKey)}
+                  </h2>
+                  <div className="space-y-1">
+                    {items.map(({ id, icon: Icon, labelKey }) => (
+                      <NavigationRow
+                        key={id}
+                        className="settings-nav-item"
+                        labelClassName="settings-nav-label"
+                        label={t(labelKey)}
+                        leading={<Icon />}
+                        current={id === tab}
+                        accessibilityLabel={t(labelKey)}
+                        tooltip={t(labelKey)}
+                        onSelect={() => setTab(id)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         </nav>
       </aside>
 
       {/* ---- the page ---- */}
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <main className="bg-background flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* The same 46px bar as the main shell's header, border and all. */}
         <header
           data-settings-titlebar
-          className="electrobun-webkit-app-region-drag settings-titlebar flex shrink-0 items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5"
+          className="electrobun-webkit-app-region-drag settings-titlebar flex shrink-0 items-center gap-1.5 border-b pt-1.5 pr-3 pb-1.5 pl-6"
         >
-          <span className="electrobun-webkit-app-region-drag text-body font-medium text-muted-foreground">
+          <span className="electrobun-webkit-app-region-drag text-body text-muted-foreground font-medium">
             {tab === "profile" ? t("profile.title") : t("settings.title")}
           </span>
           <div className="electrobun-webkit-app-region-drag flex-1" />
-          {(tab === "general" || tab === "appearance" || tab === "keybindings") && (
+          {(tab === "general" ||
+            tab === "appearance" ||
+            tab === "keybindings") && (
             <Button
               variant="ghost"
               size="sm"
@@ -412,7 +442,7 @@ export function SettingsPage({
             className={cn(
               "settings-page mx-auto w-full",
               tab === "profile" && "settings-profile-page",
-              tab === "worktrees" && "settings-worktrees-page",
+              tab === "worktrees" && "settings-worktrees-page"
             )}
           >
             {tab === "general" && (
@@ -432,12 +462,17 @@ export function SettingsPage({
             )}
 
             {tab === "appearance" && (
-              <Page title={t("settings.appearance")} description={t("settings.appearanceHint")}>
+              <Page
+                title={t("settings.appearance")}
+                description={t("settings.appearanceHint")}
+              >
                 <AppearanceSettings value={theme} onChange={setTheme} />
               </Page>
             )}
 
-            {tab === "profile" && <ProfileSettings providerNames={providerNames} />}
+            {tab === "profile" && (
+              <ProfileSettings providerNames={providerNames} />
+            )}
 
             {tab === "pets" && (
               <Page title={t("settings.pets")}>
@@ -445,13 +480,11 @@ export function SettingsPage({
               </Page>
             )}
 
-            {tab === "sync" && deviceSyncEnabled && (
-              <DeviceSyncSettingsPage
+            {tab === "sync" && deviceSyncEnabled ? <DeviceSyncSettingsPage
                 loader={deviceSyncStatusLoader}
                 enabledSaver={deviceSyncEnabledSaver}
                 syncStarter={deviceSyncStarter}
-              />
-            )}
+              /> : null}
 
             {tab === "keybindings" && (
               <KeybindingsSettingsPage
@@ -491,18 +524,19 @@ export function SettingsPage({
               />
             )}
 
-            {tab === "memory" && memoryEnabled && (
-              <MemorySettingsPage
+            {tab === "memory" && memoryEnabled ? <MemorySettingsPage
                 projectPath={projectPath}
                 projects={projects}
                 onOpenSession={onOpenSession}
-              />
-            )}
+              /> : null}
 
             {tab === "usage" && (
               <UsagePanel
                 provider={provider}
-                providerName={providers.find((candidate) => candidate.id === provider)?.display_name ?? provider}
+                providerName={
+                  providers.find((candidate) => candidate.id === provider)
+                    ?.display_name ?? provider
+                }
                 providerNames={providerNames}
               />
             )}

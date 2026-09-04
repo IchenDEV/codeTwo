@@ -19,19 +19,19 @@ function terminalLabel(title: string | undefined, slot: number): string {
 }
 
 type TerminalDockContentProps = {
-  cwd: string | null;
-  projectPath: string | null;
-  sessionKey: string;
-  onSendText: (text: string) => void;
+  readonly cwd: string | null;
+  readonly projectPath: string | null;
+  readonly sessionKey: string;
+  readonly onSendText: (text: string) => void;
 };
 
 /** Terminal-specific tabs and lifecycle, rendered inside the generic Dock container. */
-export function TerminalDockContent({
+export const TerminalDockContent = ({
   cwd,
   projectPath,
   sessionKey,
   onSendText,
-}: TerminalDockContentProps) {
+}: TerminalDockContentProps) => {
   const t = useT();
   const [slots, setSlots] = useState<number[]>([1]);
   const [activeSlot, setActiveSlot] = useState(1);
@@ -82,10 +82,10 @@ export function TerminalDockContent({
               setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
             }}
             className={cn(
-              "group relative h-full max-w-40 shrink-0 gap-1.5 px-module-inset text-metadata",
+              "group px-module-inset text-metadata relative h-full max-w-40 shrink-0 gap-1.5",
               slot === activeSlot
                 ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             <span className="truncate">
@@ -93,7 +93,7 @@ export function TerminalDockContent({
             </span>
             {slots.length > 1 && (
               <X
-                className="size-3 shrink-0 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                className="hover:text-destructive size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                 onClick={(event) => {
                   event.stopPropagation();
                   closeSlot(slot);
@@ -101,7 +101,7 @@ export function TerminalDockContent({
               />
             )}
             {slot === activeSlot && (
-              <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-none bg-primary" />
+              <span className="bg-primary absolute inset-x-1.5 -bottom-px h-0.5 rounded-none" />
             )}
           </Button>
         ))}
@@ -130,7 +130,7 @@ export function TerminalDockContent({
         >
           <CornerUpLeft className="size-3" />
         </TooltipButton>
-        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 px-1 text-callout text-muted-foreground">
+        <label className="text-callout text-muted-foreground flex shrink-0 cursor-pointer items-center gap-1.5 px-1">
           <Checkbox
             checked={tmux}
             onCheckedChange={(checked) => setTmux(checked === true)}

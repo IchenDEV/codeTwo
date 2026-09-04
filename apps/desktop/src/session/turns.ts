@@ -1,22 +1,24 @@
+import { isAgentActivityTitle } from "./agentActivity";
 import type {
   CoreEvent,
-  DocBlock,
+  DocBlock as DocumentBlock,
   MemoryReceipt,
   Part,
   PlanEntry,
   ToolOutput,
   TranscriptEntry,
 } from "../bridge";
-import { isAgentActivityTitle } from "./agentActivity";
 
-/** Only an accepted TurnStarted may dispose mutable Composer Canvas heads. */
+/**
+Only an accepted TurnStarted may dispose mutable Composer Canvas heads.
+*/
 export function canvasIdsToPurgeAfterTurnStart(
   accepted: boolean,
   canvasIds: readonly string[],
-  editorUnchanged = true,
+  editorUnchanged = true
 ): string[] {
   return accepted && editorUnchanged
-    ? Array.from(new Set(canvasIds.filter((id) => id.length > 0)))
+    ? [...new Set(canvasIds.filter((id) => id.length > 0))]
     : [];
 }
 
@@ -27,12 +29,12 @@ export function canvasIdsToPurgeAfterTurnStart(
  */
 export function canvasUnmountPlan(
   hasMutableHead: boolean,
-  alreadyTombstoned: boolean,
+  alreadyTombstoned: boolean
 ): { tombstone: boolean; purge: boolean } {
-  const mutable = hasMutableHead || alreadyTombstoned;
+  const isMutable = hasMutableHead || alreadyTombstoned;
   return {
     tombstone: hasMutableHead && !alreadyTombstoned,
-    purge: mutable,
+    purge: isMutable,
   };
 }
 
@@ -41,29 +43,41 @@ export interface CanvasFrozenRef {
   revision: number;
 }
 
-/** Provider-image failures are the only terminal errors that may offer a structure-only retry. */
+/**
+Provider-image failures are the only terminal errors that may offer a structure-only retry.
+*/
 export function isCanvasProviderImageError(message: string): boolean {
-  return /provider.*image|image.*unsupported|ProviderImageUnsupported/i.test(message);
+  return /provider.*image|image.*unsupported|ProviderImageUnsupported/i.test(
+    message
+  );
 }
 
-/** Correlate the immutable accepted request with its explicit provider retry affordance. */
+/**
+Correlate the immutable accepted request with its explicit provider retry affordance.
+*/
 export function canvasRetryRefsForTerminal(
   kind: "error" | "success",
   message: string | undefined,
-  refs: readonly CanvasFrozenRef[],
+  references: readonly CanvasFrozenRef[]
 ): CanvasFrozenRef[] {
-  if (kind !== "error" || !message || !isCanvasProviderImageError(message)) return [];
-  return refs.map((ref) => ({ id: ref.id, revision: ref.revision }));
+  if (kind !== "error" || !message || !isCanvasProviderImageError(message))
+    return [];
+  return references.map((reference) => ({ id: reference.id, revision: reference.revision }));
 }
 
-export function canvasAcceptedRequestKey(session: string, requestId: string): string {
+export function canvasAcceptedRequestKey(
+  session: string,
+  requestId: string
+): string {
   return `${session}:${requestId}`;
 }
 
-/** A provider change after an accepted Canvas failure must stage a fresh session. */
+/**
+A provider change after an accepted Canvas failure must stage a fresh session.
+*/
 export function canvasRetryTargetSession(
   activeSession: string | null,
-  forceNewSession: boolean,
+  forceNewSession: boolean
 ): string | null {
   return forceNewSession ? null : activeSession;
 }
@@ -71,11 +85,11 @@ export function canvasRetryTargetSession(
 /** Replace only Canvas references in a retry document; every non-Canvas block stays ordered and
  * byte-for-byte equivalent so an async provider failure never drops the user's instruction. */
 export function canvasRetryDocument(
-  doc: readonly DocBlock[],
-  replacements: ReadonlyMap<string, CanvasFrozenRef>,
-): DocBlock[] {
-  return doc.map((block) => {
-    if (block.type !== "canvas") return block;
+  document_: readonly DocumentBlock[],
+  replacements: ReadonlyMap<string, CanvasFrozenRef>
+): DocumentBlock[] {
+  return document_.map((block) => {
+    if (block.type !== "canvas") {return block;}
     const replacement = replacements.get(block.id);
     return replacement
       ? { ...block, id: replacement.id, frozen_revision: replacement.revision }
@@ -86,7 +100,9 @@ export function canvasRetryDocument(
 export interface ToolEntry {
   id: string;
   title: string;
-  /** First title that explicitly identified delegated activity, retained across status updates. */
+  /**
+  First title that explicitly identified delegated activity, retained across status updates.
+  */
   activityTitle?: string;
   status: string;
   kind?: string | null;
@@ -94,22 +110,27 @@ export interface ToolEntry {
   outputs?: ToolOutput[];
   startedAt?: number;
   endedAt?: number;
-  /** Last durable row folded into this call; older snapshot/live updates cannot regress it. */
+  /**
+  Last durable row folded into this call; older snapshot/live updates cannot regress it.
+  */
   lastTranscriptSeq?: number;
 }
 
-/** Normalize durable legacy string entries and current structured ACP plan entries once. */
+/**
+Normalize durable legacy string entries and current structured ACP plan entries once.
+*/
 export function normalizePlanEntries(
-  entries: readonly (PlanEntry | string)[],
+  entries: readonly (PlanEntry | string)[]
 ): PlanEntry[] {
-  return entries.map((entry) =>
-    typeof entry === "string"
+  return entries.map((entry) => {
+  	return typeof entry === "string"
       ? { content: entry, priority: null, status: null }
       : {
           content: entry.content,
           priority: entry.priority ?? null,
           status: entry.status ?? null,
-        },
+        };
+  }
   );
 }
 
@@ -120,7 +141,12 @@ export function normalizePlanEntries(
  */
 export type TurnContentEntry =
   | { kind: "text"; text: string; transcriptSeq?: number; createdAt?: number }
-  | { kind: "tool"; toolId: string; transcriptSeq?: number; createdAt?: number };
+  | {
+      kind: "tool";
+      toolId: string;
+      transcriptSeq?: number;
+      createdAt?: number;
+    };
 
 export interface PromptImage {
   id: string;
@@ -134,7 +160,11 @@ const PROMPT_ATTACHMENT_MARKER =
   /\[attachment:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi;
 
 function promptImagesFromCanonicalText(text: string): PromptImage[] {
-  return Array.from(text.matchAll(PROMPT_ATTACHMENT_MARKER), (match) => ({ id: match[1] }));
+  return Array.from(text.matchAll(PROMPT_ATTACHMENT_MARKER), (match) => {
+  	return {
+	    id: match[1],
+	  };
+  });
 }
 
 /**
@@ -143,27 +173,45 @@ function promptImagesFromCanonicalText(text: string): PromptImage[] {
  */
 export interface Turn {
   id: number;
-  /** Durable user-row boundary. Present for turns reconstructed from a transcript page. */
+  /**
+  Durable user-row boundary. Present for turns reconstructed from a transcript page.
+  */
   transcriptStartSeq?: number;
-  /** Prompt correlation id when the core/client supplied one. */
+  /**
+  Prompt correlation id when the core/client supplied one.
+  */
   requestId?: string;
-  /** False for an optimistic local row until its matching TurnStarted arrives. */
+  /**
+  False for an optimistic local row until its matching TurnStarted arrives.
+  */
   accepted: boolean;
-  /** Client/provider delivery state before this prompt becomes the active response phase. */
+  /**
+  Client/provider delivery state before this prompt becomes the active response phase.
+  */
   delivery?: "queued" | "steer";
   queuePosition?: number;
-  /** True when live deltas were observed from this turn's explicit TurnStarted boundary. */
+  /**
+  True when live deltas were observed from this turn's explicit TurnStarted boundary.
+  */
   streamBoundaryKnown: boolean;
   prompt: string;
-  /** Private prompt images rendered beside the user-authored text, never as marker strings. */
+  /**
+  Private prompt images rendered beside the user-authored text, never as marker strings.
+  */
   promptImages?: PromptImage[];
   text: string;
-  /** Exact ACP text chunks; merge by boundary/count, never by substring equality. */
+  /**
+  Exact ACP text chunks; merge by boundary/count, never by substring equality.
+  */
   textDeltas: string[];
-  /** Live chunks observed since the current stream boundary, including count-skipped replays. */
+  /**
+  Live chunks observed since the current stream boundary, including count-skipped replays.
+  */
   observedTextDeltas: number;
   observedThoughtDeltas: number;
-  /** Persisted chunks that raced ahead of IPC delivery and should be skipped by position. */
+  /**
+  Persisted chunks that raced ahead of IPC delivery and should be skipped by position.
+  */
   pendingTextDeltaSkips: number;
   pendingThoughtDeltaSkips: number;
   thoughts: string[];
@@ -182,7 +230,7 @@ let nextId = 1;
 export function newTurn(
   prompt: string,
   requestId?: string,
-  promptImages: PromptImage[] = [],
+  promptImages: PromptImage[] = []
 ): Turn {
   return {
     id: nextId++,
@@ -205,68 +253,91 @@ export function newTurn(
   };
 }
 
-/** Immutable Set update used by App for both its synchronous ref and rendered state. */
+/**
+Immutable Set update used by App for both its synchronous ref and rendered state.
+*/
 export function withRunningSession(
   current: ReadonlySet<string>,
   session: string,
-  running: boolean,
+  running: boolean
 ): Set<string> {
   const next = new Set(current);
-  if (running) next.add(session);
-  else next.delete(session);
+  if (running) {next.add(session);}
+  else {next.delete(session);}
   return next;
 }
 
-/** Drop only the optimistic row owned by a cancelled creation request. */
-export function withoutUnacceptedTurn(turns: Turn[], requestId: string): Turn[] {
+/**
+Drop only the optimistic row owned by a cancelled creation request.
+*/
+export function withoutUnacceptedTurn(
+  turns: Turn[],
+  requestId: string
+): Turn[] {
   return turns.filter((turn) => turn.requestId !== requestId || turn.accepted);
 }
 
-/** Project the session-level state onto a persisted tail without treating optimism as acceptance. */
+/**
+Project the session-level state onto a persisted tail without treating optimism as acceptance.
+*/
 export function transcriptTailState(
   sessionRunning: boolean,
   authoritativeTurnKnown: boolean,
-  latestRequestId?: string,
+  latestRequestId?: string
 ): { running: boolean; requestId?: string } {
   return {
     running: sessionRunning && authoritativeTurnKnown,
-    requestId: sessionRunning && !authoritativeTurnKnown ? undefined : latestRequestId,
+    requestId:
+      sessionRunning && !authoritativeTurnKnown ? undefined : latestRequestId,
   };
 }
 
-/** Compare the submitted editor revision without depending on object key insertion order. */
-export function sameDocBlocks(a: readonly DocBlock[], b: readonly DocBlock[]): boolean {
-  if (a.length !== b.length) return false;
+/**
+Compare the submitted editor revision without depending on object key insertion order.
+*/
+export function sameDocBlocks(
+  a: readonly DocumentBlock[],
+  b: readonly DocumentBlock[]
+): boolean {
+  if (a.length !== b.length) {return false;}
   return a.every((left, index) => {
     const right = b[index];
-    if (!right || left.type !== right.type) return false;
+    if (!right || left.type !== right.type) {return false;}
     switch (left.type) {
-      case "text":
+      case "text": {
         return right.type === "text" && left.text === right.text;
+      }
       case "file":
-      case "image":
+      case "image": {
         return right.type === left.type && left.path === right.path;
-      case "session":
+      }
+      case "session": {
         return (
           right.type === "session" &&
           left.session_id === right.session_id &&
           left.through_seq === right.through_seq
         );
-      case "canvas":
+      }
+      case "canvas": {
         return (
           right.type === "canvas" &&
           left.id === right.id &&
           left.frozen_revision === right.frozen_revision &&
           left.pixel_policy === right.pixel_policy
         );
+      }
       case "skill": {
-        if (right.type !== "skill" || left.skill_id !== right.skill_id) return false;
+        if (right.type !== "skill" || left.skill_id !== right.skill_id)
+          {return false;}
         const leftKeys = Object.keys(left.params).sort();
         const rightKeys = Object.keys(right.params).sort();
         return (
           leftKeys.length === rightKeys.length &&
-          leftKeys.every((key, keyIndex) =>
-            key === rightKeys[keyIndex] && left.params[key] === right.params[key],
+          leftKeys.every(
+            (key, keyIndex) => {
+            	return key === rightKeys[keyIndex] &&
+              left.params[key] === right.params[key];
+            }
           )
         );
       }
@@ -274,22 +345,28 @@ export function sameDocBlocks(a: readonly DocBlock[], b: readonly DocBlock[]): b
   });
 }
 
-/** Exact content plus editor revision prevents equal-looking post-submit edits from being erased. */
+/**
+Exact content plus editor revision prevents equal-looking post-submit edits from being erased.
+*/
 export function matchesSubmittedEditorRevision(
-  current: readonly DocBlock[],
+  current: readonly DocumentBlock[],
   currentRevision: number,
-  submitted: readonly DocBlock[],
-  submittedRevision: number,
+  submitted: readonly DocumentBlock[],
+  submittedRevision: number
 ): boolean {
-  return currentRevision === submittedRevision && sameDocBlocks(current, submitted);
+  return (
+    currentRevision === submittedRevision && sameDocBlocks(current, submitted)
+  );
 }
 
-/** Is this turn still in flight? */
+/**
+Is this turn still in flight?
+*/
 export function isRunning(t: Turn | undefined): boolean {
   return !!t && t.endedAt === undefined;
 }
 
-type ToolUpdate = {
+interface ToolUpdate {
   id: string;
   title: string;
   status: string;
@@ -299,15 +376,22 @@ type ToolUpdate = {
   transcriptSeq?: number | null;
   startedAt?: number;
   endedAt?: number;
-};
-
-function terminalToolStatus(status: string): boolean {
-  return ["completed", "failed", "cancelled", "canceled", "rejected", "denied"].includes(
-    status.trim().toLowerCase(),
-  );
 }
 
-/** Upsert a streamed/persisted tool call without dropping metadata on status-only updates. */
+function terminalToolStatus(status: string): boolean {
+  return [
+    "completed",
+    "failed",
+    "cancelled",
+    "canceled",
+    "rejected",
+    "denied",
+  ].includes(status.trim().toLowerCase());
+}
+
+/**
+Upsert a streamed/persisted tool call without dropping metadata on status-only updates.
+*/
 function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
   const existing = tools.find((tool) => tool.id === update.id);
   if (
@@ -318,36 +402,54 @@ function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
     return tools;
   }
   const entry: ToolEntry = {
-    ...(existing ?? {}),
+    ...existing,
     id: update.id,
     title: update.title || existing?.title || update.id,
     activityTitle:
-      existing?.activityTitle || (isAgentActivityTitle(update.title) ? update.title : undefined),
+      existing?.activityTitle ||
+      (isAgentActivityTitle(update.title) ? update.title : undefined),
     status: update.status || existing?.status || "pending",
     outputs: mergeToolOutputs(existing?.outputs ?? [], update.outputs ?? []),
     startedAt: existing?.startedAt ?? update.startedAt,
     endedAt: update.endedAt ?? existing?.endedAt,
   };
-  if (update.kind != null) entry.kind = update.kind;
-  if (update.agentInput != null) entry.agentInput = update.agentInput;
-  if (update.transcriptSeq != null) entry.lastTranscriptSeq = update.transcriptSeq;
-  return existing ? tools.map((tool) => (tool.id === update.id ? entry : tool)) : [...tools, entry];
+  if (update.kind != null) {
+    entry.kind = update.kind;
+  }
+  if (update.agentInput != null) {
+    entry.agentInput = update.agentInput;
+  }
+  if (update.transcriptSeq != null) {
+    entry.lastTranscriptSeq = update.transcriptSeq;
+  }
+  return existing
+    ? tools.map((tool) => (tool.id === update.id ? entry : tool))
+    : [...tools, entry];
 }
 
-function mergeToolOutputs(current: ToolOutput[], incoming: ToolOutput[]): ToolOutput[] {
+function mergeToolOutputs(
+  current: ToolOutput[],
+  incoming: ToolOutput[]
+): ToolOutput[] {
   const output = [...current];
   for (const item of incoming) {
-    const duplicate = output.some((existing) => {
-      if (existing.type !== item.type) return false;
+    const isDuplicate = output.some((existing) => {
+      if (existing.type !== item.type) {return false;}
       if (item.type === "image" && existing.type === "image") {
         return existing.artifact.id === item.artifact.id;
       }
       if (item.type === "resource_link" && existing.type === "resource_link") {
         return existing.uri === item.uri;
       }
-      return item.type === "text" && existing.type === "text" && existing.text === item.text;
+      return (
+        item.type === "text" &&
+        existing.type === "text" &&
+        existing.text === item.text
+      );
     });
-    if (!duplicate) output.push(item);
+    if (!isDuplicate) {
+      output.push(item);
+    }
   }
   return output;
 }
@@ -356,15 +458,15 @@ function appendTextContent(
   content: readonly TurnContentEntry[],
   text: string,
   transcriptSeq?: number | null,
-  createdAt?: number,
+  createdAt?: number
 ): TurnContentEntry[] {
   return [
     ...content,
     {
       kind: "text" as const,
       text,
-      ...(transcriptSeq == null ? {} : { transcriptSeq }),
-      ...(createdAt == null ? {} : { createdAt }),
+      ...(transcriptSeq != null && { transcriptSeq }),
+      ...(createdAt != null && { createdAt }),
     },
   ];
 }
@@ -373,9 +475,11 @@ function appendToolContent(
   content: readonly TurnContentEntry[],
   toolId: string,
   transcriptSeq?: number | null,
-  createdAt?: number,
+  createdAt?: number
 ): TurnContentEntry[] {
-  if (content.some((entry) => entry.kind === "tool" && entry.toolId === toolId)) {
+  if (
+    content.some((entry) => entry.kind === "tool" && entry.toolId === toolId)
+  ) {
     return [...content];
   }
   return [
@@ -383,8 +487,8 @@ function appendToolContent(
     {
       kind: "tool" as const,
       toolId,
-      ...(transcriptSeq == null ? {} : { transcriptSeq }),
-      ...(createdAt == null ? {} : { createdAt }),
+      ...(transcriptSeq != null && { transcriptSeq }),
+      ...(createdAt != null && { createdAt }),
     },
   ];
 }
@@ -395,29 +499,30 @@ function appendToolContent(
  */
 export function applyEvent(
   turns: Turn[],
-  ev: CoreEvent,
-  activeRequestId?: string,
+  event_: CoreEvent,
+  activeRequestId?: string
 ): Turn[] {
   // Events that don't belong to a turn.
   if (
-    ev.event === "session_created" ||
-    ev.event === "session_title_changed" ||
-    ev.event === "session_activity_changed" ||
-    ev.event === "usage" ||
-    ev.event === "models" ||
-    ev.event === "config_options" ||
-    ev.event === "session_capabilities" ||
-    ev.event === "goal_changed" ||
-    ev.event === "permission_request"
+    event_.event === "session_created" ||
+    event_.event === "session_title_changed" ||
+    event_.event === "session_activity_changed" ||
+    event_.event === "usage" ||
+    event_.event === "models" ||
+    event_.event === "config_options" ||
+    event_.event === "session_capabilities" ||
+    event_.event === "goal_changed" ||
+    event_.event === "permission_request"
   ) {
     return turns;
   }
 
-  const requestId = "request_id" in ev ? (ev.request_id ?? undefined) : undefined;
+  const requestId =
+    "request_id" in event_ ? (event_.request_id ?? undefined) : undefined;
 
   // A start only accepts the optimistic row with the same correlation id. A foreign start owns a
   // separate row, so its output can never bind to a prompt this client lost the core-side race for.
-  if (ev.event === "turn_started") {
+  if (event_.event === "turn_started") {
     let match = -1;
     if (requestId) {
       for (let index = turns.length - 1; index >= 0; index -= 1) {
@@ -427,8 +532,8 @@ export function applyEvent(
         }
       }
     } else {
-      const tail = turns[turns.length - 1];
-      if (isRunning(tail) && !tail.requestId) match = turns.length - 1;
+      const tail = turns.at(-1);
+      if (isRunning(tail) && !tail.requestId) {match = turns.length - 1;}
     }
     if (match >= 0) {
       const list = [...turns];
@@ -449,41 +554,43 @@ export function applyEvent(
     return [...turns, remote];
   }
 
-  if (ev.event === "prompt_queued") {
+  if (event_.event === "prompt_queued") {
     const match = requestId
       ? turns.findIndex((turn) => turn.requestId === requestId)
       : -1;
-    if (match < 0) return turns;
+    if (match < 0) {return turns;}
     const list = [...turns];
     list[match] = {
       ...list[match],
       delivery: "queued",
-      queuePosition: ev.position,
+      queuePosition: event_.position,
     };
     return list;
   }
 
-  if (ev.event === "steer_accepted") {
+  if (event_.event === "steer_accepted") {
     const match = requestId
       ? turns.findIndex((turn) => turn.requestId === requestId)
       : -1;
-    if (match < 0) return turns;
-    const list = turns.map((turn, index) =>
-      index !== match && isRunning(turn) && turn.accepted
+    if (match < 0) {return turns;}
+    const list = turns.map((turn, index) => {
+    	return index !== match && isRunning(turn) && turn.accepted
         ? { ...turn, endedAt: Date.now() }
-        : turn,
+        : turn;
+    }
     );
     list[match] = {
       ...list[match],
       accepted: true,
       delivery: "steer",
       streamBoundaryKnown: true,
-      transcriptStartSeq: ev.transcript_seq ?? list[match].transcriptStartSeq,
+      transcriptStartSeq:
+        event_.transcript_seq ?? list[match].transcriptStartSeq,
     };
     return list;
   }
 
-  if (ev.event === "error" && requestId) {
+  if (event_.event === "error" && requestId) {
     let match = -1;
     for (let index = turns.length - 1; index >= 0; index -= 1) {
       if (turns[index].requestId === requestId) {
@@ -493,25 +600,29 @@ export function applyEvent(
     }
     if (match >= 0) {
       const list = [...turns];
-      const cur = { ...list[match], error: ev.message };
+      const current = { ...list[match], error: event_.message };
       // A non-terminal error before acceptance is a correlated rejection (normally `busy`). It
       // ends only that optimistic row; warnings after TurnStarted keep the accepted turn open.
-      if (ev.terminal || !cur.accepted) cur.endedAt = Date.now();
-      list[match] = cur;
+      if (event_.terminal || !current.accepted) current.endedAt = Date.now();
+      list[match] = current;
       return list;
     }
     // Correlated errors with no known turn are bounded notices, never activity that can absorb
     // another client's streamed output.
     const notice = newTurn("(session notice)", requestId);
-    notice.error = ev.message;
+    notice.error = event_.message;
     notice.endedAt = Date.now();
     return [...turns, notice];
   }
 
   // A warning emitted while the session is idle is a completed notice, not a phantom running turn.
-  if (ev.event === "error" && !ev.terminal && !isRunning(turns[turns.length - 1])) {
+  if (
+    event_.event === "error" &&
+    !event_.terminal &&
+    !isRunning(turns.at(-1))
+  ) {
     const notice = newTurn("(session notice)");
-    notice.error = ev.message;
+    notice.error = event_.message;
     notice.endedAt = Date.now();
     return [...turns, notice];
   }
@@ -519,58 +630,63 @@ export function applyEvent(
   // Backward compatibility for event producers that predate `turn_started`: activity after an
   // ended transcript still starts a fresh remote turn instead of mutating the previous one.
   const list = [...turns];
-  let i = -1;
+  let index_ = -1;
   if (activeRequestId) {
     for (let index = list.length - 1; index >= 0; index -= 1) {
       if (isRunning(list[index]) && list[index].requestId === activeRequestId) {
-        i = index;
+        index_ = index;
         break;
       }
     }
-    if (i < 0) {
+    if (index_ < 0) {
       const remote = newTurn("(started elsewhere)", activeRequestId);
       remote.accepted = true;
       list.push(remote);
-      i = list.length - 1;
+      index_ = list.length - 1;
     }
   }
-  if (i < 0) {
+  if (index_ < 0) {
     for (let index = list.length - 1; index >= 0; index -= 1) {
       if (isRunning(list[index]) && list[index].accepted) {
-        i = index;
+        index_ = index;
         break;
       }
     }
   }
-  if (i < 0) {
+  if (index_ < 0) {
     for (let index = list.length - 1; index >= 0; index -= 1) {
       if (isRunning(list[index])) {
-        i = index;
+        index_ = index;
         break;
       }
     }
   }
-  if (i < 0) {
+  if (index_ < 0) {
     const remote = newTurn("(started elsewhere)");
     remote.accepted = true;
     list.push(remote);
-    i = list.length - 1;
+    index_ = list.length - 1;
   }
-  const cur = { ...list[i] };
+  const cur = { ...list[index_] };
   const observedAt = Date.now();
 
-  switch (ev.event) {
+  switch (event_.event) {
     case "memory_context":
-      cur.memory = ev.receipt;
+      cur.memory = event_.receipt;
       break;
     case "agent_text":
       cur.observedTextDeltas += 1;
       if (cur.pendingTextDeltaSkips > 0) {
         cur.pendingTextDeltaSkips -= 1;
       } else {
-        cur.text += ev.text;
-        cur.textDeltas = [...cur.textDeltas, ev.text];
-        cur.content = appendTextContent(cur.content, ev.text, ev.transcript_seq, observedAt);
+        cur.text += event_.text;
+        cur.textDeltas = [...cur.textDeltas, event_.text];
+        cur.content = appendTextContent(
+          cur.content,
+          event_.text,
+          event_.transcript_seq,
+          observedAt
+        );
       }
       break;
     case "agent_thought":
@@ -578,38 +694,43 @@ export function applyEvent(
       if (cur.pendingThoughtDeltaSkips > 0) {
         cur.pendingThoughtDeltaSkips -= 1;
       } else {
-        cur.thoughts = [...cur.thoughts, ev.text];
+        cur.thoughts = [...cur.thoughts, event_.text];
       }
       break;
     case "tool_call": {
       cur.tools = upsertTool(cur.tools, {
-        id: ev.id,
-        title: ev.title,
-        status: ev.status,
-        kind: ev.kind,
-        agentInput: ev.agent_input,
-        outputs: ev.outputs,
-        transcriptSeq: ev.transcript_seq,
+        id: event_.id,
+        title: event_.title,
+        status: event_.status,
+        kind: event_.kind,
+        agentInput: event_.agent_input,
+        outputs: event_.outputs,
+        transcriptSeq: event_.transcript_seq,
         startedAt: observedAt,
-        endedAt: terminalToolStatus(ev.status) ? observedAt : undefined,
+        endedAt: terminalToolStatus(event_.status) ? observedAt : undefined,
       });
-      cur.content = appendToolContent(cur.content, ev.id, ev.transcript_seq, observedAt);
+      cur.content = appendToolContent(
+        cur.content,
+        event_.id,
+        event_.transcript_seq,
+        observedAt
+      );
       break;
     }
     case "plan":
-      cur.plan = normalizePlanEntries(ev.entries);
+      cur.plan = normalizePlanEntries(event_.entries);
       break;
     case "turn_ended":
-      cur.stopReason = ev.stop_reason;
+      cur.stopReason = event_.stop_reason;
       cur.endedAt = Date.now();
       break;
     case "error":
-      cur.error = ev.message;
-      if (ev.terminal) cur.endedAt = Date.now();
+      cur.error = event_.message;
+      if (event_.terminal) {cur.endedAt = Date.now();}
       break;
   }
 
-  list[i] = cur;
+  list[index_] = cur;
   return list;
 }
 
@@ -617,16 +738,21 @@ function mergeDeltas(
   snapshot: string[],
   live: string[],
   observedLiveCount: number,
-  boundaryKnown: boolean,
+  boundaryKnown: boolean
 ): { deltas: string[]; pendingSkips: number } {
   // With an explicit TurnStarted boundary, the observed `live` sequence starts at the turn boundary
   // and the persisted snapshot contains a prefix of the same sequence. Counts preserve repeated equal
   // deltas. Persistence can also race ahead of IPC delivery; `pendingSkips` consumes those future
   // replays by position. Without that boundary, append conservatively: duplicating an uncertain
   // delta is safer than deleting distinct model output merely because the text happens to be equal.
-  if (!boundaryKnown) return { deltas: [...snapshot, ...live], pendingSkips: 0 };
+  if (!boundaryKnown) {
+    return { deltas: [...snapshot, ...live], pendingSkips: 0 };
+  }
   return {
-    deltas: [...snapshot, ...live.slice(Math.min(snapshot.length, live.length))],
+    deltas: [
+      ...snapshot,
+      ...live.slice(Math.min(snapshot.length, live.length)),
+    ],
     pendingSkips: Math.max(0, snapshot.length - observedLiveCount),
   };
 }
@@ -634,29 +760,39 @@ function mergeDeltas(
 function mergeTurnContent(
   snapshot: readonly TurnContentEntry[],
   live: readonly TurnContentEntry[],
-  boundaryKnown: boolean,
+  boundaryKnown: boolean
 ): TurnContentEntry[] {
-  if (snapshot.length === 0) return [...live];
-  if (live.length === 0) return [...snapshot];
+  if (snapshot.length === 0) {
+    return [...live];
+  }
+  if (live.length === 0) {
+    return [...snapshot];
+  }
 
   const durable = [...snapshot, ...live].filter(
     (entry): entry is TurnContentEntry & { transcriptSeq: number } =>
-      entry.transcriptSeq !== undefined,
+      entry.transcriptSeq !== undefined
   );
   if (durable.length > 0) {
     const bySeq = new Map<number, TurnContentEntry>();
     for (const entry of [...live, ...snapshot]) {
-      if (entry.transcriptSeq === undefined) continue;
+      if (entry.transcriptSeq === undefined) {
+        continue;
+      }
       // Snapshot state wins an equal sequence because it was read after persistence.
       bySeq.set(entry.transcriptSeq, entry);
     }
     const ordered = [...bySeq.values()].sort(
-      (left, right) => (left.transcriptSeq ?? 0) - (right.transcriptSeq ?? 0),
+      (left, right) => (left.transcriptSeq ?? 0) - (right.transcriptSeq ?? 0)
     );
     const seenTools = new Set<string>();
     const deduped = ordered.filter((entry) => {
-      if (entry.kind === "text") return true;
-      if (seenTools.has(entry.toolId)) return false;
+      if (entry.kind === "text") {
+        return true;
+      }
+      if (seenTools.has(entry.toolId)) {
+        return false;
+      }
       seenTools.add(entry.toolId);
       return true;
     });
@@ -665,29 +801,37 @@ function mergeTurnContent(
     // durable edge instead of silently dropping provider output.
     let textToSkip = snapshot.filter((entry) => entry.kind === "text").length;
     const durableTools = new Set(
-      deduped.flatMap((entry) => (entry.kind === "tool" ? [entry.toolId] : [])),
+      deduped.flatMap((entry) => (entry.kind === "tool" ? [entry.toolId] : []))
     );
     const sequenceLess = live.filter((entry) => {
-      if (entry.transcriptSeq !== undefined) return false;
+      if (entry.transcriptSeq !== undefined) {
+        return false;
+      }
       if (entry.kind === "text" && boundaryKnown && textToSkip > 0) {
         textToSkip -= 1;
         return false;
       }
       if (entry.kind === "tool") {
-        if (durableTools.has(entry.toolId)) return false;
+        if (durableTools.has(entry.toolId)) {
+          return false;
+        }
         durableTools.add(entry.toolId);
       }
       return true;
     });
-    if (sequenceLess.length === 0) return deduped;
+    if (sequenceLess.length === 0) {
+      return deduped;
+    }
     return [...deduped, ...mergeTurnContent([], sequenceLess, boundaryKnown)];
   }
 
-  if (!boundaryKnown) return [...snapshot, ...live];
+  if (!boundaryKnown) {
+    return [...snapshot, ...live];
+  }
 
   let textToSkip = snapshot.filter((entry) => entry.kind === "text").length;
   const seenTools = new Set(
-    snapshot.flatMap((entry) => (entry.kind === "tool" ? [entry.toolId] : [])),
+    snapshot.flatMap((entry) => (entry.kind === "tool" ? [entry.toolId] : []))
   );
   const tail = live.filter((entry) => {
     if (entry.kind === "text" && textToSkip > 0) {
@@ -695,7 +839,9 @@ function mergeTurnContent(
       return false;
     }
     if (entry.kind === "tool") {
-      if (seenTools.has(entry.toolId)) return false;
+      if (seenTools.has(entry.toolId)) {
+        return false;
+      }
       seenTools.add(entry.toolId);
     }
     return true;
@@ -703,15 +849,31 @@ function mergeTurnContent(
   return [...snapshot, ...tail];
 }
 
-/** Merge events received during an async transcript read without dropping or duplicating its tail. */
-export function mergeLoadedTurns(loaded: Turn[], live: Turn[], running: boolean): Turn[] {
-  if (live.length === 0) return loaded;
-  if (loaded.length === 0) return live;
+/**
+Merge events received during an async transcript read without dropping or duplicating its tail.
+*/
+export function mergeLoadedTurns(
+  loaded: Turn[],
+  live: Turn[],
+  running: boolean
+): Turn[] {
+  if (live.length === 0) {
+    return loaded;
+  }
+  if (loaded.length === 0) {
+    return live;
+  }
 
-  const loadedTail = loaded[loaded.length - 1];
-  if (!loadedTail.requestId) return [...loaded, ...live];
-  const liveIndex = live.findIndex((turn) => turn.requestId === loadedTail.requestId);
-  if (liveIndex < 0) return [...loaded, ...live];
+  const loadedTail = loaded.at(-1);
+  if (!loadedTail.requestId) {
+    return [...loaded, ...live];
+  }
+  const liveIndex = live.findIndex(
+    (turn) => turn.requestId === loadedTail.requestId
+  );
+  if (liveIndex === -1) {
+    return [...loaded, ...live];
+  }
   const liveTurn = live[liveIndex];
 
   let tools = [...loadedTail.tools];
@@ -725,13 +887,13 @@ export function mergeLoadedTurns(loaded: Turn[], live: Turn[], running: boolean)
     loadedTail.textDeltas,
     liveTurn.textDeltas,
     liveTurn.observedTextDeltas,
-    liveTurn.streamBoundaryKnown,
+    liveTurn.streamBoundaryKnown
   );
   const thoughtMerge = mergeDeltas(
     loadedTail.thoughts,
     liveTurn.thoughts,
     liveTurn.observedThoughtDeltas,
-    liveTurn.streamBoundaryKnown,
+    liveTurn.streamBoundaryKnown
   );
   const merged: Turn = {
     ...loadedTail,
@@ -749,7 +911,7 @@ export function mergeLoadedTurns(loaded: Turn[], live: Turn[], running: boolean)
     content: mergeTurnContent(
       loadedTail.content,
       liveTurn.content,
-      liveTurn.streamBoundaryKnown,
+      liveTurn.streamBoundaryKnown
     ),
     plan: liveTurn.plan.length > 0 ? liveTurn.plan : loadedTail.plan,
     error: liveTurn.error ?? loadedTail.error,
@@ -765,21 +927,25 @@ export function mergeLoadedTurns(loaded: Turn[], live: Turn[], running: boolean)
   ];
 }
 
-/** Rebuild turns from a persisted transcript: each user message starts a new turn. */
+/**
+Rebuild turns from a persisted transcript: each user message starts a new turn.
+*/
 export function turnsFromTranscript(
   entries: readonly (TranscriptEntry | readonly [string, Part])[],
   lastTurnRunning = false,
   lastTurnRequestId?: string,
-  receipts: readonly MemoryReceipt[] = [],
+  receipts: readonly MemoryReceipt[] = []
 ): Turn[] {
   const out: Turn[] = [];
-  const receiptBySeq = new Map(receipts.map((receipt) => [receipt.user_part_seq, receipt]));
+  const receiptBySeq = new Map(
+    receipts.map((receipt) => [receipt.user_part_seq, receipt])
+  );
   const push = (
     part: Part,
     role: string,
     seq?: number,
     createdAt?: number,
-    startedAt?: number,
+    startedAt?: number
   ) => {
     const at = createdAt && createdAt > 0 ? createdAt : Date.now();
     if (role === "user" && (part.kind === "text" || part.kind === "prompt")) {
@@ -787,7 +953,7 @@ export function turnsFromTranscript(
         ...newTurn(
           part.text,
           undefined,
-          part.kind === "prompt" ? promptImagesFromCanonicalText(part.text) : [],
+          part.kind === "prompt" ? promptImagesFromCanonicalText(part.text) : []
         ),
         transcriptStartSeq: seq,
         accepted: true,
@@ -798,25 +964,32 @@ export function turnsFromTranscript(
       return;
     }
     if (out.length === 0) {
-      out.push({ ...newTurn("(earlier)"), accepted: true, endedAt: Date.now() });
+      out.push({
+        ...newTurn("(earlier)"),
+        accepted: true,
+        endedAt: Date.now(),
+      });
     }
-    const cur = out[out.length - 1];
+    const current = out.at(-1);
     switch (part.kind) {
-      case "text":
-        cur.text += part.text;
-        cur.textDeltas.push(part.text);
-        cur.content = appendTextContent(cur.content, part.text, seq, at);
+      case "text": {
+        current.text += part.text;
+        current.textDeltas.push(part.text);
+        current.content = appendTextContent(current.content, part.text, seq, at);
         break;
-      case "prompt":
-        cur.text += part.text;
-        cur.textDeltas.push(part.text);
-        cur.content = appendTextContent(cur.content, part.text, seq, at);
+      }
+      case "prompt": {
+        current.text += part.text;
+        current.textDeltas.push(part.text);
+        current.content = appendTextContent(current.content, part.text, seq, at);
         break;
-      case "reasoning":
-        cur.thoughts.push(part.text);
+      }
+      case "reasoning": {
+        current.thoughts.push(part.text);
         break;
-      case "tool_call":
-        cur.tools = upsertTool(cur.tools, {
+      }
+      case "tool_call": {
+        current.tools = upsertTool(current.tools, {
           id: part.id,
           title: part.title,
           status: part.status,
@@ -827,39 +1000,54 @@ export function turnsFromTranscript(
           startedAt: startedAt && startedAt > 0 ? startedAt : at,
           endedAt: terminalToolStatus(part.status) ? at : undefined,
         });
-        cur.content = appendToolContent(cur.content, part.id, seq, at);
+        current.content = appendToolContent(current.content, part.id, seq, at);
         break;
-      case "plan":
-        cur.plan = normalizePlanEntries(part.entries);
+      }
+      case "plan": {
+        current.plan = normalizePlanEntries(part.entries);
         break;
+      }
     }
-    cur.endedAt = Math.max(cur.endedAt ?? at, at);
+    current.endedAt = Math.max(current.endedAt ?? at, at);
   };
   for (const entry of entries) {
     if ("part" in entry) {
-      push(entry.part, entry.role, entry.seq, entry.created_at, entry.started_at);
+      push(
+        entry.part,
+        entry.role,
+        entry.seq,
+        entry.created_at,
+        entry.started_at
+      );
+    } else {
+      push(entry[1], entry[0]);
     }
-    else push(entry[1], entry[0]);
   }
   if (out.length > 0 && lastTurnRequestId) {
-    out[out.length - 1].requestId = lastTurnRequestId;
+    out.at(-1).requestId = lastTurnRequestId;
   }
-  if (lastTurnRunning && out.length > 0) delete out[out.length - 1].endedAt;
+  if (lastTurnRunning && out.length > 0) {
+    delete out[out.length - 1].endedAt;
+  }
   return out;
 }
 
-/** Prepend an older, non-overlapping page without touching the live tail merge machinery. */
+/**
+Prepend an older, non-overlapping page without touching the live tail merge machinery.
+*/
 export function prependTranscriptTurns(current: Turn[], older: Turn[]): Turn[] {
-  if (older.length === 0) return current;
+  if (older.length === 0) {
+    return current;
+  }
   const durableStarts = new Set(
     current
       .map((turn) => turn.transcriptStartSeq)
-      .filter((seq): seq is number => seq !== undefined),
+      .filter((seq): seq is number => seq !== undefined)
   );
   return [
-    ...older.filter(
-      (turn) => turn.transcriptStartSeq === undefined || !durableStarts.has(turn.transcriptStartSeq),
-    ),
+    ...older.filter((turn) => turn.transcriptStartSeq === undefined ||
+        !durableStarts.has(turn.transcriptStartSeq)
+    }),
     ...current,
   ];
 }

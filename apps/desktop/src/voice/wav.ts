@@ -6,18 +6,20 @@
  * so we resample here and send the one format they all accept.
  */
 
-/** Decode `blob` and re-render it as a single 16 kHz channel. */
+/**
+Decode `blob` and re-render it as a single 16 kHz channel.
+*/
 export async function toWav16kMono(blob: Blob): Promise<Uint8Array> {
   const bytes = await blob.arrayBuffer();
-  const ctx = new AudioContext();
+  const context = new AudioContext();
   let decoded: AudioBuffer;
   try {
-    decoded = await ctx.decodeAudioData(bytes);
+    decoded = await context.decodeAudioData(bytes);
   } finally {
-    void ctx.close();
+    void context.close();
   }
 
-  const rate = 16000;
+  const rate = 16_000;
   const frames = Math.max(1, Math.round(decoded.duration * rate));
   // The three-argument form: Safari never gained the options-object constructor.
   const offline = new OfflineAudioContext(1, frames, rate);
@@ -30,13 +32,17 @@ export async function toWav16kMono(blob: Blob): Promise<Uint8Array> {
   return encodeWav(rendered.getChannelData(0), rate);
 }
 
-/** Wrap float samples in a canonical 44-byte-header PCM WAV. */
+/**
+Wrap float samples in a canonical 44-byte-header PCM WAV.
+*/
 function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   const bytesPerSample = 2;
   const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
   const view = new DataView(buffer);
   const ascii = (offset: number, text: string) => {
-    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+    for (let index = 0; index < text.length; index++) {
+      view.setUint8(offset + index, text.charCodeAt(index));
+    }
   };
 
   ascii(0, "RIFF");
@@ -53,15 +59,26 @@ function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   ascii(36, "data");
   view.setUint32(40, samples.length * bytesPerSample, true);
 
-  for (let i = 0; i < samples.length; i++) {
-    const clamped = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(44 + i * bytesPerSample, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+  for (const [index, sample] of samples.entries()) {
+    const clamped = Math.max(-1, Math.min(1, sample));
+    view.setInt16(
+      44 + index * bytesPerSample,
+      clamped < 0 ? clamped * 0x80_00 : clamped * 0x7f_ff,
+      true
+    );
   }
   return new Uint8Array(buffer);
 }
 
-/** The first container this webview will actually record, or undefined to take its default. */
+/**
+The first container this webview will actually record, or undefined to take its default.
+*/
 export function preferredRecordingType(): string | undefined {
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"];
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/aac",
+  ];
   return candidates.find((t) => MediaRecorder.isTypeSupported?.(t));
 }

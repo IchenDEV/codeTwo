@@ -244,10 +244,10 @@ const CATEGORY_KEYS: Record<string, StringKey> = {
 
 export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
   const status = Object.fromEntries(
-    Object.entries(STATUS_KEYS).map(([key, value]) => [key, t(value)]),
+    Object.entries(STATUS_KEYS).map(([key, value]) => [key, t(value)])
   ) as Record<PluginManagerStatus, string>;
   const sourceNames = Object.fromEntries(
-    Object.entries(SOURCE_KEYS).map(([key, value]) => [key, t(value)]),
+    Object.entries(SOURCE_KEYS).map(([key, value]) => [key, t(value)])
   ) as Record<PluginManagerSource, string>;
   return {
     title: t("pluginManager.title"),
@@ -261,8 +261,7 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
     userScope: t("pluginManager.userScope"),
     projectScope: (project) => project.label,
     search: t("pluginManager.search"),
-    searchPlaceholder: (tab) =>
-      t(
+    searchPlaceholder: (tab) => t(
         tab === "plugins"
           ? "pluginManager.searchPlugins"
           : tab === "mcps"
@@ -271,7 +270,7 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
               ? "pluginManager.searchSkills"
               : tab === "hooks"
                 ? "pluginManager.searchHooks"
-                : "pluginManager.searchMarketplace",
+                : "pluginManager.searchMarketplace"
       ),
     noResults: t("pluginManager.noResults"),
     enabled: t("pluginManager.enabled"),
@@ -299,8 +298,7 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
     githubHint: t("pluginManager.githubHint"),
     closeInstaller: t("pluginManager.closeInstaller"),
     installingPlugin: t("pluginManager.installingPlugin"),
-    bundleInstalled: (result) =>
-      t("pluginManager.bundleInstalled", {
+    bundleInstalled: (result) => t("pluginManager.bundleInstalled", {
         name: result.name,
         version: result.version ? ` ${result.version}` : "",
       }),
@@ -330,13 +328,12 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
     scope: t("pluginManager.scope"),
     pluginList: t("pluginManager.pluginList"),
     componentList: t("pluginManager.componentList"),
-    resourceList: (tab) =>
-      t(
+    resourceList: (tab) => t(
         tab === "mcps"
           ? "pluginManager.mcpList"
           : tab === "skills"
             ? "pluginManager.skillList"
-            : "pluginManager.hookList",
+            : "pluginManager.hookList"
       ),
     projectState: (name) => t("pluginManager.projectState", { name }),
     noDescription: t("pluginManager.noDescription"),
@@ -360,8 +357,7 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
     dataOnly: t("pluginManager.dataOnly"),
     invalidConfigurationObject: t("pluginManager.invalidConfigurationObject"),
     githubRepositoryRequired: t("pluginManager.githubRepositoryRequired"),
-    changeApplied: (name, state) =>
-      t("pluginManager.changeApplied", {
+    changeApplied: (name, state) => t("pluginManager.changeApplied", {
         name,
         state:
           state === "enabled"
@@ -370,8 +366,7 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
               ? t("pluginManager.disabled")
               : t("pluginManager.inherit"),
       }),
-    changeSummary: (kind, name, state) =>
-      t(
+    changeSummary: (kind, name, state) => t(
         kind === "component"
           ? state === "disabled"
             ? "pluginManager.componentChangeSummary.disabled"
@@ -379,33 +374,30 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
           : state === "disabled"
             ? "pluginManager.pluginChangeSummary.disabled"
             : "pluginManager.pluginChangeSummary.enabled",
-        { name },
+        { name }
       ),
     marketplaceInstalled: t("pluginManager.marketplaceInstalled"),
     componentUninstalled: t("pluginHub.componentUninstalledToast"),
     scaffoldApplied: (count) =>
       t("pluginHub.scaffoldInstalledToast", { count }),
     settingsReset: t("pluginManager.settingsReset"),
-    bundleEnabled: (name, enabled) =>
-      t(
+    bundleEnabled: (name, enabled) => t(
         enabled
           ? "pluginManager.bundleEnabled"
           : "pluginManager.bundleDisabled",
-        { name },
+        { name }
       ),
-    bundleTrusted: (name, trusted) =>
-      t(
+    bundleTrusted: (name, trusted) => t(
         trusted
           ? "pluginManager.bundleTrusted"
           : "pluginManager.bundleTrustRevoked",
-        { name },
+        { name }
       ),
-    bundleUninstalled: (name, keepData) =>
-      t(
+    bundleUninstalled: (name, keepData) => t(
         keepData
           ? "pluginManager.bundleUninstalledDataKept"
           : "pluginManager.bundleUninstalled",
-        { name },
+        { name }
       ),
     confirmTitle: t("pluginManager.confirmTitle"),
     confirm: t("pluginManager.confirm"),
@@ -415,7 +407,7 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
 
 export function localizePluginManagerCatalog(
   model: PluginManagerCatalogModel,
-  t: Translate,
+  t: Translate
 ): PluginManagerCatalogModel {
   const pluginName = (id: string, fallback: string) =>
     PLUGIN_KEYS[id] ? t(PLUGIN_KEYS[id].name) : fallback;
@@ -423,7 +415,9 @@ export function localizePluginManagerCatalog(
     ...model,
     plugins: model.plugins.map((plugin) => {
       const keys = PLUGIN_KEYS[plugin.id];
-      if (!keys || plugin.source === "bundle") return plugin;
+      if (!keys || plugin.source === "bundle") {
+        return plugin;
+      }
       return {
         ...plugin,
         name: t(keys.name),
@@ -432,37 +426,36 @@ export function localizePluginManagerCatalog(
           plugin.category && CATEGORY_KEYS[plugin.category]
             ? t(CATEGORY_KEYS[plugin.category])
             : plugin.category,
-        dependencies: plugin.dependencies?.map((dependency) =>
-          dependency.endsWith(" (optional)")
+        dependencies: plugin.dependencies?.map((dependency) => dependency.endsWith(" (optional)")
             ? t("pluginManager.optionalDependency", {
                 id: dependency.slice(0, -11),
               })
-            : dependency,
+            : dependency
         ),
         bundle: plugin.bundle
           ? {
               ...plugin.bundle,
               contributions: plugin.bundle.contributions.map((item) => ({
-                ...item,
-                label: CONTRIBUTION_KEYS[item.id]
-                  ? t(CONTRIBUTION_KEYS[item.id])
-                  : item.label,
-              })),
+										                ...item,
+										                label: CONTRIBUTION_KEYS[item.id]
+										                  ? t(CONTRIBUTION_KEYS[item.id])
+										                  : item.label,
+										              })),
             }
           : undefined,
       };
     }),
     components: model.components.map((component) => {
       const keys = COMPONENT_KEYS[component.id];
-      const firstParty = component.source !== "bundle";
+      const isFirstParty = component.source !== "bundle";
       return {
         ...component,
-        pluginName: firstParty
+        pluginName: isFirstParty
           ? pluginName(component.pluginId, component.pluginName)
           : component.pluginName,
-        name: keys && firstParty ? t(keys.name) : component.name,
+        name: keys && isFirstParty ? t(keys.name) : component.name,
         description:
-          keys && firstParty ? t(keys.description) : component.description,
+          keys && isFirstParty ? t(keys.description) : component.description,
       };
     }),
   };

@@ -5,7 +5,8 @@ import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
-const { AppearanceSettings } = await import("../src/settings/AppearanceSettings");
+const { AppearanceSettings } =
+  await import("../src/settings/AppearanceSettings");
 const {
   applyAppearanceSettings,
   getAppearanceSettings,
@@ -48,17 +49,25 @@ describe("Appearance settings", () => {
     const view = mount(<Harness />);
     await flush();
 
-    const radios = Array.from(view.container.querySelectorAll('input[name="appearance-color-scheme"]'));
-    expect(radios.map((radio) => radio.getAttribute("value"))).toEqual(["system", "light", "dark"]);
+    const radios = Array.from(
+      view.container.querySelectorAll('input[name="appearance-color-scheme"]')
+    );
+    expect(radios.map((radio) => radio.getAttribute("value"))).toEqual([
+      "system",
+      "light",
+      "dark",
+    ]);
     expect(radios[0].checked).toBe(true);
 
     radios[2].click();
     await flush();
     expect(radios[2].checked).toBe(true);
     expect(radios[0].checked).toBe(false);
-    expect(view.container.querySelector('[role="radiogroup"]')?.getAttribute("aria-labelledby")).toBe(
-      "appearance-color-scheme",
-    );
+    expect(
+      view.container
+        .querySelector('[role="radiogroup"]')
+        ?.getAttribute("aria-labelledby")
+    ).toBe("appearance-color-scheme");
 
     view.unmount();
   });
@@ -68,8 +77,12 @@ describe("Appearance settings", () => {
     const view = mount(<Harness />);
     await flush();
 
-    expect(view.container.querySelectorAll(".appearance-system-half")).toHaveLength(2);
-    expect(view.container.querySelectorAll(".appearance-mini-app")).toHaveLength(4);
+    expect(
+      view.container.querySelectorAll(".appearance-system-half")
+    ).toHaveLength(2);
+    expect(
+      view.container.querySelectorAll(".appearance-mini-app")
+    ).toHaveLength(4);
 
     view.unmount();
   });
@@ -80,19 +93,35 @@ describe("Appearance settings", () => {
     const view = mount(<Harness />);
     await flush();
 
-    expect(view.container.querySelectorAll('[data-slot="setting-row"]')).toHaveLength(19);
     expect(
-      view.container.querySelector('[aria-label="Light theme Interface font"]')?.closest('[data-slot="setting-row"]'),
+      view.container.querySelectorAll('[data-slot="setting-row"]')
+    ).toHaveLength(19);
+    expect(
+      view.container
+        .querySelector('[aria-label="Light theme Interface font"]')
+        ?.closest('[data-slot="setting-row"]')
     ).not.toBeNull();
     expect(
-      view.container.querySelector('[aria-label="Interface font size"]')?.closest('[data-slot="setting-row"]'),
+      view.container
+        .querySelector('[aria-label="Interface font size"]')
+        ?.closest('[data-slot="setting-row"]')
     ).not.toBeNull();
-    expect(view.container.querySelectorAll(".appearance-section")).toHaveLength(6);
-    expect(view.container.querySelectorAll(".appearance-setting-group")).toHaveLength(2);
-    expect(view.container.querySelectorAll(".appearance-profile-grid")).toHaveLength(2);
-    expect(view.container.querySelector(".appearance-editor-surface")).not.toBeNull();
+    expect(view.container.querySelectorAll(".appearance-section")).toHaveLength(
+      6
+    );
     expect(
-      view.container.querySelector(".appearance-setting-group [data-surface='card']"),
+      view.container.querySelectorAll(".appearance-setting-group")
+    ).toHaveLength(2);
+    expect(
+      view.container.querySelectorAll(".appearance-profile-grid")
+    ).toHaveLength(2);
+    expect(
+      view.container.querySelector(".appearance-editor-surface")
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector(
+        ".appearance-setting-group [data-surface='card']"
+      )
     ).toBeNull();
 
     view.unmount();
@@ -124,22 +153,30 @@ describe("Appearance settings", () => {
       petId: "columbina",
       petName: "Columbina",
     });
-    expect(normalizeAppearanceSettings({ petSource: "petshare", petId: "../escape" })).toMatchObject({
+    expect(
+      normalizeAppearanceSettings({ petSource: "petshare", petId: "../escape" })
+    ).toMatchObject({
       petSource: "builtin",
       petId: "naiwa",
     });
   });
 
   test("migrates the former compact default without overriding a current explicit 13px choice", () => {
-    expect(normalizeAppearanceSettings({ version: 1, uiFontSize: 13 })).toMatchObject({
+    expect(
+      normalizeAppearanceSettings({ version: 1, uiFontSize: 13 })
+    ).toMatchObject({
       version: 3,
       uiFontSize: 14,
     });
-    expect(normalizeAppearanceSettings({ version: 2, uiFontSize: 13 })).toMatchObject({
+    expect(
+      normalizeAppearanceSettings({ version: 2, uiFontSize: 13 })
+    ).toMatchObject({
       version: 3,
       uiFontSize: 13,
     });
-    expect(normalizeAppearanceSettings({ version: 3, uiFontSize: 13 })).toMatchObject({
+    expect(
+      normalizeAppearanceSettings({ version: 3, uiFontSize: 13 })
+    ).toMatchObject({
       version: 3,
       uiFontSize: 13,
     });
@@ -160,8 +197,18 @@ describe("Appearance settings", () => {
 
     expect(migrated).toMatchObject({
       version: 3,
-      light: { uiFont: "avenir", codeFont: "menlo", sidebarOpacity: 67, contrast: 58 },
-      dark: { uiFont: "avenir", codeFont: "menlo", sidebarOpacity: 67, contrast: 58 },
+      light: {
+        uiFont: "avenir",
+        codeFont: "menlo",
+        sidebarOpacity: 67,
+        contrast: 58,
+      },
+      dark: {
+        uiFont: "avenir",
+        codeFont: "menlo",
+        sidebarOpacity: 67,
+        contrast: 58,
+      },
       uiFontSize: 15,
       codeFontSize: 14,
       pointerCursors: true,
@@ -170,23 +217,35 @@ describe("Appearance settings", () => {
     });
 
     const root = dom.document.documentElement;
-    applyAppearanceSettings(root, {
-      ...migrated,
-      dark: {
-        ...migrated.dark,
-        uiFontWeight: "medium",
-        codeFontWeight: "semibold",
-        sidebarOpacity: 74,
-        contrast: 63,
+    applyAppearanceSettings(
+      root,
+      {
+        ...migrated,
+        dark: {
+          ...migrated.dark,
+          uiFontWeight: "medium",
+          codeFontWeight: "semibold",
+          sidebarOpacity: 74,
+          contrast: 63,
+        },
+        pointerCursors: false,
+        reduceMotion: "on",
+        diffMarkers: "symbols",
       },
-      pointerCursors: false,
-      reduceMotion: "on",
-      diffMarkers: "symbols",
-    }, "dark");
-    expect(root.style.getPropertyValue("--appearance-font-ui")).toContain("Avenir Next");
-    expect(root.style.getPropertyValue("--appearance-font-ui-weight")).toBe("500");
-    expect(root.style.getPropertyValue("--appearance-font-code-weight")).toBe("600");
-    expect(root.style.getPropertyValue("--appearance-sidebar-opacity")).toBe("74%");
+      "dark"
+    );
+    expect(root.style.getPropertyValue("--appearance-font-ui")).toContain(
+      "Avenir Next"
+    );
+    expect(root.style.getPropertyValue("--appearance-font-ui-weight")).toBe(
+      "500"
+    );
+    expect(root.style.getPropertyValue("--appearance-font-code-weight")).toBe(
+      "600"
+    );
+    expect(root.style.getPropertyValue("--appearance-sidebar-opacity")).toBe(
+      "74%"
+    );
     expect(root.dataset.appearancePointerCursors).toBe("false");
     expect(root.dataset.reduceMotion).toBe("on");
     expect(root.dataset.diffMarkers).toBe("symbols");
@@ -209,7 +268,11 @@ describe("Appearance settings", () => {
       reduceMotion: "off",
       diffMarkers: "symbols",
     });
-    expect(JSON.parse(dom.window.localStorage.getItem("codetwo.appearance.v1") ?? "{}")).toMatchObject({
+    expect(
+      JSON.parse(
+        dom.window.localStorage.getItem("codetwo.appearance.v1") ?? "{}"
+      )
+    ).toMatchObject({
       version: 3,
       light: { uiFont: "inter", contrast: 32 },
       dark: { codeFont: "monaco", contrast: 71 },
@@ -224,36 +287,56 @@ describe("Appearance settings", () => {
     const view = mount(<Harness />);
     await flush();
 
-    expect(view.container.querySelectorAll(".appearance-theme-card")).toHaveLength(6);
-    const createButton = view.container.querySelector<HTMLButtonElement>('[data-appearance-action="create-theme"]');
+    expect(
+      view.container.querySelectorAll(".appearance-theme-card")
+    ).toHaveLength(6);
+    const createButton = view.container.querySelector<HTMLButtonElement>(
+      '[data-appearance-action="create-theme"]'
+    );
     expect(createButton).not.toBeNull();
     createButton!.click();
     await flush();
 
     expect(getAppearanceSettings().customThemes).toHaveLength(1);
-    expect(getAppearanceSettings().activeThemeId.startsWith("custom-")).toBe(true);
-    expect(view.container.querySelectorAll(".appearance-theme-card")).toHaveLength(7);
+    expect(getAppearanceSettings().activeThemeId.startsWith("custom-")).toBe(
+      true
+    );
+    expect(
+      view.container.querySelectorAll(".appearance-theme-card")
+    ).toHaveLength(7);
 
     view.unmount();
   });
 
   test("imports and serializes a versioned theme document", () => {
     activateDom();
-    const imported = importAppearanceTheme(JSON.stringify({
-      format: "codetwo-theme",
-      version: 1,
-      theme: {
-        name: "Test Theme",
-        light: { accent: "#3366ff", background: "#ffffff", foreground: "#101828" },
-        dark: { accent: "#77a7ff", background: "#18191d", foreground: "#f2f4f8" },
-      },
-    }));
+    const imported = importAppearanceTheme(
+      JSON.stringify({
+        format: "codetwo-theme",
+        version: 1,
+        theme: {
+          name: "Test Theme",
+          light: {
+            accent: "#3366ff",
+            background: "#ffffff",
+            foreground: "#101828",
+          },
+          dark: {
+            accent: "#77a7ff",
+            background: "#18191d",
+            foreground: "#f2f4f8",
+          },
+        },
+      })
+    );
 
     expect(imported.name).toBe("Test Theme");
     expect(getAppearanceSettings().activeThemeId).toBe(imported.id);
     const exported = JSON.parse(serializeAppearanceTheme(imported.id));
     expect(exported.format).toBe("codetwo-theme");
     expect(exported.theme.dark.background).toBe("#18191d");
-    expect(() => importAppearanceTheme('{"format":"codetwo-theme","version":1,"theme":{}}')).toThrow();
+    expect(() =>
+      importAppearanceTheme('{"format":"codetwo-theme","version":1,"theme":{}}')
+    ).toThrow();
   });
 });

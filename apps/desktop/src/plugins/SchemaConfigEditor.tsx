@@ -65,7 +65,7 @@ function asSimpleObjectSchema(value: unknown): SimpleObjectSchema | null {
       return property.enum.every(
         (entry) =>
           entry === null ||
-          ["string", "number", "boolean"].includes(typeof entry),
+          ["string", "number", "boolean"].includes(typeof entry)
       );
     }
     return (
@@ -100,7 +100,7 @@ function enumLabel(value: JsonPrimitive): string {
 function updateProperty(
   current: Record<string, unknown>,
   name: string,
-  value: unknown,
+  value: unknown
 ): Record<string, unknown> {
   if (value !== undefined) return { ...current, [name]: value };
   const next = { ...current };
@@ -108,19 +108,19 @@ function updateProperty(
   return next;
 }
 
-function SchemaField({
+const SchemaField = ({
   name,
   schema,
   required,
   value,
   onChange,
 }: {
-  name: string;
-  schema: JsonSchema;
-  required: boolean;
-  value: unknown;
-  onChange: (value: unknown) => void;
-}) {
+  readonly name: string;
+  readonly schema: JsonSchema;
+  readonly required: boolean;
+  readonly value: unknown;
+  readonly onChange: (value: unknown) => void;
+}) => {
   const id = `plugin-config-${name}`;
   const label = schema.title ?? name;
 
@@ -210,25 +210,25 @@ function SchemaField({
   );
 }
 
-export function SchemaConfigEditor({
+export const SchemaConfigEditor = ({
   config,
   schema,
   labels,
   onSave,
 }: {
-  config: unknown;
-  schema: unknown;
-  labels: PluginManagerLabels;
-  onSave: (config: unknown) => Promise<void>;
-}) {
+  readonly config: unknown;
+  readonly schema: unknown;
+  readonly labels: PluginManagerLabels;
+  readonly onSave: (config: unknown) => Promise<void>;
+}) => {
   const simpleSchema = useMemo(() => asSimpleObjectSchema(schema), [schema]);
   const incomingJson = useMemo(() => formatJson(config), [config]);
   const [draft, setDraft] = useState<Record<string, unknown>>(() =>
-    initialObject(config),
+    initialObject(config)
   );
   const [json, setJson] = useState(incomingJson);
   const [mode, setMode] = useState<"form" | "json">(
-    simpleSchema ? "form" : "json",
+    simpleSchema ? "form" : "json"
   );
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -311,7 +311,7 @@ export function SchemaConfigEditor({
       </FieldLabel>
       <Textarea
         id="plugin-config-json"
-        className="min-h-64 font-mono text-callout"
+        className="text-callout min-h-64 font-mono"
         value={json}
         aria-invalid={Boolean(jsonError)}
         onChange={(event) => {
@@ -348,7 +348,7 @@ export function SchemaConfigEditor({
             setJsonError(null);
           } catch (error) {
             setJsonError(
-              error instanceof Error ? error.message : String(error),
+              error instanceof Error ? error.message : String(error)
             );
             return;
           }

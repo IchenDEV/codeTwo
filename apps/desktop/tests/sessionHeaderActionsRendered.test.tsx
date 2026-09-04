@@ -1,11 +1,19 @@
 // @ts-nocheck
 import { act as reactAct } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
-const { SessionHeaderActions } = await import("../src/session/SessionHeaderActions");
+const { SessionHeaderActions } =
+  await import("../src/session/SessionHeaderActions");
 const {
   TOOLTIP_FIRST_OPEN_DELAY,
   TOOLTIP_INSTANT_PHASE_TIMEOUT,
@@ -40,20 +48,24 @@ function renderActions(overrides = {}) {
       <TooltipProvider>
         <SessionHeaderActions {...props} />
       </TooltipProvider>
-    </I18nProvider>,
+    </I18nProvider>
   );
   return { calls, view };
 }
 
 async function press(element: Element) {
   await reactAct(async () => {
-    element.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    element.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    element.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
@@ -72,8 +84,12 @@ describe("SessionHeaderActions", () => {
     expect(group).not.toBeNull();
     for (const label of ["Add action", "Open", "Commit"]) {
       const action = button(view.container, label);
-      expect(action.classList.contains("session-header-action-main")).toBe(true);
-      expect(action.querySelector(".session-header-action-label")?.textContent).toBe(label);
+      expect(action.classList.contains("session-header-action-main")).toBe(
+        true
+      );
+      expect(
+        action.querySelector(".session-header-action-label")?.textContent
+      ).toBe(label);
     }
 
     view.unmount();
@@ -96,23 +112,35 @@ describe("SessionHeaderActions", () => {
       expect(action.classList.contains("bg-fill-rest")).toBe(true);
       expect(action.classList.contains("hover:bg-fill-hover")).toBe(true);
       expect(action.classList.contains("text-foreground")).toBe(true);
-      expect(action.querySelector(".session-header-action-icon")).not.toBeNull();
-      expect(action.querySelector(".session-header-action-label")?.textContent).toBe(label);
+      expect(
+        action.querySelector(".session-header-action-icon")
+      ).not.toBeNull();
+      expect(
+        action.querySelector(".session-header-action-label")?.textContent
+      ).toBe(label);
       expect(action.classList.contains("button-toolbar-outline")).toBe(false);
     }
 
     expect(view.container.querySelectorAll("button")).toHaveLength(3);
-    expect(view.container.querySelector('[data-slot="button-group"]')).toBeNull();
-    expect(view.container.querySelector(".session-header-split-trigger")).toBeNull();
-    expect(view.container.querySelector(".session-header-compact-action")).toBeNull();
+    expect(
+      view.container.querySelector('[data-slot="button-group"]')
+    ).toBeNull();
+    expect(
+      view.container.querySelector(".session-header-split-trigger")
+    ).toBeNull();
+    expect(
+      view.container.querySelector(".session-header-compact-action")
+    ).toBeNull();
 
-    for (const action of Array.from(view.container.querySelectorAll("button"))) {
+    for (const action of Array.from(
+      view.container.querySelectorAll("button")
+    )) {
       expect(
         action.classList.contains("h-control") ||
           action.classList.contains("h-control-mini") ||
           action.classList.contains("size-control") ||
           action.classList.contains("size-control-mini") ||
-          action.classList.contains("size-7"),
+          action.classList.contains("size-7")
       ).toBe(true);
     }
 
@@ -130,15 +158,17 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("Finder");
     expect(dom.document.body.textContent).toContain("⌘O");
 
-    const finderItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("Finder"));
+    const finderItem = Array.from(
+      dom.document.body.querySelectorAll('[role="menuitem"]')
+    ).find((item) => item.textContent?.includes("Finder"));
     if (!finderItem) throw new Error("Finder menu item not found");
     await press(finderItem);
     expect(calls).toEqual(["add", "finder"]);
 
     await press(button(view.container, "Open"));
-    const moveItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("Move task to device"));
+    const moveItem = Array.from(
+      dom.document.body.querySelectorAll('[role="menuitem"]')
+    ).find((item) => item.textContent?.includes("Move task to device"));
     if (!moveItem) throw new Error("Move task menu item not found");
     await press(moveItem);
     expect(calls).toEqual(["add", "finder", "move"]);
@@ -147,9 +177,11 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("Source control");
     expect(dom.document.body.textContent).toContain("Checkpoint now");
     expect(dom.document.body.textContent).toContain("Push");
-    const sourceControlItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("Source control"));
-    if (!sourceControlItem) throw new Error("Source control menu item not found");
+    const sourceControlItem = Array.from(
+      dom.document.body.querySelectorAll('[role="menuitem"]')
+    ).find((item) => item.textContent?.includes("Source control"));
+    if (!sourceControlItem)
+      throw new Error("Source control menu item not found");
     await press(sourceControlItem);
     expect(calls).toEqual(["add", "finder", "move", "commit"]);
 
@@ -161,8 +193,12 @@ describe("SessionHeaderActions", () => {
     const { view } = renderActions({ canCommit: false });
 
     expect(button(view.container, "Commit").disabled).toBe(true);
-    expect(button(view.container, "Commit").classList.contains("disabled:opacity-60")).toBe(true);
-    expect(view.container.querySelectorAll('[aria-label="Commit"]')).toHaveLength(1);
+    expect(
+      button(view.container, "Commit").classList.contains("disabled:opacity-60")
+    ).toBe(true);
+    expect(
+      view.container.querySelectorAll('[aria-label="Commit"]')
+    ).toHaveLength(1);
 
     view.unmount();
   });
@@ -181,8 +217,9 @@ describe("SessionHeaderActions", () => {
     expect(dom.document.body.textContent).toContain("File manager");
     expect(dom.document.body.textContent).toContain("Ctrl+O");
 
-    const fileManagerItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("File manager"));
+    const fileManagerItem = Array.from(
+      dom.document.body.querySelectorAll('[role="menuitem"]')
+    ).find((item) => item.textContent?.includes("File manager"));
     if (!fileManagerItem) throw new Error("File manager menu item not found");
     await press(fileManagerItem);
     expect(calls).toEqual(["finder"]);
@@ -194,17 +231,19 @@ describe("SessionHeaderActions", () => {
     activateDom();
     const calls: string[] = [];
     const { view } = renderActions({
-      actions: [{
-        id: "test",
-        name: "Test",
-        kind: "command",
-        command: "bun test",
-        prompt: "",
-        keybinding: "Mod+Shift+T",
-        preview_url: "",
-        run_on_worktree_create: false,
-        open_preview: false,
-      }],
+      actions: [
+        {
+          id: "test",
+          name: "Test",
+          kind: "command",
+          command: "bun test",
+          prompt: "",
+          keybinding: "Mod+Shift+T",
+          preview_url: "",
+          run_on_worktree_create: false,
+          open_preview: false,
+        },
+      ],
       onRunAction: (action) => calls.push(action.id),
     });
 

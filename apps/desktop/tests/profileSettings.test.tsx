@@ -1,15 +1,26 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, button, click, dom, mount, waitFor } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  mount,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
-const { ProfileSettings, summarizeProfileActivity } = await import("../src/settings/ProfileSettings");
+const { ProfileSettings, summarizeProfileActivity } =
+  await import("../src/settings/ProfileSettings");
 
 const report = {
   windows: [],
-  by_source: [["codex", 800], ["claude_code", 300]],
+  by_source: [
+    ["codex", 800],
+    ["claude_code", 300],
+  ],
   transcripts: 42,
 };
 
@@ -24,8 +35,24 @@ const history = {
     ],
   },
   by_source: [
-    { source: "claude_code", input_tokens: 200, cached_tokens: 0, output_tokens: 100, total_tokens: 300, estimated_cost_usd: null, unpriced_tokens: 300 },
-    { source: "codex", input_tokens: 600, cached_tokens: 0, output_tokens: 200, total_tokens: 800, estimated_cost_usd: null, unpriced_tokens: 800 },
+    {
+      source: "claude_code",
+      input_tokens: 200,
+      cached_tokens: 0,
+      output_tokens: 100,
+      total_tokens: 300,
+      estimated_cost_usd: null,
+      unpriced_tokens: 300,
+    },
+    {
+      source: "codex",
+      input_tokens: 600,
+      cached_tokens: 0,
+      output_tokens: 200,
+      total_tokens: 800,
+      estimated_cost_usd: null,
+      unpriced_tokens: 800,
+    },
   ],
 };
 
@@ -48,7 +75,10 @@ describe("ProfileSettings", () => {
     expect(summary.activeDays).toBe(4);
     expect(summary.currentStreak).toBe(4);
     expect(summary.transcripts).toBe(42);
-    expect(summary.providers.map((provider) => provider.source)).toEqual(["codex", "claude_code"]);
+    expect(summary.providers.map((provider) => provider.source)).toEqual([
+      "codex",
+      "claude_code",
+    ]);
   });
 
   test("renders the profile summary and shares the same real statistics", async () => {
@@ -64,7 +94,7 @@ describe("ProfileSettings", () => {
             return "shared";
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     await waitFor(() => expect(view.container.textContent).toContain("1.1k"));
@@ -75,7 +105,9 @@ describe("ProfileSettings", () => {
     click(button(view.container, "Share profile"));
     await waitFor(() => expect(sharedText).toContain("1.1k tokens"));
     expect(sharedText).toContain("4 active days");
-    await waitFor(() => expect(view.container.textContent).toContain("Profile shared."));
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("Profile shared.")
+    );
 
     view.unmount();
   });
@@ -89,11 +121,13 @@ describe("ProfileSettings", () => {
           reportLoader={async () => report}
           historyLoader={async () => history}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     await waitFor(() => {
-      expect(view.container.querySelector(".profile-avatar img")?.getAttribute("src")).toBe(avatar);
+      expect(
+        view.container.querySelector(".profile-avatar img")?.getAttribute("src")
+      ).toBe(avatar);
     });
 
     view.unmount();
@@ -106,7 +140,7 @@ describe("ProfileSettings", () => {
           reportLoader={async () => report}
           historyLoader={async () => history}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     await reactAct(async () => click(button(view.container, "Edit profile")));
@@ -114,8 +148,12 @@ describe("ProfileSettings", () => {
 
     const name = view.container.querySelector("#profile-display-name");
     expect(name?.getAttribute("aria-invalid")).toBe("true");
-    expect(name?.getAttribute("aria-describedby")).toBe("profile-display-name-error");
-    expect(view.container.textContent).toContain("Add a display name before saving.");
+    expect(name?.getAttribute("aria-describedby")).toBe(
+      "profile-display-name-error"
+    );
+    expect(view.container.textContent).toContain(
+      "Add a display name before saving."
+    );
 
     await reactAct(async () => setValue(name, "Ada Lovelace"));
     await waitFor(() => expect(name?.getAttribute("aria-invalid")).toBeNull());
@@ -123,7 +161,9 @@ describe("ProfileSettings", () => {
     await reactAct(async () => setValue(handle, "@ada"));
     await reactAct(async () => click(button(view.container, "Save")));
 
-    await waitFor(() => expect(view.container.textContent).toContain("Ada Lovelace"));
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("Ada Lovelace")
+    );
     expect(view.container.textContent).toContain("@ada");
     expect(JSON.parse(dom.localStorage.getItem("codetwo.profile"))).toEqual({
       name: "Ada Lovelace",
@@ -150,13 +190,21 @@ describe("ProfileSettings", () => {
           reportLoader={async () => ({ ...report, transcripts: 0 })}
           historyLoader={async () => emptyHistory}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    await waitFor(() => expect(view.container.textContent).toContain("No activity yet"));
-    expect(view.container.querySelectorAll(".profile-activity-cell")).toHaveLength(90);
-    expect(view.container.textContent?.match(/No activity yet/g)).toHaveLength(1);
-    expect(view.container.textContent).toContain("Your local usage will appear here after your first C2 session.");
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("No activity yet")
+    );
+    expect(
+      view.container.querySelectorAll(".profile-activity-cell")
+    ).toHaveLength(90);
+    expect(view.container.textContent?.match(/No activity yet/g)).toHaveLength(
+      1
+    );
+    expect(view.container.textContent).toContain(
+      "Your local usage will appear here after your first C2 session."
+    );
     expect(view.container.textContent).not.toContain("Provider activity");
 
     view.unmount();

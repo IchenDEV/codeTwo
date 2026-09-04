@@ -49,7 +49,8 @@ export function parseChartSpec(source: string): ChartSpec | null {
   const title = text(input.title, 120);
   const xLabel = text(input.xLabel, 80);
   const yLabel = text(input.yLabel, 80);
-  if ((type !== "line" && type !== "bar") || !title || !xLabel || !yLabel) return null;
+  if ((type !== "line" && type !== "bar") || !title || !xLabel || !yLabel)
+    return null;
   if (
     !Array.isArray(input.labels) ||
     input.labels.length === 0 ||
@@ -68,10 +69,16 @@ export function parseChartSpec(source: string): ChartSpec | null {
   }
   const series: ChartSeries[] = [];
   for (const candidate of input.series) {
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate))
+      return null;
     const item = candidate as Record<string, unknown>;
     const name = text(item.name, 80);
-    if (!name || !Array.isArray(item.values) || item.values.length !== labels.length) return null;
+    if (
+      !name ||
+      !Array.isArray(item.values) ||
+      item.values.length !== labels.length
+    )
+      return null;
     const values = item.values.map(Number);
     if (values.some((number) => !Number.isFinite(number))) return null;
     series.push({ name, values });
@@ -90,7 +97,10 @@ function compactLabel(value: string): string {
   return value.length > 13 ? `${value.slice(0, 12)}…` : value;
 }
 
-function paddedDomain(spec: ChartSpec, visible: readonly number[]): [number, number] {
+function paddedDomain(
+  spec: ChartSpec,
+  visible: readonly number[]
+): [number, number] {
   const values = visible.flatMap((index) => spec.series[index]?.values ?? []);
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
@@ -104,7 +114,7 @@ function paddedDomain(spec: ChartSpec, visible: readonly number[]): [number, num
   return [minimum - pad, maximum + pad];
 }
 
-export function ChartBlock({ spec }: { spec: ChartSpec }) {
+export const ChartBlock = ({ spec }: { readonly spec: ChartSpec }) => {
   const t = useT();
   const { locale } = useLanguage();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -114,7 +124,10 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    const measure = () => setWidth(Math.max(320, Math.round(root.getBoundingClientRect().width || 680)));
+    const measure = () =>
+      setWidth(
+        Math.max(320, Math.round(root.getBoundingClientRect().width || 680))
+      );
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
@@ -126,7 +139,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
 
   const visibleIndexes = useMemo(
     () => visible.flatMap((shown, index) => (shown ? [index] : [])),
-    [visible],
+    [visible]
   );
   const effectiveIndexes = visibleIndexes.length > 0 ? visibleIndexes : [0];
   const [domainMin, domainMax] = paddedDomain(spec, effectiveIndexes);
@@ -137,22 +150,29 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
   const plotHeight = height - margin.top - margin.bottom;
   const y = (value: number) =>
     margin.top + ((domainMax - value) / (domainMax - domainMin)) * plotHeight;
-  const x = (index: number) => margin.left + ((index + 0.5) / spec.labels.length) * plotWidth;
+  const x = (index: number) =>
+    margin.left + ((index + 0.5) / spec.labels.length) * plotWidth;
   const tickCount = 5;
   const yTicks = Array.from(
     { length: tickCount },
-    (_, index) => domainMin + ((domainMax - domainMin) * index) / (tickCount - 1),
+    (_, index) =>
+      domainMin + ((domainMax - domainMin) * index) / (tickCount - 1)
   );
   const xStep = Math.max(1, Math.ceil(spec.labels.length / (narrow ? 4 : 8)));
   const xTicks = spec.labels.flatMap((label, index) =>
-    index % xStep === 0 || index === spec.labels.length - 1 ? [{ label, index }] : [],
+    index % xStep === 0 || index === spec.labels.length - 1
+      ? [{ label, index }]
+      : []
   );
   const barBand = (plotWidth / spec.labels.length) * 0.72;
-  const barWidth = Math.max(2, Math.min(34, barBand / Math.max(1, visibleIndexes.length)));
+  const barWidth = Math.max(
+    2,
+    Math.min(34, barBand / Math.max(1, visibleIndexes.length))
+  );
   const zeroY = y(Math.min(domainMax, Math.max(domainMin, 0)));
   const numberFormatter = useMemo(
     () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
-    [locale],
+    [locale]
   );
   const summary = t("chart.summary", {
     title: spec.title,
@@ -163,9 +183,14 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
 
   return (
     <figure ref={rootRef} className="my-4 min-w-0" data-chart-block>
-      <figcaption className="mb-2 font-medium text-foreground">{spec.title}</figcaption>
+      <figcaption className="text-foreground mb-2 font-medium">
+        {spec.title}
+      </figcaption>
       {spec.series.length > 1 ? (
-        <div className="mb-1.5 flex flex-wrap gap-x-3 gap-y-1" aria-label={t("chart.series")}>
+        <div
+          className="mb-1.5 flex flex-wrap gap-x-3 gap-y-1"
+          aria-label={t("chart.series")}
+        >
           {spec.series.map((series, index) => (
             <Button
               key={series.name}
@@ -175,17 +200,22 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
               focusStyle="inset"
               aria-pressed={visible[index]}
               className={cn(
-                "flex items-center gap-1.5 text-callout text-foreground disabled:opacity-50",
-                visible[index] ? "opacity-100" : "opacity-50",
+                "text-callout text-foreground flex items-center gap-1.5 disabled:opacity-50",
+                visible[index] ? "opacity-100" : "opacity-50"
               )}
               onClick={() =>
                 setVisible((current) =>
-                  current.map((value, itemIndex) => (itemIndex === index ? !value : value)),
+                  current.map((value, itemIndex) =>
+                    itemIndex === index ? !value : value
+                  )
                 )
               }
             >
               <span
-                className={cn("size-2 rounded-full bg-current", SERIES_COLOR_CLASSES[index])}
+                className={cn(
+                  "size-2 rounded-full bg-current",
+                  SERIES_COLOR_CLASSES[index]
+                )}
                 aria-hidden="true"
               />
               {series.name}
@@ -266,13 +296,30 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
           ? spec.series.map((series, seriesIndex) => {
               if (!visible[seriesIndex]) return null;
               const path = series.values
-                .map((value, index) => `${index === 0 ? "M" : "L"}${x(index)},${y(value)}`)
+                .map(
+                  (value, index) =>
+                    `${index === 0 ? "M" : "L"}${x(index)},${y(value)}`
+                )
                 .join(" ");
               return (
-                <g key={series.name} className={SERIES_COLOR_CLASSES[seriesIndex]}>
-                  <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
+                <g
+                  key={series.name}
+                  className={SERIES_COLOR_CLASSES[seriesIndex]}
+                >
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
                   {series.values.map((value, index) => (
-                    <circle key={index} cx={x(index)} cy={y(value)} r="3" fill="currentColor">
+                    <circle
+                      key={index}
+                      cx={x(index)}
+                      cy={y(value)}
+                      r="3"
+                      fill="currentColor"
+                    >
                       <title>{`${series.name}, ${spec.labels[index]}: ${numberFormatter.format(value)}`}</title>
                     </circle>
                   ))}
@@ -297,7 +344,13 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
                     const top = Math.min(valueY, zeroY);
                     const barHeight = Math.max(1, Math.abs(zeroY - valueY));
                     return (
-                      <rect key={index} x={left} y={top} width={barWidth - 1} height={barHeight}>
+                      <rect
+                        key={index}
+                        x={left}
+                        y={top}
+                        width={barWidth - 1}
+                        height={barHeight}
+                      >
                         <title>{`${series.name}, ${spec.labels[index]}: ${numberFormatter.format(value)}`}</title>
                       </rect>
                     );

@@ -13,7 +13,9 @@ export const CANVAS_SCHEMA_VERSION = 1 as const;
 export type CanvasTheme = ExcalidrawTheme;
 export type CanvasMode = "edit" | "readonly" | "historical";
 
-/** The only scene element types that C2 allows to cross a persistence boundary. */
+/**
+The only scene element types that C2 allows to cross a persistence boundary.
+*/
 export const ALLOWED_ELEMENT_TYPES = [
   "rectangle",
   "ellipse",
@@ -26,7 +28,9 @@ export const ALLOWED_ELEMENT_TYPES = [
 
 export type AllowedElementType = (typeof ALLOWED_ELEMENT_TYPES)[number];
 
-/** Toolbar tools are deliberately narrower than Excalidraw's complete tool set. */
+/**
+Toolbar tools are deliberately narrower than Excalidraw's complete tool set.
+*/
 export const APPROVED_TOOL_TYPES = [
   "selection",
   "hand",
@@ -43,7 +47,9 @@ export const APPROVED_TOOL_TYPES = [
 export type ApprovedToolType = (typeof APPROVED_TOOL_TYPES)[number];
 
 export interface CanvasAssetRef {
-  /** Opaque app-owned identifier. It must never contain a path, URL, or data URL. */
+  /**
+  Opaque app-owned identifier. It must never contain a path, URL, or data URL.
+  */
   ref: string;
   fileId: string;
   mimeType: "image/png" | "image/webp";
@@ -99,15 +105,21 @@ export interface CanvasCallbacks {
 
 export interface CanvasEditorProps extends CanvasCallbacks {
   className?: string;
-  /** A caller can provide a new envelope after reconnect without local persistence. */
+  /**
+  A caller can provide a new envelope after reconnect without local persistence.
+  */
   value?: CanvasEnvelope | null;
   mode?: CanvasMode;
   theme?: CanvasTheme;
   initiallyExpanded?: boolean;
   autosaveDebounceMs?: number;
   mediaNormalizer?: import("./media").CanvasMediaNormalizer;
-  assetResolver?: (asset: CanvasAssetRef) => Promise<NormalizedStaticAsset | null>;
-  /** Optional caller-rendered PNG/WebP thumbnail shown while the island is collapsed. */
+  assetResolver?: (
+    asset: CanvasAssetRef
+  ) => Promise<NormalizedStaticAsset | null>;
+  /**
+  Optional caller-rendered PNG/WebP thumbnail shown while the island is collapsed.
+  */
   previewImage?: string | null;
   previewAlt?: string;
   name?: string;

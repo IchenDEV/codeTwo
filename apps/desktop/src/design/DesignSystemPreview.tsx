@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   AlertTriangle,
   Check,
@@ -74,7 +80,12 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipButton, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipButton,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ChoiceRow } from "@/components/business/choice-row";
 import { LoadFeedback } from "@/components/business/load-feedback";
 import { QuotaProgress } from "@/components/business/quota-progress";
@@ -132,7 +143,9 @@ const motionRoles = [
 ] as const;
 
 function useSystemDark(): boolean {
-  const [dark, setDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const [dark, setDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");
@@ -144,17 +157,17 @@ function useSystemDark(): boolean {
   return dark;
 }
 
-function ThemeChoice({
+const ThemeChoice = ({
   active,
   children,
   label,
   onClick,
 }: {
-  active: boolean;
-  children: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
+  readonly active: boolean;
+  readonly children: ReactNode;
+  readonly label: string;
+  readonly onClick: () => void;
+}) => {
   return (
     <Button
       aria-label={label}
@@ -171,7 +184,13 @@ function ThemeChoice({
   );
 }
 
-function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
+const SectionHeading = ({
+  eyebrow,
+  title,
+}: {
+  readonly eyebrow: string;
+  readonly title: string;
+}) => {
   return (
     <header className="ds-section-heading">
       <span>{eyebrow}</span>
@@ -180,7 +199,7 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
   );
 }
 
-export function DesignSystemPreview() {
+export const DesignSystemPreview = () => {
   const toast = useToast();
   const systemDark = useSystemDark();
   const appearance = useAppearanceSettings();
@@ -192,7 +211,8 @@ export function DesignSystemPreview() {
   const [memoryCapture, setMemoryCapture] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [invalidValue, setInvalidValue] = useState("Missing token");
-  const resolvedTheme = themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
+  const resolvedTheme =
+    themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -209,7 +229,7 @@ export function DesignSystemPreview() {
           priority: root.style.getPropertyPriority(name),
           value: root.style.getPropertyValue(name),
         },
-      ]),
+      ])
     );
 
     root.setAttribute("data-ds-theme", resolvedTheme);
@@ -219,13 +239,14 @@ export function DesignSystemPreview() {
       root.style.setProperty(
         name,
         previewStyle.style.getPropertyValue(name),
-        previewStyle.style.getPropertyPriority(name),
+        previewStyle.style.getPropertyPriority(name)
       );
     }
 
     return () => {
       for (const [name, previous] of previousAppearance) {
-        if (previous.value) root.style.setProperty(name, previous.value, previous.priority);
+        if (previous.value)
+          root.style.setProperty(name, previous.value, previous.priority);
         else root.style.removeProperty(name);
       }
       root.style.colorScheme = previousColorScheme;
@@ -242,7 +263,7 @@ export function DesignSystemPreview() {
         token,
         style: { "--ds-preview-swatch": `var(${token})` } as CSSProperties,
       })),
-    [],
+    []
   );
 
   return (
@@ -278,10 +299,16 @@ export function DesignSystemPreview() {
         <header className="ds-preview-toolbar">
           <div>
             <strong>Foundation preview</strong>
-            <span className="ds-toolbar-label">Codex desktop density · 4px grid</span>
+            <span className="ds-toolbar-label">
+              Codex desktop density · 4px grid
+            </span>
           </div>
           <div className="ds-toolbar-actions">
-            <div aria-label="Preview theme" className="ds-theme-switcher" role="group">
+            <div
+              aria-label="Preview theme"
+              className="ds-theme-switcher"
+              role="group"
+            >
               <ThemeChoice
                 active={themeMode === "system"}
                 label="Use system theme"
@@ -311,21 +338,41 @@ export function DesignSystemPreview() {
           <section className="ds-intro" id="foundation">
             <div>
               <span className="ds-eyebrow">C2 DESIGN SYSTEM 0.9</span>
-              <h1>Quiet structure.<br />Precise density.</h1>
+              <h1>
+                Quiet structure.
+                <br />
+                Precise density.
+              </h1>
               <p>
-                A calm desktop system with the same readable density as Codex. Quiet neutral
-                planes, fixed blue action, one managed raised material, and platform-native typography.
+                A calm desktop system with the same readable density as Codex.
+                Quiet neutral planes, fixed blue action, one managed raised
+                material, and platform-native typography.
               </p>
             </div>
             <div className="ds-principle-stack" aria-label="Core principles">
-              <div><span>01</span><strong>One density</strong><small>Codex desktop rhythm</small></div>
-              <div><span>02</span><strong>One grid</strong><small>4px with a 2px optical step</small></div>
-              <div><span>03</span><strong>One language</strong><small>Semantic tokens, no visual overrides</small></div>
+              <div>
+                <span>01</span>
+                <strong>One density</strong>
+                <small>Codex desktop rhythm</small>
+              </div>
+              <div>
+                <span>02</span>
+                <strong>One grid</strong>
+                <small>4px with a 2px optical step</small>
+              </div>
+              <div>
+                <span>03</span>
+                <strong>One language</strong>
+                <small>Semantic tokens, no visual overrides</small>
+              </div>
             </div>
           </section>
 
           <section className="ds-preview-section">
-            <SectionHeading eyebrow="01 · Color" title="Five neutral planes, one C2 blue" />
+            <SectionHeading
+              eyebrow="01 · Color"
+              title="Five neutral planes, one C2 blue"
+            />
             <div className="ds-color-grid">
               {swatches.map(({ label, token, style }) => (
                 <div className="ds-swatch-card" key={token}>
@@ -337,30 +384,50 @@ export function DesignSystemPreview() {
             </div>
             <div className="ds-contrast-note">
               <Check className="ds-icon-list" />
-              <span>Text pairs are machine-checked in light and dark at AA or better.</span>
+              <span>
+                Text pairs are machine-checked in light and dark at AA or
+                better.
+              </span>
             </div>
           </section>
 
           <section className="ds-preview-section" id="typography">
-            <SectionHeading eyebrow="02 · Typography" title="Platform system faces, Mac rhythm" />
+            <SectionHeading
+              eyebrow="02 · Typography"
+              title="Platform system faces, Mac rhythm"
+            />
             <Card className="ds-type-specimen">
               {typeRoles.map(([role, metric, className]) => (
                 <div className="ds-type-row" key={role}>
-                  <span className="ds-type-meta"><strong>{role}</strong><code>{metric}</code></span>
-                  <span className={className}>C2 stays calm, readable, and coherent.</span>
+                  <span className="ds-type-meta">
+                    <strong>{role}</strong>
+                    <code>{metric}</code>
+                  </span>
+                  <span className={className}>
+                    C2 stays calm, readable, and coherent.
+                  </span>
                 </div>
               ))}
             </Card>
             <div className="ds-inline-facts">
-              <span><strong>macOS</strong> SF Pro · SF Mono</span>
-              <span><strong>Windows</strong> Segoe UI · Cascadia / Consolas</span>
-              <span><strong>Content</strong> 14 / 23 · code 12 / 18</span>
+              <span>
+                <strong>macOS</strong> SF Pro · SF Mono
+              </span>
+              <span>
+                <strong>Windows</strong> Segoe UI · Cascadia / Consolas
+              </span>
+              <span>
+                <strong>Content</strong> 14 / 23 · code 12 / 18
+              </span>
             </div>
           </section>
 
           <section className="ds-preview-section ds-two-column">
             <div>
-              <SectionHeading eyebrow="03 · Spacing" title="A finite 2–32 scale" />
+              <SectionHeading
+                eyebrow="03 · Spacing"
+                title="A finite 2–32 scale"
+              />
               <Card className="ds-spacing-list">
                 {spacingRoles.map(([role, value]) => (
                   <div className="ds-spacing-row" key={role}>
@@ -372,12 +439,27 @@ export function DesignSystemPreview() {
               </Card>
             </div>
             <div>
-              <SectionHeading eyebrow="04 · Geometry" title="12px floor, 16px modules" />
+              <SectionHeading
+                eyebrow="04 · Geometry"
+                title="12px floor, 16px modules"
+              />
               <Card className="ds-geometry-grid">
-                <div className="ds-radius-sample ds-radius-micro"><span>12</span><small>micro</small></div>
-                <div className="ds-radius-sample ds-radius-control"><span>12</span><small>control</small></div>
-                <div className="ds-radius-sample ds-radius-module"><span>16</span><small>module</small></div>
-                <div className="ds-radius-sample ds-radius-modal"><span>16</span><small>modal</small></div>
+                <div className="ds-radius-sample ds-radius-micro">
+                  <span>12</span>
+                  <small>micro</small>
+                </div>
+                <div className="ds-radius-sample ds-radius-control">
+                  <span>12</span>
+                  <small>control</small>
+                </div>
+                <div className="ds-radius-sample ds-radius-module">
+                  <span>16</span>
+                  <small>module</small>
+                </div>
+                <div className="ds-radius-sample ds-radius-modal">
+                  <span>16</span>
+                  <small>modal</small>
+                </div>
                 <div className="ds-icon-scale">
                   <Search className="ds-icon-inline" />
                   <Search className="ds-icon-list" />
@@ -389,27 +471,56 @@ export function DesignSystemPreview() {
           </section>
 
           <section className="ds-preview-section" id="surfaces">
-            <SectionHeading eyebrow="05 · Elevation" title="Transient layers use one material" />
+            <SectionHeading
+              eyebrow="05 · Elevation"
+              title="Transient layers use one material"
+            />
             <div className="ds-elevation-grid">
-              <div className="ds-elevation-sample ds-elevation-surface"><strong>Surface</strong><span>flat · cards · inputs · panels</span></div>
-              <div className="ds-elevation-sample ds-elevation-raised raised-material"><strong>Raised</strong><span>frosted · menus · popovers · selects</span></div>
-              <div className="ds-elevation-sample ds-elevation-modal"><strong>Modal</strong><span>restrained · dialogs · blocking overlays</span></div>
+              <div className="ds-elevation-sample ds-elevation-surface">
+                <strong>Surface</strong>
+                <span>flat · cards · inputs · panels</span>
+              </div>
+              <div className="ds-elevation-sample ds-elevation-raised raised-material">
+                <strong>Raised</strong>
+                <span>frosted · menus · popovers · selects</span>
+              </div>
+              <div className="ds-elevation-sample ds-elevation-modal">
+                <strong>Modal</strong>
+                <span>restrained · dialogs · blocking overlays</span>
+              </div>
             </div>
-            <p className="ds-rule-note">Persistent planes stay flat. Menu-like layers share one subtle translucent material.</p>
+            <p className="ds-rule-note">
+              Persistent planes stay flat. Menu-like layers share one subtle
+              translucent material.
+            </p>
           </section>
 
           <section className="ds-preview-section" id="components">
-            <SectionHeading eyebrow="06 · Components" title="Shared controls carry every state" />
+            <SectionHeading
+              eyebrow="06 · Components"
+              title="Shared controls carry every state"
+            />
             <div className="ds-component-grid">
               <Card className="ds-control-specimen">
                 <span className="ds-specimen-label">Buttons</span>
                 <div className="ds-control-row">
                   <Button type="button">Continue</Button>
-                  <Button variant="secondary" type="button">Save draft</Button>
-                  <Button variant="ghost" type="button">Cancel</Button>
-                  <Button variant="destructive" type="button">Delete</Button>
-                  <Button variant="secondary" disabled type="button">Disabled</Button>
-                  <Button disabled><Spinner data-icon="inline-start" />Saving</Button>
+                  <Button variant="secondary" type="button">
+                    Save draft
+                  </Button>
+                  <Button variant="ghost" type="button">
+                    Cancel
+                  </Button>
+                  <Button variant="destructive" type="button">
+                    Delete
+                  </Button>
+                  <Button variant="secondary" disabled type="button">
+                    Disabled
+                  </Button>
+                  <Button disabled>
+                    <Spinner data-icon="inline-start" />
+                    Saving
+                  </Button>
                   <TooltipButton label="Refresh" variant="ghost" size="icon-sm">
                     <RefreshCw />
                   </TooltipButton>
@@ -423,7 +534,11 @@ export function DesignSystemPreview() {
                   <FieldLabel htmlFor="preview-project">Project</FieldLabel>
                   <Input id="preview-project" defaultValue="C2" />
                 </Field>
-                <Input aria-label="Compact filter example" defaultValue="Filter providers" size="compact" />
+                <Input
+                  aria-label="Compact filter example"
+                  defaultValue="Filter providers"
+                  size="compact"
+                />
                 <Field data-invalid>
                   <FieldLabel htmlFor="preview-invalid-token">Token</FieldLabel>
                   <Input
@@ -433,7 +548,9 @@ export function DesignSystemPreview() {
                     onChange={(event) => setInvalidValue(event.target.value)}
                     value={invalidValue}
                   />
-                  <FieldError id="preview-error">Use a semantic token.</FieldError>
+                  <FieldError id="preview-error">
+                    Use a semantic token.
+                  </FieldError>
                 </Field>
                 <Textarea
                   aria-label="Compact multiline example"
@@ -449,7 +566,10 @@ export function DesignSystemPreview() {
                   value={selectedProvider}
                   onValueChange={(value) => value && setSelectedProvider(value)}
                 >
-                  <SelectTrigger aria-label="Current provider" className="w-full">
+                  <SelectTrigger
+                    aria-label="Current provider"
+                    className="w-full"
+                  >
                     <SelectValue>
                       {selectedProvider === "claude" ? "Claude Code" : "Codex"}
                     </SelectValue>
@@ -463,7 +583,9 @@ export function DesignSystemPreview() {
                 </Select>
                 <Field orientation="horizontal">
                   <Checkbox defaultChecked id="preview-keep-panel" />
-                  <FieldLabel htmlFor="preview-keep-panel">Keep the panel visible</FieldLabel>
+                  <FieldLabel htmlFor="preview-keep-panel">
+                    Keep the panel visible
+                  </FieldLabel>
                 </Field>
                 <RadioGroup
                   aria-label="Run mode"
@@ -486,11 +608,41 @@ export function DesignSystemPreview() {
                     selected={selectedChoice === "manual"}
                   />
                 </RadioGroup>
-                <div className="ds-status-row"><ActivityOrb state="searching" visualSize={14} aria-hidden="true" /> Refreshing provider quota</div>
-                <div className="ds-status-row"><ActivityOrb state="working" visualSize={14} aria-hidden="true" /> Agent working</div>
-                <div className="ds-status-row"><ActivityOrb state="listening" visualSize={14} aria-hidden="true" /> Listening to voice input</div>
-                <div className="ds-status-row"><ActivityOrb state="shaping" visualSize={14} aria-hidden="true" /> Structuring transcript</div>
-                <div className="ds-status-row ds-status-warning"><AlertTriangle className="ds-icon-list" /> Quota unavailable</div>
+                <div className="ds-status-row">
+                  <ActivityOrb
+                    state="searching"
+                    visualSize={14}
+                    aria-hidden="true"
+                  />{" "}
+                  Refreshing provider quota
+                </div>
+                <div className="ds-status-row">
+                  <ActivityOrb
+                    state="working"
+                    visualSize={14}
+                    aria-hidden="true"
+                  />{" "}
+                  Agent working
+                </div>
+                <div className="ds-status-row">
+                  <ActivityOrb
+                    state="listening"
+                    visualSize={14}
+                    aria-hidden="true"
+                  />{" "}
+                  Listening to voice input
+                </div>
+                <div className="ds-status-row">
+                  <ActivityOrb
+                    state="shaping"
+                    visualSize={14}
+                    aria-hidden="true"
+                  />{" "}
+                  Structuring transcript
+                </div>
+                <div className="ds-status-row ds-status-warning">
+                  <AlertTriangle className="ds-icon-list" /> Quota unavailable
+                </div>
               </Card>
 
               <Card className="ds-control-specimen">
@@ -501,11 +653,16 @@ export function DesignSystemPreview() {
                   options={[
                     { value: "all", label: "All", count: 4 },
                     { value: "ready", label: "Ready", count: 2 },
-                    { value: "blocked", label: "Blocked", count: 1, disabled: true },
+                    {
+                      value: "blocked",
+                      label: "Blocked",
+                      count: 1,
+                      disabled: true,
+                    },
                   ]}
                   onValueChange={setSelectedBusinessView}
                 />
-                <div className="flex items-center gap-2 text-metadata text-content-muted">
+                <div className="text-metadata text-content-muted flex items-center gap-2">
                   <span>Active providers</span>
                   <Separator className="flex-1" />
                   <span>2</span>
@@ -548,13 +705,26 @@ export function DesignSystemPreview() {
                 </div>
                 <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
                   <span className="text-metadata text-content-muted">72%</span>
-                  <QuotaProgress label="Healthy quota remaining" remainingPercent={72} />
+                  <QuotaProgress
+                    label="Healthy quota remaining"
+                    remainingPercent={72}
+                  />
                   <span className="text-metadata text-content-muted">18%</span>
-                  <QuotaProgress label="Low quota remaining" remainingPercent={18} />
+                  <QuotaProgress
+                    label="Low quota remaining"
+                    remainingPercent={18}
+                  />
                   <span className="text-metadata text-content-muted">4%</span>
-                  <QuotaProgress label="Critical quota remaining" remainingPercent={4} />
+                  <QuotaProgress
+                    label="Critical quota remaining"
+                    remainingPercent={4}
+                  />
                   <span className="text-metadata text-content-muted">Rail</span>
-                  <QuotaProgress label="Rail quota remaining" remainingPercent={72} density="rail" />
+                  <QuotaProgress
+                    label="Rail quota remaining"
+                    remainingPercent={72}
+                    density="rail"
+                  />
                 </div>
                 <SettingRow
                   label="Project model"
@@ -593,33 +763,49 @@ export function DesignSystemPreview() {
                     <TabsTrigger value="quota">Quota</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                   </TabsList>
-                  <TabsContent className="text-metadata text-content-muted" value="quota">
+                  <TabsContent
+                    className="text-metadata text-content-muted"
+                    value="quota"
+                  >
                     72% remaining · resets in 1h 42m
                   </TabsContent>
-                  <TabsContent className="text-metadata text-content-muted" value="history">
+                  <TabsContent
+                    className="text-metadata text-content-muted"
+                    value="history"
+                  >
                     Seven-day provider usage
                   </TabsContent>
                 </Tabs>
                 <div className="flex flex-wrap gap-2">
                   <Popover>
-                    <PopoverTrigger render={<Button variant="secondary" type="button" />}>
+                    <PopoverTrigger
+                      render={<Button variant="secondary" type="button" />}
+                    >
                       Provider summary
                     </PopoverTrigger>
                     <PopoverContent align="start">
                       <PopoverHeader>
                         <PopoverTitle>Codex</PopoverTitle>
-                        <PopoverDescription>Ready for project tasks.</PopoverDescription>
+                        <PopoverDescription>
+                          Ready for project tasks.
+                        </PopoverDescription>
                       </PopoverHeader>
                     </PopoverContent>
                   </Popover>
                   <Tooltip>
-                    <TooltipTrigger render={<Button variant="ghost" type="button" />}>
+                    <TooltipTrigger
+                      render={<Button variant="ghost" type="button" />}
+                    >
                       Usage reset
                     </TooltipTrigger>
-                    <TooltipContent>Available after the current limit resets</TooltipContent>
+                    <TooltipContent>
+                      Available after the current limit resets
+                    </TooltipContent>
                   </Tooltip>
                   <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button variant="secondary" type="button" />}>
+                    <DropdownMenuTrigger
+                      render={<Button variant="secondary" type="button" />}
+                    >
                       Project actions
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
@@ -627,24 +813,37 @@ export function DesignSystemPreview() {
                         <DropdownMenuItem>
                           <DropdownMenuItemText>
                             New task
-                            <DropdownMenuItemDescription>Start in the current project</DropdownMenuItemDescription>
+                            <DropdownMenuItemDescription>
+                              Start in the current project
+                            </DropdownMenuItemDescription>
                           </DropdownMenuItemText>
                           <DropdownMenuShortcut>⌘N</DropdownMenuShortcut>
                         </DropdownMenuItem>
                         <DropdownMenuItem>Rename project</DropdownMenuItem>
-                        <DropdownMenuItem variant="destructive">Remove project</DropdownMenuItem>
+                        <DropdownMenuItem variant="destructive">
+                          Remove project
+                        </DropdownMenuItem>
                       </DropdownMenuGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <ContextMenu>
-                    <ContextMenuTrigger render={<Button variant="secondary" type="button" />}>
+                    <ContextMenuTrigger
+                      render={<Button variant="secondary" type="button" />}
+                    >
                       Context actions
                     </ContextMenuTrigger>
                     <ContextMenuContent>
                       <ContextMenuGroup>
-                        <ContextMenuItem>Open in new task<ContextMenuShortcut>↵</ContextMenuShortcut></ContextMenuItem>
-                        <ContextMenuItem>Copy path<ContextMenuShortcut>⌘C</ContextMenuShortcut></ContextMenuItem>
-                        <ContextMenuItem variant="destructive">Remove</ContextMenuItem>
+                        <ContextMenuItem>
+                          Open in new task
+                          <ContextMenuShortcut>↵</ContextMenuShortcut>
+                        </ContextMenuItem>
+                        <ContextMenuItem>
+                          Copy path<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+                        </ContextMenuItem>
+                        <ContextMenuItem variant="destructive">
+                          Remove
+                        </ContextMenuItem>
                       </ContextMenuGroup>
                     </ContextMenuContent>
                   </ContextMenu>
@@ -662,21 +861,30 @@ export function DesignSystemPreview() {
                   >
                     Use dark theme
                   </Button>
-                  <Button onClick={() => setDialogOpen(true)} type="button">Open quota details</Button>
+                  <Button onClick={() => setDialogOpen(true)} type="button">
+                    Open quota details
+                  </Button>
                   <AlertDialog>
-                    <AlertDialogTrigger render={<Button variant="destructive" type="button" />}>
+                    <AlertDialogTrigger
+                      render={<Button variant="destructive" type="button" />}
+                    >
                       Remove project
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Remove this project?</AlertDialogTitle>
+                        <AlertDialogTitle>
+                          Remove this project?
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                          The project is removed from C2. Files on disk are not deleted.
+                          The project is removed from C2. Files on disk are not
+                          deleted.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction variant="destructive">Remove project</AlertDialogAction>
+                        <AlertDialogAction variant="destructive">
+                          Remove project
+                        </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
@@ -684,19 +892,34 @@ export function DesignSystemPreview() {
                 <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle className="flex items-center gap-module-inset">
+                      <DialogTitle className="gap-module-inset flex items-center">
                         <CircleHelp /> Provider quota
                       </DialogTitle>
-                      <DialogDescription>Current provider: Codex</DialogDescription>
+                      <DialogDescription>
+                        Current provider: Codex
+                      </DialogDescription>
                     </DialogHeader>
-                    <div className="flex flex-col gap-module-inset">
-                      <QuotaProgress label="Provider quota remaining" remainingPercent={72} />
+                    <div className="gap-module-inset flex flex-col">
+                      <QuotaProgress
+                        label="Provider quota remaining"
+                        remainingPercent={72}
+                      />
                       <strong className="text-body">5-hour limit</strong>
-                      <span className="text-metadata text-content-muted">72% remaining · resets in 1h 42m</span>
+                      <span className="text-metadata text-content-muted">
+                        72% remaining · resets in 1h 42m
+                      </span>
                     </div>
                     <DialogFooter>
-                      <Button variant="ghost" type="button">Refresh</Button>
-                      <Button onClick={() => setDialogOpen(false)} variant="secondary" type="button">Done</Button>
+                      <Button variant="ghost" type="button">
+                        Refresh
+                      </Button>
+                      <Button
+                        onClick={() => setDialogOpen(false)}
+                        variant="secondary"
+                        type="button"
+                      >
+                        Done
+                      </Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -706,29 +929,61 @@ export function DesignSystemPreview() {
 
           <section className="ds-preview-section ds-two-column">
             <div>
-              <SectionHeading eyebrow="07 · Motion" title="Four durations, no theatre" />
+              <SectionHeading
+                eyebrow="07 · Motion"
+                title="Four durations, no theatre"
+              />
               <Card className="ds-motion-list">
                 {motionRoles.map(([role, duration, use]) => (
                   <div className="ds-motion-row" key={role}>
-                    <span className={`ds-motion-dot ds-motion-${role.toLowerCase()}`} />
-                    <strong>{role}</strong><code>{duration}</code><span>{use}</span>
+                    <span
+                      className={`ds-motion-dot ds-motion-${role.toLowerCase()}`}
+                    />
+                    <strong>{role}</strong>
+                    <code>{duration}</code>
+                    <span>{use}</span>
                   </div>
                 ))}
               </Card>
             </div>
             <div id="accessibility">
-              <SectionHeading eyebrow="08 · Accessibility" title="OS preferences stay in control" />
+              <SectionHeading
+                eyebrow="08 · Accessibility"
+                title="OS preferences stay in control"
+              />
               <Card className="ds-access-list">
-                <div><Check className="ds-icon-list" /><span><strong>Reduced motion</strong><small>All four semantic durations collapse.</small></span></div>
-                <div><Check className="ds-icon-list" /><span><strong>Increased contrast</strong><small>Muted text and control fills strengthen.</small></span></div>
-                <div><Check className="ds-icon-list" /><span><strong>Reduced transparency</strong><small>Sidebar and raised material fall back to solid planes.</small></span></div>
+                <div>
+                  <Check className="ds-icon-list" />
+                  <span>
+                    <strong>Reduced motion</strong>
+                    <small>All four semantic durations collapse.</small>
+                  </span>
+                </div>
+                <div>
+                  <Check className="ds-icon-list" />
+                  <span>
+                    <strong>Increased contrast</strong>
+                    <small>Muted text and control fills strengthen.</small>
+                  </span>
+                </div>
+                <div>
+                  <Check className="ds-icon-list" />
+                  <span>
+                    <strong>Reduced transparency</strong>
+                    <small>
+                      Sidebar and raised material fall back to solid planes.
+                    </small>
+                  </span>
+                </div>
                 <Field orientation="horizontal">
                   <Checkbox
                     checked={boldText}
                     id="preview-bold-text"
                     onCheckedChange={(checked) => setBoldText(checked === true)}
                   />
-                  <FieldLabel htmlFor="preview-bold-text">Simulate bold text</FieldLabel>
+                  <FieldLabel htmlFor="preview-bold-text">
+                    Simulate bold text
+                  </FieldLabel>
                 </Field>
               </Card>
             </div>

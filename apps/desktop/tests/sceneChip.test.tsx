@@ -1,11 +1,21 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
-const { SceneChip, ScenePicker, SourceBadge } = await import("../src/session/SceneChip");
-const { ProviderPicker, SessionControls } = await import("../src/session/Composer");
+const { SceneChip, ScenePicker, SourceBadge } =
+  await import("../src/session/SceneChip");
+const { ProviderPicker, SessionControls } =
+  await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -72,7 +82,7 @@ function renderChip(cfg) {
   return mount(
     <I18nProvider>
       <SceneChip config={cfg} />
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
 
@@ -87,26 +97,34 @@ describe("ProviderPicker", () => {
             providers: [],
             providersStatus: "error",
             provider: "grok",
-            onReloadProviders: () => { retries += 1; },
+            onReloadProviders: () => {
+              retries += 1;
+            },
           })}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     const trigger = rendered.container.querySelector("button");
 
     await reactAct(async () => {
-      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        pointerId: 1,
-      }));
-      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      trigger?.dispatchEvent(
+        new dom.window.PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          pointerId: 1,
+        })
+      );
+      trigger?.dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+      );
     });
     await flush();
 
     try {
-      const popup = dom.document.body.querySelector('[data-slot="popover-content"]');
+      const popup = dom.document.body.querySelector(
+        '[data-slot="popover-content"]'
+      );
       expect(trigger?.textContent?.trim()).toBe("Grok");
       expect(popup?.textContent).toContain("Grok");
       expect(popup?.textContent).toContain("Codex");
@@ -131,7 +149,9 @@ describe("SceneChip", () => {
   test("keeps the scene popover focused on scene selection", async () => {
     activateDom();
     const rendered = renderChip(config());
-    const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
+    const trigger = rendered.container.querySelector(
+      '[aria-label="Scene: Develop"]'
+    );
     expect(trigger).toBeTruthy();
 
     await reactAct(async () => {
@@ -141,9 +161,11 @@ describe("SceneChip", () => {
           cancelable: true,
           button: 0,
           pointerId: 1,
-        }),
+        })
       );
-      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      trigger?.dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+      );
     });
     await flush();
 
@@ -154,17 +176,23 @@ describe("SceneChip", () => {
     expect(content).not.toContain("Memory on");
     expect(content).not.toContain("No worktree");
     expect(content).not.toContain("🛠️");
-    expect(dom.document.body.querySelector('[data-slot="popover-content"]')?.className).toContain(
-      "w-96",
-    );
-    expect(dom.document.body.querySelector('[data-slot="popover-content"]')?.className).toContain(
-      "max-h-(--available-height)",
-    );
+    expect(
+      dom.document.body.querySelector('[data-slot="popover-content"]')
+        ?.className
+    ).toContain("w-96");
+    expect(
+      dom.document.body.querySelector('[data-slot="popover-content"]')
+        ?.className
+    ).toContain("max-h-(--available-height)");
     const detail = Array.from(dom.document.body.querySelectorAll("span")).find(
-      (node) => node.textContent === "Plan-first implementation",
+      (node) => node.textContent === "Plan-first implementation"
     );
     expect(detail?.classList.contains("whitespace-normal")).toBe(true);
-    expect(dom.document.body.querySelector('[data-slot="selectable-row"][data-selected="true"]')).not.toBeNull();
+    expect(
+      dom.document.body.querySelector(
+        '[data-slot="selectable-row"][data-selected="true"]'
+      )
+    ).not.toBeNull();
     rendered.unmount();
   });
 
@@ -178,27 +206,31 @@ describe("SceneChip", () => {
           currentModel="grok-4.6"
           defaultModel="grok-4.6"
           onModel={() => {}}
-          configOptions={[{
-            id: "reasoning_effort",
-            name: "Reasoning Effort",
-            category: "thought_level",
-            current: "xhigh",
-            choices: [
-              { id: "low", name: "Low Effort", description: null },
-              { id: "medium", name: "Medium Effort", description: null },
-              { id: "high", name: "High Effort", description: null },
-              { id: "xhigh", name: "Extra High Effort", description: null },
-            ],
-          }]}
+          configOptions={[
+            {
+              id: "reasoning_effort",
+              name: "Reasoning Effort",
+              category: "thought_level",
+              current: "xhigh",
+              choices: [
+                { id: "low", name: "Low Effort", description: null },
+                { id: "medium", name: "Medium Effort", description: null },
+                { id: "high", name: "High Effort", description: null },
+                { id: "xhigh", name: "Extra High Effort", description: null },
+              ],
+            },
+          ]}
           onConfigOption={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     const row = rendered.container.querySelector("[data-session-controls]");
     expect(row?.textContent).toContain("Develop");
     expect(row?.textContent).toContain("Grok 4.6");
     expect(row?.querySelector('button[title="Model"]')).toBeTruthy();
-    expect(row?.querySelector('button[title="Reasoning"]')?.textContent).toContain("Extra High Effort");
+    expect(
+      row?.querySelector('button[title="Reasoning"]')?.textContent
+    ).toContain("Extra High Effort");
     expect(row?.querySelector('input[type="range"]')).toBeNull();
     expect(row?.textContent).not.toContain("Ask first");
     expect(row?.textContent).not.toContain("Memory on");
@@ -210,7 +242,9 @@ describe("SceneChip", () => {
     expect(row?.textContent).toContain("Ask first");
     expect(row?.textContent).toContain("Memory on");
     expect(row?.textContent).toContain("No worktree");
-    expect(button(row, "Hide session settings").getAttribute("aria-expanded")).toBe("true");
+    expect(
+      button(row, "Hide session settings").getAttribute("aria-expanded")
+    ).toBe("true");
     rendered.unmount();
   });
 
@@ -228,7 +262,7 @@ describe("SceneChip", () => {
           onConfigOption={() => {}}
           showWorktreePicker={false}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     click(button(rendered.container, "Show session settings"));
@@ -249,23 +283,43 @@ describe("SceneChip", () => {
   test("keeps Auto visible with the agent-selected scene and enables it from the menu", async () => {
     activateDom();
     const changes = [];
-    const rendered = renderChip(config({ autoScene: true, onAutoScene: (enabled) => changes.push(enabled) }));
-    const trigger = rendered.container.querySelector('[aria-label="Scene: Auto · Develop"]');
+    const rendered = renderChip(
+      config({
+        autoScene: true,
+        onAutoScene: (enabled) => changes.push(enabled),
+      })
+    );
+    const trigger = rendered.container.querySelector(
+      '[aria-label="Scene: Auto · Develop"]'
+    );
     expect(trigger).toBeTruthy();
 
     await reactAct(async () => {
-      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 1 }));
-      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      trigger?.dispatchEvent(
+        new dom.window.PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          pointerId: 1,
+        })
+      );
+      trigger?.dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+      );
     });
     await flush();
 
-    expect(dom.document.body.textContent).toContain("Agent chooses and switches scenes as the task changes");
+    expect(dom.document.body.textContent).toContain(
+      "Agent chooses and switches scenes as the task changes"
+    );
     const autoOption = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="popover-content"] button'),
+      dom.document.body.querySelectorAll('[data-slot="popover-content"] button')
     ).find((candidate) => candidate.textContent?.includes("Auto scene"));
     expect(autoOption).toBeTruthy();
     await reactAct(async () => {
-      autoOption?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      autoOption?.dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+      );
     });
     await flush();
     expect(changes).toEqual([true]);
@@ -275,32 +329,70 @@ describe("SceneChip", () => {
   test("marks a customized scene", async () => {
     activateDom();
     const rendered = renderChip(config({ sceneCustomized: true }));
-    expect(rendered.container.querySelector('[aria-label="Customized"]')).toBeTruthy();
+    expect(
+      rendered.container.querySelector('[aria-label="Customized"]')
+    ).toBeTruthy();
 
-    const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
+    const trigger = rendered.container.querySelector(
+      '[aria-label="Scene: Develop"]'
+    );
     await reactAct(async () => {
-      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 1 }));
-      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      trigger?.dispatchEvent(
+        new dom.window.PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          pointerId: 1,
+        })
+      );
+      trigger?.dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+      );
     });
     await flush();
-    expect(dom.document.body.querySelector('[data-slot="status-badge"]')?.getAttribute("data-tone")).toBe("warning");
+    expect(
+      dom.document.body
+        .querySelector('[data-slot="status-badge"]')
+        ?.getAttribute("data-tone")
+    ).toBe("warning");
     rendered.unmount();
   });
 
   test("marks a partial soft-apply", () => {
     activateDom();
-    const rendered = renderChip(config({ scenePendingFields: ["model", "worktree"] }));
-    expect(rendered.container.querySelector('[aria-label="Partially applied"]')).toBeTruthy();
+    const rendered = renderChip(
+      config({ scenePendingFields: ["model", "worktree"] })
+    );
+    expect(
+      rendered.container.querySelector('[aria-label="Partially applied"]')
+    ).toBeTruthy();
   });
 
   test("opens the complete scene manager from the scene chip", async () => {
     activateDom();
     let opened = false;
-    const rendered = renderChip(config({ onManageScenes: () => { opened = true; } }));
-    const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
+    const rendered = renderChip(
+      config({
+        onManageScenes: () => {
+          opened = true;
+        },
+      })
+    );
+    const trigger = rendered.container.querySelector(
+      '[aria-label="Scene: Develop"]'
+    );
     await reactAct(async () => {
-      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 1 }));
-      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      trigger?.dispatchEvent(
+        new dom.window.PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          pointerId: 1,
+        })
+      );
+      trigger?.dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+      );
     });
     await flush();
     button(dom.document.body, "Manage scenes").click();
@@ -321,7 +413,7 @@ describe("SceneChip", () => {
           configOptions={[]}
           onConfigOption={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     expect(rendered.container.textContent).not.toContain("Develop");
@@ -352,7 +444,7 @@ describe("SceneChip", () => {
           configOptions={[]}
           onConfigOption={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     expect(rendered.container.textContent).not.toContain("Memory on");
@@ -366,7 +458,7 @@ describe("SourceBadge", () => {
     const rendered = mount(
       <I18nProvider>
         <SourceBadge source="project" />
-      </I18nProvider>,
+      </I18nProvider>
     );
     expect(rendered.container.textContent).toBe("Project");
   });
@@ -377,7 +469,12 @@ describe("ScenePicker management", () => {
     activateDom();
     const calls = [];
     const builtin = sceneInfo();
-    const user = sceneInfo({ reference: "user:review", name: "review", title: "Review", source: "user" });
+    const user = sceneInfo({
+      reference: "user:review",
+      name: "review",
+      title: "Review",
+      source: "user",
+    });
     const rendered = mount(
       <I18nProvider>
         <ScenePicker
@@ -391,14 +488,18 @@ describe("ScenePicker management", () => {
           onDuplicate={(scene) => calls.push(`duplicate:${scene.reference}`)}
           onClose={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     await flush();
 
     button(dom.document.body, "New scene").click();
     button(dom.document.body, "Duplicate: Develop").click();
     button(dom.document.body, "Edit: Review").click();
-    expect(calls).toEqual(["create", "duplicate:builtin:develop", "edit:user:review"]);
+    expect(calls).toEqual([
+      "create",
+      "duplicate:builtin:develop",
+      "edit:user:review",
+    ]);
     expect(() => button(dom.document.body, "Edit: Develop")).toThrow();
     rendered.unmount();
   });

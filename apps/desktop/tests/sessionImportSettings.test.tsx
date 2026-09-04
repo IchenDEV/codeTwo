@@ -1,7 +1,14 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, button, dom, mount, restoreDom, waitFor } from "./domTestHarness";
+import {
+  activateDom,
+  button,
+  dom,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { SettingsPage } = await import("../src/settings/SettingsPage");
@@ -39,13 +46,15 @@ describe("Settings session import", () => {
               skipped: 1,
               failed: 0,
               messages: 8,
-              sessions: [{
-                id: "import-codex-demo",
-                title: "Imported conversation",
-                source: "Codex",
-                messages: 8,
-                imported: true,
-              }],
+              sessions: [
+                {
+                  id: "import-codex-demo",
+                  title: "Imported conversation",
+                  source: "Codex",
+                  messages: 8,
+                  imported: true,
+                },
+              ],
               errors: [],
             };
           }}
@@ -56,17 +65,27 @@ describe("Settings session import", () => {
             opened = id;
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    expect(rendered.container.textContent).toContain("Cursor, and T3 Code conversations");
-    await reactAct(async () => button(rendered.container, "Choose files").click());
-    await waitFor(() => expect(rendered.container.textContent).toContain("1 imported"));
+    expect(rendered.container.textContent).toContain(
+      "Cursor, and T3 Code conversations"
+    );
+    await reactAct(async () =>
+      button(rendered.container, "Choose files").click()
+    );
+    await waitFor(() =>
+      expect(rendered.container.textContent).toContain("1 imported")
+    );
 
     expect(fallbackCwd).toBe("/workspace");
     expect(refreshes).toBe(1);
-    expect(rendered.container.textContent).toContain("8 visible messages added");
-    await reactAct(async () => button(rendered.container, "Open session").click());
+    expect(rendered.container.textContent).toContain(
+      "8 visible messages added"
+    );
+    await reactAct(async () =>
+      button(rendered.container, "Open session").click()
+    );
     expect(opened).toBe("import-codex-demo");
     rendered.unmount();
   });

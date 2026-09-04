@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Check, RefreshCw } from "@/components/ui/icons";
 
-import { setAppearanceSettings, useAppearanceSettings, type PetSize } from "../appearance";
+import {
+  setAppearanceSettings,
+  useAppearanceSettings,
+  type PetSize,
+} from "../appearance";
 import { CodeTwoPetSprite } from "../pet/CodeTwoPet";
 import type { CodeTwoPetAnimation } from "../pet/state";
 import {
@@ -14,14 +18,27 @@ import { SettingRow } from "@/components/business/setting-row";
 import { SettingsSection } from "@/components/business/settings-section";
 import { SettingToggle } from "@/components/business/setting-toggle";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n";
 import type { StringKey } from "@/i18n/strings";
 
 import "./pet-settings.css";
 
-const MOODS: CodeTwoPetAnimation[] = ["idle", "running", "waiting", "review", "failed"];
+const MOODS: CodeTwoPetAnimation[] = [
+  "idle",
+  "running",
+  "waiting",
+  "review",
+  "failed",
+];
 const PREVIEW_SIZE = 46;
 
 const SIZES: { size: PetSize; labelKey: StringKey }[] = [
@@ -30,18 +47,22 @@ const SIZES: { size: PetSize; labelKey: StringKey }[] = [
   { size: "large", labelKey: "settings.petSizeLarge" },
 ];
 
-export function PetSettings({
+export const PetSettings = ({
   loadCatalog = fetchPetShareCatalog,
 }: {
-  loadCatalog?: () => Promise<PetCatalogItem[]>;
-} = {}) {
+  readonly loadCatalog?: () => Promise<PetCatalogItem[]>;
+} = {}) => {
   const t = useT();
   const settings = useAppearanceSettings();
-  const [previewAnimation, setPreviewAnimation] = useState<CodeTwoPetAnimation>("idle");
+  const [previewAnimation, setPreviewAnimation] =
+    useState<CodeTwoPetAnimation>("idle");
   const [catalog, setCatalog] = useState<PetCatalogItem[]>([]);
-  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
+  const [catalogState, setCatalogState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [catalogAttempt, setCatalogAttempt] = useState(0);
-  const selectedSize = SIZES.find(({ size }) => size === settings.petSize) ?? SIZES[1];
+  const selectedSize =
+    SIZES.find(({ size }) => size === settings.petSize) ?? SIZES[1];
 
   useEffect(() => {
     let active = true;
@@ -55,7 +76,7 @@ export function PetSettings({
       () => {
         if (!active) return;
         setCatalogState("error");
-      },
+      }
     );
     return () => {
       active = false;
@@ -64,7 +85,10 @@ export function PetSettings({
 
   const pets = useMemo(() => {
     const items = [BUILTIN_PET, ...catalog];
-    if (settings.petSource === "petshare" && !items.some((item) => item.id === settings.petId)) {
+    if (
+      settings.petSource === "petshare" &&
+      !items.some((item) => item.id === settings.petId)
+    ) {
       items.push({
         id: settings.petId,
         displayName: settings.petName,
@@ -75,8 +99,10 @@ export function PetSettings({
       });
     }
     return items.sort((left, right) => {
-      const leftSelected = left.source === settings.petSource && left.id === settings.petId;
-      const rightSelected = right.source === settings.petSource && right.id === settings.petId;
+      const leftSelected =
+        left.source === settings.petSource && left.id === settings.petId;
+      const rightSelected =
+        right.source === settings.petSource && right.id === settings.petId;
       return Number(rightSelected) - Number(leftSelected);
     });
   }, [catalog, settings.petId, settings.petName, settings.petSource, t]);
@@ -97,7 +123,7 @@ export function PetSettings({
   };
 
   return (
-    <div className="pet-settings flex min-w-0 flex-col gap-page-section">
+    <div className="pet-settings gap-page-section flex min-w-0 flex-col">
       <SettingsSection
         headingId="pet-picker-heading"
         title={t("settings.petPicker")}
@@ -117,26 +143,42 @@ export function PetSettings({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setAppearanceSettings({ petEnabled: !settings.petEnabled })}
+              onClick={() =>
+                setAppearanceSettings({ petEnabled: !settings.petEnabled })
+              }
             >
-              {settings.petEnabled ? t("settings.petTuckAway") : t("settings.petShow")}
+              {settings.petEnabled
+                ? t("settings.petTuckAway")
+                : t("settings.petShow")}
             </Button>
           </>
         }
       >
-
         <ul className="pet-catalog" aria-label={t("settings.petPicker")}>
           {pets.map((pet) => {
-            const selected = pet.source === settings.petSource && pet.id === settings.petId;
-            const description = pet.source === "builtin" ? t("settings.petDescription") : pet.description;
+            const selected =
+              pet.source === settings.petSource && pet.id === settings.petId;
+            const description =
+              pet.source === "builtin"
+                ? t("settings.petDescription")
+                : pet.description;
             return (
               <li className="pet-catalog-item" key={`${pet.source}:${pet.id}`}>
                 <SettingRow
                   className="pet-catalog-row"
-                  label={pet.source === "builtin" ? t("settings.petName") : pet.displayName}
+                  label={
+                    pet.source === "builtin"
+                      ? t("settings.petName")
+                      : pet.displayName
+                  }
                   description={description}
                   leading={
-                    <div className="pet-catalog-avatar" aria-label={t("settings.petPreviewLabel", { name: pet.displayName })}>
+                    <div
+                      className="pet-catalog-avatar"
+                      aria-label={t("settings.petPreviewLabel", {
+                        name: pet.displayName,
+                      })}
+                    >
                       <CodeTwoPetSprite
                         key={`${pet.source}-${pet.id}-${previewAnimation}`}
                         animation={previewAnimation}
@@ -160,7 +202,9 @@ export function PetSettings({
                       variant="outline"
                       size="sm"
                       className="pet-select-button"
-                      aria-label={t("settings.petSelectNamed", { name: pet.displayName })}
+                      aria-label={t("settings.petSelectNamed", {
+                        name: pet.displayName,
+                      })}
                       onClick={() => selectPet(pet)}
                     >
                       {t("settings.petSelect")}
@@ -181,7 +225,11 @@ export function PetSettings({
             <li className="pet-catalog-state pet-catalog-error" role="alert">
               <AlertCircle className="size-4" aria-hidden="true" />
               <span>{t("settings.petStoreError")}</span>
-              <Button variant="ghost" size="sm" onClick={() => setCatalogAttempt((value) => value + 1)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCatalogAttempt((value) => value + 1)}
+              >
                 {t("settings.petRetry")}
               </Button>
             </li>
@@ -189,13 +237,18 @@ export function PetSettings({
         </ul>
       </SettingsSection>
 
-      <SettingsSection headingId="pet-behavior-heading" title={t("settings.petBehavior")}>
+      <SettingsSection
+        headingId="pet-behavior-heading"
+        title={t("settings.petBehavior")}
+      >
         <div className="pet-setting-group">
           <SettingToggle
             label={t("settings.petActivity")}
             description={t("settings.petActivityHint")}
             checked={settings.petActivityEnabled}
-            onCheckedChange={(petActivityEnabled) => setAppearanceSettings({ petActivityEnabled })}
+            onCheckedChange={(petActivityEnabled) =>
+              setAppearanceSettings({ petActivityEnabled })
+            }
           />
           <SettingRow
             label={t("settings.petSize")}
@@ -203,9 +256,15 @@ export function PetSettings({
           >
             <Select
               value={settings.petSize}
-              onValueChange={(value) => setAppearanceSettings({ petSize: value as PetSize })}
+              onValueChange={(value) =>
+                setAppearanceSettings({ petSize: value as PetSize })
+              }
             >
-              <SelectTrigger size="sm" className="w-32" aria-label={t("settings.petSize")}>
+              <SelectTrigger
+                size="sm"
+                className="w-32"
+                aria-label={t("settings.petSize")}
+              >
                 <SelectValue>{t(selectedSize.labelKey)}</SelectValue>
               </SelectTrigger>
               <SelectContent position="popper" align="end">

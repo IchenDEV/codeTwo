@@ -1,31 +1,29 @@
 import type { ProviderInfo } from "../bridge";
 
 const DEFAULT_RETRY_DELAYS_MS = [0, 250, 750] as const;
-const DEFAULT_ATTEMPT_TIMEOUT_MS = 7_000;
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 7000;
 
-function timeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = globalThis.setTimeout(
-      () => reject(new Error(`Provider detection timed out after ${timeoutMs}ms`)),
-      timeoutMs,
-    );
-    promise.then(
-      (value) => {
-        globalThis.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
+async function timeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
+    const timer = globalThis.setTimeout(() => {
+      reject(new Error(`Provider detection timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise
+      .catch((error) => {
         globalThis.clearTimeout(timer);
         reject(error);
-      },
-    );
+      })
+      .then((value) => {
+        globalThis.clearTimeout(timer);
+        resolve(value);
+      });
   });
 }
 
-function pause(delayMs: number): Promise<void> {
-  return delayMs > 0
-    ? new Promise((resolve) => globalThis.setTimeout(resolve, delayMs))
-    : Promise.resolve();
+async function pause(delayMs: number): Promise<void> {
+  delayMs > 0
+    ? await new Promise((resolve) => globalThis.setTimeout(resolve, delayMs))
+    : await Promise.resolve();
 }
 
 /**
@@ -35,7 +33,7 @@ function pause(delayMs: number): Promise<void> {
 export async function loadProviderRegistry(
   load: () => Promise<ProviderInfo[]>,
   retryDelaysMs: readonly number[] = DEFAULT_RETRY_DELAYS_MS,
-  attemptTimeoutMs = DEFAULT_ATTEMPT_TIMEOUT_MS,
+  attemptTimeoutMs = DEFAULT_ATTEMPT_TIMEOUT_MS
 ): Promise<ProviderInfo[]> {
   let lastError: unknown = new Error("Provider detection did not run");
 
@@ -43,12 +41,14 @@ export async function loadProviderRegistry(
     await pause(delayMs);
     try {
       const providers = await timeout(load(), attemptTimeoutMs);
-      if (providers.length === 0) throw new Error("Provider detection returned an empty registry");
+      if (providers.length === 0) {
+        throw new Error("Provider detection returned an empty registry");
+      }
       return providers;
     } catch (error) {
       lastError = error;
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  throw Error.isError(lastError) ? lastError : new Error(String(lastError));
 }

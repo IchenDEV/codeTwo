@@ -5,17 +5,17 @@ import { SettingsPanel } from "@/components/business/settings-panel";
 import { cn } from "@/lib/utils";
 
 type RowProps = {
-  icon?: ReactNode;
-  label: string;
-  hint?: ReactNode;
-  compact?: boolean;
-  className?: string;
-  controlClassName?: string;
-  children: ReactNode;
+  readonly icon?: ReactNode;
+  readonly label: string;
+  readonly hint?: ReactNode;
+  readonly compact?: boolean;
+  readonly className?: string;
+  readonly controlClassName?: string;
+  readonly children: ReactNode;
 };
 
 /** Shared anatomy for every setting: description on the left, control on the right. */
-export function Row({
+export const Row = ({
   icon,
   label,
   hint,
@@ -23,7 +23,7 @@ export function Row({
   className,
   controlClassName,
   children,
-}: RowProps) {
+}: RowProps) => {
   return (
     <SettingRow
       label={label}
@@ -39,7 +39,7 @@ export function Row({
 }
 
 /** Project settings share one trailing control lane so fields and actions stay on the same grid. */
-export function ProjectRow(props: RowProps) {
+export const ProjectRow = (props: RowProps) => {
   return (
     <SettingRow
       label={props.label}
@@ -55,23 +55,23 @@ export function ProjectRow(props: RowProps) {
   );
 }
 
-export function GroupHeading({ children }: { children: ReactNode }) {
+export const GroupHeading = ({ children }: { readonly children: ReactNode }) => {
   return (
-    <h3 className="pt-section text-metadata font-semibold uppercase tracking-wider text-muted-foreground">
+    <h3 className="pt-section text-metadata text-muted-foreground font-semibold tracking-wider uppercase">
       {children}
     </h3>
   );
 }
 
-export function Page({
+export const Page = ({
   title,
   description,
   children,
 }: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
+  readonly title: string;
+  readonly description?: string;
+  readonly children: ReactNode;
+}) => {
   return (
     <SettingsPanel title={title} description={description}>
       {children}

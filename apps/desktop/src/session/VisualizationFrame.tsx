@@ -31,12 +31,18 @@ function currentTheme(): Record<string, string> {
   if (typeof document === "undefined") return {};
   const root = getComputedStyle(document.documentElement);
   return Object.fromEntries(
-    VISUALIZATION_THEME_VARIABLES.map((name) => [name, root.getPropertyValue(name).trim()]),
+    VISUALIZATION_THEME_VARIABLES.map((name) => [
+      name,
+      root.getPropertyValue(name).trim(),
+    ])
   );
 }
 
 function frameToken(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `visual-${Math.random().toString(36).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `visual-${Math.random().toString(36).slice(2)}`
+  );
 }
 
 const messageSubscribers = new Set<(event: MessageEvent) => void>();
@@ -45,9 +51,12 @@ function routeVisualizationMessage(event: MessageEvent): void {
   for (const subscriber of messageSubscribers) subscriber(event);
 }
 
-function subscribeVisualizationMessages(subscriber: (event: MessageEvent) => void): () => void {
+function subscribeVisualizationMessages(
+  subscriber: (event: MessageEvent) => void
+): () => void {
   messageSubscribers.add(subscriber);
-  if (messageSubscribers.size === 1) window.addEventListener("message", routeVisualizationMessage);
+  if (messageSubscribers.size === 1)
+    window.addEventListener("message", routeVisualizationMessage);
   return () => {
     messageSubscribers.delete(subscriber);
     if (messageSubscribers.size === 0) {
@@ -56,13 +65,13 @@ function subscribeVisualizationMessages(subscriber: (event: MessageEvent) => voi
   };
 }
 
-export function VisualizationFrame({
+export const VisualizationFrame = ({
   reference,
   loader = readVisualization,
 }: {
-  reference: VisualizationReference;
-  loader?: (path: string) => Promise<string>;
-}) {
+  readonly reference: VisualizationReference;
+  readonly loader?: (path: string) => Promise<string>;
+}) => {
   const t = useT();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const confirmingLinkRef = useRef(false);
@@ -92,7 +101,10 @@ export function VisualizationFrame({
     const root = document.documentElement;
     const refresh = () => setTheme(currentTheme());
     const observer = new MutationObserver(refresh);
-    observer.observe(root, { attributes: true, attributeFilter: ["class", "style"] });
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
     // ThemeProvider applies its root class/tokens in an effect. It can finish before this child
     // observer is attached, so take one authoritative post-mount sample as well.
     refresh();
@@ -103,8 +115,16 @@ export function VisualizationFrame({
     const receive = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       const message = event.data as Record<string, unknown> | null;
-      if (!message || message.token !== token || typeof message.type !== "string") return;
-      if (message.type === "codetwo-visualize-size" && typeof message.height === "number") {
+      if (
+        !message ||
+        message.token !== token ||
+        typeof message.type !== "string"
+      )
+        return;
+      if (
+        message.type === "codetwo-visualize-size" &&
+        typeof message.height === "number"
+      ) {
         setHeight(Math.min(1600, Math.max(96, Math.ceil(message.height))));
         return;
       }
@@ -118,24 +138,32 @@ export function VisualizationFrame({
           new CustomEvent("codetwo-visualize-follow-up", {
             detail: {
               prompt: message.prompt,
-              title: typeof message.title === "string" ? message.title.slice(0, 250) : undefined,
+              title:
+                typeof message.title === "string"
+                  ? message.title.slice(0, 250)
+                  : undefined,
             },
-          }),
+          })
         );
         return;
       }
-      if (message.type === "codetwo-visualize-open-link" && typeof message.url === "string") {
+      if (
+        message.type === "codetwo-visualize-open-link" &&
+        typeof message.url === "string"
+      ) {
         const link = safeWebLink(message.url);
         if (link && !confirmingLinkRef.current) {
           confirmingLinkRef.current = true;
           void confirmNative(
             t("visualization.openLink", { url: link }),
-            t("visualization.openLinkTitle"),
-          ).then((accepted) => {
-            if (accepted) void openExternal(link);
-          }).finally(() => {
-            confirmingLinkRef.current = false;
-          });
+            t("visualization.openLinkTitle")
+          )
+            .then((accepted) => {
+              if (accepted) void openExternal(link);
+            })
+            .finally(() => {
+              confirmingLinkRef.current = false;
+            });
         }
       }
     };
@@ -143,15 +171,16 @@ export function VisualizationFrame({
   }, [t, token]);
 
   const source = useMemo(
-    () => (fragment === null ? null : visualizationDocument(fragment, theme, token)),
-    [fragment, theme, token],
+    () =>
+      fragment === null ? null : visualizationDocument(fragment, theme, token),
+    [fragment, theme, token]
   );
 
   if (failed) {
     return (
       <p
         role="alert"
-        className="my-3 flex items-center gap-2 rounded-control bg-destructive/10 px-3 py-2 text-callout text-destructive"
+        className="rounded-control bg-destructive/10 text-callout text-destructive my-3 flex items-center gap-2 px-3 py-2"
       >
         <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
         {t("visualization.unavailable")}
@@ -160,7 +189,10 @@ export function VisualizationFrame({
   }
   if (!source) {
     return (
-      <p role="status" className="my-3 flex items-center gap-2 text-callout text-muted-foreground">
+      <p
+        role="status"
+        className="text-callout text-muted-foreground my-3 flex items-center gap-2"
+      >
         <Spinner className="size-3.5" />
         {t("visualization.loading")}
       </p>
@@ -169,7 +201,10 @@ export function VisualizationFrame({
 
   return (
     <div
-      className={cn("codetwo-visualize my-4 min-w-0", reference.mode === "wide" && "is-wide")}
+      className={cn(
+        "codetwo-visualize my-4 min-w-0",
+        reference.mode === "wide" && "is-wide"
+      )}
       data-mode={reference.mode ?? "normal"}
     >
       <iframe

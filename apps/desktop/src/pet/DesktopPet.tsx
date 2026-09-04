@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 
 import { useT } from "@/i18n";
 
@@ -20,17 +25,21 @@ import type { CodeTwoPetAnimation } from "./state";
 const PET_STATE_UPDATE_INTERVAL_MS = 160;
 export const DESKTOP_PET_CLOSE_ACTION = "close";
 
-export function desktopPetContextMenu(closeLabel: string): NativeContextMenuItem[] {
-  return [{ type: "item", label: closeLabel, action: DESKTOP_PET_CLOSE_ACTION }];
+export function desktopPetContextMenu(
+  closeLabel: string
+): NativeContextMenuItem[] {
+  return [
+    { type: "item", label: closeLabel, action: DESKTOP_PET_CLOSE_ACTION },
+  ];
 }
 
-export function DesktopPetBridge({
+export const DesktopPetBridge = ({
   animation,
   bubble,
 }: {
-  animation: CodeTwoPetAnimation;
-  bubble: string | null;
-}) {
+  readonly animation: CodeTwoPetAnimation;
+  readonly bubble: string | null;
+}) => {
   const appearance = useAppearanceSettings();
   const pendingState = useRef<DesktopPetState | null>(null);
   const updateTimer = useRef<number>();
@@ -68,9 +77,10 @@ export function DesktopPetBridge({
 
   useEffect(
     () => () => {
-      if (updateTimer.current !== undefined) window.clearTimeout(updateTimer.current);
+      if (updateTimer.current !== undefined)
+        window.clearTimeout(updateTimer.current);
     },
-    [],
+    []
   );
 
   useEffect(() => {
@@ -86,7 +96,7 @@ export function DesktopPetBridge({
   return null;
 }
 
-export function DesktopPetWindow() {
+export const DesktopPetWindow = () => {
   const t = useT();
   const [state, setState] = useState<DesktopPetState | null>(null);
 
@@ -109,9 +119,12 @@ export function DesktopPetWindow() {
   const openContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
     event.preventDefault();
     if (!nativeContextMenusAvailable) return;
-    void showNativeContextMenu(desktopPetContextMenu(t("pet.close")), (action) => {
-      if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet();
-    });
+    void showNativeContextMenu(
+      desktopPetContextMenu(t("pet.close")),
+      (action) => {
+        if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet();
+      }
+    );
   };
 
   return (

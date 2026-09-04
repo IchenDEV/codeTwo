@@ -1,29 +1,38 @@
-import type { NativeContextMenuAction, NativeContextMenuItem } from "./rpc";
 import { desktopShowContextMenu, isElectrobun, listenDesktop } from "./client";
+import type { NativeContextMenuAction, NativeContextMenuItem } from "./rpc";
 
 type ActionHandler = (action: string) => void;
 
 const pendingMenus = new Map<string, ActionHandler>();
 let nextRequestId = 0;
-let listening = false;
+let isListening = false;
 
 export const nativeContextMenusAvailable =
-  isElectrobun && typeof navigator !== "undefined" && /Mac|Win/.test(navigator.platform);
+  isElectrobun &&
+  typeof navigator !== "undefined" &&
+  /Mac|Win/.test(navigator.platform);
 
 function ensureActionListener(): void {
-  if (listening) return;
-  listening = true;
-  listenDesktop<NativeContextMenuAction>("native-context-menu-action", ({ requestId, action }) => {
-    const handler = pendingMenus.get(requestId);
-    if (!handler) return;
-    pendingMenus.delete(requestId);
-    handler(action);
-  });
+  if (isListening) {
+    return;
+  }
+  isListening = true;
+  listenDesktop<NativeContextMenuAction>(
+    "native-context-menu-action",
+    ({ requestId, action }) => {
+      const handler = pendingMenus.get(requestId);
+      if (!handler) {
+        return;
+      }
+      pendingMenus.delete(requestId);
+      handler(action);
+    }
+  );
 }
 
 export async function showNativeContextMenu(
   items: NativeContextMenuItem[],
-  onAction: ActionHandler,
+  onAction: ActionHandler
 ): Promise<void> {
   ensureActionListener();
 

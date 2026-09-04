@@ -13,9 +13,11 @@ import { installTitlebarDoubleClick } from "./electrobun/titlebar";
 
 export function installDesktopTitlebarDoubleClick(
   document: Document,
-  onError: (error: unknown) => void,
+  onError: (error: unknown) => void
 ): () => void {
-  if (!desktopContainerAvailable) return () => {};
+  if (!desktopContainerAvailable) {
+    return () => {};
+  }
   return installTitlebarDoubleClick(document, () => {
     void performTitlebarDoubleClick().catch(onError);
   });

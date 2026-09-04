@@ -14,26 +14,38 @@ import {
   isLspLanguage,
   onLspRuntimeEnabled,
   pathToUri,
-  type LspClient,
 } from "./client";
 import { applyDiagnostics, registerProviders } from "./providers";
+import type { LspClient } from "./client";
 
 const synced = new Set<string>();
 const mountedModels = new Map<monaco.editor.ITextModel, string>();
-let openerRegistered = false;
+let isOpenerRegistered = false;
 
-/** Where cross-file navigation lands before the target editor exists — consumed on its mount. */
-let pendingReveal: { absPath: string; lineNumber: number; column: number } | null = null;
+/**
+Where cross-file navigation lands before the target editor exists — consumed on its mount.
+*/
+let pendingReveal: {
+  absPath: string;
+  lineNumber: number;
+  column: number;
+} | null = null;
 
-/** The current pane's "open this project file" callback — App's tab opener, kept fresh on mount. */
+/**
+The current pane's "open this project file" callback — App's tab opener, kept fresh on mount.
+*/
 let fileOpener: ((absPath: string) => boolean) | null = null;
 
-export function setFileOpener(cb: (absPath: string) => boolean): void {
-  fileOpener = cb;
+export function setFileOpener(callback: (absPath: string) => boolean): void {
+  fileOpener = callback;
 }
 
-export function takePendingReveal(absPath: string): { lineNumber: number; column: number } | null {
-  if (pendingReveal?.absPath !== absPath) return null;
+export function takePendingReveal(
+  absPath: string
+): { lineNumber: number; column: number } | null {
+  if (pendingReveal?.absPath !== absPath) {
+    return null;
+  }
   const at = pendingReveal;
   pendingReveal = null;
   return { lineNumber: at.lineNumber, column: at.column };
@@ -45,20 +57,27 @@ export function takePendingReveal(absPath: string): { lineNumber: number; column
  * on the symbol", which is the difference between a code viewer and an IDE.
  */
 function ensureOpener(): void {
-  if (openerRegistered) return;
-  openerRegistered = true;
+  if (isOpenerRegistered) {
+    return;
+  }
+  isOpenerRegistered = true;
   monaco.editor.registerEditorOpener({
     openCodeEditor: (_source, resource, at) => {
-      if (resource.scheme !== "file" || !fileOpener) return false;
-      const pos = at && "startLineNumber" in at
-        ? { lineNumber: at.startLineNumber, column: at.startColumn }
-        : at && "lineNumber" in at
-          ? { lineNumber: at.lineNumber, column: at.column }
-          : { lineNumber: 1, column: 1 };
+      if (resource.scheme !== "file" || !fileOpener) {
+        return false;
+      }
+      const pos =
+        at && "startLineNumber" in at
+          ? { lineNumber: at.startLineNumber, column: at.startColumn }
+          : (at && "lineNumber" in at
+            ? { lineNumber: at.lineNumber, column: at.column }
+            : { lineNumber: 1, column: 1 });
       pendingReveal = { absPath: resource.path, ...pos };
-      const opened = fileOpener(resource.path);
-      if (!opened) pendingReveal = null;
-      return opened;
+      const isOpened = fileOpener(resource.path);
+      if (!isOpened) {
+        pendingReveal = null;
+      }
+      return isOpened;
     },
   });
 }
@@ -69,9 +88,13 @@ function ensureOpener(): void {
  * let the project-aware server speak. (Highlighting is shiki's and unaffected.)
  */
 function muteBuiltinTs(lang: string): void {
-  if (lang !== "typescript" && lang !== "javascript") return;
+  if (lang !== "typescript" && lang !== "javascript") {
+    return;
+  }
   const defaults =
-    lang === "typescript" ? monaco.typescript.typescriptDefaults : monaco.typescript.javascriptDefaults;
+    lang === "typescript"
+      ? monaco.typescript.typescriptDefaults
+      : monaco.typescript.javascriptDefaults;
   defaults.setModeConfiguration({
     completionItems: false,
     hovers: false,
@@ -89,8 +112,13 @@ function muteBuiltinTs(lang: string): void {
   });
 }
 
-/** Hook `model` up to its project's language server, if one exists for its language. */
-export async function attachLsp(cwd: string, model: monaco.editor.ITextModel): Promise<void> {
+/**
+Hook `model` up to its project's language server, if one exists for its language.
+*/
+export async function attachLsp(
+  cwd: string,
+  model: monaco.editor.ITextModel
+): Promise<void> {
   ensureOpener();
   if (!mountedModels.has(model)) {
     model.onWillDispose(() => {
@@ -100,9 +128,13 @@ export async function attachLsp(cwd: string, model: monaco.editor.ITextModel): P
   }
   mountedModels.set(model, cwd);
   const lang = model.getLanguageId();
-  if (!isLspLanguage(lang)) return;
+  if (!isLspLanguage(lang)) {
+    return;
+  }
   const client = await getClient(cwd, lang);
-  if (!client || model.isDisposed()) return;
+  if (!client || model.isDisposed()) {
+    return;
+  }
 
   registerProviders(lang, client.capabilities);
   muteBuiltinTs(lang);
@@ -117,8 +149,11 @@ export async function attachLsp(cwd: string, model: monaco.editor.ITextModel): P
     model.onDidChangeContent(() => {
       const current = clientForPath(model.uri.path, model.getLanguageId());
       if (current) {
-        if (!current.isOpen(uri)) current.didOpen(uri, model.getLanguageId(), model.getValue());
-        else current.scheduleChange(uri, model.getValue());
+        if (current.isOpen(uri)) {
+          current.scheduleChange(uri, model.getValue());
+        } else {
+          current.didOpen(uri, model.getLanguageId(), model.getValue());
+        }
       }
     });
   }
@@ -136,9 +171,18 @@ function wireDiagnostics(client: LspClient): void {
   client.onDiagnostics ??= applyDiagnostics;
 }
 
-/** Tell the server the file hit disk — rust-analyzer runs its cargo-check pass on this signal. */
-export function notifySaved(cwd: string, model: monaco.editor.ITextModel): void {
+/**
+Tell the server the file hit disk — rust-analyzer runs its cargo-check pass on this signal.
+*/
+export function notifySaved(
+  cwd: string,
+  model: monaco.editor.ITextModel
+): void {
   const lang = model.getLanguageId();
-  if (!isLspLanguage(lang)) return;
-  void getClient(cwd, lang).then((client) => client?.didSave(pathToUri(model.uri.path)));
+  if (!isLspLanguage(lang)) {
+    return;
+  }
+  void getClient(cwd, lang).then((client) =>
+    client?.didSave(pathToUri(model.uri.path))
+  );
 }

@@ -21,9 +21,12 @@ describe("macOS titlebar double-click", () => {
     dom.document.body.append(titlebar);
 
     let actions = 0;
-    const uninstall = installTitlebarDoubleClick(dom.document as unknown as Document, () => {
-      actions += 1;
-    });
+    const uninstall = installTitlebarDoubleClick(
+      dom.document as unknown as Document,
+      () => {
+        actions += 1;
+      }
+    );
 
     const dragDoubleClick = new dom.MouseEvent("dblclick", {
       bubbles: true,
@@ -34,13 +37,21 @@ describe("macOS titlebar double-click", () => {
     expect(actions).toBe(1);
     expect(dragDoubleClick.defaultPrevented).toBe(true);
 
-    buttonLabel.dispatchEvent(new dom.MouseEvent("dblclick", { bubbles: true, button: 0 }));
-    dom.document.body.dispatchEvent(new dom.MouseEvent("dblclick", { bubbles: true, button: 0 }));
-    blank.dispatchEvent(new dom.MouseEvent("dblclick", { bubbles: true, button: 2 }));
+    buttonLabel.dispatchEvent(
+      new dom.MouseEvent("dblclick", { bubbles: true, button: 0 })
+    );
+    dom.document.body.dispatchEvent(
+      new dom.MouseEvent("dblclick", { bubbles: true, button: 0 })
+    );
+    blank.dispatchEvent(
+      new dom.MouseEvent("dblclick", { bubbles: true, button: 2 })
+    );
     expect(actions).toBe(1);
 
     uninstall();
-    blank.dispatchEvent(new dom.MouseEvent("dblclick", { bubbles: true, button: 0 }));
+    blank.dispatchEvent(
+      new dom.MouseEvent("dblclick", { bubbles: true, button: 0 })
+    );
     expect(actions).toBe(1);
   });
 });

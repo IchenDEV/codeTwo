@@ -314,7 +314,8 @@ export const en = {
   "actionDialog.kindCommand": "Run command",
   "actionDialog.kindPrompt": "Send prompt",
   "actionDialog.kindCommandHint": "Run a shell command in this project.",
-  "actionDialog.kindPromptHint": "Send reusable instructions to the current conversation.",
+  "actionDialog.kindPromptHint":
+    "Send reusable instructions to the current conversation.",
   "actionDialog.name": "Name",
   "actionDialog.namePlaceholder": "Test",
   "actionDialog.keybinding": "Keybinding",
@@ -323,13 +324,16 @@ export const en = {
   "actionDialog.command": "Command",
   "actionDialog.commandPlaceholder": "bun test",
   "actionDialog.prompt": "Prompt",
-  "actionDialog.promptPlaceholder": "Review the current changes and list any issues.",
+  "actionDialog.promptPlaceholder":
+    "Review the current changes and list any issues.",
   "actionDialog.promptHint": "If a turn is running, the prompt is queued next.",
   "actionDialog.previewUrl": "Preview URL (optional)",
   "actionDialog.previewPlaceholder": "http://localhost:5173",
-  "actionDialog.previewHint": "Open this URL in the in-app preview when this action runs.",
+  "actionDialog.previewHint":
+    "Open this URL in the in-app preview when this action runs.",
   "actionDialog.runOnWorktree": "Run automatically on worktree creation",
-  "actionDialog.openPreview": "Open preview automatically when this action runs",
+  "actionDialog.openPreview":
+    "Open preview automatically when this action runs",
   "actionDialog.cancel": "Cancel",
   "actionDialog.save": "Save action",
   "actionDialog.saving": "Saving…",
@@ -845,7 +849,8 @@ export const en = {
   "composer.searchModels": "Search models",
   "composer.clearModelSearch": "Clear model search",
   "composer.noMatchingModels": "No models match this search.",
-  "composer.noVisibleModels": "All models for this provider are hidden in Settings.",
+  "composer.noVisibleModels":
+    "All models for this provider are hidden in Settings.",
   "composer.noModels":
     "We don't know this provider's models, and it doesn't report any over ACP, so the model is whatever its CLI is configured to use. Set it in the CLI's own config.",
   "composer.defaultModel": "Default model",
@@ -918,7 +923,8 @@ export const en = {
   "trajectory.overview": "Overview",
   "trajectory.ledger": "Event ledger",
   "trajectory.inspector": "Event inspector",
-  "trajectory.inspectHint": "Select an event to inspect its timing, input, and output.",
+  "trajectory.inspectHint":
+    "Select an event to inspect its timing, input, and output.",
   "trajectory.search": "Search trajectory",
   "trajectory.searchPlaceholder": "Search events, tools, and content",
   "trajectory.filter": "Filter event type",
@@ -983,7 +989,8 @@ export const en = {
   "chart.series": "Chart series",
   "chart.type.line": "Line chart",
   "chart.type.bar": "Bar chart",
-  "chart.summary": "{title}. {type} with {series} series and {points} categories.",
+  "chart.summary":
+    "{title}. {type} with {series} series and {points} categories.",
   "goal.label": "Goal",
   "goal.objective": "Goal objective",
   "goal.placeholder": "What should Codex keep pursuing?",
@@ -1032,7 +1039,8 @@ export const en = {
   "profile.tokenActivity": "Token activity",
   "profile.last90Days": "Last 90 days",
   "profile.noActivity": "No activity yet",
-  "profile.noActivityHint": "Your local usage will appear here after your first C2 session.",
+  "profile.noActivityHint":
+    "Your local usage will appear here after your first C2 session.",
   "profile.activityLabel": "Token activity across {days} active days",
   "profile.insights": "Activity insights",
   "profile.sessionsScanned": "Sessions scanned",
@@ -1040,9 +1048,11 @@ export const en = {
   "profile.mostUsedProvider": "Most used provider",
   "profile.providerActivity": "Provider activity",
   "profile.noProviderActivity": "No provider activity yet.",
-  "profile.localOnly": "Statistics come from local C2 session records and stay on this Mac until you share them.",
+  "profile.localOnly":
+    "Statistics come from local C2 session records and stay on this Mac until you share them.",
   "profile.shareTitle": "{name} · C2 profile",
-  "profile.shareText": "{name} on C2 — {tokens} tokens across {days} active days in the last 90 days, a {streak}-day current streak, and {sessions} local sessions.",
+  "profile.shareText":
+    "{name} on C2 — {tokens} tokens across {days} active days in the last 90 days, a {streak}-day current streak, and {sessions} local sessions.",
   "profile.shared": "Profile shared.",
   "profile.copied": "Profile summary copied.",
   "profile.shareFailed": "The profile could not be shared or copied.",
@@ -1050,14 +1060,16 @@ export const en = {
   "settings.generalHint":
     "Language, software updates, and how the terminal renders.",
   "settings.import": "Import",
-  "settings.importHint": "Bring Codex, Claude Code, Cursor, and T3 Code conversations into C2.",
+  "settings.importHint":
+    "Bring Codex, Claude Code, Cursor, and T3 Code conversations into C2.",
   "settings.importFromFiles": "From files",
   "settings.importSessions": "Session files",
   "settings.importSessionsHint":
     "Choose Codex or Claude Code JSONL, Cursor globalStorage state.vscdb, or T3 Code state.sqlite. Sessions already imported are skipped.",
   "settings.chooseSessionFiles": "Choose files",
   "settings.importing": "Importing…",
-  "settings.importResult": "{imported} imported · {skipped} already imported · {failed} failed",
+  "settings.importResult":
+    "{imported} imported · {skipped} already imported · {failed} failed",
   "settings.importedMessages": "{count} visible messages added.",
   "settings.openImportedSession": "Open session",
   "settings.importFailed": "Could not import sessions: {error}",
@@ -1071,7 +1083,8 @@ export const en = {
   "settings.pluginHotReload": "Plugin hot reload",
   "settings.pluginHotReloadLoading": "Checking the native file watcher…",
   "settings.pluginHotReloadOff": "Hot reload is off.",
-  "settings.pluginHotReloadUnavailable": "The native file watcher could not start.",
+  "settings.pluginHotReloadUnavailable":
+    "The native file watcher could not start.",
   "settings.pluginHotReloadWatching": "Watching installed plugins in {path}.",
   "settings.pluginHotReloadLastSuccess": "Reloaded {plugins} at {time}.",
   "settings.pluginHotReloadLastError": "Last reload failed: {error}",
@@ -1089,12 +1102,14 @@ export const en = {
   "settings.exportDiagnosticsAction": "Export diagnostics",
   "settings.exportingDiagnostics": "Exporting…",
   "settings.diagnosticsExported": "Diagnostics exported.",
-  "settings.diagnosticsUnsupported": "Diagnostics export is available in the desktop app.",
+  "settings.diagnosticsUnsupported":
+    "Diagnostics export is available in the desktop app.",
   "settings.diagnosticsExportFailed": "Could not export diagnostics: {error}",
   "settings.developerLoadFailed": "Could not load developer settings: {error}",
   "settings.developerSaveFailed": "Could not update developer mode: {error}",
   "settings.developerReloadFailed": "Could not reload plugins: {error}",
-  "settings.developerDevtoolsFailed": "Could not open WebView DevTools: {error}",
+  "settings.developerDevtoolsFailed":
+    "Could not open WebView DevTools: {error}",
   "settings.sync": "Device sync",
   "settings.syncHint":
     "Keep conversations and saved memory consistent with C2 devices paired through Device connections.",
@@ -1102,11 +1117,13 @@ export const en = {
   "settings.syncReady": "Ready to sync with paired C2 devices.",
   "settings.syncLastSuccess": "Last synced {time}.",
   "settings.syncing": "Syncing changes with paired C2 devices…",
-  "settings.syncSignedOut": "The paired device rejected this connection. Pair it again.",
-  "settings.syncRestricted":
-    "This build cannot use paired-device sync.",
-  "settings.syncUnsupported": "Paired-device sync is unavailable on this platform.",
-  "settings.syncUnavailable": "Pair another C2 device in Device connections first.",
+  "settings.syncSignedOut":
+    "The paired device rejected this connection. Pair it again.",
+  "settings.syncRestricted": "This build cannot use paired-device sync.",
+  "settings.syncUnsupported":
+    "Paired-device sync is unavailable on this platform.",
+  "settings.syncUnavailable":
+    "Pair another C2 device in Device connections first.",
   "settings.syncLoading": "Checking paired devices…",
   "settings.syncNow": "Device data",
   "settings.syncNowHint":
@@ -1123,7 +1140,8 @@ export const en = {
   "settings.petsHint":
     "Choose how your desktop companion appears and responds while you work.",
   "settings.petPicker": "Pick a pet",
-  "settings.petPickerHint": "Pets float on the desktop, follow the active task, and stay independent of conversations.",
+  "settings.petPickerHint":
+    "Pets float on the desktop, follow the active task, and stay independent of conversations.",
   "settings.petName": "Naiwa",
   "settings.petDescription":
     "A quiet C2 companion that keeps pace with your sessions.",
@@ -1140,7 +1158,8 @@ export const en = {
   "settings.petRetry": "Retry",
   "settings.petSavedDescription": "PetShare companion",
   "settings.petPreviewMoods": "Preview moods",
-  "settings.petPreviewMoodsHint": "See how Naiwa responds as a task changes state.",
+  "settings.petPreviewMoodsHint":
+    "See how Naiwa responds as a task changes state.",
   "settings.petMoodIdle": "Idle",
   "settings.petMoodWorking": "Working",
   "settings.petMoodWaiting": "Waiting",
@@ -1148,7 +1167,8 @@ export const en = {
   "settings.petMoodAttention": "Needs attention",
   "settings.petBehavior": "Session behavior",
   "settings.petActivity": "React to task activity",
-  "settings.petActivityHint": "Match working, waiting, completed, and failed session states.",
+  "settings.petActivityHint":
+    "Match working, waiting, completed, and failed session states.",
   "settings.petSize": "Pet size",
   "settings.petSizeHint": "Set the size of the floating desktop companion.",
   "settings.petSizeSmall": "Small",
@@ -1161,11 +1181,14 @@ export const en = {
     "Defaults for the project selected in the main sidebar.",
   "settings.projectProfile": "Project profile",
   "settings.projectName": "Name",
-  "settings.projectNameHint": "Shown in the sidebar, title bar, and project switcher.",
+  "settings.projectNameHint":
+    "Shown in the sidebar, title bar, and project switcher.",
   "settings.projectNameRequired": "Project name cannot be empty.",
   "settings.projectIcon": "Project icon",
-  "settings.projectIconAutomatic": "Using the automatic folder icon. PNG, JPEG, or WebP; up to 2 MB.",
-  "settings.projectIconCustom": "Custom icon used anywhere this project appears.",
+  "settings.projectIconAutomatic":
+    "Using the automatic folder icon. PNG, JPEG, or WebP; up to 2 MB.",
+  "settings.projectIconCustom":
+    "Custom icon used anywhere this project appears.",
   "settings.projectIconChoose": "Choose image",
   "settings.projectIconChange": "Change",
   "settings.projectIconRemove": "Remove custom icon",
@@ -1173,10 +1196,12 @@ export const en = {
   "settings.projectSaveFailed": "Could not save the project setting: {error}",
   "settings.projectNewSessions": "New sessions",
   "settings.projectProvider": "Default provider",
-  "settings.projectProviderHint": "New sessions use this provider unless you change the draft before sending.",
+  "settings.projectProviderHint":
+    "New sessions use this provider unless you change the draft before sending.",
   "settings.projectProviderAutomatic": "Automatic (keep current)",
   "settings.projectModel": "Default model and reasoning",
-  "settings.projectModelHint": "Available after choosing a provider that advertises models.",
+  "settings.projectModelHint":
+    "Available after choosing a provider that advertises models.",
   "settings.projectModelDefault": "Provider default",
   "settings.projectModelReset": "Use provider default model",
   "settings.projectReasoning": "Default reasoning effort",
@@ -1192,18 +1217,23 @@ export const en = {
     "Allow scene `schedule` hooks to run for this project (off by default; runs land as attributed turns).",
   "settings.projectCheckout": "Checkout",
   "settings.projectPath": "Project path",
-  "settings.projectPathHint": "The source checkout registered for this project.",
+  "settings.projectPathHint":
+    "The source checkout registered for this project.",
   "settings.projectPathCopy": "Copy project path",
   "settings.projectPathReveal": "Reveal project folder",
-  "settings.projectPathRevealUnavailable": "Native folder reveal is unavailable.",
+  "settings.projectPathRevealUnavailable":
+    "Native folder reveal is unavailable.",
   "settings.projectActions": "Actions",
   "settings.projectActionsEmpty": "No actions configured for this project.",
-  "settings.projectActionsCount": "{count} actions configured for this project.",
+  "settings.projectActionsCount":
+    "{count} actions configured for this project.",
   "settings.projectActionAdd": "Add action",
   "settings.projectDanger": "Danger",
   "settings.removeProject": "Remove project",
-  "settings.removeProjectHint": "Removes this project from C2. Files and saved sessions stay on disk.",
-  "settings.removeProjectConfirm": "Remove {name} from C2? Files and saved sessions will not be deleted.",
+  "settings.removeProjectHint":
+    "Removes this project from C2. Files and saved sessions stay on disk.",
+  "settings.removeProjectConfirm":
+    "Remove {name} from C2? Files and saved sessions will not be deleted.",
   "settings.projectNone": "Select a project to configure its defaults.",
   "settings.providers": "Providers",
   "settings.restoreDefaults": "Restore defaults",
@@ -1236,21 +1266,29 @@ export const en = {
   "settings.providerDisplayNameHint": "Optional name shown throughout C2.",
   "settings.providerRuntimeCommand": "ACP runtime command",
   "settings.providerRuntimeCommandPlaceholder": "Use the detected command",
-  "settings.providerRuntimeCommandHint": "Executable or path C2 launches for this provider.",
+  "settings.providerRuntimeCommandHint":
+    "Executable or path C2 launches for this provider.",
   "settings.providerConfigDirectory": "Provider config directory",
-  "settings.providerConfigDirectoryHint": "Passed as {variable} when this provider starts.",
+  "settings.providerConfigDirectoryHint":
+    "Passed as {variable} when this provider starts.",
   "settings.providerRuntimeArguments": "Launch arguments",
-  "settings.providerOverrideArguments": "Override the detected launch arguments",
-  "settings.providerRuntimeArgumentsHint": "One argument per line. Turn off the override to use the detected defaults.",
+  "settings.providerOverrideArguments":
+    "Override the detected launch arguments",
+  "settings.providerRuntimeArgumentsHint":
+    "One argument per line. Turn off the override to use the detected defaults.",
   "settings.providerNoArguments": "No arguments",
   "settings.providerForwardedEnvironment": "Forwarded environment",
-  "settings.providerForwardedEnvironmentHint": "One host variable name per line. C2 stores only names and never returns their values to Settings.",
-  "settings.providerMissingEnvironment": "Not set in the current host: {variables}",
+  "settings.providerForwardedEnvironmentHint":
+    "One host variable name per line. C2 stores only names and never returns their values to Settings.",
+  "settings.providerMissingEnvironment":
+    "Not set in the current host: {variables}",
   "settings.providerSave": "Save runtime",
   "settings.providerSaving": "Saving…",
-  "settings.providerConfigured": "Saved runtime settings for {provider}. New sessions will use them.",
+  "settings.providerConfigured":
+    "Saved runtime settings for {provider}. New sessions will use them.",
   "settings.providerModels": "Models",
-  "settings.providerModelsHint": "Hidden models stay out of the Composer picker. The current selection remains available until you switch models.",
+  "settings.providerModelsHint":
+    "Hidden models stay out of the Composer picker. The current selection remains available until you switch models.",
   "settings.providerShowAllModels": "Show all",
   "settings.providerSearchModels": "Search provider models",
   "settings.providerClearModelSearch": "Clear model search",
@@ -1283,27 +1321,32 @@ export const en = {
   "settings.appshotsLoading": "Loading Appshot settings…",
   "settings.appshotsUnavailable": "Appshots are unavailable on this device.",
   "settings.appshotsHotkey": "Hotkey",
-  "settings.appshotsHotkeyHint": "Works while another application is frontmost.",
+  "settings.appshotsHotkeyHint":
+    "Works while another application is frontmost.",
   "settings.appshotsHotkeyBothCommand": "Both ⌘ keys",
   "settings.appshotsHotkeyCommandShift2": "⌘⇧2",
   "settings.appshotsHotkeyCommandOption2": "⌘⌥2",
   "settings.appshotsDestination": "Destination",
-  "settings.appshotsDestinationHint": "Choose which Composer receives a new Appshot.",
+  "settings.appshotsDestinationHint":
+    "Choose which Composer receives a new Appshot.",
   "settings.appshotsDestinationAutomatic": "Automatic",
   "settings.appshotsDestinationCurrent": "Current session",
   "settings.appshotsDestinationNew": "New session",
   "settings.appshotsSound": "Play sound effect",
   "settings.appshotsPermissions": "Permissions",
   "settings.appshotsScreenRecording": "Screen Recording",
-  "settings.appshotsScreenRecordingHint": "Required to capture another application's window.",
+  "settings.appshotsScreenRecordingHint":
+    "Required to capture another application's window.",
   "settings.appshotsAccessibility": "Accessibility",
-  "settings.appshotsAccessibilityHint": "Adds window text and enables the dual-Command hotkey.",
+  "settings.appshotsAccessibilityHint":
+    "Adds window text and enables the dual-Command hotkey.",
   "settings.appshotsAllowed": "Allowed",
   "settings.appshotsAllow": "Allow…",
   "settings.appshotsOpenSettings": "Open Settings",
   "settings.appshotsLoadFailed": "Could not load Appshot settings: {error}",
   "settings.appshotsSaveFailed": "Could not save Appshot settings: {error}",
-  "settings.appshotsPermissionFailed": "Could not request Appshot access: {error}",
+  "settings.appshotsPermissionFailed":
+    "Could not request Appshot access: {error}",
   "settings.appshotsCaptureFailed": "Could not take an Appshot: {error}",
   "settings.browserUse": "Browser Use",
   "settings.browserUseHint":
@@ -1380,14 +1423,17 @@ export const en = {
   "settings.contrastHint": "Strengthens surface separation and secondary text.",
   "settings.appearancePreferences": "Preferences",
   "settings.pointerCursors": "Use pointer cursors",
-  "settings.pointerCursorsHint": "Show a pointer when hovering over interactive controls.",
+  "settings.pointerCursorsHint":
+    "Show a pointer when hovering over interactive controls.",
   "settings.reduceMotion": "Reduce motion",
-  "settings.reduceMotionHint": "Reduce decorative animation or match your macOS setting.",
+  "settings.reduceMotionHint":
+    "Reduce decorative animation or match your macOS setting.",
   "settings.preferenceSystem": "System",
   "settings.preferenceOn": "On",
   "settings.preferenceOff": "Off",
   "settings.diffMarkers": "Diff markers",
-  "settings.diffMarkersHint": "Show added and removed lines using color or explicit +/- markers.",
+  "settings.diffMarkersHint":
+    "Show added and removed lines using color or explicit +/- markers.",
   "settings.diffMarkersColor": "Color",
   "settings.diffMarkersSymbols": "+/-",
   "pet.label": "C2 desktop pet",
@@ -1702,7 +1748,8 @@ export const en = {
   "dock.browserDesc": "Open a local app or URL.",
   "dock.filesDesc": "Browse and edit workspace files.",
   "dock.gitDesc": "Review changes in the working tree.",
-  "dock.trajectoryDesc": "Inspect the session timeline, events, and execution details.",
+  "dock.trajectoryDesc":
+    "Inspect the session timeline, events, and execution details.",
   "dock.maximize": "Widen the panel",
   "dock.restore": "Restore the panel width",
   "dock.tmux": "tmux",
@@ -1722,7 +1769,8 @@ export const en = {
   "githubPr.refresh": "Refresh pull request",
   "githubPr.loading": "Checking this branch for a pull request…",
   "githubPr.notGithub": "This workspace does not use a GitHub remote.",
-  "githubPr.cliMissing": "Install and sign in to GitHub CLI to review pull requests here.",
+  "githubPr.cliMissing":
+    "Install and sign in to GitHub CLI to review pull requests here.",
   "githubPr.empty": "No pull request is linked to {branch}.",
   "githubPr.loadFailed": "Could not load the pull request: {error}",
   "githubPr.openOnGithub": "Open PR #{number} on GitHub",
@@ -1752,7 +1800,8 @@ export const en = {
   "githubPr.approve": "Approve",
   "githubPr.requestChanges": "Request changes",
   "githubPr.submitting": "Submitting…",
-  "githubPr.reviewBodyRequired": "Write a comment before submitting this review.",
+  "githubPr.reviewBodyRequired":
+    "Write a comment before submitting this review.",
   "githubPr.reviewSubmitted": "Review submitted.",
   "githubPr.reviewFailed": "Could not submit the review: {error}",
   "githubPr.mergeSection": "Merge pull request",
@@ -1764,7 +1813,8 @@ export const en = {
   "githubPr.merging": "Merging…",
   "githubPr.mergeConfirm":
     "Merge PR #{number} into {branch} using “{strategy}”? GitHub branch protection and required checks still apply.",
-  "githubPr.mergeDraftBlocked": "Mark this pull request ready for review before merging.",
+  "githubPr.mergeDraftBlocked":
+    "Mark this pull request ready for review before merging.",
   "githubPr.mergeConflictBlocked": "Resolve merge conflicts before merging.",
   "githubPr.mergeComplete": "PR #{number} merged.",
   "githubPr.mergeFailed": "Could not merge the pull request: {error}",
@@ -1864,11 +1914,16 @@ export const en = {
   "toast.appshotReady": "Appshot from {app} is ready in the Composer.",
   "toast.appshotFailed": "Appshot failed: {error}",
   "toast.imageAttachFailed": "Could not attach image: {error}",
-  "toast.draftSaveFailed": "Your draft is still open, but C2 could not save it locally.",
-  "toast.draftCorrupt": "Saved drafts could not be read. A blank draft was opened.",
-  "toast.draftStorageUnavailable": "Local draft storage is unavailable. Drafts will remain only in this window.",
-  "toast.draftAttachmentMissing": "One or more images in this draft are no longer available.",
-  "toast.draftRestoreFailed": "This draft could not be restored. Its saved copy was kept.",
+  "toast.draftSaveFailed":
+    "Your draft is still open, but C2 could not save it locally.",
+  "toast.draftCorrupt":
+    "Saved drafts could not be read. A blank draft was opened.",
+  "toast.draftStorageUnavailable":
+    "Local draft storage is unavailable. Drafts will remain only in this window.",
+  "toast.draftAttachmentMissing":
+    "One or more images in this draft are no longer available.",
+  "toast.draftRestoreFailed":
+    "This draft could not be restored. Its saved copy was kept.",
   "toast.alreadyRunning": "A turn is already running. Stop it first.",
   "toast.notRunning": "There is no running turn.",
   "toast.steerUnsupported": "This provider does not support native steering.",
@@ -1994,7 +2049,8 @@ export const en = {
   "taskboard.more": "{count} more",
   "taskboard.showLess": "Show less",
   "taskboard.attention.reviewReady": "Review changes",
-  "taskboard.attention.reviewReadyDescription": "The task is ready for your review.",
+  "taskboard.attention.reviewReadyDescription":
+    "The task is ready for your review.",
   "taskboard.attention.answerNeeded": "Answer needed",
   "taskboard.attention.permissionNeeded": "Permission needed",
   "taskboard.attention.inputDescription": "The task is waiting for your input.",
@@ -2014,7 +2070,7 @@ export const en = {
   "taskboard.taskActions": "Task actions: {title}",
   "taskboard.dragTask": "Drag task: {title}",
   "taskboard.dragTaskHint": "Drag task",
-  "taskboard.moveTo": "Move to \"{status}\"",
+  "taskboard.moveTo": 'Move to "{status}"',
   "taskboard.addInColumn": "Add a task to {status}",
   "taskboard.moveToEnd": "Move to the end of {status}",
   "taskboard.taskCount": "{count} tasks",
@@ -2037,21 +2093,26 @@ export const en = {
   "taskboard.updatedHours": "Updated {count}h ago",
   "taskboard.updatedDays": "Updated {count}d ago",
   "taskboard.updatedOn": "Updated {date}",
-  "taskboard.createdHidden": "Created \"{title}\", but the current filters hide it.",
-  "taskboard.deleteConfirm": "Delete \"{title}\"? This cannot be undone.",
-  "taskboard.deleted": "Deleted \"{title}\".",
-  "taskboard.warning.corrupt": "The saved task board could not be read. Example tasks were restored.",
-  "taskboard.warning.load": "Local task data is unavailable. Example tasks were restored.",
+  "taskboard.createdHidden":
+    'Created "{title}", but the current filters hide it.',
+  "taskboard.deleteConfirm": 'Delete "{title}"? This cannot be undone.',
+  "taskboard.deleted": 'Deleted "{title}".',
+  "taskboard.warning.corrupt":
+    "The saved task board could not be read. Example tasks were restored.",
+  "taskboard.warning.load":
+    "Local task data is unavailable. Example tasks were restored.",
   "taskboard.warning.save": "The task changed, but could not be saved locally.",
   "taskboard.editor.editTitle": "Edit task",
   "taskboard.editor.newTitle": "New task",
   "taskboard.editor.editDescription": "Update the task and its stage.",
-  "taskboard.editor.newDescription": "Capture the next piece of work and place it in the right stage.",
+  "taskboard.editor.newDescription":
+    "Capture the next piece of work and place it in the right stage.",
   "taskboard.editor.title": "Title",
   "taskboard.editor.titlePlaceholder": "For example: Improve task filtering",
   "taskboard.editor.titleRequired": "Enter a task title",
   "taskboard.editor.description": "Description",
-  "taskboard.editor.descriptionPlaceholder": "Add context, acceptance criteria, or implementation notes…",
+  "taskboard.editor.descriptionPlaceholder":
+    "Add context, acceptance criteria, or implementation notes…",
   "taskboard.editor.status": "Status",
   "taskboard.editor.priority": "Priority",
   "taskboard.editor.labels": "Labels",
@@ -2443,10 +2504,11 @@ export const en = {
   "pullRequests.linkTask": "Link to task",
   "pullRequests.openTask": "Open task",
   "pullRequests.unlinkTask": "Unlink task",
-  "pullRequests.taskCreated": "Created \"{title}\" and linked this pull request.",
-  "pullRequests.taskLinked": "Linked this pull request to \"{title}\".",
-  "pullRequests.taskUnlinked": "Unlinked this pull request from \"{title}\".",
-  "pullRequests.taskLinkChanged": "The task link changed. Refresh and try again.",
+  "pullRequests.taskCreated": 'Created "{title}" and linked this pull request.',
+  "pullRequests.taskLinked": 'Linked this pull request to "{title}".',
+  "pullRequests.taskUnlinked": 'Unlinked this pull request from "{title}".',
+  "pullRequests.taskLinkChanged":
+    "The task link changed. Refresh and try again.",
   "pullRequests.chat": "Chat",
   "pullRequests.branch": "Branch",
   "pullRequests.reviewers": "Reviewers",
@@ -2464,14 +2526,16 @@ export const en = {
   "pullRequests.description": "Description",
   "pullRequests.noDescription": "No description provided.",
   "pullRequests.changedFiles": "{count} changed files",
-  "pullRequests.chatPrompt": "Review this GitHub pull request and help me decide what to do next:",
+  "pullRequests.chatPrompt":
+    "Review this GitHub pull request and help me decide what to do next:",
   "config.showSessionOptions": "Show session settings",
   "config.hideSessionOptions": "Hide session settings",
   "config.sessionOptionsHint": "Permissions, memory, and worktree",
 
   // Feishu collaboration
   "feishu.railLabel": "Feishu Collaboration",
-  "feishu.railDescription": "Work with Feishu chats, cloud documents, and Base data in CodeTwo.",
+  "feishu.railDescription":
+    "Work with Feishu chats, cloud documents, and Base data in CodeTwo.",
   "feishu.title": "Feishu",
   "feishu.resources": "Feishu resources",
   "feishu.section.contacts": "Contacts",
@@ -2481,22 +2545,26 @@ export const en = {
   "feishu.collapseSection": "Collapse {section}",
   "feishu.expandSection": "Expand {section}",
   "feishu.dragSection": "Drag to reorder {section}",
-  "feishu.dragResource": "Drag to reorder {name}; Option-Up or Option-Down also moves it",
+  "feishu.dragResource":
+    "Drag to reorder {name}; Option-Up or Option-Down also moves it",
   "feishu.showMore": "Show {count} more",
   "feishu.showLess": "Show less",
   "feishu.pinResource": "Pin {name}",
   "feishu.unpinResource": "Unpin {name}",
   "feishu.newActivity": "New activity in {name}",
   "feishu.sectionHasActivity": "New activity in {section}",
-  "feishu.realtimeUnavailable": "{name} cannot send live updates. It will refresh when opened.",
+  "feishu.realtimeUnavailable":
+    "{name} cannot send live updates. It will refresh when opened.",
   "feishu.refresh": "Refresh Feishu",
   "feishu.retry": "Retry",
   "feishu.loading": "Loading Feishu…",
   "feishu.search": "Search chats and resources",
   "feishu.empty": "No visible resources",
-  "feishu.emptyHint": "Only resources visible to the connected Feishu account appear here.",
+  "feishu.emptyHint":
+    "Only resources visible to the connected Feishu account appear here.",
   "feishu.loadFailed": "Could not load Feishu resources",
-  "feishu.loadFailedHint": "Check the app's user permissions, then authorize this account again.",
+  "feishu.loadFailedHint":
+    "Check the app's user permissions, then authorize this account again.",
   "feishu.noMatches": "No matching resources",
   "feishu.selectResource": "Select a chat or resource",
   "feishu.source.chat": "Feishu chat: {name}",
@@ -2525,45 +2593,59 @@ export const en = {
   "feishu.emptyDocument": "This document has no visible text.",
   "feishu.documentComponentLoading": "Opening the live Feishu document…",
   "feishu.documentComponentFrameTitle": "Live Feishu document",
-  "feishu.documentComponentFallback": "Live view is unavailable. Showing the latest readable preview.",
-  "feishu.documentComponentUnavailable": "This resource cannot be opened by the Feishu Docs Component.",
-  "feishu.documentComponentTimeout": "The live Feishu document took too long to open.",
+  "feishu.documentComponentFallback":
+    "Live view is unavailable. Showing the latest readable preview.",
+  "feishu.documentComponentUnavailable":
+    "This resource cannot be opened by the Feishu Docs Component.",
+  "feishu.documentComponentTimeout":
+    "The live Feishu document took too long to open.",
   "feishu.loadingBase": "Loading Base data…",
   "feishu.emptyBase": "This Base table has no visible records.",
   "feishu.baseTables": "Base tables",
   "feishu.related": "Related · {count}",
   "feishu.relatedResources": "Related resources",
   "feishu.relatedDialogTitle": "Related resources",
-  "feishu.relatedDialogDescription": "Choose the documents and Base apps that belong with {chat}.",
+  "feishu.relatedDialogDescription":
+    "Choose the documents and Base apps that belong with {chat}.",
   "feishu.handoff": "Hand to CodeTwo",
   "feishu.handoffTitle": "Hand this context to CodeTwo",
-  "feishu.handoffDescription": "CodeTwo will receive a current snapshot of {source}.",
+  "feishu.handoffDescription":
+    "CodeTwo will receive a current snapshot of {source}.",
   "feishu.objective": "What should CodeTwo do?",
-  "feishu.objectivePlaceholder": "For example: extract the acceptance items, implement them, and report any blockers…",
+  "feishu.objectivePlaceholder":
+    "For example: extract the acceptance items, implement them, and report any blockers…",
   "feishu.notifyOnComplete": "Notify the Feishu chat when this task ends",
   "feishu.notifyTarget": "The result will be announced in {chat}.",
-  "feishu.notifyUnavailable": "Open an existing CodeTwo task and select a Feishu chat to enable notifications.",
+  "feishu.notifyUnavailable":
+    "Open an existing CodeTwo task and select a Feishu chat to enable notifications.",
   "feishu.taskHandedOff": "Sent to the current CodeTwo task.",
-  "feishu.taskHandedOffWithNotification": "Sent to CodeTwo. {chat} will be notified when the task ends.",
+  "feishu.taskHandedOffWithNotification":
+    "Sent to CodeTwo. {chat} will be notified when the task ends.",
   "feishu.handoffFailed": "Could not hand this context to CodeTwo: {error}",
   "feishu.cancel": "Cancel",
   "feishu.pluginNotReady": "Feishu collaboration is not ready",
-  "feishu.pluginNotReadyHint": "Enable and trust the community Feishu plugin before opening its workspace.",
+  "feishu.pluginNotReadyHint":
+    "Enable and trust the community Feishu plugin before opening its workspace.",
   "feishu.openPlugins": "Open Plugin Hub",
   "feishu.authorizationRequired": "Sign in to Feishu",
-  "feishu.authorizationRequiredHint": "Authorize Feishu in plugin settings to show contacts, documents, and Base data.",
+  "feishu.authorizationRequiredHint":
+    "Authorize Feishu in plugin settings to show contacts, documents, and Base data.",
   "feishu.signIn": "Sign in to Feishu",
   "feishu.credentialsRequired": "Connect Feishu",
-  "feishu.credentialsHint": "Bring chats, cloud documents, and Base data into CodeTwo, then notify the right chat when work finishes.",
+  "feishu.credentialsHint":
+    "Bring chats, cloud documents, and Base data into CodeTwo, then notify the right chat when work finishes.",
   "feishu.oneClickTitle": "Create a CodeTwo app in Feishu",
-  "feishu.oneClickHint": "Feishu creates the app and preconfigures the permissions needed for chats, cloud documents, Base data, and notifications.",
+  "feishu.oneClickHint":
+    "Feishu creates the app and preconfigures the permissions needed for chats, cloud documents, Base data, and notifications.",
   "feishu.finishConnectionTitle": "Finish connecting your Feishu account",
-  "feishu.finishConnectionHint": "The app is ready. Authorize your account so CodeTwo can show the chats and resources you can access.",
+  "feishu.finishConnectionHint":
+    "The app is ready. Authorize your account so CodeTwo can show the chats and resources you can access.",
   "feishu.createAndConnect": "Create app and connect",
   "feishu.useExistingApp": "I already have a Feishu app",
   "feishu.loadingConnection": "Checking the Feishu connection…",
   "feishu.appId": "App ID",
-  "feishu.appIdHint": "Find it on the Credentials & Basic Info page in the Feishu developer console.",
+  "feishu.appIdHint":
+    "Find it on the Credentials & Basic Info page in the Feishu developer console.",
   "feishu.appIdRequired": "Enter the Feishu App ID.",
   "feishu.appSecret": "App Secret",
   "feishu.appSecretPlaceholder": "Enter the App Secret",
@@ -2573,24 +2655,31 @@ export const en = {
   "feishu.showSecret": "Show App Secret",
   "feishu.hideSecret": "Hide App Secret",
   "feishu.redirectUri": "Redirect URL",
-  "feishu.redirectHint": "Add this exact URL to the app's redirect URL list. CodeTwo will open the authorization page after saving.",
+  "feishu.redirectHint":
+    "Add this exact URL to the app's redirect URL list. CodeTwo will open the authorization page after saving.",
   "feishu.waitingForAuthorization": "Finish authorization in your browser",
-  "feishu.waitingForAuthorizationHint": "This page will connect automatically after Feishu returns the result.",
+  "feishu.waitingForAuthorizationHint":
+    "This page will connect automatically after Feishu returns the result.",
   "feishu.waitingForCreation": "Confirm app creation in Feishu",
-  "feishu.waitingForCreationHint": "CodeTwo connects automatically after you confirm. If the link expires, start again here.",
+  "feishu.waitingForCreationHint":
+    "CodeTwo connects automatically after you confirm. If the link expires, start again here.",
   "feishu.reopenAuthorization": "Open again",
   "feishu.openDeveloperConsole": "Feishu developer console",
   "feishu.continueAuthorization": "Authorize",
   "feishu.saveAndAuthorize": "Save and authorize",
-  "feishu.authorizationOpened": "The Feishu authorization page is open in your browser.",
+  "feishu.authorizationOpened":
+    "The Feishu authorization page is open in your browser.",
   "feishu.authorizationFailed": "Could not start Feishu authorization: {error}",
   "feishu.connectionSettings": "Feishu connection",
-  "feishu.connectionSettingsHint": "Manage the app and account used for chats, documents, Base data, and task notifications.",
-  "feishu.createdByCodeTwo": "This app was created through Feishu's official one-click agent setup.",
+  "feishu.connectionSettingsHint":
+    "Manage the app and account used for chats, documents, Base data, and task notifications.",
+  "feishu.createdByCodeTwo":
+    "This app was created through Feishu's official one-click agent setup.",
   "feishu.manageFeishuApp": "Manage in Feishu",
   "feishu.connectedAccount": "Connected Feishu account",
   "feishu.connected": "Connected",
-  "feishu.disconnectHint": "Disconnecting removes the saved App ID, App Secret, and user authorization from this CodeTwo profile.",
+  "feishu.disconnectHint":
+    "Disconnecting removes the saved App ID, App Secret, and user authorization from this CodeTwo profile.",
   "feishu.disconnect": "Disconnect",
   "feishu.reauthorize": "Authorize again",
   "feishu.disconnected": "Feishu has been disconnected.",
@@ -2609,7 +2698,9 @@ export const en = {
 
 export type StringKey = keyof typeof en;
 
-/** Simplified Chinese. Typed against `en`, so an omission won't compile. */
+/**
+Simplified Chinese. Typed against `en`, so an omission won't compile.
+*/
 export const zhCN: Record<StringKey, string> = {
   "app.name": "C2",
   "rail.noProject": "未选择项目",
@@ -2698,7 +2789,8 @@ export const zhCN: Record<StringKey, string> = {
 
   "docker.title": "Docker",
   "docker.unavailableTitle": "Docker Tools 尚未就绪",
-  "docker.unavailableHint": "启用并信任 Docker Tools 插件后，即可管理本机容器和镜像。",
+  "docker.unavailableHint":
+    "启用并信任 Docker Tools 插件后，即可管理本机容器和镜像。",
   "docker.openPlugins": "打开 Plugin Hub",
   "docker.refresh": "刷新",
   "docker.retry": "重试",
@@ -2751,7 +2843,8 @@ export const zhCN: Record<StringKey, string> = {
   "docker.logsDescription": "最近 200 行带时间戳的日志。",
   "docker.noOutput": "没有输出。",
   "docker.removeTitle": "删除这个镜像？",
-  "docker.removeDescription": "从当前 Docker 引擎删除 {name}？正在使用它的容器可能会阻止删除。",
+  "docker.removeDescription":
+    "从当前 Docker 引擎删除 {name}？正在使用它的容器可能会阻止删除。",
 
   "automations.title": "自动化",
   "automations.subtitle": "按计划运行重复工作，并逐次审阅结果。",
@@ -2891,7 +2984,8 @@ export const zhCN: Record<StringKey, string> = {
   "transientChat.add": "向对话添加内容",
 
   "actionDialog.title": "添加动作",
-  "actionDialog.description": "动作可从顶部栏或快捷键运行项目命令，或发送预设提示词。",
+  "actionDialog.description":
+    "动作可从顶部栏或快捷键运行项目命令，或发送预设提示词。",
   "actionDialog.kind": "动作类型",
   "actionDialog.kindCommand": "运行命令",
   "actionDialog.kindPrompt": "发送提示词",
@@ -3049,8 +3143,7 @@ export const zhCN: Record<StringKey, string> = {
     "上下文窗口：已用 {used} / {capacity} 个 token（{percentage}）",
 
   "pluginHub.title": "Plugin Hub",
-  "pluginHub.description":
-    "管理遵循 C2 插件标准的插件包及其组件。",
+  "pluginHub.description": "管理遵循 C2 插件标准的插件包及其组件。",
   "pluginHub.newSkill": "新建技能",
   "pluginHub.github": "从 GitHub 安装",
   "pluginHub.openMarketplace": "打开插件市场",
@@ -3569,23 +3662,27 @@ export const zhCN: Record<StringKey, string> = {
   "profile.mostUsedProvider": "最常用 Provider",
   "profile.providerActivity": "Provider 使用量",
   "profile.noProviderActivity": "还没有 Provider 使用记录。",
-  "profile.localOnly": "统计来自本机 C2 会话记录；只有主动分享时才会离开这台 Mac。",
+  "profile.localOnly":
+    "统计来自本机 C2 会话记录；只有主动分享时才会离开这台 Mac。",
   "profile.shareTitle": "{name} · C2 Profile",
-  "profile.shareText": "{name} 的 C2 Profile：最近 90 天使用 {tokens} Tokens，活跃 {days} 天，当前连续使用 {streak} 天，共扫描 {sessions} 个本地会话。",
+  "profile.shareText":
+    "{name} 的 C2 Profile：最近 90 天使用 {tokens} Tokens，活跃 {days} 天，当前连续使用 {streak} 天，共扫描 {sessions} 个本地会话。",
   "profile.shared": "Profile 已分享。",
   "profile.copied": "Profile 摘要已复制。",
   "profile.shareFailed": "无法分享或复制 Profile。",
   "settings.general": "通用",
   "settings.generalHint": "应用语言、软件更新与终端显示设置。",
   "settings.import": "导入",
-  "settings.importHint": "将已有的 Codex、Claude Code、Cursor 与 T3 Code 对话导入 C2。",
+  "settings.importHint":
+    "将已有的 Codex、Claude Code、Cursor 与 T3 Code 对话导入 C2。",
   "settings.importFromFiles": "从文件导入",
   "settings.importSessions": "会话文件",
   "settings.importSessionsHint":
     "选择 Codex 或 Claude Code JSONL、Cursor globalStorage state.vscdb，或 T3 Code state.sqlite；已导入的会话会自动跳过。",
   "settings.chooseSessionFiles": "选择文件",
   "settings.importing": "正在导入…",
-  "settings.importResult": "已导入 {imported} 个 · 已存在 {skipped} 个 · 失败 {failed} 个",
+  "settings.importResult":
+    "已导入 {imported} 个 · 已存在 {skipped} 个 · 失败 {failed} 个",
   "settings.importedMessages": "已添加 {count} 条可见消息。",
   "settings.openImportedSession": "打开会话",
   "settings.importFailed": "无法导入会话：{error}",
@@ -3624,7 +3721,8 @@ export const zhCN: Record<StringKey, string> = {
   "settings.developerReloadFailed": "无法重载插件：{error}",
   "settings.developerDevtoolsFailed": "无法打开 WebView 开发者工具：{error}",
   "settings.sync": "设备同步",
-  "settings.syncHint": "让通过“设备连接”配对的多台 C2 设备保持会话与已保存记忆一致。",
+  "settings.syncHint":
+    "让通过“设备连接”配对的多台 C2 设备保持会话与已保存记忆一致。",
   "settings.pairedDeviceSync": "已配对的 C2 设备",
   "settings.syncReady": "已可与配对的 C2 设备同步。",
   "settings.syncLastSuccess": "上次同步：{time}。",
@@ -3647,7 +3745,8 @@ export const zhCN: Record<StringKey, string> = {
   "settings.pets": "宠物",
   "settings.petsHint": "设置桌面宠物的显示方式与状态反馈。",
   "settings.petPicker": "选择宠物",
-  "settings.petPickerHint": "宠物独立悬浮在桌面上，跟随当前任务，不占用对话空间。",
+  "settings.petPickerHint":
+    "宠物独立悬浮在桌面上，跟随当前任务，不占用对话空间。",
   "settings.petName": "奈娃",
   "settings.petDescription": "安静陪伴会话进度的 C2 小伙伴。",
   "settings.petPreviewLabel": "{name} 预览",
@@ -3686,7 +3785,8 @@ export const zhCN: Record<StringKey, string> = {
   "settings.projectNameHint": "显示在侧边栏、标题栏和项目切换器中。",
   "settings.projectNameRequired": "项目名称不能为空。",
   "settings.projectIcon": "项目图标",
-  "settings.projectIconAutomatic": "正在使用自动文件夹图标。支持 PNG、JPEG 或 WebP，最大 2 MB。",
+  "settings.projectIconAutomatic":
+    "正在使用自动文件夹图标。支持 PNG、JPEG 或 WebP，最大 2 MB。",
   "settings.projectIconCustom": "在项目出现的所有位置使用此自定义图标。",
   "settings.projectIconChoose": "选择图片",
   "settings.projectIconChange": "更换",
@@ -3695,7 +3795,8 @@ export const zhCN: Record<StringKey, string> = {
   "settings.projectSaveFailed": "无法保存项目设置：{error}",
   "settings.projectNewSessions": "新会话",
   "settings.projectProvider": "默认供应商",
-  "settings.projectProviderHint": "新会话默认使用此供应商；发送前仍可在草稿中更改。",
+  "settings.projectProviderHint":
+    "新会话默认使用此供应商；发送前仍可在草稿中更改。",
   "settings.projectProviderAutomatic": "自动（保留当前选择）",
   "settings.projectModel": "默认模型与推理强度",
   "settings.projectModelHint": "选择一个能提供模型列表的供应商后即可设置。",
@@ -3724,8 +3825,10 @@ export const zhCN: Record<StringKey, string> = {
   "settings.projectActionAdd": "添加操作",
   "settings.projectDanger": "危险操作",
   "settings.removeProject": "移除项目",
-  "settings.removeProjectHint": "从 C2 中移除此项目；磁盘文件和已保存会话不会被删除。",
-  "settings.removeProjectConfirm": "从 C2 中移除「{name}」？磁盘文件和已保存会话不会被删除。",
+  "settings.removeProjectHint":
+    "从 C2 中移除此项目；磁盘文件和已保存会话不会被删除。",
+  "settings.removeProjectConfirm":
+    "从 C2 中移除「{name}」？磁盘文件和已保存会话不会被删除。",
   "settings.projectNone": "请先选择一个项目，再配置它的默认值。",
   "settings.providers": "供应商",
   "settings.restoreDefaults": "恢复默认",
@@ -3758,21 +3861,27 @@ export const zhCN: Record<StringKey, string> = {
   "settings.providerDisplayNameHint": "可选；会显示在 C2 各处。",
   "settings.providerRuntimeCommand": "ACP 运行命令",
   "settings.providerRuntimeCommandPlaceholder": "使用自动检测的命令",
-  "settings.providerRuntimeCommandHint": "C2 启动该 Provider 时执行的程序名或路径。",
+  "settings.providerRuntimeCommandHint":
+    "C2 启动该 Provider 时执行的程序名或路径。",
   "settings.providerConfigDirectory": "Provider 配置目录",
-  "settings.providerConfigDirectoryHint": "启动 Provider 时通过 {variable} 传入。",
+  "settings.providerConfigDirectoryHint":
+    "启动 Provider 时通过 {variable} 传入。",
   "settings.providerRuntimeArguments": "启动参数",
   "settings.providerOverrideArguments": "覆盖自动检测的启动参数",
-  "settings.providerRuntimeArgumentsHint": "每行一个参数。关闭覆盖后使用自动检测的默认值。",
+  "settings.providerRuntimeArgumentsHint":
+    "每行一个参数。关闭覆盖后使用自动检测的默认值。",
   "settings.providerNoArguments": "无参数",
   "settings.providerForwardedEnvironment": "转发环境变量",
-  "settings.providerForwardedEnvironmentHint": "每行一个宿主变量名。C2 只保存名称，设置页不会读取或返回变量值。",
+  "settings.providerForwardedEnvironmentHint":
+    "每行一个宿主变量名。C2 只保存名称，设置页不会读取或返回变量值。",
   "settings.providerMissingEnvironment": "当前宿主尚未设置：{variables}",
   "settings.providerSave": "保存运行时",
   "settings.providerSaving": "正在保存…",
-  "settings.providerConfigured": "已保存 {provider} 的运行时设置；新会话会使用它们。",
+  "settings.providerConfigured":
+    "已保存 {provider} 的运行时设置；新会话会使用它们。",
   "settings.providerModels": "模型",
-  "settings.providerModelsHint": "隐藏的模型不会出现在编辑器选择器中；切换前，当前已选模型仍保持可用。",
+  "settings.providerModelsHint":
+    "隐藏的模型不会出现在编辑器选择器中；切换前，当前已选模型仍保持可用。",
   "settings.providerShowAllModels": "全部显示",
   "settings.providerSearchModels": "搜索 Provider 模型",
   "settings.providerClearModelSearch": "清除模型搜索",
@@ -3818,7 +3927,8 @@ export const zhCN: Record<StringKey, string> = {
   "settings.appshotsScreenRecording": "屏幕录制",
   "settings.appshotsScreenRecordingHint": "用于捕获其他应用的窗口。",
   "settings.appshotsAccessibility": "辅助功能",
-  "settings.appshotsAccessibilityHint": "用于读取窗口文本和启用双 Command 快捷键。",
+  "settings.appshotsAccessibilityHint":
+    "用于读取窗口文本和启用双 Command 快捷键。",
   "settings.appshotsAllowed": "已允许",
   "settings.appshotsAllow": "允许…",
   "settings.appshotsOpenSettings": "打开设置",
@@ -4117,8 +4227,7 @@ export const zhCN: Record<StringKey, string> = {
   "worktree.current": "当前检出",
   "worktree.origin_default": "本地 origin 默认分支",
   "worktree.localOnly": "本地 ref",
-  "worktree.noFetch":
-    "创建 worktree 前会把所选 ref 解析为确定的 commit。",
+  "worktree.noFetch": "创建 worktree 前会把所选 ref 解析为确定的 commit。",
   "worktree.resolving": "正在解析本地 Git ref…",
   "worktree.unavailable": "所选项目没有这个可用基线。",
   "worktree.fixedForSession": "该会话固定使用创建时记录的本地 ref 与 commit。",
@@ -4127,7 +4236,8 @@ export const zhCN: Record<StringKey, string> = {
     "该旧会话早于持久化目录身份字段，只能使用较窄的旧版 Git 与路径证据校验。",
   "worktree.manage": "Worktree 管理",
   "worktree.manageHint": "该项目下创建的隔离检出目录，包括没有会话认领的残留。",
-  "worktree.manageAllHint": "查看所有项目的隔离检出，打开关联会话，并清理不再需要的 worktree。",
+  "worktree.manageAllHint":
+    "查看所有项目的隔离检出，打开关联会话，并清理不再需要的 worktree。",
   "worktree.settingsTitle": "Worktree 行为",
   "worktree.settingsLoading": "正在加载 worktree 设置…",
   "worktree.settingsLoadFailed": "无法加载 worktree 设置：{error}",
@@ -4143,7 +4253,8 @@ export const zhCN: Record<StringKey, string> = {
   "worktree.autoDeleteHint":
     "超过上限时，仅丢弃最旧的已归档会话 worktree。会话记录仍可查看，但检出目录无法恢复；活跃会话和无主残留不会被自动删除。",
   "worktree.autoDeleteLimit": "自动删除上限",
-  "worktree.autoDeleteLimitHint": "要保留的活跃与已归档会话 worktree 总数上限。",
+  "worktree.autoDeleteLimitHint":
+    "要保留的活跃与已归档会话 worktree 总数上限。",
   "worktree.manageLoading": "正在扫描 worktree…",
   "worktree.manageEmpty": "没有 worktree。",
   "worktree.manageNoProjects": "请先添加项目，再管理其 worktree。",
@@ -4235,7 +4346,8 @@ export const zhCN: Record<StringKey, string> = {
   "githubPr.diffLoading": "正在加载拉取请求改动…",
   "githubPr.diffFailed": "无法加载改动：{error}",
   "githubPr.noChanges": "没有可审阅的改动。",
-  "githubPr.diffTruncated": "改动内容已截断。请在 GitHub 打开拉取请求查看完整补丁。",
+  "githubPr.diffTruncated":
+    "改动内容已截断。请在 GitHub 打开拉取请求查看完整补丁。",
   "githubPr.review": "审阅改动",
   "githubPr.reviewPlaceholder": "留下审阅意见",
   "githubPr.comment": "评论",
@@ -4347,9 +4459,11 @@ export const zhCN: Record<StringKey, string> = {
   "toast.appshotReady": "已把 {app} 的 Appshot 放入输入区。",
   "toast.appshotFailed": "Appshot 失败：{error}",
   "toast.imageAttachFailed": "无法添加图片：{error}",
-  "toast.draftSaveFailed": "草稿仍保留在当前窗口中，但 C2 暂时无法将它保存到本地。",
+  "toast.draftSaveFailed":
+    "草稿仍保留在当前窗口中，但 C2 暂时无法将它保存到本地。",
   "toast.draftCorrupt": "无法读取已保存的草稿，已打开空白草稿。",
-  "toast.draftStorageUnavailable": "本地草稿存储不可用；草稿目前只保留在这个窗口中。",
+  "toast.draftStorageUnavailable":
+    "本地草稿存储不可用；草稿目前只保留在这个窗口中。",
   "toast.draftAttachmentMissing": "这份草稿中的一张或多张图片已不可用。",
   "toast.draftRestoreFailed": "无法恢复这份草稿；已保留原有的本地记录。",
   "toast.alreadyRunning": "已经有一轮在运行了，先停止它。",
@@ -4579,7 +4693,8 @@ export const zhCN: Record<StringKey, string> = {
   "permission.site": "站点",
   "permission.application": "应用",
   "permission.risk": "风险",
-  "permission.requiredEvenFullAccess": "即使处于完全访问模式，也必须确认此操作。",
+  "permission.requiredEvenFullAccess":
+    "即使处于完全访问模式，也必须确认此操作。",
   "planDoc.open": "以文档打开",
   "planDoc.pin": "固定到场景",
   "planDoc.title": "将计划打开为文档",
@@ -4980,8 +5095,10 @@ export const zhCN: Record<StringKey, string> = {
   "feishu.emptyDocument": "这份文档没有可见正文。",
   "feishu.documentComponentLoading": "正在打开飞书实时文档…",
   "feishu.documentComponentFrameTitle": "飞书实时文档",
-  "feishu.documentComponentFallback": "实时文档暂时不可用，下面显示最近一次可读预览。",
-  "feishu.documentComponentUnavailable": "这个资源暂不支持用飞书云文档组件打开。",
+  "feishu.documentComponentFallback":
+    "实时文档暂时不可用，下面显示最近一次可读预览。",
+  "feishu.documentComponentUnavailable":
+    "这个资源暂不支持用飞书云文档组件打开。",
   "feishu.documentComponentTimeout": "飞书实时文档打开超时。",
   "feishu.loadingBase": "正在加载多维表格…",
   "feishu.emptyBase": "这张数据表没有可见记录。",
@@ -4989,7 +5106,8 @@ export const zhCN: Record<StringKey, string> = {
   "feishu.related": "关联资料 · {count}",
   "feishu.relatedResources": "关联资料",
   "feishu.relatedDialogTitle": "关联资料",
-  "feishu.relatedDialogDescription": "选择与“{chat}”一起使用的云文档和多维表格。",
+  "feishu.relatedDialogDescription":
+    "选择与“{chat}”一起使用的云文档和多维表格。",
   "feishu.handoff": "交给 CodeTwo",
   "feishu.handoffTitle": "把这份上下文交给 CodeTwo",
   "feishu.handoffDescription": "CodeTwo 将收到“{source}”的当前快照。",
@@ -4997,23 +5115,29 @@ export const zhCN: Record<StringKey, string> = {
   "feishu.objectivePlaceholder": "例如：提取验收项、完成实现，并报告阻塞问题…",
   "feishu.notifyOnComplete": "任务结束后通知飞书对话",
   "feishu.notifyTarget": "结果会通知到“{chat}”。",
-  "feishu.notifyUnavailable": "先打开一个已有 CodeTwo 任务并选择飞书对话，才能开启通知。",
+  "feishu.notifyUnavailable":
+    "先打开一个已有 CodeTwo 任务并选择飞书对话，才能开启通知。",
   "feishu.taskHandedOff": "已交给当前 CodeTwo 任务。",
-  "feishu.taskHandedOffWithNotification": "已交给 CodeTwo；任务结束后会通知“{chat}”。",
+  "feishu.taskHandedOffWithNotification":
+    "已交给 CodeTwo；任务结束后会通知“{chat}”。",
   "feishu.handoffFailed": "无法把上下文交给 CodeTwo：{error}",
   "feishu.cancel": "取消",
   "feishu.pluginNotReady": "飞书协作尚未就绪",
   "feishu.pluginNotReadyHint": "请先启用并信任社区飞书插件。",
   "feishu.openPlugins": "打开插件中心",
   "feishu.authorizationRequired": "登录飞书",
-  "feishu.authorizationRequiredHint": "请在插件设置中完成飞书授权，授权后才会显示联系人、云文档和多维表格。",
+  "feishu.authorizationRequiredHint":
+    "请在插件设置中完成飞书授权，授权后才会显示联系人、云文档和多维表格。",
   "feishu.signIn": "登录飞书",
   "feishu.credentialsRequired": "连接飞书",
-  "feishu.credentialsHint": "在 CodeTwo 中查看对话、云文档和多维表格，并在任务结束后通知对应群聊。",
+  "feishu.credentialsHint":
+    "在 CodeTwo 中查看对话、云文档和多维表格，并在任务结束后通知对应群聊。",
   "feishu.oneClickTitle": "在飞书中创建 CodeTwo 应用",
-  "feishu.oneClickHint": "飞书会自动创建应用，并预置对话、云文档、多维表格和任务通知所需的权限。",
+  "feishu.oneClickHint":
+    "飞书会自动创建应用，并预置对话、云文档、多维表格和任务通知所需的权限。",
   "feishu.finishConnectionTitle": "完成飞书账号连接",
-  "feishu.finishConnectionHint": "应用已经创建完成。授权当前账号后，CodeTwo 才能显示你有权访问的对话和资料。",
+  "feishu.finishConnectionHint":
+    "应用已经创建完成。授权当前账号后，CodeTwo 才能显示你有权访问的对话和资料。",
   "feishu.createAndConnect": "创建应用并连接",
   "feishu.useExistingApp": "我已有飞书应用",
   "feishu.loadingConnection": "正在检查飞书连接…",
@@ -5028,11 +5152,13 @@ export const zhCN: Record<StringKey, string> = {
   "feishu.showSecret": "显示 App Secret",
   "feishu.hideSecret": "隐藏 App Secret",
   "feishu.redirectUri": "重定向 URL",
-  "feishu.redirectHint": "请把这个完整地址加入应用的重定向 URL。保存后 CodeTwo 会自动打开授权页。",
+  "feishu.redirectHint":
+    "请把这个完整地址加入应用的重定向 URL。保存后 CodeTwo 会自动打开授权页。",
   "feishu.waitingForAuthorization": "请在浏览器中完成授权",
   "feishu.waitingForAuthorizationHint": "飞书返回结果后，本页会自动完成连接。",
   "feishu.waitingForCreation": "请在飞书中确认创建应用",
-  "feishu.waitingForCreationHint": "确认后 CodeTwo 会自动完成连接；如果链接失效，请在这里重新发起。",
+  "feishu.waitingForCreationHint":
+    "确认后 CodeTwo 会自动完成连接；如果链接失效，请在这里重新发起。",
   "feishu.reopenAuthorization": "重新打开",
   "feishu.openDeveloperConsole": "飞书开放平台",
   "feishu.continueAuthorization": "授权登录",
@@ -5040,12 +5166,15 @@ export const zhCN: Record<StringKey, string> = {
   "feishu.authorizationOpened": "已在浏览器中打开飞书授权页。",
   "feishu.authorizationFailed": "无法发起飞书授权：{error}",
   "feishu.connectionSettings": "飞书连接",
-  "feishu.connectionSettingsHint": "管理用于对话、云文档、多维表格和任务通知的应用与账号。",
-  "feishu.createdByCodeTwo": "这个应用通过飞书官方的一键创建智能体应用流程完成连接。",
+  "feishu.connectionSettingsHint":
+    "管理用于对话、云文档、多维表格和任务通知的应用与账号。",
+  "feishu.createdByCodeTwo":
+    "这个应用通过飞书官方的一键创建智能体应用流程完成连接。",
   "feishu.manageFeishuApp": "在飞书中管理",
   "feishu.connectedAccount": "已连接的飞书账号",
   "feishu.connected": "已连接",
-  "feishu.disconnectHint": "断开后会从当前 CodeTwo 配置中移除 App ID、App Secret 和用户授权信息。",
+  "feishu.disconnectHint":
+    "断开后会从当前 CodeTwo 配置中移除 App ID、App Secret 和用户授权信息。",
   "feishu.disconnect": "断开连接",
   "feishu.reauthorize": "重新授权",
   "feishu.disconnected": "已断开飞书连接。",

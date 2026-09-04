@@ -8,7 +8,8 @@
  */
 import * as monaco from "monaco-editor";
 
-import { clientForPath, pathToUri, type LspClient } from "./client";
+import { clientForPath, pathToUri } from "./client";
+import type { LspClient } from "./client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the wire format is untyped JSON */
 type Json = any;
@@ -32,14 +33,24 @@ function toMonacoRange(r: Json): monaco.IRange {
   };
 }
 
-function docParams(model: monaco.editor.ITextModel, pos: monaco.Position): Json {
-  return { textDocument: { uri: pathToUri(model.uri.path) }, position: toLspPosition(pos) };
+function documentParameters(
+  model: monaco.editor.ITextModel,
+  pos: monaco.Position
+): Json {
+  return {
+    textDocument: { uri: pathToUri(model.uri.path) },
+    position: toLspPosition(pos),
+  };
 }
 
-/** Flush pending edits first: a request against stale server text answers the wrong question. */
+/**
+Flush pending edits first: a request against stale server text answers the wrong question.
+*/
 function readyClient(model: monaco.editor.ITextModel): LspClient | null {
   const client = clientFor(model);
-  if (!client) return null;
+  if (!client) {
+    return null;
+  }
   client.flush(pathToUri(model.uri.path));
   return client;
 }
@@ -73,15 +84,25 @@ const KIND: monaco.languages.CompletionItemKind[] = [
   monaco.languages.CompletionItemKind.TypeParameter,
 ];
 
-function toDoc(d: Json): monaco.IMarkdownString | undefined {
-  if (!d) return undefined;
-  if (typeof d === "string") return { value: d };
-  if (typeof d.value === "string") return { value: d.value };
+function toDocument(d: Json): monaco.IMarkdownString | undefined {
+  if (!d) {
+    return undefined;
+  }
+  if (typeof d === "string") {
+    return { value: d };
+  }
+  if (typeof d.value === "string") {
+    return { value: d.value };
+  }
   return undefined;
 }
 
-function toCompletion(item: Json, fallback: monaco.IRange): monaco.languages.CompletionItem {
-  const label = typeof item.label === "string" ? item.label : (item.label?.label ?? "");
+function toCompletion(
+  item: Json,
+  fallback: monaco.IRange
+): monaco.languages.CompletionItem {
+  const label =
+    typeof item.label === "string" ? item.label : (item.label?.label ?? "");
   let range: monaco.languages.CompletionItem["range"] = fallback;
   let insertText: string = item.insertText ?? label;
   if (item.textEdit) {
@@ -89,11 +110,15 @@ function toCompletion(item: Json, fallback: monaco.IRange): monaco.languages.Com
     // InsertReplaceEdit carries two ranges; plain TextEdit carries one.
     range = item.textEdit.range
       ? toMonacoRange(item.textEdit.range)
-      : { insert: toMonacoRange(item.textEdit.insert), replace: toMonacoRange(item.textEdit.replace) };
+      : {
+          insert: toMonacoRange(item.textEdit.insert),
+          replace: toMonacoRange(item.textEdit.replace),
+        };
   }
   return {
     label,
-    kind: KIND[(item.kind ?? 1) - 1] ?? monaco.languages.CompletionItemKind.Text,
+    kind:
+      KIND[(item.kind ?? 1) - 1] ?? monaco.languages.CompletionItemKind.Text,
     insertText,
     range,
     insertTextRules:
@@ -101,24 +126,30 @@ function toCompletion(item: Json, fallback: monaco.IRange): monaco.languages.Com
         ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
         : undefined,
     detail: item.detail,
-    documentation: toDoc(item.documentation),
+    documentation: toDocument(item.documentation),
     sortText: item.sortText,
     filterText: item.filterText,
     preselect: item.preselect,
     additionalTextEdits: item.additionalTextEdits?.map((e: Json) => ({
-      range: toMonacoRange(e.range),
-      text: e.newText,
-    })),
+									      range: toMonacoRange(e.range),
+									      text: e.newText,
+									    })),
   };
 }
 
 function toHoverContents(contents: Json): monaco.IMarkdownString[] {
   const one = (c: Json): monaco.IMarkdownString | null => {
-    if (!c) return null;
-    if (typeof c === "string") return c ? { value: c } : null;
+    if (!c) {
+      return null;
+    }
+    if (typeof c === "string") {
+      return c ? { value: c } : null;
+    }
     if (typeof c.value === "string") {
       // MarkedString {language, value} wants a fenced block; MarkupContent is already markdown.
-      return c.language ? { value: `\`\`\`${c.language}\n${c.value}\n\`\`\`` } : { value: c.value };
+      return c.language
+        ? { value: `\`\`\`${c.language}\n${c.value}\n\`\`\`` }
+        : { value: c.value };
     }
     return null;
   };
@@ -127,27 +158,36 @@ function toHoverContents(contents: Json): monaco.IMarkdownString[] {
 }
 
 function toLocations(res: Json): monaco.languages.Location[] {
-  if (!res) return [];
+  if (!res) {
+    return [];
+  }
   const list = Array.isArray(res) ? res : [res];
   return list.map((l: Json) => ({
-    uri: monaco.Uri.parse(l.uri ?? l.targetUri),
-    range: toMonacoRange(l.range ?? l.targetSelectionRange ?? l.targetRange),
-  }));
+									    uri: monaco.Uri.parse(l.uri ?? l.targetUri),
+									    range: toMonacoRange(l.range ?? l.targetSelectionRange ?? l.targetRange),
+									  }));
 }
 
-/** Wire up every provider for one language id. Idempotent; called when a client becomes ready. */
+/**
+Wire up every provider for one language id. Idempotent; called when a client becomes ready.
+*/
 export function registerProviders(lang: string, capabilities: Json): void {
-  if (registered.has(lang)) return;
+  if (registered.has(lang)) {
+    return;
+  }
   registered.add(lang);
 
   monaco.languages.registerCompletionItemProvider(lang, {
-    triggerCharacters: capabilities?.completionProvider?.triggerCharacters ?? [],
+    triggerCharacters:
+      capabilities?.completionProvider?.triggerCharacters ?? [],
     provideCompletionItems: async (model, position) => {
       const client = readyClient(model);
-      if (!client) return { suggestions: [] };
+      if (!client) {
+        return { suggestions: [] };
+      }
       const res = await client
         .request("textDocument/completion", {
-          ...docParams(model, position),
+          ...documentParameters(model, position),
           context: { triggerKind: 1 },
         })
         .catch(() => null);
@@ -169,35 +209,55 @@ export function registerProviders(lang: string, capabilities: Json): void {
   monaco.languages.registerHoverProvider(lang, {
     provideHover: async (model, position) => {
       const client = readyClient(model);
-      if (!client) return null;
-      const res = await client.request("textDocument/hover", docParams(model, position)).catch(() => null);
-      if (!res?.contents) return null;
+      if (!client) {
+        return null;
+      }
+      const res = await client
+        .request("textDocument/hover", documentParameters(model, position))
+        .catch(() => null);
+      if (!res?.contents) {
+        return null;
+      }
       const contents = toHoverContents(res.contents);
-      if (contents.length === 0) return null;
-      return { contents, range: res.range ? toMonacoRange(res.range) : undefined };
+      if (contents.length === 0) {
+        return null;
+      }
+      return {
+        contents,
+        range: res.range ? toMonacoRange(res.range) : undefined,
+      };
     },
   });
 
   monaco.languages.registerSignatureHelpProvider(lang, {
-    signatureHelpTriggerCharacters: capabilities?.signatureHelpProvider?.triggerCharacters ?? ["(", ","],
-    signatureHelpRetriggerCharacters: capabilities?.signatureHelpProvider?.retriggerCharacters ?? [],
+    signatureHelpTriggerCharacters: capabilities?.signatureHelpProvider
+      ?.triggerCharacters ?? ["(", ","],
+    signatureHelpRetriggerCharacters:
+      capabilities?.signatureHelpProvider?.retriggerCharacters ?? [],
     provideSignatureHelp: async (model, position) => {
       const client = readyClient(model);
-      if (!client) return null;
+      if (!client) {
+        return null;
+      }
       const res = await client
-        .request("textDocument/signatureHelp", docParams(model, position))
+        .request(
+          "textDocument/signatureHelp",
+          documentParameters(model, position)
+        )
         .catch(() => null);
-      if (!res?.signatures?.length) return null;
+      if (!res?.signatures?.length) {
+        return null;
+      }
       return {
         value: {
           signatures: res.signatures.map((s: Json) => ({
-            label: s.label ?? "",
-            documentation: toDoc(s.documentation),
-            parameters: (s.parameters ?? []).map((p: Json) => ({
-              label: p.label,
-              documentation: toDoc(p.documentation),
-            })),
-          })),
+									            label: s.label ?? "",
+									            documentation: toDocument(s.documentation),
+									            parameters: (s.parameters ?? []).map((p: Json) => ({
+									              label: p.label,
+									              documentation: toDocument(p.documentation),
+									            })),
+									          })),
           activeSignature: res.activeSignature ?? 0,
           activeParameter: res.activeParameter ?? 0,
         },
@@ -209,9 +269,11 @@ export function registerProviders(lang: string, capabilities: Json): void {
   monaco.languages.registerDefinitionProvider(lang, {
     provideDefinition: async (model, position) => {
       const client = readyClient(model);
-      if (!client) return null;
+      if (!client) {
+        return null;
+      }
       const res = await client
-        .request("textDocument/definition", docParams(model, position))
+        .request("textDocument/definition", documentParameters(model, position))
         .catch(() => null);
       return toLocations(res);
     },
@@ -220,10 +282,12 @@ export function registerProviders(lang: string, capabilities: Json): void {
   monaco.languages.registerReferenceProvider(lang, {
     provideReferences: async (model, position) => {
       const client = readyClient(model);
-      if (!client) return null;
+      if (!client) {
+        return null;
+      }
       const res = await client
         .request("textDocument/references", {
-          ...docParams(model, position),
+          ...documentParameters(model, position),
           context: { includeDeclaration: true },
         })
         .catch(() => null);
@@ -234,15 +298,25 @@ export function registerProviders(lang: string, capabilities: Json): void {
   monaco.languages.registerDocumentFormattingEditProvider(lang, {
     provideDocumentFormattingEdits: async (model) => {
       const client = readyClient(model);
-      if (!client) return null;
+      if (!client) {
+        return null;
+      }
       const res = await client
         .request("textDocument/formatting", {
           textDocument: { uri: pathToUri(model.uri.path) },
-          options: { tabSize: model.getOptions().tabSize, insertSpaces: model.getOptions().insertSpaces },
+          options: {
+            tabSize: model.getOptions().tabSize,
+            insertSpaces: model.getOptions().insertSpaces,
+          },
         })
         .catch(() => null);
-      if (!Array.isArray(res)) return null;
-      return res.map((e: Json) => ({ range: toMonacoRange(e.range), text: e.newText }));
+      if (!Array.isArray(res)) {
+        return null;
+      }
+      return res.map((e: Json) => ({
+										        range: toMonacoRange(e.range),
+										        text: e.newText,
+										      }));
     },
   });
 }
@@ -254,16 +328,23 @@ const SEVERITY: monaco.MarkerSeverity[] = [
   monaco.MarkerSeverity.Hint,
 ];
 
-/** Push one file's published diagnostics onto its model as markers. */
+/**
+Push one file's published diagnostics onto its model as markers.
+*/
 export function applyDiagnostics(uri: string, diagnostics: Json[]): void {
   const model = monaco.editor.getModel(monaco.Uri.parse(uri));
-  if (!model) return;
+  if (!model) {
+    return;
+  }
   const markers: monaco.editor.IMarkerData[] = diagnostics.map((d) => ({
-    ...toMonacoRange(d.range),
-    severity: SEVERITY[(d.severity ?? 1) - 1] ?? monaco.MarkerSeverity.Error,
-    message: String(d.message ?? ""),
-    code: typeof d.code === "object" && d.code !== null ? String(d.code.value ?? "") : d.code?.toString(),
-    source: d.source,
-  }));
+										    ...toMonacoRange(d.range),
+										    severity: SEVERITY[(d.severity ?? 1) - 1] ?? monaco.MarkerSeverity.Error,
+										    message: String(d.message ?? ""),
+										    code:
+										      typeof d.code === "object" && d.code !== null
+										        ? String(d.code.value ?? "")
+										        : d.code?.toString(),
+										    source: d.source,
+										  }));
   monaco.editor.setModelMarkers(model, "codetwo-lsp", markers);
 }

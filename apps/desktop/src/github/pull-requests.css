@@ -47,12 +47,12 @@
 }
 
 .pull-request-body pre {
-  overflow-x: auto;
+  padding: var(--ds-space-surface-inset);
   border-radius: var(--ds-radius-control);
   background: var(--ds-color-fill-quiet);
-  padding: var(--ds-space-surface-inset);
   font-size: var(--ds-type-code-size);
   line-height: var(--ds-type-code-leading);
+  overflow-x: auto;
 }
 
 .pull-request-back {

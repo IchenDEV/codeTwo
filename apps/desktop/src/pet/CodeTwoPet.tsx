@@ -27,7 +27,7 @@ export type CodeTwoPetAppearance = Pick<
   "petActivityEnabled" | "petSize" | "petSource" | "petId" | "petName"
 >;
 
-export function CodeTwoPetSprite({
+export const CodeTwoPetSprite = ({
   animation,
   size,
   title,
@@ -36,14 +36,14 @@ export function CodeTwoPetSprite({
   playing = true,
   frame,
 }: {
-  animation: CodeTwoPetAnimation | "waving";
-  size: number;
-  title: string;
-  src?: string;
-  spriteVersionNumber?: number;
-  playing?: boolean;
-  frame?: number;
-}) {
+  readonly animation: CodeTwoPetAnimation | "waving";
+  readonly size: number;
+  readonly title: string;
+  readonly src?: string;
+  readonly spriteVersionNumber?: number;
+  readonly playing?: boolean;
+  readonly frame?: number;
+}) => {
   return (
     <PetX
       src={src}
@@ -57,15 +57,15 @@ export function CodeTwoPetSprite({
   );
 }
 
-export function CodeTwoPet({
+export const CodeTwoPet = ({
   animation,
   bubble = null,
   appearance: providedAppearance,
 }: {
-  animation: CodeTwoPetAnimation;
-  bubble?: string | null;
-  appearance?: CodeTwoPetAppearance;
-}) {
+  readonly animation: CodeTwoPetAnimation;
+  readonly bubble?: string | null;
+  readonly appearance?: CodeTwoPetAppearance;
+}) => {
   const t = useT();
   const storedAppearance = useAppearanceSettings();
   const appearance = providedAppearance ?? storedAppearance;
@@ -74,9 +74,10 @@ export function CodeTwoPet({
 
   useEffect(
     () => () => {
-      if (waveTimer.current !== undefined) window.clearTimeout(waveTimer.current);
+      if (waveTimer.current !== undefined)
+        window.clearTimeout(waveTimer.current);
     },
-    [],
+    []
   );
 
   const greet = () => {
@@ -88,8 +89,12 @@ export function CodeTwoPet({
     }, WAVE_DURATION_MS);
   };
 
-  const activeAnimation = wave > 0 ? "waving" : appearance.petActivityEnabled ? animation : "idle";
-  const spritesheetUrl = petSpritesheetUrl(appearance.petSource, appearance.petId);
+  const activeAnimation =
+    wave > 0 ? "waving" : appearance.petActivityEnabled ? animation : "idle";
+  const spritesheetUrl = petSpritesheetUrl(
+    appearance.petSource,
+    appearance.petId
+  );
 
   return (
     <section className="codetwo-pet-stage" aria-label={t("pet.label")}>

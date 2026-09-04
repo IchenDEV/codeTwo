@@ -1,24 +1,33 @@
-import { type ReactNode } from "react"
+import { type ReactNode } from "react";
 
 interface DetailMetricProps {
-  icon: ReactNode
-  label: string
-  children: ReactNode
+  readonly icon: ReactNode;
+  readonly label: string;
+  readonly children: ReactNode;
 }
 
 /** Consistent label/value row for master-detail metadata panels. */
-function DetailMetric({ icon, label, children }: DetailMetricProps) {
+const DetailMetric = ({ icon, label, children }: DetailMetricProps) => {
   return (
-    <div data-slot="detail-metric" className="grid grid-cols-[9rem_minmax(0,1fr)] items-start gap-3 text-body">
-      <span data-slot="detail-metric-label" className="flex items-center gap-2 text-muted-foreground">
+    <div
+      data-slot="detail-metric"
+      className="text-body grid grid-cols-[9rem_minmax(0,1fr)] items-start gap-3"
+    >
+      <span
+        data-slot="detail-metric-label"
+        className="text-muted-foreground flex items-center gap-2"
+      >
         {icon}
         {label}
       </span>
-      <span data-slot="detail-metric-value" className="min-w-0 text-foreground/90">
+      <span
+        data-slot="detail-metric-value"
+        className="text-foreground/90 min-w-0"
+      >
         {children}
       </span>
     </div>
-  )
+  );
 }
 
-export { DetailMetric, type DetailMetricProps }
+export { DetailMetric, type DetailMetricProps };

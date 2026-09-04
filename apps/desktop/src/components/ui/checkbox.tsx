@@ -1,17 +1,14 @@
-import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox"
-import { CheckIcon } from "@/components/ui/icons"
+import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
+import { CheckIcon } from "@/components/ui/icons";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
-function Checkbox({
-  className,
-  ...props
-}: CheckboxPrimitive.Root.Props) {
+const Checkbox = ({ className, ...props }: CheckboxPrimitive.Root.Props) => {
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        "peer relative flex size-4 shrink-0 items-center justify-center rounded-micro bg-fill-hover transition-[background-color,box-shadow] outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-2 aria-invalid:ring-destructive/30 data-checked:bg-primary data-checked:text-primary-foreground",
+        "peer rounded-micro bg-fill-hover focus-visible:focus-ring aria-invalid:ring-destructive/30 data-checked:bg-primary data-checked:text-primary-foreground relative flex size-4 shrink-0 items-center justify-center transition-[background-color,box-shadow] outline-none after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-2",
         className
       )}
       {...props}
@@ -23,7 +20,7 @@ function Checkbox({
         <CheckIcon />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
-  )
+  );
 }
 
-export { Checkbox }
+export { Checkbox };

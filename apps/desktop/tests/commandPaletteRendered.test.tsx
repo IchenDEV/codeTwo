@@ -1,12 +1,22 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+import {
+  activateDom,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { CommandPalette } = await import("../src/palette/CommandPalette");
-const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const styles = readFileSync(
+  new URL("../src/styles.css", import.meta.url),
+  "utf8"
+);
 
 let previousResizeObserver;
 
@@ -29,7 +39,12 @@ afterEach(() => {
 const commands = [
   { id: "run", label: "Run prompt", run: () => {} },
   { id: "session", category: "session", label: "Search polish", run: () => {} },
-  { id: "settings", category: "setting", label: "Open settings", run: () => {} },
+  {
+    id: "settings",
+    category: "setting",
+    label: "Open settings",
+    run: () => {},
+  },
 ];
 
 describe("CommandPalette", () => {
@@ -37,14 +52,20 @@ describe("CommandPalette", () => {
     const view = mount(
       <I18nProvider>
         <CommandPalette commands={commands} onClose={() => {}} />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     const body = dom.document.body;
     expect(body.querySelector(".command-palette-surface")).toBeTruthy();
-    expect(body.querySelector('[data-slot="command-list"]')?.className).toContain("flex-1");
-    expect(body.querySelector('[data-slot="command-list"]')?.className).toContain("max-h-none");
-    expect(styles).toContain("height: min(32rem, calc(100dvh - var(--ds-space-page-section)));");
+    expect(
+      body.querySelector('[data-slot="command-list"]')?.className
+    ).toContain("flex-1");
+    expect(
+      body.querySelector('[data-slot="command-list"]')?.className
+    ).toContain("max-h-none");
+    expect(styles).toContain(
+      "height: min(32rem, calc(100dvh - var(--ds-space-page-section)));"
+    );
     expect(body.querySelector('[data-palette-group="session"]')).toBeTruthy();
     expect(body.querySelector('[data-palette-group="action"]')).toBeTruthy();
     expect(body.querySelector('[data-palette-group="setting"]')).toBeTruthy();
@@ -57,17 +78,25 @@ describe("CommandPalette", () => {
     const view = mount(
       <I18nProvider>
         <CommandPalette commands={commands} onClose={() => {}} />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    const sessions = dom.document.body.querySelector('[data-palette-filter="session"]');
+    const sessions = dom.document.body.querySelector(
+      '[data-palette-filter="session"]'
+    );
     click(sessions);
     await flush();
 
     expect(sessions.getAttribute("aria-pressed")).toBe("true");
-    expect(dom.document.body.querySelector('[data-palette-group="session"]')).toBeTruthy();
-    expect(dom.document.body.querySelector('[data-palette-group="action"]')).toBeNull();
-    expect(dom.document.body.querySelector('[data-palette-group="setting"]')).toBeNull();
+    expect(
+      dom.document.body.querySelector('[data-palette-group="session"]')
+    ).toBeTruthy();
+    expect(
+      dom.document.body.querySelector('[data-palette-group="action"]')
+    ).toBeNull();
+    expect(
+      dom.document.body.querySelector('[data-palette-group="setting"]')
+    ).toBeNull();
     view.unmount();
   });
 });

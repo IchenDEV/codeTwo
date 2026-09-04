@@ -4,7 +4,8 @@ import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { PaneTiles } = await import("../src/session/PaneTiles");
-const { singlePaneLayout, splitPane } = await import("../src/session/paneLayout");
+const { singlePaneLayout, splitPane } =
+  await import("../src/session/paneLayout");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -19,7 +20,9 @@ function tiledLayout() {
 }
 
 function mousedown(element: Element) {
-  element.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  element.dispatchEvent(
+    new dom.window.MouseEvent("mousedown", { bubbles: true, cancelable: true })
+  );
 }
 
 describe("PaneTiles", () => {
@@ -30,22 +33,28 @@ describe("PaneTiles", () => {
         renderPane={(paneId) => <div data-content={paneId}>{paneId}</div>}
         onFocusPane={() => {}}
         onResizeSplit={() => {}}
-      />,
+      />
     );
     await flush();
 
-    const frames = Array.from(rendered.container.querySelectorAll("[data-pane-id]"));
-    expect(frames.map((frame) => frame.getAttribute("data-pane-id")).sort()).toEqual([
-      "p1",
-      "p2",
-      "p3",
-    ]);
+    const frames = Array.from(
+      rendered.container.querySelectorAll("[data-pane-id]")
+    );
     expect(
-      rendered.container.querySelector("[data-focused]")?.getAttribute("data-pane-id"),
+      frames.map((frame) => frame.getAttribute("data-pane-id")).sort()
+    ).toEqual(["p1", "p2", "p3"]);
+    expect(
+      rendered.container
+        .querySelector("[data-focused]")
+        ?.getAttribute("data-pane-id")
     ).toBe("p3");
     // Every leaf's content is mounted, not just the focused one.
-    expect(rendered.container.querySelector("[data-content='p1']")).not.toBeNull();
-    expect(rendered.container.querySelector("[data-content='p2']")).not.toBeNull();
+    expect(
+      rendered.container.querySelector("[data-content='p1']")
+    ).not.toBeNull();
+    expect(
+      rendered.container.querySelector("[data-content='p2']")
+    ).not.toBeNull();
     rendered.unmount();
   });
 
@@ -57,7 +66,7 @@ describe("PaneTiles", () => {
         renderPane={(paneId) => <div>{paneId}</div>}
         onFocusPane={(id) => focusRequests.push(id)}
         onResizeSplit={() => {}}
-      />,
+      />
     );
     await flush();
 
@@ -79,10 +88,12 @@ describe("PaneTiles", () => {
         renderPane={(paneId) => <div>{paneId}</div>}
         onFocusPane={() => {}}
         onResizeSplit={() => {}}
-      />,
+      />
     );
     await flush();
-    expect(rendered.container.querySelectorAll("[data-divider-id]")).toHaveLength(2);
+    expect(
+      rendered.container.querySelectorAll("[data-divider-id]")
+    ).toHaveLength(2);
     rendered.unmount();
   });
 });

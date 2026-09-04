@@ -1,8 +1,4 @@
-import {
-  useRef,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -16,12 +12,12 @@ import { PaneDivider } from "./PaneDivider";
 const percent = (value: number): string => `${value * 100}%`;
 
 export interface PaneTilesProps {
-  layout: PaneLayout;
+  readonly layout: PaneLayout;
   /** Renders a leaf's content. Called once per pane; the node is kept mounted across relayouts. */
-  renderPane: (paneId: string, focused: boolean) => ReactNode;
-  onFocusPane: (paneId: string) => void;
-  onResizeSplit: (splitId: string, ratio: number) => void;
-  className?: string;
+  readonly renderPane: (paneId: string, focused: boolean) => ReactNode;
+  readonly onFocusPane: (paneId: string) => void;
+  readonly onResizeSplit: (splitId: string, ratio: number) => void;
+  readonly className?: string;
 }
 
 /**
@@ -30,13 +26,13 @@ export interface PaneTilesProps {
  * moves a pane within the React tree — its composer/editor instance (and unsaved draft) survives a
  * relayout. Dragging a divider reports a new ratio; the parent owns the layout state.
  */
-export function PaneTiles({
+export const PaneTiles = ({
   layout,
   renderPane,
   onFocusPane,
   onResizeSplit,
   className,
-}: PaneTilesProps) {
+}: PaneTilesProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const paneIds = listPanes(layout.root);
   const rects = computePaneRects(layout.root);
@@ -68,7 +64,9 @@ export function PaneTiles({
             data-focused={focused || undefined}
             className={cn(
               "overflow-hidden",
-              focused && multiPane && "outline outline-1 -outline-offset-1 outline-ring",
+              focused &&
+                multiPane &&
+                "outline-ring outline outline-1 -outline-offset-1"
             )}
             style={style}
             // Focus on press so a click's action targets the pane it lands in.

@@ -51,7 +51,7 @@ function renderStudio(props = {}) {
         onClose={() => {}}
         {...props}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
 
@@ -60,18 +60,26 @@ describe("SceneStudio rendered", () => {
     activateDom();
     const rendered = renderStudio();
 
-    expect(rendered.container.querySelector('[data-page="scene-studio"]')).toBeTruthy();
+    expect(
+      rendered.container.querySelector('[data-page="scene-studio"]')
+    ).toBeTruthy();
     expect(rendered.container.textContent).toContain("Scenes");
     expect(rendered.container.textContent).toContain("Provided scenes");
     expect(rendered.container.textContent).toContain("Develop");
-    expect(dom.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull();
+    expect(
+      dom.document.body.querySelector('[data-slot="dialog-content"]')
+    ).toBeNull();
     rendered.unmount();
   });
 
   test("opens creation inside the page flow", async () => {
     activateDom();
     let request = null;
-    const rendered = renderStudio({ onRequest: (next) => { request = next; } });
+    const rendered = renderStudio({
+      onRequest: (next) => {
+        request = next;
+      },
+    });
 
     await reactAct(async () => {
       button(rendered.container, "New scene").click();

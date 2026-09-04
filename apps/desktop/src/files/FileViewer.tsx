@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AtSign, ChevronRight, MessageSquarePlus, Save } from "@/components/ui/icons";
+import {
+  AtSign,
+  ChevronRight,
+  MessageSquarePlus,
+  Save,
+} from "@/components/ui/icons";
 
 import { CODE_FONTS, FONT_WEIGHTS, useAppearanceSettings } from "../appearance";
 import { readText, writeText } from "../bridge";
@@ -32,11 +37,15 @@ export interface FileRevealTarget {
   requestId: number;
 }
 
-function revealTarget(editor: Editor, model: TextModel, target: FileRevealTarget) {
+function revealTarget(
+  editor: Editor,
+  model: TextModel,
+  target: FileRevealTarget
+) {
   const lineNumber = Math.min(Math.max(target.line, 1), model.getLineCount());
   const column = Math.min(
     Math.max(target.column, 1),
-    model.getLineMaxColumn(lineNumber),
+    model.getLineMaxColumn(lineNumber)
   );
   const position = { lineNumber, column };
   editor.setPosition(position);
@@ -56,7 +65,7 @@ function revealTarget(editor: Editor, model: TextModel, target: FileRevealTarget
  * in the prompt document as a context block — "look at these lines and do X" is still the whole
  * reason a coding agent's app has a file pane.
  */
-export function FileViewer({
+export const FileViewer = ({
   cwd,
   path,
   onInsert,
@@ -64,24 +73,27 @@ export function FileViewer({
   onComment,
   reveal,
 }: {
-  cwd: string;
-  path: string;
-  onInsert: (path: string) => void;
+  readonly cwd: string;
+  readonly path: string;
+  readonly onInsert: (path: string) => void;
   /** Open another workspace file in the pane — cross-file go-to-definition lands here. */
-  onOpen: (path: string) => void;
+  readonly onOpen: (path: string) => void;
   /** Receives a ready-made markdown context block for the prompt document. */
-  onComment: (text: string) => void;
+  readonly onComment: (text: string) => void;
   /** A token makes repeated jumps to the same path and position observable. */
-  reveal: FileRevealTarget | null;
-}) {
+  readonly reveal: FileRevealTarget | null;
+}) => {
   const t = useT();
   const toast = useToast();
   const scheme = useColorScheme();
   const appearance = useAppearanceSettings();
   const codeProfile = appearance[scheme];
-  const codeFont = CODE_FONTS.find((font) => font.id === codeProfile.codeFont)?.stack ?? CODE_FONTS[0].stack;
-  const codeFontWeight = FONT_WEIGHTS.find((weight) => weight.id === codeProfile.codeFontWeight)?.value
-    ?? FONT_WEIGHTS[0].value;
+  const codeFont =
+    CODE_FONTS.find((font) => font.id === codeProfile.codeFont)?.stack ??
+    CODE_FONTS[0].stack;
+  const codeFontWeight =
+    FONT_WEIGHTS.find((weight) => weight.id === codeProfile.codeFontWeight)
+      ?.value ?? FONT_WEIGHTS[0].value;
   // Pictures take the preview path instead of the editor — there's no text to put in a buffer.
   const isImage = imageTypeOf(path) !== null;
   const container = useRef<HTMLDivElement | null>(null);
@@ -144,7 +156,10 @@ export function FileViewer({
     setHasSelection(false);
 
     (async () => {
-      const [m, text] = await Promise.all([import("./monaco"), readText(cwd, path)]);
+      const [m, text] = await Promise.all([
+        import("./monaco"),
+        readText(cwd, path),
+      ]);
       // Set the scheme before loading a grammar: `ensureLanguage` re-asserts whatever it's told,
       // which is how it undoes the theme reset shiki's Monaco bridge performs on every load.
       m.applyTheme(scheme);
@@ -169,7 +184,11 @@ export function FileViewer({
         padding: { top: 10, bottom: 24 },
         // Hover cards and suggest widgets must escape this narrow pane, not clip against it.
         fixedOverflowWidgets: true,
-        scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
+        scrollbar: {
+          verticalScrollbarSize: 10,
+          horizontalScrollbarSize: 10,
+          useShadows: false,
+        },
         renderLineHighlightOnlyWhenFocus: true,
         smoothScrolling: true,
         stickyScroll: { enabled: false },
@@ -181,16 +200,25 @@ export function FileViewer({
           setDirty(m.isDirtyModel(model));
           m.syncDirty(cwd, path, model);
         }),
-        editor.onDidChangeCursorSelection((e) => setHasSelection(!e.selection.isEmpty())),
+        editor.onDidChangeCursorSelection((e) =>
+          setHasSelection(!e.selection.isEmpty())
+        )
       );
 
-      editor.addCommand(m.monaco.KeyMod.CtrlCmd | m.monaco.KeyCode.KeyS, () => void saveRef.current());
+      editor.addCommand(
+        m.monaco.KeyMod.CtrlCmd | m.monaco.KeyCode.KeyS,
+        () => void saveRef.current()
+      );
       // ⌘⇧C, not ⌘⇧M: the app keymap owns ⌘⇧M (Plugin Hub), and a binding the shell already
       // claims would be a coin-flip depending on focus.
       editor.addAction({
         id: "codetwo.commentSelection",
         label: t("files.commentTitle"),
-        keybindings: [m.monaco.KeyMod.CtrlCmd | m.monaco.KeyMod.Shift | m.monaco.KeyCode.KeyC],
+        keybindings: [
+          m.monaco.KeyMod.CtrlCmd |
+            m.monaco.KeyMod.Shift |
+            m.monaco.KeyCode.KeyC,
+        ],
         contextMenuGroupId: "navigation",
         precondition: "editorHasSelection",
         run: () => openDraftRef.current(),
@@ -253,9 +281,17 @@ export function FileViewer({
     const m = modRef.current;
     const model = modelRef.current;
     if (!draft || !m || !model || !draft.note.trim()) return;
-    const range = draft.startLine === draft.endLine ? `L${draft.startLine}` : `L${draft.startLine}–L${draft.endLine}`;
+    const range =
+      draft.startLine === draft.endLine
+        ? `L${draft.startLine}`
+        : `L${draft.startLine}–L${draft.endLine}`;
     const excerpt = model.getValueInRange(
-      new m.monaco.Range(draft.startLine, 1, draft.endLine, model.getLineMaxColumn(draft.endLine)),
+      new m.monaco.Range(
+        draft.startLine,
+        1,
+        draft.endLine,
+        model.getLineMaxColumn(draft.endLine)
+      )
     );
     const lang = m.languageOf(path);
     // Same shape as the browser's context block: a labelled quote the agent can act on.
@@ -266,7 +302,10 @@ export function FileViewer({
   };
 
   // The project's own name leads the breadcrumb, reference-style: "project > docs > file.md".
-  const parts = [cwd.split("/").filter(Boolean).pop() ?? cwd, ...path.split("/")];
+  const parts = [
+    cwd.split("/").filter(Boolean).pop() ?? cwd,
+    ...path.split("/"),
+  ];
   const range = draft
     ? draft.startLine === draft.endLine
       ? `L${draft.startLine}`
@@ -277,19 +316,22 @@ export function FileViewer({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <header className="flex items-center gap-2 border-b px-3 py-1.5">
         {/* Breadcrumb, not a raw path: the segments are how you know where you are. */}
-        <span className="flex min-w-0 flex-1 items-center gap-0.5 text-metadata">
+        <span className="text-metadata flex min-w-0 flex-1 items-center gap-0.5">
           {parts.map((p, i) =>
             i === parts.length - 1 ? (
               <span key={i} className="truncate font-medium">
                 {p}
-                {dirty && <span className="ml-1.5 text-warning">•</span>}
+                {dirty ? <span className="text-warning ml-1.5">•</span> : null}
               </span>
             ) : (
-              <span key={i} className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+              <span
+                key={i}
+                className="text-muted-foreground flex shrink-0 items-center gap-0.5"
+              >
                 <span className="max-w-32 truncate">{p}</span>
-                <ChevronRight className="size-3 text-muted-foreground/50" />
+                <ChevronRight className="text-muted-foreground/50 size-3" />
               </span>
-            ),
+            )
           )}
         </span>
 
@@ -316,76 +358,97 @@ export function FileViewer({
           <AtSign className="size-3.5" />
         </TooltipButton>
 
-        {(dirty || saving) && (
-          <Button size="compact" className="text-metadata" disabled={saving} onClick={() => void save()}>
-            {saving ? <Spinner className="size-3.5" /> : <Save className="size-3.5" />}
+        {(dirty || saving) ? <Button
+            size="compact"
+            className="text-metadata"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            {saving ? (
+              <Spinner className="size-3.5" />
+            ) : (
+              <Save className="size-3.5" />
+            )}
             {t("files.save")}
-          </Button>
-        )}
+          </Button> : null}
       </header>
 
       {isImage ? (
         <ImagePreview cwd={cwd} path={path} />
       ) : (
-      <div
-        className="relative min-h-0 flex-1"
-        // The app's keymap binds bare Escape to "close side panel". Monaco consumes Escape when it
-        // has something to dismiss (suggest, find); the leftover Escapes must not vaporize the
-        // pane out from under the cursor.
-        onKeyDown={(e) => {
-          if (e.key === "Escape") e.stopPropagation();
-        }}
-      >
-        {/* Monaco owns this node. It stays mounted through loading so create() has real bounds. */}
-        <div ref={container} className="absolute inset-0" />
+        <div
+          className="relative min-h-0 flex-1"
+          // The app's keymap binds bare Escape to "close side panel". Monaco consumes Escape when it
+          // has something to dismiss (suggest, find); the leftover Escapes must not vaporize the
+          // pane out from under the cursor.
+          onKeyDown={(e) => {
+            if (e.key === "Escape") e.stopPropagation();
+          }}
+        >
+          {/* Monaco owns this node. It stays mounted through loading so create() has real bounds. */}
+          <div ref={container} className="absolute inset-0" />
 
-        {error ? (
-          <p className="absolute inset-x-0 top-0 px-6 py-4 text-body text-destructive">{error}</p>
-        ) : !mod ? (
-          <p className="absolute inset-x-0 top-0 flex items-center gap-2 px-6 py-4 text-body text-muted-foreground">
-            <Spinner className="size-3.5" />
-            {t("files.loading")}
-          </p>
-        ) : null}
+          {error ? (
+            <p className="text-body text-destructive absolute inset-x-0 top-0 px-6 py-4">
+              {error}
+            </p>
+          ) : !mod ? (
+            <p className="text-body text-muted-foreground absolute inset-x-0 top-0 flex items-center gap-2 px-6 py-4">
+              <Spinner className="size-3.5" />
+              {t("files.loading")}
+            </p>
+          ) : null}
 
-        {/* The comment card floats over the code, top-right — the GitHub-review gesture. */}
-        {draft && (
-          <div className="raised-material absolute right-4 top-3 z-10 w-80 rounded-module p-3 font-sans shadow-raised">
-            <div className="flex items-center gap-2 text-metadata font-medium">
-              <MessageSquarePlus className="size-3.5 text-primary" />
-              {t("files.commentTitle")}
-            </div>
-            <div className="mt-0.5 text-callout text-muted-foreground">{t("files.commentOn", { range })}</div>
-            <Textarea
-              autoFocus
-              size="compact"
-              value={draft.note}
-              onChange={(e) => setDraft((d) => (d ? { ...d, note: e.target.value } : d))}
-              onKeyDown={(e) => {
-                // Both keys have app-level meanings (close panel, run prompt); they end here.
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  setDraft(null);
+          {/* The comment card floats over the code, top-right — the GitHub-review gesture. */}
+          {draft ? <div className="raised-material rounded-module shadow-raised absolute top-3 right-4 z-10 w-80 p-3 font-sans">
+              <div className="text-metadata flex items-center gap-2 font-medium">
+                <MessageSquarePlus className="text-primary size-3.5" />
+                {t("files.commentTitle")}
+              </div>
+              <div className="text-callout text-muted-foreground mt-0.5">
+                {t("files.commentOn", { range })}
+              </div>
+              <Textarea
+                autoFocus
+                size="compact"
+                value={draft.note}
+                onChange={(e) =>
+                  setDraft((d) => (d ? { ...d, note: e.target.value } : d))
                 }
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.stopPropagation();
-                  submitDraft();
-                }
-              }}
-              placeholder={t("files.commentPlaceholder")}
-              className="mt-2 min-h-16 font-mono text-metadata"
-            />
-            <div className="mt-2 flex justify-end gap-2">
-              <Button variant="ghost" size="compact" className="text-metadata" onClick={() => setDraft(null)}>
-                {t("files.cancel")}
-              </Button>
-              <Button size="compact" className="text-metadata" disabled={!draft.note.trim()} onClick={submitDraft}>
-                {t("browser.addToPrompt")}
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
+                onKeyDown={(e) => {
+                  // Both keys have app-level meanings (close panel, run prompt); they end here.
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setDraft(null);
+                  }
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.stopPropagation();
+                    submitDraft();
+                  }
+                }}
+                placeholder={t("files.commentPlaceholder")}
+                className="text-metadata mt-2 min-h-16 font-mono"
+              />
+              <div className="mt-2 flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  className="text-metadata"
+                  onClick={() => setDraft(null)}
+                >
+                  {t("files.cancel")}
+                </Button>
+                <Button
+                  size="compact"
+                  className="text-metadata"
+                  disabled={!draft.note.trim()}
+                  onClick={submitDraft}
+                >
+                  {t("browser.addToPrompt")}
+                </Button>
+              </div>
+            </div> : null}
+        </div>
       )}
     </div>
   );

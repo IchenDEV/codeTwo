@@ -46,7 +46,7 @@ const WORKTREE_BADGE_LABELS: Record<WorktreeStatusBadge, StringKey> = {
   checkoutMissing: "worktree.badgeCheckoutMissing",
 };
 
-export function WorktreeSettingsPage({
+export const WorktreeSettingsPage = ({
   projects,
   onOpenSession = () => {},
   lister = listProjectWorktrees,
@@ -56,43 +56,61 @@ export function WorktreeSettingsPage({
   orphanDiscarder = discardOrphanWorktree,
   confirmer = confirmNative,
 }: {
-  projects: Project[];
-  onOpenSession?: (sessionId: string) => void;
-  lister?: typeof listProjectWorktrees;
-  settingsLoader?: () => Promise<WorktreeSettings>;
-  settingsSaver?: (settings: WorktreeSettings) => Promise<WorktreeSettings>;
-  sessionDiscarder?: typeof discardSessionWorktree;
-  orphanDiscarder?: typeof discardOrphanWorktree;
-  confirmer?: typeof confirmNative;
-}) {
+  readonly projects: Project[];
+  readonly onOpenSession?: (sessionId: string) => void;
+  readonly lister?: typeof listProjectWorktrees;
+  readonly settingsLoader?: () => Promise<WorktreeSettings>;
+  readonly settingsSaver?: (settings: WorktreeSettings) => Promise<WorktreeSettings>;
+  readonly sessionDiscarder?: typeof discardSessionWorktree;
+  readonly orphanDiscarder?: typeof discardOrphanWorktree;
+  readonly confirmer?: typeof confirmNative;
+}) => {
   const t = useT();
-  const [worktreesByProject, setWorktreesByProject] = useState<Record<string, ProjectWorktreeState>>({});
+  const [worktreesByProject, setWorktreesByProject] = useState<
+    Record<string, ProjectWorktreeState>
+  >({});
   const [worktreesLoading, setWorktreesLoading] = useState(false);
-  const [worktreeSettings, setWorktreeSettings] = useState<WorktreeSettings | null>(null);
+  const [worktreeSettings, setWorktreeSettings] =
+    useState<WorktreeSettings | null>(null);
   const [worktreeSettingsSaving, setWorktreeSettingsSaving] = useState(false);
-  const [worktreeSettingsError, setWorktreeSettingsError] = useState<string | null>(null);
+  const [worktreeSettingsError, setWorktreeSettingsError] = useState<
+    string | null
+  >(null);
   const [worktreeRootDraft, setWorktreeRootDraft] = useState("");
   const [worktreeLimitDraft, setWorktreeLimitDraft] = useState("15");
-  const [discardingWorktree, setDiscardingWorktree] = useState<string | null>(null);
+  const [discardingWorktree, setDiscardingWorktree] = useState<string | null>(
+    null
+  );
   const requestRef = useRef(0);
 
-  const loadWorktrees = useCallback(async (projectList: Project[]) => {
-    const request = ++requestRef.current;
-    setWorktreesLoading(true);
-    const results = await Promise.all(projectList.map(async (candidate) => {
-      try {
-        return [candidate.path, { entries: await lister(candidate.path), error: null }] as const;
-      } catch (cause) {
-        return [candidate.path, {
-          entries: [],
-          error: t("worktree.manageFailed", { error: String(cause) }),
-        }] as const;
-      }
-    }));
-    if (request !== requestRef.current) return;
-    setWorktreesByProject(Object.fromEntries(results));
-    setWorktreesLoading(false);
-  }, [lister, t]);
+  const loadWorktrees = useCallback(
+    async (projectList: Project[]) => {
+      const request = ++requestRef.current;
+      setWorktreesLoading(true);
+      const results = await Promise.all(
+        projectList.map(async (candidate) => {
+          try {
+            return [
+              candidate.path,
+              { entries: await lister(candidate.path), error: null },
+            ] as const;
+          } catch (cause) {
+            return [
+              candidate.path,
+              {
+                entries: [],
+                error: t("worktree.manageFailed", { error: String(cause) }),
+              },
+            ] as const;
+          }
+        })
+      );
+      if (request !== requestRef.current) return;
+      setWorktreesByProject(Object.fromEntries(results));
+      setWorktreesLoading(false);
+    },
+    [lister, t]
+  );
 
   useEffect(() => {
     void loadWorktrees(projects);
@@ -104,14 +122,19 @@ export function WorktreeSettingsPage({
   useEffect(() => {
     let active = true;
     setWorktreeSettingsError(null);
-    void settingsLoader().then((settings) => {
-      if (!active) return;
-      setWorktreeSettings(settings);
-      setWorktreeRootDraft(settings.root ?? "");
-      setWorktreeLimitDraft(String(settings.auto_delete_limit));
-    }).catch((cause) => {
-      if (active) setWorktreeSettingsError(t("worktree.settingsLoadFailed", { error: String(cause) }));
-    });
+    void settingsLoader()
+      .then((settings) => {
+        if (!active) return;
+        setWorktreeSettings(settings);
+        setWorktreeRootDraft(settings.root ?? "");
+        setWorktreeLimitDraft(String(settings.auto_delete_limit));
+      })
+      .catch((cause) => {
+        if (active)
+          setWorktreeSettingsError(
+            t("worktree.settingsLoadFailed", { error: String(cause) })
+          );
+      });
     return () => {
       active = false;
     };
@@ -120,7 +143,10 @@ export function WorktreeSettingsPage({
   async function loadProjectWorktrees(path: string) {
     try {
       const entries = await lister(path);
-      setWorktreesByProject((current) => ({ ...current, [path]: { entries, error: null } }));
+      setWorktreesByProject((current) => ({
+        ...current,
+        [path]: { entries, error: null },
+      }));
     } catch (cause) {
       setWorktreesByProject((current) => ({
         ...current,
@@ -142,14 +168,16 @@ export function WorktreeSettingsPage({
       setWorktreeRootDraft(saved.root ?? "");
       setWorktreeLimitDraft(String(saved.auto_delete_limit));
       if (
-        Object.prototype.hasOwnProperty.call(patch, "root")
-        || Object.prototype.hasOwnProperty.call(patch, "auto_delete")
+        Object.prototype.hasOwnProperty.call(patch, "root") ||
+        Object.prototype.hasOwnProperty.call(patch, "auto_delete")
       ) {
         await loadWorktrees(projects);
       }
       return true;
     } catch (cause) {
-      setWorktreeSettingsError(t("worktree.settingsSaveFailed", { error: String(cause) }));
+      setWorktreeSettingsError(
+        t("worktree.settingsSaveFailed", { error: String(cause) })
+      );
       setWorktreeRootDraft(worktreeSettings.root ?? "");
       setWorktreeLimitDraft(String(worktreeSettings.auto_delete_limit));
       return false;
@@ -177,8 +205,12 @@ export function WorktreeSettingsPage({
     }
   }
 
-  async function discardWorktree(projectPath: string, entry: WorktreeStatusEntry) {
-    if (!(await confirmer(t("worktree.discardConfirm", { path: entry.path })))) return;
+  async function discardWorktree(
+    projectPath: string,
+    entry: WorktreeStatusEntry
+  ) {
+    if (!(await confirmer(t("worktree.discardConfirm", { path: entry.path }))))
+      return;
     setDiscardingWorktree(entry.path);
     try {
       const route = worktreeDiscardRoute(entry);
@@ -199,8 +231,14 @@ export function WorktreeSettingsPage({
   }
 
   return (
-    <Page title={t("settings.worktrees")} description={t("worktree.manageAllHint")}>
-      <section className="worktree-policy-card" aria-label={t("worktree.settingsTitle")}>
+    <Page
+      title={t("settings.worktrees")}
+      description={t("worktree.manageAllHint")}
+    >
+      <section
+        className="worktree-policy-card"
+        aria-label={t("worktree.settingsTitle")}
+      >
         {worktreeSettings ? (
           <>
             <Row
@@ -262,7 +300,9 @@ export function WorktreeSettingsPage({
                 inputMode="numeric"
                 value={worktreeLimitDraft}
                 aria-label={t("worktree.autoDeleteLimit")}
-                disabled={worktreeSettingsSaving || !worktreeSettings.auto_delete}
+                disabled={
+                  worktreeSettingsSaving || !worktreeSettings.auto_delete
+                }
                 onChange={(event) => setWorktreeLimitDraft(event.target.value)}
                 onBlur={commitWorktreeLimit}
                 onKeyDown={(event) => {
@@ -272,22 +312,26 @@ export function WorktreeSettingsPage({
             </Row>
           </>
         ) : (
-          <p className="px-4 py-4 text-metadata text-muted-foreground">
+          <p className="text-metadata text-muted-foreground px-4 py-4">
             {t("worktree.settingsLoading")}
           </p>
         )}
       </section>
       {worktreeSettingsError ? (
-        <p className="mt-2 text-metadata text-destructive" role="alert">
+        <p className="text-metadata text-destructive mt-2" role="alert">
           {worktreeSettingsError}
         </p>
       ) : null}
 
-      <div className="flex items-center justify-end pb-2 pt-section">
+      <div className="pt-section flex items-center justify-end pb-2">
         <Button
           variant="secondary"
           size="sm"
-          disabled={worktreesLoading || worktreeSettingsSaving || discardingWorktree !== null}
+          disabled={
+            worktreesLoading ||
+            worktreeSettingsSaving ||
+            discardingWorktree !== null
+          }
           onClick={() => void loadWorktrees(projects)}
         >
           {worktreesLoading ? <Spinner /> : <RefreshCw />}
@@ -296,12 +340,19 @@ export function WorktreeSettingsPage({
       </div>
 
       {projects.length === 0 ? (
-        <p className="py-6 text-body text-muted-foreground">{t("worktree.manageNoProjects")}</p>
+        <p className="text-body text-muted-foreground py-6">
+          {t("worktree.manageNoProjects")}
+        </p>
       ) : worktreesLoading && Object.keys(worktreesByProject).length === 0 ? (
-        <p className="py-6 text-body text-muted-foreground">{t("worktree.manageLoading")}</p>
+        <p className="text-body text-muted-foreground py-6">
+          {t("worktree.manageLoading")}
+        </p>
       ) : (
         projects.map((candidate) => {
-          const state = worktreesByProject[candidate.path] ?? { entries: [], error: null };
+          const state = worktreesByProject[candidate.path] ?? {
+            entries: [],
+            error: null,
+          };
           return (
             <section
               key={candidate.path}
@@ -311,8 +362,13 @@ export function WorktreeSettingsPage({
               <div className="worktree-project-header">
                 <ProjectIcon project={candidate} size={24} />
                 <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-body font-semibold">{candidate.name}</h2>
-                  <p className="truncate font-mono text-callout text-muted-foreground" title={candidate.path}>
+                  <h2 className="text-body truncate font-semibold">
+                    {candidate.name}
+                  </h2>
+                  <p
+                    className="text-callout text-muted-foreground truncate font-mono"
+                    title={candidate.path}
+                  >
                     {candidate.path}
                   </p>
                 </div>
@@ -323,11 +379,14 @@ export function WorktreeSettingsPage({
 
               <div className="worktree-project-card">
                 {state.error ? (
-                  <p className="px-3 py-3 text-metadata text-destructive" role="alert">
+                  <p
+                    className="text-metadata text-destructive px-3 py-3"
+                    role="alert"
+                  >
                     {state.error}
                   </p>
                 ) : state.entries.length === 0 ? (
-                  <p className="px-3 py-3 text-metadata text-muted-foreground">
+                  <p className="text-metadata text-muted-foreground px-3 py-3">
                     {t("worktree.manageEmpty")}
                   </p>
                 ) : (
@@ -340,22 +399,29 @@ export function WorktreeSettingsPage({
                         className="worktree-settings-row"
                         controlClassName="worktree-settings-actions"
                         label={entry.session_title ?? branch ?? entry.path}
-                        hint={(
+                        hint={
                           <span className="block min-w-0">
                             <span className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="secondary">{t(WORKTREE_KIND_LABELS[entry.kind])}</Badge>
+                              <Badge variant="secondary">
+                                {t(WORKTREE_KIND_LABELS[entry.kind])}
+                              </Badge>
                               {worktreeStatusBadges(entry).map((badge) => (
                                 <Badge key={badge} variant="secondary">
                                   {t(WORKTREE_BADGE_LABELS[badge])}
                                 </Badge>
                               ))}
-                              {branch && <span className="shrink-0 font-mono">{branch}</span>}
+                              {branch ? <span className="shrink-0 font-mono">
+                                  {branch}
+                                </span> : null}
                             </span>
-                            <span className="mt-1 block truncate font-mono" title={entry.path}>
+                            <span
+                              className="mt-1 block truncate font-mono"
+                              title={entry.path}
+                            >
                               {entry.path}
                             </span>
                           </span>
-                        )}
+                        }
                       >
                         {entry.session_id ? (
                           <Button
@@ -372,11 +438,15 @@ export function WorktreeSettingsPage({
                           variant="destructive"
                           size="xs"
                           disabled={discardingWorktree !== null}
-                          onClick={() => void discardWorktree(candidate.path, entry)}
+                          onClick={() =>
+                            void discardWorktree(candidate.path, entry)
+                          }
                         >
-                          {discardingWorktree === entry.path
-                            ? <Spinner />
-                            : <Trash2 />}
+                          {discardingWorktree === entry.path ? (
+                            <Spinner />
+                          ) : (
+                            <Trash2 />
+                          )}
                           {t("worktree.discard")}
                         </Button>
                       </Row>

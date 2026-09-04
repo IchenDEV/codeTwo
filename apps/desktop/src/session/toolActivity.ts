@@ -1,5 +1,5 @@
 import type { DockSurface, DockTab } from "../dock/Dock";
-import type { ArtifactRef } from "../bridge";
+import type { ArtifactRef as ArtifactReference } from "../bridge";
 import type { ToolEntry, Turn } from "./turns";
 
 /**
@@ -11,47 +11,80 @@ import type { ToolEntry, Turn } from "./turns";
 
 export interface ToolSurfaceHint {
   surface: DockSurface;
-  /** The touched path for file tools, when the input names one. */
+  /**
+  The touched path for file tools, when the input names one.
+  */
   file?: string;
 }
 
 type JsonRecord = Record<string, unknown>;
 
-/** ACP kinds whose whole point is looking, not acting — the dock never follows a read. */
+/**
+ACP kinds whose whole point is looking, not acting — the dock never follows a read.
+*/
 const READ_KINDS = new Set(["read", "search", "fetch", "think"]);
 
 // Complete-token matches on normalized identifiers, exactly like agentActivity's suffix rule:
 // a whole `git_commit` or `apply_patch` operation is evidence, a substring in prose is not.
-const GIT_TOOL = /(?:^|_)git_(?:commit|branch|merge|status|checkout|rebase|stash|push|pull)(?:_|$)/;
-const GIT_EXACT = new Set(["commit", "git_commit", "branch", "create_branch", "git_branch", "merge", "merge_branch", "git_merge", "git_status"]);
+const GIT_TOOL =
+  /(?:^|_)git_(?:commit|branch|merge|status|checkout|rebase|stash|push|pull)(?:_|$)/;
+const GIT_EXACT = new Set([
+  "commit",
+  "git_commit",
+  "branch",
+  "create_branch",
+  "git_branch",
+  "merge",
+  "merge_branch",
+  "git_merge",
+  "git_status",
+]);
 
-const FILE_TOOL = /(?:^|_)(?:apply_patch|str_replace|(?:edit|write|create)_file|file_(?:edit|write|create))(?:_|$)/;
-const FILE_EXACT = new Set(["edit", "write", "create", "apply_patch", "multi_edit", "str_replace", "str_replace_editor", "str_replace_based_edit_tool", "notebook_edit", "text_editor"]);
+const FILE_TOOL =
+  /(?:^|_)(?:apply_patch|str_replace|(?:edit|write|create)_file|file_(?:edit|write|create))(?:_|$)/;
+const FILE_EXACT = new Set([
+  "edit",
+  "write",
+  "create",
+  "apply_patch",
+  "multi_edit",
+  "str_replace",
+  "str_replace_editor",
+  "str_replace_based_edit_tool",
+  "notebook_edit",
+  "text_editor",
+]);
 
-const TERMINAL_TOOL = /(?:^|_)(?:bash|shell|zsh|exec|execute|terminal|cmd)(?:_|$)/;
+const TERMINAL_TOOL =
+  /(?:^|_)(?:bash|shell|zsh|exec|execute|terminal|cmd)(?:_|$)/;
 const TERMINAL_COMMAND = /(?:^|_)(?:run|exec|shell|execute)_commands?(?:_|$)/;
 // "Test-run" titles: a runner followed by `test`, or a runner whose only job is running tests.
-const TEST_RUN = /(?:^|_)(?:cargo|npm|pnpm|yarn|bun|go|make|mvn|gradle|python)_tests?(?:_|$)|(?:^|_)(?:pytest|vitest|jest|ctest)(?:_|$)|(?:^|_)run_tests?(?:_|$)/;
+const TEST_RUN =
+  /(?:^|_)(?:cargo|npm|pnpm|yarn|bun|go|make|mvn|gradle|python)_tests?(?:_|$)|(?:^|_)(?:pytest|vitest|jest|ctest)(?:_|$)|(?:^|_)run_tests?(?:_|$)/;
 
 function normalizeIdentifier(value: string | null | undefined): string {
   return (value ?? "")
     .trim()
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1_$2")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+    .replaceAll(/[^a-z0-9]+/g, "_")
+    .replaceAll(/^_+|_+$/g, "");
 }
 
 export interface InteractiveToolPreview {
   kind: "browser" | "computer";
   title: string;
-  artifact: ArtifactRef;
+  artifact: ArtifactReference;
 }
 
-function interactiveToolKind(tool: ToolEntry): InteractiveToolPreview["kind"] | null {
+function interactiveToolKind(
+  tool: ToolEntry
+): InteractiveToolPreview["kind"] | null {
   const kind = normalizeIdentifier(tool.kind);
   const title = normalizeIdentifier(tool.title);
-  if (kind === "computer_use" || title === "computer_use") return "computer";
+  if (kind === "computer_use" || title === "computer_use") {
+    return "computer";
+  }
   if (
     kind === "browser_use" ||
     kind === "codetwo_browser" ||
@@ -63,14 +96,25 @@ function interactiveToolKind(tool: ToolEntry): InteractiveToolPreview["kind"] | 
   return null;
 }
 
-/** The latest real screen image from Browser/Computer activity in the current agent turn. */
-export function activeInteractivePreview(turns: readonly Turn[]): InteractiveToolPreview | null {
+/**
+The latest real screen image from Browser/Computer activity in the current agent turn.
+*/
+export function activeInteractivePreview(
+  turns: readonly Turn[]
+): InteractiveToolPreview | null {
   for (let turnIndex = turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
     const turn = turns[turnIndex];
-    if (!turn || turn.endedAt !== undefined) continue;
+    if (!turn || turn.endedAt !== undefined) {
+      continue;
+    }
 
-    let activeTool: Pick<InteractiveToolPreview, "kind" | "title"> | null = null;
-    for (let toolIndex = turn.tools.length - 1; toolIndex >= 0; toolIndex -= 1) {
+    let activeTool: Pick<InteractiveToolPreview, "kind" | "title"> | null =
+      null;
+    for (
+      let toolIndex = turn.tools.length - 1;
+      toolIndex >= 0;
+      toolIndex -= 1
+    ) {
       const tool = turn.tools[toolIndex];
       const kind = tool && interactiveToolKind(tool);
       if (tool && kind) {
@@ -78,13 +122,25 @@ export function activeInteractivePreview(turns: readonly Turn[]): InteractiveToo
         break;
       }
     }
-    if (!activeTool) continue;
+    if (!activeTool) {
+      continue;
+    }
 
-    for (let toolIndex = turn.tools.length - 1; toolIndex >= 0; toolIndex -= 1) {
+    for (
+      let toolIndex = turn.tools.length - 1;
+      toolIndex >= 0;
+      toolIndex -= 1
+    ) {
       const tool = turn.tools[toolIndex];
-      if (!tool || interactiveToolKind(tool) !== activeTool.kind) continue;
+      if (!tool || interactiveToolKind(tool) !== activeTool.kind) {
+        continue;
+      }
       const outputs = tool.outputs ?? [];
-      for (let outputIndex = outputs.length - 1; outputIndex >= 0; outputIndex -= 1) {
+      for (
+        let outputIndex = outputs.length - 1;
+        outputIndex >= 0;
+        outputIndex -= 1
+      ) {
         const output = outputs[outputIndex];
         if (output?.type === "image") {
           return { ...activeTool, artifact: output.artifact };
@@ -96,35 +152,53 @@ export function activeInteractivePreview(turns: readonly Turn[]): InteractiveToo
 }
 
 function parsedRecord(value: unknown): JsonRecord | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as JsonRecord;
-  if (typeof value !== "string") return null;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as JsonRecord;
+  }
+  if (typeof value !== "string") {
+    return null;
+  }
   const text = value.trim();
-  if (!text.startsWith("{") || !text.endsWith("}")) return null;
+  if (!text.startsWith("{") || !text.endsWith("}")) {
+    return null;
+  }
   try {
     const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as JsonRecord) : null;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as JsonRecord)
+      : null;
   } catch {
     return null;
   }
 }
 
-/** Providers nest the real arguments one level down as often as not. */
+/**
+Providers nest the real arguments one level down as often as not.
+*/
 function inputRecord(value: unknown): JsonRecord | null {
   const outer = parsedRecord(value);
-  if (!outer) return null;
+  if (!outer) {
+    return null;
+  }
   for (const key of ["arguments", "args", "input", "params"]) {
     const nested = parsedRecord(outer[key]);
-    if (nested) return { ...outer, ...nested };
+    if (nested) {
+      return { ...outer, ...nested };
+    }
   }
   return outer;
 }
 
 function filePathFrom(value: unknown): string | undefined {
   const record = inputRecord(value);
-  if (!record) return undefined;
+  if (!record) {
+    return undefined;
+  }
   for (const key of ["file_path", "filePath", "path", "filename", "fileName"]) {
     const candidate = record[key];
-    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
   }
   return undefined;
 }
@@ -156,23 +230,35 @@ export function classifyToolSurface(tool: {
 }): ToolSurfaceHint | null {
   const kind = normalizeIdentifier(tool.kind);
   const title = normalizeIdentifier(tool.title);
-  if (READ_KINDS.has(kind)) return null;
+  if (READ_KINDS.has(kind)) {
+    return null;
+  }
   // Git before terminal: `git commit` run through a shell tool belongs on the git surface.
-  if (isGitTool(title) || isGitTool(kind)) return { surface: "git" };
+  if (isGitTool(title) || isGitTool(kind)) {
+    return { surface: "git" };
+  }
   if (kind === "edit" || isFileTool(title)) {
     const file = filePathFrom(tool.agentInput);
     return file ? { surface: "files", file } : { surface: "files" };
   }
-  if (kind === "execute" || isTerminalTool(title)) return { surface: "terminal" };
+  if (kind === "execute" || isTerminalTool(title)) {
+    return { surface: "terminal" };
+  }
   return null;
 }
 
 export interface FollowState {
-  /** Set by any manual dock action; auto-follow stays silent until the run ends. */
+  /**
+  Set by any manual dock action; auto-follow stays silent until the run ends.
+  */
   manualLatched: boolean;
-  /** The surface auto-follow last chose (or recorded while the dock was closed). */
+  /**
+  The surface auto-follow last chose (or recorded while the dock was closed).
+  */
   autoTab: DockSurface | null;
-  /** Epoch ms of the last emitted switch, for the debounce window. */
+  /**
+  Epoch ms of the last emitted switch, for the debounce window.
+  */
   lastSwitchAt: number;
 }
 
@@ -188,7 +274,9 @@ export type FollowEvent =
   | { kind: "run_ended" }
   | { kind: "session_switched" };
 
-/** Emitted switches must be at least this far apart — the dock is a place, not a slideshow. */
+/**
+Emitted switches must be at least this far apart — the dock is a place, not a slideshow.
+*/
 const SWITCH_DEBOUNCE_MS = 2000;
 
 /**
@@ -199,25 +287,34 @@ const SWITCH_DEBOUNCE_MS = 2000;
  */
 export function followReduce(
   s: FollowState,
-  e: FollowEvent,
+  e: FollowEvent
 ): { state: FollowState; setTab?: DockSurface } {
   switch (e.kind) {
-    case "manual":
+    case "manual": {
       return { state: { ...s, manualLatched: true, autoTab: null } };
-    case "run_ended":
+    }
+    case "run_ended": {
       return { state: { ...s, manualLatched: false, autoTab: null } };
-    case "session_switched":
+    }
+    case "session_switched": {
       return { state: initialFollowState };
+    }
     case "tool": {
-      if (s.manualLatched) return { state: s };
-      const surface = e.hint.surface;
+      if (s.manualLatched) {
+        return { state: s };
+      }
+      const { surface } = e.hint;
       if (!e.dockOpen) {
         return { state: { ...s, autoTab: surface } };
       }
-      if (surface === s.autoTab) return { state: s };
+      if (surface === s.autoTab) {
+        return { state: s };
+      }
       // Debounced attempts leave state untouched so the switch still happens once the window
       // passes — recording the surface here would make the next event a same-surface no-op.
-      if (e.now - s.lastSwitchAt < SWITCH_DEBOUNCE_MS) return { state: s };
+      if (e.now - s.lastSwitchAt < SWITCH_DEBOUNCE_MS) {
+        return { state: s };
+      }
       return {
         state: { manualLatched: false, autoTab: surface, lastSwitchAt: e.now },
         setTab: surface,

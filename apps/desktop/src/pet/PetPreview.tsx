@@ -2,16 +2,17 @@ import { CodeTwoPet } from "./CodeTwoPet";
 import { useAppearanceSettings, type PetSize } from "../appearance";
 
 /** Development-only visual fixture for checking the pet at the real app scale. */
-export function PetPreview() {
+export const PetPreview = () => {
   const appearance = useAppearanceSettings();
   const search = new URLSearchParams(window.location.search);
   const bubble = search.get("pet-bubble");
   const requestedSize = search.get("pet-size");
-  const petSize: PetSize = requestedSize === "small"
-    || requestedSize === "medium"
-    || requestedSize === "large"
-    ? requestedSize
-    : appearance.petSize;
+  const petSize: PetSize =
+    requestedSize === "small" ||
+    requestedSize === "medium" ||
+    requestedSize === "large"
+      ? requestedSize
+      : appearance.petSize;
 
   return (
     <main className="desktop-pet-window">

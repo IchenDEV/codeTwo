@@ -1,5 +1,13 @@
-import { forwardRef, type ForwardRefExoticComponent, type RefAttributes } from "react";
-import { HugeiconsIcon, type HugeiconsIconProps, type IconSvgElement } from "@hugeicons/react";
+import {
+  forwardRef,
+  type ForwardRefExoticComponent,
+  type RefAttributes,
+} from "react";
+import {
+  HugeiconsIcon,
+  type HugeiconsIconProps,
+  type IconSvgElement,
+} from "@hugeicons/react";
 import ActivityData from "@hugeicons/core-free-icons/Activity01Icon";
 import AddSquareIconData from "@hugeicons/core-free-icons/AddSquareIcon";
 import AlertCircleData from "@hugeicons/core-free-icons/AlertCircleIcon";
@@ -173,8 +181,13 @@ export type HugeIcon = ForwardRefExoticComponent<
 function createIcon(icon: IconSvgElement, displayName: string): HugeIcon {
   const Component = forwardRef<SVGSVGElement, IconProps>(
     ({ strokeWidth = 1.7, ...props }, ref) => (
-      <HugeiconsIcon ref={ref} icon={icon} strokeWidth={strokeWidth} {...props} />
-    ),
+      <HugeiconsIcon
+        ref={ref}
+        icon={icon}
+        strokeWidth={strokeWidth}
+        {...props}
+      />
+    )
   );
   Component.displayName = displayName;
   return Component;
@@ -201,12 +214,21 @@ export const Brain = createIcon(BrainData, "Brain");
 export const BrainCircuit = createIcon(BrainCircuitData, "BrainCircuit");
 export const Bug = createIcon(BugData, "Bug");
 export const CalendarClock = createIcon(CalendarClockData, "CalendarClock");
-export const ChartNoAxesColumn = createIcon(ChartNoAxesColumnIconData, "ChartNoAxesColumn");
+export const ChartNoAxesColumn = createIcon(
+  ChartNoAxesColumnIconData,
+  "ChartNoAxesColumn"
+);
 export const Check = createIcon(CheckData, "Check");
-export const CheckCircle2 = createIcon(CheckmarkCircle02IconData, "CheckCircle2");
+export const CheckCircle2 = createIcon(
+  CheckmarkCircle02IconData,
+  "CheckCircle2"
+);
 export const CheckIcon = createIcon(CheckIconData, "CheckIcon");
 export const ChevronDown = createIcon(ChevronDownData, "ChevronDown");
-export const ChevronDownIcon = createIcon(ChevronDownIconData, "ChevronDownIcon");
+export const ChevronDownIcon = createIcon(
+  ChevronDownIconData,
+  "ChevronDownIcon"
+);
 export const ChevronLeft = createIcon(ChevronLeftData, "ChevronLeft");
 export const ChevronRight = createIcon(ChevronRightData, "ChevronRight");
 export const ChevronUp = createIcon(ChevronUpData, "ChevronUp");
@@ -215,7 +237,10 @@ export const Circle = createIcon(CircleData, "Circle");
 export const CircleAlert = createIcon(CircleAlertData, "CircleAlert");
 export const CircleCheck = createIcon(CircleCheckData, "CircleCheck");
 export const CircleDot = createIcon(CircleDotData, "CircleDot");
-export const CircleEllipsis = createIcon(MoreHorizontalCircle01IconData, "CircleEllipsis");
+export const CircleEllipsis = createIcon(
+  MoreHorizontalCircle01IconData,
+  "CircleEllipsis"
+);
 export const CircleHelp = createIcon(HelpCircleIconData, "CircleHelp");
 export const Clapperboard = createIcon(ClapperboardData, "Clapperboard");
 export const Clock3 = createIcon(Clock3Data, "Clock3");
@@ -249,7 +274,10 @@ export const FolderTree = createIcon(FolderTreeIconData, "FolderTree");
 export const FolderX = createIcon(FolderXData, "FolderX");
 export const Gauge = createIcon(GaugeIconData, "Gauge");
 export const GitBranch = createIcon(GitBranchData, "GitBranch");
-export const GitCommitHorizontal = createIcon(GitCommitHorizontalData, "GitCommitHorizontal");
+export const GitCommitHorizontal = createIcon(
+  GitCommitHorizontalData,
+  "GitCommitHorizontal"
+);
 export const GitFork = createIcon(GitForkData, "GitFork");
 export const GitMerge = createIcon(GitMergeData, "GitMerge");
 export const GitPullRequest = createIcon(GitPullRequestData, "GitPullRequest");
@@ -273,16 +301,28 @@ export const Lock = createIcon(LockData, "Lock");
 export const LockOpen = createIcon(LockOpenData, "LockOpen");
 export const Maximize2 = createIcon(Maximize2Data, "Maximize2");
 export const MessageCircle = createIcon(MessageCircleData, "MessageCircle");
-export const MessageCircleQuestion = createIcon(MessageCircleQuestionMarkIconData, "MessageCircleQuestion");
+export const MessageCircleQuestion = createIcon(
+  MessageCircleQuestionMarkIconData,
+  "MessageCircleQuestion"
+);
 export const MessageSquare = createIcon(MessageSquareData, "MessageSquare");
-export const MessageSquarePlus = createIcon(MessageSquarePlusData, "MessageSquarePlus");
-export const MessageSquareText = createIcon(MessageSquareTextData, "MessageSquareText");
+export const MessageSquarePlus = createIcon(
+  MessageSquarePlusData,
+  "MessageSquarePlus"
+);
+export const MessageSquareText = createIcon(
+  MessageSquareTextData,
+  "MessageSquareText"
+);
 export const Mic = createIcon(MicData, "Mic");
 export const Minimize2 = createIcon(Minimize2Data, "Minimize2");
 export const Minus = createIcon(MinusData, "Minus");
 export const Monitor = createIcon(MonitorData, "Monitor");
 export const MonitorCog = createIcon(MonitorCogData, "MonitorCog");
-export const MonitorSmartphone = createIcon(MonitorSmartphoneData, "MonitorSmartphone");
+export const MonitorSmartphone = createIcon(
+  MonitorSmartphoneData,
+  "MonitorSmartphone"
+);
 export const Smartphone = createIcon(SmartphoneData, "Smartphone");
 export const Moon = createIcon(MoonData, "Moon");
 export const MoreHorizontal = createIcon(MoreHorizontalData, "MoreHorizontal");
@@ -321,10 +361,16 @@ export const Settings = createIcon(SettingsData, "Settings");
 export const Settings2 = createIcon(Settings2Data, "Settings2");
 export const ShieldAlert = createIcon(ShieldAlertData, "ShieldAlert");
 export const ShieldCheck = createIcon(ShieldCheckData, "ShieldCheck");
-export const SlidersHorizontal = createIcon(SlidersHorizontalData, "SlidersHorizontal");
+export const SlidersHorizontal = createIcon(
+  SlidersHorizontalData,
+  "SlidersHorizontal"
+);
 export const Sparkles = createIcon(SparklesData, "Sparkles");
 export const Square = createIcon(SquareData, "Square");
-export const SquareDashedMousePointer = createIcon(SquareDashedMousePointerIconData, "SquareDashedMousePointer");
+export const SquareDashedMousePointer = createIcon(
+  SquareDashedMousePointerIconData,
+  "SquareDashedMousePointer"
+);
 export const SquareKanban = createIcon(SquareKanbanData, "SquareKanban");
 export const SquarePen = createIcon(SquarePenData, "SquarePen");
 export const SquarePlus = createIcon(AddSquareIconData, "SquarePlus");

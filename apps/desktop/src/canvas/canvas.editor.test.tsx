@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import React, { useEffect, useState } from "react";
 import { activateDom, dom, restoreDom } from "../../tests/domTestHarness";
 
-const canvasStyles = await Bun.file(new URL("./styles.css", import.meta.url)).text();
+const canvasStyles = await Bun.file(
+  new URL("./styles.css", import.meta.url)
+).text();
 
 let act: any;
 let cleanup: any;
@@ -35,7 +37,8 @@ function fakeCanvas(width = 1, height = 1) {
     width,
     height,
     getContext: () => context,
-    toBlob: (callback: (blob: Blob | null) => void) => callback(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" })),
+    toBlob: (callback: (blob: Blob | null) => void) =>
+      callback(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" })),
   };
 }
 
@@ -105,7 +108,7 @@ function fakeRectangleElement(id = "theme-rectangle") {
   };
 }
 
-function FakeExcalidraw(props: any) {
+const FakeExcalidraw = (props: any) => {
   latestProps = props;
   const [rectangleSelected, setRectangleSelected] = useState(false);
   useEffect(() => {
@@ -114,12 +117,20 @@ function FakeExcalidraw(props: any) {
       getSceneElements: () => fakeState.elements,
       getFiles: () => fakeState.files,
       addFiles: (files: any[]) => {
-        Object.assign(fakeState.files, Object.fromEntries(files.map((file) => [file.id, file])));
+        Object.assign(
+          fakeState.files,
+          Object.fromEntries(files.map((file) => [file.id, file]))
+        );
       },
       updateScene: ({ elements, appState }: any) => {
         if (elements) fakeState.elements = elements;
-        if (appState) fakeState.appState = { ...fakeState.appState, ...appState };
-        latestProps?.onChange?.(fakeState.elements, fakeState.appState, fakeState.files);
+        if (appState)
+          fakeState.appState = { ...fakeState.appState, ...appState };
+        latestProps?.onChange?.(
+          fakeState.elements,
+          fakeState.appState,
+          fakeState.files
+        );
       },
       resetScene: ({ elements, appState, files }: any) => {
         fakeState.elements = elements ?? [];
@@ -133,21 +144,54 @@ function FakeExcalidraw(props: any) {
   }, [props]);
   return (
     <div data-testid="fake-excalidraw">
-      <div className="main-menu-trigger"><button type="button"><span>Main menu</span></button></div>
-      <button type="button" aria-label="Library"><span>Library</span></button>
-      <button type="button" aria-label="Keep selected tool active after drawing"><span>Lock</span></button>
-      <button type="button" aria-label="More tools"><span>More tools</span></button>
-      <button type="button" aria-label="Help"><span>Help</span></button>
-      <button type="button" aria-label="Hand (panning tool)"><span>Hand</span></button>
-      <button type="button" aria-label="Draw — P or 7"><span>Draw</span></button>
-      <button type="button" aria-label="Rectangle" onClick={() => setRectangleSelected(true)}><span>Rectangle</span></button>
-      <button type="button" aria-label="Undo"><span>Undo</span></button>
-      <button type="button" aria-label="Redo"><span>Redo</span></button>
+      <div className="main-menu-trigger">
+        <button type="button">
+          <span>Main menu</span>
+        </button>
+      </div>
+      <button type="button" aria-label="Library">
+        <span>Library</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Keep selected tool active after drawing"
+      >
+        <span>Lock</span>
+      </button>
+      <button type="button" aria-label="More tools">
+        <span>More tools</span>
+      </button>
+      <button type="button" aria-label="Help">
+        <span>Help</span>
+      </button>
+      <button type="button" aria-label="Hand (panning tool)">
+        <span>Hand</span>
+      </button>
+      <button type="button" aria-label="Draw — P or 7">
+        <span>Draw</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Rectangle"
+        onClick={() => setRectangleSelected(true)}
+      >
+        <span>Rectangle</span>
+      </button>
+      <button type="button" aria-label="Undo">
+        <span>Undo</span>
+      </button>
+      <button type="button" aria-label="Redo">
+        <span>Redo</span>
+      </button>
       {rectangleSelected ? (
         <section className="selected-shape-actions">
           <h2>Selected shape actions</h2>
-          <button type="button" aria-label="Stroke"><span>Stroke</span></button>
-          <button type="button" aria-label="Background"><span>Background</span></button>
+          <button type="button" aria-label="Stroke">
+            <span>Stroke</span>
+          </button>
+          <button type="button" aria-label="Background">
+            <span>Background</span>
+          </button>
         </section>
       ) : null}
     </div>
@@ -183,7 +227,8 @@ for (const key of [
 ]) {
   (globalThis as any)[key] = (dom as any)[key];
 }
-({ act, cleanup, fireEvent, render, screen } = await import("@testing-library/react"));
+({ act, cleanup, fireEvent, render, screen } =
+  await import("@testing-library/react"));
 ({ CanvasEditor } = await import("./CanvasEditor"));
 await import("./remote-entry");
 
@@ -195,7 +240,13 @@ afterEach(() => {
   fakeState.files = {};
   lastExportOptions = null;
   exportDrawCalls.length = 0;
-  fakeState.appState = { scrollX: 0, scrollY: 0, zoom: { value: 1 }, viewBackgroundColor: "white", viewModeEnabled: false };
+  fakeState.appState = {
+    scrollX: 0,
+    scrollY: 0,
+    zoom: { value: 1 },
+    viewBackgroundColor: "white",
+    viewModeEnabled: false,
+  };
   restoreDom();
 });
 
@@ -234,18 +285,33 @@ describe("CanvasEditor behavioral interaction contract", () => {
       expect(canvasStyles).toContain(`var(--ds-${token},`);
     }
     expect(canvasStyles.match(/var\(--ds-[^,)\s]+\)/g) ?? []).toEqual([]);
-    expect(canvasStyles).toContain("--canvas-radius-module: var(--ds-radius-module, 16px);");
-    expect(canvasStyles).toContain("--canvas-radius-control: var(--ds-radius-control, 12px);");
-    expect(canvasStyles).toContain("--canvas-button-radius: var(--ds-button-radius, 12px);");
+    expect(canvasStyles).toContain(
+      "--canvas-radius-module: var(--ds-radius-module, 16px);"
+    );
+    expect(canvasStyles).toContain(
+      "--canvas-radius-control: var(--ds-radius-control, 12px);"
+    );
+    expect(canvasStyles).toContain(
+      "--canvas-button-radius: var(--ds-button-radius, 12px);"
+    );
     expect(canvasStyles).toContain('.canvas-editor[data-canvas-theme="light"]');
   });
 
   test("keeps C2 chrome in a bounded second row without toolbar overlap", () => {
-    const chromeRule = canvasStyles.match(/\.canvas-editor__chrome \{([\s\S]*?)\n\}/)?.[1] ?? "";
-    expect(chromeRule).toContain("inset-block-start: var(--canvas-chrome-offset)");
-    expect(chromeRule).toContain("inset-inline-start: var(--canvas-space-module-inset)");
-    expect(chromeRule).toContain("inset-inline-end: var(--canvas-space-module-inset)");
-    expect(chromeRule).toContain("width: calc(100% - (var(--canvas-space-module-inset) * 2))");
+    const chromeRule =
+      canvasStyles.match(/\.canvas-editor__chrome \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(chromeRule).toContain(
+      "inset-block-start: var(--canvas-chrome-offset)"
+    );
+    expect(chromeRule).toContain(
+      "inset-inline-start: var(--canvas-space-module-inset)"
+    );
+    expect(chromeRule).toContain(
+      "inset-inline-end: var(--canvas-space-module-inset)"
+    );
+    expect(chromeRule).toContain(
+      "width: calc(100% - (var(--canvas-space-module-inset) * 2))"
+    );
     expect(chromeRule).toContain("overflow: hidden");
     expect(canvasStyles).toContain(".canvas-editor__presets {");
     expect(canvasStyles).toContain("flex: 1 1 auto;");
@@ -254,8 +320,13 @@ describe("CanvasEditor behavioral interaction contract", () => {
     expect(canvasStyles).toContain("overflow-x: auto;");
     expect(canvasStyles).toContain(".canvas-editor__done,");
     expect(canvasStyles).toContain(".canvas-editor__media-button {");
-    expect(chromeRule).not.toContain("inset-block-start: var(--canvas-space-module-inset)");
-    const narrowRule = canvasStyles.match(/@media screen and \(max-width: 450px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(chromeRule).not.toContain(
+      "inset-block-start: var(--canvas-space-module-inset)"
+    );
+    const narrowRule =
+      canvasStyles.match(
+        /@media screen and \(max-width: 450px\) \{([\s\S]*?)\n\}/
+      )?.[1] ?? "";
     expect(narrowRule).toContain("--canvas-chrome-offset: 8rem;");
   });
 
@@ -267,37 +338,75 @@ describe("CanvasEditor behavioral interaction contract", () => {
       revision: 2,
       theme: "light",
       elements: [],
-      appState: { viewBackgroundColor: "white", scrollX: 0, scrollY: 0, zoom: 1, gridSize: 20, gridStep: 5, viewModeEnabled: false },
+      appState: {
+        viewBackgroundColor: "white",
+        scrollX: 0,
+        scrollY: 0,
+        zoom: 1,
+        gridSize: 20,
+        gridStep: 5,
+        viewModeEnabled: false,
+      },
       assetRefs: [],
     };
     const editRef = React.createRef<any>();
-    const { container } = render(<CanvasEditor ref={editRef} value={value} theme="dark" initiallyExpanded />);
+    const { container } = render(
+      <CanvasEditor
+        ref={editRef}
+        value={value}
+        theme="dark"
+        initiallyExpanded
+      />
+    );
     await act(async () => undefined);
     expect(latestProps.theme).toBe("dark");
-    expect((container.firstElementChild as HTMLElement).dataset.canvasTheme).toBe("dark");
+    expect(
+      (container.firstElementChild as HTMLElement).dataset.canvasTheme
+    ).toBe("dark");
     expect(editRef.current.getEnvelope().theme).toBe("dark");
 
     cleanup();
     const historicalRef = React.createRef<any>();
-    const historical = render(<CanvasEditor ref={historicalRef} value={value} theme="dark" mode="historical" initiallyExpanded />);
+    const historical = render(
+      <CanvasEditor
+        ref={historicalRef}
+        value={value}
+        theme="dark"
+        mode="historical"
+        initiallyExpanded
+      />
+    );
     await act(async () => undefined);
     expect(latestProps.theme).toBe("light");
-    expect((historical.container.firstElementChild as HTMLElement).dataset.canvasTheme).toBe("light");
+    expect(
+      (historical.container.firstElementChild as HTMLElement).dataset
+        .canvasTheme
+    ).toBe("light");
     expect(historicalRef.current.getEnvelope().theme).toBe("light");
   });
 
   test("expands and collapses with Escape while historical mode remains view-only", async () => {
-    const { container } = render(<CanvasEditor mode="historical" name="History" />);
+    const { container } = render(
+      <CanvasEditor mode="historical" name="History" />
+    );
     expect(screen.getByRole("button", { name: "Open History" })).toBeTruthy();
     expect(screen.getByText("Click to expand and view")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open History" }));
-    expect(container.querySelector('[data-canvas-collapsed="false"]')).toBeTruthy();
+    expect(
+      container.querySelector('[data-canvas-collapsed="false"]')
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Image" })).toBeNull();
-    fireEvent.keyDown(container.firstElementChild as HTMLElement, { key: "Escape" });
-    expect(container.querySelector('[data-canvas-collapsed="true"]')).toBeTruthy();
+    fireEvent.keyDown(container.firstElementChild as HTMLElement, {
+      key: "Escape",
+    });
+    expect(
+      container.querySelector('[data-canvas-collapsed="true"]')
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open History" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(container.querySelector('[data-canvas-collapsed="true"]')).toBeTruthy();
+    expect(
+      container.querySelector('[data-canvas-collapsed="true"]')
+    ).toBeTruthy();
   });
 
   test("debounces autosave without incrementing the core-owned revision", async () => {
@@ -309,10 +418,25 @@ describe("CanvasEditor behavioral interaction contract", () => {
       revision: 7,
       theme: "light",
       elements: [],
-      appState: { viewBackgroundColor: "white", scrollX: 0, scrollY: 0, zoom: 1, gridSize: 20, gridStep: 5, viewModeEnabled: false },
+      appState: {
+        viewBackgroundColor: "white",
+        scrollX: 0,
+        scrollY: 0,
+        zoom: 1,
+        gridSize: 20,
+        gridStep: 5,
+        viewModeEnabled: false,
+      },
       assetRefs: [],
     };
-    render(<CanvasEditor initiallyExpanded value={value} autosaveDebounceMs={20} onChange={onChange} />);
+    render(
+      <CanvasEditor
+        initiallyExpanded
+        value={value}
+        autosaveDebounceMs={20}
+        onChange={onChange}
+      />
+    );
     await act(async () => undefined);
     await act(async () => {
       latestProps.onChange([], fakeState.appState, {});
@@ -332,34 +456,63 @@ describe("CanvasEditor behavioral interaction contract", () => {
       height: 40,
     }));
     const onChange = mock(() => undefined);
-    render(<CanvasEditor initiallyExpanded mediaNormalizer={normalizer} autosaveDebounceMs={10} onChange={onChange} />);
-    const input = screen.getByLabelText("Choose image files") as HTMLInputElement;
-    const file = new File([new Uint8Array([1, 2, 3])], "input.gif", { type: "image/gif" });
+    render(
+      <CanvasEditor
+        initiallyExpanded
+        mediaNormalizer={normalizer}
+        autosaveDebounceMs={10}
+        onChange={onChange}
+      />
+    );
+    const input = screen.getByLabelText(
+      "Choose image files"
+    ) as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "input.gif", {
+      type: "image/gif",
+    });
     await act(async () => {
       fireEvent.change(input, { target: { files: [file] } });
     });
     expect(normalizer).toHaveBeenCalledTimes(1);
     expect(Object.values(fakeState.files)).toHaveLength(1);
     expect(Object.keys(fakeState.files)[0]).toBe("trusted-image-1");
-    expect(fakeState.elements.some((element: any) => element.type === "image")).toBe(true);
+    expect(
+      fakeState.elements.some((element: any) => element.type === "image")
+    ).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0].assetRefs[0].ref).toBe("trusted-image-1");
-    const { deserializeEnvelope, rehydrateEnvelope, serializeEnvelope } = await import("./serialize");
+    const { deserializeEnvelope, rehydrateEnvelope, serializeEnvelope } =
+      await import("./serialize");
     const reopened = await rehydrateEnvelope(
       deserializeEnvelope(serializeEnvelope(onChange.mock.calls[0][0])),
-      [{ ref: "trusted-image-1", fileId: "trusted-image-1", mimeType: "image/png", bytes: new Uint8Array([137, 80, 78, 71]) }],
+      [
+        {
+          ref: "trusted-image-1",
+          fileId: "trusted-image-1",
+          mimeType: "image/png",
+          bytes: new Uint8Array([137, 80, 78, 71]),
+        },
+      ]
     );
-    expect(reopened.elements.find((element: any) => element.type === "image")?.fileId).toBe("trusted-image-1");
+    expect(
+      reopened.elements.find((element: any) => element.type === "image")?.fileId
+    ).toBe("trusted-image-1");
     expect(reopened.files["trusted-image-1"]?.mimeType).toBe("image/png");
   });
 
   test("exposes only bounded C2 style presets and focuses the editor root", () => {
     const onFocusChange = mock(() => undefined);
-    const { container } = render(<CanvasEditor initiallyExpanded onFocusChange={onFocusChange} />);
-    expect(screen.getByRole("button", { name: "Stroke color black" })).toBeTruthy();
+    const { container } = render(
+      <CanvasEditor initiallyExpanded onFocusChange={onFocusChange} />
+    );
+    expect(
+      screen.getByRole("button", { name: "Stroke color black" })
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Stroke width 2" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Fill color transparent" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Fill color transparent" })
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Font Monospace" })).toBeTruthy();
     expect(latestProps.gridModeEnabled).toBe(true);
     expect(latestProps.objectsSnapModeEnabled).toBe(true);
@@ -381,28 +534,46 @@ describe("CanvasEditor behavioral interaction contract", () => {
     const root = container.firstElementChild as HTMLElement;
     expect(root.querySelector(".main-menu-trigger")?.hidden).toBe(true);
     expect(root.querySelector('[aria-label="Library"]')?.hidden).toBe(true);
-    expect(root.querySelector('[aria-label="Keep selected tool active after drawing"]')?.hidden).toBe(true);
+    expect(
+      root.querySelector(
+        '[aria-label="Keep selected tool active after drawing"]'
+      )?.hidden
+    ).toBe(true);
     expect(root.querySelector('[aria-label="More tools"]')?.hidden).toBe(true);
     expect(root.querySelector('[aria-label="Help"]')?.hidden).toBe(true);
-    expect(root.querySelector('[aria-label="Hand (panning tool)"]')?.hidden).toBe(false);
-    expect(root.querySelector('[aria-label="Draw — P or 7"]')?.hidden).toBe(false);
+    expect(
+      root.querySelector('[aria-label="Hand (panning tool)"]')?.hidden
+    ).toBe(false);
+    expect(root.querySelector('[aria-label="Draw — P or 7"]')?.hidden).toBe(
+      false
+    );
     expect(root.querySelector('[aria-label="Rectangle"]')?.hidden).toBe(false);
     expect(root.querySelector('[aria-label="Undo"]')?.hidden).toBe(false);
     expect(root.querySelector('[aria-label="Redo"]')?.hidden).toBe(false);
     expect(screen.getByRole("button", { name: "Image" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Stroke color black" })).toBeTruthy();
-    fireEvent.click(root.querySelector('[aria-label="Rectangle"]') as HTMLElement);
+    expect(
+      screen.getByRole("button", { name: "Stroke color black" })
+    ).toBeTruthy();
+    fireEvent.click(
+      root.querySelector('[aria-label="Rectangle"]') as HTMLElement
+    );
     await act(async () => undefined);
     expect(root.querySelector(".selected-shape-actions")?.hidden).toBe(true);
-    expect(screen.getByRole("button", { name: "Fill color blue" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Fill color blue" })
+    ).toBeTruthy();
   });
 
   test("blocks unsupported shortcut-entry tools while preserving approved shortcuts", () => {
     const { container } = render(<CanvasEditor initiallyExpanded />);
     const root = container.firstElementChild as HTMLElement;
     for (const key of ["3", "9", "d", "f", "i", "k", "m"]) {
-      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+      });
       root.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(true);
     }
@@ -411,12 +582,20 @@ describe("CanvasEditor behavioral interaction contract", () => {
       { key: "f", metaKey: true },
       { key: "l", ctrlKey: true, shiftKey: true },
     ]) {
-      const event = new KeyboardEvent("keydown", { ...init, bubbles: true, cancelable: true });
+      const event = new KeyboardEvent("keydown", {
+        ...init,
+        bubbles: true,
+        cancelable: true,
+      });
       root.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(true);
     }
     for (const key of ["a", "t"]) {
-      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+      });
       root.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(false);
     }
@@ -432,7 +611,15 @@ describe("CanvasEditor behavioral interaction contract", () => {
       revision: 3,
       theme: "light",
       elements: [fakeRectangleElement()],
-      appState: { viewBackgroundColor: "white", scrollX: 0, scrollY: 0, zoom: 1, gridSize: 20, gridStep: 5, viewModeEnabled: false },
+      appState: {
+        viewBackgroundColor: "white",
+        scrollX: 0,
+        scrollY: 0,
+        zoom: 1,
+        gridSize: 20,
+        gridStep: 5,
+        viewModeEnabled: false,
+      },
       assetRefs: [],
     };
     const globalContract = (window as any).CodeTwoCanvasIsland;
@@ -442,9 +629,12 @@ describe("CanvasEditor behavioral interaction contract", () => {
     expect(root.querySelector('[data-canvas-collapsed="true"]')).toBeTruthy();
     expect(globalContract.prepareDraft(root).envelope.theme).toBe("dark");
     const originalCreateElement = document.createElement.bind(document);
-    (document as any).createElement = (tagName: string) => tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
+    (document as any).createElement = (tagName: string) =>
+      tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
     try {
-      const freeze = await globalContract.prepareFreeze(root, { budget: { maxBytes: 100_000_000 } });
+      const freeze = await globalContract.prepareFreeze(root, {
+        budget: { maxBytes: 100_000_000 },
+      });
       expect(freeze.envelope.theme).toBe("dark");
       expect(freeze.theme).toBe("dark");
       expect(freeze.envelope.elements).toHaveLength(1);
@@ -492,17 +682,35 @@ describe("CanvasEditor behavioral interaction contract", () => {
     const bounds = getCanvasExportBounds(scene as any, 24);
     expect(bounds).toEqual({ minX: -124, minY: 26, maxX: 4924, maxY: 3074 });
     const originalCreateElement = document.createElement.bind(document);
-    (document as any).createElement = (tagName: string) => tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
+    (document as any).createElement = (tagName: string) =>
+      tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
     try {
-      const results = await exportCanvasPng(scene as any, fakeState.appState as any, {}, { maxBytes: 100_000_000 });
+      const results = await exportCanvasPng(
+        scene as any,
+        fakeState.appState as any,
+        {},
+        { maxBytes: 100_000_000 }
+      );
       expect(lastExportOptions.exportPadding).toBe(24);
       expect(lastExportOptions.appState.gridModeEnabled).toBe(false);
-      expect(results.map((result: any) => result.kind)).toEqual(["overview", "detail", "detail", "detail", "detail", "detail", "detail"]);
+      expect(results.map((result: any) => result.kind)).toEqual([
+        "overview",
+        "detail",
+        "detail",
+        "detail",
+        "detail",
+        "detail",
+        "detail",
+      ]);
       const detailSourceRects = exportDrawCalls
         .slice(1)
         .map((args) => args.slice(1, 5))
         .filter((args) => args.length === 4);
-      expect(detailSourceRects.slice(1, 4)).toEqual([[0, 0, 2048, 2048], [2048, 0, 2048, 2048], [4096, 0, 904, 2048]]);
+      expect(detailSourceRects.slice(1, 4)).toEqual([
+        [0, 0, 2048, 2048],
+        [2048, 0, 2048, 2048],
+        [4096, 0, 904, 2048],
+      ]);
     } finally {
       (document as any).createElement = originalCreateElement;
     }
@@ -519,7 +727,9 @@ describe("CanvasEditor behavioral interaction contract", () => {
       globalContract.mount(root, { initiallyExpanded: true, theme: "dark" });
     });
     await act(async () => {
-      globalContract.setMediaCallbacks(root, { mediaNormalizer: async () => null });
+      globalContract.setMediaCallbacks(root, {
+        mediaNormalizer: async () => null,
+      });
     });
     const rectangle = {
       id: "remote-rectangle",
@@ -553,9 +763,12 @@ describe("CanvasEditor behavioral interaction contract", () => {
       latestApi.updateScene({ elements: [rectangle] });
     });
     const originalCreateElement = document.createElement.bind(document);
-    (document as any).createElement = (tagName: string) => tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
+    (document as any).createElement = (tagName: string) =>
+      tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
     try {
-      const freeze = await globalContract.prepareFreeze(root, { budget: { maxBytes: 100_000_000 } });
+      const freeze = await globalContract.prepareFreeze(root, {
+        budget: { maxBytes: 100_000_000 },
+      });
       expect(freeze.envelope.theme).toBe("dark");
       expect(freeze.manifest.objects[0].id).toBe("remote-rectangle");
       expect(freeze.exports[0].kind).toBe("overview");
@@ -593,8 +806,25 @@ describe("CanvasEditor behavioral interaction contract", () => {
       revision: 4,
       theme: "light",
       elements: [image],
-      appState: { viewBackgroundColor: "white", scrollX: 0, scrollY: 0, zoom: 1, gridSize: 20, gridStep: 5, viewModeEnabled: false },
-      assetRefs: [{ ref: "trusted-image-2", fileId: "trusted-image-2", mimeType: "image/png", byteLength: 4, width: 80, height: 40 }],
+      appState: {
+        viewBackgroundColor: "white",
+        scrollX: 0,
+        scrollY: 0,
+        zoom: 1,
+        gridSize: 20,
+        gridStep: 5,
+        viewModeEnabled: false,
+      },
+      assetRefs: [
+        {
+          ref: "trusted-image-2",
+          fileId: "trusted-image-2",
+          mimeType: "image/png",
+          byteLength: 4,
+          width: 80,
+          height: 40,
+        },
+      ],
     };
     const globalContract = (window as any).CodeTwoCanvasIsland;
     await act(async () => {
@@ -610,11 +840,18 @@ describe("CanvasEditor behavioral interaction contract", () => {
     });
     expect(root.querySelector('[data-canvas-collapsed="true"]')).toBeTruthy();
     const originalCreateElement = document.createElement.bind(document);
-    (document as any).createElement = (tagName: string) => tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
+    (document as any).createElement = (tagName: string) =>
+      tagName === "canvas" ? fakeCanvas() : originalCreateElement(tagName);
     try {
-      const freeze = await globalContract.prepareFreeze(root, { budget: { maxBytes: 100_000_000 } });
+      const freeze = await globalContract.prepareFreeze(root, {
+        budget: { maxBytes: 100_000_000 },
+      });
       expect(freeze.manifest.objects[0].type).toBe("image");
-      expect(freeze.envelope.elements.some((element: any) => element.fileId === "trusted-image-2")).toBe(true);
+      expect(
+        freeze.envelope.elements.some(
+          (element: any) => element.fileId === "trusted-image-2"
+        )
+      ).toBe(true);
       expect(freeze.exports.length).toBeGreaterThan(0);
     } finally {
       (document as any).createElement = originalCreateElement;
