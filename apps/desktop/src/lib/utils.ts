@@ -1,11 +1,11 @@
-import { clsx, type ClassValue } from "clsx";
-import { extendTailwindMerge } from "tailwind-merge";
+import { createCn } from "cn/config";
 
 /* styles.css adds semantic values beyond Tailwind's built-in scale, so the merger must know their
    namespaces too. Type roles need special care: an unknown `text-*` name falls through to the
    colour group, which silently drops either the size or the colour. Keep these names aligned with
    the @theme bridge whenever its public utility contract changes. */
-const twMerge = extendTailwindMerge({
+/** Merge conditional class names, with later Tailwind utilities winning. */
+export const cn = createCn({
   extend: {
     theme: {
       spacing: [
@@ -55,8 +55,3 @@ const twMerge = extendTailwindMerge({
     },
   },
 });
-
-/** Merge conditional class names, with later Tailwind utilities winning. */
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
