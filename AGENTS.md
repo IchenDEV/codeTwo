@@ -8,6 +8,11 @@ checkout.
 
 [`docs/sdlc/workflow.md`](docs/sdlc/workflow.md) is the single source of truth for material change
 Artifacts, lifecycle states, Gates, verification evidence, release handoff, Incidents, and Evals.
+Use [`docs/sdlc/development-workflow.md`](docs/sdlc/development-workflow.md) and
+[`./script/devflow`](script/devflow) for daily change creation, approval recording, and validation.
+Install the external [`sdlc-skill`](https://github.com/IchenDEV/sdlc-skill) `ai-native-sdlc` skill
+when Bootstrap, audit, or incident-to-improvement guidance is needed; the repository checker remains
+the enforcement source.
 
 - A direct user implementation request may approve Intent. Record its source, constraints, named
   approver, and observable acceptance in one change Artifact, then move it to `executing` before
@@ -19,8 +24,10 @@ Artifacts, lifecycle states, Gates, verification evidence, release handoff, Inci
   always run `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts`, and
   `bun script/verify/sdlc.ts --worktree`. A PR that
   changes repository files must change or add a schema-2 canonical
-  `docs/sdlc/changes/<date>-<slug>/change.md`; implementation differences require that Artifact to
-  be `executing` or later and every changed path to fall under its explicit scope.
+  `docs/sdlc/changes/<date>-<slug>/` with schema-3 stage files (`intent.md`, `spec.md`,
+  `plan.md`, `verification.md`); implementation differences require that bundle's
+  `intent.md`, `spec.md`, and `plan.md` to be `accepted` and every changed path to fall under its
+  explicit `plan.md` scope.
 - Do not create `docs/superpowers`, a parallel specs/plans tree, or another lifecycle registry.
 - Every file under `docs/` must match exactly one rule in `docs/catalog.json`; dated research and
   completed plans belong under `docs/archive/`, and every documentation image must be referenced.

@@ -50,16 +50,35 @@
       "authority": "current",
       "paths": [
         "docs/sdlc/workflow.md",
-        "docs/sdlc/templates/change.md",
+        "docs/sdlc/development-workflow.md",
+        "docs/sdlc/references/artifact-contracts.md",
+        "docs/sdlc/templates/intent.md",
+        "docs/sdlc/templates/spec.md",
+        "docs/sdlc/templates/plan.md",
+        "docs/sdlc/templates/verification.md",
         "docs/sdlc/templates/eval.md",
-        "docs/sdlc/templates/incident.md",
-        "docs/sdlc/evals/ai-native-sdlc-gates.md"
+        "docs/sdlc/templates/incident.md"
       ]
+    },
+    {
+      "classification": "incident-record-flat",
+      "authority": "historical-state",
+      "pattern": "^docs/sdlc/incidents/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*\\.md$"
+    },
+    {
+      "classification": "eval-record",
+      "authority": "historical-state",
+      "pattern": "^docs/sdlc/evals/[a-z0-9-]+\\.md$"
     },
     {
       "classification": "change-record",
       "authority": "historical-state",
-      "pattern": "^docs/sdlc/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*/change\\.md$"
+      "pattern": "^docs/sdlc/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*\/intent\\.md$"
+    },
+    {
+      "classification": "change-stage",
+      "authority": "historical-state",
+      "pattern": "^docs/sdlc/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*\/(spec|plan|verification)\\.md$"
     },
     {
       "classification": "change-evidence",
