@@ -108,13 +108,8 @@ function quotaReasonLabel(
     case "query_failed": {
       return t("quota.queryFailed", { provider: providerName });
     }
-    case null: {
-      throw new Error("Not implemented yet: null case");
-    }
+    case null:
     case "unsupported_provider": {
-      throw new Error('Not implemented yet: "unsupported_provider" case');
-    }
-    default: {
       return t("quota.unsupported", { provider: providerName });
     }
   }

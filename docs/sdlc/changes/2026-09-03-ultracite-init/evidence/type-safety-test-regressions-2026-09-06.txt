@@ -14,6 +14,8 @@ Commands (apps/desktop):
     tests/builtinLinks.test.ts
   → 52 pass / 0 fail
 
+  bun run test:ci → 867 pass / 0 fail (2026-09-06 evening follow-up)
+
 Fixes:
   - titlebar: duck-type closest (happy-dom / cross-realm Elements)
   - sidebarGitStatus: restore paths[cursor++] (post-increment semantics)
@@ -21,3 +23,12 @@ Fixes:
   - TurnCard: memoize canvas history + snapshot map (avoid effect loop)
   - MarkdownContent: linux reveal uses file-manager label (no throw stub)
   - policy/archive test assertions aligned with formatted source
+  - restore incomplete switch stubs (Usage/sync/update/slotCard/memory) as
+    exhaustive cases without useless default duplicates
+  - ProfileSettings: treat empty bucket arrays as empty activity (not buckets[0])
+  - TaskBoard narrow layout: Number(fontSize.replace(/px$/, "")) for rem width
+  - editorCanvasRendered mock docToBlocks: handle mentions before empty text
+  - taskBoard ResizeObserver mock: hasAttribute === true (not != null)
+  - designSystem/pluginManager: getElementById for colon-bearing useId selectors
+  - projectActionDialog: assert aria-disabled for Base UI disabled state
+  - AutomationsPage / CanvasEditor contract tests tolerate oxfmt wrapping

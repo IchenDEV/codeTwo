@@ -72,7 +72,12 @@ export function TaskBoardPage({
     if (!page || typeof ResizeObserver === "undefined") return;
     const updateLayout = (): void => {
       const rootFontSize =
-        Number(getComputedStyle(document.documentElement).fontSize) || 16;
+        Number(
+          getComputedStyle(document.documentElement).fontSize.replace(
+            /px$/u,
+            ""
+          )
+        ) || 16;
       const width = page.clientWidth;
       if (width <= 0) return;
       const narrow = width <= NARROW_BOARD_WIDTH_REM * rootFontSize;

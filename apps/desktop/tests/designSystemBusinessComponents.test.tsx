@@ -160,7 +160,7 @@ describe("design-system business components", () => {
     ).toBe("Current");
     expect(describedBy).toHaveLength(3);
     expect(
-      describedBy.every((id) => dom.document.querySelector(`#${id}`))
+      describedBy.every((id) => dom.document.getElementById(id) != null)
     ).toBe(true);
 
     click(selected);

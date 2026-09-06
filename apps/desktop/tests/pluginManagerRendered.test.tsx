@@ -661,8 +661,8 @@ describe("PluginManagerPage", () => {
     click(button(view.container, "MCPs 1"));
     await flush();
     click(
-      view.container.ownerDocument.querySelector(
-        "#component-state-skill:docs-search"
+      view.container.ownerDocument.getElementById(
+        "component-state-skill:docs-search"
       )
     );
     await flush();

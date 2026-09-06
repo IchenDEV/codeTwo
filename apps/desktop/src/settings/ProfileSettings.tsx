@@ -177,10 +177,13 @@ export function ProfileSettings({
   });
   const numberFormatter = new Intl.NumberFormat(locale);
   const leadingCells =
-    summary?.buckets.length == null
-      ? 0
-      : new Date(summary.buckets[0].startMs).getDay();
-  const activityCellCount = summary?.buckets.length ?? ACTIVITY_DAYS;
+    summary != null && summary.buckets.length > 0
+      ? new Date(summary.buckets[0].startMs).getDay()
+      : 0;
+  const activityCellCount =
+    summary != null && summary.buckets.length > 0
+      ? summary.buckets.length
+      : ACTIVITY_DAYS;
 
   const save = () => {
     const next = {

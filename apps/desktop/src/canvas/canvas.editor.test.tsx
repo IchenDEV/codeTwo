@@ -284,7 +284,9 @@ describe("CanvasEditor behavioral interaction contract", () => {
       "type-body-size",
       "type-body-leading",
     ]) {
-      expect(canvasStyles).toContain(`var(--ds-${token},`);
+      expect(canvasStyles).toMatch(
+        new RegExp(`var\\(\\s*--ds-${token}\\s*,`, "u")
+      );
     }
     expect(canvasStyles.match(/var\(--ds-[^,)\s]+\)/g) ?? []).toEqual([]);
     expect(canvasStyles).toContain(

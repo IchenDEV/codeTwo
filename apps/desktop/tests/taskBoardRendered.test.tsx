@@ -709,7 +709,7 @@ describe("TaskBoardPage rendered", () => {
         this.callback = callback;
       }
       observe(element) {
-        if (element.hasAttribute?.("data-task-board-page") != null)
+        if (element.hasAttribute?.("data-task-board-page") === true)
           notifyResize = this.callback;
       }
       disconnect() {}
@@ -775,7 +775,7 @@ describe("TaskBoardPage rendered", () => {
         this.callback = callback;
       }
       observe(element) {
-        if (element.hasAttribute?.("data-task-board-page") != null)
+        if (element.hasAttribute?.("data-task-board-page") === true)
           notifyResize = this.callback;
       }
       disconnect() {}

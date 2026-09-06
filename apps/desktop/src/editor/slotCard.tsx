@@ -461,9 +461,6 @@ export function SlotCardView({
         );
       }
       case "text": {
-        throw new Error('Not implemented yet: "text" case');
-      }
-      default: {
         return (
           <Input
             data-slot-field

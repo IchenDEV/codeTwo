@@ -158,10 +158,16 @@ void mock.module("../src/skillInline", () => ({
                 .map((inline: any) => inline.text ?? "")
                 .join("")
             : "";
-      if (text != null) return [{ type: "text", text }];
+      if (typeof block.content === "string") {
+        return text.trim().length > 0 ? [{ type: "text", text }] : [];
+      }
       if (Array.isArray(block.content)) {
         const inline = block.content.find(
-          (item: any) => item?.type != null && item.type !== "text"
+          (item: any) =>
+            item != null &&
+            typeof item === "object" &&
+            item.type != null &&
+            item.type !== "text"
         );
         if (inline?.type === "skill")
           return [
@@ -171,6 +177,7 @@ void mock.module("../src/skillInline", () => ({
           return [{ type: "file", path: inline.props.path }];
         if (inline?.type === "sessionMention")
           return [{ type: "session", session_id: inline.props.sessionId }];
+        if (text.trim().length > 0) return [{ type: "text", text }];
       }
       return [];
     }),
@@ -288,7 +295,8 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     expect(
       getBlocksRef
         .current()
-        .map((block: any) => block.type === "canvas" && block.id)
+        .filter((block: any) => block.type === "canvas")
+        .map((block: any) => block.id)
     ).toEqual(["canvas-a", "canvas-b"]);
     expect(empty.at(-1)).toBe(false);
     view.unmount();

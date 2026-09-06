@@ -333,9 +333,6 @@ function syncHint(
       return status.message ?? t("settings.syncUnavailable");
     }
     case undefined: {
-      throw new Error("Not implemented yet: undefined case");
-    }
-    default: {
       return status?.available === true
         ? t("settings.syncReady")
         : t("settings.syncLoading");

@@ -181,7 +181,7 @@ describe("AutomationsPage layout", () => {
 
   test("is mounted inside the persistent session shell instead of replacing the whole window", () => {
     expect(appSource).not.toContain(") : showAutomations ? (");
-    expect(appSource).toContain("{showAutomations && (");
+    expect(appSource).toMatch(/\{showAutomations\s*&&/u);
     expect(appSource).toMatch(
       /showTaskBoard\s*\|\|\s*showPluginManager\s*\|\|\s*showAutomations/u
     );

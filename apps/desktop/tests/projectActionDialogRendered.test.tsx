@@ -57,7 +57,7 @@ describe("ProjectActionDialog", () => {
     const switches = body.querySelectorAll('[data-slot="switch"]');
     expect(switches).toHaveLength(2);
     const previewSwitch = switches[1] as HTMLElement;
-    expect(Object.hasOwn(previewSwitch.dataset, "disabled")).toBe(true);
+    expect(previewSwitch.getAttribute("aria-disabled")).toBe("true");
 
     setValue(body.querySelector("#action-name"), "Test");
     setValue(body.querySelector("#action-command"), "bun test");
@@ -66,7 +66,7 @@ describe("ProjectActionDialog", () => {
       "http://localhost:5173"
     );
     await flush();
-    expect(Object.hasOwn(previewSwitch.dataset, "disabled")).toBe(false);
+    expect(previewSwitch.getAttribute("aria-disabled")).toBeNull();
 
     const shortcut = button(body, "Keybinding");
     await reactAct(async () => {

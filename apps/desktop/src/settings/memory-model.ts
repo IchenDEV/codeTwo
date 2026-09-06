@@ -62,7 +62,7 @@ function matchesView(
       return record.accessed_at !== null && record.accessed_at >= recentSince;
     }
     case "all": {
-      throw new Error('Not implemented yet: "all" case');
+      return true;
     }
     default: {
       return true;
@@ -132,7 +132,7 @@ export function originLabelKey(
       return "memory.origin.profile";
     }
     case "automatic": {
-      throw new Error('Not implemented yet: "automatic" case');
+      return "memory.origin.automatic";
     }
     default: {
       return "memory.origin.automatic";

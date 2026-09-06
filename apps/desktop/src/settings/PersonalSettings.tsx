@@ -144,9 +144,6 @@ export function GeneralSettingsPage({
         return t("settings.updateUnavailable");
       }
       case undefined: {
-        throw new Error("Not implemented yet: undefined case");
-      }
-      default: {
         return t("settings.updateLoading");
       }
     }
