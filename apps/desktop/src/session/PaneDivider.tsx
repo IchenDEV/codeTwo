@@ -20,9 +20,8 @@ export function PaneDivider({
   divider,
   containerRef,
   onResize,
-  className = "group z-20",
-}: PaneDividerProps) {
-  const vertical = divider.direction === "row";
+  className = "group z-20 pane-geometry-motion",
+}: PaneDividerProps) {  const vertical = divider.direction === "row";
   const boundary = vertical
     ? divider.rect.x + divider.rect.w * divider.ratio
     : divider.rect.y + divider.rect.h * divider.ratio;

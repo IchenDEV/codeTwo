@@ -41,6 +41,7 @@ import type {
   SchemeAppearanceProfile,
   ThemePalette,
   ThemePreference,
+  WindowMotionPreference,
 } from "../appearance";
 import {
   pickAppearanceThemeDocument,
@@ -884,6 +885,23 @@ export function AppearanceSettings({
               ]}
               onValueChange={(reduceMotion) =>
                 setAppearanceSettings({ reduceMotion })
+              }
+            />
+          </SettingRow>
+          <SettingRow
+            label={t("settings.windowMotion")}
+            description={t("settings.windowMotionHint")}
+          >
+            <ViewSwitcher<WindowMotionPreference>
+              label={t("settings.windowMotion")}
+              value={settings.windowMotion}
+              options={[
+                { value: "instant", label: t("settings.windowMotionInstant") },
+                { value: "fast", label: t("settings.windowMotionFast") },
+                { value: "smooth", label: t("settings.windowMotionSmooth") },
+              ]}
+              onValueChange={(windowMotion) =>
+                setAppearanceSettings({ windowMotion })
               }
             />
           </SettingRow>
