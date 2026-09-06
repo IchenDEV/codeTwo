@@ -40,9 +40,10 @@ No new network, storage, or permission surface; tooling and desktop UI source on
 Residual risk: House offs disable much of Ultracite’s default pedantry. Remaining type-unsafe
 casts live only in explicit `oxlint.config.ts` boundary overrides (host/FFI/BlockNote/persist-event).
 Product UI constraints stay on. Editor must use the Oxc VS Code extension for format-on-save.
-Do not run blanket `oxlint --fix-suggestions`. Full `bun test` suite was not used as the Gate
-verdict because of act()/noise hangs; focused regression coverage plus check/tsc is the recorded
-proof. Schema-2 `change.md` was replaced by these schema-3 stage files to satisfy main’s SDLC Gate.
+Do not run blanket `oxlint --fix-suggestions`. Source-contract tests were realigned after oxfmt
+wrapping so smoke/`test:ci` stay deterministic; focused regression coverage plus check/tsc remains
+the recorded proof. Schema-2 `change.md` was replaced by these schema-3 stage files to satisfy
+main’s SDLC Gate.
 
 ## Verdict
 
