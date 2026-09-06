@@ -345,12 +345,14 @@ export function SourceControlModal({
     }
   };
 
+  // Depend on `cwd` only: a fresh `loadSourceControl` identity every render would
+  // retrigger this effect forever under bun test (no React Compiler).
   useEffect(() => {
     void loadSourceControl();
     return () => {
       sourceControlRequestRef.current += 1;
     };
-  }, [loadSourceControl]);
+  }, [cwd]);
 
   const loadDiff = async (next: DiffSelection) => {
     if (next.kind === "working" && !repositoryReady) {
@@ -377,7 +379,7 @@ export function SourceControlModal({
 
   useEffect(() => {
     void loadDiff(selection);
-  }, [loadDiff, selection, status]);
+  }, [cwd, repositoryReady, selection, status]);
 
   const selectDiff = (next: DiffSelection) => {
     setSelection(next);

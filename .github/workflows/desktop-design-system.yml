@@ -21,24 +21,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      taskboard: ${{ steps.filter.outputs.taskboard }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            taskboard:
+              - 'apps/desktop/src/taskboard/**'
+              - 'apps/desktop/tests/taskBoard*'
+              - 'apps/desktop/stryker.taskboard.config.json'
+              - 'apps/desktop/tsconfig.stryker.json'
+
+  validate:
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Lint and typecheck
+        run: bun run check && bunx tsc --noEmit
       - name: Run desktop tests
-        run: bun test
+        run: bun run test:ci
       - name: Require zero surviving TaskBoard model mutants
+        if: needs.changes.outputs.taskboard == 'true'
         run: bun run mutation:taskboard
-      - name: Lint and build desktop renderer
+      - name: Build desktop renderer
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-        run: bun run build:renderer
+        run: bunx vite build
 
   test-cross-platform:
     strategy:
@@ -46,13 +69,16 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Run desktop tests
-        run: bun test
+      - name: Run desktop smoke tests
+        run: bun run test:smoke
