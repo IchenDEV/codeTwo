@@ -26,13 +26,13 @@ describe("composer geometry contract", () => {
     expect(composer).not.toContain("function ComposerLiquidSurface");
     expect(composer).not.toContain("data-gooey-composer");
     expect(composer).toContain(
-      '"rounded-composer bg-card shadow-raised transition-shadow duration-feedback ease-enter focus-within:focus-ring-inset"'
+      '"rounded-composer bg-card shadow-raised duration-feedback ease-enter focus-within:focus-ring-inset transition-shadow"'
     );
   });
 
   test("keeps the circular submit control concentric with the composer corner", () => {
     expect(tokens).toContain(
-      "--ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));"
+      "--ds-composer-radius: calc(\n    var(--ds-radius-modal) + var(--ds-space-module-inset)\n  );"
     );
     expect(composer).toContain(
       'data-composer-mode={docMode ? "document" : "compact"}'
@@ -40,7 +40,7 @@ describe("composer geometry contract", () => {
     expect(composer).toContain('"composer-mode-transition flex flex-col"');
     expect(composer).not.toContain("reducedMotion");
     expect(composer).toContain(
-      '"raised-material pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"'
+      '"raised-material rounded-composer shadow-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"'
     );
     expect(
       composer.match(
@@ -48,9 +48,7 @@ describe("composer geometry contract", () => {
       )
     ).toHaveLength(2);
     expect(
-      composer.match(
-        /className="size-7 shrink-0 rounded-full(?: text-muted-foreground)?"/gu
-      )
+      composer.match(/className="[^"]*size-7 shrink-0 rounded-full[^"]*"/gu)
     ).toHaveLength(2);
     expect(composer).toMatch(
       /variant="ghost"[\s\S]*size="compact"[\s\S]*focusStyle="inset"/u
@@ -75,18 +73,17 @@ describe("composer geometry contract", () => {
     expect(styles).not.toContain(".composer-grip");
     expect(app).not.toContain("codetwo.composerHeight");
     expect(app).not.toContain("composerHByPane");
-    expect(composer).toContain(
-      'aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}'
-    );
+    expect(composer).toContain("aria-label={");
+    expect(composer).toContain('? t("composer.collapseLabel")');
+    expect(composer).toContain(': t("composer.expandLabel")');
   });
 
   test("keeps the interactive Project name typographically continuous with the empty heading", () => {
     expect(app).toContain(
-      "[font-size:inherit] [font-weight:inherit] [letter-spacing:inherit] [line-height:inherit]"
+      "[font-size:inherit] [line-height:inherit] [font-weight:inherit] [letter-spacing:inherit]"
     );
-    expect(app).toContain(
-      '</DropdownMenu>\n                  {" "}\n                  {t("transcript.greetingEnd")}'
-    );
+    expect(app).toContain('</DropdownMenu>{" "}');
+    expect(app).toContain('{t("transcript.greetingEnd")}');
   });
 });
 

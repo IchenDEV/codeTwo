@@ -1478,7 +1478,8 @@ export const en = {
   "settings.preferenceOn": "On",
   "settings.preferenceOff": "Off",
   "settings.windowMotion": "Window motion",
-  "settings.windowMotionHint": "Glide panes to their new position when the tiling layout changes.",
+  "settings.windowMotionHint":
+    "Glide panes to their new position when the tiling layout changes.",
   "settings.windowMotionInstant": "Instant",
   "settings.windowMotionFast": "Fast",
   "settings.windowMotionSmooth": "Smooth",

@@ -107,7 +107,7 @@ export function PaneTiles({
           key={divider.splitId}
           divider={divider}
           containerRef={containerRef}
-          className="group z-10 pane-geometry-motion"
+          className="group pane-geometry-motion z-10"
           onResize={(ratio) => onResizeSplit(divider.splitId, ratio)}
         />
       ))}

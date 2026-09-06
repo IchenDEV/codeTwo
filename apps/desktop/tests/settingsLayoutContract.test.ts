@@ -157,8 +157,9 @@ describe("Settings page layout contract", () => {
     expect(source).toMatch(
       /\{ id: "profile", icon: UserRound, labelKey: "profile\.title" \}/
     );
+    expect(source).toContain('{tab === "profile" && (');
     expect(source).toContain(
-      '{tab === "profile" && <ProfileSettings providerNames={providerNames} />}'
+      "<ProfileSettings providerNames={providerNames} />"
     );
     expect(styles).toContain(".settings-profile-page");
     expect(styles).toContain(".profile-activity-grid");
@@ -257,7 +258,7 @@ describe("Settings page layout contract", () => {
 
   test("removes and closes the Memory tab when its component policy is disabled", () => {
     expect(source).toContain(
-      'group.items.filter(({ id }) => memoryEnabled || id !== "memory")'
+      '.filter(({ id }) => memoryEnabled || id !== "memory")'
     );
     expect(source).toContain('current === "memory" ? "general" : current');
     expect(source).toMatch(

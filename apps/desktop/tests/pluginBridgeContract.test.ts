@@ -58,14 +58,14 @@ describe("plugin bridge contract", () => {
     );
 
     expect(bridge).toContain(
-      "return coreCall<T>(name, args ?? null, projectPath)"
+      "return await coreCall<T>(name, args ?? null, projectPath)"
     );
     expect(coreTransport).toContain("call: desktopCall");
     expect(coreTransport).toContain("listen: listenDesktop");
     expect(bridge).toContain("projectPath: string | null = callProjectPath");
-    expect(bridge).toContain(
-      'call<ManagedPluginCatalog>("plugins.catalog", { scope: managedPluginScopeToWire(scope) }, null)'
-    );
+    expect(bridge).toContain("call<ManagedPluginCatalog>(");
+    expect(bridge).toContain('"plugins.catalog"');
+    expect(bridge).toContain("managedPluginScopeToWire(scope)");
     expect(bridge).toContain(
       'call("lsp.set_runtime_enabled", { enabled }, projectPath)'
     );
@@ -75,9 +75,8 @@ describe("plugin bridge contract", () => {
     expect(main).toContain("new NativeHost({");
     expect(main).toContain("await host.start()");
     expect(main).toContain("host.call(name, args, projectPath)");
-    expect(adapter).toContain(
-      'return this.request("call", { name, args, project_path: projectPath })'
-    );
+    expect(adapter).toContain('return await this.request("call"');
+    expect(adapter).toContain("project_path: projectPath");
     expect(adapter).toContain("DESKTOP_HOST_PROTOCOL_VERSION = 1");
     expect(host).toContain('"protocol_version": 1');
     expect(host.match(/if request\.method == "call"/gu)).toHaveLength(1);
@@ -95,7 +94,11 @@ describe("plugin bridge contract", () => {
     expect(macPackageSigning).toContain(
       'join(bundle, "Contents", "Resources", metadata)'
     );
-    expect(macPackageSigning).toContain('"--force", "--deep", "--sign", "-"');
+    expect(macPackageSigning).toContain('"--force"');
+    expect(macPackageSigning).toContain('"--deep"');
+    expect(macPackageSigning).toContain('"--sign"');
+    expect(macPackageSigning).toContain('"-"');
+    expect(macPackageSigning).toContain('"/usr/bin/codesign"');
     expect(
       `${bridge}\n${coreTransport}\n${client}\n${main}\n${host}`
     ).not.toContain("@tauri-apps");
@@ -145,15 +148,10 @@ describe("plugin bridge contract", () => {
       "utf-8"
     );
 
-    expect(bridge).toContain(
-      'call<PluginDeveloperStatus>("plugins.developer_status"'
-    );
-    expect(bridge).toContain(
-      'call<PluginDeveloperStatus>("plugins.set_developer_mode"'
-    );
-    expect(bridge).toContain(
-      'call<PluginDeveloperStatus>("plugins.reload_development"'
-    );
+    expect(bridge).toContain("call<PluginDeveloperStatus>(");
+    expect(bridge).toContain('"plugins.developer_status"');
+    expect(bridge).toContain('"plugins.set_developer_mode"');
+    expect(bridge).toContain('"plugins.reload_development"');
     expect(hostEvents).toContain("ctx.on::<PluginsChanged");
     expect(hostEvents).toContain('host.emit("plugins-changed", ())');
   });

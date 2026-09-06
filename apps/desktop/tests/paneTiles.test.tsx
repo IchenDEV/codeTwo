@@ -197,16 +197,20 @@ describe("PaneTiles", () => {
         renderPane={(paneId) => <div>{paneId}</div>}
         onFocusPane={() => {}}
         onResizeSplit={() => {}}
-      />,
+      />
     );
     await flush();
 
-    const frames = Array.from(rendered.container.querySelectorAll("[data-pane-id]"));
+    const frames = Array.from(
+      rendered.container.querySelectorAll("[data-pane-id]")
+    );
     expect(frames.length).toBeGreaterThan(0);
     for (const frame of frames) {
       expect(frame.classList.contains("pane-geometry-motion")).toBe(true);
     }
-    const dividers = Array.from(rendered.container.querySelectorAll("[data-divider-id]"));
+    const dividers = Array.from(
+      rendered.container.querySelectorAll("[data-divider-id]")
+    );
     expect(dividers.length).toBeGreaterThan(0);
     for (const divider of dividers) {
       expect(divider.classList.contains("pane-geometry-motion")).toBe(true);

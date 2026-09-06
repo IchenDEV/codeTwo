@@ -19,7 +19,7 @@ describe("Appshots desktop contract", () => {
     expect(settings).toContain('<SelectItem value="automatic">');
     expect(settings).toContain('label={t("settings.appshotsFrontmost")}');
     expect(settings).toContain(
-      'leading={<ScanText className="size-5 text-primary" />}'
+      'leading={<ScanText className="text-primary size-5" />}'
     );
     expect(settings).toContain("checked={appshotSettings.play_sound}");
     expect(app).toContain("onAppshotCaptured");

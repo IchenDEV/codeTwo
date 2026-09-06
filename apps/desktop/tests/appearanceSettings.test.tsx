@@ -288,21 +288,31 @@ describe("Appearance settings", () => {
   test("normalizes, applies, and persists the window motion preference", () => {
     activateDom();
     installThemeTokens();
-    expect(normalizeAppearanceSettings({})).toMatchObject({ windowMotion: "smooth" });
-    expect(normalizeAppearanceSettings({ windowMotion: "bouncy" })).toMatchObject({ windowMotion: "smooth" });
-    expect(normalizeAppearanceSettings({ windowMotion: "instant" })).toMatchObject({ windowMotion: "instant" });
+    expect(normalizeAppearanceSettings({})).toMatchObject({
+      windowMotion: "smooth",
+    });
+    expect(
+      normalizeAppearanceSettings({ windowMotion: "bouncy" })
+    ).toMatchObject({ windowMotion: "smooth" });
+    expect(
+      normalizeAppearanceSettings({ windowMotion: "instant" })
+    ).toMatchObject({ windowMotion: "instant" });
 
     const root = dom.document.documentElement;
     applyAppearanceSettings(
       root,
       { ...normalizeAppearanceSettings({}), windowMotion: "fast" },
-      "light",
+      "light"
     );
     expect(root.dataset.windowMotion).toBe("fast");
 
     setAppearanceSettings({ windowMotion: "instant" });
     expect(getAppearanceSettings().windowMotion).toBe("instant");
-    expect(JSON.parse(dom.window.localStorage.getItem("codetwo.appearance.v1") ?? "{}")).toMatchObject({
+    expect(
+      JSON.parse(
+        dom.window.localStorage.getItem("codetwo.appearance.v1") ?? "{}"
+      )
+    ).toMatchObject({
       windowMotion: "instant",
     });
   });

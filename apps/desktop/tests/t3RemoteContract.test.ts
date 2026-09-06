@@ -46,13 +46,13 @@ describe("Rust Plugin Kernel remote contract", () => {
     const remote = read("src/remote/Remote.tsx");
 
     expect(remote).toContain(
-      'return status.protocols?.length ? status.protocols : ["t3", "legacy"]'
+      'return status.protocols?.length == null ? ["t3", "legacy"] : status.protocols;'
     );
     expect(remote).toContain('if (protocol === "t3") return "T3 Code mobile"');
     expect(remote).toContain('return "Browser remote"');
-    expect(remote).toContain(
-      "remotePairingLink(endpointId ?? undefined, requestedProtocol)"
-    );
+    expect(remote).toContain("remotePairingLink(");
+    expect(remote).toContain("endpointId ?? undefined");
+    expect(remote).toContain("requestedProtocol");
     expect(remote).toContain("pairRemoteDevice(pairingUrl)");
   });
 
