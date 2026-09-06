@@ -15,9 +15,9 @@ describe("built-in component policy integration", () => {
     const lsp = source("lsp/client.ts");
     const lspAttachment = source("lsp/attach.ts");
 
-    expect(app).toContain(
-      "pluginManagerComponentEnabled(activePluginModel.components, id, activeComponentPolicyReady)"
-    );
+    expect(app).toContain("pluginManagerComponentEnabled(");
+    expect(app).toContain("activePluginModel.components,");
+    expect(app).toContain("activeComponentPolicyReady");
     expect(app).toContain('componentEnabled("voice.composer")');
     expect(app).toContain('componentEnabled("memory.settings")');
     expect(app).toContain('componentEnabled("scenes.surface")');
@@ -40,12 +40,13 @@ describe("built-in component policy integration", () => {
     expect(app).toContain("scenesEnabled: scenesSurfaceEnabled");
     expect(app).toContain("void synchronizeLspRuntimePolicy(");
     expect(app).toContain(
-      "(enabled) => lspSetRuntimeEnabled(enabled, lspProjectPath)"
+      "async (enabled) => await lspSetRuntimeEnabled(enabled, lspProjectPath)"
     );
     expect(app).toContain('componentEnabledRef.current("lsp.runtime")');
-    expect(app).toContain(
-      "[activeComponentPolicyReady, lspPluginEnabled, lspProjectPath, lspRuntimeEnabled]"
-    );
+    expect(app).toContain("activeComponentPolicyReady,");
+    expect(app).toContain("lspPluginEnabled,");
+    expect(app).toContain("lspProjectPath,");
+    expect(app).toContain("lspRuntimeEnabled,");
     expect(lsp).toContain("if (!runtimeEnabled) return null;");
     expect(lsp).toContain(
       "for (const client of [...LspClient.clients.values()]) client.dispose()"
@@ -93,18 +94,19 @@ describe("built-in component policy integration", () => {
     expect(host).toContain(
       "desktopPetWindow.setFrame(frame.x, y, desktopPetWidth, height)"
     );
+    expect(host).toContain("desktopPetBubbleHeight");
     expect(host).toContain(
-      "desktopPetState.bubble ? desktopPetBubbleHeight : 0"
+      'desktopPetState.bubble != null && desktopPetState.bubble !== ""'
     );
     expect(host).toContain("passthrough: false");
     expect(host).not.toContain("passthrough: true");
-    expect(host).toContain(
-      'desktopPetRpc.send.event({ name: "native-context-menu-action"'
-    );
+    expect(host).toContain("desktopPetRpc.send.event({");
+    expect(host).toContain('name: "native-context-menu-action"');
     expect(host).toContain(
       'mainWindow.on("close", () => desktopPetWindow?.close())'
     );
-    expect(desktopPet).toContain("showNativeContextMenu(desktopPetContextMenu");
+    expect(desktopPet).toContain("showNativeContextMenu(");
+    expect(desktopPet).toContain("desktopPetContextMenu(");
     expect(desktopPet).toContain(
       "if (action === DESKTOP_PET_CLOSE_ACTION) void desktopHidePet()"
     );

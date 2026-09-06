@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -625,7 +625,7 @@ export function FeishuWorkspacePage({
     );
   }, [sidebarOrder]);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     if (!enabled) return;
     setLoading(true);
     setError(null);
@@ -655,7 +655,7 @@ export function FeishuWorkspacePage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [callCommand, enabled]);
 
   useEffect(() => {
     void reload();
@@ -715,7 +715,7 @@ export function FeishuWorkspacePage({
         : selectedBase;
   const related = selectedChat ? (associations[selectedChat.id] ?? []) : [];
 
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     if (!selectedChat) {
       setMessages([]);
       return;
@@ -734,14 +734,14 @@ export function FeishuWorkspacePage({
     } finally {
       if (request === detailRequestRef.current) setDetailLoading(false);
     }
-  };
+  }, [callCommand, selectedChat]);
 
   useEffect(() => {
     if (!detailVisible || tab !== "messages") return;
     void loadMessages();
   }, [detailVisible, loadMessages, tab]);
 
-  const loadDocument = async () => {
+  const loadDocument = useCallback(async () => {
     if (!selectedDocument) {
       setDocumentContent("");
       return;
@@ -761,30 +761,33 @@ export function FeishuWorkspacePage({
     } finally {
       if (request === detailRequestRef.current) setDetailLoading(false);
     }
-  };
+  }, [callCommand, selectedDocument]);
 
   useEffect(() => {
     if (!detailVisible || tab !== "documents") return;
     void loadDocument();
   }, [detailVisible, loadDocument, tab]);
 
-  const loadBase = async (tableId = "") => {
-    if (!selectedBase) return;
-    const request = (detailRequestRef.current += 1);
-    setDetailLoading(true);
-    setError(null);
-    try {
-      const result = await callCommand<BaseData>("table.read", {
-        appToken: selectedBase.id,
-        tableId,
-      });
-      if (request === detailRequestRef.current) setBaseData(result);
-    } catch (error) {
-      if (request === detailRequestRef.current) setError(String(error));
-    } finally {
-      if (request === detailRequestRef.current) setDetailLoading(false);
-    }
-  };
+  const loadBase = useCallback(
+    async (tableId = "") => {
+      if (!selectedBase) return;
+      const request = (detailRequestRef.current += 1);
+      setDetailLoading(true);
+      setError(null);
+      try {
+        const result = await callCommand<BaseData>("table.read", {
+          appToken: selectedBase.id,
+          tableId,
+        });
+        if (request === detailRequestRef.current) setBaseData(result);
+      } catch (error) {
+        if (request === detailRequestRef.current) setError(String(error));
+      } finally {
+        if (request === detailRequestRef.current) setDetailLoading(false);
+      }
+    },
+    [callCommand, selectedBase]
+  );
 
   useEffect(() => {
     if (!detailVisible || tab !== "bases") return;
@@ -792,35 +795,38 @@ export function FeishuWorkspacePage({
     void loadBase();
   }, [detailVisible, loadBase, tab]);
 
-  const markResourceActivity = (
-    resourceTab: ResourceTab,
-    resourceId: string
-  ) => {
-    if (!resourceId) return;
-    setResourceActivity((current) =>
-      current[resourceTab].includes(resourceId)
-        ? current
-        : { ...current, [resourceTab]: [...current[resourceTab], resourceId] }
-    );
-  };
+  const markResourceActivity = useCallback(
+    (resourceTab: ResourceTab, resourceId: string) => {
+      if (!resourceId) return;
+      setResourceActivity((current) =>
+        current[resourceTab].includes(resourceId)
+          ? current
+          : {
+              ...current,
+              [resourceTab]: [...current[resourceTab], resourceId],
+            }
+      );
+    },
+    []
+  );
 
-  const clearResourceActivity = (
-    resourceTab: ResourceTab,
-    resourceId: string
-  ) => {
-    setResourceActivity((current) =>
-      current[resourceTab].includes(resourceId)
-        ? {
-            ...current,
-            [resourceTab]: current[resourceTab].filter(
-              (id) => id !== resourceId
-            ),
-          }
-        : current
-    );
-  };
+  const clearResourceActivity = useCallback(
+    (resourceTab: ResourceTab, resourceId: string) => {
+      setResourceActivity((current) =>
+        current[resourceTab].includes(resourceId)
+          ? {
+              ...current,
+              [resourceTab]: current[resourceTab].filter(
+                (id) => id !== resourceId
+              ),
+            }
+          : current
+      );
+    },
+    []
+  );
 
-  const scheduleRefresh = (key: string, refresh: () => void) => {
+  const scheduleRefresh = useCallback((key: string, refresh: () => void) => {
     const existing = refreshTimersRef.current.get(key);
     if (existing !== undefined) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
@@ -828,7 +834,7 @@ export function FeishuWorkspacePage({
       refresh();
     }, 120);
     refreshTimersRef.current.set(key, timer);
-  };
+  }, []);
 
   useEffect(
     () => () => {
@@ -1067,16 +1073,19 @@ export function FeishuWorkspacePage({
     }
   };
 
-  const openAuthorization = async (ticket: FeishuAuthTicket) => {
-    if (ticket.flow === "registration") {
-      continueAfterRegistrationRef.current = true;
-      automaticAuthorizationStartedRef.current = false;
-    }
-    setAuthorizationUrl(ticket.url);
-    const next = await callCommand<FeishuAuthStatus>("connection.status", {});
-    setAuthStatus(next);
-    await openExternal(ticket.url);
-  };
+  const openAuthorization = useCallback(
+    async (ticket: FeishuAuthTicket) => {
+      if (ticket.flow === "registration") {
+        continueAfterRegistrationRef.current = true;
+        automaticAuthorizationStartedRef.current = false;
+      }
+      setAuthorizationUrl(ticket.url);
+      const next = await callCommand<FeishuAuthStatus>("connection.status", {});
+      setAuthStatus(next);
+      await openExternal(ticket.url);
+    },
+    [callCommand]
+  );
 
   const createFeishuApp = async () => {
     setActivating(true);

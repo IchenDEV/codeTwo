@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useState, useCallback } from "react";
 
 import { PageHeader } from "@/components/business/page-header";
 import { SearchField } from "@/components/business/search-field";
@@ -733,7 +733,7 @@ export function MemorySettingsPage({
     if (projectPath) setSelectedProject(projectPath);
   }, [projectPath]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!selectedProject) {
       setRecords([]);
       setStats(EMPTY_STATS);
@@ -762,7 +762,7 @@ export function MemorySettingsPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedProject, toast]);
 
   useEffect(() => {
     void getMemorySettings()
@@ -780,26 +780,29 @@ export function MemorySettingsPage({
   const profile = memoryProfile(records);
   const visible = filterMemories(records, { ...filter, query: deferredQuery });
 
-  const loadDetail = async (memory: MemoryRecord | null, reveal = false) => {
-    if (!memory) {
-      setEvidence([]);
-      setUsages([]);
-      return;
-    }
-    setDetailLoading(true);
-    try {
-      const [nextEvidence, nextUsages] = await Promise.all([
-        getMemoryEvidence(memory.id, reveal),
-        getMemoryUsages(memory.id),
-      ]);
-      setEvidence(nextEvidence);
-      setUsages(nextUsages);
-    } catch (error) {
-      toast(String(error), "error");
-    } finally {
-      setDetailLoading(false);
-    }
-  };
+  const loadDetail = useCallback(
+    async (memory: MemoryRecord | null, reveal = false) => {
+      if (!memory) {
+        setEvidence([]);
+        setUsages([]);
+        return;
+      }
+      setDetailLoading(true);
+      try {
+        const [nextEvidence, nextUsages] = await Promise.all([
+          getMemoryEvidence(memory.id, reveal),
+          getMemoryUsages(memory.id),
+        ]);
+        setEvidence(nextEvidence);
+        setUsages(nextUsages);
+      } catch (error) {
+        toast(String(error), "error");
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [toast]
+  );
 
   useEffect(() => {
     setRevealed(false);

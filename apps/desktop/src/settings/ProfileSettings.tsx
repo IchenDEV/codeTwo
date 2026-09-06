@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Check, Lock, Pencil, Share2, UserRound } from "@/components/ui/icons";
@@ -144,7 +144,7 @@ export function ProfileSettings({
   const handle = profile.handle.trim().replace(/^@+/u, "");
   const bio = profile.bio.trim() || t("profile.defaultBio");
 
-  const loadActivity = () => {
+  const loadActivity = useCallback(() => {
     setLoading(true);
     setLoadFailed(false);
     void Promise.all([reportLoader(), historyLoader(ACTIVITY_DAYS)])
@@ -153,7 +153,7 @@ export function ProfileSettings({
       )
       .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
-  };
+  }, [historyLoader, reportLoader]);
 
   useEffect(loadActivity, [loadActivity]);
 

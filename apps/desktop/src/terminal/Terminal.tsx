@@ -2,7 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import type { ITheme } from "@xterm/xterm";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 import { ArrowDown, ArrowUp, X } from "@/components/ui/icons";
@@ -105,7 +105,7 @@ export function TerminalPanel({
   // Terminals stay mounted when they're not the visible tab, so they have no layout box — and
   // xterm's fit addon throws on those. The dock's resize event reaches every mounted instance, so
   // this guard is what keeps a panel resize from spraying errors from the hidden ones.
-  const refit = () => {
+  const refit = useCallback(() => {
     const el = boxRef.current;
     const term = termRef.current;
     if (
@@ -123,7 +123,7 @@ export function TerminalPanel({
     } catch {
       return false;
     }
-  };
+  }, []);
 
   useEffect(() => {
     const el = boxRef.current;

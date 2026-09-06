@@ -195,21 +195,13 @@ export function builtinLinkMenuItems(
     | "link.revealInFinder"
     | "link.showInFileExplorer"
     | "link.showInFileManager";
-  switch (currentDesktopPlatform()) {
-    case "macos": {
-      revealKey = "link.revealInFinder";
-      break;
-    }
-    case "windows": {
-      revealKey = "link.showInFileExplorer";
-      break;
-    }
-    case "linux": {
-      throw new Error('Not implemented yet: "linux" case');
-    }
-    default: {
-      revealKey = "link.showInFileManager";
-    }
+  const platform = currentDesktopPlatform();
+  if (platform === "macos") {
+    revealKey = "link.revealInFinder";
+  } else if (platform === "windows") {
+    revealKey = "link.showInFileExplorer";
+  } else {
+    revealKey = "link.showInFileManager";
   }
   return [
     ...(options.canOpenInApp

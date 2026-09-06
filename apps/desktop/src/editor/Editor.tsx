@@ -8,7 +8,7 @@ import {
   useCreateBlockNote,
 } from "@blocknote/react";
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import type { MutableRefObject } from "react";
 
 import { Bot, Server, Sparkles } from "@/components/ui/icons";
@@ -608,18 +608,21 @@ export function DocEditor({
   // Composer's document is still live. Keep the recovery non-destructive: route only the ids in
   // that submitted document to matching mounted handles. The wrapped runtime callback still owns
   // its base toast/telemetry behavior and is invoked exactly once per matching id.
-  const routeCanvasDeliveryError = (
-    doc: readonly DocBlock[],
-    message: string,
-    kind: "provider_image" | "other"
-  ) => {
-    if (!editorCanvasRuntime) return;
-    for (const block of doc) {
-      if (block.type === "canvas") {
-        editorCanvasRuntime.onCanvasDeliveryError(block.id, message, kind);
+  const routeCanvasDeliveryError = useCallback(
+    (
+      doc: readonly DocBlock[],
+      message: string,
+      kind: "provider_image" | "other"
+    ) => {
+      if (!editorCanvasRuntime) return;
+      for (const block of doc) {
+        if (block.type === "canvas") {
+          editorCanvasRuntime.onCanvasDeliveryError(block.id, message, kind);
+        }
       }
-    }
-  };
+    },
+    [editorCanvasRuntime]
+  );
 
   useEffect(() => {
     if (!canvasDeliveryErrorRef) return;

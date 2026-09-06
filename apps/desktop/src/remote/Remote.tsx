@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 import { StatusIndicator } from "@/components/business/status-indicator";
 import { Button } from "@/components/ui/button";
@@ -110,7 +110,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     remoteStatus()
       .then(applyStatus)
       .catch(() => {
@@ -121,7 +121,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
       .catch(() => {
         /* empty */
       });
-  };
+  }, [applyStatus]);
 
   useEffect(refresh, [refresh]);
 

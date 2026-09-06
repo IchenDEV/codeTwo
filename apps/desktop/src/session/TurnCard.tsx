@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 
 import { StatusBadge } from "@/components/business/status-badge";
 import { ActivityOrb } from "@/components/ui/activity-orb";
@@ -816,7 +816,10 @@ export const TurnCard = memo(
       return state === "active" || state === "pending";
     }).length;
     const blocks = orderedBlocks(turn);
-    const history = parseCanvasHistoryPrompt(turn.prompt);
+    const history = useMemo(
+      () => parseCanvasHistoryPrompt(turn.prompt),
+      [turn.prompt]
+    );
     const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
     const promptText = promptTextWithoutImageMarkers(
       history.visiblePrompt,
@@ -841,7 +844,10 @@ export const TurnCard = memo(
         .then(() => setCopied(target))
         .catch(() => toast(t("turn.copyFailed"), "error"));
     };
-    const historySnapshots = new Map<string, CanvasSnapshot>();
+    const historySnapshots = useMemo(
+      () => new Map<string, CanvasSnapshot>(),
+      []
+    );
     const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>(
       {}
     );

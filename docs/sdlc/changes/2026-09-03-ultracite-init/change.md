@@ -8,7 +8,7 @@ owner: auto
 approvers: user via the 2026-09-03 Ultracite request and the 2026-09-04 oxlint migration request
 approved_at: 2026-09-04
 created: 2026-09-03
-updated: 2026-09-04
+updated: 2026-09-06
 source: current user request to start the type-safety cleanup round after oxlint migration
 inputs: Ultracite oxlint setup docs, existing apps/desktop house lint constraints
 outputs: Ultracite oxlint + oxfmt configs under apps/desktop, preserved product lint constraints where expressible, Stylelint retained for CSS radius allow-list; type-safety themes driven toward zero in product src
@@ -114,12 +114,16 @@ integration; runtime product behavior and user data are unaffected.
   - Drove product `src` type-aware residuals to zero via `jsonValue`/`isOneOf`/`td`/`cssVars`/
     `instanceof` fixes, plus explicit boundary overrides for host/FFI/BlockNote/persist-event seams.
   - Evidence: `evidence/oxlint-type-safety-zero-2026-09-04.txt`.
+- 2026-09-06 bun-test regression repair:
+  - Restored effect-stable `useCallback`/`useMemo` (Vite React Compiler does not run under `bun test`).
+  - Fixed titlebar duck-typing, sidebar PR cursor post-increment, TurnCard history loop, linux reveal stub.
+  - Evidence: `evidence/type-safety-test-regressions-2026-09-06.txt` (52 focused tests pass; check/tsc clean).
 
 ## Verification
 
 Verdict: oxlint provider migration **implementation complete**; type-safety cleanup **complete** for
 desktop product `src` under the current override map.
-`bun run check` / doctor / tsc / `oxlint --quiet` green.
+`bun run check` / doctor / tsc / `oxlint --quiet` green; focused desktop regression suite green.
 
 ### Acceptance evidence
 

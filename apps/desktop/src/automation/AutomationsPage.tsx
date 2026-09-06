@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { ReactNode } from "react";
 
 import { DetailMetric } from "@/components/business/detail-metric";
@@ -289,7 +289,7 @@ export function AutomationsPage({
       { id: "paused" as const, items: paused },
     ].filter((group) => group.items.length > 0);
   })();
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const next = await listAutomations();
     setAutomations(next);
     setSelectedId((current) =>
@@ -300,11 +300,11 @@ export function AutomationsPage({
         : (next[0]?.id ?? null)
     );
     setLoading(false);
-  };
+  }, []);
 
-  const refreshRuns = async (id: string | null) => {
+  const refreshRuns = useCallback(async (id: string | null) => {
     setRuns(id != null && id !== "" ? await listAutomationRuns(id) : []);
-  };
+  }, []);
 
   useEffect(() => {
     void refresh().catch((error: unknown) => {

@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { ArrowUp, MessageSquare, Plus, Square, X } from "@/components/ui/icons";
@@ -235,28 +241,33 @@ function TransientChatPanel({
   const panelOffsetRef = useRef<PanelOffset>({ x: 0, y: 0 });
   const activePanelMoveRef = useRef<ActivePanelMove | null>(null);
 
-  const clampPanelOffset = (
-    offset: PanelOffset,
-    width: number,
-    height: number
-  ): PanelOffset => {
-    const centeredLeft = (window.innerWidth - width) / 2;
-    const centeredTop = (window.innerHeight - height) / 2;
-    const minX = QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
-    const maxX =
-      window.innerWidth - width - QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
-    const minY = QUICK_CHAT_VIEWPORT_INSET - centeredTop;
-    const maxY =
-      window.innerHeight - height - QUICK_CHAT_VIEWPORT_INSET - centeredTop;
-    return {
-      x: Math.round(
-        Math.min(Math.max(minX, maxX), Math.max(Math.min(minX, maxX), offset.x))
-      ),
-      y: Math.round(
-        Math.min(Math.max(minY, maxY), Math.max(Math.min(minY, maxY), offset.y))
-      ),
-    };
-  };
+  const clampPanelOffset = useCallback(
+    (offset: PanelOffset, width: number, height: number): PanelOffset => {
+      const centeredLeft = (window.innerWidth - width) / 2;
+      const centeredTop = (window.innerHeight - height) / 2;
+      const minX = QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
+      const maxX =
+        window.innerWidth - width - QUICK_CHAT_VIEWPORT_INSET - centeredLeft;
+      const minY = QUICK_CHAT_VIEWPORT_INSET - centeredTop;
+      const maxY =
+        window.innerHeight - height - QUICK_CHAT_VIEWPORT_INSET - centeredTop;
+      return {
+        x: Math.round(
+          Math.min(
+            Math.max(minX, maxX),
+            Math.max(Math.min(minX, maxX), offset.x)
+          )
+        ),
+        y: Math.round(
+          Math.min(
+            Math.max(minY, maxY),
+            Math.max(Math.min(minY, maxY), offset.y)
+          )
+        ),
+      };
+    },
+    []
+  );
 
   const applyPanelOffset = (offset: PanelOffset) => {
     panelOffsetRef.current = offset;
@@ -345,43 +356,50 @@ function TransientChatPanel({
     else panel.setAttribute("inert", "");
   }, [open]);
 
-  const providerModels = (providerId: string) => {
-    const advertised =
-      providers.find((candidate) => candidate.id === providerId)?.models ?? [];
-    if (
-      advertised.length > 0 ||
-      providerId !== provider ||
-      model == null ||
-      model === ""
-    )
-      return advertised;
-    return [{ id: model, name: model, description: null }];
-  };
+  const providerModels = useCallback(
+    (providerId: string) => {
+      const advertised =
+        providers.find((candidate) => candidate.id === providerId)?.models ??
+        [];
+      if (
+        advertised.length > 0 ||
+        providerId !== provider ||
+        model == null ||
+        model === ""
+      )
+        return advertised;
+      return [{ id: model, name: model, description: null }];
+    },
+    [model, provider, providers]
+  );
 
-  const createLocalTab = (draft = "", replaceExisting = false) => {
-    const tab = makeTab({
-      provider,
-      cwd: cwd || ".",
-      model,
-      mode,
-      sandbox,
-      models: providerModels(provider),
-      draft,
-      idPrefix: surface === "quick" ? "quick-chat" : "side-chat",
-    });
-    const previous = tabsRef.current;
-    const next = replaceExisting ? [tab] : [...previous, tab];
-    tabsRef.current = next;
-    setTabs(next);
-    setActiveTabId(tab.localId);
-    if (replaceExisting) {
-      for (const existing of previous) {
-        if (existing.sessionId != null && existing.sessionId !== "")
-          void closeTransientSession(existing.sessionId);
+  const createLocalTab = useCallback(
+    (draft = "", replaceExisting = false) => {
+      const tab = makeTab({
+        provider,
+        cwd: cwd || ".",
+        model,
+        mode,
+        sandbox,
+        models: providerModels(provider),
+        draft,
+        idPrefix: surface === "quick" ? "quick-chat" : "side-chat",
+      });
+      const previous = tabsRef.current;
+      const next = replaceExisting ? [tab] : [...previous, tab];
+      tabsRef.current = next;
+      setTabs(next);
+      setActiveTabId(tab.localId);
+      if (replaceExisting) {
+        for (const existing of previous) {
+          if (existing.sessionId != null && existing.sessionId !== "")
+            void closeTransientSession(existing.sessionId);
+        }
       }
-    }
-    return tab.localId;
-  };
+      return tab.localId;
+    },
+    [cwd, mode, model, provider, providerModels, sandbox, surface]
+  );
 
   useEffect(() => {
     if (!open) {
@@ -429,35 +447,38 @@ function TransientChatPanel({
     onSeedHandled(seed.id);
   }, [activeTabId, createLocalTab, onSeedHandled, seed, surface]);
 
-  const updateTab = (
-    tabId: string,
-    update: (tab: TransientChatTab) => TransientChatTab
-  ) => {
-    setTabs((current) =>
-      current.map((tab) => (tab.localId === tabId ? update(tab) : tab))
-    );
-  };
+  const updateTab = useCallback(
+    (tabId: string, update: (tab: TransientChatTab) => TransientChatTab) => {
+      setTabs((current) =>
+        current.map((tab) => (tab.localId === tabId ? update(tab) : tab))
+      );
+    },
+    []
+  );
 
-  const failPrompt = (
-    tabId: string,
-    requestId: string,
-    message: string,
-    attachments: AppshotCapture[] = []
-  ) => {
-    updateTab(tabId, (tab) => ({
-      ...tab,
-      running: false,
-      creationRequestId: null,
-      attachments: tab.attachments.length > 0 ? tab.attachments : attachments,
-      turns: applyEvent(tab.turns, {
-        event: "error",
-        session: tab.sessionId,
-        message,
-        terminal: true,
-        request_id: requestId,
-      }),
-    }));
-  };
+  const failPrompt = useCallback(
+    (
+      tabId: string,
+      requestId: string,
+      message: string,
+      attachments: AppshotCapture[] = []
+    ) => {
+      updateTab(tabId, (tab) => ({
+        ...tab,
+        running: false,
+        creationRequestId: null,
+        attachments: tab.attachments.length > 0 ? tab.attachments : attachments,
+        turns: applyEvent(tab.turns, {
+          event: "error",
+          session: tab.sessionId,
+          message,
+          terminal: true,
+          request_id: requestId,
+        }),
+      }));
+    },
+    [updateTab]
+  );
 
   useEffect(() => {
     let disposed = false;

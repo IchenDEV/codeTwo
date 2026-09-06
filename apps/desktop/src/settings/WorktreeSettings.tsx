@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,31 +88,34 @@ export function WorktreeSettingsPage({
   );
   const requestRef = useRef(0);
 
-  const loadWorktrees = async (projectList: Project[]) => {
-    const request = (requestRef.current += 1);
-    setWorktreesLoading(true);
-    const results = await Promise.all(
-      projectList.map(async (candidate) => {
-        try {
-          return [
-            candidate.path,
-            { entries: await lister(candidate.path), error: null },
-          ] as const;
-        } catch (error) {
-          return [
-            candidate.path,
-            {
-              entries: [],
-              error: t("worktree.manageFailed", { error: String(error) }),
-            },
-          ] as const;
-        }
-      })
-    );
-    if (request !== requestRef.current) return;
-    setWorktreesByProject(Object.fromEntries(results));
-    setWorktreesLoading(false);
-  };
+  const loadWorktrees = useCallback(
+    async (projectList: Project[]) => {
+      const request = (requestRef.current += 1);
+      setWorktreesLoading(true);
+      const results = await Promise.all(
+        projectList.map(async (candidate) => {
+          try {
+            return [
+              candidate.path,
+              { entries: await lister(candidate.path), error: null },
+            ] as const;
+          } catch (error) {
+            return [
+              candidate.path,
+              {
+                entries: [],
+                error: t("worktree.manageFailed", { error: String(error) }),
+              },
+            ] as const;
+          }
+        })
+      );
+      if (request !== requestRef.current) return;
+      setWorktreesByProject(Object.fromEntries(results));
+      setWorktreesLoading(false);
+    },
+    [lister, t]
+  );
 
   useEffect(() => {
     void loadWorktrees(projects);

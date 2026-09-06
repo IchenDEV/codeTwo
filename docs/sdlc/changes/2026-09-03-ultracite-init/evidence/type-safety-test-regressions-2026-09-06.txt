@@ -1,0 +1,23 @@
+2026-09-06 — type-safety follow-up: bun-test regressions
+
+Commands (apps/desktop):
+  bun run check → exit 0
+  bunx tsc --noEmit → exit 0
+  bunx oxlint --quiet → exit 0
+  bun test --timeout 15000 \
+    tests/titlebarDoubleClick.test.ts \
+    tests/pluginComponentPolicyContract.test.ts \
+    tests/sessionRailRendered.test.tsx \
+    tests/canvasHistoryRendered.test.tsx \
+    tests/canvasBlockRendered.test.tsx \
+    tests/feishuWorkspaceRendered.test.tsx \
+    tests/builtinLinks.test.ts
+  → 52 pass / 0 fail
+
+Fixes:
+  - titlebar: duck-type closest (happy-dom / cross-realm Elements)
+  - sidebarGitStatus: restore paths[cursor++] (post-increment semantics)
+  - restore useCallback/useMemo for effect deps (bun test has no React Compiler)
+  - TurnCard: memoize canvas history + snapshot map (avoid effect loop)
+  - MarkdownContent: linux reveal uses file-manager label (no throw stub)
+  - policy/archive test assertions aligned with formatted source

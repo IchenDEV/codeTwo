@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 import { QuotaProgress } from "@/components/business/quota-progress";
 import { Button } from "@/components/ui/button";
@@ -620,7 +620,7 @@ function UsageView({
     providerNames
   );
 
-  const loadLocal = (range: 7 | 30) => {
+  const loadLocal = useCallback((range: 7 | 30) => {
     setLoading(true);
     void Promise.all([usageReport(), usageHistory(range)])
       .then(([r, h]) => {
@@ -631,9 +631,9 @@ function UsageView({
         /* empty */
       })
       .finally(() => setLoading(false));
-  };
+  }, []);
 
-  const loadQuota = async () => {
+  const loadQuota = useCallback(async () => {
     const request = (quotaRequestRef.current += 1);
     setQuotaLoading(true);
     setQuotaFailed(false);
@@ -648,7 +648,7 @@ function UsageView({
     } finally {
       if (request === quotaRequestRef.current) setQuotaLoading(false);
     }
-  };
+  }, [quotaProvider]);
 
   useEffect(() => loadLocal(days), [days, loadLocal]);
   useEffect(() => {

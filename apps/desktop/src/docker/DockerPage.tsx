@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { ReactNode } from "react";
 
 import { SearchField } from "@/components/business/search-field";
@@ -160,7 +160,7 @@ export function DockerPage({
   const [pullReference, setPullReference] = useState("");
   const [removeTarget, setRemoveTarget] = useState<DockerImage | null>(null);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!enabled) return;
     setLoading(true);
     setError(null);
@@ -184,7 +184,7 @@ export function DockerPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [callCommand, enabled]);
 
   useEffect(() => {
     void refresh();

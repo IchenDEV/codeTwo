@@ -1355,7 +1355,7 @@ describe("SessionRail row layout", () => {
 
     click(archive);
     await waitFor(() => {
-      expect(row?.dataset.sessionArchiveMotion).toBe("archive");
+      expect(row?.getAttribute("data-session-archive-motion")).toBe("archive");
       expect(row?.getAttribute("aria-busy")).toBe("true");
     });
     expect(archived).toEqual([]);
@@ -1363,7 +1363,7 @@ describe("SessionRail row layout", () => {
     row?.dispatchEvent(new dom.Event("animationend", { bubbles: true }));
     await waitFor(() => expect(archived).toEqual([["meaningful", true]]));
     await waitFor(() => {
-      expect(row?.dataset.sessionArchiveMotion).toBeNull();
+      expect(row?.getAttribute("data-session-archive-motion")).toBeNull();
       expect(row?.getAttribute("aria-busy")).toBeNull();
     });
 

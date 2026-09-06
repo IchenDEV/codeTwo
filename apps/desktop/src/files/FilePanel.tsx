@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { ReactNode } from "react";
 
 import { CompositeActionRow } from "@/components/business/composite-action-row";
@@ -136,16 +136,19 @@ export function FilePanel({
   const [error, setError] = useState<string | null>(null);
   const draftInput = useRef<HTMLInputElement | null>(null);
 
-  const load = async (path: string) => {
-    if (cwd == null || cwd === "") return;
-    try {
-      const entries = await listDir(cwd, path);
-      setLoaded((prev) => ({ ...prev, [path]: entries }));
-      setError(null);
-    } catch (error) {
-      setError(String(error));
-    }
-  };
+  const load = useCallback(
+    async (path: string) => {
+      if (cwd == null || cwd === "") return;
+      try {
+        const entries = await listDir(cwd, path);
+        setLoaded((prev) => ({ ...prev, [path]: entries }));
+        setError(null);
+      } catch (error) {
+        setError(String(error));
+      }
+    },
+    [cwd]
+  );
 
   /** Reload every directory currently open, so the tree matches disk after a mutation. */
   const reload = async () => {

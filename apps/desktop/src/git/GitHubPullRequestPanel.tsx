@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { StatusBadge } from "@/components/business/status-badge";
 import {
@@ -149,7 +149,7 @@ export function pullRequestMergeBlock(
 
 function DiffPreview({ result }: { result: GitHubPullRequestDiff }) {
   const t = useT();
-  const preview = diffPreviewLines(result.text);
+  const preview = useMemo(() => diffPreviewLines(result.text), [result.text]);
   if (!result.text.trim()) {
     return (
       <p className="text-metadata text-muted-foreground p-3">
@@ -240,45 +240,48 @@ export function GitHubPullRequestPanel({
   const cwdRef = useRef(cwd);
   cwdRef.current = cwd;
 
-  const load = async (resetFeedback = true) => {
-    const targetCwd = cwd;
-    const request = (loadRequestRef.current += 1);
-    if (resetFeedback) {
-      setActionError(null);
-      setActionStatus(null);
-    }
-    setLoadState({ kind: "loading", pullRequest: null, error: null });
-    try {
-      const sourceControl = await apiRef.current.sourceControl(targetCwd);
-      if (request !== loadRequestRef.current) return;
-      if (sourceControl?.provider !== "github") {
-        setLoadState({ kind: "not_github", pullRequest: null, error: null });
-        return;
+  const load = useCallback(
+    async (resetFeedback = true) => {
+      const targetCwd = cwd;
+      const request = (loadRequestRef.current += 1);
+      if (resetFeedback) {
+        setActionError(null);
+        setActionStatus(null);
       }
-      if (
-        sourceControl.required_cli === "gh" &&
-        !sourceControl.required_cli_available
-      ) {
-        setLoadState({ kind: "cli_missing", pullRequest: null, error: null });
-        return;
+      setLoadState({ kind: "loading", pullRequest: null, error: null });
+      try {
+        const sourceControl = await apiRef.current.sourceControl(targetCwd);
+        if (request !== loadRequestRef.current) return;
+        if (sourceControl?.provider !== "github") {
+          setLoadState({ kind: "not_github", pullRequest: null, error: null });
+          return;
+        }
+        if (
+          sourceControl.required_cli === "gh" &&
+          !sourceControl.required_cli_available
+        ) {
+          setLoadState({ kind: "cli_missing", pullRequest: null, error: null });
+          return;
+        }
+        const pullRequest = await apiRef.current.currentPullRequest(targetCwd);
+        if (request !== loadRequestRef.current) return;
+        setLoadState(
+          pullRequest
+            ? { kind: "ready", pullRequest, error: null }
+            : { kind: "empty", pullRequest: null, error: null }
+        );
+      } catch (error) {
+        if (request === loadRequestRef.current) {
+          setLoadState({
+            kind: "error",
+            pullRequest: null,
+            error: String(error),
+          });
+        }
       }
-      const pullRequest = await apiRef.current.currentPullRequest(targetCwd);
-      if (request !== loadRequestRef.current) return;
-      setLoadState(
-        pullRequest
-          ? { kind: "ready", pullRequest, error: null }
-          : { kind: "empty", pullRequest: null, error: null }
-      );
-    } catch (error) {
-      if (request === loadRequestRef.current) {
-        setLoadState({
-          kind: "error",
-          pullRequest: null,
-          error: String(error),
-        });
-      }
-    }
-  };
+    },
+    [cwd]
+  );
 
   useEffect(() => {
     setView("overview");

@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 
 import { CompositeActionRow } from "@/components/business/composite-action-row";
 import { Button } from "@/components/ui/button";
@@ -260,27 +266,30 @@ export function BrowserPanel({
   const annotatingRef = useRef(annotating);
   annotatingRef.current = annotating;
 
-  const applyRegistry = (registry: import("../bridge").BrowserTab[]) => {
-    const restored = registry
-      .map((tab) => ({
-        id: Number(tab.id.replace(/^browser-/, "")),
-        url: tab.url,
-        title: tab.title,
-        agentActive: tab.agent_active,
-        leaseSession: tab.lease_session,
-      }))
-      .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
-    if (restored.length === 0) return;
-    const selected = registry.find((tab) => tab.active);
-    const selectedId = selected
-      ? Number(selected.id.replace(/^browser-/, ""))
-      : restored[0].id;
-    const selectedTab =
-      restored.find((tab) => tab.id === selectedId) ?? restored[0];
-    setTabs(restored);
-    setActiveId(selectedTab.id);
-    setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
-  };
+  const applyRegistry = useCallback(
+    (registry: import("../bridge").BrowserTab[]) => {
+      const restored = registry
+        .map((tab) => ({
+          id: Number(tab.id.replace(/^browser-/, "")),
+          url: tab.url,
+          title: tab.title,
+          agentActive: tab.agent_active,
+          leaseSession: tab.lease_session,
+        }))
+        .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
+      if (restored.length === 0) return;
+      const selected = registry.find((tab) => tab.active);
+      const selectedId = selected
+        ? Number(selected.id.replace(/^browser-/, ""))
+        : restored[0].id;
+      const selectedTab =
+        restored.find((tab) => tab.id === selectedId) ?? restored[0];
+      setTabs(restored);
+      setActiveId(selectedTab.id);
+      setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
+    },
+    []
+  );
 
   useEffect(() => {
     void browserRegistrySnapshot().then(applyRegistry);
@@ -294,24 +303,25 @@ export function BrowserPanel({
     setHistoryState(loadBrowserHistory(localHistoryStorage()));
   }, [projectPath]);
 
-  const updateHistory = (
-    update: (current: BrowserHistoryState) => BrowserHistoryState
-  ) => {
-    const storage = localHistoryStorage();
-    const current = loadBrowserHistory(storage);
-    const next = update(current);
-    saveBrowserHistory(storage, next);
-    setHistoryState(next);
-  };
+  const updateHistory = useCallback(
+    (update: (current: BrowserHistoryState) => BrowserHistoryState) => {
+      const storage = localHistoryStorage();
+      const current = loadBrowserHistory(storage);
+      const next = update(current);
+      saveBrowserHistory(storage, next);
+      setHistoryState(next);
+    },
+    []
+  );
 
   const patch = (id: number, f: (t: Tab) => Tab) =>
     setTabs((prev) => prev.map((x) => (x.id === id ? f(x) : x)));
 
   /** Where the native page belongs, in the window's own logical coordinates. */
-  const rect = () => {
+  const rect = useCallback(() => {
     const r = hostRef.current?.getBoundingClientRect();
     return r ? { x: r.left, y: r.top, width: r.width, height: r.height } : null;
-  };
+  }, []);
 
   /* Create/move/show the active tab's webview. This runs on every layout-affecting change, and
      `browser_open` is idempotent, so it doubles as the "keep it pinned to the placeholder" path. */

@@ -1,4 +1,11 @@
-import { Fragment, useDeferredValue, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import type { ReactNode } from "react";
 
 import { MasterDetailRow } from "@/components/business/master-detail-row";
@@ -353,7 +360,7 @@ export function PullRequestsPage({
   const [compactListVisible, setCompactListVisible] = useState(true);
   const requestRef = useRef(0);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     const request = (requestRef.current += 1);
     setLoading(true);
     setError(null);
@@ -376,7 +383,7 @@ export function PullRequestsPage({
     } finally {
       if (request === requestRef.current) setLoading(false);
     }
-  };
+  }, [loadPullRequests]);
 
   useEffect(() => {
     void reload();

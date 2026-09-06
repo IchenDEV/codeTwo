@@ -2,9 +2,15 @@ const dragRegionSelector = ".electrobun-webkit-app-region-drag";
 const noDragRegionSelector = ".electrobun-webkit-app-region-no-drag";
 
 function isTitlebarDragTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  if (target.closest(noDragRegionSelector)) return false;
-  return target.closest(dragRegionSelector) !== null;
+  // Duck-type `closest` so happy-dom / iframe Elements still match; `instanceof
+  // Element` fails across JS realms even when the node is a real Element.
+  if (target == null) return false;
+  const closest = Reflect.get(target, "closest");
+  if (typeof closest !== "function") return false;
+  const lookup = (selector: string): unknown =>
+    Reflect.apply(closest, target, [selector]);
+  if (lookup(noDragRegionSelector) != null) return false;
+  return lookup(dragRegionSelector) != null;
 }
 
 export function installTitlebarDoubleClick(

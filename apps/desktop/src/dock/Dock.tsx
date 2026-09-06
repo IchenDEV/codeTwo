@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -183,7 +183,10 @@ export function Dock({
 
   // Never let the dock squeeze the document below a usable measure. Persist the preferred width,
   // but clamp only what is applied so it returns in full on a larger window.
-  const maxForPlacement = () => dockMaxWidth(window.innerWidth, reservedWidth);
+  const maxForPlacement = useCallback(
+    () => dockMaxWidth(window.innerWidth, reservedWidth),
+    [reservedWidth]
+  );
   const [maxSize, setMaxSize] = useState(maxForPlacement);
   useEffect(() => {
     const measure = () => setMaxSize(maxForPlacement());
