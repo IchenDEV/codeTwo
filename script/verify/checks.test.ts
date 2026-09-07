@@ -68,7 +68,7 @@ function stageSections(name: string): string {
   }
   return [
     common("Automated checks", "- AC-1: PASS — `example-check` passed in the fixed fixture."),
-    common("Behavioral evidence", "- AC-1: PASS — `example-check` passed in the fixed fixture."),
+    common("Behavioral evidence", "The acceptance mapping is recorded under Automated checks."),
     common("Visual evidence", "Not applicable."),
     common("Security and privacy evidence", "Not applicable."),
     common("Deviations and residual risk", "Residual risk: the check covers only the fixture."),
@@ -320,7 +320,7 @@ test("committed branch Gate requires accepted plan scope", () => {
     git(root, "commit", "-qm", "baseline");
     const base = git(root, "rev-parse", "HEAD");
 
-    writeStageBundle(root, { scope: "README.md" });
+    writeStageBundle(root, { scope: "README.md, fixture.txt" });
     write(root, "notes.txt", "uncovered change\n");
     git(root, "add", ".");
     git(root, "commit", "-qm", "uncovered implementation");
@@ -353,7 +353,7 @@ test("worktree Gate includes staged and untracked paths", () => {
     git(root, "add", ".");
     git(root, "commit", "-qm", "baseline");
 
-    writeStageBundle(root, { scope: "README.md" });
+    writeStageBundle(root, { scope: "README.md, fixture.txt" });
     write(root, "README.md", "staged change\n");
     git(root, "add", "README.md");
     write(root, "notes.txt", "untracked change\n");
@@ -365,6 +365,115 @@ test("worktree Gate includes staged and untracked paths", () => {
 
     writeStageBundle(root, { scope: "README.md, notes.txt" });
     expect(validateRepository(root, undefined, undefined, true)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test("new changes cannot reuse an unchanged historical plan", () => {
+  for (const operation of ["edit", "delete", "rename"]) {
+    const root = sdlcRoot();
+    try {
+      writeStageBundle(root, { scope: "README.md, moved.md" });
+      write(root, "README.md", "baseline\n");
+      git(root, "init", "-q");
+      git(root, "config", "user.name", "SDLC Test");
+      git(root, "config", "user.email", "sdlc-test@example.invalid");
+      git(root, "add", ".");
+      git(root, "commit", "-qm", "baseline");
+      const base = git(root, "rev-parse", "HEAD");
+      if (operation === "edit") write(root, "README.md", "new implementation\n");
+      if (operation === "delete") rmSync(join(root, "README.md"));
+      if (operation === "rename") git(root, "mv", "README.md", "moved.md");
+      expect(validateRepository(root, undefined, undefined, true).some(e => e.includes("changed bundle"))).toBe(true);
+      git(root, "add", ".");
+      git(root, "commit", "-qm", operation);
+      expect(validateRepository(root, base).some(e => e.includes("changed bundle"))).toBe(true);
+      write(root, `${BUNDLE_DIR}/plan.md`, readFileSync(join(root, BUNDLE_DIR, "plan.md"), "utf8") + "\nReviewed this change.\n");
+      git(root, "add", ".");
+      git(root, "commit", "-qm", "update governing plan");
+      expect(validateRepository(root, base)).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("acceptance evidence cannot hide a conflicting or different duplicate", () => {
+  const root = sdlcRoot();
+  try {
+    const path = join(root, BUNDLE_DIR, "verification.md");
+    const original = readFileSync(path, "utf8");
+    for (const duplicate of [
+      "- AC-1: FAIL — `example-check` failed.",
+      "- AC-1: PASS — `different-check` passed.",
+    ]) {
+      writeFileSync(path, original.replace("The acceptance mapping is recorded under Automated checks.", duplicate));
+      expect(validateRepository(root).some(e => e.includes("duplicate verification evidence AC-1"))).toBe(true);
+    }
+    writeFileSync(path, original.replace("The acceptance mapping is recorded under Automated checks.", "- AC-1: PASS — `example-check` passed in the fixed fixture."));
+    expect(validateRepository(root)).toEqual([]);
+    writeFileSync(path, original.replace("status: passed", "status: failed"));
+    expect(validateRepository(root).some(e => e.includes("FAIL mapping"))).toBe(true);
+    writeFileSync(path, original.replace("status: passed", "status: failed")
+      .replace("AC-1: PASS", "AC-1: FAIL").replace("Verdict: verified.", "Verdict: failed."));
+    expect(validateRepository(root)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("approved stages reject unfinished markers without rejecting ordinary words", () => {
+  const root = sdlcRoot();
+  try {
+    const path = join(root, BUNDLE_DIR, "intent.md");
+    const original = readFileSync(path, "utf8");
+    for (const marker of ["TODO", "TBD", "[fill]", "Finish later: TODO."]) {
+      writeFileSync(path, original.replace("Real problem and desired outcome.", marker));
+      expect(validateRepository(root).some(e => e.includes("cannot contain placeholders"))).toBe(true);
+    }
+    writeFileSync(path, original.replace("Real problem and desired outcome.", "Document Todoist and TODO_LIST behavior."));
+    expect(validateRepository(root)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sequential draft stages validate without granting implementation or release", () => {
+  const root = sdlcRoot();
+  try {
+    const dir = join(root, BUNDLE_DIR);
+    const stages = ["intent", "spec", "plan", "verification"];
+    const original = stages.map(name => readFileSync(join(dir, `${name}.md`), "utf8"));
+    for (let last = 0; last < stages.length; last += 1) {
+      for (let i = 0; i < stages.length; i += 1) {
+        const path = join(dir, `${stages[i]}.md`);
+        if (i > last) rmSync(path, { force: true });
+        else writeFileSync(path, i === last
+          ? original[i].replace(/status: (accepted|passed)/, `status: ${i === 3 ? "in-progress" : "in-review"}`)
+          : original[i]);
+      }
+      expect(validateRepository(root)).toEqual([]);
+      expect(validateRepository(root, undefined, BUNDLE_ID).some(e => e.includes("verification passed"))).toBe(true);
+    }
+    // A valid proposal can be reviewed, but cannot authorize a code edit.
+    writeFileSync(join(dir, "verification.md"), original[3].replace("status: passed", "status: pending"));
+    git(root, "init", "-q");
+    git(root, "config", "user.name", "SDLC Test");
+    git(root, "config", "user.email", "sdlc-test@example.invalid");
+    git(root, "add", ".");
+    git(root, "commit", "-qm", "baseline");
+    writeFileSync(join(dir, "plan.md"), original[2].replace("status: accepted", "status: in-review"));
+    rmSync(join(dir, "verification.md"));
+    expect(validateRepository(root, undefined, undefined, true)).toEqual([]);
+    write(root, "README.md", "implementation before plan acceptance");
+    expect(validateRepository(root, undefined, undefined, true).some(e => e.includes("changed bundle"))).toBe(true);
+    writeFileSync(join(dir, "plan.md"), original[2]);
+    rmSync(join(dir, "spec.md"));
+    expect(validateRepository(root).some(e => e.includes("requires preceding spec.md"))).toBe(true);
+    writeFileSync(join(dir, "spec.md"), original[1].replace("status: accepted", "status: draft"));
+    expect(validateRepository(root).some(e => e.includes("spec must be accepted"))).toBe(true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

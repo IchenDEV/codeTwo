@@ -95,6 +95,11 @@ cd codeTwo
 ./script/dev/run.sh
 ```
 
+If this launcher's tracked instance is already running, normal launch refuses to replace it.
+Use `./script/dev/run.sh --logs` or `--telemetry` to inspect it, or `--restart` to explicitly stop
+and rebuild it. These modes do not provide multi-instance isolation; follow the
+[desktop launch rules](AGENTS.md#desktop-development-instances).
+
 C2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
 are documented in [Providers](website/guide/providers.md).
 

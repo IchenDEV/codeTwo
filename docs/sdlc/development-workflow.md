@@ -4,7 +4,7 @@ Status: **current operator guide**.
 
 [`workflow.md`](workflow.md) 是生命周期权威文档；本文件说明日常怎么用它。CodeTwo 采用 **schema 3 四阶段 Artifact**（`intent.md` → `spec.md` → `plan.md` → `verification.md`），对齐 doubao-work-skin：一变更一目录、证据并列、Intent/Spec/Plan 必须依次批准后才能实现与合并。
 
-Agent 可安装 [`IchenDEV/sdlc-skill`](https://github.com/IchenDEV/sdlc-skill) 中的 `ai-native-sdlc` skill，用于 Bootstrap、推进变更、审计链路或处理事故改进。仓库内的 [artifact-contracts.md](references/artifact-contracts.md) 把通用契约映射到 CodeTwo 的 schema-3 字段。
+仅在需要搭建或审计研发生命周期、处理事故改进流程的指导时，使用 [`IchenDEV/sdlc-skill`](https://github.com/IchenDEV/sdlc-skill) 中的 `ai-native-sdlc` skill；优先复用已安装版本。仓库内的 [artifact-contracts.md](references/artifact-contracts.md) 把通用契约映射到 CodeTwo 的 schema-3 字段。
 
 ## 状态环
 
@@ -43,7 +43,7 @@ PR 审查 + CI ─── 人工合并决策
 ./script/devflow new improve-task-board user medium
 ```
 
-这会创建 `docs/sdlc/changes/<date>-improve-task-board/intent.md`。填写 Intent 章节后，在明确人工确认后记录批准：
+这只创建 `docs/sdlc/changes/<date>-improve-task-board/intent.md`；合法的阶段草稿可以立即运行 `devflow validate`，无需提前创建后续文件。填写 Intent 章节后，在明确人工确认后记录批准：
 
 ```bash
 ./script/devflow approve 2026-09-02-improve-task-board intent "product owner"
@@ -100,13 +100,15 @@ Spec 已 `accepted` 后才能创建 Plan（并在 frontmatter 填写精确 `scop
 
 ## 构建与验证循环
 
-实现中使用最小相关循环，交付前跑完整 Gate：
+实现中使用最小相关验证循环。有仓库文件变更时，交付前运行以下 Gate；`--worktree` 已包含完整生命周期校验，无需另跑普通模式。纯只读审计无需执行：
 
 ```bash
-bun test script/verify/checks.test.ts script/devflow.test.ts
 bun script/verify/docs.ts
 bun script/verify/sdlc.ts --worktree
 ```
+
+Gate 或生命周期契约变更运行 `bun test script/verify/checks.test.ts`；devflow 变更运行
+`bun test script/devflow.test.ts`。同时执行满足触发条件的 active Eval。
 
 桌面 UI 变更：编译成功不等于验收——需要真实渲染窗口证据（light / dark / narrow）。服务或协议变更：需要契约、集成或运行时证据。在 `verification.md` 记录实际命令与结果；截图放在同 bundle 的 `evidence/` 目录。
 
@@ -118,7 +120,7 @@ PR 正文必须链接 canonical bundle 路径，例如：
 docs/sdlc/changes/2026-09-02-improve-task-board
 ```
 
-Draft PR 可在 verification 未完成时存在；Ready PR 要求 `intent.md`、`spec.md`、`plan.md` 均为 `accepted`，且 plan scope 覆盖所有改动路径。CI 的 `SDLC contract` job 会运行 `bun script/verify/sdlc.ts --base "$BASE_SHA"`。
+Draft PR 可承载合法的 Artifact-only 草稿或未完成的验证；实现差异仍必须由本次新增或更新 bundle 的 accepted Plan 覆盖。Ready PR 要求 `intent.md`、`spec.md`、`plan.md` 均为 `accepted`、verification 为 `passed`，且 scope 覆盖全部改动路径（含删除及重命名两端）。CI 的 `SDLC contract` job 会运行 `bun script/verify/sdlc.ts --base "$BASE_SHA"`。
 
 本地 PR Gate 检查：
 
@@ -145,7 +147,7 @@ Eval 在 fixture、oracle 和最新结果就绪前保持 `draft`；`active` 后�
 
 ## Skill 与学习循环
 
-- 安装：`npx skills add IchenDEV/sdlc-skill -a cursor -y`（或其他 Agent）。
+- 仅在上述生命周期任务需要且未安装时，使用 `npx skills add IchenDEV/sdlc-skill -a cursor -y`（或其他 Agent）。
 - 项目级改进记录：`.agent-learning/ai-native-sdlc/`（proposal-only，不自动改 skill）。
 - 生命周期回归：[`evals/ai-native-sdlc-gates.md`](evals/ai-native-sdlc-gates.md)。
 

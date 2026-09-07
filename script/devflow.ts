@@ -6,7 +6,7 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseArtifact } from "./verify/artifact-parse";
-import { CHANGE_ID_RE, STAGE_FILES } from "./verify/stage-bundle";
+import { CHANGE_ID_RE, STAGE_FILES, validateStageBundle } from "./verify/stage-bundle";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SDLC_ROOT = join(REPO_ROOT, "docs", "sdlc");
@@ -139,7 +139,7 @@ function cmdApprove(args: string[]): void {
   if (!APPROVAL_STAGES.has(stage)) fail("approval stage must be intent, spec, or plan");
   const path = requireStage(changeId, stage);
   const metadata = parseArtifact(path).artifact?.metadata ?? {};
-  if ((metadata.status ?? "") !== "draft") fail(`${path}: approve expects draft status`);
+  if (!["draft", "in-review"].includes(metadata.status ?? "")) fail(`${path}: approve expects draft or in-review status`);
   validateApprover(path, approver);
   if (stage === "spec" && parseArtifact(requireStage(changeId, "intent")).artifact?.metadata.status !== "accepted") {
     fail("intent must be accepted before spec approval");
@@ -260,21 +260,20 @@ function cmdCheckPr(): void {
   const match = body.match(/docs\/sdlc\/changes\/(\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*)/);
   if (!match) fail("PR body must link docs/sdlc/changes/<change-id>");
   const changeId = match[1];
-  for (const stage of ["intent", "spec", "plan"]) {
-    const path = requireStage(changeId, stage);
-    if (parseArtifact(path).artifact?.metadata.status !== "accepted") {
-      fail(`${path}: ${stage} must be accepted before PR gate`);
-    }
-  }
-  const verificationPath = requireStage(changeId, "verification");
-  const verificationStatus = parseArtifact(verificationPath).artifact?.metadata.status ?? "";
+  const { bundle, errors } = validateStageBundle(REPO_ROOT, changeDir(changeId));
+  if (errors.length > 0 || !bundle) fail(errors.join("\n") || "invalid change bundle");
+  const verificationStatus = bundle.verification?.metadata.status;
   if (isDraft === "true") {
-    if (!["pending", "passed"].includes(verificationStatus)) {
-      fail(`${verificationPath}: failed verification blocks Draft PRs`);
-    }
-    console.log(`devflow: Draft PR gate passed for ${changeId}`);
+    if (verificationStatus === "failed") fail(`${changeId}: failed verification blocks Draft PRs`);
+    console.log(`devflow: Draft PR bundle valid for ${changeId}; implementation scope is checked by the branch Gate`);
     return;
   }
+  for (const stage of ["intent", "spec", "plan"] as const) {
+    if (bundle[stage]?.metadata.status !== "accepted") {
+      fail(`${changeId}: ${stage} must be accepted before Ready PR`);
+    }
+  }
+  const verificationPath = join(changeDir(changeId), "verification.md");
   if (verificationStatus !== "passed") fail(`${verificationPath}: Ready PR requires verification passed`);
   console.log(`devflow: Ready PR gate passed for ${changeId}`);
 }

@@ -28,7 +28,9 @@ docs/sdlc/
   evals/<slug>.md                fixed regression cases with actual results
 ```
 
-Use four stage files inside each change bundle. This aligns with the adjacent doubao-work-skin
+Create stage files progressively inside each change bundle; a draft may contain only Intent,
+or a contiguous prefix through the current stage. Later files require an accepted predecessor.
+A completed bundle contains four stage files. This aligns with the adjacent doubao-work-skin
 model: one directory per change, explicit Intent → Spec → Plan approval before implementation,
 and Verification as a separate evidence record. Binary or runtime evidence may live in the
 bundle's `evidence/` directory. Do not create global parallel `specs`, `plans`, `docs/superpowers`,
@@ -54,8 +56,9 @@ plan.md accepted    →  implementation and verification.md
 ```
 
 Pull requests with repository implementation changes require all three stages accepted in at least
-one covering bundle. An Artifact-only proposal may keep later stages in `draft` until review
-completes; this must not be treated as authorization to merge code outside an accepted Plan scope.
+one covering bundle added or updated in that same difference. Unchanged historical approval
+cannot cover new implementation. Artifact-only proposals may remain at their current draft stage;
+this is not authorization to merge code outside an accepted Plan scope.
 
 ## End-to-end chain
 
@@ -71,6 +74,11 @@ Failure, blocking, rejection, supersession, rollback, and no-release closure are
 An Artifact does not advance because an Agent says work is done.
 
 ## Change states and Gates
+
+The operational labels below are not interchangeable frontmatter values. Intent, Spec, and Plan
+use `draft`, `in-review`, `accepted`, or `rejected`; Verification uses `pending`, `in-progress`,
+`passed`, or `failed`. Execution is an accepted Plan with Verification `in-progress`. Record other
+operational decisions in the relevant Decision or Review and release section.
 
 | State | Required fact | Gate or next trigger |
 |---|---|---|
@@ -93,8 +101,8 @@ release remain human Gates unless separately authorized.
 
 A PR containing changes outside its canonical bundle must include a schema-3 bundle whose
 `intent.md`, `spec.md`, and `plan.md` are all `accepted`. Every changed path must fall under the
-explicit `scope` in that bundle's `plan.md`. An Artifact-only proposal may keep later stages in
-`draft` until review completes. Legacy `change.md` files are rejected; migrate with
+explicit `scope` in an accepted bundle updated in the same difference, including deleted paths
+and both sides of renames. Artifact-only proposals may remain at their current draft stage. Legacy `change.md` files are rejected; migrate with
 `bun script/sdlc/migrate-bundles.ts` when splitting historical records.
 
 ## Intent, Spec, Plan, and Build
@@ -116,7 +124,9 @@ check supports human judgment but does not prove that a name corresponds to a re
 ## Verification loop
 
 Verification records actual commands, environment, results, runtime or visual evidence, failed
-iterations, and residual risk. A failed attempt remains visible; correction returns the same change
+iterations, and residual risk. Each acceptance id has one current evidence mapping. Exact repeated
+records in historical bundles count once; differing duplicates fail. Keep prior attempts in the
+evidence history rather than adding competing current mappings. A failed attempt remains visible; correction returns the same change
 to `executing`, then produces new evidence.
 
 - Desktop UI changes require real rendered-window evidence for applicable light, dark, and narrow
@@ -177,7 +187,13 @@ Incident Eval merely because its fixture is difficult; repair its isolation or s
 
 ## Deterministic checks
 
-Run from the repository root:
+For repository file changes, run `bun script/verify/docs.ts` and
+`bun script/verify/sdlc.ts --worktree` before handoff. The latter includes the full lifecycle check;
+a separate plain run is unnecessary. Read-only audits do not require these runs.
+Run `bun test script/verify/checks.test.ts` for Gate or lifecycle-contract changes and
+`bun test script/devflow.test.ts` for devflow changes, plus applicable active Evals.
+
+Run the required lifecycle operation from the repository root:
 
 ```sh
 ./script/devflow new <slug> [source] [risk]
@@ -186,17 +202,14 @@ Run from the repository root:
 ./script/devflow plan <change-id>
 ./script/devflow verify <change-id>
 ./script/devflow validate [--worktree]
-bun test script/verify/checks.test.ts
-bun script/verify/docs.ts
-bun script/verify/sdlc.ts
-bun script/verify/sdlc.ts --worktree
 ```
 
 [`development-workflow.md`](development-workflow.md) is the operator guide for daily use.
 [`references/artifact-contracts.md`](references/artifact-contracts.md) maps generic AI-native SDLC
-contracts onto schema-3 stage files. Install the external [`sdlc-skill`](https://github.com/IchenDEV/sdlc-skill)
-`ai-native-sdlc` skill for Bootstrap, audit, and incident-to-improvement modes; the repository
-checker remains the enforcement source.
+contracts onto schema-3 stage files. Use the external [`sdlc-skill`](https://github.com/IchenDEV/sdlc-skill)
+`ai-native-sdlc` skill only when guidance is needed to bootstrap or audit the development lifecycle,
+or improve it after an incident. Reuse an installed copy first; the repository checker remains
+the enforcement source.
 
 The documentation check enforces `docs/catalog.json`, archive boundaries, local links, schema-3
 stage history, and asset ownership. The plain lifecycle check validates the full Artifact tree.

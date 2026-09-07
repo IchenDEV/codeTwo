@@ -18,17 +18,14 @@ release_identity: ""
 
 ## Automated checks
 
-- AC-1: PASS — `bun test script/verify/checks.test.ts` includes schema-3 approval rejection cases.
-- AC-2: PASS — `bun test script/devflow.test.ts` covers approve/design/plan flow.
-- AC-3: PASS — `bun script/verify/docs.ts` passes after `change-stage` catalog classification fix.
-- AC-4: PASS — `docs/sdlc/workflow.md`, `development-workflow.md`, and `artifact-contracts.md` updated.
+- AC-1: PASS — `bun test script/verify/checks.test.ts` includes schema-3 approval rejection cases. `bun test script/verify/checks.test.ts` fixture rejects unaccepted intent upstream.
+- AC-2: PASS — `bun test script/devflow.test.ts` covers approve/design/plan flow. `./script/devflow approve` writes `approved_by` and `approved_at` on approved stages.
+- AC-3: PASS — `bun script/verify/docs.ts` passes after `change-stage` catalog classification fix. `bun script/verify/docs.ts` accepts migrated stage files as `change-stage`.
+- AC-4: PASS — `docs/sdlc/workflow.md`, `development-workflow.md`, and `artifact-contracts.md` updated. [`development-workflow.md`](../../development-workflow.md) documents mandatory approval.
 
 ## Behavioral evidence
 
-- AC-1: PASS — `bun test script/verify/checks.test.ts` fixture rejects unaccepted intent upstream.
-- AC-2: PASS — `./script/devflow approve` writes `approved_by` and `approved_at` on approved stages.
-- AC-3: PASS — `bun script/verify/docs.ts` accepts migrated stage files as `change-stage`.
-- AC-4: PASS — [`development-workflow.md`](../../development-workflow.md) documents mandatory approval.
+The acceptance mappings above retain both the automated and behavioral evidence.
 
 ## Visual evidence
 

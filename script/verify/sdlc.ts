@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -132,14 +132,8 @@ function parseChangedPaths(output: string): ChangedPath[] {
 }
 
 function gateChangedPaths(changes: ChangedPath[]): string[] {
-  return changes.flatMap((change) => {
-    if (change.status === "D") return [];
-    if (/^R/.test(change.status)) {
-      const destination = change.paths.at(-1);
-      return destination ? [destination] : [];
-    }
-    return change.paths;
-  });
+  // Deletions and both sides of renames require approval just like additions.
+  return changes.flatMap((change) => change.paths);
 }
 
 function legacyChangePathsInDiff(changes: ChangedPath[]): string[] {
@@ -183,12 +177,6 @@ function changedPaths(
   return { changes, errors: [] };
 }
 
-function bundleForStagePath(bundles: Map<string, StageBundle>, path: string): StageBundle | undefined {
-  const match = path.match(/^docs\/sdlc\/changes\/([^/]+)\//);
-  if (!match) return undefined;
-  return bundles.get(match[1]);
-}
-
 function validateChangedArtifactGate(
   root: string,
   base: string | undefined,
@@ -211,34 +199,22 @@ function validateChangedArtifactGate(
       .filter(Boolean) as string[],
   );
 
-  const readyBundles = Array.from(bundles.values()).filter(bundleIsImplementationReady);
+  const readyBundles = Array.from(bundles.values()).filter(
+    (bundle) => changedBundleIds.has(bundle.id) && bundleIsImplementationReady(bundle),
+  );
   const nonStageChanges = Array.from(changed).filter(
     (path) => !isCanonicalStagePath(path) && !path.match(/docs\/sdlc\/changes\/[^/]+\/evidence\//),
   );
 
   if (nonStageChanges.length > 0 && readyBundles.length === 0) {
     return [
-      "repository implementation changes require intent, spec, and plan accepted in a schema-3 bundle",
+      "repository implementation changes require intent, spec, and plan accepted in a changed bundle",
     ];
   }
 
   for (const path of nonStageChanges) {
     if (readyBundles.some((bundle) => planCoversPath(bundle, path))) continue;
     return [`${path}: changed path is not covered by an accepted plan scope`];
-  }
-
-  for (const bundleId of changedBundleIds) {
-    const bundle = bundles.get(bundleId);
-    if (!bundle) continue;
-    if (bundle.intent.metadata.status !== "accepted") {
-      return [`docs/sdlc/changes/${bundleId}/intent.md: intent must be accepted before bundle changes merge`];
-    }
-    if (bundle.spec.metadata.status !== "accepted") {
-      return [`docs/sdlc/changes/${bundleId}/spec.md: spec must be accepted before bundle changes merge`];
-    }
-    if (bundle.plan.metadata.status !== "accepted") {
-      return [`docs/sdlc/changes/${bundleId}/plan.md: plan must be accepted before bundle changes merge`];
-    }
   }
 
   return [];
@@ -248,14 +224,15 @@ function validateReleaseGate(bundles: Map<string, StageBundle>, changeId: string
   const normalized = changeId.startsWith("change-") ? changeId.slice("change-".length) : changeId;
   const bundle = bundles.get(normalized);
   if (!bundle) return [`release change bundle not found: ${changeId}`];
-  if (bundle.verification.metadata.status !== "passed") {
+  const verification = bundle.verification;
+  if (verification?.metadata.status !== "passed") {
     return [`release change ${changeId} requires verification passed`];
   }
-  const target = bundle.verification.metadata.release_target ?? "";
+  const target = verification.metadata.release_target ?? "";
   if (!isConcrete(target) || target.toLowerCase().replace(/\.$/, "") === "none") {
     return [`release change ${changeId} requires a concrete release_target`];
   }
-  const review = bundle.verification.sections["review and release"] ?? "";
+  const review = verification.sections["review and release"] ?? "";
   if (!isConcrete(labelValue(review, "Approval"))) {
     return [`release change ${changeId} requires release Approval`];
   }
