@@ -5,7 +5,7 @@ status: active
 owner: repository maintainers
 approvers: user via the 2026-08-30 lifecycle migration request
 created: 2026-08-30
-updated: 2026-08-31
+updated: 2026-09-07
 source: change-2026-08-30-ai-native-sdlc-migration
 inputs: isolated temporary repositories, the live Artifact tree, and the documentation catalog
 outputs: deterministic success and failure-path assertions
@@ -40,16 +40,17 @@ deploy, or modify the user's application data.
 
 ## Observable acceptance
 
-- Valid documentation, `executing` changes, and `verified` changes pass.
+- Valid documentation, sequential draft stages, accepted plans, and passing verification records pass.
+- Gaps, unapproved predecessors, unfinished markers, and differing evidence for the same acceptance id fail.
 - Documentation drift fails for an unclassified file, broken local link, orphan image, or legacy
   change schema.
 - Duplicate change ids, non-passing acceptance evidence, and owner-approved high-risk changes fail.
 - release readiness fails without approval or target; `released` fails without identity or smoke.
 - a resolved Incident fails without recovery, follow-up change, or regression Eval links.
 - an active Eval fails without linked provenance, result, or revision.
-- the committed branch Gate rejects uncovered paths and a changed schema-1 Artifact.
+- the committed branch Gate rejects uncovered paths, unchanged historical approval, and outdated stage schemas.
 - the worktree Gate sees staged and untracked files and rejects paths outside the changed Artifact
-  scope.
+  scope, including deleted paths and both sides of renames.
 
 ## Scoring and failure classes
 
@@ -60,10 +61,9 @@ must not be reported as a lifecycle verdict.
 ## Last result
 
 Result: pass.
-Revision: uncommitted script-organization worktree over `cdbfefe9` on 2026-08-31. Evidence:
-`bun test script/verify/checks.test.ts` passed all 5 focused tests with 23 assertions. The suite
-covers the valid path plus documentation drift, acceptance and authority closure, release,
-Incident/Eval evidence, committed branch scope/schema, and staged/untracked worktree scope.
-`bun script/verify/docs.ts`, the plain lifecycle checker, and the `--worktree` Gate passed. The
-first consolidated worktree fixture did not modify its Change Artifact and was corrected before
-this passing result. Isolated committed-diff evidence is recorded in the governing script change.
+Revision: uncommitted lifecycle-boundary fix on 2026-09-07. Evidence:
+`bun test script/verify/checks.test.ts` passed 9 tests and 49 assertions. It covers branch and
+worktree approval freshness, edit/delete/rename scope, conflicting evidence, unfinished markers,
+sequential drafts, review/progress states, and the existing release and incident checks.
+The governing [change bundle](../changes/2026-09-07-enforce-lifecycle-and-launch-boundaries/intent.md)
+records the final repository and launcher validation.

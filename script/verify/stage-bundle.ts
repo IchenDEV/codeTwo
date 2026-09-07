@@ -3,8 +3,6 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import {
   duplicates,
-  hasBlocker,
-  hasLinkTo,
   hasVerificationEvidence,
   isConcrete,
   isValidDate,
@@ -28,7 +26,7 @@ export const CHANGE_ID_RE = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const RISK_LEVELS = new Set(["low", "medium", "high", "critical"]);
 const INDEPENDENT_RISK_LEVELS = new Set(["high", "critical"]);
 const VERIFICATION_MODES = new Set(["owner", "fresh-context", "human", "pair"]);
-const PLACEHOLDER_BODY_RE = /\[fill\]|(^|[^[:alnum:]_])(TODO|TBD)([^[:alnum:]_]|$)/i;
+const PLACEHOLDER_BODY_RE = /\[fill\]|(^|[^\p{L}\p{N}_])(TODO|TBD)([^\p{L}\p{N}_]|$)/iu;
 
 const INTENT_HEADINGS = [
   "problem",
@@ -78,9 +76,9 @@ export interface StageBundle {
   id: string;
   dir: string;
   intent: Artifact;
-  spec: Artifact;
-  plan: Artifact;
-  verification: Artifact;
+  spec?: Artifact;
+  plan?: Artifact;
+  verification?: Artifact;
 }
 
 function display(path: string): string {
@@ -154,16 +152,21 @@ function validateAcceptanceCriteria(spec: Artifact): string[] {
   return errors;
 }
 
-function validateVerificationEvidence(bundle: StageBundle): string[] {
+function validateVerificationEvidence(intent: Artifact, spec: Artifact, verification: Artifact): string[] {
   const errors: string[] = [];
-  const verification = bundle.verification;
   const path = display(verification.path);
   const status = verification.metadata.status ?? "";
   if (status !== "passed" && status !== "failed") return errors;
 
-  const criteria = v2Criteria(bundle.spec.sections["acceptance criteria"] ?? "");
+  const criteria = v2Criteria(spec.sections["acceptance criteria"] ?? "");
   const evidenceText = `${verification.sections["automated checks"] ?? ""}\n${verification.sections["behavioral evidence"] ?? ""}`;
-  const evidence = v2Evidence(evidenceText);
+  // Historical bundles repeat identical mappings in both evidence sections.
+  const evidence = Array.from(
+    new Map(v2Evidence(evidenceText).map((item) => [JSON.stringify(item), item])).values(),
+  );
+  for (const id of duplicates(evidence.map((item) => item.id))) {
+    errors.push(`${path}: duplicate verification evidence ${id}`);
+  }
   const evidenceById = new Map(evidence.map((item) => [item.id, item]));
   const criterionIds = new Set(criteria.map((item) => item.id));
 
@@ -215,8 +218,8 @@ function validateVerificationEvidence(bundle: StageBundle): string[] {
   }
   if (
     status === "passed" &&
-    INDEPENDENT_RISK_LEVELS.has(bundle.intent.metadata.risk ?? "") &&
-    normalizedActor(verification.metadata.verified_by) === normalizedActor(bundle.intent.metadata.owner)
+    INDEPENDENT_RISK_LEVELS.has(intent.metadata.risk ?? "") &&
+    normalizedActor(verification.metadata.verified_by) === normalizedActor(intent.metadata.owner)
   ) {
     errors.push(`${path}: high/critical verification requires an independent verifier`);
   }
@@ -236,70 +239,55 @@ export function validateStageBundle(root: string, bundleDir: string): { bundle: 
   const stages: Partial<Record<(typeof STAGE_FILES)[number], Artifact>> = {};
   for (const fileName of STAGE_FILES) {
     const path = join(bundleDir, fileName);
-    if (!existsSync(path)) {
-      errors.push(`${display(path)}: missing required stage file`);
-      continue;
-    }
+    if (!existsSync(path)) continue;
     const parsed = parseArtifact(path);
     errors.push(...parsed.errors);
     if (parsed.artifact) stages[fileName] = parsed.artifact;
   }
-  if (errors.length > 0 || !stages["intent.md"] || !stages["spec.md"] || !stages["plan.md"] || !stages["verification.md"]) {
-    return { bundle: null, errors };
-  }
-
   const intent = stages["intent.md"];
+  if (!intent) return { bundle: null, errors: [...errors, `${display(bundleDir)}: missing intent.md`] };
   const spec = stages["spec.md"];
   const plan = stages["plan.md"];
   const verification = stages["verification.md"];
   const risk = intent.metadata.risk ?? "";
+  const headings = [INTENT_HEADINGS, SPEC_HEADINGS, PLAN_HEADINGS, VERIFICATION_HEADINGS];
 
-  errors.push(...validateStageCommon(intent, "intent", new Set(["draft", "accepted", "rejected"]), bundleId));
-  errors.push(...validateStageCommon(spec, "spec", new Set(["draft", "accepted", "rejected"]), bundleId));
-  errors.push(...validateStageCommon(plan, "plan", new Set(["draft", "accepted", "rejected"]), bundleId));
-  errors.push(
-    ...validateStageCommon(verification, "verification", new Set(["pending", "passed", "failed"]), bundleId),
-  );
-
-  if (spec.metadata.based_on !== "intent.md") errors.push(`${display(spec.path)}: based_on must be intent.md`);
-  if (plan.metadata.based_on !== "spec.md") errors.push(`${display(plan.path)}: based_on must be spec.md`);
-  if (verification.metadata.based_on !== "plan.md") errors.push(`${display(verification.path)}: based_on must be plan.md`);
-  if (spec.metadata.risk !== risk) errors.push(`${display(spec.path)}: risk must match intent`);
-  if (plan.metadata.risk !== risk) errors.push(`${display(plan.path)}: risk must match intent`);
-
-  for (const heading of INTENT_HEADINGS) errors.push(requireHeading(intent, heading) ?? "");
-  for (const heading of SPEC_HEADINGS) errors.push(requireHeading(spec, heading) ?? "");
-  for (const heading of PLAN_HEADINGS) errors.push(requireHeading(plan, heading) ?? "");
-  for (const heading of VERIFICATION_HEADINGS) errors.push(requireHeading(verification, heading) ?? "");
-  errors.push(...validateAcceptanceCriteria(spec));
-
-  const intentStatus = intent.metadata.status ?? "";
-  const specStatus = spec.metadata.status ?? "";
-  const planStatus = plan.metadata.status ?? "";
-  const verificationStatus = verification.metadata.status ?? "";
-
-  if (intentStatus === "accepted") errors.push(...validateApproval(intent, risk));
-  if (specStatus === "accepted") {
-    if (intentStatus !== "accepted") errors.push(`${display(spec.path)}: intent must be accepted before spec`);
-    errors.push(...validateApproval(spec, risk));
+  for (const [index, fileName] of STAGE_FILES.entries()) {
+    const stage = stages[fileName];
+    if (!stage) continue;
+    const name = fileName.replace(".md", "");
+    const statuses = index === 3
+      ? new Set(["pending", "in-progress", "passed", "failed"])
+      : new Set(["draft", "in-review", "accepted", "rejected"]);
+    errors.push(...validateStageCommon(stage, name, statuses, bundleId));
+    for (const heading of headings[index]) errors.push(requireHeading(stage, heading) ?? "");
+    if (index > 0) {
+      const previousName = STAGE_FILES[index - 1];
+      const previous = stages[previousName];
+      if (!previous) errors.push(`${display(stage.path)}: requires preceding ${previousName}`);
+      else if (previous.metadata.status !== "accepted") {
+        errors.push(`${display(stage.path)}: ${previousName.replace(".md", "")} must be accepted before ${name}`);
+      }
+      if (stage.metadata.based_on !== previousName) {
+        errors.push(`${display(stage.path)}: based_on must be ${previousName}`);
+      }
+    }
+    if (index < 3) {
+      if (stage.metadata.risk !== risk) errors.push(`${display(stage.path)}: risk must match intent`);
+      if (stage.metadata.status === "accepted") errors.push(...validateApproval(stage, risk));
+    }
   }
-  if (planStatus === "accepted") {
-    if (specStatus !== "accepted") errors.push(`${display(plan.path)}: spec must be accepted before plan`);
-    errors.push(...validateApproval(plan, risk));
-    if (isConcrete(plan.metadata.scope)) errors.push(...validateScope(plan.metadata.scope, display(plan.path)));
+  if (spec) errors.push(...validateAcceptanceCriteria(spec));
+  if (plan?.metadata.status === "accepted") {
+    if (!isConcrete(plan.metadata.scope)) errors.push(`${display(plan.path)}: plan requires explicit scope`);
+    else errors.push(...validateScope(plan.metadata.scope, display(plan.path)));
   }
-  if ((specStatus === "accepted" || planStatus === "accepted" || verificationStatus === "passed") && intentStatus !== "accepted") {
-    errors.push(`${display(intent.path)}: intent must be accepted before later stages advance`);
+  if (spec && verification) {
+    errors.push(...validateVerificationEvidence(intent, spec, verification));
+    if (verification.metadata.status === "passed") {
+      errors.push(requireNoPlaceholders(verification.path, readFileSync(verification.path, "utf8")) ?? "");
+    }
   }
-  if ((verificationStatus === "passed" || verificationStatus === "failed") && planStatus !== "accepted") {
-    errors.push(`${display(verification.path)}: plan must be accepted before verification verdict`);
-  }
-  if (verificationStatus === "passed") {
-    errors.push(...validateVerificationEvidence({ id: bundleId, dir: bundleDir, intent, spec, plan, verification }));
-    const placeholder = requireNoPlaceholders(verification.path, readFileSync(verification.path, "utf8"));
-    if (placeholder) errors.push(placeholder);
-  }
-
   return {
     bundle: { id: bundleId, dir: bundleDir, intent, spec, plan, verification },
     errors: errors.filter(Boolean),
@@ -320,11 +308,13 @@ export function isCanonicalStagePath(path: string): boolean {
 }
 
 export function planCoversPath(bundle: StageBundle, changedPath: string): boolean {
-  return bundle.plan.metadata.status === "accepted" && scopeCovers(bundle.plan.metadata.scope, changedPath);
+  return bundleIsImplementationReady(bundle) && scopeCovers(bundle.plan?.metadata.scope, changedPath);
 }
 
 export function bundleIsImplementationReady(bundle: StageBundle): boolean {
-  return bundle.plan.metadata.status === "accepted";
+  return bundle.intent.metadata.status === "accepted"
+    && bundle.spec?.metadata.status === "accepted"
+    && bundle.plan?.metadata.status === "accepted";
 }
 
 export function validateLocalLinks(root: string, path: string): string[] {

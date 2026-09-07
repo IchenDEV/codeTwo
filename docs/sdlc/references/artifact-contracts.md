@@ -4,7 +4,7 @@
 
 ## 总览
 
-CodeTwo 用**一个 bundle 目录**承载一项 material change，拆成四个 stage 文件：
+CodeTwo 用**一个 bundle 目录**承载一项 material change，按审批顺序逐步创建四个 stage 文件；草稿允许只包含截至当前阶段的连续文件：
 
 ```text
 docs/sdlc/changes/<date>-<slug>/
@@ -66,7 +66,7 @@ docs/sdlc/evals/<slug>.md
 验收标准：
 
 - 使用稳定唯一的 `AC-N` 标识；
-- 每条 criterion 在 `verification.md` 中有且仅有一条 `PASS` / `FAIL` / `BLOCKED` 映射。
+- 每条 criterion 在 `verification.md` 中只有一条当前 `PASS` / `FAIL` / `BLOCKED` 映射；历史文件中内容完全相同的重复记录算一条，结果或内容不同的重复记录会失败。
 
 ### plan.md
 
@@ -87,7 +87,8 @@ docs/sdlc/evals/<slug>.md
 
 | 状态 | 含义 |
 | --- | --- |
-| `draft` / `in-progress` | 验证进行中 |
+| `pending` | 验证尚未开始 |
+| `in-progress` | 验证进行中 |
 | `passed` | 全部 AC 有 PASS 证据，`Verdict: verified` |
 | `failed` | 保留 FAIL 映射 |
 
@@ -103,7 +104,8 @@ docs/sdlc/evals/<slug>.md
 ## PR Gate
 
 - 含仓库实现改动的 PR：`intent.md`、`spec.md`、`plan.md` 必须均为 `accepted`；
-- 每个改动路径须落在 accepted plan 的 `scope` 内；
+- 每个改动路径（含删除及重命名两端）须落在本次新增或更新 bundle 的 accepted plan `scope` 内；
+- Artifact-only 草稿可以通过结构校验，但不能授权实现；Ready PR 仍要求前三阶段 accepted 和 verification passed；
 - 禁止新增或修改 legacy `change.md`。
 
 创建 Intent：`./script/devflow new <slug> [source] [risk]`

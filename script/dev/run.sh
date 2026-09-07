@@ -19,8 +19,6 @@ STATE_DIR="$ROOT_DIR/.codex/run"
 PID_FILE="$STATE_DIR/codetwo-dev.pid"
 APP_RUNNER_PID=""
 
-mkdir -p "$STATE_DIR"
-
 # Homebrew keeps versioned Zig formulae keg-only. Keep the project requirement
 # local to this launcher rather than modifying the user's global shell setup.
 if [[ -d /opt/homebrew/opt/zig@0.15/bin ]]; then
@@ -34,30 +32,39 @@ require_command() {
   fi
 }
 
-require_command bun
-require_command cargo
-require_command zig
-
-if [[ "$(zig version)" != "0.15.2" ]]; then
-  echo "C2 requires Zig 0.15.2; found $(zig version)." >&2
-  exit 1
-fi
-
-stop_existing() {
+# Inspect only this launcher's tracked owner. This is not a cross-process data-directory lock.
+find_existing() {
+  EXISTING_PID=""
   if [[ -f "$PID_FILE" ]]; then
+    local previous_pid previous_command
     previous_pid="$(<"$PID_FILE")"
-    if [[ "$previous_pid" =~ ^[0-9]+$ ]] && kill -0 "$previous_pid" >/dev/null 2>&1; then
+    if [[ "$previous_pid" =~ ^[1-9][0-9]*$ ]] && [[ "$previous_pid" -gt 1 ]] && kill -0 "$previous_pid" >/dev/null 2>&1; then
       previous_command="$(ps -p "$previous_pid" -o command= 2>/dev/null || true)"
-      if [[ "$previous_command" == *"$DESKTOP_DIR/build/"*"/Contents/MacOS/launcher"* ]]; then
-        kill "$previous_pid" >/dev/null 2>&1 || true
-        for _ in {1..20}; do
-          kill -0 "$previous_pid" >/dev/null 2>&1 || break
-          sleep 0.1
-        done
+      if [[ "$previous_command" == "$APP_EXECUTABLE" || "$previous_command" == "$APP_EXECUTABLE "* ]]; then
+        EXISTING_PID="$previous_pid"
       fi
     fi
-    rm -f "$PID_FILE"
   fi
+}
+
+require_stopped() {
+  find_existing
+  if [[ -n "$EXISTING_PID" ]]; then
+    echo "C2 already running (pid: $EXISTING_PID). Use --logs to inspect it or --restart to replace it explicitly." >&2
+    exit 1
+  fi
+}
+
+restart_existing() {
+  find_existing
+  if [[ -z "$EXISTING_PID" ]]; then return; fi
+  kill "$EXISTING_PID"
+  for _ in {1..20}; do
+    if ! kill -0 "$EXISTING_PID" >/dev/null 2>&1; then return; fi
+    sleep 0.1
+  done
+  echo "C2 process $EXISTING_PID did not exit; refusing to rebuild or start another instance." >&2
+  exit 1
 }
 
 cleanup() {
@@ -72,6 +79,13 @@ cleanup() {
 }
 
 build_app() {
+  require_command bun
+  require_command cargo
+  require_command zig
+  if [[ "$(zig version)" != "0.15.2" ]]; then
+    echo "C2 requires Zig 0.15.2; found $(zig version)." >&2
+    exit 1
+  fi
   cd "$DESKTOP_DIR"
   if [[ ! -d node_modules ]]; then
     bun install --frozen-lockfile
@@ -102,6 +116,7 @@ build_app() {
 }
 
 start_app() {
+  mkdir -p "$STATE_DIR"
   "$APP_EXECUTABLE" &
   APP_RUNNER_PID=$!
   echo "$APP_RUNNER_PID" > "$PID_FILE"
@@ -120,48 +135,36 @@ wait_for_app() {
 }
 
 case "$MODE" in
-  run)
-    stop_existing
+  run|--verify|verify|--debug|debug|--restart|restart)
+    if [[ "$MODE" == --restart || "$MODE" == restart ]]; then
+      restart_existing
+    else
+      require_stopped
+    fi
+    if [[ "$MODE" == --debug || "$MODE" == debug ]]; then
+      export RUST_BACKTRACE=1
+      export RUST_LOG="${RUST_LOG:-debug}"
+    fi
     trap cleanup EXIT INT TERM
     build_app
     start_app
+    if [[ "$MODE" == --verify || "$MODE" == verify ]]; then wait_for_app; fi
     wait "$APP_RUNNER_PID"
     ;;
-  --verify|verify)
-    stop_existing
-    trap cleanup EXIT INT TERM
-    build_app
-    start_app
-    wait_for_app
-    wait "$APP_RUNNER_PID"
-    ;;
-  --debug|debug)
-    stop_existing
-    export RUST_BACKTRACE=1
-    export RUST_LOG="${RUST_LOG:-debug}"
-    trap cleanup EXIT INT TERM
-    build_app
-    start_app
-    wait "$APP_RUNNER_PID"
-    ;;
-  --logs|logs)
-    stop_existing
-    trap cleanup EXIT INT TERM
-    build_app
-    start_app
-    wait_for_app
-    /usr/bin/log stream --info --style compact --predicate "processID == $APP_RUNNER_PID"
-    ;;
-  --telemetry|telemetry)
-    stop_existing
-    trap cleanup EXIT INT TERM
-    build_app
-    start_app
-    wait_for_app
-    /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\""
+  --logs|logs|--telemetry|telemetry)
+    find_existing
+    if [[ -z "$EXISTING_PID" ]]; then
+      echo "No tracked C2 instance is running. Start it with $0 run first." >&2
+      exit 1
+    fi
+    predicate="processID == $EXISTING_PID"
+    if [[ "$MODE" == --telemetry || "$MODE" == telemetry ]]; then
+      predicate="$predicate AND subsystem == \"$BUNDLE_ID\""
+    fi
+    exec /usr/bin/log stream --info --style compact --predicate "$predicate"
     ;;
   *)
-    echo "usage: $0 [run|--verify|--debug|--logs|--telemetry]" >&2
+    echo "usage: $0 [run|--verify|--debug|--restart|--logs|--telemetry]" >&2
     exit 2
     ;;
 esac

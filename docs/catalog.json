@@ -11,6 +11,7 @@
       "authority": "current",
       "paths": [
         "docs/reference/architecture.md",
+        "docs/reference/desktop-development-profiles.md",
         "docs/design/system.md",
         "docs/reference/memory.md",
         "docs/reference/plugin-protocol.md",
