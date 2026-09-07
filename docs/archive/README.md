@@ -10,7 +10,7 @@ implementation specification without rechecking the live source and a current do
 - [`research/`](research/README.md) contains dated investigations and comparison snapshots.
 - [`scenes-v1/`](scenes-v1/README.md) contains the completed Scenes 1.0 roadmap, implementation
   plans, and historical UI evidence. The live 1.0 runtime contract remains
-  [`../scenes.md`](../reference/scenes.md) until the accepted Scenes 2.0 cutover is implemented.
+  [Agent Scenes 1.0](../reference/scenes.md) until the accepted Scenes 2.0 cutover is implemented.
 
 Git history is the authority for deleted duplicates and earlier revisions. Archive moves preserve
 tracked-file provenance; only path repairs and archive metadata should modify historical content.

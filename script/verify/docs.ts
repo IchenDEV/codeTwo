@@ -104,8 +104,9 @@ export function validateDocumentation(repositoryRoot: string): string[] {
 
   const localReferences = new Set<string>();
   const markdownFiles = [
-    ...["README.md", "AGENTS.md", "CONTEXT.md"].map((path) => join(root, path)).filter(existsSync),
+    ...["README.md", "AGENTS.md", "CONTEXT.md", "script/README.md"].map((path) => join(root, path)).filter(existsSync),
     ...filesBelow(docsRoot).filter((path) => extname(path) === ".md"),
+    ...filesBelow(join(root, ".agents", "skills")).filter((path) => extname(path) === ".md"),
   ];
   for (const markdownPath of markdownFiles) {
     for (const target of localTargets(root, markdownPath)) {
@@ -126,7 +127,8 @@ export function validateDocumentation(repositoryRoot: string): string[] {
     }
     if (rule.classification === "change-record" || rule.classification === "change-stage") {
       const body = readFileSync(join(root, path), "utf8");
-      if (!/^schema: 3$/m.test(body)) errors.push(`${path}: canonical change stage must use schema 3`);
+      const schema = path.endsWith("/change.md") ? 4 : 3;
+      if (!new RegExp(`^schema: ${schema}$`, "m").test(body)) errors.push(`${path}: canonical change must use schema ${schema}`);
     }
     if (new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]).has(extname(path).toLowerCase())) {
       if (!localReferences.has(path)) errors.push(`${path}: unreferenced documentation image`);

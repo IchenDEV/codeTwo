@@ -4,21 +4,44 @@
     {
       "classification": "catalog",
       "authority": "current",
-      "paths": ["docs/README.md", "docs/catalog.json", "docs/reference/README.md"]
+      "paths": [
+        "docs/README.md",
+        "docs/catalog.json",
+        "docs/reference/README.md",
+        "docs/design/README.md",
+        "docs/adr/README.md"
+      ]
     },
     {
       "classification": "contract",
       "authority": "current",
       "paths": [
         "docs/reference/architecture.md",
-        "docs/reference/desktop-development-profiles.md",
         "docs/design/system.md",
         "docs/reference/memory.md",
         "docs/reference/plugin-protocol.md",
         "docs/reference/plugin-standard.md",
         "docs/reference/plugins.md",
-        "docs/reference/remote-agent.md",
         "docs/reference/scenes.md"
+      ]
+    },
+    {
+      "classification": "historical-template",
+      "authority": "historical-schema-3",
+      "paths": [
+        "docs/sdlc/templates/intent.md",
+        "docs/sdlc/templates/spec.md",
+        "docs/sdlc/templates/plan.md",
+        "docs/sdlc/templates/verification.md"
+      ]
+    },
+    {
+      "classification": "compatibility-pointer",
+      "authority": "non-normative",
+      "paths": [
+        "docs/sdlc/development-workflow.md",
+        "docs/sdlc/references/artifact-contracts.md",
+        "docs/sdlc/workflow.md"
       ]
     },
     {
@@ -30,11 +53,11 @@
       "classification": "active-design",
       "authority": "accepted-pending",
       "paths": [
-        "docs/design/README.md",
         "docs/design/scenes-v2.md",
         "docs/design/scenes-v2-implementation-plan.md",
         "docs/design/taskboard-concept.png",
-        "docs/design/taskboard-editor-concept.png"
+        "docs/design/taskboard-editor-concept.png",
+        "docs/design/desktop-development-profiles.md"
       ]
     },
     {
@@ -44,21 +67,6 @@
         "docs/screenshots/README.md",
         "docs/screenshots/app-main.png",
         "docs/screenshots/slash-menu.png"
-      ]
-    },
-    {
-      "classification": "sdlc-authority",
-      "authority": "current",
-      "paths": [
-        "docs/sdlc/workflow.md",
-        "docs/sdlc/development-workflow.md",
-        "docs/sdlc/references/artifact-contracts.md",
-        "docs/sdlc/templates/intent.md",
-        "docs/sdlc/templates/spec.md",
-        "docs/sdlc/templates/plan.md",
-        "docs/sdlc/templates/verification.md",
-        "docs/sdlc/templates/eval.md",
-        "docs/sdlc/templates/incident.md"
       ]
     },
     {
@@ -74,12 +82,12 @@
     {
       "classification": "change-record",
       "authority": "historical-state",
-      "pattern": "^docs/sdlc/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*\/intent\\.md$"
+      "pattern": "^docs/sdlc/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*/(intent|change)\\.md$"
     },
     {
       "classification": "change-stage",
       "authority": "historical-state",
-      "pattern": "^docs/sdlc/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*\/(spec|plan|verification)\\.md$"
+      "pattern": "^docs/sdlc/changes/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*/(spec|plan|verification)\\.md$"
     },
     {
       "classification": "change-evidence",

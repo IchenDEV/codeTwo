@@ -2,6 +2,7 @@ name: SDLC contract
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review, converted_to_draft]
   push:
     branches: [main]
 
@@ -22,14 +23,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
-      - name: Test repository Gates
-        run: bun test script/verify/checks.test.ts
-      - name: Validate canonical Artifacts and evidence
-        run: bun script/verify/sdlc.ts
-      - name: Validate documentation catalog and archive
+      - name: Test lifecycle and devflow Gates
+        run: bun test script/verify/checks.test.ts script/devflow.test.ts
+      - name: Validate documentation
         run: bun script/verify/docs.ts
-      - name: Enforce branch lifecycle readiness
+      - name: Validate PR records, changed scope, and review readiness
         if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bun script/verify/sdlc.ts --base "$BASE_SHA"
+        run: bun script/devflow.ts check-pr
+      - name: Validate canonical lifecycle records
+        if: github.event_name != 'pull_request'
+        run: bun script/verify/sdlc.ts
