@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,7 +9,6 @@ import {
   hasBlocker,
   hasLinkTo,
   isConcrete,
-  isValidDate,
   labelValue,
   linkTargets,
   parseArtifact,
@@ -26,20 +25,19 @@ import {
 } from "./stage-bundle";
 
 export const REQUIRED_FILES = [
-  "docs/sdlc/workflow.md",
-  "docs/sdlc/templates/intent.md",
-  "docs/sdlc/templates/spec.md",
-  "docs/sdlc/templates/plan.md",
-  "docs/sdlc/templates/verification.md",
-  "docs/sdlc/templates/incident.md",
-  "docs/sdlc/templates/eval.md",
+  ".agents/skills/codetwo-develop/SKILL.md",
+  ".agents/skills/codetwo-develop/references/workflow.md",
+  ".agents/skills/codetwo-develop/templates/change.md",
+  ".agents/skills/codetwo-develop/templates/eval.md",
+  ".agents/skills/codetwo-release/SKILL.md",
+  ".agents/skills/codetwo-operations/SKILL.md",
+  ".agents/skills/codetwo-operations/templates/incident.md",
 ] as const;
 
 const LEGACY_PATHS = [
   "docs/superpowers",
   "docs/sdlc/specs",
   "docs/sdlc/plans",
-  "docs/sdlc/templates/change.md",
   "docs/sdlc/changes/2026-08-29-sdlc-bootstrap.md",
   "docs/sdlc/evals/legacy-workflow-single-source.md",
 ] as const;
@@ -136,17 +134,6 @@ function gateChangedPaths(changes: ChangedPath[]): string[] {
   return changes.flatMap((change) => change.paths);
 }
 
-function legacyChangePathsInDiff(changes: ChangedPath[]): string[] {
-  return changes.flatMap((change) => {
-    if (change.status === "D") return [];
-    if (/^R/.test(change.status)) {
-      const destination = change.paths.at(-1) ?? "";
-      return /docs\/sdlc\/changes\/[^/]+\/change\.md$/.test(destination) ? [destination] : [];
-    }
-    return change.paths.filter((path) => /docs\/sdlc\/changes\/[^/]+\/change\.md$/.test(path));
-  });
-}
-
 function changedPaths(
   root: string,
   base: string | undefined,
@@ -182,14 +169,10 @@ function validateChangedArtifactGate(
   base: string | undefined,
   worktree: boolean,
   bundles: Map<string, StageBundle>,
+  ready = false,
 ): string[] {
   const { changes, errors } = changedPaths(root, base, worktree);
   if (errors.length > 0 || changes.length === 0) return errors;
-
-  const legacyChangePaths = legacyChangePathsInDiff(changes);
-  if (legacyChangePaths.length > 0) {
-    return [`${legacyChangePaths[0]}: schema 3 forbids legacy change.md`];
-  }
 
   const changed = new Set(gateChangedPaths(changes));
   const changedBundleIds = new Set(
@@ -199,6 +182,14 @@ function validateChangedArtifactGate(
       .filter(Boolean) as string[],
   );
 
+  if (ready) {
+    for (const id of changedBundleIds) {
+      const bundle = bundles.get(id);
+      if (bundle && (!bundleIsImplementationReady(bundle) || bundle.verification?.metadata.status !== "passed")) {
+        return [`${id}: Ready PR requires accepted intent/design and verification passed`];
+      }
+    }
+  }
   const readyBundles = Array.from(bundles.values()).filter(
     (bundle) => changedBundleIds.has(bundle.id) && bundleIsImplementationReady(bundle),
   );
@@ -208,7 +199,7 @@ function validateChangedArtifactGate(
 
   if (nonStageChanges.length > 0 && readyBundles.length === 0) {
     return [
-      "repository implementation changes require intent, spec, and plan accepted in a changed bundle",
+      "repository implementation changes require accepted authorization and plan in a changed bundle",
     ];
   }
 
@@ -247,6 +238,7 @@ export function validateRepository(
   base?: string,
   releaseChange?: string,
   worktree = false,
+  ready = false,
 ): string[] {
   const root = resolve(repositoryRoot);
   const errors: string[] = [];
@@ -265,13 +257,7 @@ export function validateRepository(
     if (bundle) bundles.set(bundle.id, bundle);
   }
 
-  for (const path of markdownFiles(join(root, "docs", "sdlc", "changes"))) {
-    if (basename(path) === "change.md") {
-      errors.push(`${repoPath(root, path)}: schema 3 forbids legacy change.md`);
-    }
-  }
-
-  if (bundles.size === 0) errors.push("at least one schema-3 stage bundle is required");
+  if (bundles.size === 0) errors.push("at least one canonical change record is required");
 
   for (const path of markdownFiles(join(root, "docs", "sdlc", "incidents"))) {
     const parsed = parseArtifact(path);
@@ -294,11 +280,12 @@ export function validateRepository(
     errors.push(...validateLocalLinks(root, path));
   }
 
-  const workflow = join(root, "docs", "sdlc", "workflow.md");
+  const workflow = join(root, ".agents/skills/codetwo-develop/references/workflow.md");
   if (existsSync(workflow)) errors.push(...validateLocalLinks(root, workflow));
 
+  if (ready && !base && !worktree) errors.push("--ready requires --base or --worktree");
   if (base && worktree) errors.push("--base and --worktree are mutually exclusive");
-  else if (base || worktree) errors.push(...validateChangedArtifactGate(root, base, worktree, bundles));
+  else if (base || worktree) errors.push(...validateChangedArtifactGate(root, base, worktree, bundles, ready));
   if (releaseChange) errors.push(...validateReleaseGate(bundles, releaseChange));
 
   return errors;
@@ -309,13 +296,16 @@ function parseArguments(argv: string[]): {
   base?: string;
   releaseChange?: string;
   worktree: boolean;
+  ready: boolean;
 } {
   let root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
   let base: string | undefined;
   let releaseChange: string | undefined;
   let worktree = false;
+  let ready = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
+    if (argument === "--ready") { ready = true; continue; }
     if (argument === "--worktree") {
       worktree = true;
       continue;
@@ -323,7 +313,7 @@ function parseArguments(argv: string[]): {
     const value = argv[index + 1];
     if (!["--root", "--base", "--release-change"].includes(argument) || !value) {
       throw new Error(
-        "usage: bun script/verify/sdlc.ts [--root PATH] [--base SHA | --worktree] [--release-change ID]",
+        "usage: bun script/verify/sdlc.ts [--root PATH] [--base SHA | --worktree] [--release-change ID] [--ready]",
       );
     }
     if (argument === "--root") root = value;
@@ -331,13 +321,13 @@ function parseArguments(argv: string[]): {
     if (argument === "--release-change") releaseChange = value;
     index += 1;
   }
-  return { root, base, releaseChange, worktree };
+  return { root, base, releaseChange, worktree, ready };
 }
 
 if (import.meta.main) {
   try {
     const args = parseArguments(process.argv.slice(2));
-    const errors = validateRepository(args.root, args.base, args.releaseChange, args.worktree);
+    const errors = validateRepository(args.root, args.base, args.releaseChange, args.worktree, args.ready);
     if (errors.length > 0) {
       for (const error of errors) console.error(`[sdlc] error: ${error}`);
       console.error(`[sdlc] failed with ${errors.length} error(s)`);

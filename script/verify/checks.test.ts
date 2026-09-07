@@ -240,6 +240,11 @@ test("documentation Gate accepts the catalog and rejects unsafe drift", () => {
     );
     write(root, "docs/sdlc/changes/2026-08-30-example/evidence/window.png", "fixture");
     expect(validateDocumentation(root)).toEqual([]);
+    const skillPath = ".agents/skills/fixture/SKILL.md";
+    write(root, skillPath, "# Fixture\n\n[Current](../../../docs/reference/current.md)\n");
+    expect(validateDocumentation(root)).toEqual([]);
+    write(root, skillPath, "# Fixture\n\n[Missing reference](references/missing.md)\n");
+    expect(validateDocumentation(root).some(error => error.includes(".agents/skills/fixture/SKILL.md: broken local link"))).toBe(true);
 
     write(root, "docs/reference/current.md", "# Current\n\n[Missing](missing.md)\n");
     write(root, "docs/loose.md", "# Loose\n");
@@ -477,4 +482,119 @@ test("sequential draft stages validate without granting implementation or releas
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+function compactRecord(status = "passed", risk = "medium"): string {
+  return `---
+id: ${BUNDLE_ID}
+schema: 4
+status: ${status}
+owner: implementer
+created: 2026-09-08
+source: current user task
+risk: ${risk}
+scope: README.md, moved.md
+approved_by: requester
+approved_at: 2026-09-08
+approval_source: Requester asked to fix this bounded fixture.
+next_trigger: Human review of verified local work.
+revision: disposable worktree baseline
+verification_mode: owner
+verified_by: implementer
+verified_at: 2026-09-08
+release_target: none
+---
+# Compact fixture
+
+## Intent
+Fix the local fixture; preserve external-action authorization.
+
+## Acceptance criteria
+- [x] AC-1: Observable fixture result.
+
+## Plan
+Change README.md, check it, and revert the diff if needed.
+
+## Verification
+- AC-1: PASS — \`fixture-check\` passed in isolated temp directory.
+Verdict: verified.
+Residual risk: fixture proof only; no production effects.
+
+## Review and release
+Approval: pending.
+Rollback: revert the fixture commit.
+`;
+}
+
+function withCompact(check: (root: string, path: string) => void): void {
+  const root = sdlcRoot();
+  try {
+    rmSync(join(root, BUNDLE_DIR), { recursive: true });
+    write(root, `${BUNDLE_DIR}/change.md`, compactRecord());
+    check(root, join(root, BUNDLE_DIR, "change.md"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("single record preserves acceptance, authorization, independent design and release Gates", () => {
+  withCompact((root, path) => {
+    expect(validateRepository(root)).toEqual([]);
+    for (const [from, to, error] of [
+      ["schema: 4", "schema: 2", "requires schema 4"],
+      ["approved_by: requester", "approved_by: pending", "requires approved_by"],
+      ["approval_source: Requester asked to fix this bounded fixture.", "approval_source: pending", "requires approval_source"],
+      ["[x] AC-1", "[ ] AC-1", "checked AC-1"],
+      ["AC-1: PASS", "AC-1: BLOCKED", "requires PASS"],
+      ["revision: disposable worktree baseline", "revision:", "requires verified revision"],
+      ["scope: README.md, moved.md", "scope: ../outside", "unsafe or broad"],
+      ["scope: README.md, moved.md", "scope: pending", "explicit scope"],
+      ["Verdict: verified.", "- AC-1: PASS — `fixture-check` passed in isolated temp directory.\nVerdict: verified.", "duplicate verification evidence"],
+      ["Fix the local fixture;", "TODO", "cannot contain placeholders"],
+    ]) {
+      writeFileSync(path, compactRecord().replace(from, to));
+      expect(validateRepository(root).some(e => e.includes(error))).toBe(true);
+    }
+    writeFileSync(path, compactRecord("passed", "high"));
+    expect(validateRepository(root).some(e => e.includes("independent design approval"))).toBe(true);
+    const high = compactRecord("passed", "high").replace("scope: README", "design_approved_by: human reviewer\ndesign_approved_at: 2026-09-08\ndesign_approval_source: Reviewer accepted this fixture design.\nscope: README");
+    writeFileSync(path, high);
+    expect(validateRepository(root).some(e => e.includes("independent verifier"))).toBe(true);
+    writeFileSync(path, high.replace("verified_by: implementer", "verified_by: independent reviewer"));
+    expect(validateRepository(root)).toEqual([]);
+    expect(validateRepository(root, undefined, BUNDLE_ID).some(e => e.includes("release_target"))).toBe(true);
+    const release = compactRecord().replace("release_target: none", "release_target: versioned macOS release");
+    writeFileSync(path, release);
+    expect(validateRepository(root, undefined, BUNDLE_ID).some(e => e.includes("release Approval"))).toBe(true);
+    writeFileSync(path, release.replace("Approval: pending.", "Approval: requester approved the fixture revision on 2026-09-08."));
+    expect(validateRepository(root, undefined, BUNDLE_ID)).toEqual([]);
+    write(root, `${BUNDLE_DIR}/intent.md`, "# Do not create a second authority\n");
+    expect(validateRepository(root).some(e => e.includes("do not mix"))).toBe(true);
+  });
+});
+
+test("single record branch and worktree Gates cover edits, deletions, renames, and Ready status", () => {
+  for (const operation of ["edit", "delete", "rename"]) withCompact((root, path) => {
+    write(root, "README.md", "baseline\n");
+    git(root, "init", "-q");
+    git(root, "config", "user.name", "Fixture");
+    git(root, "config", "user.email", "fixture@example.invalid");
+    git(root, "add", "."); git(root, "commit", "-qm", "baseline");
+    const base = git(root, "rev-parse", "HEAD");
+    if (operation === "edit") write(root, "README.md", "change\n");
+    if (operation === "delete") rmSync(join(root, "README.md"));
+    if (operation === "rename") git(root, "mv", "README.md", "moved.md");
+    expect(validateRepository(root, undefined, undefined, true).some(e => e.includes("changed bundle"))).toBe(true);
+    writeFileSync(path, compactRecord("in-progress") + "\nCurrent local change.\n");
+    expect(validateRepository(root, undefined, undefined, true)).toEqual([]);
+    git(root, "add", "."); git(root, "commit", "-qm", "implementation");
+    expect(validateRepository(root, base, undefined, false, true).some(e => e.includes("Ready PR"))).toBe(true);
+    writeFileSync(path, compactRecord().replace("scope: README.md, moved.md", "scope: unrelated.md"));
+    expect(validateRepository(root, undefined, undefined, true)).toEqual([]); // record-only local change
+    git(root, "add", "."); git(root, "commit", "-qm", "wrong scope");
+    expect(validateRepository(root, base).some(e => e.includes("not covered"))).toBe(true);
+    writeFileSync(path, compactRecord() + "\nCurrent local verification.\n");
+    git(root, "add", "."); git(root, "commit", "-qm", "verified scope");
+    expect(validateRepository(root, base, undefined, false, true)).toEqual([]);
+  });
 });

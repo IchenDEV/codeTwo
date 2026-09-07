@@ -1,19 +1,18 @@
-# Technical reference
+# Technical contracts
 
-Status: **current implementation reference**.
+This directory describes current runtime behavior and extension boundaries. For build and
+operating commands use the [development Skill](../../.agents/skills/codetwo-develop/SKILL.md); proposed behavior belongs in
+[design](../design/README.md), and past investigations belong in [archive](../archive/README.md).
 
-This directory contains maintained contracts and operator/developer guides for the product that
-exists today. Accepted future designs belong in [`../design/`](../design/README.md); historical
-research and completed plans belong in [`../archive/`](../archive/README.md).
-
-| Document | Purpose |
+| Area | Authoritative document |
 | --- | --- |
-| [`architecture.md`](architecture.md) | Runtime ownership, dependency boundaries, and built-in providers |
-| [`memory.md`](memory.md) | Memory behavior and persistence contract |
-| [`plugin-standard.md`](plugin-standard.md) | Normative external plugin bundle standard |
-| [`plugin-protocol.md`](plugin-protocol.md) | Normative external process-extension protocol |
-| [`plugins.md`](plugins.md) | Internal runtime-module and extension implementation guide |
-| [`remote-agent.md`](remote-agent.md) | Remote-agent operator guide |
-| [`scenes.md`](scenes.md) | Implemented Agent Scenes 1.0 runtime contract |
+| Runtime ownership, dependencies, providers | [Architecture](architecture.md) |
+| Project memory and persistence | [Memory contract](memory.md) |
+| External plugin bundles and host capabilities | [Plugin standard](plugin-standard.md) |
+| External extension wire protocol | [Plugin protocol](plugin-protocol.md) |
+| Internal runtime-module composition | [Runtime modules and plugins](plugins.md) |
+| Implemented scene and pipeline behavior | [Agent Scenes 1.0](scenes.md) |
 
-The desktop design-system contract lives at [`../design/system.md`](../design/system.md).
+[Scenes 2.0](../design/scenes-v2.md) and [development profiles](../design/desktop-development-profiles.md)
+are separate future contracts, not currently supported features. The current desktop visual and
+interaction contract is the [design system](../design/system.md).

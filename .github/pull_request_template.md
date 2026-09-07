@@ -1,32 +1,20 @@
-## Canonical change bundle
-
-Link the canonical `docs/sdlc/changes/<date>-<slug>/` bundle:
-
-- Bundle: <!-- docs/sdlc/changes/... -->
-- Schema: <!-- 3 -->
-- Intent approval: <!-- named approver + source -->
-- Spec approval: <!-- named approver -->
-- Plan approval: <!-- named approver + scope summary -->
-- Verification status: <!-- draft / passed / failed -->
-
 ## Outcome
 
-Describe the observable product or repository result, not the implementation diary.
+Describe the problem and observable result.
 
-## Verification
+## Change record
 
-- [ ] Every `AC-N` acceptance criterion is mapped to one actual command or linked evidence item in `verification.md`.
-- [ ] `verification.md` records `Verdict:` and residual risk consistently with its status.
-- [ ] Verification mode, verifier, and date match the risk lane; high/critical verification is independent.
-- [ ] Relevant Rust, desktop, documentation, packaging, or runtime checks passed.
-- [ ] User-visible UI changes include real light, dark, and narrow evidence where applicable.
-- [ ] Failures, skipped checks, and residual risk are recorded.
+- Change: <!-- docs/sdlc/changes/<date>-<slug>/change.md; list every changed record -->
+
+The linked record owns scope, authorization, acceptance, evidence, and residual risk.
+Reuse it; do not copy its stage status or approval fields here.
 
 ## Review and release
 
-- Risk level: <!-- low / medium / high / critical -->
-- Release target: <!-- none / nightly / versioned release / other -->
-- Rollback: <!-- link or concise path -->
-- Merge approval: <!-- pending or named authorization -->
-- Release approval: <!-- not applicable / pending / named authorization -->
-- [ ] This PR does not infer merge, deployment, or release authority from implementation work.
+- [ ] Acceptance evidence covers the current diff, including rendered UI where affected.
+- [ ] Required checks passed; failures and skipped checks are explained in the record.
+- Merge authorization: <!-- pending or existing explicit authorization -->
+- Release authorization: <!-- not requested / pending / existing explicit authorization -->
+
+Drafts may contain proposals or failed verification. Ready PRs require accepted scope
+and passing verification. CI checks records; it does not grant human approval.

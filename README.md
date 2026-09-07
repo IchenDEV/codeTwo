@@ -21,8 +21,8 @@
 ![C2 document editor with the skill picker open](docs/screenshots/slash-menu.png)
 
 > [!IMPORTANT]
-> C2 is pre-release software. The core product works, but there are no signed binary releases
-> yet. Build it from source and expect APIs, storage, and packaging details to change before 1.0.
+> C2 is pre-release software. Expect APIs, storage, and packaging details to change before 1.0.
+> See the [release Skill](.agents/skills/codetwo-release/SKILL.md) for package channels and signing limitations.
 
 ## Why C2
 
@@ -71,95 +71,13 @@ lifecycle, scope, security, and host behavior follow the
 
 ## Build from source
 
-### Prerequisites
+Start with [source setup and local development](.agents/skills/codetwo-develop/references/development.md). It covers the pinned
+Zig toolchain, desktop launch, TUI/server builds, and relevant checks. Provider setup is in the
+[user guide](website/guide/providers.md).
 
-- Rust 1.82 or newer
-- Zig **0.15.2** exactly, required by the embedded Ghostty terminal engine
-- Bun
-- Git
-- Your platform's native build tools (Xcode command-line tools on macOS)
-- At least one supported provider CLI if you want to run a real agent turn
-
-On macOS, install the pinned Zig version with Homebrew:
-
-```sh
-brew install zig@0.15
-brew link --force zig@0.15
-```
-
-Then clone the repository and run the desktop app:
-
-```sh
-git clone https://github.com/IchenDEV/codeTwo.git
-cd codeTwo
-./script/dev/run.sh
-```
-
-If this launcher's tracked instance is already running, normal launch refuses to replace it.
-Use `./script/dev/run.sh --logs` or `--telemetry` to inspect it, or `--restart` to explicitly stop
-and rebuild it. These modes do not provide multi-instance isolation; follow the
-[desktop launch rules](AGENTS.md#desktop-development-instances).
-
-C2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
-are documented in [Providers](website/guide/providers.md).
-
-### Nightly package
-
-Every push to `main`, plus the daily 02:17 Asia/Singapore schedule, builds and verifies an Apple
-Silicon DMG in the [Nightly macOS package](.github/workflows/nightly-macos.yml) workflow. Download
-`C2-nightly-macos-arm64-<commit>` from that run's artifacts. Nightly packages are ad-hoc signed but
-not Apple-notarized, so they are for testing rather than general distribution.
-
-Development, nightly, and release builds can be installed together. Their macOS identities and
-default data directories are isolated:
-
-| Channel | Application | Bundle identifier | Application Support directory |
-| --- | --- | --- | --- |
-| Development | `C2-dev.app` | `dev.codetwo.app.dev` | `dev.codetwo.app.dev` |
-| Nightly | `C2 Nightly.app` | `dev.codetwo.app.nightly` | `dev.codetwo.app.nightly` |
-| Release | `C2.app` | `dev.codetwo.app` | `dev.codetwo.app` |
-
-Only release builds embed the Sparkle update helper. Development and nightly builds stay on their
-explicit build channel and cannot replace a release through the in-app updater.
-
-### Versioned release
-
-Run the [Release macOS](.github/workflows/release-macos.yml) workflow, enter a semantic version such
-as `0.1.0`, provide a canonical change id whose Artifact is `ready-to-release`, and choose whether
-it is a prerelease. The workflow builds and verifies the versioned Apple Silicon DMG before it
-creates the matching `v<version>` tag and publishes a GitHub Release with the DMG, SHA-256 checksum,
-and authorized change id. Existing tags are never overwritten.
-
-Release packages are currently ad-hoc signed and not Apple-notarized. They are suitable for testing
-through GitHub Releases, but a public production distribution still requires Developer ID signing
-and notarization.
-
-### Other surfaces
-
-From the repository root:
-
-```sh
-# Build the TUI, server, shared Web UI, and Bun Tool Broker
-./script/build/hosts.sh release
-
-# Terminal interface
-./target/release/codetwo-tui
-
-# Paired compact remote client
-./target/release/codetwo-server
-
-# Full React Web UI (starts one Core and opens the pairing link)
-./target/release/codetwo-server webui
-
-# Self-contained turn demo using a stub ACP agent (requires Node)
-cargo run -p codetwo-core --example live_demo
-```
-
-Both server modes print a one-time pairing URL and token. `webui` serves the same React renderer as
-the desktop app from the adjacent `web-ui` build directory and opens the local pairing URL; pass
-`--no-open` to suppress that side effect, or `--ui-dir <path>` when the assets are packaged
-elsewhere. Keep either mode on a trusted LAN or Tailscale tailnet; C2 does not provide a hosted
-relay.
+For package channels, signing limitations, and authorized publication, use the
+[release Skill](.agents/skills/codetwo-release/SKILL.md). To operate a programming node, use the
+[operations Skill](.agents/skills/codetwo-operations/SKILL.md).
 
 ## Repository map
 
@@ -176,49 +94,12 @@ relay.
 | [`docs`](docs/README.md)         | Documentation map, current contracts, designs, research, and SDLC records   |
 | [`script`](script/README.md)     | Development, build, and repository-verification entry points                |
 
-## Development
-
-Run Rust checks from the repository root:
-
-```sh
-cargo check --workspace --all-targets
-cargo test --workspace
-./script/build/hosts.sh debug
-```
-
-Run desktop checks from `apps/desktop`:
-
-```sh
-bun install --frozen-lockfile
-bun run lint
-bun test
-bun run build
-```
-
-Build the documentation site from `website`:
-
-```sh
-bun install --frozen-lockfile
-bun run docs:build
-```
-
-The desktop UI follows the repository's [design system](docs/design/system.md). Product surfaces use the
-shared components under `apps/desktop/src/components/ui`; avoid introducing one-off interaction
-primitives or visual tokens.
-
 ## Contributing
 
-Bug reports, documentation fixes, and focused pull requests are welcome. For a large change, open
-an issue first so the product boundary and protocol impact can be discussed before implementation.
-
-Please keep changes scoped, add tests for behavior changes, and run the relevant checks above. A
-pull request that changes user-visible desktop UI should include light, dark, and narrow viewport
-evidence where applicable.
-
-Material changes follow the repository's [AI-native development lifecycle](docs/sdlc/workflow.md).
-Link the canonical change Artifact in the pull request. Implementation starts only after its
-Intent/Spec is accepted and the Artifact reaches `executing`; do not create a parallel lifecycle,
-specs, or plans registry.
+Focused fixes, documentation improvements, and bug reports are welcome. Follow the
+[development Skill](.agents/skills/codetwo-develop/SKILL.md), [design system](docs/design/system.md), and
+[development lifecycle](.agents/skills/codetwo-develop/references/workflow.md). Keep one change record with observable acceptance
+and actual evidence; scope and risk determine the required checks and human decisions.
 
 ## Security and privacy
 

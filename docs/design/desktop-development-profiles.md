@@ -1,5 +1,7 @@
 # Desktop Development Profile Contract
 
+Status: **required design; implementation pending**. These profile launches are not supported yet.
+
 Follow the [desktop launch rules](../../AGENTS.md#desktop-development-instances) before starting an instance.
 
 ## Required profile contract

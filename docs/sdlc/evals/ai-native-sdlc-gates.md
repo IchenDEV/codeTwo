@@ -5,11 +5,11 @@ status: active
 owner: repository maintainers
 approvers: user via the 2026-08-30 lifecycle migration request
 created: 2026-08-30
-updated: 2026-09-07
+updated: 2026-09-08
 source: change-2026-08-30-ai-native-sdlc-migration
 inputs: isolated temporary repositories, the live Artifact tree, and the documentation catalog
 outputs: deterministic success and failure-path assertions
-next_trigger: any project instruction, lifecycle checker, template, CI Gate, or release Gate change
+next_trigger: changes to authorization, routing, lifecycle behavior, template structure, or checkers; pure wording edits use documentation and scope checks only
 ---
 
 # Enforce AI-native lifecycle Gates
@@ -23,11 +23,15 @@ verification, release, Incident, or Eval evidence. The
 [strict schema-3 hardening](../changes/2026-08-31-strict-sdlc-v2/intent.md) extends this same Eval
 with risk, scope, criterion-to-evidence, verifier-identity, and local worktree regressions. The
 [script organization](../changes/2026-08-31-organize-scripts/intent.md) condenses those failure
-classes into one focused suite without changing either Gate.
+classes into one focused suite without changing either Gate. The
+[single-record redesign](../changes/2026-09-08-simplify-sdlc/change.md) adds regressions for the
+observed four-file approval overhead, disconnected Ready PR check, and Incident follow-up linkage.
+[Skill-owned documentation](../changes/2026-09-08-organize-documentation/change.md) adds the relocated
+template-loading and Skill-reference regression cases.
 
 ## Fixed input and environment
 
-Run `bun test script/verify/checks.test.ts` from a CodeTwo checkout with Bun 1.3.10. Branch-diff
+Run `bun test script/verify/checks.test.ts script/devflow.test.ts` from a CodeTwo checkout. CI pins Bun 1.3.10. Branch-diff
 fixtures use temporary Git repositories with fixed baselines; documentation fixtures use isolated
 temporary directories. Live checks read the repository without starting CodeTwo or using its
 runtime data.
@@ -45,12 +49,18 @@ deploy, or modify the user's application data.
 - Documentation drift fails for an unclassified file, broken local link, orphan image, or legacy
   change schema.
 - Duplicate change ids, non-passing acceptance evidence, and owner-approved high-risk changes fail.
-- release readiness fails without approval or target; `released` fails without identity or smoke.
+- Release readiness fails without approval, target, rollback, or passing evidence; remote publication and smoke remain externally verified facts.
 - a resolved Incident fails without recovery, follow-up change, or regression Eval links.
 - an active Eval fails without linked provenance, result, or revision.
 - the committed branch Gate rejects uncovered paths, unchanged historical approval, and outdated stage schemas.
 - the worktree Gate sees staged and untracked files and rejects paths outside the changed Artifact
   scope, including deleted paths and both sides of renames.
+
+- New work needs only one record: existing request authorization enables bounded local work; a failed
+  check can be preserved in a Draft PR, while Ready PR and release remain blocked.
+- Schema 4 checks source, scope, unique/checked criteria, revision, and high-risk independent design.
+- PR event JSON drives the base comparison and draft readiness; PR text never becomes shell code.
+- Incident creation produces one linked follow-up rather than asking the operator to create it twice.
 
 ## Scoring and failure classes
 
@@ -61,9 +71,13 @@ must not be reported as a lifecycle verdict.
 ## Last result
 
 Result: pass.
-Revision: uncommitted lifecycle-boundary fix on 2026-09-07. Evidence:
-`bun test script/verify/checks.test.ts` passed 9 tests and 49 assertions. It covers branch and
-worktree approval freshness, edit/delete/rename scope, conflicting evidence, unfinished markers,
-sequential drafts, review/progress states, and the existing release and incident checks.
-The governing [change bundle](../changes/2026-09-07-enforce-lifecycle-and-launch-boundaries/intent.md)
-records the final repository and launcher validation.
+Revision: Skill-owned documentation and approved Astra scaffold cleanup worktree on 2026-09-08, linked in Provenance.
+Evidence: `npx --yes --package=bun@1.3.10 bun test script/verify/checks.test.ts script/devflow.test.ts`
+passed 14 tests and 113 assertions on Bun 1.3.10, the CI runtime. Fixtures replay local failure and
+correction, Draft/Ready transitions, changed-record links, event base validation, high-risk design,
+release approval, scope freshness, deletions/renames, Incident follow-up, and Skill-owned template
+loading. The documentation fixture rejects broken Skill reference links. No provider or app
+runtime was started; test writes and commits were confined to disposable directories.
+
+The contract suite and instruction inspection do not establish model behavioral improvement.
+Reduced pauses, context use, and near-miss Skill selection remain unmeasured without model replay.

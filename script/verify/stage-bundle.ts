@@ -20,7 +20,7 @@ import {
 export const SCHEMA_V3 = "3";
 export const STAGE_FILES = ["intent.md", "spec.md", "plan.md", "verification.md"] as const;
 export const CHANGE_BUNDLE_RE =
-  /^docs\/sdlc\/changes\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\/(intent|spec|plan|verification)\.md$/;
+  /^docs\/sdlc\/changes\/\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\/(change|intent|spec|plan|verification)\.md$/;
 export const CHANGE_ID_RE = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const RISK_LEVELS = new Set(["low", "medium", "high", "critical"]);
@@ -226,15 +226,86 @@ function validateVerificationEvidence(intent: Artifact, spec: Artifact, verifica
   return errors;
 }
 
+// Schema 4 stores the lifecycle once. Section views reuse the existing scope,
+// evidence, and release Gates without manufacturing additional persisted stages.
+function validateChangeRecord(root: string, dir: string): { bundle: StageBundle | null; errors: string[] } {
+  const path = join(dir, "change.md");
+  const parsed = parseArtifact(path);
+  const errors = [...parsed.errors];
+  const record = parsed.artifact;
+  if (!record) return { bundle: null, errors };
+  const m = record.metadata;
+  const id = basename(dir);
+  const status = m.status ?? "";
+  const executing = ["accepted", "in-progress", "passed", "failed"].includes(status);
+  if (STAGE_FILES.some(file => existsSync(join(dir, file)))) errors.push(`${path}: do not mix change.md with stage files`);
+  if (m.schema !== "4") errors.push(`${path}: change.md requires schema 4; legacy records are not accepted`);
+  if (m.id !== id) errors.push(`${path}: id must match bundle ${id}`);
+  if (!isValidDate(m.created ?? "")) errors.push(`${path}: created must be YYYY-MM-DD`);
+  if (!RISK_LEVELS.has(m.risk ?? "")) errors.push(`${path}: invalid risk`);
+  if (!["draft", "accepted", "in-progress", "blocked", "passed", "failed", "rejected", "superseded"].includes(status)) {
+    errors.push(`${path}: invalid change status ${JSON.stringify(status)}`);
+  }
+  for (const heading of ["intent", "acceptance criteria", "plan", "verification", "review and release"]) {
+    errors.push(requireHeading(record, heading) ?? "");
+  }
+  if (executing) {
+    for (const key of ["owner", "source", "approved_by", "approval_source", "next_trigger"]) {
+      if (!isConcrete(m[key])) errors.push(`${path}: execution requires ${key}`);
+    }
+    if (!isValidDate(m.approved_at ?? "")) errors.push(`${path}: execution requires approved_at YYYY-MM-DD`);
+    if (!isConcrete(m.scope)) errors.push(`${path}: execution requires explicit scope`);
+    else errors.push(...validateScope(m.scope, path));
+    for (const heading of ["intent", "acceptance criteria", "plan"]) {
+      errors.push(requireNoPlaceholders(path, record.sections[heading] ?? "") ?? "");
+    }
+    if (INDEPENDENT_RISK_LEVELS.has(m.risk)) {
+      if (normalizedActor(m.approved_by) === normalizedActor(m.owner)) errors.push(`${path}: high/critical requires an approver other than the owner`);
+      if (!isConcrete(m.design_approved_by) || normalizedActor(m.design_approved_by) === normalizedActor(m.owner)
+        || !isValidDate(m.design_approved_at ?? "") || !isConcrete(m.design_approval_source)) {
+        errors.push(`${path}: high/critical requires independent design approval, date, and source`);
+      }
+    }
+  }
+  if (["blocked", "rejected", "superseded"].includes(status) && !isConcrete(m.next_trigger)) {
+    errors.push(`${path}: ${status} requires a concrete next_trigger`);
+  }
+  const view = (sections: Record<string, string>, viewStatus: string): Artifact => ({
+    ...record, metadata: { ...m, status: viewStatus }, sections,
+  });
+  const intent = view(record.sections, executing ? "accepted" : "draft");
+  const spec = view(record.sections, intent.metadata.status);
+  const plan = view(record.sections, intent.metadata.status);
+  const evidence = record.sections.verification ?? "";
+  const verification = view({
+    "automated checks": evidence,
+    "deviations and residual risk": evidence,
+    verdict: evidence,
+    "review and release": record.sections["review and release"] ?? "",
+  }, ["passed", "failed"].includes(status) ? status : "in-progress");
+  errors.push(...validateAcceptanceCriteria(spec));
+  errors.push(...validateVerificationEvidence(intent, spec, verification));
+  for (const id of duplicates(v2Evidence(evidence).map(item => item.id))) {
+    errors.push(`${path}: duplicate verification evidence ${id}`);
+  }
+  if (status === "passed") {
+    errors.push(requireNoPlaceholders(path, readFileSync(path, "utf8")) ?? "");
+    for (const criterion of v2Criteria(spec.sections["acceptance criteria"] ?? "")) {
+      if (criterion.mark.toLowerCase() !== "x") errors.push(`${path}: passed change requires checked ${criterion.id}`);
+    }
+    if (!isConcrete(m.revision)) errors.push(`${path}: passed change requires verified revision or worktree baseline`);
+  }
+  errors.push(...validateLocalLinks(root, path));
+  return { bundle: { id, dir, intent, spec, plan, verification }, errors: errors.filter(Boolean) };
+}
+
 export function validateStageBundle(root: string, bundleDir: string): { bundle: StageBundle | null; errors: string[] } {
   const errors: string[] = [];
   const bundleId = basename(bundleDir);
   if (!CHANGE_ID_RE.test(bundleId)) {
     return { bundle: null, errors: [`${display(bundleDir)}: invalid change bundle id`] };
   }
-  if (existsSync(join(bundleDir, "change.md"))) {
-    errors.push(`${display(join(bundleDir, "change.md"))}: schema 3 bundles forbid legacy change.md`);
-  }
+  if (existsSync(join(bundleDir, "change.md"))) return validateChangeRecord(root, bundleDir);
 
   const stages: Partial<Record<(typeof STAGE_FILES)[number], Artifact>> = {};
   for (const fileName of STAGE_FILES) {
@@ -299,7 +370,7 @@ export function discoverStageBundles(root: string): string[] {
   if (!existsSync(changesRoot)) return [];
   return readdirSync(changesRoot)
     .map((entry) => join(changesRoot, entry))
-    .filter((path) => existsSync(join(path, "intent.md")))
+    .filter((path) => existsSync(join(path, "intent.md")) || existsSync(join(path, "change.md")))
     .sort();
 }
 

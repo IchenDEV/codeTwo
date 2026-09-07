@@ -1,15 +1,16 @@
-# Design documentation
+# Product design
 
-Status: **current system plus accepted direction where stated**.
+Use the status below to distinguish the current UI contract from accepted direction that has not
+been implemented. Read [technical reference](../reference/README.md) for current runtime behavior.
 
-- [`system.md`](system.md) is the current desktop visual and interaction contract.
+| Document | Status and purpose |
+| --- | --- |
+| [Design system](system.md) | Current desktop visual and interaction contract |
+| [Scenes 2.0](scenes-v2.md) | Accepted product contract; implementation pending |
+| [Scenes 2.0 implementation plan](scenes-v2-implementation-plan.md) | Delivery plan for that contract; does not authorize work by itself |
+| [Development profiles](desktop-development-profiles.md) | Required isolation design; profile launches are not yet supported |
 
-- [`scenes-v2.md`](scenes-v2.md) is the accepted product contract for the breaking Scenes 2.0
-  cutover.
-- [`scenes-v2-implementation-plan.md`](scenes-v2-implementation-plan.md) is its implementation
-  plan and does not authorize work by itself.
-- [`taskboard-concept.png`](taskboard-concept.png) and
-  [`taskboard-editor-concept.png`](taskboard-editor-concept.png) are non-normative visual concepts
-  linked from the product contract.
-
-Completed Scenes 1.0 design and delivery plans are under [`../archive/scenes-v1/`](../archive/scenes-v1/README.md).
+[Task-board](taskboard-concept.png) and [editor](taskboard-editor-concept.png) images are
+non-normative concepts owned by the Scenes 2.0 contract. Accepted rationale lives in the
+[decision index](../adr/README.md); completed Scenes 1.0 plans and visual evidence live in the
+[archive](../archive/scenes-v1/README.md).
