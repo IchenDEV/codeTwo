@@ -6,7 +6,7 @@ status: passed
 owner: codex
 created: 2026-09-08
 based_on: plan.md
-revision: "Worktree based on 948b703b, retaining prior plugin and Linear changes"
+revision: "PR worktree integrating origin/main a6a6981e, retaining prior plugin and Linear changes"
 verification_mode: pair
 verified_by: verify_four_stage
 verified_at: 2026-09-08

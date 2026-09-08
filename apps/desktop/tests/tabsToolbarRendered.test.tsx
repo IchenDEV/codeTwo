@@ -10,7 +10,8 @@ globalThis.ResizeObserver = class {
   disconnect() {}
 };
 
-const { Tabs, TabsList, TabsTrigger } = await import("../src/components/ui/tabs");
+const { Tabs, TabsList, TabsTrigger } =
+  await import("../src/components/ui/tabs");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -23,7 +24,7 @@ function renderToolbarTabs() {
         <TabsTrigger value="trajectory">Execution trajectory</TabsTrigger>
         <TabsTrigger value="browser">Browser</TabsTrigger>
       </TabsList>
-    </Tabs>,
+    </Tabs>
   );
 }
 
@@ -33,14 +34,14 @@ describe("toolbar Tabs selected state", () => {
     await flush();
 
     const list = view.container.querySelector('[data-slot="tabs-list"]');
-    const active = list?.querySelector('[data-active]');
+    const active = list?.querySelector("[data-active]");
 
     expect(list?.querySelector('[aria-hidden="true"]')).toBeNull();
     expect(active?.className).toContain(
-      "group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary",
+      "group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary"
     );
     expect(active?.className).not.toContain(
-      "group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent",
+      "group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent"
     );
 
     view.unmount();

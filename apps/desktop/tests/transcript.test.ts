@@ -24,7 +24,11 @@ describe("persisted transcript projection", () => {
           kind: "plan",
           entries: [
             "Inspect the workspace",
-            { content: "Implement the panel", priority: "high", status: "in_progress" },
+            {
+              content: "Implement the panel",
+              priority: "high",
+              status: "in_progress",
+            },
           ],
         },
       ],
@@ -32,7 +36,11 @@ describe("persisted transcript projection", () => {
 
     expect(turns[0].plan).toEqual([
       { content: "Inspect the workspace", priority: null, status: null },
-      { content: "Implement the panel", priority: "high", status: "in_progress" },
+      {
+        content: "Implement the panel",
+        priority: "high",
+        status: "in_progress",
+      },
     ]);
   });
 
@@ -56,7 +64,9 @@ describe("persisted transcript projection", () => {
   });
 
   test("keeps legacy user text compatible", () => {
-    const turns = turnsFromTranscript([["user", { kind: "text", text: "legacy prompt" }]]);
+    const turns = turnsFromTranscript([
+      ["user", { kind: "text", text: "legacy prompt" }],
+    ]);
     expect(turns[0].prompt).toBe("legacy prompt");
   });
 
@@ -83,41 +93,52 @@ describe("persisted transcript projection", () => {
         seq: 1,
         role: "user",
         part: { kind: "prompt", text: "inspect", display: "inspect" },
-        created_at: 1_000,
-        started_at: 1_000,
+        created_at: 1000,
+        started_at: 1000,
       },
       {
         seq: 2,
         role: "agent",
         part: { kind: "text", text: "checking" },
-        created_at: 1_500,
-        started_at: 1_500,
+        created_at: 1500,
+        started_at: 1500,
       },
       {
         seq: 3,
         role: "agent",
-        part: { kind: "tool_call", id: "read-1", title: "Read", status: "completed" },
-        created_at: 4_000,
-        started_at: 2_000,
+        part: {
+          kind: "tool_call",
+          id: "read-1",
+          title: "Read",
+          status: "completed",
+        },
+        created_at: 4000,
+        started_at: 2000,
       },
     ]);
 
-    expect(turns[0]).toMatchObject({ startedAt: 1_000, endedAt: 4_000 });
+    expect(turns[0]).toMatchObject({ startedAt: 1000, endedAt: 4000 });
     expect(turns[0].content).toEqual([
-      { kind: "text", text: "checking", transcriptSeq: 2, createdAt: 1_500 },
-      { kind: "tool", toolId: "read-1", transcriptSeq: 3, createdAt: 4_000 },
+      { kind: "text", text: "checking", transcriptSeq: 2, createdAt: 1500 },
+      { kind: "tool", toolId: "read-1", transcriptSeq: 3, createdAt: 4000 },
     ]);
-    expect(turns[0].tools[0]).toMatchObject({ startedAt: 2_000, endedAt: 4_000 });
+    expect(turns[0].tools[0]).toMatchObject({
+      startedAt: 2000,
+      endedAt: 4000,
+    });
   });
 
   test("merges live output received while a running transcript is loading", () => {
     const loaded = turnsFromTranscript(
       [
-        ["user", { kind: "prompt", text: "current prompt", display: "current prompt" }],
+        [
+          "user",
+          { kind: "prompt", text: "current prompt", display: "current prompt" },
+        ],
         ["agent", { kind: "text", text: "first " }],
       ],
       true,
-      "remote-prompt",
+      "remote-prompt"
     );
     let live = applyEvent([], {
       event: "turn_started",
@@ -171,9 +192,14 @@ describe("persisted transcript projection", () => {
 
   test("uses the known request identity when loading begins after TurnStarted", () => {
     const loaded = turnsFromTranscript(
-      [["user", { kind: "prompt", text: "running prompt", display: "running prompt" }]],
+      [
+        [
+          "user",
+          { kind: "prompt", text: "running prompt", display: "running prompt" },
+        ],
+      ],
       true,
-      "running-request",
+      "running-request"
     );
     const live = applyEvent(
       [],
@@ -183,7 +209,7 @@ describe("persisted transcript projection", () => {
         message_id: "chunk-1",
         text: "live answer",
       },
-      "running-request",
+      "running-request"
     );
 
     const merged = mergeLoadedTurns(loaded, live, true);
@@ -201,7 +227,7 @@ describe("persisted transcript projection", () => {
         ["agent", { kind: "reasoning", text: "again" }],
       ],
       true,
-      "repeat-request",
+      "repeat-request"
     );
     let live = applyEvent([], {
       event: "turn_started",
@@ -240,7 +266,7 @@ describe("persisted transcript projection", () => {
         ["agent", { kind: "reasoning", text: "again" }],
       ],
       true,
-      "repeat-request",
+      "repeat-request"
     );
     let live = applyEvent([], {
       event: "turn_started",
@@ -296,14 +322,26 @@ describe("persisted transcript projection", () => {
 
   test("prepends older turn-aligned pages once without touching the live tail", () => {
     const current = turnsFromTranscript([
-      { seq: 20, role: "user", part: { kind: "prompt", text: "new", display: "new" } },
+      {
+        seq: 20,
+        role: "user",
+        part: { kind: "prompt", text: "new", display: "new" },
+      },
       { seq: 21, role: "agent", part: { kind: "text", text: "answer" } },
     ]);
     const older = turnsFromTranscript([
-      { seq: 10, role: "user", part: { kind: "prompt", text: "old", display: "old" } },
+      {
+        seq: 10,
+        role: "user",
+        part: { kind: "prompt", text: "old", display: "old" },
+      },
       { seq: 11, role: "agent", part: { kind: "text", text: "earlier" } },
       // A retried page may overlap at a durable user boundary; it must not duplicate the row.
-      { seq: 20, role: "user", part: { kind: "prompt", text: "new", display: "new" } },
+      {
+        seq: 20,
+        role: "user",
+        part: { kind: "prompt", text: "new", display: "new" },
+      },
     ]);
 
     const combined = prependTranscriptTurns(current, older);
@@ -314,7 +352,11 @@ describe("persisted transcript projection", () => {
   test("does not regress a completed snapshot tool with an older live update", () => {
     const loaded = turnsFromTranscript(
       [
-        { seq: 10, role: "user", part: { kind: "prompt", text: "run", display: "run" } },
+        {
+          seq: 10,
+          role: "user",
+          part: { kind: "prompt", text: "run", display: "run" },
+        },
         {
           seq: 12,
           role: "agent",
@@ -329,7 +371,7 @@ describe("persisted transcript projection", () => {
         },
       ],
       true,
-      "request-1",
+      "request-1"
     );
     let live = applyEvent([], {
       event: "turn_started",
@@ -421,7 +463,11 @@ describe("persisted transcript projection", () => {
   test("merges a durable snapshot with live tool ordering by transcript sequence", () => {
     const loaded = turnsFromTranscript(
       [
-        { seq: 10, role: "user", part: { kind: "prompt", text: "run", display: "run" } },
+        {
+          seq: 10,
+          role: "user",
+          part: { kind: "prompt", text: "run", display: "run" },
+        },
         { seq: 11, role: "agent", part: { kind: "text", text: "Before" } },
         {
           seq: 13,
@@ -436,7 +482,7 @@ describe("persisted transcript projection", () => {
         { seq: 14, role: "agent", part: { kind: "text", text: "After" } },
       ],
       true,
-      "request-1",
+      "request-1"
     );
     let live = applyEvent([], {
       event: "turn_started",
@@ -476,14 +522,24 @@ describe("persisted transcript projection", () => {
 
     const merged = mergeLoadedTurns(loaded, live, true);
     expect(merged[0].content).toEqual([
-      { kind: "text", text: "Before", transcriptSeq: 11, createdAt: expect.any(Number) },
+      {
+        kind: "text",
+        text: "Before",
+        transcriptSeq: 11,
+        createdAt: expect.any(Number),
+      },
       {
         kind: "tool",
         toolId: "tool-1",
         transcriptSeq: 12,
         createdAt: expect.any(Number),
       },
-      { kind: "text", text: "After", transcriptSeq: 14, createdAt: expect.any(Number) },
+      {
+        kind: "text",
+        text: "After",
+        transcriptSeq: 14,
+        createdAt: expect.any(Number),
+      },
     ]);
     expect(merged[0].tools[0].status).toBe("completed");
   });
@@ -493,8 +549,16 @@ describe("long prompt preview", () => {
   test("collapses only after the upstream line or character threshold", () => {
     expect(isLongPrompt("x".repeat(LONG_PROMPT_MAX_CHARS))).toBe(false);
     expect(isLongPrompt("x".repeat(LONG_PROMPT_MAX_CHARS + 1))).toBe(true);
-    expect(isLongPrompt(Array(LONG_PROMPT_MAX_LINES).fill("line").join("\n"))).toBe(false);
-    expect(isLongPrompt(Array(LONG_PROMPT_MAX_LINES + 1).fill("line").join("\n"))).toBe(true);
+    expect(
+      isLongPrompt(Array(LONG_PROMPT_MAX_LINES).fill("line").join("\n"))
+    ).toBe(false);
+    expect(
+      isLongPrompt(
+        Array(LONG_PROMPT_MAX_LINES + 1)
+          .fill("line")
+          .join("\n")
+      )
+    ).toBe(true);
     expect(isLongPrompt("😀".repeat(LONG_PROMPT_MAX_CHARS))).toBe(false);
     expect(isLongPrompt("😀".repeat(LONG_PROMPT_MAX_CHARS + 1))).toBe(true);
   });
@@ -503,7 +567,7 @@ describe("long prompt preview", () => {
     const prompt = `${"😀".repeat(LONG_PROMPT_MAX_CHARS + 20)}\n${Array(9).fill("tail").join("\n")}`;
     const preview = collapsedPrompt(prompt);
 
-    expect(Array.from(preview)).toHaveLength(LONG_PROMPT_MAX_CHARS);
+    expect([...preview]).toHaveLength(LONG_PROMPT_MAX_CHARS);
     expect(preview).not.toContain("tail");
     expect(preview.endsWith("😀")).toBe(true);
   });

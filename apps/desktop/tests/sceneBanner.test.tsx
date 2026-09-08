@@ -1,11 +1,11 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { activateDom, click, dom, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
-const { SceneBanner, sceneBannerFromEvent, resolveSceneReference } = await import(
-  "../src/session/SceneBanner"
-);
+const { SceneBanner, sceneBannerFromEvent, resolveSceneReference } =
+  await import("../src/session/SceneBanner");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -64,7 +64,7 @@ function renderBanner(banner, handlers = {}) {
         onApplyScene={handlers.onApplyScene ?? (() => {})}
         onDismiss={handlers.onDismiss ?? (() => {})}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
 
@@ -84,7 +84,9 @@ describe("sceneBannerFromEvent", () => {
     });
     expect(banner.kind).toBe("complete");
     expect(banner.session).toBe("s1");
-    expect(banner.stateKey).toBe("required_artifacts:test-report@1,user_confirm");
+    expect(banner.stateKey).toBe(
+      "required_artifacts:test-report@1,user_confirm"
+    );
     expect(banner.unverified).toEqual(["docs updated"]);
   });
 
@@ -110,7 +112,7 @@ describe("sceneBannerFromEvent", () => {
         on: "enter",
         kind: "run_macro",
         state_key: "x",
-      }),
+      })
     ).toBeNull();
   });
 });
@@ -129,7 +131,9 @@ describe("SceneBanner", () => {
     const rendered = renderBanner(suggestionBanner(), {
       onApplyScene: (reference) => applied.push(reference),
     });
-    const start = buttons(rendered).find((el) => el.textContent?.includes("Fix"));
+    const start = buttons(rendered).find((el) =>
+      el.textContent?.includes("Fix")
+    );
     expect(start).toBeTruthy();
     click(start);
     expect(applied).toEqual(["builtin:fix"]);
@@ -141,7 +145,7 @@ describe("SceneBanner", () => {
       onDismiss: () => dismissed.push(true),
     });
     const dismiss = buttons(rendered).find(
-      (el) => el.getAttribute("aria-label") && el.textContent?.trim() === "",
+      (el) => el.getAttribute("aria-label") && el.textContent?.trim() === ""
     );
     expect(dismiss).toBeTruthy();
     click(dismiss);
@@ -150,7 +154,11 @@ describe("SceneBanner", () => {
 
   test("notify banners render message-only, without action buttons", () => {
     const rendered = renderBanner(
-      suggestionBanner({ kind: "notify", targetScene: null, message: "tests are red" }),
+      suggestionBanner({
+        kind: "notify",
+        targetScene: null,
+        message: "tests are red",
+      })
     );
     expect(rendered.container.textContent).toContain("tests are red");
     // Only the dismiss control remains.
@@ -160,11 +168,17 @@ describe("SceneBanner", () => {
   test("complete banners offer the active scene's next suggestions, skipping unresolvable ones", () => {
     const applied = [];
     const rendered = renderBanner(
-      suggestionBanner({ kind: "complete", targetScene: null, unverified: ["manual check"] }),
-      { onApplyScene: (reference) => applied.push(reference) },
+      suggestionBanner({
+        kind: "complete",
+        targetScene: null,
+        unverified: ["manual check"],
+      }),
+      { onApplyScene: (reference) => applied.push(reference) }
     );
     expect(rendered.container.textContent).toContain("manual check");
-    const next = buttons(rendered).filter((el) => el.textContent?.trim() !== "");
+    const next = buttons(rendered).filter(
+      (el) => el.textContent?.trim() !== ""
+    );
     // `missing-scene` resolves to nothing and is skipped; only `fix` renders.
     expect(next).toHaveLength(1);
     click(next[0]);

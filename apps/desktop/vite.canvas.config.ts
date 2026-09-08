@@ -1,6 +1,7 @@
 import path from "node:path";
-import { defineConfig } from "vite";
+
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 /**
  * Excalidraw ships optional collaboration/embed/help code in its browser
@@ -10,10 +11,8 @@ import react from "@vitejs/plugin-react";
  * the W3C namespace constants intact; they are not fetch targets.
  */
 function neutralizeRuntimeUrls(code: string): string {
-  const replaceUrls = (literal: string) => literal.replace(
-    /https?:\/\/(?!www\.w3\.org(?:[\/"'`]|$))/g,
-    "blocked://",
-  );
+  const replaceUrls = (literal: string) =>
+    literal.replace(/https?:\/\/(?!www\.w3\.org(?:[\/"'`]|$))/g, "blocked://");
   let output = "";
   let index = 0;
   while (index < code.length) {
@@ -64,7 +63,7 @@ function neutralizeRuntimeUrls(code: string): string {
   // because they are DOM identifiers, not network resources.
   return output.replace(
     /https?:\/\/(?!www\.w3\.org(?:[\/"'`]|$))/g,
-    "blocked://",
+    "blocked://"
   );
 }
 
@@ -75,7 +74,8 @@ export default defineConfig({
       name: "codetwo-local-canvas-url-guard",
       generateBundle(_options, bundle) {
         for (const output of Object.values(bundle)) {
-          if (output.type === "chunk") output.code = neutralizeRuntimeUrls(output.code);
+          if (output.type === "chunk")
+            output.code = neutralizeRuntimeUrls(output.code);
         }
       },
     },
@@ -83,7 +83,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@excalidraw/mermaid-to-excalidraw": path.resolve(__dirname, "./src/canvas/unsupported/mermaid.ts"),
+      "@excalidraw/mermaid-to-excalidraw": path.resolve(
+        __dirname,
+        "./src/canvas/unsupported/mermaid.ts"
+      ),
     },
   },
   build: {

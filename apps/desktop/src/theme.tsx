@@ -1,16 +1,18 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+
 import {
   applyAppearanceSettings,
   setAppearanceSettings,
   useAppearanceSettings,
-  type ColorScheme,
-  type ThemePreference,
 } from "./appearance";
+import type { ColorScheme, ThemePreference } from "./appearance";
 
 export type { ColorScheme, ThemePreference } from "./appearance";
 
 function systemScheme(): ColorScheme {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches
+  return typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
 }
@@ -26,7 +28,9 @@ interface ThemeValue {
 const ThemeContext = createContext<ThemeValue>({
   preference: "system",
   scheme: "light",
-  setPreference: () => {},
+  setPreference: () => {
+    /* empty */
+  },
 });
 
 /**
@@ -50,8 +54,9 @@ export function ThemeProvider({
 
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!mq) return;
-    const onChange = (e: MediaQueryListEvent) => setSystem(e.matches ? "dark" : "light");
+    if (mq == null) return;
+    const onChange = (e: MediaQueryListEvent) =>
+      setSystem(e.matches ? "dark" : "light");
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
@@ -70,7 +75,6 @@ export function ThemeProvider({
     // Tells the webview to render form controls and scrollbars in the matching scheme, so the bits
     // the OS draws don't stay light while the app goes dark.
     root.style.colorScheme = scheme;
-
   }, [scheme, system]);
 
   // Palette, type, and surface settings remain independent from the resolved color scheme.
@@ -78,13 +82,15 @@ export function ThemeProvider({
     applyAppearanceSettings(document.documentElement, appearance, scheme);
   }, [appearance, scheme]);
 
-  const setPreference = useCallback((p: ThemePreference) => {
+  const setPreference = (p: ThemePreference) => {
     if (preferenceOverride !== undefined) return;
     setAppearanceSettings({ preference: p });
-  }, [preferenceOverride]);
+  };
 
   return (
-    <ThemeContext.Provider value={{ preference, scheme, setPreference }}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={{ preference, scheme, setPreference }}>
+      {children}
+    </ThemeContext.Provider>
   );
 }
 

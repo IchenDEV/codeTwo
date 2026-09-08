@@ -14,7 +14,7 @@ design_approved_by: chenli
 design_approved_at: 2026-09-08
 design_approval_source: "Session: 开始整改 accepts the preceding design: bounded protocol calls and queues, cancellation, backend effective state, and retention of existing lifecycle and transport."
 next_trigger: Human review of the verified local change; no merge or release authorized.
-revision: "Worktree based on 948b703b"
+revision: "PR worktree integrating origin/main a6a6981e"
 verification_mode: pair
 verified_by: "verify_protocol (independent agent)"
 verified_at: 2026-09-08
@@ -50,6 +50,8 @@ Add an installed-inventory-locked snapshot command using existing catalogs and b
 Verdict: verified.
 
 The complete `cargo test -p codetwo-plugins` suite passed before the final alias fix; its affected project-bundle suite passed again afterward. `bun script/verify/docs.ts`, the lifecycle Eval (`bun test script/verify/checks.test.ts script/devflow.test.ts`), Rust formatting, and `git diff --check` passed. Final worktree scope checking uses `bun script/verify/sdlc.ts --worktree`.
+
+PR integration: `verify_linear_adapter` independently checked snapshot wiring after the upstream frontend merge. `bun run test:ci` passed 876 desktop tests, including the snapshot/catalog regressions, and strict lint and TypeScript checks passed.
 
 Independent review: `verify_protocol` raised and verified fixes for handshake deadline coupling, terminal process observations being overwritten by activation, and frontend project-path aliases. An existing test expecting eager trusted-bundle startup was corrected to the already-implemented lazy contract.
 Residual risk: Browser rendering used preview data; no installed desktop end-to-end launch, remote CI, or release was performed. The production bundle-size warning remains. No OS sandbox; process-wide cancellation can interrupt concurrent calls in the same plugin realm. No release or remote CI evidence requested.

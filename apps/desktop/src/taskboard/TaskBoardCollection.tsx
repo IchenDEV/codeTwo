@@ -1,31 +1,31 @@
-import type { Locale, Translate } from "@/i18n"
-import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus"
+import type { Locale, Translate } from "@/i18n";
+import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus";
 
-import { TaskBoardKanban } from "./TaskBoardKanban"
-import { TaskBoardList } from "./TaskBoardList"
-import type { BoardTask, TaskStatus } from "./taskBoard"
-import type { ProjectedTask, TaskBoardView } from "./workspaceTypes"
+import type { BoardTask, TaskStatus } from "./taskBoard";
+import { TaskBoardKanban } from "./TaskBoardKanban";
+import { TaskBoardList } from "./TaskBoardList";
+import type { ProjectedTask, TaskBoardView } from "./workspaceTypes";
 
 interface TaskBoardCollectionProps {
-  view: TaskBoardView
-  t: Translate
-  locale: Locale
-  projectedTasks: readonly ProjectedTask[]
-  renderedTasks: readonly ProjectedTask[]
-  remainingTaskCount: number
-  activeFilterCount: number
-  expandedTaskIds: ReadonlySet<string>
-  selectedTaskId: string | null
-  selectedSessionId: string | null
-  pullRequestsByPath: ReadonlyMap<string, SidebarPullRequestStatus | null>
-  onToggleTask: (task: ProjectedTask) => void
-  onSelectTask: (task: ProjectedTask) => void
-  onSelectSession: (taskId: string, sessionId: string) => void
-  onEditTask: (task: BoardTask) => void
-  onDeleteTask: (task: BoardTask) => void
-  onMoveTask: (task: BoardTask, status: TaskStatus) => void
-  onStartTask?: (task: BoardTask) => void
-  onShowMore: () => void
+  view: TaskBoardView;
+  t: Translate;
+  locale: Locale;
+  projectedTasks: readonly ProjectedTask[];
+  renderedTasks: readonly ProjectedTask[];
+  remainingTaskCount: number;
+  activeFilterCount: number;
+  expandedTaskIds: ReadonlySet<string>;
+  selectedTaskId: string | null;
+  selectedSessionId: string | null;
+  pullRequestsByPath: ReadonlyMap<string, SidebarPullRequestStatus | null>;
+  onToggleTask: (task: ProjectedTask) => void;
+  onSelectTask: (task: ProjectedTask) => void;
+  onSelectSession: (taskId: string, sessionId: string) => void;
+  onEditTask: (task: BoardTask) => void;
+  onDeleteTask: (task: BoardTask) => void;
+  onMoveTask: (task: BoardTask, status: TaskStatus) => void;
+  onStartTask?: (task: BoardTask) => void;
+  onShowMore: () => void;
 }
 
 export function TaskBoardCollection(props: TaskBoardCollectionProps) {
@@ -44,7 +44,7 @@ export function TaskBoardCollection(props: TaskBoardCollectionProps) {
         onMoveTask={props.onMoveTask}
         onStartTask={props.onStartTask}
       />
-    )
+    );
   }
 
   return (
@@ -67,5 +67,5 @@ export function TaskBoardCollection(props: TaskBoardCollectionProps) {
       onStartTask={props.onStartTask}
       onShowMore={props.onShowMore}
     />
-  )
+  );
 }

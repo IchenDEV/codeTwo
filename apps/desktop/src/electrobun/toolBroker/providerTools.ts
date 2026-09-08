@@ -10,22 +10,7 @@ import {
   JsonSelectionStore,
   OPENAI_BROWSER_BACKEND,
   ToolBroker,
-  type AcpMcpServer,
-  type AcpRemoteMcpServer,
-  type AcpStdioMcpServer,
-  type BrowserUseBackendOption,
-  type BrowserUseSettings,
-  type CapabilityState,
-  type ComputerUseBackendOption,
-  type ComputerUseSettings,
-  type ConfiguredBrowserUseBridge,
-  type ConfiguredComputerUseBridge,
-  type HostToolEvidence,
-  type ProviderCapability,
-  type ProviderCapabilityId,
-  type ProviderToolset,
 } from "../../../../../packages/tool-broker/src";
-import { which } from "./executable";
 
 export {
   BROWSER_USE_AUTOMATIC,
@@ -34,7 +19,25 @@ export {
   COMPUTER_USE_DISABLED,
   HOST_TOOLS_CONFIG_FILE,
   OPENAI_BROWSER_BACKEND,
-};
+} from "../../../../../packages/tool-broker/src";
+import type {
+  AcpMcpServer,
+  AcpRemoteMcpServer,
+  AcpStdioMcpServer,
+  BrowserUseBackendOption,
+  BrowserUseSettings,
+  CapabilityState,
+  ComputerUseBackendOption,
+  ComputerUseSettings,
+  ConfiguredBrowserUseBridge,
+  ConfiguredComputerUseBridge,
+  HostToolEvidence,
+  ProviderCapability,
+  ProviderCapabilityId,
+  ProviderToolset,
+} from "../../../../../packages/tool-broker/src";
+import { which } from "./executable";
+
 export type {
   AcpMcpServer,
   AcpRemoteMcpServer,
@@ -70,7 +73,9 @@ interface PluginBundle {
 }
 
 function table(value: unknown): Table {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Table : {};
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Table)
+    : {};
 }
 
 function string(value: unknown): string | null {
@@ -78,7 +83,9 @@ function string(value: unknown): string | null {
 }
 
 function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function namedValues(value: unknown): { name: string; value: string }[] {
@@ -88,7 +95,7 @@ function namedValues(value: unknown): { name: string; value: string }[] {
 }
 
 function isFile(path: string | null): path is string {
-  if (!path) return false;
+  if (path == null || path === "") return false;
   try {
     return statSync(path).isFile();
   } catch {
@@ -96,7 +103,11 @@ function isFile(path: string | null): path is string {
   }
 }
 
-function run(command: string[]): { success: boolean; stdout: string; stderr: string } {
+function run(command: string[]): {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+} {
   try {
     const result = Bun.spawnSync(command, { stdout: "pipe", stderr: "pipe" });
     return {
@@ -111,16 +122,28 @@ function run(command: string[]): { success: boolean; stdout: string; stderr: str
 
 function lineValue(text: string, prefix: string): string | null {
   for (const line of text.split("\n")) {
-    if (line.startsWith(prefix)) return string(line.slice(prefix.length).trim());
+    if (line.startsWith(prefix))
+      return string(line.slice(prefix.length).trim());
   }
   return null;
 }
 
 function signature(path: string | null): SignatureInfo {
-  if (!path || !existsSync(path) || process.platform !== "darwin") {
+  if (
+    path == null ||
+    path === "" ||
+    !existsSync(path) ||
+    process.platform !== "darwin"
+  ) {
     return { valid: false, identifier: null, teamId: null };
   }
-  const verified = run(["/usr/bin/codesign", "--verify", "--deep", "--strict", path]).success;
+  const verified = run([
+    "/usr/bin/codesign",
+    "--verify",
+    "--deep",
+    "--strict",
+    path,
+  ]).success;
   const details = run(["/usr/bin/codesign", "-dv", "--verbose=4", path]);
   return {
     valid: verified,
@@ -130,7 +153,11 @@ function signature(path: string | null): SignatureInfo {
 }
 
 function isOpenAiSignature(info: SignatureInfo, identifier: string): boolean {
-  return info.valid && info.identifier === identifier && info.teamId === OPENAI_TEAM_ID;
+  return (
+    info.valid &&
+    info.identifier === identifier &&
+    info.teamId === OPENAI_TEAM_ID
+  );
 }
 
 function plistValue(path: string, key: string): string | null {
@@ -142,7 +169,10 @@ function chatGptCandidates(): string[] {
   if (process.platform !== "darwin") return [];
   const candidates = new Set<string>();
   candidates.add("/Applications/ChatGPT.app");
-  const search = run(["/usr/bin/mdfind", "kMDItemCFBundleIdentifier == 'com.openai.codex'"]);
+  const search = run([
+    "/usr/bin/mdfind",
+    "kMDItemCFBundleIdentifier == 'com.openai.codex'",
+  ]);
   for (const path of search.stdout.split("\n")) {
     if (path.endsWith(".app")) candidates.add(path);
   }
@@ -150,7 +180,7 @@ function chatGptCandidates(): string[] {
 }
 
 function versionKey(version: string): number[] {
-  return version.split(/\D+/).filter(Boolean).map(Number);
+  return version.split(/\D+/u).filter(Boolean).map(Number);
 }
 
 function compareVersions(left: string, right: string): number {
@@ -171,16 +201,26 @@ function bundledPlugin(codexHome: string, name: string): PluginBundle | null {
   } catch {
     return null;
   }
-  return entries.flatMap((entry): PluginBundle[] => {
-    const root = join(directory, entry);
-    try {
-      const manifest = JSON.parse(readFileSync(join(root, ".codex-plugin", "plugin.json"), "utf8")) as Table;
-      const version = string(manifest.version);
-      return manifest.name === name && version ? [{ root, version }] : [];
-    } catch {
-      return [];
-    }
-  }).sort((left, right) => compareVersions(right.version, left.version))[0] ?? null;
+  return (
+    entries
+      .flatMap((entry): PluginBundle[] => {
+        const root = join(directory, entry);
+        try {
+          const manifest = JSON.parse(
+            readFileSync(join(root, ".codex-plugin", "plugin.json"), "utf-8")
+          ) as Table;
+          const version = string(manifest.version);
+          return manifest.name === name && version != null && version !== ""
+            ? [{ root, version }]
+            : [];
+        } catch {
+          return [];
+        }
+      })
+      .toSorted((left, right) =>
+        compareVersions(right.version, left.version)
+      )[0] ?? null
+  );
 }
 
 function pluginEnabled(config: Table, name: string): boolean {
@@ -188,7 +228,9 @@ function pluginEnabled(config: Table, name: string): boolean {
 }
 
 function browserAccessBlockerMcp(): AcpStdioMcpServer {
-  const compiled = /^codetwo-tool-broker(?:\.exe)?$/i.test(basename(process.execPath));
+  const compiled = /^codetwo-tool-broker(?:\.exe)?$/iu.test(
+    basename(process.execPath)
+  );
   return {
     name: "node_repl",
     command: process.execPath,
@@ -202,28 +244,46 @@ function browserAccessBlockerMcp(): AcpStdioMcpServer {
 export function stdioServer(
   name: string,
   config: Table,
-  safeInheritedEnv: Table = {},
+  safeInheritedEnv: Table = {}
 ): AcpStdioMcpServer | null {
   const command = string(config.command);
   if (!isFile(command)) return null;
   const env = Object.entries(table(config.env)).flatMap(([key, value]) => {
     const resolved = string(value);
-    return resolved ? [{ name: key, value: resolved }] : [];
+    return resolved != null && resolved !== ""
+      ? [{ name: key, value: resolved }]
+      : [];
   });
-  const trustedHashes = string(safeInheritedEnv.NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S);
-  if (trustedHashes && !env.some((entry) => entry.name === "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S")) {
-    env.push({ name: "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S", value: trustedHashes });
+  const trustedHashes = string(
+    safeInheritedEnv.NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S
+  );
+  if (
+    trustedHashes != null &&
+    trustedHashes !== "" &&
+    !env.some(
+      (entry) => entry.name === "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S"
+    )
+  ) {
+    env.push({
+      name: "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S",
+      value: trustedHashes,
+    });
   }
   return {
     name,
     command,
     args: stringArray(config.args),
     env,
-    ...(string(config.cwd) ? { cwd: string(config.cwd)! } : {}),
+    ...(string(config.cwd) != null && string(config.cwd) !== ""
+      ? { cwd: string(config.cwd)! }
+      : {}),
   };
 }
 
-function resolveConfiguredCommand(command: string, dataDir: string): string | null {
+function resolveConfiguredCommand(
+  command: string,
+  dataDir: string
+): string | null {
   if (command.includes("/") || command.includes("\\")) {
     const path = isAbsolute(command) ? command : join(dataDir, command);
     return isFile(path) ? path : null;
@@ -235,30 +295,47 @@ function configuredServer(
   id: string,
   value: unknown,
   dataDir: string,
-  kind = "computer-use",
+  kind = "computer-use"
 ): AcpMcpServer {
   const server = table(value);
   const name = string(server.name) ?? `${kind}-${id}`;
   const transport = string(server.type) ?? "stdio";
   if (transport === "stdio") {
     const command = string(server.command);
-    if (!command) throw new Error(`${kind} backend ${JSON.stringify(id)} is missing server.command`);
+    if (command == null || command === "")
+      throw new Error(
+        `${kind} backend ${JSON.stringify(id)} is missing server.command`
+      );
     const executable = resolveConfiguredCommand(command, dataDir);
-    if (!executable) {
-      throw new Error(`${kind} backend ${JSON.stringify(id)} command ${JSON.stringify(command)} was not found`);
+    if (executable == null || executable === "") {
+      throw new Error(
+        `${kind} backend ${JSON.stringify(id)} command ${JSON.stringify(command)} was not found`
+      );
     }
     return {
       name,
       command: executable,
       args: stringArray(server.args),
       env: namedValues(server.env),
-      ...(string(server.cwd) ? { cwd: string(server.cwd)! } : {}),
+      ...(string(server.cwd) != null && string(server.cwd) !== ""
+        ? { cwd: string(server.cwd)! }
+        : {}),
     };
   }
-  if (transport === "http" || transport === "streamable-http" || transport === "sse") {
+  if (
+    transport === "http" ||
+    transport === "streamable-http" ||
+    transport === "sse"
+  ) {
     const url = string(server.url);
-    if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
-      throw new Error(`${kind} backend ${JSON.stringify(id)} needs an http(s) server.url`);
+    if (
+      url == null ||
+      url === "" ||
+      (!url.startsWith("http://") && !url.startsWith("https://"))
+    ) {
+      throw new Error(
+        `${kind} backend ${JSON.stringify(id)} needs an http(s) server.url`
+      );
     }
     return {
       name,
@@ -268,13 +345,11 @@ function configuredServer(
     };
   }
   throw new Error(
-    `${kind} backend ${JSON.stringify(id)} uses unsupported MCP transport ${JSON.stringify(transport)}`,
+    `${kind} backend ${JSON.stringify(id)} uses unsupported MCP transport ${JSON.stringify(transport)}`
   );
 }
 
-export function loadConfiguredComputerUse(
-  dataDir: string,
-): {
+export function loadConfiguredComputerUse(dataDir: string): {
   bridges: ConfiguredComputerUseBridge[];
   selections: Record<string, string>;
   backends: ComputerUseBackendOption[];
@@ -282,11 +357,16 @@ export function loadConfiguredComputerUse(
 } {
   const path = join(dataDir, HOST_TOOLS_CONFIG_FILE);
   if (!existsSync(path)) {
-    return { bridges: [], selections: {}, backends: [cuaDriverOption()], errors: [] };
+    return {
+      bridges: [],
+      selections: {},
+      backends: [cuaDriverOption()],
+      errors: [],
+    };
   }
   let document: Table;
   try {
-    document = table(JSON.parse(readFileSync(path, "utf8")));
+    document = table(JSON.parse(readFileSync(path, "utf-8")));
   } catch (error) {
     return {
       bridges: [],
@@ -296,21 +376,27 @@ export function loadConfiguredComputerUse(
     };
   }
   const persistedSelections = Object.fromEntries(
-    Object.entries(table(document.computer_use_selection))
-      .filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    Object.entries(table(document.computer_use_selection)).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string"
+    )
   );
-  const selections: Record<string, string> = typeof persistedSelections["*"] === "string"
-    ? { "*": persistedSelections["*"] }
-    : {};
+  const selections: Record<string, string> =
+    typeof persistedSelections["*"] === "string"
+      ? { "*": persistedSelections["*"] }
+      : {};
   if (document.schema_version !== 1) {
     return {
       bridges: [],
       selections,
       backends: [cuaDriverOption()],
-      errors: [`schema ${JSON.stringify(document.schema_version)} is unsupported; expected 1`],
+      errors: [
+        `schema ${JSON.stringify(document.schema_version)} is unsupported; expected 1`,
+      ],
     };
   }
-  const entries = Array.isArray(document.computer_use) ? document.computer_use : [];
+  const entries = Array.isArray(document.computer_use)
+    ? document.computer_use
+    : [];
   const bridges: ConfiguredComputerUseBridge[] = [];
   const backends: ComputerUseBackendOption[] = [];
   const errors: string[] = [];
@@ -318,14 +404,17 @@ export function loadConfiguredComputerUse(
   const ids = new Set<string>();
   const selectedIds = new Set(
     Object.values(selections).filter(
-      (selection) => selection !== COMPUTER_USE_AUTOMATIC && selection !== COMPUTER_USE_DISABLED,
-    ),
+      (selection) =>
+        selection !== COMPUTER_USE_AUTOMATIC &&
+        selection !== COMPUTER_USE_DISABLED
+    )
   );
   for (const candidate of entries) {
     const entry = table(candidate);
     const id = string(entry.id);
-    const active = entry.enabled === true || (id !== null && selectedIds.has(id));
-    if (!id || !/^[A-Za-z0-9_.-]+$/.test(id)) {
+    const active =
+      entry.enabled === true || (id !== null && selectedIds.has(id));
+    if (id == null || id === "" || !/^[A-Za-z0-9_.-]+$/u.test(id)) {
       const error = `invalid computer-use backend id ${JSON.stringify(entry.id)}`;
       backends.push({
         id: id ?? String(entry.id ?? "invalid"),
@@ -372,7 +461,9 @@ export function loadConfiguredComputerUse(
         excludeProviders: bridge.excludeProviders,
       });
       if (active && names.has(server.name)) {
-        errors.push(`duplicate computer-use MCP server name ${JSON.stringify(server.name)}`);
+        errors.push(
+          `duplicate computer-use MCP server name ${JSON.stringify(server.name)}`
+        );
         continue;
       }
       if (active) names.add(server.name);
@@ -395,19 +486,29 @@ export function loadConfiguredComputerUse(
     const option = cuaDriverOption();
     backends.push(option);
     if (option.available) bridges.push(cuaDriverBridge());
-    else if (selectedIds.has("cua") && option.reason) errors.push(option.reason);
+    else if (
+      selectedIds.has("cua") &&
+      option.reason != null &&
+      option.reason !== ""
+    )
+      errors.push(option.reason);
   }
   for (const selection of selectedIds) {
     if (!backends.some((backend) => backend.id === selection)) {
-      errors.push(`computer-use selection references unknown backend ${JSON.stringify(selection)}`);
+      errors.push(
+        `computer-use selection references unknown backend ${JSON.stringify(selection)}`
+      );
     }
   }
-  return { bridges: errors.length === 0 ? bridges : [], selections, backends, errors };
+  return {
+    bridges: errors.length === 0 ? bridges : [],
+    selections,
+    backends,
+    errors,
+  };
 }
 
-export function loadConfiguredBrowserUse(
-  dataDir: string,
-): {
+export function loadConfiguredBrowserUse(dataDir: string): {
   accessEnabled: boolean;
   bridges: ConfiguredBrowserUseBridge[];
   selections: Record<string, string>;
@@ -416,12 +517,18 @@ export function loadConfiguredBrowserUse(
 } {
   const path = join(dataDir, HOST_TOOLS_CONFIG_FILE);
   if (!existsSync(path)) {
-    return { accessEnabled: true, bridges: [], selections: {}, backends: [], errors: [] };
+    return {
+      accessEnabled: true,
+      bridges: [],
+      selections: {},
+      backends: [],
+      errors: [],
+    };
   }
 
   let document: Table;
   try {
-    document = table(JSON.parse(readFileSync(path, "utf8")));
+    document = table(JSON.parse(readFileSync(path, "utf-8")));
   } catch (error) {
     return {
       accessEnabled: false,
@@ -432,49 +539,60 @@ export function loadConfiguredBrowserUse(
     };
   }
   const persistedSelections = Object.fromEntries(
-    Object.entries(table(document.browser_use_selection))
-      .filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    Object.entries(table(document.browser_use_selection)).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string"
+    )
   );
-  const selections: Record<string, string> = typeof persistedSelections["*"] === "string"
-    ? { "*": persistedSelections["*"] }
-    : {};
+  const selections: Record<string, string> =
+    typeof persistedSelections["*"] === "string"
+      ? { "*": persistedSelections["*"] }
+      : {};
   if (document.schema_version !== 1) {
     return {
       accessEnabled: false,
       bridges: [],
       selections,
       backends: [],
-      errors: [`schema ${JSON.stringify(document.schema_version)} is unsupported; expected 1`],
+      errors: [
+        `schema ${JSON.stringify(document.schema_version)} is unsupported; expected 1`,
+      ],
     };
   }
 
   const errors: string[] = [];
-  const accessEnabled = document.agent_browser_access === undefined
-    ? true
-    : typeof document.agent_browser_access === "boolean"
-      ? document.agent_browser_access
-      : false;
-  if (document.agent_browser_access !== undefined
-    && typeof document.agent_browser_access !== "boolean") {
+  const accessEnabled =
+    document.agent_browser_access === undefined
+      ? true
+      : typeof document.agent_browser_access === "boolean"
+        ? document.agent_browser_access
+        : false;
+  if (
+    document.agent_browser_access !== undefined &&
+    typeof document.agent_browser_access !== "boolean"
+  ) {
     errors.push("agent_browser_access must be a boolean");
   }
-  const entries = Array.isArray(document.browser_use) ? document.browser_use : [];
+  const entries = Array.isArray(document.browser_use)
+    ? document.browser_use
+    : [];
   const bridges: ConfiguredBrowserUseBridge[] = [];
   const backends: BrowserUseBackendOption[] = [];
   const names = new Set<string>();
   const ids = new Set<string>([OPENAI_BROWSER_BACKEND]);
   const selectedIds = new Set(
     Object.values(selections).filter(
-      (selection) => selection !== BROWSER_USE_AUTOMATIC
-        && selection !== BROWSER_USE_DISABLED
-        && selection !== OPENAI_BROWSER_BACKEND,
-    ),
+      (selection) =>
+        selection !== BROWSER_USE_AUTOMATIC &&
+        selection !== BROWSER_USE_DISABLED &&
+        selection !== OPENAI_BROWSER_BACKEND
+    )
   );
   for (const candidate of entries) {
     const entry = table(candidate);
     const id = string(entry.id);
-    const active = entry.enabled === true || (id !== null && selectedIds.has(id));
-    if (!id || !/^[A-Za-z0-9_.-]+$/.test(id)) {
+    const active =
+      entry.enabled === true || (id !== null && selectedIds.has(id));
+    if (id == null || id === "" || !/^[A-Za-z0-9_.-]+$/u.test(id)) {
       const error = `invalid browser-use backend id ${JSON.stringify(entry.id)}`;
       backends.push({
         id: id ?? String(entry.id ?? "invalid"),
@@ -488,9 +606,10 @@ export function loadConfiguredBrowserUse(
       continue;
     }
     if (ids.has(id)) {
-      const error = id === OPENAI_BROWSER_BACKEND
-        ? `browser-use backend id ${JSON.stringify(id)} is reserved`
-        : `duplicate browser-use backend id ${JSON.stringify(id)}`;
+      const error =
+        id === OPENAI_BROWSER_BACKEND
+          ? `browser-use backend id ${JSON.stringify(id)} is reserved`
+          : `duplicate browser-use backend id ${JSON.stringify(id)}`;
       backends.push({
         id,
         displayName: string(entry.display_name) ?? id,
@@ -523,7 +642,9 @@ export function loadConfiguredBrowserUse(
         excludeProviders: bridge.excludeProviders,
       });
       if (active && names.has(server.name)) {
-        errors.push(`duplicate browser-use MCP server name ${JSON.stringify(server.name)}`);
+        errors.push(
+          `duplicate browser-use MCP server name ${JSON.stringify(server.name)}`
+        );
         continue;
       }
       if (active) names.add(server.name);
@@ -543,7 +664,9 @@ export function loadConfiguredBrowserUse(
   }
   for (const selection of selectedIds) {
     if (!backends.some((backend) => backend.id === selection)) {
-      errors.push(`browser-use selection references unknown backend ${JSON.stringify(selection)}`);
+      errors.push(
+        `browser-use selection references unknown backend ${JSON.stringify(selection)}`
+      );
     }
   }
   return {
@@ -586,103 +709,168 @@ function cuaDriverBridge(): ConfiguredComputerUseBridge {
   };
 }
 
-export function computerUseSettings(evidence: HostToolEvidence): ComputerUseSettings {
+export function computerUseSettings(
+  evidence: HostToolEvidence
+): ComputerUseSettings {
   return new ToolBroker().catalog({ evidence }).computerUse;
 }
 
 export function saveComputerUseSelection(
   dataDir: string,
   backendId: string,
-  evidence: HostToolEvidence,
+  evidence: HostToolEvidence
 ): void {
-  if (backendId !== COMPUTER_USE_AUTOMATIC && backendId !== COMPUTER_USE_DISABLED) {
-    const backend = evidence.computerUseBackends.find((candidate) => candidate.id === backendId);
-    if (!backend) throw new Error(`unknown computer-use backend ${JSON.stringify(backendId)}`);
-    if (!backend.available) throw new Error(backend.reason ?? `computer-use backend ${JSON.stringify(backendId)} is unavailable`);
+  if (
+    backendId !== COMPUTER_USE_AUTOMATIC &&
+    backendId !== COMPUTER_USE_DISABLED
+  ) {
+    const backend = evidence.computerUseBackends.find(
+      (candidate) => candidate.id === backendId
+    );
+    if (!backend)
+      throw new Error(
+        `unknown computer-use backend ${JSON.stringify(backendId)}`
+      );
+    if (!backend.available)
+      throw new Error(
+        backend.reason ??
+          `computer-use backend ${JSON.stringify(backendId)} is unavailable`
+      );
   }
 
   new JsonSelectionStore(dataDir).setGlobal("computer_use", backendId);
 }
 
-export function browserUseSettings(evidence: HostToolEvidence): BrowserUseSettings {
+export function browserUseSettings(
+  evidence: HostToolEvidence
+): BrowserUseSettings {
   return new ToolBroker().catalog({ evidence }).browserUse;
 }
 
 export function saveBrowserUseSelection(
   dataDir: string,
   backendId: string,
-  evidence: HostToolEvidence,
+  evidence: HostToolEvidence
 ): void {
-  if (backendId !== BROWSER_USE_AUTOMATIC && backendId !== BROWSER_USE_DISABLED) {
-    const backend = evidence.browserUseBackends.find((candidate) => candidate.id === backendId);
-    if (!backend) throw new Error(`unknown browser-use backend ${JSON.stringify(backendId)}`);
-    if (!backend.available) throw new Error(backend.reason ?? `browser-use backend ${JSON.stringify(backendId)} is unavailable`);
+  if (
+    backendId !== BROWSER_USE_AUTOMATIC &&
+    backendId !== BROWSER_USE_DISABLED
+  ) {
+    const backend = evidence.browserUseBackends.find(
+      (candidate) => candidate.id === backendId
+    );
+    if (!backend)
+      throw new Error(
+        `unknown browser-use backend ${JSON.stringify(backendId)}`
+      );
+    if (!backend.available)
+      throw new Error(
+        backend.reason ??
+          `browser-use backend ${JSON.stringify(backendId)} is unavailable`
+      );
   }
 
   new JsonSelectionStore(dataDir).setGlobal("browser_use", backendId);
 }
 
-export function saveAgentBrowserAccess(dataDir: string, enabled: boolean): void {
+export function saveAgentBrowserAccess(
+  dataDir: string,
+  enabled: boolean
+): void {
   new JsonSelectionStore(dataDir).setAgentBrowserAccess(enabled);
 }
 
 export function detectHostToolEvidence(
   environment: NodeJS.ProcessEnv = process.env,
-  dataDir?: string,
+  dataDir?: string
 ): HostToolEvidence {
   const userHome = string(environment.HOME) ?? string(environment.USERPROFILE);
-  const codexHome = string(environment.CODEX_HOME)
-    ?? (userHome ? join(userHome, ".codex") : null);
+  const codexHome =
+    string(environment.CODEX_HOME) ??
+    (userHome != null && userHome !== "" ? join(userHome, ".codex") : null);
   let config: Table = {};
   let configError: string | null = null;
-  if (!codexHome) {
-    configError = "CODEX_HOME, HOME, and USERPROFILE are unset";
-  } else {
+  if (codexHome != null && codexHome !== "") {
     try {
-      config = table(Bun.TOML.parse(readFileSync(join(codexHome, "config.toml"), "utf8")));
+      config = table(
+        Bun.TOML.parse(readFileSync(join(codexHome, "config.toml"), "utf-8"))
+      );
     } catch (error) {
       configError = error instanceof Error ? error.message : String(error);
     }
+  } else {
+    configError = "CODEX_HOME, HOME, and USERPROFILE are unset";
   }
 
   const candidates = chatGptCandidates();
-  const verifiedHost = candidates.find((path) => isOpenAiSignature(signature(path), CHATGPT_BUNDLE_ID)) ?? null;
+  const verifiedHost =
+    candidates.find((path) =>
+      isOpenAiSignature(signature(path), CHATGPT_BUNDLE_ID)
+    ) ?? null;
   const observedHost = verifiedHost ?? candidates[0] ?? null;
   const hostVersion = observedHost
-    ? plistValue(join(observedHost, "Contents", "Info.plist"), "CFBundleShortVersionString")
+    ? plistValue(
+        join(observedHost, "Contents", "Info.plist"),
+        "CFBundleShortVersionString"
+      )
     : null;
   const node = table(table(config.mcp_servers).node_repl);
   const nodeEnv = table(node.env);
   const shellPolicy = table(table(config.shell_environment_policy).set);
   const chromeMcp = stdioServer("node_repl", node, shellPolicy);
-  const computerBundle = codexHome ? bundledPlugin(codexHome, "computer-use") : null;
-  const computerLauncher = computerBundle ? join(computerBundle.root, "bin", "computer-use-client-launcher") : null;
-  const computerMcp = codexHome && isFile(computerLauncher) ? {
-    name: "codetwo-openai-computer-use",
-    command: computerLauncher,
-    args: ["mcp"],
-    env: [{ name: "CODEX_HOME", value: codexHome }],
-    cwd: computerBundle!.root,
-  } satisfies AcpMcpServer : null;
-  const sitesBundle = codexHome ? bundledPlugin(codexHome, "sites") : null;
+  const computerBundle =
+    codexHome != null && codexHome !== ""
+      ? bundledPlugin(codexHome, "computer-use")
+      : null;
+  const computerLauncher = computerBundle
+    ? join(computerBundle.root, "bin", "computer-use-client-launcher")
+    : null;
+  const computerMcp =
+    codexHome != null && codexHome !== "" && isFile(computerLauncher)
+      ? ({
+          name: "codetwo-openai-computer-use",
+          command: computerLauncher,
+          args: ["mcp"],
+          env: [{ name: "CODEX_HOME", value: codexHome }],
+          cwd: computerBundle!.root,
+        } satisfies AcpMcpServer)
+      : null;
+  const sitesBundle =
+    codexHome != null && codexHome !== ""
+      ? bundledPlugin(codexHome, "sites")
+      : null;
   const cuaPath = string(nodeEnv.SKY_CUA_SERVICE_PATH);
-  const computerConfigured = dataDir
-    ? loadConfiguredComputerUse(dataDir)
-    : { bridges: [], selections: {}, backends: [cuaDriverOption()], errors: [] };
-  const browserConfigured = dataDir
-    ? loadConfiguredBrowserUse(dataDir)
-    : { accessEnabled: true, bridges: [], selections: {}, backends: [], errors: [] };
+  const computerConfigured =
+    dataDir != null && dataDir !== ""
+      ? loadConfiguredComputerUse(dataDir)
+      : {
+          bridges: [],
+          selections: {},
+          backends: [cuaDriverOption()],
+          errors: [],
+        };
+  const browserConfigured =
+    dataDir != null && dataDir !== ""
+      ? loadConfiguredBrowserUse(dataDir)
+      : {
+          accessEnabled: true,
+          bridges: [],
+          selections: {},
+          backends: [],
+          errors: [],
+        };
   const browserEnabled = pluginEnabled(config, "browser@openai-bundled");
   const chromeEnabled = pluginEnabled(config, "chrome@openai-bundled");
   const browserBackends = (string(nodeEnv.BROWSER_USE_AVAILABLE_BACKENDS) ?? "")
     .split(",")
     .map((backend) => backend.trim())
     .filter(Boolean);
-  const openAiBrowserAvailable = observedHost !== null
-    && verifiedHost !== null
-    && chromeMcp !== null
-    && ((browserEnabled && browserBackends.includes("iab"))
-      || (chromeEnabled && browserBackends.includes("chrome")));
+  const openAiBrowserAvailable =
+    observedHost !== null &&
+    verifiedHost !== null &&
+    chromeMcp !== null &&
+    ((browserEnabled && browserBackends.includes("iab")) ||
+      (chromeEnabled && browserBackends.includes("chrome")));
   const openAiBrowserOption: BrowserUseBackendOption = {
     id: OPENAI_BROWSER_BACKEND,
     displayName: "OpenAI Browser / Chrome",
@@ -722,11 +910,17 @@ export function detectHostToolEvidence(
   };
 }
 
-export function projectProviderToolset(evidence: HostToolEvidence, providerId: string): ProviderToolset {
+export function projectProviderToolset(
+  evidence: HostToolEvidence,
+  providerId: string
+): ProviderToolset {
   return new ToolBroker().resolve({ providerId, context: { evidence } });
 }
 
-export function withProviderToolInstructions(blocks: unknown[], instructions: string[]): unknown[] {
+export function withProviderToolInstructions(
+  blocks: unknown[],
+  instructions: string[]
+): unknown[] {
   if (instructions.length === 0) return blocks;
   return [
     { type: "text", text: `[C2 host tools]\n${instructions.join("\n")}` },

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
+
 import { GlobalWindow } from "happy-dom";
 
 const dom = new GlobalWindow({ url: "http://localhost/" });
@@ -38,7 +39,8 @@ const {
   docToBlocks,
   resolveCanvasSnapshotForFreeze,
 } = await import("../src/skillInline");
-const { parseCanvasHistoryPrompt } = await import("../src/session/promptPreview");
+const { parseCanvasHistoryPrompt } =
+  await import("../src/session/promptPreview");
 const {
   canvasAcceptedRequestKey,
   canvasIdsToPurgeAfterTurnStart,
@@ -74,7 +76,7 @@ function draft(id: string, revision = 1) {
 
 describe("Desktop Canvas Composer integration seams", () => {
   test("feature gate is hidden by default and never reports production enabled", async () => {
-    await expect(canvasFeatureState()).resolves.toEqual({
+    expect(canvasFeatureState()).resolves.toEqual({
       feature: "CODETWO_CANVAS_INPUT_V1",
       enabled: false,
       status: "not production-enabled",
@@ -92,7 +94,12 @@ describe("Desktop Canvas Composer integration seams", () => {
     });
     expect(blocks).toEqual([
       { type: "text", text: "before" },
-      { type: "canvas", id: "canvas-a", frozen_revision: 3, pixel_policy: "required" },
+      {
+        type: "canvas",
+        id: "canvas-a",
+        frozen_revision: 3,
+        pixel_policy: "required",
+      },
       { type: "text", text: "after" },
     ]);
     expect(JSON.stringify(blocks)).not.toContain("elements");
@@ -103,45 +110,67 @@ describe("Desktop Canvas Composer integration seams", () => {
     const lightDraft = canvasDraftToEnvelope(draft("theme", 1));
     expect(canvasThemeForMode("edit", "dark", lightDraft.theme)).toBe("dark");
     expect(canvasThemeForMode("edit", "light", lightDraft.theme)).toBe("light");
-    expect(canvasThemeForMode("readonly", "dark", lightDraft.theme)).toBe("light");
-    expect(canvasThemeForMode("historical", "dark", lightDraft.theme)).toBe("light");
+    expect(canvasThemeForMode("readonly", "dark", lightDraft.theme)).toBe(
+      "light"
+    );
+    expect(canvasThemeForMode("historical", "dark", lightDraft.theme)).toBe(
+      "light"
+    );
   });
 
   test("multiple Canvas blocks preserve document order and policy", () => {
     const first = canvasBlockPropsFromDraft(draft("canvas-a", 1));
-    const second = { ...canvasBlockPropsFromDraft(draft("canvas-b", 2)), pixelPolicy: "structure_only" };
+    const second = {
+      ...canvasBlockPropsFromDraft(draft("canvas-b", 2)),
+      pixelPolicy: "structure_only",
+    };
     const blocks = docToBlocks({
       document: [
         { type: "canvas", props: first },
         { type: "canvas", props: second },
       ],
     });
-    expect(blocks.map((block) => block.type === "canvas" && block.id)).toEqual(["canvas-a", "canvas-b"]);
-    expect(blocks[1]).toMatchObject({ pixel_policy: "structure_only", frozen_revision: 2 });
+    expect(blocks.map((block) => block.type === "canvas" && block.id)).toEqual([
+      "canvas-a",
+      "canvas-b",
+    ]);
+    expect(blocks[1]).toMatchObject({
+      pixel_policy: "structure_only",
+      frozen_revision: 2,
+    });
     expect(sameDocBlocks(blocks, blocks)).toBe(true);
   });
 
   test("history compatibility markers are stripped from visible prompt", () => {
     const parsed = parseCanvasHistoryPrompt(
-      "before\n\n[canvas-history canvas-a@7] Whiteboard\ncanvas-text: User note\ncanvas-text: Another note\n\nafter",
+      "before\n\n[canvas-history canvas-a@7] Whiteboard\ncanvas-text: User note\ncanvas-text: Another note\n\nafter"
     );
     expect(parsed.visiblePrompt).toBe("before\n\nafter");
     expect(parsed.canvases).toEqual([
-      { id: "canvas-a", revision: 7, title: "Whiteboard", textOriginals: ["User note", "Another note"] },
+      {
+        id: "canvas-a",
+        revision: 7,
+        title: "Whiteboard",
+        textOriginals: ["User note", "Another note"],
+      },
     ]);
     expect(parsed.visiblePrompt).not.toContain("canvas-history");
     expect(parsed.visiblePrompt).not.toContain("canvas-text:");
   });
 
   test("literal canvas-text prompt lines remain visible without a marker", () => {
-    const parsed = parseCanvasHistoryPrompt("canvas-text: keep this line\nordinary text");
-    expect(parsed.visiblePrompt).toBe("canvas-text: keep this line\nordinary text");
+    const parsed = parseCanvasHistoryPrompt(
+      "canvas-text: keep this line\nordinary text"
+    );
+    expect(parsed.visiblePrompt).toBe(
+      "canvas-text: keep this line\nordinary text"
+    );
     expect(parsed.canvases).toEqual([]);
   });
 
   test("strict JSON history markers decode multiline originals and reject marker-like user text", () => {
     const parsed = parseCanvasHistoryPrompt(
-      "before\n[canvas-history-json {\"version\":1,\"id\":\"canvas-json\",\"revision\":8,\"title\":\"Title ] with newline\",\"text_originals\":[\"first\\nsecond\",\"quote \\\"x\\\"\"]}]\nafter",
+      'before\n[canvas-history-json {"version":1,"id":"canvas-json","revision":8,"title":"Title ] with newline","text_originals":["first\\nsecond","quote \\"x\\""]}]\nafter'
     );
     expect(parsed.visiblePrompt).toBe("before\nafter");
     expect(parsed.canvases).toEqual([
@@ -149,12 +178,12 @@ describe("Desktop Canvas Composer integration seams", () => {
         id: "canvas-json",
         revision: 8,
         title: "Title ] with newline",
-        textOriginals: ["first\nsecond", "quote \"x\""],
+        textOriginals: ["first\nsecond", 'quote "x"'],
       },
     ]);
 
     const malformed = parseCanvasHistoryPrompt(
-      "[canvas-history-json {\"version\":1,\"id\":\"broken\",\"revision\":\"8\",\"title\":\"Nope\",\"text_originals\":[]}]\ncanvas-text: keep user line",
+      '[canvas-history-json {"version":1,"id":"broken","revision":"8","title":"Nope","text_originals":[]}]\ncanvas-text: keep user line'
     );
     expect(malformed.visiblePrompt).toContain("canvas-history-json");
     expect(malformed.visiblePrompt).toContain("canvas-text: keep user line");
@@ -168,19 +197,19 @@ describe("Desktop Canvas Composer integration seams", () => {
         id: "canvas-bounded",
         revision: 1,
         title: "",
-        text_originals: ["🙂".repeat(2_000)],
-      })}]`,
+        text_originals: ["🙂".repeat(2000)],
+      })}]`
     );
     expect(valid.visiblePrompt).toBe("");
     expect(valid.canvases[0]?.title).toBe("");
-    expect(valid.canvases[0]?.textOriginals[0]).toBe("🙂".repeat(2_000));
+    expect(valid.canvases[0]?.textOriginals[0]).toBe("🙂".repeat(2000));
 
     const malformed = parseCanvasHistoryPrompt(
       [
         `[canvas-history-json ${JSON.stringify({ version: 1, id: "bad-revision", revision: 0, title: "", text_originals: [] })}]`,
         `[canvas-history-json ${JSON.stringify({ version: 1, id: "too-many", revision: 1, title: "", text_originals: Array.from({ length: 65 }, () => "x") })}]`,
-        `[canvas-history-json ${JSON.stringify({ version: 1, id: "too-long", revision: 1, title: "", text_originals: ["x".repeat(2_001)] })}]`,
-      ].join("\n"),
+        `[canvas-history-json ${JSON.stringify({ version: 1, id: "too-long", revision: 1, title: "", text_originals: ["x".repeat(2001)] })}]`,
+      ].join("\n")
     );
     expect(malformed.canvases).toEqual([]);
     expect(malformed.visiblePrompt).toContain("bad-revision");
@@ -190,7 +219,7 @@ describe("Desktop Canvas Composer integration seams", () => {
 
   test("CAS autosave serializes A/B and keeps the latest local scene while rebasing", async () => {
     const savedRevisions: number[] = [];
-    const acknowledgements: Array<{ isLatest: boolean; elements: unknown[] }> = [];
+    const acknowledgements: { isLatest: boolean; elements: unknown[] }[] = [];
     let active = 0;
     let maximumActive = 0;
     let releaseFirst!: () => void;
@@ -244,7 +273,9 @@ describe("Desktop Canvas Composer integration seams", () => {
   test("collapsed loaded Canvas rehydrates its nonempty envelope for freeze/export", async () => {
     const envelope = {
       ...canvasDraftToEnvelope(draft("collapsed", 9)),
-      elements: [{ id: "rect-1", type: "rectangle", x: 1, y: 2, width: 40, height: 20 }],
+      elements: [
+        { id: "rect-1", type: "rectangle", x: 1, y: 2, width: 40, height: 20 },
+      ],
       appState: {
         viewBackgroundColor: "white",
         scrollX: 0,
@@ -266,43 +297,96 @@ describe("Desktop Canvas Composer integration seams", () => {
 
   test("accepted TurnStarted requests purge only mutable heads; rejection requests none", () => {
     const ids = ["canvas-a", "canvas-a", "canvas-b"];
-    expect(canvasIdsToPurgeAfterTurnStart(true, ids)).toEqual(["canvas-a", "canvas-b"]);
+    expect(canvasIdsToPurgeAfterTurnStart(true, ids)).toEqual([
+      "canvas-a",
+      "canvas-b",
+    ]);
     expect(canvasIdsToPurgeAfterTurnStart(false, ids)).toEqual([]);
     expect(canvasIdsToPurgeAfterTurnStart(true, ids, false)).toEqual([]);
   });
 
   test("unmount tombstones and purges live mutable heads without purging immutable history", () => {
-    expect(canvasUnmountPlan(true, false)).toEqual({ tombstone: true, purge: true });
-    expect(canvasUnmountPlan(false, true)).toEqual({ tombstone: false, purge: true });
-    expect(canvasUnmountPlan(false, false)).toEqual({ tombstone: false, purge: false });
+    expect(canvasUnmountPlan(true, false)).toEqual({
+      tombstone: true,
+      purge: true,
+    });
+    expect(canvasUnmountPlan(false, true)).toEqual({
+      tombstone: false,
+      purge: true,
+    });
+    expect(canvasUnmountPlan(false, false)).toEqual({
+      tombstone: false,
+      purge: false,
+    });
   });
 
   test("accepted async provider-image errors restore immutable refs for an explicit new-session retry", () => {
     const refs = [{ id: "canvas-frozen", revision: 9 }];
-    expect(canvasAcceptedRequestKey("session-failed", "request-1")).toBe("session-failed:request-1");
-    expect(canvasRetryRefsForTerminal("error", "provider does not support image pixels", refs)).toEqual(refs);
-    expect(canvasRetryRefsForTerminal("error", "CAS conflict", refs)).toEqual([]);
-    expect(canvasRetryRefsForTerminal("success", "provider does not support image pixels", refs)).toEqual([]);
-    expect(canvasRetryTargetSession("session-failed", false)).toBe("session-failed");
+    expect(canvasAcceptedRequestKey("session-failed", "request-1")).toBe(
+      "session-failed:request-1"
+    );
+    expect(
+      canvasRetryRefsForTerminal(
+        "error",
+        "provider does not support image pixels",
+        refs
+      )
+    ).toEqual(refs);
+    expect(canvasRetryRefsForTerminal("error", "CAS conflict", refs)).toEqual(
+      []
+    );
+    expect(
+      canvasRetryRefsForTerminal(
+        "success",
+        "provider does not support image pixels",
+        refs
+      )
+    ).toEqual([]);
+    expect(canvasRetryTargetSession("session-failed", false)).toBe(
+      "session-failed"
+    );
     expect(canvasRetryTargetSession("session-failed", true)).toBeNull();
   });
 
   test("provider retry replaces Canvas refs without dropping surrounding prompt order", () => {
     const original = [
       { type: "text", text: "instruction before" },
-      { type: "canvas", id: "canvas-a", frozen_revision: 4, pixel_policy: "required" },
+      {
+        type: "canvas",
+        id: "canvas-a",
+        frozen_revision: 4,
+        pixel_policy: "required",
+      },
       { type: "text", text: "instruction between" },
-      { type: "canvas", id: "canvas-b", frozen_revision: 5, pixel_policy: "structure_only" },
+      {
+        type: "canvas",
+        id: "canvas-b",
+        frozen_revision: 5,
+        pixel_policy: "structure_only",
+      },
     ] as const;
-    const retry = canvasRetryDocument(original, new Map([
-      ["canvas-a", { id: "duplicate-a", revision: 1 }],
-      ["canvas-b", { id: "duplicate-b", revision: 2 }],
-    ]));
+    const retry = canvasRetryDocument(
+      original,
+      new Map([
+        ["canvas-a", { id: "duplicate-a", revision: 1 }],
+        ["canvas-b", { id: "duplicate-b", revision: 2 }],
+      ])
+    );
     expect(retry).toEqual([
       { type: "text", text: "instruction before" },
-      { type: "canvas", id: "duplicate-a", frozen_revision: 1, pixel_policy: "required" },
+      {
+        type: "canvas",
+        id: "duplicate-a",
+        frozen_revision: 1,
+        pixel_policy: "required",
+      },
       { type: "text", text: "instruction between" },
-      { type: "canvas", id: "duplicate-b", frozen_revision: 2, pixel_policy: "structure_only" },
+      {
+        type: "canvas",
+        id: "duplicate-b",
+        frozen_revision: 2,
+        pixel_policy: "structure_only",
+      },
     ]);
   });
 });

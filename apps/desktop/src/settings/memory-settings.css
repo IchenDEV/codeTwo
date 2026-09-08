@@ -136,7 +136,8 @@
   gap: 0.25rem;
   overflow-x: auto;
   padding: var(--ds-space-surface-inset);
-  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0
+    var(--ds-color-fill-rest);
 }
 .memory-stat {
   display: inline-flex;
@@ -167,7 +168,8 @@
   min-width: 0;
   overflow-x: auto;
   padding-inline: var(--ds-space-surface-inset);
-  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0
+    var(--ds-color-fill-rest);
 }
 .memory-view-switcher > [data-slot="view-switcher"] {
   width: 100%;
@@ -206,7 +208,8 @@
   grid-template-columns: minmax(11rem, 1fr) repeat(3, 9.5rem);
   gap: 0.5rem;
   padding: var(--ds-space-surface-inset);
-  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0
+    var(--ds-color-fill-rest);
 }
 .memory-filter-select {
   width: 100%;
@@ -218,7 +221,8 @@
   border-radius: var(--ds-radius-micro);
   background: var(--accent);
   padding: var(--ds-space-inline) var(--ds-space-module-inset);
-  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0
+    var(--ds-color-fill-rest);
 }
 .memory-batch-bar strong {
   margin-inline-end: 0.25rem;
@@ -247,7 +251,8 @@
   padding-inline: 0.625rem;
   color: var(--muted-foreground);
   font-size: var(--ds-type-metadata-size);
-  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0
+    var(--ds-color-fill-rest);
 }
 .memory-list-viewport {
   min-height: 0;

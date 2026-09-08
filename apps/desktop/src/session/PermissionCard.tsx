@@ -1,27 +1,36 @@
-import { CircleAlert } from "@/components/ui/icons";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { useT, type Translate } from "../i18n";
+import { CircleAlert } from "@/components/ui/icons";
+
 import type { PermissionContext, PermissionContextKind } from "../bridge";
+import { useT } from "../i18n";
+import type { Translate } from "../i18n";
 import type { PermissionQueueItem } from "./sessionEvents";
 
 function contextLabel(kind: PermissionContextKind, t: Translate): string {
   switch (kind) {
-    case "mcp_elicitation":
+    case "mcp_elicitation": {
       return t("permission.kind.externalTool");
-    case "website_access":
+    }
+    case "website_access": {
       return t("permission.kind.websiteAccess");
-    case "sensitive_web_action":
+    }
+    case "sensitive_web_action": {
       return t("permission.kind.sensitiveWebAction");
-    case "computer_use_application":
+    }
+    case "computer_use_application": {
       return t("permission.kind.appControl");
-    case "sites_mutation":
+    }
+    case "sites_mutation": {
       return t("permission.kind.siteChange");
-    case "sites_production":
+    }
+    case "sites_production": {
       return t("permission.kind.productionDeploy");
-    case "acp":
+    }
+    case "acp": {
       return t("permission.kind.command");
+    }
   }
 }
 
@@ -37,8 +46,10 @@ function PermissionDetails({ context }: { context: PermissionContext }) {
 
   if (context.kind === "acp") return null;
   return (
-    <div className="space-y-1 text-metadata text-muted-foreground">
-      <p className="font-medium text-foreground">{contextLabel(context.kind, t)}</p>
+    <div className="text-metadata text-muted-foreground space-y-1">
+      <p className="text-foreground font-medium">
+        {contextLabel(context.kind, t)}
+      </p>
       {details.map(([label, value]) => (
         <p key={label}>
           {label}: {value}
@@ -73,19 +84,25 @@ export function PermissionCard({
   };
 
   return (
-    <div className="shrink-0 px-6 pb-1 pt-3" data-testid="permission-card">
+    <div className="shrink-0 px-6 pt-3 pb-1" data-testid="permission-card">
       <section
-        className="mx-auto w-full max-w-3xl rounded-module border bg-card px-4 py-3 shadow-raised"
+        className="rounded-module bg-card shadow-raised mx-auto w-full max-w-3xl border px-4 py-3"
         aria-labelledby="permission-card-title"
         aria-busy={answering}
         aria-live="polite"
       >
         <div className="flex items-start gap-3">
-          <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+          <CircleAlert
+            className="text-warning mt-0.5 size-4 shrink-0"
+            aria-hidden
+          />
           <div className="min-w-0 flex-1 space-y-3">
             <div className="space-y-0.5">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <h2 id="permission-card-title" className="text-body font-semibold">
+                <h2
+                  id="permission-card-title"
+                  className="text-body font-semibold"
+                >
                   {t("permission.requested")}
                 </h2>
                 {pendingCount > 1 && (
@@ -99,7 +116,7 @@ export function PermissionCard({
               </p>
             </div>
 
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-control bg-fill-quiet px-3 py-2 font-mono text-body">
+            <pre className="rounded-control bg-fill-quiet text-body max-h-40 overflow-auto px-3 py-2 font-mono break-words whitespace-pre-wrap">
               {request.title}
             </pre>
 

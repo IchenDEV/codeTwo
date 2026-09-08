@@ -1,13 +1,14 @@
-import { FileText, X } from "@/components/ui/icons";
-
-import { FilePanel } from "./FilePanel";
-import { FileViewer, type FileRevealTarget } from "./FileViewer";
-import { dirtyKey, useDirtyPaths } from "./dirty";
-import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
+import { FileText, X } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
-type FileDockContentProps = {
+import { useT } from "../i18n";
+import { dirtyKey, useDirtyPaths } from "./dirty";
+import { FilePanel } from "./FilePanel";
+import { FileViewer } from "./FileViewer";
+import type { FileRevealTarget } from "./FileViewer";
+
+interface FileDockContentProps {
   cwd: string | null;
   openFiles: string[];
   activeFile: string | null;
@@ -18,7 +19,7 @@ type FileDockContentProps = {
   onInsertFile: (path: string) => void;
   onOpenFile: (path: string) => void;
   onSendText: (text: string) => void;
-};
+}
 
 /** File tabs, viewer, and tree composed as one content module for the generic Dock container. */
 export function FileDockContent({
@@ -54,33 +55,38 @@ export function FileDockContent({
                 onClick={() => onActiveFile(path)}
                 title={path}
                 className={cn(
-                  "group relative h-full max-w-48 shrink-0 gap-1.5 px-module-inset text-metadata",
+                  "group px-module-inset text-metadata relative h-full max-w-48 shrink-0 gap-1.5",
                   active
                     ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 <FileText className="size-3.5 shrink-0" />
                 <span className="truncate">{name}</span>
-                {cwd && dirtyPaths.has(dirtyKey(cwd, path)) && (
-                  <span className="size-1.5 shrink-0 rounded-full bg-warning" />
-                )}
+                {cwd != null &&
+                  cwd !== "" &&
+                  dirtyPaths.has(dirtyKey(cwd, path)) && (
+                    <span className="bg-warning size-1.5 shrink-0 rounded-full" />
+                  )}
                 <X
-                  className="size-3 shrink-0 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                  className="hover:text-destructive size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();
                     onCloseFile(path);
                   }}
                 />
                 {active && (
-                  <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-none bg-primary" />
+                  <span className="bg-primary absolute inset-x-1.5 -bottom-px h-0.5 rounded-none" />
                 )}
               </Button>
             );
           })}
         </div>
 
-        {activeFile && cwd ? (
+        {activeFile != null &&
+        activeFile !== "" &&
+        cwd != null &&
+        cwd !== "" ? (
           <FileViewer
             key={activeFile}
             cwd={cwd}
@@ -92,7 +98,7 @@ export function FileDockContent({
           />
         ) : (
           <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-            <p className="text-center text-metadata text-muted-foreground">
+            <p className="text-metadata text-muted-foreground text-center">
               {t("files.noneOpen")}
             </p>
           </div>

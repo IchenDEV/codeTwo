@@ -59,10 +59,18 @@ export interface AppUpdateStatus {
   message?: string;
 }
 
-export type AppshotHotkey = "both-command" | "command-shift-2" | "command-option-2";
+export type AppshotHotkey =
+  | "both-command"
+  | "command-shift-2"
+  | "command-option-2";
 export type AppshotDestination = "automatic" | "current" | "new";
 
-export type DesktopPetAnimation = "idle" | "running" | "waiting" | "failed" | "review";
+export type DesktopPetAnimation =
+  | "idle"
+  | "running"
+  | "waiting"
+  | "failed"
+  | "review";
 
 export interface DesktopPetState {
   visible: boolean;
@@ -103,7 +111,7 @@ export interface AppshotCapture {
   destination: AppshotDestination;
 }
 
-export type CodeTwoRPC = {
+export interface CodeTwoRPC {
   bun: RPCSchema<{
     requests: {
       call: {
@@ -112,7 +120,10 @@ export type CodeTwoRPC = {
       };
       dialogOpen: { params: OpenDialogOptions; response: string[] };
       dialogSave: { params: SaveDialogOptions; response: string | null };
-      confirm: { params: { message: string; title?: string }; response: boolean };
+      confirm: {
+        params: { message: string; title?: string };
+        response: boolean;
+      };
       contextMenuShow: { params: NativeContextMenuRequest; response: void };
       openExternal: { params: { url: string }; response: boolean };
       openPath: { params: { path: string }; response: boolean };
@@ -124,7 +135,10 @@ export type CodeTwoRPC = {
       systemBadgeSet: { params: { count: number }; response: boolean };
       titlebarDoubleClick: { params: undefined; response: boolean };
       systemProfileAvatar: { params: undefined; response: string | null };
-      browserZoom: { params: { webviewId: number; factor: number }; response: void };
+      browserZoom: {
+        params: { webviewId: number; factor: number };
+        response: void;
+      };
       desktopPetState: { params: undefined; response: DesktopPetState };
       desktopPetUpdate: { params: DesktopPetState; response: void };
       desktopPetHide: { params: undefined; response: void };
@@ -133,7 +147,9 @@ export type CodeTwoRPC = {
       updateCheck: { params: undefined; response: AppUpdateStatus };
       appshotsSettings: { params: undefined; response: AppshotSettings };
       appshotsUpdate: {
-        params: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>;
+        params: Partial<
+          Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">
+        >;
         response: AppshotSettings;
       };
       appshotsRequestPermissions: {
@@ -158,4 +174,4 @@ export type CodeTwoRPC = {
       appshotFailed: { message: string };
     };
   }>;
-};
+}

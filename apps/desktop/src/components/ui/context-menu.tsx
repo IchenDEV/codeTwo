@@ -1,7 +1,7 @@
-import * as React from "react";
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
-import { ChevronRight } from "@/components/ui/icons";
+import * as React from "react";
 
+import { ChevronRight } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 const contextMenuItemStyles =
@@ -11,13 +11,16 @@ function ContextMenu(props: ContextMenuPrimitive.Root.Props) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
 }
 
-function ContextMenuTrigger({ className, ...props }: ContextMenuPrimitive.Trigger.Props) {
+function ContextMenuTrigger({
+  className,
+  ...props
+}: ContextMenuPrimitive.Trigger.Props) {
   return (
     <ContextMenuPrimitive.Trigger
       data-slot="context-menu-trigger"
       className={cn(
-        "transition-colors duration-feedback ease-enter data-[popup-open]:bg-fill-hover",
-        className,
+        "duration-feedback ease-enter data-[popup-open]:bg-fill-hover transition-colors",
+        className
       )}
       {...props}
     />
@@ -48,8 +51,8 @@ function ContextMenuContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-content"
           className={cn(
-            "pop-layer raised-material z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu p-menu text-content shadow-menu outline-none",
-            className,
+            "pop-layer raised-material rounded-menu p-menu text-content shadow-menu z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto outline-none",
+            className
           )}
           {...props}
         />
@@ -59,11 +62,15 @@ function ContextMenuContent({
 }
 
 function ContextMenuGroup(props: ContextMenuPrimitive.Group.Props) {
-  return <ContextMenuPrimitive.Group data-slot="context-menu-group" {...props} />;
+  return (
+    <ContextMenuPrimitive.Group data-slot="context-menu-group" {...props} />
+  );
 }
 
 function ContextMenuSub(props: ContextMenuPrimitive.SubmenuRoot.Props) {
-  return <ContextMenuPrimitive.SubmenuRoot data-slot="context-menu-sub" {...props} />;
+  return (
+    <ContextMenuPrimitive.SubmenuRoot data-slot="context-menu-sub" {...props} />
+  );
 }
 
 function ContextMenuItem({
@@ -78,7 +85,7 @@ function ContextMenuItem({
       className={cn(
         contextMenuItemStyles,
         "data-[variant=destructive]:text-status-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:data-highlighted:bg-destructive/10",
-        className,
+        className
       )}
       {...props}
     />
@@ -96,12 +103,15 @@ function ContextMenuSubTrigger({
       className={cn(
         contextMenuItemStyles,
         "data-[popup-open]:bg-fill-hover data-[popup-open]:text-content",
-        className,
+        className
       )}
       {...props}
     >
       {children}
-      <ChevronRight className="ml-auto size-3.5 text-muted-foreground" aria-hidden="true" />
+      <ChevronRight
+        className="text-muted-foreground ml-auto size-3.5"
+        aria-hidden="true"
+      />
     </ContextMenuPrimitive.SubmenuTrigger>
   );
 }
@@ -130,8 +140,8 @@ function ContextMenuSubContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-sub-content"
           className={cn(
-            "pop-layer raised-material z-50 max-h-(--available-height) min-w-44 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-menu p-menu text-content shadow-menu outline-none",
-            className,
+            "pop-layer raised-material rounded-menu p-menu text-content shadow-menu z-50 max-h-(--available-height) min-w-44 origin-(--transform-origin) overflow-x-hidden overflow-y-auto outline-none",
+            className
           )}
           {...props}
         />
@@ -147,17 +157,23 @@ function ContextMenuSeparator({
   return (
     <ContextMenuPrimitive.Separator
       data-slot="context-menu-separator"
-      className={cn("-mx-1 my-1.5 h-px bg-border", className)}
+      className={cn("bg-border -mx-1 my-1.5 h-px", className)}
       {...props}
     />
   );
 }
 
-function ContextMenuShortcut({ className, ...props }: React.ComponentProps<"span">) {
+function ContextMenuShortcut({
+  className,
+  ...props
+}: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="context-menu-shortcut"
-      className={cn("ml-auto font-mono text-caption tracking-widest text-muted-foreground", className)}
+      className={cn(
+        "text-caption text-muted-foreground ml-auto font-mono tracking-widest",
+        className
+      )}
       {...props}
     />
   );

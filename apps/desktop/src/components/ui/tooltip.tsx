@@ -1,11 +1,11 @@
-import * as React from "react"
-import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
+import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
+import * as React from "react";
 
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-const TOOLTIP_FIRST_OPEN_DELAY = 600
-const TOOLTIP_INSTANT_PHASE_TIMEOUT = 400
+const TOOLTIP_FIRST_OPEN_DELAY = 600;
+const TOOLTIP_INSTANT_PHASE_TIMEOUT = 400;
 
 function TooltipProvider({
   delay = TOOLTIP_FIRST_OPEN_DELAY,
@@ -19,21 +19,20 @@ function TooltipProvider({
       timeout={timeout}
       {...props}
     />
-  )
+  );
 }
 
-function Tooltip({
-  ...props
-}: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
-const TooltipTrigger = React.forwardRef<HTMLButtonElement, TooltipPrimitive.Trigger.Props>(
-  (props, ref) => (
-    <TooltipPrimitive.Trigger ref={ref} data-slot="tooltip-trigger" {...props} />
-  ),
-)
-TooltipTrigger.displayName = "TooltipTrigger"
+const TooltipTrigger = React.forwardRef<
+  HTMLButtonElement,
+  TooltipPrimitive.Trigger.Props
+>((props, ref) => (
+  <TooltipPrimitive.Trigger ref={ref} data-slot="tooltip-trigger" {...props} />
+));
+TooltipTrigger.displayName = "TooltipTrigger";
 
 function TooltipContent({
   className,
@@ -60,23 +59,23 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "pop-layer z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-control bg-raised px-2 py-1 text-metadata text-balance text-content shadow-raised",
+            "pop-layer rounded-control bg-raised text-metadata text-content shadow-raised z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 px-2 py-1 text-balance",
             className
           )}
           {...props}
         >
           {children}
-          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 bg-raised fill-raised data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+          <TooltipPrimitive.Arrow className="bg-raised fill-raised z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
-  )
+  );
 }
 
 interface TooltipButtonProps extends React.ComponentProps<typeof Button> {
-  label: string
-  tooltip?: React.ReactNode
-  tooltipSide?: TooltipPrimitive.Positioner.Props["side"]
+  label: string;
+  tooltip?: React.ReactNode;
+  tooltipSide?: TooltipPrimitive.Positioner.Props["side"];
 }
 
 /** One accessible name and one themed tooltip for icon-only product actions. */
@@ -84,13 +83,15 @@ const TooltipButton = React.forwardRef<HTMLButtonElement, TooltipButtonProps>(
   ({ label, tooltip = label, tooltipSide = "top", ...props }, ref) => (
     <Tooltip>
       <TooltipTrigger
-        render={<Button ref={ref} type="button" aria-label={label} {...props} />}
+        render={
+          <Button ref={ref} type="button" aria-label={label} {...props} />
+        }
       />
       <TooltipContent side={tooltipSide}>{tooltip}</TooltipContent>
     </Tooltip>
-  ),
-)
-TooltipButton.displayName = "TooltipButton"
+  )
+);
+TooltipButton.displayName = "TooltipButton";
 
 export {
   TOOLTIP_FIRST_OPEN_DELAY,
@@ -100,4 +101,4 @@ export {
   TooltipContent,
   TooltipButton,
   TooltipProvider,
-}
+};

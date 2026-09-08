@@ -1,0 +1,18 @@
+timestamp=2026-09-04T08:15:00+00:00
+tsc=clean
+eslint_errors≈2149 (was ~2202 → was ~2408)
+hooks≈431 (was ~485 → was ~691)
+
+this pass (pages):
+- AutomationsPage: latest-ref for refresh/runs; selection sync during render
+- FeishuWorkspacePage: avatar prop reset during render; loaders + connector
+  subscription via useLatestRef/useMapRef/useSetRef; slim effect deps
+- MemorySettings / Usage: latest-ref loaders keyed on selectedProject/days/quotaProvider
+
+residual hooks:
+- fresh-deps ~60 (mostly App.tsx)
+- exhaustive-deps ~60
+- set-state-in-effect ~51
+- App.tsx still the hotspot
+
+next: App.tsx fresh-deps / SideChatPanel / SourceControl; keep tsc green; no full eslint --fix

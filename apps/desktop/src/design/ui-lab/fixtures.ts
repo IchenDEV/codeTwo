@@ -9,8 +9,8 @@ import { githubPullRequestReference } from "../../github/pullRequests";
 import {
   associateTaskPullRequest,
   createBoardTask,
-  type BoardTask,
 } from "../../taskboard/taskBoard";
+import type { BoardTask } from "../../taskboard/taskBoard";
 
 const stableTimestamp = "2099-01-01T10:00:00Z";
 
@@ -74,14 +74,44 @@ export const pullRequestDetail: GitHubPullRequestDetail = {
   reviewDecision: "APPROVED",
   reviewers: [{ login: "octocat", state: "APPROVED" }],
   checks: [
-    { name: "Desktop tests", status: "COMPLETED", conclusion: "SUCCESS", detailsUrl: null },
-    { name: "Type check", status: "COMPLETED", conclusion: "SUCCESS", detailsUrl: null },
-    { name: "Documentation", status: "COMPLETED", conclusion: "SUCCESS", detailsUrl: null },
+    {
+      name: "Desktop tests",
+      status: "COMPLETED",
+      conclusion: "SUCCESS",
+      detailsUrl: null,
+    },
+    {
+      name: "Type check",
+      status: "COMPLETED",
+      conclusion: "SUCCESS",
+      detailsUrl: null,
+    },
+    {
+      name: "Documentation",
+      status: "COMPLETED",
+      conclusion: "SUCCESS",
+      detailsUrl: null,
+    },
   ],
   files: [
-    { path: "apps/desktop/src/App.tsx", additions: 210, deletions: 41, changeType: "MODIFIED" },
-    { path: "apps/desktop/src/github/PullRequestsPage.tsx", additions: 418, deletions: 62, changeType: "ADDED" },
-    { path: "apps/desktop/tests/githubPullRequestsRendered.test.tsx", additions: 141, deletions: 0, changeType: "ADDED" },
+    {
+      path: "apps/desktop/src/App.tsx",
+      additions: 210,
+      deletions: 41,
+      changeType: "MODIFIED",
+    },
+    {
+      path: "apps/desktop/src/github/PullRequestsPage.tsx",
+      additions: 418,
+      deletions: 62,
+      changeType: "ADDED",
+    },
+    {
+      path: "apps/desktop/tests/githubPullRequestsRendered.test.tsx",
+      additions: 141,
+      deletions: 0,
+      changeType: "ADDED",
+    },
   ],
 };
 
@@ -105,26 +135,26 @@ const task = createBoardTask(
     priority: "high",
     labels: ["dashboard", "review"],
   },
-  { id: "ui-lab-pr-task", now: 1 },
+  { id: "ui-lab-pr-task", now: 1 }
 );
 
 export const pullRequestTasks: readonly BoardTask[] = associateTaskPullRequest(
   [task],
   task.id,
   githubPullRequestReference(pullRequestSummary),
-  1,
+  1
 ) ?? [task];
 
-export const loadPullRequests = async (): Promise<GitHubPullRequestSummary[]> => [
-  pullRequestSummary,
-  reviewRequestSummary,
-];
+export const loadPullRequests = async (): Promise<
+  GitHubPullRequestSummary[]
+> => [pullRequestSummary, reviewRequestSummary];
 
 export const loadPullRequest = async (
-  summary: GitHubPullRequestSummary,
-): Promise<GitHubPullRequestDetail> => summary.id === reviewRequestSummary.id
-  ? reviewRequestDetail
-  : pullRequestDetail;
+  summary: GitHubPullRequestSummary
+): Promise<GitHubPullRequestDetail> =>
+  summary.id === reviewRequestSummary.id
+    ? reviewRequestDetail
+    : pullRequestDetail;
 
 const sourceControl: SourceControlInfo = {
   remote_name: "origin",
@@ -180,7 +210,13 @@ export const pullRequestPanelApi: GitHubPullRequestPanelApi = {
     ].join("\n"),
     truncated: false,
   }),
-  review: async () => {},
-  merge: async () => {},
-  open: async () => {},
+  review: async () => {
+    /* empty */
+  },
+  merge: async () => {
+    /* empty */
+  },
+  open: async () => {
+    /* empty */
+  },
 };

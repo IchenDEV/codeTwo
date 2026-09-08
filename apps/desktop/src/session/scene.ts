@@ -1,5 +1,6 @@
-import { SESSION_MODES, type SessionMode } from "./mode";
 import type { MemoryAccess } from "../bridge";
+import { SESSION_MODES } from "./mode";
+import type { SessionMode } from "./mode";
 
 /**
  * Agent Scenes 1.0.0 wire shapes and pure helpers (see docs/reference/scenes.md).
@@ -29,7 +30,15 @@ export interface SceneBrief {
 export interface SceneArtifactDef {
   id: string;
   title: string;
-  kind: "document" | "plan" | "report" | "test_report" | "checklist" | "diff" | "link" | "custom";
+  kind:
+    | "document"
+    | "plan"
+    | "report"
+    | "test_report"
+    | "checklist"
+    | "diff"
+    | "link"
+    | "custom";
   required?: boolean;
   template?: string;
   description?: string;
@@ -94,7 +103,11 @@ export type SceneHookEvent =
   | "tests_failed"
   | "schedule";
 
-export type SceneHookActionKind = "suggest_scene" | "suggest_next" | "run_macro" | "notify";
+export type SceneHookActionKind =
+  | "suggest_scene"
+  | "suggest_next"
+  | "run_macro"
+  | "notify";
 
 export interface SceneHook {
   on: SceneHookEvent;
@@ -165,7 +178,11 @@ export interface SceneNextSuggestion {
   carry?: string[];
 }
 
-export type MemoryPresetId = "standard" | "read_only" | "private" | "learn_only";
+export type MemoryPresetId =
+  | "standard"
+  | "read_only"
+  | "private"
+  | "learn_only";
 
 /** Mirrors core `memory_preset_policy`, in the frontend's (read, write) vocabulary. */
 export const MEMORY_PRESET_POLICY: Record<
@@ -198,14 +215,23 @@ export function sceneTitle(scene: SceneInfo, locale: string): string {
  * never count as customized.
  */
 export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
-  const execution = scene.execution;
+  const { execution } = scene;
   if (!execution) return false;
-  if (execution.session_mode !== undefined && execution.session_mode !== live.mode) return true;
+  if (
+    execution.session_mode !== undefined &&
+    execution.session_mode !== live.mode
+  )
+    return true;
   if (execution.memory_preset !== undefined) {
     const preset = MEMORY_PRESET_POLICY[execution.memory_preset];
-    if (preset.read !== live.memoryRead || preset.write !== live.memoryWrite) return true;
+    if (preset.read !== live.memoryRead || preset.write !== live.memoryWrite)
+      return true;
   }
-  if (execution.plan_first !== undefined && execution.plan_first !== live.planFirst) return true;
+  if (
+    execution.plan_first !== undefined &&
+    execution.plan_first !== live.planFirst
+  )
+    return true;
   if (
     execution.providers !== undefined &&
     execution.providers.length > 0 &&
@@ -213,7 +239,11 @@ export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
   ) {
     return true;
   }
-  if (execution.model !== undefined && live.model !== null && execution.model !== live.model) {
+  if (
+    execution.model !== undefined &&
+    live.model !== null &&
+    execution.model !== live.model
+  ) {
     return true;
   }
   return false;
@@ -224,17 +254,23 @@ export function sceneCustomized(scene: SceneInfo, live: LivePosture): boolean {
  * providers/model/reasoning_effort bind at session creation; worktree is immutable per session.
  * When the live value already matches, the field is not pending.
  */
-export function softApplyPending(scene: SceneInfo, live: LivePosture | null): string[] {
-  const execution = scene.execution;
+export function softApplyPending(
+  scene: SceneInfo,
+  live: LivePosture | null
+): string[] {
+  const { execution } = scene;
   if (!execution) return [];
   const pending: string[] = [];
   if (execution.providers !== undefined && execution.providers.length > 0) {
-    if (!live || execution.providers[0] !== live.provider) pending.push("providers");
+    if (!live || execution.providers[0] !== live.provider)
+      pending.push("providers");
   }
   if (execution.model !== undefined) {
-    if (!live || live.model === null || execution.model !== live.model) pending.push("model");
+    if (!live || live.model === null || execution.model !== live.model)
+      pending.push("model");
   }
-  if (execution.reasoning_effort !== undefined) pending.push("reasoning_effort");
+  if (execution.reasoning_effort !== undefined)
+    pending.push("reasoning_effort");
   if (execution.worktree !== undefined) pending.push("worktree");
   return pending;
 }
@@ -245,12 +281,14 @@ export function softApplyPending(scene: SceneInfo, live: LivePosture | null): st
  */
 export function escalationNeeded(
   scene: SceneInfo,
-  currentMode: SessionMode,
+  currentMode: SessionMode
 ): { from: SessionMode; to: SessionMode } | null {
   const target = scene.execution?.session_mode;
   if (!target) return null;
-  const rank = (m: SessionMode) => SESSION_MODES.findIndex((entry) => entry.id === m);
-  if (rank(target) > rank(currentMode)) return { from: currentMode, to: target };
+  const rank = (m: SessionMode) =>
+    SESSION_MODES.findIndex((entry) => entry.id === m);
+  if (rank(target) > rank(currentMode))
+    return { from: currentMode, to: target };
   return null;
 }
 
@@ -261,7 +299,7 @@ export function escalationNeeded(
 export function nextSceneInRing(
   ring: readonly string[],
   scenes: readonly SceneInfo[],
-  active: string | null,
+  active: string | null
 ): string | null {
   const order = ring.length > 0 ? ring : scenes.map((s) => s.reference);
   if (order.length === 0) return null;
@@ -284,15 +322,19 @@ export interface EffortOptionLike {
  */
 export function sceneEffortChoice(
   options: readonly EffortOptionLike[],
-  effort: string,
+  effort: string
 ): { configId: string; value: string } | null {
   const option = options.find(
-    (o) => o.category === "thought_level" || o.id === "effort" || o.id === "reasoning_effort",
+    (o) =>
+      o.category === "thought_level" ||
+      o.id === "effort" ||
+      o.id === "reasoning_effort"
   );
   if (!option) return null;
   const wanted = effort.toLowerCase();
   const choice = option.choices.find(
-    (c) => c.id.toLowerCase() === wanted || (c.name ?? "").toLowerCase() === wanted,
+    (c) =>
+      c.id.toLowerCase() === wanted || (c.name ?? "").toLowerCase() === wanted
   );
   return choice ? { configId: option.id, value: choice.id } : null;
 }
@@ -304,14 +346,16 @@ export function sceneEffortChoice(
  */
 export function sceneCollaborationChoice(
   options: readonly EffortOptionLike[],
-  planFirst: boolean,
+  planFirst: boolean
 ): { configId: string; value: string } | null {
   const option = options.find(
-    (o) => o.category === "collaboration_mode" || o.id === "collaboration_mode",
+    (o) => o.category === "collaboration_mode" || o.id === "collaboration_mode"
   );
   if (!option) return null;
   const wanted = planFirst ? "plan" : "default";
-  const choice = option.choices.find((candidate) => candidate.id.toLowerCase() === wanted);
+  const choice = option.choices.find(
+    (candidate) => candidate.id.toLowerCase() === wanted
+  );
   return choice ? { configId: option.id, value: choice.id } : null;
 }
 
@@ -329,16 +373,16 @@ export interface SkillLike {
 export function orderSkillsForScene<T extends SkillLike>(
   skills: readonly T[],
   scene: SceneInfo | null,
-  showAll: boolean,
+  showAll: boolean
 ): { items: T[]; hiddenCount: number } {
   const pinned = scene?.skills?.pinned ?? [];
   if (pinned.length === 0) return { items: [...skills], hiddenCount: 0 };
   const rank = new Map(pinned.map((id, index) => [id, index]));
   const front = [...skills]
     .filter((s) => rank.has(s.id))
-    .sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+    .toSorted((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
   const rest = skills.filter((s) => !rank.has(s.id));
-  if (scene?.skills?.suppress_unpinned && !showAll) {
+  if (scene?.skills?.suppress_unpinned === true && !showAll) {
     return { items: front, hiddenCount: rest.length };
   }
   return { items: [...front, ...rest], hiddenCount: 0 };

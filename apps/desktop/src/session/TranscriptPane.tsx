@@ -1,16 +1,18 @@
-import { useRef, type ReactNode } from "react";
-import { ArrowDown } from "@/components/ui/icons";
-import { ActivityOrb } from "@/components/ui/activity-orb";
+import { useRef } from "react";
+import type { ReactNode } from "react";
 
-import { TurnCard } from "./TurnCard";
-import type { BuiltinLinkActions } from "./MarkdownContent";
-import { SelectionActions } from "./SelectionActions";
-import type { Turn } from "./turns";
-import type { TranscriptScrollController } from "./useTranscriptScroll";
+import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
+import { ArrowDown } from "@/components/ui/icons";
 import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
+
+import type { BuiltinLinkActions } from "./MarkdownContent";
+import { SelectionActions } from "./SelectionActions";
+import { TurnCard } from "./TurnCard";
+import type { Turn } from "./turns";
+import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { useTranscriptScroll } from "./useTranscriptScroll";
 
 interface TranscriptPaneProps {
@@ -61,8 +63,8 @@ export function TranscriptPane({
       className={cn(
         "relative min-h-0",
         variant === "side"
-          ? "animate-slide-in-right order-2 w-[360px] max-w-[38%] shrink-0 border-s bg-fill-quiet"
-          : "order-1 flex-1",
+          ? "animate-slide-in-right bg-fill-quiet order-2 w-[360px] max-w-[38%] shrink-0 border-s"
+          : "order-1 flex-1"
       )}
     >
       <div
@@ -79,14 +81,14 @@ export function TranscriptPane({
         <div
           className={cn(
             "mx-auto w-full",
-            variant === "side" ? "px-4 pb-6 pt-4" : "max-w-3xl px-8 pb-8 pt-6",
+            variant === "side" ? "px-4 pt-4 pb-6" : "max-w-3xl px-8 pt-6 pb-8"
           )}
         >
           {before}
           {loading ? (
             <p
               role="status"
-              className="flex items-center justify-center gap-2 py-12 text-body text-muted-foreground"
+              className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12"
             >
               <ActivityOrb state="connecting" aria-hidden="true" />
               {t("session.loading")}
@@ -143,7 +145,7 @@ export function TranscriptPane({
           type="button"
           size="sm"
           variant="secondary"
-          className="absolute bottom-4 start-1/2 -translate-x-1/2 rounded-control shadow-lg"
+          className="rounded-control absolute start-1/2 bottom-4 -translate-x-1/2 shadow-lg"
           onClick={scroll.jumpToLatest}
         >
           <ArrowDown data-icon="inline-start" aria-hidden />

@@ -20,10 +20,14 @@ describe("sidebar dnd destination mapping", () => {
 
   test("decodes Project and Task destination groups without losing paths or Section ids", () => {
     expect(sidebarProjectSectionFromGroup("sidebar-projects:")).toBeNull();
-    expect(sidebarProjectSectionFromGroup("sidebar-projects:work%3Aurgent")).toBe("work:urgent");
-    expect(sidebarTaskLocationFromGroup(
-      "sidebar-tasks:work%3Aurgent:%2Ftmp%2Frepo%3Afeature",
-    )).toEqual({
+    expect(
+      sidebarProjectSectionFromGroup("sidebar-projects:work%3Aurgent")
+    ).toBe("work:urgent");
+    expect(
+      sidebarTaskLocationFromGroup(
+        "sidebar-tasks:work%3Aurgent:%2Ftmp%2Frepo%3Afeature"
+      )
+    ).toEqual({
       kind: "tasks",
       sectionId: "work:urgent",
       projectPath: "/tmp/repo:feature",
@@ -38,18 +42,24 @@ describe("sidebar dnd destination mapping", () => {
       initialIndex: 0,
     });
 
-    expect(sidebarFinalizedDestination(
-      { kind: "section", id: "work" },
-      snapshot("sidebar-sections", 2),
-    )).toEqual({ kind: "sections", index: 2 });
-    expect(sidebarFinalizedDestination(
-      { kind: "project", id: "/tmp/repo" },
-      snapshot("sidebar-projects:work%3Aurgent", 1),
-    )).toEqual({ kind: "projects", sectionId: "work:urgent", index: 1 });
-    expect(sidebarFinalizedDestination(
-      { kind: "task", id: "task-1" },
-      snapshot("sidebar-tasks::%2Ftmp%2Frepo", 3),
-    )).toEqual({
+    expect(
+      sidebarFinalizedDestination(
+        { kind: "section", id: "work" },
+        snapshot("sidebar-sections", 2)
+      )
+    ).toEqual({ kind: "sections", index: 2 });
+    expect(
+      sidebarFinalizedDestination(
+        { kind: "project", id: "/tmp/repo" },
+        snapshot("sidebar-projects:work%3Aurgent", 1)
+      )
+    ).toEqual({ kind: "projects", sectionId: "work:urgent", index: 1 });
+    expect(
+      sidebarFinalizedDestination(
+        { kind: "task", id: "task-1" },
+        snapshot("sidebar-tasks::%2Ftmp%2Frepo", 3)
+      )
+    ).toEqual({
       kind: "tasks",
       sectionId: null,
       projectPath: "/tmp/repo",
@@ -66,13 +76,23 @@ describe("sidebar dnd destination mapping", () => {
     const source = { kind: "task", id: "task-1" } as const;
     const previous = {
       item: { kind: "task", id: "task-2" } as const,
-      location: { kind: "tasks", sectionId: null, projectPath: "/tmp/repo" } as const,
+      location: {
+        kind: "tasks",
+        sectionId: null,
+        projectPath: "/tmp/repo",
+      } as const,
     };
 
     expect(sidebarRememberedDragTarget(source, null, previous)).toBeNull();
-    expect(sidebarRememberedDragTarget(source, {
-      item: { kind: "project", id: "/tmp/other" },
-      location: { kind: "projects", sectionId: null },
-    }, previous)).toBeNull();
+    expect(
+      sidebarRememberedDragTarget(
+        source,
+        {
+          item: { kind: "project", id: "/tmp/other" },
+          location: { kind: "projects", sectionId: null },
+        },
+        previous
+      )
+    ).toBeNull();
   });
 });

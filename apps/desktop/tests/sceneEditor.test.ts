@@ -39,8 +39,12 @@ function validScene(): SceneDocument {
       template: "Review {{target}}",
       slots: [{ id: "target", label: "Target", kind: "text", required: true }],
     },
-    artifacts: [{ id: "report", title: "Review report", kind: "report", required: true }],
-    exit: { criteria: [{ kind: "required_artifacts" }, { kind: "user_confirm" }] },
+    artifacts: [
+      { id: "report", title: "Review report", kind: "report", required: true },
+    ],
+    exit: {
+      criteria: [{ kind: "required_artifacts" }, { kind: "user_confirm" }],
+    },
   };
 }
 
@@ -51,7 +55,7 @@ describe("scene editor draft helpers", () => {
 
     const copy = duplicateSceneDocument(
       { ...validScene(), name: "research", title: "Research" },
-      scenes,
+      scenes
     );
     expect(copy.name).toBe("research-copy-2");
     expect(copy.title).toBe("Research copy");
@@ -69,9 +73,15 @@ describe("scene editor draft helpers", () => {
       { id: "bad.id", title: "", kind: "custom" },
       { id: "bad.id", title: "Duplicate", kind: "custom" },
     ];
-    scene.exit = { criteria: [{ kind: "checklist_complete" }, { kind: "custom" }] };
+    scene.exit = {
+      criteria: [{ kind: "checklist_complete" }, { kind: "custom" }],
+    };
     scene.hooks = [
-      { on: "schedule", schedule: "not cron", action: { kind: "notify", message: "" } },
+      {
+        on: "schedule",
+        schedule: "not cron",
+        action: { kind: "notify", message: "" },
+      },
     ];
 
     const keys = validateSceneDocument(scene).map((issue) => issue.key);

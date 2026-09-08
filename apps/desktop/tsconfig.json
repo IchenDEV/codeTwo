@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2021",
     "useDefineForClassFields": true,
-    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
@@ -15,9 +15,22 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      // Excalidraw 0.18 ships these as internal packages in .d.ts imports but does
+      // not publish them; map to the bundled math types + local utils shims.
+      "@excalidraw/math": [
+        "./node_modules/@excalidraw/excalidraw/dist/types/math/index.d.ts"
+      ],
+      "@excalidraw/math/*": [
+        "./node_modules/@excalidraw/excalidraw/dist/types/math/*"
+      ],
+      "@excalidraw/utils/export": ["./types/excalidraw-utils-export.d.ts"],
+      "@excalidraw/utils/withinBounds": [
+        "./types/excalidraw-utils-withinBounds.d.ts"
+      ]
+    }
   },
-  "include": ["src"],
+  "include": ["src", "types"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

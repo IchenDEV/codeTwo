@@ -15,8 +15,10 @@ import {
   stdioServer,
   withProviderToolInstructions,
   withRichResponseInstructions,
-  type AcpMcpServer,
-  type HostToolEvidence,
+} from "../src/electrobun/toolBroker/providerTools";
+import type {
+  AcpMcpServer,
+  HostToolEvidence,
 } from "../src/electrobun/toolBroker/providerTools";
 
 const computerMcp: AcpMcpServer = {
@@ -61,27 +63,36 @@ const readyEvidence: HostToolEvidence = {
   hostToolsConfigErrors: [],
   configuredBrowserUse: [],
   browserUseSelections: {},
-  browserUseBackends: [{
-    id: "openai-browser",
-    displayName: "OpenAI Browser / Chrome",
-    available: true,
-    reason: null,
-    providers: ["codex"],
-    excludeProviders: [],
-  }],
+  browserUseBackends: [
+    {
+      id: "openai-browser",
+      displayName: "OpenAI Browser / Chrome",
+      available: true,
+      reason: null,
+      providers: ["codex"],
+      excludeProviders: [],
+    },
+  ],
   browserUseConfigErrors: [],
 };
 
 describe("provider capability wire compatibility", () => {
   test("publishes the built-in backend catalog with the correct provider scopes", () => {
-    const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-catalog-"));
+    const directory = mkdtempSync(
+      join(tmpdir(), "codetwo-host-tools-catalog-")
+    );
     try {
       const evidence = detectHostToolEvidence({}, directory);
       expect(evidence.agentBrowserAccessEnabled).toBe(true);
-      expect(evidence.computerUseBackends.find((backend) => backend.id === "cua")?.providers)
-        .toEqual([]);
-      expect(evidence.browserUseBackends.find((backend) => backend.id === "openai-browser")?.providers)
-        .toEqual(["codex"]);
+      expect(
+        evidence.computerUseBackends.find((backend) => backend.id === "cua")
+          ?.providers
+      ).toEqual([]);
+      expect(
+        evidence.browserUseBackends.find(
+          (backend) => backend.id === "openai-browser"
+        )?.providers
+      ).toEqual(["codex"]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -93,7 +104,10 @@ describe("provider capability wire compatibility", () => {
     try {
       mkdirSync(codexHome);
       writeFileSync(join(codexHome, "config.toml"), "");
-      const evidence = detectHostToolEvidence({ USERPROFILE: directory }, directory);
+      const evidence = detectHostToolEvidence(
+        { USERPROFILE: directory },
+        directory
+      );
       expect(evidence.configError).toBeNull();
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -108,7 +122,7 @@ describe("provider capability wire compatibility", () => {
         available: true,
         needs_node: false,
         models: [],
-      }).capabilities,
+      }).capabilities
     ).toEqual([]);
   });
 
@@ -143,13 +157,17 @@ describe("provider capability wire compatibility", () => {
     ]) {
       const codex = projectProviderToolset(evidence, "codex");
       expect(codex.mcpServers).toEqual([]);
-      expect(codex.capabilities.find((item) => item.id === "chrome_browser")?.state)
-        .not.toBe("unavailable");
+      expect(
+        codex.capabilities.find((item) => item.id === "chrome_browser")?.state
+      ).not.toBe("unavailable");
 
       const claude = projectProviderToolset(evidence, "claude_code");
-      expect(claude.mcpServers.map((server) => server.name)).not.toContain("node_repl");
-      expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.state)
-        .toBe("unavailable");
+      expect(claude.mcpServers.map((server) => server.name)).not.toContain(
+        "node_repl"
+      );
+      expect(
+        claude.capabilities.find((item) => item.id === "chrome_browser")?.state
+      ).toBe("unavailable");
     }
   });
 
@@ -169,7 +187,9 @@ describe("provider capability wire compatibility", () => {
       const unreadable = detectHostToolEvidence({}, directory);
       expect(unreadable.agentBrowserAccessEnabled).toBe(false);
       expect(unreadable.browserUseConfigErrors).not.toEqual([]);
-      expect(projectProviderToolset(unreadable, "codex").browserAccessEnabled).toBe(false);
+      expect(
+        projectProviderToolset(unreadable, "codex").browserAccessEnabled
+      ).toBe(false);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -177,27 +197,46 @@ describe("provider capability wire compatibility", () => {
 
   test("projects portable host tools onto Claude without duplicating Codex-native tools", () => {
     const claude = projectProviderToolset(readyEvidence, "claude_code");
-    expect(claude.mcpServers.map((server) => server.name)).toEqual(["codetwo-openai-computer-use"]);
-    expect(claude.capabilities.find((item) => item.id === "computer_use")?.state).toBe("ready");
-    expect(claude.capabilities.find((item) => item.id === "image_generation")?.state).toBe("unavailable");
-    expect(claude.capabilities.find((item) => item.id === "sites")?.state).toBe("unavailable");
-    expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.state).toBe("unavailable");
-    expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.reason)
-      .toContain("Codex-native");
-    expect(withProviderToolInstructions([{ type: "text", text: "hello" }], claude.instructions)[0])
-      .toMatchObject({ type: "text" });
+    expect(claude.mcpServers.map((server) => server.name)).toEqual([
+      "codetwo-openai-computer-use",
+    ]);
+    expect(
+      claude.capabilities.find((item) => item.id === "computer_use")?.state
+    ).toBe("ready");
+    expect(
+      claude.capabilities.find((item) => item.id === "image_generation")?.state
+    ).toBe("unavailable");
+    expect(claude.capabilities.find((item) => item.id === "sites")?.state).toBe(
+      "unavailable"
+    );
+    expect(
+      claude.capabilities.find((item) => item.id === "chrome_browser")?.state
+    ).toBe("unavailable");
+    expect(
+      claude.capabilities.find((item) => item.id === "chrome_browser")?.reason
+    ).toContain("Codex-native");
+    expect(
+      withProviderToolInstructions(
+        [{ type: "text", text: "hello" }],
+        claude.instructions
+      )[0]
+    ).toMatchObject({ type: "text" });
 
     const codex = projectProviderToolset(readyEvidence, "codex");
     expect(codex.mcpServers).toEqual([]);
     expect(codex.instructions).toEqual([]);
-    expect(codex.capabilities.find((item) => item.id === "image_generation")?.state).toBe("ready");
+    expect(
+      codex.capabilities.find((item) => item.id === "image_generation")?.state
+    ).toBe("ready");
   });
 
   test("describes the chart and visualize renderer contracts to providers", () => {
-    const blocks = withRichResponseInstructions([{ type: "text", text: "hello" }]) as Array<{
+    const blocks = withRichResponseInstructions([
+      { type: "text", text: "hello" },
+    ]) as {
       type: string;
       text: string;
-    }>;
+    }[];
     expect(blocks[0]?.text).toContain("fenced `chart` JSON block");
     expect(blocks[0]?.text).toContain("visualize");
     expect(blocks[1]).toEqual({ type: "text", text: "hello" });
@@ -206,43 +245,51 @@ describe("provider capability wire compatibility", () => {
   test("forwards only the browser trust hash from the shell policy", () => {
     const server = stdioServer(
       "node_repl",
-      { command: process.execPath, env: { BROWSER_USE_AVAILABLE_BACKENDS: "chrome" } },
+      {
+        command: process.execPath,
+        env: { BROWSER_USE_AVAILABLE_BACKENDS: "chrome" },
+      },
       {
         NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S: "abc123",
         SKY_PRIVATE_TOKEN: "must-not-cross-the-provider-boundary",
-      },
+      }
     );
     expect(server?.env).toContainEqual({
       name: "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S",
       value: "abc123",
     });
-    expect(server?.env.some((entry) => entry.name === "SKY_PRIVATE_TOKEN")).toBe(false);
+    expect(
+      server?.env.some((entry) => entry.name === "SKY_PRIVATE_TOKEN")
+    ).toBe(false);
   });
 
   test("loads Cua Driver and other explicitly enabled stdio computer-use backends", () => {
     const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-"));
     try {
-      writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
-        schema_version: 1,
-        computer_use: [
-          {
-            id: "cua",
-            enabled: true,
-            display_name: "Cua Driver",
-            providers: ["claude_code", "grok"],
-            server: {
-              name: "cua-driver",
-              command: process.execPath,
-              args: ["mcp"],
+      writeFileSync(
+        join(directory, "host-tools.json"),
+        JSON.stringify({
+          schema_version: 1,
+          computer_use: [
+            {
+              id: "cua",
+              enabled: true,
+              display_name: "Cua Driver",
+              providers: ["claude_code", "grok"],
+              server: {
+                name: "cua-driver",
+                command: process.execPath,
+                args: ["mcp"],
+              },
             },
-          },
-          {
-            id: "disabled-brand",
-            enabled: false,
-            server: { command: "/not/used" },
-          },
-        ],
-      }));
+            {
+              id: "disabled-brand",
+              enabled: false,
+              server: { command: "/not/used" },
+            },
+          ],
+        })
+      );
 
       const configured = loadConfiguredComputerUse(directory);
       expect(configured.errors).toEqual([]);
@@ -253,9 +300,12 @@ describe("provider capability wire compatibility", () => {
         configuredComputerUse: configured.bridges,
       };
       const claude = projectProviderToolset(evidence, "claude_code");
-      expect(claude.mcpServers.map((server) => server.name)).toContain("cua-driver");
-      expect(claude.capabilities.find((item) => item.id === "computer_use")?.reason)
-        .toContain("Cua Driver");
+      expect(claude.mcpServers.map((server) => server.name)).toContain(
+        "cua-driver"
+      );
+      expect(
+        claude.capabilities.find((item) => item.id === "computer_use")?.reason
+      ).toContain("Cua Driver");
       expect(projectProviderToolset(evidence, "codex").mcpServers).toEqual([]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -263,52 +313,64 @@ describe("provider capability wire compatibility", () => {
   });
 
   test("fails the configured computer-use registry closed when any enabled backend is invalid", () => {
-    const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-invalid-"));
+    const directory = mkdtempSync(
+      join(tmpdir(), "codetwo-host-tools-invalid-")
+    );
     try {
-      writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
-        schema_version: 1,
-        computer_use_selection: { claude_code: "second" },
-        computer_use: [
-          {
-            id: "otherwise-valid",
-            enabled: true,
-            server: { command: process.execPath },
-          },
-          {
-            id: "missing",
-            enabled: true,
-            server: { command: "definitely-not-a-real-c2-test-command" },
-          },
-        ],
-      }));
+      writeFileSync(
+        join(directory, "host-tools.json"),
+        JSON.stringify({
+          schema_version: 1,
+          computer_use_selection: { claude_code: "second" },
+          computer_use: [
+            {
+              id: "otherwise-valid",
+              enabled: true,
+              server: { command: process.execPath },
+            },
+            {
+              id: "missing",
+              enabled: true,
+              server: { command: "definitely-not-a-real-c2-test-command" },
+            },
+          ],
+        })
+      );
 
       const configured = loadConfiguredComputerUse(directory);
       expect(configured.bridges).toEqual([]);
-      expect(configured.errors.join("\n")).toContain("definitely-not-a-real-c2-test-command");
+      expect(configured.errors.join("\n")).toContain(
+        "definitely-not-a-real-c2-test-command"
+      );
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
   });
 
   test("persists one global choice and attaches the selected backend across providers", () => {
-    const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-selection-"));
+    const directory = mkdtempSync(
+      join(tmpdir(), "codetwo-host-tools-selection-")
+    );
     try {
-      writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
-        schema_version: 1,
-        computer_use_selection: { claude_code: "second" },
-        computer_use: [
-          {
-            id: "first",
-            enabled: true,
-            server: { name: "first-computer", command: process.execPath },
-          },
-          {
-            id: "second",
-            enabled: false,
-            server: { name: "second-computer", command: process.execPath },
-          },
-        ],
-      }));
+      writeFileSync(
+        join(directory, "host-tools.json"),
+        JSON.stringify({
+          schema_version: 1,
+          computer_use_selection: { claude_code: "second" },
+          computer_use: [
+            {
+              id: "first",
+              enabled: true,
+              server: { name: "first-computer", command: process.execPath },
+            },
+            {
+              id: "second",
+              enabled: false,
+              server: { name: "second-computer", command: process.execPath },
+            },
+          ],
+        })
+      );
 
       const configured = loadConfiguredComputerUse(directory);
       expect(configured.selections).toEqual({});
@@ -318,7 +380,10 @@ describe("provider capability wire compatibility", () => {
         computerUseSelections: configured.selections,
         computerUseBackends: configured.backends,
       };
-      const grokServers = projectProviderToolset(evidence, "grok").mcpServers.map((server) => server.name);
+      const grokServers = projectProviderToolset(
+        evidence,
+        "grok"
+      ).mcpServers.map((server) => server.name);
       expect(grokServers).not.toContain("second-computer");
       saveComputerUseSelection(directory, "second", evidence);
       const selected = loadConfiguredComputerUse(directory);
@@ -328,12 +393,19 @@ describe("provider capability wire compatibility", () => {
         computerUseSelections: selected.selections,
         computerUseBackends: selected.backends,
       };
-      const claudeToolset = projectProviderToolset(selectedEvidence, "claude_code");
+      const claudeToolset = projectProviderToolset(
+        selectedEvidence,
+        "claude_code"
+      );
       const grokToolset = projectProviderToolset(selectedEvidence, "grok");
 
       expect(selected.selections).toEqual({ "*": "second" });
-      expect(claudeToolset.mcpServers.map((server) => server.name)).toEqual(["second-computer"]);
-      expect(grokToolset.mcpServers.map((server) => server.name)).toEqual(["second-computer"]);
+      expect(claudeToolset.mcpServers.map((server) => server.name)).toEqual([
+        "second-computer",
+      ]);
+      expect(grokToolset.mcpServers.map((server) => server.name)).toEqual([
+        "second-computer",
+      ]);
 
       saveComputerUseSelection(directory, "automatic", {
         ...evidence,
@@ -342,32 +414,48 @@ describe("provider capability wire compatibility", () => {
         computerUseBackends: selected.backends,
       });
       const automatic = loadConfiguredComputerUse(directory);
-      const automaticToolset = projectProviderToolset({
-        ...readyEvidence,
-        hostPresent: false,
-        configuredComputerUse: automatic.bridges,
-        computerUseSelections: automatic.selections,
-        computerUseBackends: automatic.backends,
-      }, "claude_code");
-      expect(automaticToolset.mcpServers.map((server) => server.name)).toEqual(["first-computer"]);
+      const automaticToolset = projectProviderToolset(
+        {
+          ...readyEvidence,
+          hostPresent: false,
+          configuredComputerUse: automatic.bridges,
+          computerUseSelections: automatic.selections,
+          computerUseBackends: automatic.backends,
+        },
+        "claude_code"
+      );
+      expect(automaticToolset.mcpServers.map((server) => server.name)).toEqual([
+        "first-computer",
+      ]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
   });
 
   test("persists one Browser Use choice and resolves it across compatible providers", () => {
-    const directory = mkdtempSync(join(tmpdir(), "codetwo-browser-tools-selection-"));
+    const directory = mkdtempSync(
+      join(tmpdir(), "codetwo-browser-tools-selection-")
+    );
     try {
-      writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
-        schema_version: 1,
-        browser_use_selection: { claude_code: "playwright" },
-        browser_use: [{
-          id: "playwright",
-          enabled: false,
-          display_name: "Playwright MCP",
-          server: { name: "playwright", command: process.execPath, args: ["server.js"] },
-        }],
-      }));
+      writeFileSync(
+        join(directory, "host-tools.json"),
+        JSON.stringify({
+          schema_version: 1,
+          browser_use_selection: { claude_code: "playwright" },
+          browser_use: [
+            {
+              id: "playwright",
+              enabled: false,
+              display_name: "Playwright MCP",
+              server: {
+                name: "playwright",
+                command: process.execPath,
+                args: ["server.js"],
+              },
+            },
+          ],
+        })
+      );
 
       const configured = loadConfiguredBrowserUse(directory);
       expect(configured.selections).toEqual({});
@@ -375,7 +463,10 @@ describe("provider capability wire compatibility", () => {
         ...readyEvidence,
         configuredBrowserUse: configured.bridges,
         browserUseSelections: configured.selections,
-        browserUseBackends: [...readyEvidence.browserUseBackends, ...configured.backends],
+        browserUseBackends: [
+          ...readyEvidence.browserUseBackends,
+          ...configured.backends,
+        ],
       };
       saveBrowserUseSelection(directory, "playwright", evidence);
       const selected = loadConfiguredBrowserUse(directory);
@@ -391,9 +482,12 @@ describe("provider capability wire compatibility", () => {
         "codetwo-openai-computer-use",
         "playwright",
       ]);
-      expect(grok.mcpServers.map((server) => server.name)).toContain("playwright");
-      expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.reason)
-        .toContain("Playwright MCP");
+      expect(grok.mcpServers.map((server) => server.name)).toContain(
+        "playwright"
+      );
+      expect(
+        claude.capabilities.find((item) => item.id === "chrome_browser")?.reason
+      ).toContain("Playwright MCP");
 
       saveBrowserUseSelection(directory, "openai-browser", selectedEvidence);
       const openAi = loadConfiguredBrowserUse(directory);
@@ -404,12 +498,17 @@ describe("provider capability wire compatibility", () => {
       };
       const native = projectProviderToolset(openAiEvidence, "codex");
       expect(native.mcpServers).toEqual([]);
-      expect(native.capabilities.find((item) => item.id === "chrome_browser")?.state)
-        .not.toBe("unavailable");
+      expect(
+        native.capabilities.find((item) => item.id === "chrome_browser")?.state
+      ).not.toBe("unavailable");
       const unsupported = projectProviderToolset(openAiEvidence, "claude_code");
-      expect(unsupported.mcpServers.map((server) => server.name)).not.toContain("playwright");
-      expect(unsupported.capabilities.find((item) => item.id === "chrome_browser")?.state)
-        .toBe("unavailable");
+      expect(unsupported.mcpServers.map((server) => server.name)).not.toContain(
+        "playwright"
+      );
+      expect(
+        unsupported.capabilities.find((item) => item.id === "chrome_browser")
+          ?.state
+      ).toBe("unavailable");
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

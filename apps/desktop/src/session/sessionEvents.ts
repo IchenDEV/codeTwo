@@ -30,7 +30,9 @@ export const IDLE_SESSION_ACTIVITY: SessionActivity = {
   state: { kind: "idle" },
 };
 
-export function sessionActivity(session: Pick<SessionInfo, "activity">): SessionActivity {
+export function sessionActivity(
+  session: Pick<SessionInfo, "activity">
+): SessionActivity {
   return session.activity ?? IDLE_SESSION_ACTIVITY;
 }
 
@@ -42,7 +44,7 @@ export function activityIsBusy(activity: SessionActivity | undefined): boolean {
 /** Never let a late list snapshot roll a session back behind a newer activity event. */
 export function latestActivity(
   current: SessionActivity | undefined,
-  incoming: SessionActivity | undefined,
+  incoming: SessionActivity | undefined
 ): SessionActivity {
   if (!incoming) return current ?? IDLE_SESSION_ACTIVITY;
   if (!current || incoming.revision >= current.revision) return incoming;
@@ -51,11 +53,11 @@ export function latestActivity(
 
 /** Rebuild the globally ordered, actionable input queue from authoritative session activity. */
 export function permissionsFromSessions(
-  sessions: readonly Pick<SessionInfo, "id" | "activity">[],
+  sessions: readonly Pick<SessionInfo, "id" | "activity">[]
 ): PermissionQueueItem[] {
   return sessions
     .flatMap((session) => {
-      const state = sessionActivity(session).state;
+      const { state } = sessionActivity(session);
       if (state.kind !== "awaiting_input") return [];
       return state.pending.map((pending) => ({
         session: session.id,
@@ -67,15 +69,15 @@ export function permissionsFromSessions(
         form: pending.form,
       }));
     })
-    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
+    .toSorted((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
 }
 
 /** Project the application-wide pending-input queue onto the chat the user is viewing. */
 export function pendingInputsForSession(
   queue: readonly PermissionQueueItem[],
-  session: string | null,
+  session: string | null
 ): PermissionQueueItem[] {
-  if (!session) return [];
+  if (session == null || session === "") return [];
   return queue.filter((request) => request.session === session);
 }
 
@@ -83,12 +85,13 @@ export function pendingInputsForSession(
 export function permissionQueueAfterActivity(
   queue: readonly PermissionQueueItem[],
   session: string,
-  activity: SessionActivity,
+  activity: SessionActivity
 ): PermissionQueueItem[] {
   const pending = permissionsFromSessions([{ id: session, activity }]);
-  return [...queue.filter((request) => request.session !== session), ...pending].sort(
-    (left, right) => (left.sequence ?? 0) - (right.sequence ?? 0),
-  );
+  return [
+    ...queue.filter((request) => request.session !== session),
+    ...pending,
+  ].toSorted((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
 }
 
 /** Keep a prompt visible until the host confirms that it accepted the answer. */
@@ -96,23 +99,24 @@ export function permissionQueueAfterAnswer(
   queue: readonly PermissionQueueItem[],
   session: string,
   requestId: string,
-  accepted: boolean,
+  accepted: boolean
 ): PermissionQueueItem[] {
   if (!accepted) return [...queue];
   return queue.filter(
-    (request) => request.session !== session || request.requestId !== requestId,
+    (request) => request.session !== session || request.requestId !== requestId
   );
 }
 
 /** Preserve concurrent permission requests while updating a repeated request in place. */
 export function enqueuePermission(
   queue: PermissionQueueItem[],
-  request: PermissionQueueItem,
+  request: PermissionQueueItem
 ): PermissionQueueItem[] {
   const existing = queue.findIndex(
-    (item) => item.session === request.session && item.requestId === request.requestId,
+    (item) =>
+      item.session === request.session && item.requestId === request.requestId
   );
-  return existing < 0
+  return existing === -1
     ? [...queue, request]
     : queue.map((item, index) => (index === existing ? request : item));
 }
@@ -127,18 +131,30 @@ export function shouldRenderSessionEvent(
   event: CoreEvent,
   activeSession: string | null,
   awaitingCreationRequest: string | null = null,
-  paneSessions: ReadonlySet<string> | null = null,
+  paneSessions: ReadonlySet<string> | null = null
 ): boolean {
-  if (event.event === "permission_request" || event.event === "elicitation_request") return true;
+  if (
+    event.event === "permission_request" ||
+    event.event === "elicitation_request"
+  )
+    return true;
   if (
     event.event === "session_created" ||
     event.event === "session_title_changed" ||
     event.event === "session_activity_changed"
-  ) return false;
+  )
+    return false;
   // Session creation is broadcast to every connected client. A correlated global failure is
   // transcript-worthy only for the client that owns that request.
-  if (event.event === "error" && event.session === null && event.request_id != null) {
-    return awaitingCreationRequest !== null && event.request_id === awaitingCreationRequest;
+  if (
+    event.event === "error" &&
+    event.session === null &&
+    event.request_id != null
+  ) {
+    return (
+      awaitingCreationRequest !== null &&
+      event.request_id === awaitingCreationRequest
+    );
   }
   if (event.session === null || event.session === activeSession) return true;
   return paneSessions !== null && paneSessions.has(event.session);
@@ -147,7 +163,7 @@ export function shouldRenderSessionEvent(
 /** Resolve the sole pane that owns a session; selection uses this to prevent duplicate bindings. */
 export function paneBoundToSession(
   panes: Readonly<Record<string, { sessionId: string | null }>>,
-  session: string,
+  session: string
 ): string | null {
   for (const [paneId, content] of Object.entries(panes)) {
     if (content.sessionId === session) return paneId;
@@ -157,22 +173,27 @@ export function paneBoundToSession(
 
 /** Only an explicit turn end or a terminal error may clear a session's running state. */
 export function isTerminalSessionEvent(event: CoreEvent): boolean {
-  return event.event === "turn_ended" || (event.event === "error" && event.terminal);
+  return (
+    event.event === "turn_ended" || (event.event === "error" && event.terminal)
+  );
 }
 
 /** Broadcast creation events belong to this window only when the request ids agree exactly. */
 export function matchesSessionCreation(
   event: Extract<CoreEvent, { event: "session_created" }>,
-  requestId: string | null,
+  requestId: string | null
 ): boolean {
   return requestId !== null && event.request_id === requestId;
 }
 
 /** Stable project identity for rail grouping; legacy worktrees cannot be inferred safely. */
 export function sessionProjectPath(
-  session: Pick<SessionInfo, "cwd" | "worktree_path" | "project_path">,
+  session: Pick<SessionInfo, "cwd" | "worktree_path" | "project_path">
 ): string | null {
-  return session.project_path ?? (session.worktree_path === null ? session.cwd : null);
+  return (
+    session.project_path ??
+    (session.worktree_path === null ? session.cwd : null)
+  );
 }
 
 /**
@@ -182,25 +203,38 @@ export function sessionProjectPath(
 export function sessionCreationSource(
   activeProject: string | null,
   cwd: string,
-  current: Pick<SessionInfo, "cwd" | "worktree_path" | "project_path"> | null | undefined,
-  hasActiveSession = false,
+  current:
+    | Pick<SessionInfo, "cwd" | "worktree_path" | "project_path">
+    | null
+    | undefined,
+  hasActiveSession = false
 ): string | null {
   // An active id without either a list shell or a correlated creation receipt is ambiguous: `cwd`
   // may be inside an isolated checkout, so using it would create a nested worktree.
   if (hasActiveSession && !current) return null;
-  if (activeProject) return activeProject;
+  if (activeProject != null && activeProject !== "") return activeProject;
   if (current?.worktree_path !== null && current?.worktree_path !== undefined) {
-    return current.project_path || null;
+    return current.project_path ?? null;
   }
-  return current?.project_path || current?.cwd || cwd || ".";
+  return (
+    (current?.project_path != null && current.project_path !== ""
+      ? current.project_path
+      : null) ??
+    (current?.cwd != null && current.cwd !== "" ? current.cwd : null) ??
+    (cwd != null && cwd !== "" ? cwd : null) ??
+    "."
+  );
 }
 
 /** Carry a baseline into a new draft only when the current session records its meaning exactly. */
 export function sessionCreationBaseline(
-  current: Pick<
-    SessionInfo,
-    "worktree_path" | "worktree_baseline" | "worktree_identity"
-  > | null | undefined,
+  current:
+    | Pick<
+        SessionInfo,
+        "worktree_path" | "worktree_baseline" | "worktree_identity"
+      >
+    | null
+    | undefined
 ): WorktreeBaselineKind | null | undefined {
   if (!current) return undefined;
   if (current.worktree_path === null) return null;
@@ -218,7 +252,7 @@ export function sessionCreationBaseline(
 export function worktreeGatingReason(
   hasSession: boolean,
   options: WorktreeBaselineOption[],
-  loading: boolean,
+  loading: boolean
 ): string | null {
   if (hasSession || loading || options.length === 0) return null;
   if (options.some((option) => option.unavailable_reason === null)) return null;
@@ -229,7 +263,7 @@ export function worktreeGatingReason(
 export function sessionCreationBaselineSha(
   baseline: WorktreeBaselineKind | null,
   options: WorktreeBaselineOption[],
-  loading: boolean,
+  loading: boolean
 ): string | null | undefined {
   if (baseline === null) return null;
   if (loading) return undefined;
@@ -238,41 +272,56 @@ export function sessionCreationBaselineSha(
 
 export type SessionCreationShell = Pick<
   SessionInfo,
-  "cwd" | "project_path" | "worktree_path" | "worktree_baseline" | "worktree_identity"
+  | "cwd"
+  | "project_path"
+  | "worktree_path"
+  | "worktree_baseline"
+  | "worktree_identity"
 >;
 
 /** Keep the durable creation receipt visible until the best-effort list supplies a full shell. */
 export function sessionShellWithReceipt(
   activeSession: string | null,
   stored: SessionCreationShell | undefined,
-  receipt: { session: string; shell: SessionCreationShell } | null,
+  receipt: { session: string; shell: SessionCreationShell } | null
 ): SessionCreationShell | undefined {
-  return stored ?? (receipt?.session === activeSession ? receipt.shell : undefined);
+  return (
+    stored ?? (receipt?.session === activeSession ? receipt.shell : undefined)
+  );
 }
 
 /** Derive the Composer's current-session worktree display from a list shell or live receipt. */
 export function activeSessionWorktreeState(
   activeSession: string | null,
   stored: SessionCreationShell | undefined,
-  receipt: { session: string; shell: SessionCreationShell } | null,
+  receipt: { session: string; shell: SessionCreationShell } | null
 ): { baseline: ResolvedWorktreeBaseline | null; legacyUnknown: boolean } {
   const shell = sessionShellWithReceipt(activeSession, stored, receipt);
-  if (!shell?.worktree_path) return { baseline: null, legacyUnknown: false };
+  if (shell?.worktree_path == null || shell?.worktree_path === "")
+    return { baseline: null, legacyUnknown: false };
   return {
     baseline: shell.worktree_baseline ?? null,
     // A persisted row must carry filesystem identity. A just-created receipt has not reached the
     // list yet, so its bundled baseline is sufficient to render the creation result truthfully.
-    legacyUnknown: stored ? !stored.worktree_identity : !shell.worktree_baseline,
+    legacyUnknown: stored
+      ? !stored.worktree_identity
+      : !shell.worktree_baseline,
   };
 }
 
 /** Build a trustworthy shell from the correlated creation receipt, rejecting legacy producers. */
 export function sessionCreationReceipt(
-  event: Extract<CoreEvent, { event: "session_created" }>,
+  event: Extract<CoreEvent, { event: "session_created" }>
 ): SessionCreationShell | null {
   // New producers always persist a source project. Its absence means the event predates provenance
   // receipts; `cwd` alone cannot distinguish a normal checkout from an isolated worktree.
-  if (!event.cwd || !event.project_path) return null;
+  if (
+    event.cwd == null ||
+    event.cwd === "" ||
+    event.project_path == null ||
+    event.project_path === ""
+  )
+    return null;
   return {
     cwd: event.cwd,
     project_path: event.project_path,

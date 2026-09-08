@@ -12,6 +12,8 @@ import type {
 } from "../bridge";
 import { pluginUiComponentId } from "../pluginModel";
 import { BUILTIN_UI_COMPONENTS } from "./builtinComponents";
+
+export { BUILTIN_UI_COMPONENTS } from "./builtinComponents";
 import type {
   PluginManagerComponent,
   PluginManagerMarketplaceItem,
@@ -40,8 +42,6 @@ const BUNDLE_CONTRIBUTIONS = [
   ["scenes", "Scenes"],
   ["pipelines", "Pipelines"],
 ] as const;
-
-export { BUILTIN_UI_COMPONENTS };
 
 export type BuiltinUiComponentId = (typeof BUILTIN_UI_COMPONENTS)[number]["id"];
 
@@ -75,21 +75,26 @@ export interface PluginManagerCatalogInput {
 export function normalizePluginProjectPath(path: string): string {
   const trimmed = path.trim();
   if (!trimmed) return ".";
-  const withoutTrailingSeparators = trimmed.replace(/[\\/]+$/, "");
+  const withoutTrailingSeparators = trimmed.replace(/[\\/]+$/u, "");
   return withoutTrailingSeparators || (trimmed.startsWith("/") ? "/" : trimmed);
 }
 
-export function toManagedPluginScope(scope: PluginManagerScope): ManagedPluginScope {
+export function toManagedPluginScope(
+  scope: PluginManagerScope
+): ManagedPluginScope {
   return scope.kind === "user"
     ? { kind: "user" }
-    : { kind: "project", projectPath: normalizePluginProjectPath(scope.projectPath) };
+    : {
+        kind: "project",
+        projectPath: normalizePluginProjectPath(scope.projectPath),
+      };
 }
 
 function titleFor(id: string): string {
   return (
     DISPLAY_NAMES[id] ??
     id
-      .split(/[-_]/)
+      .split(/[-_]/u)
       .filter(Boolean)
       .map((part) => part[0]?.toUpperCase() + part.slice(1))
       .join(" ")
@@ -102,7 +107,10 @@ function sourceFor(entry: ManagedPluginCatalogEntry): PluginManagerSource {
   return "builtin";
 }
 
-function statusFor(enabled: boolean, status: ManagedPluginCatalogEntry["status"]): PluginManagerStatus {
+function statusFor(
+  enabled: boolean,
+  status: ManagedPluginCatalogEntry["status"]
+): PluginManagerStatus {
   if (!enabled) return "disabled";
   return status ?? "pending";
 }
@@ -117,13 +125,21 @@ function effectiveState(state: EffectivePluginState): PluginManagerScopedState {
   };
 }
 
-function managerState(entry: ManagedPluginCatalogEntry, scope: PluginManagerScope): PluginManagerScopedState {
-  if (entry.effective_state) return { ...effectiveState(entry.effective_state), config: entry.config };
+function managerState(
+  entry: ManagedPluginCatalogEntry,
+  scope: PluginManagerScope
+): PluginManagerScopedState {
+  if (entry.effective_state)
+    return { ...effectiveState(entry.effective_state), config: entry.config };
   return {
     effectiveEnabled: entry.enabled,
     override:
       entry.state ??
-      (scope.kind === "project" ? "inherit" : entry.enabled ? "enabled" : "disabled"),
+      (scope.kind === "project"
+        ? "inherit"
+        : entry.enabled
+          ? "enabled"
+          : "disabled"),
     status: statusFor(entry.enabled, entry.status),
     missingDependencies: entry.missing,
     error: entry.error,
@@ -131,7 +147,10 @@ function managerState(entry: ManagedPluginCatalogEntry, scope: PluginManagerScop
   };
 }
 
-function resolveOverride(value: ManagedPluginOverride | undefined, inherited: boolean): boolean {
+function resolveOverride(
+  value: ManagedPluginOverride | undefined,
+  inherited: boolean
+): boolean {
   if (value === "enabled") return true;
   if (value === "disabled") return false;
   return inherited;
@@ -141,13 +160,18 @@ function componentState(
   componentId: string,
   entry: ManagedPluginCatalogEntry,
   userEntry: ManagedPluginCatalogEntry | undefined,
-  scope: PluginManagerScope,
+  scope: PluginManagerScope
 ): PluginManagerScopedState {
-  const userEffective = resolveOverride(userEntry?.components[componentId], true);
+  const userEffective = resolveOverride(
+    userEntry?.components[componentId],
+    true
+  );
   const override = entry.components[componentId] ?? "inherit";
-  const componentEffective = entry.effective_components?.[componentId] ?? (scope.kind === "user"
-    ? entry.enabled && resolveOverride(override, true)
-    : entry.enabled && resolveOverride(override, userEffective));
+  const componentEffective =
+    entry.effective_components?.[componentId] ??
+    (scope.kind === "user"
+      ? entry.enabled && resolveOverride(override, true)
+      : entry.enabled && resolveOverride(override, userEffective));
   return {
     effectiveEnabled: componentEffective,
     override,
@@ -157,11 +181,15 @@ function componentState(
   };
 }
 
-function scopeSupport(entry: ManagedPluginCatalogEntry): Array<"user" | "project"> {
-  return entry.metadata.scope_support.includes("project") ? ["user", "project"] : ["user"];
+function scopeSupport(
+  entry: ManagedPluginCatalogEntry
+): ("user" | "project")[] {
+  return entry.metadata.scope_support.includes("project")
+    ? ["user", "project"]
+    : ["user"];
 }
 
-function bundleScope(_bundle: PluginInfo): Array<"user" | "project"> {
+function bundleScope(_bundle: PluginInfo): ("user" | "project")[] {
   // InstalledPlugin.scope records where a bundle came from; it has no concrete project identity
   // and the protocol runtime is currently hosted by the user graph. Do not present that provenance
   // as a project-local lifecycle switch until the backend has a real (project, bundle) policy.
@@ -174,12 +202,21 @@ function bundleId(id: string): string {
 
 function bundleState(bundle: PluginInfo): PluginManagerScopedState {
   const effectiveEnabled = bundle.enabled;
-  const requiresTrust = (bundle.counts.runtime ?? 0) > 0 ||
-    bundle.extension_components.some((component) => component.status === "requires_trust");
+  const requiresTrust =
+    (bundle.counts.runtime ?? 0) > 0 ||
+    bundle.extension_components.some(
+      (component) => component.status === "requires_trust"
+    );
   return {
     effectiveEnabled,
-    status: !effectiveEnabled ? "disabled" : requiresTrust && !bundle.trusted ? "pending" : "active",
-    error: bundle.diagnostics.find((diagnostic) => diagnostic.level === "error")?.message ?? null,
+    status: effectiveEnabled
+      ? requiresTrust && !bundle.trusted
+        ? "pending"
+        : "active"
+      : "disabled",
+    error:
+      bundle.diagnostics.find((diagnostic) => diagnostic.level === "error")
+        ?.message ?? null,
     missingDependencies: bundle.diagnostics
       .filter((diagnostic) => diagnostic.level === "warning")
       .map((diagnostic) => diagnostic.message),
@@ -188,7 +225,7 @@ function bundleState(bundle: PluginInfo): PluginManagerScopedState {
 
 function extensionState(
   bundle: PluginInfo,
-  availability: PluginExtensionComponent["status"],
+  availability: PluginExtensionComponent["status"]
 ): PluginManagerScopedState {
   const state = bundleState(bundle);
   if (!state.effectiveEnabled) return state;
@@ -206,7 +243,7 @@ function extensionState(
 
 function combineSkillState(
   policy: PluginManagerScopedState,
-  bundle: PluginInfo | undefined,
+  bundle: PluginInfo | undefined
 ): PluginManagerScopedState {
   if (!bundle) return policy;
   if (!policy.effectiveEnabled) return policy;
@@ -224,11 +261,16 @@ function combineSkillState(
   };
 }
 
-function findSkillBundle(skill: SkillInfo, bundles: PluginInfo[]): PluginInfo | undefined {
-  if (!skill.source) return undefined;
+function findSkillBundle(
+  skill: SkillInfo,
+  bundles: PluginInfo[]
+): PluginInfo | undefined {
+  if (skill.source == null || skill.source === "") return undefined;
   const source = skill.source.toLocaleLowerCase();
   return bundles.find(
-    (bundle) => source.includes(bundle.name.toLocaleLowerCase()) || source.includes(bundle.id.toLocaleLowerCase()),
+    (bundle) =>
+      source.includes(bundle.name.toLocaleLowerCase()) ||
+      source.includes(bundle.id.toLocaleLowerCase())
   );
 }
 
@@ -242,8 +284,12 @@ export function buildPluginManagerCatalog({
   scope,
 }: PluginManagerCatalogInput): PluginManagerCatalogModel {
   const entries = new Map(catalog.plugins.map((entry) => [entry.id, entry]));
-  const userEntries = new Map(userCatalog.plugins.map((entry) => [entry.id, entry]));
-  const bundlesByManagedId = new Map(bundles.map((bundle) => [bundleId(bundle.id), bundle]));
+  const userEntries = new Map(
+    userCatalog.plugins.map((entry) => [entry.id, entry])
+  );
+  const bundlesByManagedId = new Map(
+    bundles.map((bundle) => [bundleId(bundle.id), bundle])
+  );
   const descriptorsByPlugin = new Map<string, string[]>();
   for (const descriptor of BUILTIN_UI_COMPONENTS) {
     const values = descriptorsByPlugin.get(descriptor.pluginId) ?? [];
@@ -252,7 +298,10 @@ export function buildPluginManagerCatalog({
   }
 
   const managedPlugins: PluginManagerPlugin[] = catalog.plugins
-    .filter((entry) => entry.metadata.role !== "core" && !bundlesByManagedId.has(entry.id))
+    .filter(
+      (entry) =>
+        entry.metadata.role !== "core" && !bundlesByManagedId.has(entry.id)
+    )
     .map((entry) => ({
       id: entry.id,
       name: titleFor(entry.id),
@@ -263,7 +312,9 @@ export function buildPluginManagerCatalog({
       required: entry.metadata.essential,
       dependencies: [
         ...entry.dependencies.required,
-        ...entry.dependencies.optional.map((dependency) => `${dependency} (optional)`),
+        ...entry.dependencies.optional.map(
+          (dependency) => `${dependency} (optional)`
+        ),
       ],
       commands: entry.commands ?? [],
       services: entry.services ?? [],
@@ -272,14 +323,19 @@ export function buildPluginManagerCatalog({
       configSchema: entry.schema ?? undefined,
       configurable:
         entry.schema != null ||
-        (typeof entry.config === "object" && entry.config !== null && Object.keys(entry.config).length > 0),
+        (typeof entry.config === "object" &&
+          entry.config !== null &&
+          Object.keys(entry.config).length > 0),
     }));
 
   const bundlePlugins: PluginManagerPlugin[] = bundles.map((bundle) => {
     const id = bundleId(bundle.id);
     const policyEntry = entries.get(id);
-    const requiresTrust = (bundle.counts.runtime ?? 0) > 0 ||
-      bundle.extension_components.some((component) => component.status === "requires_trust");
+    const requiresTrust =
+      (bundle.counts.runtime ?? 0) > 0 ||
+      bundle.extension_components.some(
+        (component) => component.status === "requires_trust"
+      );
     return {
       id,
       name: bundle.name,
@@ -289,30 +345,46 @@ export function buildPluginManagerCatalog({
       source: "bundle",
       sourceLabel: bundle.source,
       category: policyEntry?.metadata.category ?? "plugin",
-      supportedScopes: policyEntry ? scopeSupport(policyEntry) : bundleScope(bundle),
+      supportedScopes: policyEntry
+        ? scopeSupport(policyEntry)
+        : bundleScope(bundle),
       required:
-        policyEntry?.metadata.essential === true || policyEntry?.metadata.role === "core",
+        policyEntry?.metadata.essential === true ||
+        policyEntry?.metadata.role === "core",
       dependencies: policyEntry
         ? [
             ...policyEntry.dependencies.required,
-            ...policyEntry.dependencies.optional.map((dependency) => `${dependency} (optional)`),
+            ...policyEntry.dependencies.optional.map(
+              (dependency) => `${dependency} (optional)`
+            ),
           ]
         : undefined,
-      commands: policyEntry?.commands?.length
-        ? policyEntry.commands
-        : bundle.runtime_commands.map((command) => command.id),
+      commands:
+        policyEntry != null && (policyEntry.commands?.length ?? 0) > 0
+          ? policyEntry.commands
+          : bundle.runtime_commands.map((command) => command.id),
       services: policyEntry?.services ?? [],
       componentIds: [
         ...bundle.ui_contributions.map((contribution) =>
           pluginUiComponentId(bundle.id, contribution.id)
         ),
         ...bundle.extension_components
-          .filter((component) => component.kind !== "ui" && component.kind !== "connector")
-          .map((component) => `${id}:extension:${component.kind}:${component.name}`),
+          .filter(
+            (component) =>
+              component.kind !== "ui" && component.kind !== "connector"
+          )
+          .map(
+            (component) => `${id}:extension:${component.kind}:${component.name}`
+          ),
       ],
       state: catalog.bundle_states?.[bundle.id]
-        ? { ...effectiveState(catalog.bundle_states[bundle.id]), config: policyEntry?.config }
-        : policyEntry ? managerState(policyEntry, scope) : bundleState(bundle),
+        ? {
+            ...effectiveState(catalog.bundle_states[bundle.id]),
+            config: policyEntry?.config,
+          }
+        : policyEntry
+          ? managerState(policyEntry, scope)
+          : bundleState(bundle),
       configSchema: policyEntry?.schema ?? undefined,
       configurable:
         policyEntry != null &&
@@ -347,69 +419,86 @@ export function buildPluginManagerCatalog({
     };
   });
 
-  const builtinComponents: PluginManagerComponent[] = BUILTIN_UI_COMPONENTS.flatMap((descriptor) => {
-    const entry = entries.get(descriptor.pluginId);
-    if (!entry || entry.metadata.role === "core") return [];
-    return [{
-      id: descriptor.id,
-      pluginId: descriptor.pluginId,
-      pluginName: titleFor(descriptor.pluginId),
-      name: descriptor.name,
-      description: descriptor.description,
-      kind: descriptor.kind,
-      slot: descriptor.slot,
-      source: sourceFor(entry),
-      supportedScopes: scopeSupport(entry),
-      required: "required" in descriptor ? descriptor.required : false,
-      state: componentState(descriptor.id, entry, userEntries.get(descriptor.pluginId), scope),
-    }];
-  });
-
-  const bundleComponents: PluginManagerComponent[] = bundles.flatMap((bundle) => {
-    const pluginId = bundleId(bundle.id);
-    const policyEntry = entries.get(pluginId);
-    const userEntry = userEntries.get(pluginId);
-    const uiComponents: PluginManagerComponent[] = bundle.ui_contributions.map((contribution) => {
-      const id = pluginUiComponentId(bundle.id, contribution.id);
-      return {
-        id,
-        pluginId,
-        pluginName: bundle.name,
-        name: contribution.label,
-        description: contribution.description,
-        kind: "uiAction",
-        slot: contribution.slot,
-        source: "bundle",
-        sourceLabel: bundle.source,
-        supportedScopes: policyEntry ? scopeSupport(policyEntry) : bundleScope(bundle),
-        manageable: policyEntry != null,
-        state: policyEntry
-          ? componentState(id, policyEntry, userEntry, scope)
-          : bundleState(bundle),
-      };
+  const builtinComponents: PluginManagerComponent[] =
+    BUILTIN_UI_COMPONENTS.flatMap((descriptor) => {
+      const entry = entries.get(descriptor.pluginId);
+      if (!entry || entry.metadata.role === "core") return [];
+      return [
+        {
+          id: descriptor.id,
+          pluginId: descriptor.pluginId,
+          pluginName: titleFor(descriptor.pluginId),
+          name: descriptor.name,
+          description: descriptor.description,
+          kind: descriptor.kind,
+          slot: descriptor.slot,
+          source: sourceFor(entry),
+          supportedScopes: scopeSupport(entry),
+          required: "required" in descriptor ? descriptor.required : false,
+          state: componentState(
+            descriptor.id,
+            entry,
+            userEntries.get(descriptor.pluginId),
+            scope
+          ),
+        },
+      ];
     });
-    const inventoryComponents: PluginManagerComponent[] = bundle.extension_components
-      .filter((component) => component.kind !== "ui" && component.kind !== "connector")
-      .map((component) => {
-        const id = `${pluginId}:extension:${component.kind}:${component.name}`;
-        return {
-          id,
-          pluginId,
-          pluginName: bundle.name,
-          name: component.name,
-          description: component.path,
-          kind: component.kind,
-          slot: component.path,
-          source: "bundle" as const,
-          sourceLabel: bundle.source,
-          supportedScopes: bundleScope(bundle),
-          manageable: false,
-          availability: component.status,
-          state: extensionState(bundle, component.status),
-        };
-      });
-    return [...uiComponents, ...inventoryComponents];
-  });
+
+  const bundleComponents: PluginManagerComponent[] = bundles.flatMap(
+    (bundle) => {
+      const pluginId = bundleId(bundle.id);
+      const policyEntry = entries.get(pluginId);
+      const userEntry = userEntries.get(pluginId);
+      const uiComponents: PluginManagerComponent[] =
+        bundle.ui_contributions.map((contribution) => {
+          const id = pluginUiComponentId(bundle.id, contribution.id);
+          return {
+            id,
+            pluginId,
+            pluginName: bundle.name,
+            name: contribution.label,
+            description: contribution.description,
+            kind: "uiAction",
+            slot: contribution.slot,
+            source: "bundle",
+            sourceLabel: bundle.source,
+            supportedScopes: policyEntry
+              ? scopeSupport(policyEntry)
+              : bundleScope(bundle),
+            manageable: policyEntry != null,
+            state: policyEntry
+              ? componentState(id, policyEntry, userEntry, scope)
+              : bundleState(bundle),
+          };
+        });
+      const inventoryComponents: PluginManagerComponent[] =
+        bundle.extension_components
+          .filter(
+            (component) =>
+              component.kind !== "ui" && component.kind !== "connector"
+          )
+          .map((component) => {
+            const id = `${pluginId}:extension:${component.kind}:${component.name}`;
+            return {
+              id,
+              pluginId,
+              pluginName: bundle.name,
+              name: component.name,
+              description: component.path,
+              kind: component.kind,
+              slot: component.path,
+              source: "bundle" as const,
+              sourceLabel: bundle.source,
+              supportedScopes: bundleScope(bundle),
+              manageable: false,
+              availability: component.status,
+              state: extensionState(bundle, component.status),
+            };
+          });
+      return [...uiComponents, ...inventoryComponents];
+    }
+  );
 
   const skillComponents: PluginManagerComponent[] = skills.map((skill) => {
     const bundle = findSkillBundle(skill, bundles);
@@ -420,7 +509,7 @@ export function buildPluginManagerCatalog({
           `skill:${skill.id}`,
           ownerEntry,
           userEntries.get("skills"),
-          scope,
+          scope
         )
       : { effectiveEnabled: true, status: "active" as const };
     const state = combineSkillState(policyState, bundle);
@@ -451,25 +540,27 @@ export function buildPluginManagerCatalog({
     ...market.filter((item) => item.installed).map((item) => item.id),
     ...bundles.map((bundle) => bundle.id),
   ]);
-  const marketplaceItems: PluginManagerMarketplaceItem[] = market.map((item) => ({
-    id: `market:${item.id}`,
-    name: item.name,
-    description: item.description,
-    author: item.author,
-    kind: item.kind,
-    sourceLabel: item.tags.join(" · "),
-    installed: installedIds.has(item.id),
-    installable: !item.installed,
-    // The existing component market installs into the user's library; project policy can then
-    // govern the owning plugin/component independently.
-    supportedScopes: ["user"],
-  }));
+  const marketplaceItems: PluginManagerMarketplaceItem[] = market.map(
+    (item) => ({
+      id: `market:${item.id}`,
+      name: item.name,
+      description: item.description,
+      author: item.author,
+      kind: item.kind,
+      sourceLabel: item.tags.join(" · "),
+      installed: installedIds.has(item.id),
+      installable: !item.installed,
+      // The existing component market installs into the user's library; project policy can then
+      // govern the owning plugin/component independently.
+      supportedScopes: ["user"],
+    })
+  );
 
   const localMarketplaceItems: PluginManagerMarketplaceItem[] =
     localMarketplace?.plugins.map((entry) => {
       const installedBundle = bundles.find(
         (bundle) =>
-          bundle.name === entry.display_name || bundle.name === entry.name,
+          bundle.name === entry.display_name || bundle.name === entry.name
       );
       return {
         id: `marketplace:${localMarketplace.name}:${entry.name}`,
@@ -498,7 +589,7 @@ export function buildPluginManagerCatalog({
           name: localMarketplace.display_name,
           description: localMarketplace.description,
           diagnostics: localMarketplace.diagnostics.map(
-            (diagnostic) => diagnostic.message,
+            (diagnostic) => diagnostic.message
           ),
         },
       ]
@@ -515,8 +606,12 @@ export function buildPluginManagerCatalog({
 export function pluginManagerComponentEnabled(
   components: PluginManagerComponent[],
   id: BuiltinUiComponentId,
-  catalogReady = true,
+  catalogReady = true
 ): boolean {
-  return catalogReady &&
-    (components.find((component) => component.id === id)?.state.effectiveEnabled ?? true);
+  return (
+    catalogReady &&
+    (components.find((component) => component.id === id)?.state
+      .effectiveEnabled ??
+      true)
+  );
 }

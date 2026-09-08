@@ -1,7 +1,16 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { act as reactAct } from "react";
-import { activateDom, dom, flush, mount, restoreDom, waitFor } from "./domTestHarness";
+
+import {
+  activateDom,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
@@ -11,7 +20,8 @@ const {
   quotaProviderFor,
   quotaProviderOptions,
 } = await import("../src/usage/Usage");
-const { quickQuotaProviderFor, quickQuotaSummary } = await import("../src/usage/quickQuota");
+const { quickQuotaProviderFor, quickQuotaSummary } =
+  await import("../src/usage/quickQuota");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -20,32 +30,42 @@ afterEach(() => {
 
 async function openSelect(trigger) {
   await reactAct(async () => {
-    trigger.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    trigger.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    trigger.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
 
 async function selectItem(item) {
   await reactAct(async () => {
-    item.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    item.dispatchEvent(new dom.window.PointerEvent("pointerup", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    item.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    item.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    item.dispatchEvent(
+      new dom.window.PointerEvent("pointerup", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    item.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
@@ -84,11 +104,13 @@ describe("UsagePanel", () => {
   test("defaults to the current provider and preserves registry order without duplicates", () => {
     expect(quotaProviderFor("grok", null)).toBe("grok");
     expect(quotaProviderFor("grok", "codex")).toBe("codex");
-    expect(quotaProviderOptions("grok", "Grok", {
-      codex: "Codex",
-      grok: "Grok",
-      claude_code: "Claude Code",
-    })).toEqual([
+    expect(
+      quotaProviderOptions("grok", "Grok", {
+        codex: "Codex",
+        grok: "Grok",
+        claude_code: "Claude Code",
+      })
+    ).toEqual([
       { id: "grok", name: "Grok" },
       { id: "codex", name: "Codex" },
       { id: "claude_code", name: "Claude Code" },
@@ -100,16 +122,20 @@ describe("UsagePanel", () => {
     const view = mount(
       <I18nProvider>
         <UsagePanel provider="codex" providerName="Codex" />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     expect(view.container.querySelector("h1")?.textContent).toBe("Usage");
     expect(view.container.textContent).toContain("quota for any provider");
     expect(view.container.textContent).toContain("Provider quota");
-    expect(view.container.querySelector('button[aria-label="Rescan"]')).toBeTruthy();
+    expect(
+      view.container.querySelector('button[aria-label="Rescan"]')
+    ).toBeTruthy();
     expect(view.container.textContent).toContain("7d");
     expect(view.container.textContent).toContain("30d");
-    expect(dom.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull();
+    expect(
+      dom.document.body.querySelector('[data-slot="dialog-content"]')
+    ).toBeNull();
 
     await flush();
     expect(view.container.textContent).toContain("Remaining amount unknown");
@@ -130,15 +156,19 @@ describe("UsagePanel", () => {
             claude_code: "Claude Code",
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    const trigger = view.container.querySelector("[data-quota-provider-select]");
+    const trigger = view.container.querySelector(
+      "[data-quota-provider-select]"
+    );
     expect(trigger?.getAttribute("aria-label")).toBe("Choose a quota provider");
     expect(trigger?.textContent).toContain("Codex");
 
     await openSelect(trigger);
-    const items = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'));
+    const items = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ];
     expect(items.map((item) => item.textContent?.trim())).toEqual([
       "Codex",
       "Grok",
@@ -151,7 +181,7 @@ describe("UsagePanel", () => {
     await waitFor(() => {
       expect(trigger?.textContent).toContain("Grok");
       expect(view.container.textContent).toContain(
-        "Grok does not expose a safe machine-readable quota interface",
+        "Grok does not expose a safe machine-readable quota interface"
       );
     });
     view.unmount();
@@ -167,10 +197,10 @@ describe("UsagePanel", () => {
           window={{
             used_percent: 27,
             window_minutes: 300,
-            resets_at: now / 1_000 + 90 * 60,
+            resets_at: now / 1000 + 90 * 60,
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     expect(view.container.textContent).toContain("73% left");
@@ -178,9 +208,12 @@ describe("UsagePanel", () => {
     const meter = view.container.querySelector('[role="progressbar"]');
     expect(meter?.getAttribute("aria-valuenow")).toBe("73");
     expect(meter?.getAttribute("aria-label")).toContain("Capacity remaining");
-    expect(meter?.getAttribute("data-tone")).toBe("success");
-    expect(meter?.querySelector('[data-slot="progress-indicator"]')?.getAttribute("style"))
-      .toContain("width: 73%");
+    expect(meter?.dataset.tone).toBe("success");
+    expect(
+      meter
+        ?.querySelector('[data-slot="progress-indicator"]')
+        ?.getAttribute("style")
+    ).toContain("width: 73%");
 
     view.unmount();
   });

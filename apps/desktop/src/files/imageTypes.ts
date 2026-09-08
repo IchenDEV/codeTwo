@@ -13,7 +13,14 @@ const PREVIEW_IMAGE_TYPES: Record<string, string> = {
 };
 
 /** ACP image blocks currently use the formats accepted by the core's guarded image reader. */
-const AGENT_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
+const AGENT_IMAGE_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+]);
 
 function extensionOf(path: string): string {
   return path.split(".").pop()?.toLowerCase() ?? "";

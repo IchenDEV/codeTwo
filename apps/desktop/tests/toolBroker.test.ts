@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { ToolBroker, type BrokerContext } from "../../../packages/tool-broker/src";
+import { ToolBroker } from "../../../packages/tool-broker/src";
+import type { BrokerContext } from "../../../packages/tool-broker/src";
 
 const context: BrokerContext = {
   evidence: {
@@ -35,34 +36,50 @@ const context: BrokerContext = {
     sitesEnabled: true,
     sitesVersion: "0.1.34",
     configError: null,
-    configuredComputerUse: [{
-      id: "cua",
-      enabled: true,
-      displayName: "Cua Driver",
-      version: "0.4.0",
-      providers: ["claude_code"],
-      excludeProviders: [],
-      server: { name: "cua-driver", command: "/usr/local/bin/cua-driver", args: ["mcp"], env: [] },
-    }],
+    configuredComputerUse: [
+      {
+        id: "cua",
+        enabled: true,
+        displayName: "Cua Driver",
+        version: "0.4.0",
+        providers: ["claude_code"],
+        excludeProviders: [],
+        server: {
+          name: "cua-driver",
+          command: "/usr/local/bin/cua-driver",
+          args: ["mcp"],
+          env: [],
+        },
+      },
+    ],
     computerUseSelections: { "*": "cua" },
-    computerUseBackends: [{
-      id: "cua",
-      displayName: "Cua Driver",
-      available: true,
-      reason: null,
-      providers: ["claude_code"],
-      excludeProviders: [],
-    }],
+    computerUseBackends: [
+      {
+        id: "cua",
+        displayName: "Cua Driver",
+        available: true,
+        reason: null,
+        providers: ["claude_code"],
+        excludeProviders: [],
+      },
+    ],
     hostToolsConfigErrors: [],
-    configuredBrowserUse: [{
-      id: "playwright",
-      enabled: true,
-      displayName: "Playwright MCP",
-      version: "1.0.0",
-      providers: ["claude_code"],
-      excludeProviders: [],
-      server: { name: "playwright", command: "/usr/local/bin/playwright-mcp", args: [], env: [] },
-    }],
+    configuredBrowserUse: [
+      {
+        id: "playwright",
+        enabled: true,
+        displayName: "Playwright MCP",
+        version: "1.0.0",
+        providers: ["claude_code"],
+        excludeProviders: [],
+        server: {
+          name: "playwright",
+          command: "/usr/local/bin/playwright-mcp",
+          args: [],
+          env: [],
+        },
+      },
+    ],
     browserUseSelections: { "*": "playwright" },
     browserUseBackends: [
       {
@@ -93,9 +110,14 @@ describe("provider-neutral Tool Broker", () => {
     const claude = broker.resolve({ providerId: "claude_code", context });
     const codex = broker.resolve({ providerId: "codex", context });
 
-    expect(claude.mcpServers.map((server) => server.name)).toEqual(["cua-driver", "playwright"]);
+    expect(claude.mcpServers.map((server) => server.name)).toEqual([
+      "cua-driver",
+      "playwright",
+    ]);
     expect(claude.nativeCapabilities).toEqual([]);
-    expect(claude.mcpServers.map((server) => server.name)).not.toContain("node_repl");
+    expect(claude.mcpServers.map((server) => server.name)).not.toContain(
+      "node_repl"
+    );
 
     expect(codex.mcpServers).toEqual([]);
     expect(codex.browserAccessEnabled).toBe(true);
@@ -109,9 +131,15 @@ describe("provider-neutral Tool Broker", () => {
     expect(Object.isFrozen(codex.mcpServers)).toBe(true);
     expect(Object.isFrozen(catalog.computerUse.backends)).toBe(true);
     expect(Object.isFrozen(context.evidence.computerMcp)).toBe(false);
-    expect(Object.isFrozen(context.evidence.configuredComputerUse[0].server)).toBe(false);
-    expect(Object.isFrozen(context.evidence.configuredComputerUse[0].providers)).toBe(false);
-    expect(Object.isFrozen(context.evidence.computerUseBackends[0].providers)).toBe(false);
+    expect(
+      Object.isFrozen(context.evidence.configuredComputerUse[0].server)
+    ).toBe(false);
+    expect(
+      Object.isFrozen(context.evidence.configuredComputerUse[0].providers)
+    ).toBe(false);
+    expect(
+      Object.isFrozen(context.evidence.computerUseBackends[0].providers)
+    ).toBe(false);
   });
 
   test("withholds every browser route while retaining a credential-free Codex blocker", () => {
@@ -120,18 +148,27 @@ describe("provider-neutral Tool Broker", () => {
     };
     const broker = new ToolBroker();
     const codex = broker.resolve({ providerId: "codex", context: denied });
-    const claude = broker.resolve({ providerId: "claude_code", context: denied });
+    const claude = broker.resolve({
+      providerId: "claude_code",
+      context: denied,
+    });
 
     expect(broker.catalog(denied).browserUse.accessEnabled).toBe(false);
     expect(codex.browserAccessEnabled).toBe(false);
     expect(codex.nativeCapabilities).not.toContain("chrome_browser");
     expect(codex.nativeCapabilities).not.toContain("computer_use");
-    expect(codex.mcpServers).toEqual([context.evidence.browserAccessBlockerMcp]);
+    expect(codex.mcpServers).toEqual([
+      context.evidence.browserAccessBlockerMcp,
+    ]);
     expect(codex.instructions.join("\n")).not.toContain("browser MCP");
-    expect(codex.capabilities.find((item) => item.id === "chrome_browser")).toMatchObject({
+    expect(
+      codex.capabilities.find((item) => item.id === "chrome_browser")
+    ).toMatchObject({
       state: "unavailable",
       reason: "Agent browser access is disabled.",
     });
-    expect(claude.mcpServers.map((server) => server.name)).not.toContain("playwright");
+    expect(claude.mcpServers.map((server) => server.name)).not.toContain(
+      "playwright"
+    );
   });
 });

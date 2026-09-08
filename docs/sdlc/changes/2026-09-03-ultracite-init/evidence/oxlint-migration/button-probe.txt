@@ -1,0 +1,2 @@
+_oxlint_probe.tsx:1:1: error github(filenames-match-regex): Filename '_oxlint_probe.tsx' does not match the regex naming convention.
+_oxlint_probe.tsx:1:34: error eslint-js(no-restricted-syntax): Use the shared Button or TooltipButton component instead of a raw button.

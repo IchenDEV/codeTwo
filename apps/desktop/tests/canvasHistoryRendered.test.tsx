@@ -1,6 +1,17 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, button, click, dom, image, mount, restoreDom, text, waitFor } from "./domTestHarness";
+
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  image,
+  mount,
+  restoreDom,
+  text,
+  waitFor,
+} from "./domTestHarness";
 
 const snapshot = {
   id: "history-canvas",
@@ -55,7 +66,8 @@ describe("Canvas history rendered behavior", () => {
       id: 1,
       accepted: true,
       streamBoundaryKnown: true,
-      prompt: "before\n\n[canvas-history history-canvas@4] Board\ncanvas-text: note",
+      prompt:
+        "before\n\n[canvas-history history-canvas@4] Board\ncanvas-text: note",
       text: "",
       textDeltas: [],
       observedTextDeltas: 0,
@@ -68,8 +80,12 @@ describe("Canvas history rendered behavior", () => {
       startedAt: 1,
       endedAt: 2,
     };
-    const rendered = mount(<TurnCard turn={turn} canvasSnapshotLoader={async () => snapshot} />);
-    await waitFor(() => expect(image(rendered.container, "Board thumbnail")).toBeTruthy());
+    const rendered = mount(
+      <TurnCard turn={turn} canvasSnapshotLoader={async () => snapshot} />
+    );
+    await waitFor(() =>
+      expect(image(rendered.container, "Board thumbnail")).toBeTruthy()
+    );
     expect(text(rendered.container, "rev 4")).toBeTruthy();
     expect(text(rendered.container, "3 objects")).toBeTruthy();
     const exportButton = button(rendered.container, "Export PNG");

@@ -6,7 +6,7 @@ owner: codex
 created: 2026-09-08
 source: user
 risk: high
-scope: Cargo.lock, crates/core/src/lib.rs, crates/core/src/issue_delivery.rs, crates/core/src/store.rs, crates/plugins/src/bundle.rs, crates/plugins/src/app/plugins/hub.rs, apps/desktop/src-host/, apps/desktop/src/App.tsx, apps/desktop/src/bridge.ts, apps/desktop/src/pluginModel.ts, apps/desktop/src/issues/, apps/desktop/src/plugins/, apps/desktop/src/i18n/strings.ts, apps/desktop/tests/, packs/linear/, docs/reference/plugin-standard.md, docs/reference/plugins.md, docs/sdlc/changes/2026-09-08-linear-issue-delivery/
+scope: apps/desktop/package.json, apps/desktop/bun.lock, Cargo.lock, crates/core/src/lib.rs, crates/core/src/issue_delivery.rs, crates/core/src/store.rs, crates/plugins/src/bundle.rs, crates/plugins/src/app/plugins/hub.rs, apps/desktop/src-host/, apps/desktop/src/App.tsx, apps/desktop/src/bridge.ts, apps/desktop/src/pluginModel.ts, apps/desktop/src/issues/, apps/desktop/src/plugins/, apps/desktop/src/i18n/strings.ts, apps/desktop/tests/, packs/linear/, docs/reference/plugin-standard.md, docs/reference/plugins.md, docs/sdlc/changes/2026-09-08-linear-issue-delivery/
 approved_by: chenli
 approved_at: 2026-09-08
 approval_source: "Session: user confirmed the Linear Issue-to-delivery design with 确认."
@@ -14,7 +14,7 @@ design_approved_by: chenli
 design_approved_at: 2026-09-08
 design_approval_source: "Confirmed local CodeTwo entry, API-key credentials held by host, reusable tasks/worktrees, permission-bound PR creation/review continuation, actual merge-based completion, recovery and deduplicated Linear writeback."
 next_trigger: Review the verified local implementation; live account acceptance and publication remain separate actions.
-revision: "Worktree based on 948b703b, retaining prior plugin-runtime-reliability changes"
+revision: "PR worktree integrating origin/main a6a6981e, retaining prior plugin-runtime-reliability changes"
 verification_mode: pair
 verified_by: "verify_linear_adapter (independent agent)"
 verified_at: 2026-09-08
@@ -48,6 +48,8 @@ Add a dependency-free Node Linear runtime and an issues connector capability. Ad
 - AC-3: PASS — `cargo test -p codetwo-desktop-host --lib issue_delivery::tests` passed 22 independent tests covering SQLite reopen, one active tuple, explicit new attempts, task/session lease recovery, changed-base refusal, prompt acceptance receipts, updated comments/attachments, per-run cancellation, and terminal-state preservation.
 - AC-4: PASS — The independent host suite verifies real temporary Git worktrees, exact-commit receipts, dirty/stale-checkout rejection, bound repository/branch/PR identity, fork PR refusal, merge-only completed-state writes, stable writeback retries, and recovery after sync errors. The broader `cargo test -p codetwo-desktop-host --lib` suite passed 42 tests, and `cargo check -p codetwo-desktop-host --all-targets` passed. Reverification reproduced a failure where local-only delivery called GitHub CLI before validation; the query now requires PR creation permission or an existing PR association. An isolated subprocess regression covers both GitLab and GitHub remotes with PR creation disabled and confirms that an existing bound PR remains monitored through merge.
 - AC-5: PASS — `bun test tests/issueDeliveryRendered.test.tsx` passed 4 tests for credential form handling, explicit start permissions, disconnected-task recovery/history selection, and new-attempt authorization. The affected desktop plugin/UI suite passed 45 tests across 7 files, including snapshot-state coverage. `bun run build:renderer` passed lint, types, and production compilation. Agent-browser verified the actual React dialog with fake API data at a desktop dark viewport and 800x900 light viewport: search, selection, start, PR state, and sync retry; no browser errors. Temporary preview code was removed.
+
+PR integration verification: Merged origin/main `a6a6981e`, preserving its Ultracite and React Compiler configuration. Independent frontend review by `verify_linear_adapter` confirmed the snapshot and all Linear entry points, with 16 focused tests passing. `bun run test:ci` passed all 876 desktop tests; `bun run check` and `bunx tsc --noEmit` passed. `bunx vite build` first failed because upstream's React-18 compiler runtime dependency was missing; adding matching `react-compiler-runtime@1.0.0` restored production compilation. Agent-browser rendered the merged application and the actual Linear dialog with fixture API data in light/desktop and dark/800x900 views. The temporary fixture was removed. Preferences are type-checked before reuse; browser-only connector calls now explicitly report that the desktop host is required.
 
 Verdict: verified.
 

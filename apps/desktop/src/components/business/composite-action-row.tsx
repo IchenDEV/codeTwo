@@ -1,25 +1,23 @@
-import {
-  type ComponentProps,
-  type KeyboardEventHandler,
-  type ReactNode,
-  forwardRef,
-} from "react"
+import { forwardRef } from "react";
+import type { ComponentProps, KeyboardEventHandler, ReactNode } from "react";
 
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-interface CompositeActionRowProps
-  extends Omit<ComponentProps<"div">, "children" | "onClick"> {
-  accessibilityLabel: string
-  children: ReactNode
-  actions?: ReactNode
-  current?: boolean
-  selected?: boolean
-  disabled?: boolean
-  contentClassName?: string
-  primaryClassName?: string
-  onSelect: () => void
-  onPrimaryKeyDown?: KeyboardEventHandler<HTMLButtonElement>
+interface CompositeActionRowProps extends Omit<
+  ComponentProps<"div">,
+  "children" | "onClick"
+> {
+  accessibilityLabel: string;
+  children: ReactNode;
+  actions?: ReactNode;
+  current?: boolean;
+  selected?: boolean;
+  disabled?: boolean;
+  contentClassName?: string;
+  primaryClassName?: string;
+  onSelect: () => void;
+  onPrimaryKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
 }
 
 /**
@@ -29,7 +27,7 @@ interface CompositeActionRowProps
  * callers never need a clickable div or nested buttons to build a dense navigation row.
  */
 const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
-  function CompositeActionRow(
+  (
     {
       accessibilityLabel,
       children,
@@ -44,8 +42,8 @@ const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
       onPrimaryKeyDown,
       ...props
     },
-    ref,
-  ) {
+    ref
+  ) => {
     return (
       <div
         ref={ref}
@@ -65,27 +63,30 @@ const CompositeActionRow = forwardRef<HTMLDivElement, CompositeActionRowProps>(
           onClick={onSelect}
           onKeyDown={onPrimaryKeyDown}
           className={cn(
-            "absolute inset-0 z-0 h-auto w-full rounded-control p-0 hover:bg-transparent",
-            primaryClassName,
+            "rounded-control absolute inset-0 z-0 h-auto w-full p-0 hover:bg-transparent",
+            primaryClassName
           )}
         />
         <div
           data-slot="composite-action-row-content"
-          className={cn("pointer-events-none relative z-10 min-w-0 flex-1", contentClassName)}
+          className={cn(
+            "pointer-events-none relative z-10 min-w-0 flex-1",
+            contentClassName
+          )}
         >
           {children}
         </div>
-        {actions ? (
+        {actions == null ? null : (
           <div
             data-slot="composite-action-row-actions"
             className="relative z-20 flex shrink-0 items-center"
           >
             {actions}
           </div>
-        ) : null}
+        )}
       </div>
-    )
-  },
-)
+    );
+  }
+);
 
-export { CompositeActionRow, type CompositeActionRowProps }
+export { CompositeActionRow, type CompositeActionRowProps };

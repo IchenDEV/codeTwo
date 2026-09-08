@@ -2,7 +2,10 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const desktopRoot = resolve(import.meta.dir, "..");
-const executable = process.platform === "win32" ? "codetwo-tool-broker.exe" : "codetwo-tool-broker";
+const executable =
+  process.platform === "win32"
+    ? "codetwo-tool-broker.exe"
+    : "codetwo-tool-broker";
 const outputDirectory = resolve(desktopRoot, "build", "tool-broker");
 
 mkdirSync(outputDirectory, { recursive: true });
@@ -20,6 +23,6 @@ const result = Bun.spawnSync(
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
-  },
+  }
 );
 if (result.exitCode !== 0) process.exit(result.exitCode);

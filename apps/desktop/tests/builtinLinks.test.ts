@@ -15,7 +15,9 @@ describe("built-in transcript links", () => {
       kind: "web",
       url: "https://example.com/docs?q=one",
     });
-    expect(parseBuiltinLink("https://user:secret@example.com/private")).toBeNull();
+    expect(
+      parseBuiltinLink("https://user:secret@example.com/private")
+    ).toBeNull();
     expect(parseBuiltinLink("javascript:alert(1)")).toBeNull();
     expect(parseBuiltinLink("mailto:hello@example.com")).toBeNull();
   });
@@ -44,24 +46,32 @@ describe("built-in transcript links", () => {
   });
 
   test("keeps internal file opens inside the active workspace", () => {
-    expect(workspaceRelativeLinkPath("/tmp/project/src/main.ts", "/tmp/project")).toBe(
-      "src/main.ts",
+    expect(
+      workspaceRelativeLinkPath("/tmp/project/src/main.ts", "/tmp/project")
+    ).toBe("src/main.ts");
+    expect(workspaceRelativeLinkPath("src/main.ts", "/tmp/project")).toBe(
+      "src/main.ts"
     );
-    expect(workspaceRelativeLinkPath("src/main.ts", "/tmp/project")).toBe("src/main.ts");
-    expect(workspaceRelativeLinkPath("../private.txt", "/tmp/project")).toBeNull();
-    expect(workspaceRelativeLinkPath("/tmp/project-copy/main.ts", "/tmp/project")).toBeNull();
-    expect(workspaceRelativeLinkPath("c:\\Code\\App\\main.ts", "C:\\Code\\App")).toBe(
-      "main.ts",
-    );
+    expect(
+      workspaceRelativeLinkPath("../private.txt", "/tmp/project")
+    ).toBeNull();
+    expect(
+      workspaceRelativeLinkPath("/tmp/project-copy/main.ts", "/tmp/project")
+    ).toBeNull();
+    expect(
+      workspaceRelativeLinkPath("c:\\Code\\App\\main.ts", "C:\\Code\\App")
+    ).toBe("main.ts");
   });
 
   test("builds the native web and file menu contracts", () => {
     const web = builtinLinkMenuItems(
       { kind: "web", url: "https://example.com/" },
       t,
-      { canOpenInApp: true, canCopy: true },
+      { canOpenInApp: true, canCopy: true }
     );
-    expect(web.map((item) => item.type === "separator" ? "separator" : item.action)).toEqual([
+    expect(
+      web.map((item) => (item.type === "separator" ? "separator" : item.action))
+    ).toEqual([
       "open-web-in-app",
       "open-web-external",
       "separator",
@@ -71,9 +81,13 @@ describe("built-in transcript links", () => {
     const file = builtinLinkMenuItems(
       { kind: "file", path: "/tmp/project/main.ts", line: 8 },
       t,
-      { canOpenInApp: true, canCopy: true },
+      { canOpenInApp: true, canCopy: true }
     );
-    expect(file.map((item) => item.type === "separator" ? "separator" : item.action)).toEqual([
+    expect(
+      file.map((item) =>
+        item.type === "separator" ? "separator" : item.action
+      )
+    ).toEqual([
       "open-file-in-app",
       "open-file-default",
       "separator",

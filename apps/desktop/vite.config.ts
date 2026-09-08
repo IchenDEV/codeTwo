@@ -1,13 +1,22 @@
 import path from "node:path";
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 
-const webCoreTarget = process.env.CODETWO_WEB_CORE_URL ?? "http://127.0.0.1:4599";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+const webCoreTarget =
+  process.env.CODETWO_WEB_CORE_URL ?? "http://127.0.0.1:4599";
 
 // Electrobun loads this output through `views://`, so asset URLs must stay bundle-relative.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [["babel-plugin-react-compiler", { target: "18" }]],
+      },
+    }),
+    tailwindcss(),
+  ],
   base: "./",
   clearScreen: false,
   resolve: {

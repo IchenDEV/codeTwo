@@ -1,9 +1,18 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, click, dom, mount, restoreDom, waitFor } from "./domTestHarness";
+
+import {
+  activateDom,
+  click,
+  dom,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
-const { TemplateDialog, validateMacroDraft } = await import("../src/session/TemplateDialog");
+const { TemplateDialog, validateMacroDraft } =
+  await import("../src/session/TemplateDialog");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -14,15 +23,15 @@ afterEach(() => {
 // An earlier suite in the same bun run can leak a key-echo `useT` mock, so every label may render
 // as its English translation or its raw i18n key. All queries accept both.
 function field(labels) {
-  return [...dom.document.body.querySelectorAll("input, textarea, select")].find((el) =>
-    labels.includes(el.getAttribute("aria-label")),
-  );
+  return [
+    ...dom.document.body.querySelectorAll("input, textarea, select"),
+  ].find((el) => labels.includes(el.getAttribute("aria-label")));
 }
 
 function fields(labels) {
-  return [...dom.document.body.querySelectorAll("input, textarea, select")].filter((el) =>
-    labels.includes(el.getAttribute("aria-label")),
-  );
+  return [
+    ...dom.document.body.querySelectorAll("input, textarea, select"),
+  ].filter((el) => labels.includes(el.getAttribute("aria-label")));
 }
 
 function buttonByLabel(labels) {
@@ -41,7 +50,10 @@ const ADD_LABELS = ["Add slot", "templateFrom.addSlot"];
 function setValue(el, value) {
   // React installs a value tracker on the element instance; go through the prototype setter so
   // the change is not deduplicated away before the synthetic input event fires.
-  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")?.set;
+  const setter = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(el),
+    "value"
+  )?.set;
   if (setter) setter.call(el, value);
   else el.value = value;
   el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
@@ -74,7 +86,7 @@ function renderDialog(overrides = {}) {
   const rendered = mount(
     <I18nProvider>
       <TemplateDialog {...props} />
-    </I18nProvider>,
+    </I18nProvider>
   );
   return { rendered, calls };
 }
@@ -83,7 +95,9 @@ describe("validateMacroDraft", () => {
   const slot = (id, kind = "text", options = "") => ({ id, kind, options });
 
   test("accepts a matched template and slot table", () => {
-    expect(validateMacroDraft("Do {{a}} with {{b-2}}", [slot("a"), slot("b-2")])).toEqual([]);
+    expect(
+      validateMacroDraft("Do {{a}} with {{b-2}}", [slot("a"), slot("b-2")])
+    ).toEqual([]);
   });
 
   test("flags template tokens without a slot row and vice versa", () => {
@@ -97,10 +111,18 @@ describe("validateMacroDraft", () => {
   });
 
   test("flags non-slug ids, duplicates, and selects without options", () => {
-    expect(validateMacroDraft("{{Bad Id}}", [slot("Bad Id")]).length).toBeGreaterThan(0);
-    expect(validateMacroDraft("{{a}} {{a}}", [slot("a"), slot("a")])).toHaveLength(1);
-    expect(validateMacroDraft("{{a}}", [slot("a", "select", "")])).toHaveLength(1);
-    expect(validateMacroDraft("{{a}}", [slot("a", "select", "x, y")])).toEqual([]);
+    expect(
+      validateMacroDraft("{{Bad Id}}", [slot("Bad Id")]).length
+    ).toBeGreaterThan(0);
+    expect(
+      validateMacroDraft("{{a}} {{a}}", [slot("a"), slot("a")])
+    ).toHaveLength(1);
+    expect(validateMacroDraft("{{a}}", [slot("a", "select", "")])).toHaveLength(
+      1
+    );
+    expect(validateMacroDraft("{{a}}", [slot("a", "select", "x, y")])).toEqual(
+      []
+    );
   });
 });
 
@@ -113,9 +135,11 @@ describe("TemplateDialog", () => {
     });
     const ids = fields(ID_LABELS).map((el) => el.value);
     expect(ids).toEqual(["slot-1", "slot-2"]);
-    const kind = [...dom.document.body.querySelectorAll(
-      'button[data-slot="select-trigger"]',
-    )].map((el) => el.textContent?.trim());
+    const kind = [
+      ...dom.document.body.querySelectorAll(
+        'button[data-slot="select-trigger"]'
+      ),
+    ].map((el) => el.textContent?.trim());
     expect(kind).toEqual(["text", "file"]);
   });
 
@@ -123,7 +147,9 @@ describe("TemplateDialog", () => {
     activateDom();
     const { calls } = renderDialog({ propose: async () => null });
     await waitFor(() => {
-      expect(field(TEMPLATE_LABELS)?.value).toBe('Rename "old name" in src/a.rs');
+      expect(field(TEMPLATE_LABELS)?.value).toBe(
+        'Rename "old name" in src/a.rs'
+      );
     });
     expect(fields(ID_LABELS)).toHaveLength(0);
     // Still fully usable: rows can be added by hand.
@@ -157,8 +183,18 @@ describe("TemplateDialog", () => {
         kind: "macro",
         template: PROPOSAL.template,
         slots: [
-          { id: "slot-1", label: "old name", kind: "text", default: "old name" },
-          { id: "slot-2", label: "src/a.rs", kind: "file", default: "src/a.rs" },
+          {
+            id: "slot-1",
+            label: "old name",
+            kind: "text",
+            default: "old name",
+          },
+          {
+            id: "slot-2",
+            label: "src/a.rs",
+            kind: "file",
+            default: "src/a.rs",
+          },
         ],
       },
     });

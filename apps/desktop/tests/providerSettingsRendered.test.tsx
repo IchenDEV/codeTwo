@@ -5,7 +5,8 @@ import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { SettingsPage } = await import("../src/settings/SettingsPage");
-const { providerRuntimeOverrideFromDraft } = await import("../src/settings/ProviderSettings");
+const { providerRuntimeOverrideFromDraft } =
+  await import("../src/settings/ProviderSettings");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -74,23 +75,39 @@ describe("Provider settings capabilities", () => {
           initialTab="providers"
           onClose={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     await flush();
 
-    view.container.querySelector('[data-provider-disclosure="claude_code"]')?.click();
+    view.container
+      .querySelector('[data-provider-disclosure="claude_code"]')
+      ?.click();
     view.container.querySelector('[data-provider-disclosure="codex"]')?.click();
     await flush();
 
-    expect(view.container.querySelector('[data-provider-capability="claude_code:computer_use"]'))
-      .not.toBeNull();
-    expect(view.container.querySelector('[data-provider-capability="claude_code:image_generation"]'))
-      .toBeNull();
-    expect(view.container.querySelector('[data-provider-capability="codex:image_generation"]'))
-      .not.toBeNull();
-    expect(view.container.querySelector('[data-provider-capability="codex:codetwo_browser"]'))
-      .toBeNull();
-    expect(view.container.querySelectorAll("[data-provider-capability]")).toHaveLength(2);
+    expect(
+      view.container.querySelector(
+        '[data-provider-capability="claude_code:computer_use"]'
+      )
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector(
+        '[data-provider-capability="claude_code:image_generation"]'
+      )
+    ).toBeNull();
+    expect(
+      view.container.querySelector(
+        '[data-provider-capability="codex:image_generation"]'
+      )
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector(
+        '[data-provider-capability="codex:codetwo_browser"]'
+      )
+    ).toBeNull();
+    expect(
+      view.container.querySelectorAll("[data-provider-capability]")
+    ).toHaveLength(2);
 
     view.unmount();
   });
@@ -186,25 +203,37 @@ describe("Provider settings capabilities", () => {
             return [];
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     await flush();
 
     expect(view.container.textContent).toContain("Ready on demand");
     expect(view.container.textContent).toContain("v1.0.5");
     expect(view.container.textContent).toContain("Update to v1.1.0");
-    expect(view.container.querySelector('[data-provider-action="codex:upgrade"]')).toBeNull();
-    expect(view.container.querySelector('[data-provider-action="grok:install"]')).toBeNull();
-    expect(view.container.querySelector('[data-provider-action="opencode:install"]')).toBeNull();
-    expect(view.container.querySelector('[data-provider-action="opencode:upgrade"]')).toBeNull();
+    expect(
+      view.container.querySelector('[data-provider-action="codex:upgrade"]')
+    ).toBeNull();
+    expect(
+      view.container.querySelector('[data-provider-action="grok:install"]')
+    ).toBeNull();
+    expect(
+      view.container.querySelector('[data-provider-action="opencode:install"]')
+    ).toBeNull();
+    expect(
+      view.container.querySelector('[data-provider-action="opencode:upgrade"]')
+    ).toBeNull();
 
-    view.container.querySelector('[data-provider-action="codex:install"]')?.click();
+    view.container
+      .querySelector('[data-provider-action="codex:install"]')
+      ?.click();
     await flush();
-    view.container.querySelector('[data-provider-action="grok:upgrade"]')?.click();
+    view.container
+      .querySelector('[data-provider-action="grok:upgrade"]')
+      ?.click();
     await flush();
     view.container.querySelector('[data-provider-toggle="codex"]')?.click();
     await flush();
-    view.container.querySelector('[data-provider-refresh]')?.click();
+    view.container.querySelector("[data-provider-refresh]")?.click();
     await flush();
 
     expect(actions).toEqual([
@@ -270,17 +299,24 @@ describe("Provider settings capabilities", () => {
           initialTab="providers"
           onClose={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     await flush();
     view.container.querySelector('[data-provider-disclosure="codex"]')?.click();
     await flush();
 
-    expect(view.container.querySelector("#provider-display-name-codex")).not.toBeNull();
-    expect(view.container.querySelector("#provider-command-codex")?.getAttribute("placeholder"))
-      .toBe("/Applications/C2.app/codex-acp");
+    expect(
+      view.container.querySelector("#provider-display-name-codex")
+    ).not.toBeNull();
+    expect(
+      view.container
+        .querySelector("#provider-command-codex")
+        ?.getAttribute("placeholder")
+    ).toBe("/Applications/C2.app/codex-acp");
     expect(view.container.querySelector("#provider-home-codex")).not.toBeNull();
-    expect(view.container.querySelector("#provider-environment-codex")).not.toBeNull();
+    expect(
+      view.container.querySelector("#provider-environment-codex")
+    ).not.toBeNull();
 
     const normalized = providerRuntimeOverrideFromDraft({
       displayName: " Work Codex ",
@@ -300,11 +336,13 @@ describe("Provider settings capabilities", () => {
     expect(JSON.stringify(normalized)).not.toContain("sk-");
 
     const terraToggle = view.container.querySelector(
-      '[aria-label="Hide GPT-5.6-Terra from the model picker"]',
+      '[aria-label="Hide GPT-5.6-Terra from the model picker"]'
     );
     terraToggle?.click();
     await flush();
-    expect(dom.localStorage.getItem("codetwo.providerModelPreferences")).toContain("gpt-5.6-terra");
+    expect(
+      dom.localStorage.getItem("codetwo.providerModelPreferences")
+    ).toContain("gpt-5.6-terra");
 
     view.unmount();
   });

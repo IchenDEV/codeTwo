@@ -10,7 +10,8 @@ export const BUILTIN_UI_COMPONENTS = [
     pluginId: "kernel",
     id: "plugin-manager.page",
     name: "Plugin manager",
-    description: "The required management plane used to recover and re-enable other features.",
+    description:
+      "The required management plane used to recover and re-enable other features.",
     kind: "page",
     slot: "app.page",
     required: true,

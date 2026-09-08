@@ -1,7 +1,17 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { act as reactAct } from "react";
-import { activateDom, button, dom, flush, mount, restoreDom, waitFor } from "./domTestHarness";
+
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { SettingsPage } = await import("../src/settings/SettingsPage");
@@ -53,16 +63,24 @@ describe("Settings device sync", () => {
             return { ...status(true), last_success_at: Date.now() };
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
-    await waitFor(() => expect(rendered.container.textContent).toContain("Ready to sync"));
+    await waitFor(() =>
+      expect(rendered.container.textContent).toContain("Ready to sync")
+    );
 
-    const toggle = rendered.container.querySelector('[data-slot="setting-toggle"] [data-slot="switch"]');
-    expect(rendered.container.querySelector('[data-slot="setting-row-label"]')?.textContent)
-      .toBe("Paired C2 devices");
+    const toggle = rendered.container.querySelector(
+      '[data-slot="setting-toggle"] [data-slot="switch"]'
+    );
+    expect(
+      rendered.container.querySelector('[data-slot="setting-row-label"]')
+        ?.textContent
+    ).toBe("Paired C2 devices");
     expect(toggle).not.toBeNull();
     await reactAct(async () => toggle.click());
-    await waitFor(() => expect(button(rendered.container, "Sync now").disabled).toBe(false));
+    await waitFor(() =>
+      expect(button(rendered.container, "Sync now").disabled).toBe(false)
+    );
     await reactAct(async () => button(rendered.container, "Sync now").click());
     await flush();
 

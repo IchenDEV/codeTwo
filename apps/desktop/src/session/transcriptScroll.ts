@@ -22,14 +22,17 @@ export function transcriptDistanceFromEnd({
 
 export function isTranscriptNearEnd(
   metrics: TranscriptScrollMetrics,
-  threshold = TRANSCRIPT_EDGE_THRESHOLD,
+  threshold = TRANSCRIPT_EDGE_THRESHOLD
 ): boolean {
   return transcriptDistanceFromEnd(metrics) <= threshold;
 }
 
 export function scrollTopAfterPrepend(
   anchor: Pick<TranscriptScrollAnchor, "scrollHeight" | "scrollTop">,
-  nextScrollHeight: number,
+  nextScrollHeight: number
 ): number {
-  return Math.max(0, anchor.scrollTop + (nextScrollHeight - anchor.scrollHeight));
+  return Math.max(
+    0,
+    anchor.scrollTop + (nextScrollHeight - anchor.scrollHeight)
+  );
 }

@@ -1,0 +1,28 @@
+┌  Ultracite v7.10.7 Doctor
+│
+●  Detected linter: eslint
+[?25l│
+◇  Diagnostics complete.
+[?25h│
+◆  eslint is installed (v10.9.1)
+│
+◆  eslint.config.* imports ultracite/eslint
+│
+◆  prettier is installed (3.9.6)
+│
+◆  Prettier configuration found (prettier.config.mjs)
+│
+◆  stylelint is installed (17.14.1)
+│
+◆  Stylelint configuration found (stylelint.config.mjs)
+│
+◆  Ultracite is installed (7.10.7)
+│
+◆  No conflicting formatting/linting tools found
+│
+●  Summary: 8 passed, 0 warnings, 0 failed
+│
+◆  Everything looks good!
+│
+└  Doctor complete
+

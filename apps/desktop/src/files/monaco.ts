@@ -1,3 +1,4 @@
+import { shikiToMonaco } from "@shikijs/monaco";
 /**
  * Monaco bootstrap for the file editor.
  *
@@ -11,19 +12,28 @@
  * language servers cover the rest (see ../lsp).
  */
 import * as monaco from "monaco-editor";
+
+export * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
-import jsonWorker from "monaco-editor/languages/features/json/json.worker.js?worker";
 import cssWorker from "monaco-editor/languages/features/css/css.worker.js?worker";
 import htmlWorker from "monaco-editor/languages/features/html/html.worker.js?worker";
+import jsonWorker from "monaco-editor/languages/features/json/json.worker.js?worker";
 import tsWorker from "monaco-editor/languages/features/typescript/ts.worker.js?worker";
 import { createHighlighter, bundledLanguages, bundledThemes } from "shiki";
-import type { HighlighterGeneric, LanguageRegistration, ThemeRegistration } from "shiki";
-import { shikiToMonaco } from "@shikijs/monaco";
+import type {
+  HighlighterGeneric,
+  LanguageRegistration,
+  ThemeRegistration,
+} from "shiki";
 
 import { dirtyKey, markDirty } from "./dirty";
 
-export { monaco };
-export { attachLsp, notifySaved, setFileOpener, takePendingReveal } from "../lsp/attach";
+export {
+  attachLsp,
+  notifySaved,
+  setFileOpener,
+  takePendingReveal,
+} from "../lsp/attach";
 
 export const THEME_LIGHT = "codetwo-light";
 export const THEME_DARK = "codetwo-dark";
@@ -80,21 +90,26 @@ export function languageOf(path: string): string {
 self.MonacoEnvironment = {
   getWorker(_id: string, label: string): Worker {
     switch (label) {
-      case "json":
+      case "json": {
         return new jsonWorker();
+      }
       case "css":
       case "scss":
-      case "less":
+      case "less": {
         return new cssWorker();
+      }
       case "html":
       case "handlebars":
-      case "razor":
+      case "razor": {
         return new htmlWorker();
+      }
       case "typescript":
-      case "javascript":
+      case "javascript": {
         return new tsWorker();
-      default:
+      }
+      default: {
         return new editorWorker();
+      }
     }
   },
 };
@@ -117,13 +132,19 @@ const loadedLangs = new Set<string>();
  * Floating widgets (hover cards, the suggest list) go the other way and are pinned *opaque*: a
  * see-through popup over code is unreadable no matter which theme is on.
  */
-async function customTheme(id: "github-light" | "github-dark", name: string): Promise<ThemeRegistration> {
+async function customTheme(
+  id: "github-light" | "github-dark",
+  name: string
+): Promise<ThemeRegistration> {
   const theme = (await bundledThemes[id]()).default;
   const dark = id === "github-dark";
-  const surface = theme.colors?.["editor.background"] ?? (dark ? "#0d1117" : "#ffffff");
-  const text = theme.colors?.["editor.foreground"] ?? (dark ? "#e6edf3" : "#1f2328");
+  const surface =
+    theme.colors?.["editor.background"] ?? (dark ? "#0d1117" : "#ffffff");
+  const text =
+    theme.colors?.["editor.foreground"] ?? (dark ? "#e6edf3" : "#1f2328");
   // Overlays as alpha on the app's own backdrop, so they read the same on any surface beneath.
-  const wash = (alpha: string) => (dark ? `#ffffff${alpha}` : `#1f2328${alpha}`);
+  const wash = (alpha: string) =>
+    dark ? `#ffffff${alpha}` : `#1f2328${alpha}`;
   return {
     ...theme,
     name,
@@ -158,15 +179,20 @@ async function customTheme(id: "github-light" | "github-dark", name: string): Pr
  * TS worker serves both), which forces one grammar for both — the tsx grammar, renamed. TSX is a
  * superset; plain TS highlights correctly under it. Same story for javascript/jsx.
  */
-async function grammarFor(langId: string): Promise<LanguageRegistration[] | null> {
+async function grammarFor(
+  langId: string
+): Promise<LanguageRegistration[] | null> {
   const renamed = async (from: keyof typeof bundledLanguages, to: string) => {
     const regs = (await bundledLanguages[from]()).default;
-    return regs.map((r) => (r.name === from ? { ...r, name: to, aliases: [] } : r));
+    return regs.map((r) =>
+      r.name === from ? { ...r, name: to, aliases: [] } : r
+    );
   };
-  if (langId === "typescript") return renamed("tsx", "typescript");
-  if (langId === "javascript") return renamed("jsx", "javascript");
+  if (langId === "typescript") return await renamed("tsx", "typescript");
+  if (langId === "javascript") return await renamed("jsx", "javascript");
   if (langId in bundledLanguages) {
-    return (await bundledLanguages[langId as keyof typeof bundledLanguages]()).default;
+    return (await bundledLanguages[langId as keyof typeof bundledLanguages]())
+      .default;
   }
   return null;
 }
@@ -177,7 +203,10 @@ async function ensureBoot(): Promise<Highlighter> {
       customTheme("github-light", THEME_LIGHT),
       customTheme("github-dark", THEME_DARK),
     ]);
-    const highlighter = (await createHighlighter({ themes: [light, dark], langs: [] })) as Highlighter;
+    const highlighter = (await createHighlighter({
+      themes: [light, dark],
+      langs: [],
+    })) as Highlighter;
 
     // Monaco's own TS smarts, tuned for loose single-file models: semantic validation off (imports
     // resolve to nothing without a project, and a page of phantom red squiggles teaches nothing),
@@ -194,11 +223,14 @@ async function ensureBoot(): Promise<Highlighter> {
         jsx: ts.JsxEmit.ReactJSX,
         esModuleInterop: true,
       });
-      d.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false });
+      d.setDiagnosticsOptions({
+        noSemanticValidation: true,
+        noSyntaxValidation: false,
+      });
     }
     return highlighter;
   })();
-  return boot;
+  return await boot;
 }
 
 /** The scheme the app last asked for, so anything that resets the theme can be corrected back. */
@@ -239,7 +271,11 @@ export function absPath(cwd: string, path: string): string {
   return `${cwd.replace(/\/$/, "")}/${path}`;
 }
 
-export function getOrCreateModel(cwd: string, path: string, text: string): monaco.editor.ITextModel {
+export function getOrCreateModel(
+  cwd: string,
+  path: string,
+  text: string
+): monaco.editor.ITextModel {
   const uri = monaco.Uri.file(absPath(cwd, path));
   let model = monaco.editor.getModel(uri);
   if (!model) {
@@ -255,15 +291,25 @@ export function getOrCreateModel(cwd: string, path: string, text: string): monac
 }
 
 export function isDirtyModel(model: monaco.editor.ITextModel): boolean {
-  return savedVersion.get(model.uri.toString()) !== model.getAlternativeVersionId();
+  return (
+    savedVersion.get(model.uri.toString()) !== model.getAlternativeVersionId()
+  );
 }
 
-export function markSaved(cwd: string, path: string, model: monaco.editor.ITextModel): void {
+export function markSaved(
+  cwd: string,
+  path: string,
+  model: monaco.editor.ITextModel
+): void {
   savedVersion.set(model.uri.toString(), model.getAlternativeVersionId());
   markDirty(dirtyKey(cwd, path), false);
 }
 
 /** Recompute the shared dirty flag for this file; Dock tabs and close-guards read that store. */
-export function syncDirty(cwd: string, path: string, model: monaco.editor.ITextModel): void {
+export function syncDirty(
+  cwd: string,
+  path: string,
+  model: monaco.editor.ITextModel
+): void {
   markDirty(dirtyKey(cwd, path), isDirtyModel(model));
 }

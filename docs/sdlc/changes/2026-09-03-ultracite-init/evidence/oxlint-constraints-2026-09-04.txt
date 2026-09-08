@@ -1,0 +1,15 @@
+timestamp=2026-09-04T09:15:00+00:00
+probe=src/__radius_probe.tsx (deleted after)
+command=bunx oxlint -c oxlint.config.ts src/__radius_probe.tsx
+hit=better-tailwindcss(no-restricted-classes): Use a semantic radius class such as rounded-control or rounded-module. (className="rounded-lg")
+
+also_verified:
+button probe → eslint-js(no-restricted-syntax) for raw <button>
+stylelint → bun run lint:styles exit 0
+ultracite doctor → 6 passed
+bun run check → 0
+tsc --noEmit → 0
+
+cleanup:
+- removed dead ESLint-era eslint.fix-*.mjs and tsconfig.eslint.json
+- oxlint ignorePatterns no longer reference those paths

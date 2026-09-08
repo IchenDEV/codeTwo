@@ -1,3 +1,5 @@
+import { asJsonObject } from "../lib/jsonValue";
+
 export interface VisualizationReference {
   path: string;
   mode?: "wide";
@@ -12,8 +14,8 @@ const VISUALIZE_START = "visualize";
 const VISUALIZE_END = "";
 
 function visualizationReference(value: unknown): VisualizationReference | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const candidate = value as Record<string, unknown>;
+  const candidate = asJsonObject(value);
+  if (candidate == null) return null;
   if (
     typeof candidate.path !== "string" ||
     candidate.path.length === 0 ||
@@ -40,26 +42,33 @@ function visualizationReference(value: unknown): VisualizationReference | null {
 }
 
 /** Split complete visualize directives from streamed Markdown without exposing partial JSON. */
-export function splitRichText(source: string, streaming = false): RichTextSegment[] {
+export function splitRichText(
+  source: string,
+  streaming = false
+): RichTextSegment[] {
   const output: RichTextSegment[] = [];
   let cursor = 0;
   while (cursor < source.length) {
     const start = source.indexOf(VISUALIZE_START, cursor);
-    if (start < 0) {
+    if (start === -1) {
       const tail = source.slice(cursor);
       if (tail) output.push({ kind: "markdown", text: tail });
       break;
     }
-    if (start > cursor) output.push({ kind: "markdown", text: source.slice(cursor, start) });
+    if (start > cursor)
+      output.push({ kind: "markdown", text: source.slice(cursor, start) });
     const payloadStart = start + VISUALIZE_START.length;
     const end = source.indexOf(VISUALIZE_END, payloadStart);
-    if (end < 0) {
-      if (!streaming) output.push({ kind: "markdown", text: source.slice(start) });
+    if (end === -1) {
+      if (!streaming)
+        output.push({ kind: "markdown", text: source.slice(start) });
       break;
     }
     const literal = source.slice(start, end + VISUALIZE_END.length);
     try {
-      const reference = visualizationReference(JSON.parse(source.slice(payloadStart, end)));
+      const reference = visualizationReference(
+        JSON.parse(source.slice(payloadStart, end))
+      );
       if (reference) output.push({ kind: "visualization", reference });
       else output.push({ kind: "markdown", text: literal });
     } catch {
@@ -104,7 +113,7 @@ export const VISUALIZATION_THEME_VARIABLES = [
 ] as const;
 
 function safeCssValue(value: string): string {
-  return value.replace(/[;{}]/g, "").trim();
+  return value.replaceAll(/[;{}]/g, "").trim();
 }
 
 const VISUALIZATION_BASE_CSS = String.raw`
@@ -155,7 +164,7 @@ svg text{font-family:inherit}
 export function visualizationDocument(
   fragment: string,
   theme: Readonly<Record<string, string>>,
-  token: string,
+  token: string
 ): string {
   const variables = VISUALIZATION_THEME_VARIABLES.map((name) => {
     const value = safeCssValue(theme[name] ?? "");
