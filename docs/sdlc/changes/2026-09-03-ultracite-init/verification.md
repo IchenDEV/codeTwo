@@ -25,7 +25,7 @@ release_identity: ""
 
 ## Behavioral evidence
 
-- AC-4: PASS — `bun test --timeout 15000 tests/titlebarDoubleClick.test.ts tests/pluginComponentPolicyContract.test.ts tests/sessionRailRendered.test.tsx tests/canvasHistoryRendered.test.tsx tests/canvasBlockRendered.test.tsx tests/feishuWorkspaceRendered.test.tsx tests/builtinLinks.test.ts` → 52 pass / 0 fail; full `bun run test:ci` → 867 pass / 0 fail (`evidence/type-safety-test-regressions-2026-09-06.txt`).
+Supporting evidence for AC-4: `bun test --timeout 15000 tests/titlebarDoubleClick.test.ts tests/pluginComponentPolicyContract.test.ts tests/sessionRailRendered.test.tsx tests/canvasHistoryRendered.test.tsx tests/canvasBlockRendered.test.tsx tests/feishuWorkspaceRendered.test.tsx tests/builtinLinks.test.ts` → 52 pass / 0 fail; full `bun run test:ci` → 867 pass / 0 fail (`evidence/type-safety-test-regressions-2026-09-06.txt`).
 
 ## Visual evidence
 

@@ -23,6 +23,8 @@ release_target: none
 - AC-4: PASS — `npx --yes --package=bun@1.3.10 bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts` passed 28 tests and 217 assertions on the CI runtime. `bun script/verify/docs.ts`, `bun script/verify/sdlc.ts --worktree`, and `git diff --check` passed. The independent suite reproduced and then verified the fix for an orphan stage directory previously omitted by discovery.
 
 Verdict: verified.
+PR integration: Upstream `a6a6981e` introduced two historical records with duplicate AC mappings. Their additional commands and results remain as supporting evidence under the same acceptance item; original status and approvals are unchanged. The branch gate checks the consolidated records.
+
 Independent verification: `verify_four_stage` ran the complete 28-test suite on Bun 1.4.2; the owner repeated it on CI-pinned Bun 1.3.10. The orphan-stage regression was observed failing before the discovery fix and passing afterward.
 
 Residual risk: Metadata cannot authenticate human identity or prove external GitHub protection, merge, or publication. Existing historical formats remain compatible and are not automatically migrated. Product runtime tests are not applicable to this lifecycle-only change.

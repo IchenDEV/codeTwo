@@ -29,7 +29,7 @@ release_identity: ""
 
 ## Behavioral evidence
 
-- AC-3: PASS — `bun run test:smoke` completed in ~13s (452 tests / 81 files) without hanging;
+Supporting evidence for AC-3: `bun run test:smoke` completed in ~13s (452 tests / 81 files) without hanging;
   previously CI cancelled after multi-hour `bun test` on SourceControl-related renders.
 
 ## Visual evidence
