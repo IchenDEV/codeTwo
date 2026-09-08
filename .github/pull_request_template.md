@@ -4,9 +4,9 @@ Describe the problem and observable result.
 
 ## Change record
 
-- Change: <!-- docs/sdlc/changes/<date>-<slug>/change.md; list every changed record -->
+- Change: <!-- docs/sdlc/changes/<date>-<slug>/intent.md; list every changed record -->
 
-The linked record owns scope, authorization, acceptance, evidence, and residual risk.
+The linked change directory owns scope, authorization, acceptance, evidence, and residual risk.
 Reuse it; do not copy its stage status or approval fields here.
 
 ## Review and release

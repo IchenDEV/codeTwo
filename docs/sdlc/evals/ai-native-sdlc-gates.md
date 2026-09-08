@@ -27,11 +27,13 @@ classes into one focused suite without changing either Gate. The
 [single-record redesign](../changes/2026-09-08-simplify-sdlc/change.md) adds regressions for the
 observed four-file approval overhead, disconnected Ready PR check, and Incident follow-up linkage.
 [Skill-owned documentation](../changes/2026-09-08-organize-documentation/change.md) adds the relocated
-template-loading and Skill-reference regression cases.
+template-loading and Skill-reference regression cases. The
+[four-stage contract](../changes/2026-09-08-four-stage-sdlc/intent.md) restores separate Intent, Spec,
+Plan, and Verification files while retaining reusable request authorization and risk-based gates.
 
 ## Fixed input and environment
 
-Run `bun test script/verify/checks.test.ts script/devflow.test.ts` from a CodeTwo checkout. CI pins Bun 1.3.10. Branch-diff
+Run `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts` from a CodeTwo checkout. CI pins Bun 1.3.10. Branch-diff
 fixtures use temporary Git repositories with fixed baselines; documentation fixtures use isolated
 temporary directories. Live checks read the repository without starting CodeTwo or using its
 runtime data.
@@ -56,9 +58,13 @@ deploy, or modify the user's application data.
 - the worktree Gate sees staged and untracked files and rejects paths outside the changed Artifact
   scope, including deleted paths and both sides of renames.
 
-- New work needs only one record: existing request authorization enables bounded local work; a failed
+- Existing request authorization enables bounded local work; a failed
   check can be preserved in a Draft PR, while Ready PR and release remain blocked.
-- Schema 4 checks source, scope, unique/checked criteria, revision, and high-risk independent design.
+- Historical schema 4 checks source, scope, unique/checked criteria, revision, and high-risk independent design.
+- New schema 5 creates four drafts together, keeps each authority field in its owning stage, and
+  accepts ordinary Spec/Plan under Intent authorization. Missing stages, mixed schemas, missing
+  high-risk design confirmation, and self-verification fail. AC-N maps from Spec to Verification
+  while actual-diff scope and release checks continue to apply.
 - PR event JSON drives the base comparison and draft readiness; PR text never becomes shell code.
 - Incident creation produces one linked follow-up rather than asking the operator to create it twice.
 
@@ -71,13 +77,17 @@ must not be reported as a lifecycle verdict.
 ## Last result
 
 Result: pass.
-Revision: Skill-owned documentation and approved Astra scaffold cleanup worktree on 2026-09-08, linked in Provenance.
-Evidence: `npx --yes --package=bun@1.3.10 bun test script/verify/checks.test.ts script/devflow.test.ts`
-passed 14 tests and 113 assertions on Bun 1.3.10, the CI runtime. Fixtures replay local failure and
-correction, Draft/Ready transitions, changed-record links, event base validation, high-risk design,
-release approval, scope freshness, deletions/renames, Incident follow-up, and Skill-owned template
-loading. The documentation fixture rejects broken Skill reference links. No provider or app
-runtime was started; test writes and commits were confined to disposable directories.
+Revision: Four-stage SDLC worktree based on 948b703b on 2026-09-08, linked in Provenance.
+Evidence: `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts`
+passed 28 tests and 217 assertions on Bun 1.4.2, and the same suite passed on CI-pinned Bun 1.3.10
+using `npx --yes --package=bun@1.3.10 bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts`. The independent `verify_four_stage` agent authored 14 of these
+contract tests and ran the complete suite. Cases cover generated drafts, ordinary authorization
+reuse, independent high-risk design and verification, metadata ownership, checked criteria,
+missing/duplicate/failing evidence, revision, schema compatibility, actual Git diff scope,
+Draft/Ready/release gates, and Incident links. No provider or app runtime was started; writes and
+commits were confined to disposable repositories. A missing-Intent directory alongside valid
+records first reproduced a false pass; discovery now includes every stage filename and that
+regression passes.
 
-The contract suite and instruction inspection do not establish model behavioral improvement.
-Reduced pauses, context use, and near-miss Skill selection remain unmeasured without model replay.
+These deterministic tests and instruction inspection do not establish model behavioral improvement.
+Reduced pauses and context use remain unmeasured without model replay.

@@ -1,3 +1,6 @@
+import { IssueConnectorSettings, IssueDeliveryDialog } from "./issues/IssueDeliveryDialog";
+import { issueDeliveryApi, issueStageLabel, type IssueConnector, type IssueDelivery } from "./issues/issueDelivery";
+import { usePluginSnapshot } from "./plugins/usePluginSnapshot";
 import {
   lazy,
   Suspense,
@@ -86,7 +89,6 @@ import {
   listArchivedSessions,
   listMemoryReceipts,
   lspSetRuntimeEnabled,
-  listPlugins,
   listProjectScripts,
   listProjects,
   listProviders,
@@ -96,7 +98,6 @@ import {
   marketCatalog,
   marketInstall,
   planPluginChange,
-  pluginCatalog,
   newSession,
   onBrowserAgentActivity,
   onBrowserDownloadBlocked,
@@ -169,7 +170,6 @@ import {
   type MemoryAccess,
   type MemoryReceipt,
   type ModelChoice,
-  type PluginInfo,
   type PluginMarketplace,
   type ManagedPluginCatalog,
   type Project,
@@ -835,12 +835,13 @@ export default function App() {
   >("loading");
   const providerRegistryRequestRef = useRef(0);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
-  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
-  const [managedUserCatalog, setManagedUserCatalog] =
-    useState<ManagedPluginCatalog | null>(null);
-  const [managedProjectCatalogs, setManagedProjectCatalogs] = useState<
-    Record<string, ManagedPluginCatalog>
-  >({});
+  const { snapshot: pluginsSnapshot, refresh: refreshPluginsSnapshot } = usePluginSnapshot();
+  const plugins = useMemo(() => pluginsSnapshot?.bundles ?? [], [pluginsSnapshot]);
+  const managedUserCatalog = pluginsSnapshot?.catalogs.find((item) => item.scope.kind === "user")?.catalog ?? null;
+  const managedProjectCatalogs = useMemo(() => Object.fromEntries(
+    (pluginsSnapshot?.catalogs ?? []).flatMap(({ scope, catalog }) =>
+      scope.kind === "project" ? [[scope.projectPath, catalog]] : []),
+  ) as Record<string, ManagedPluginCatalog>, [pluginsSnapshot]);
   const [pluginManagerScope, setPluginManagerScope] =
     useState<PluginManagerScope>({ kind: "user" });
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -1105,6 +1106,18 @@ export default function App() {
   const [showPluginManager, setShowPluginManager] = useState(false);
   const [showDocker, setShowDocker] = useState(false);
   const [showFeishu, setShowFeishu] = useState(false);
+  const [issueConnector, setIssueConnector] = useState<IssueConnector | null>(null);
+  const [issueDeliveries, setIssueDeliveries] = useState<IssueDelivery[]>([]);
+  useEffect(() => {
+    let disposed = false;
+    let generation = 0;
+    const refresh = async () => {
+      const request = ++generation;
+      try { const values = await issueDeliveryApi<IssueDelivery[]>("list"); if (!disposed && request === generation) setIssueDeliveries(values); } catch { /* Existing tasks remain visible when the host reconnects. */ }
+    };
+    void refresh(); const timer = setInterval(() => { void refresh(); }, 5000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, []);
   const [feishuRailHost, setFeishuRailHost] = useState<HTMLDivElement | null>(null);
   const [feishuSettingsHost, setFeishuSettingsHost] = useState<HTMLDivElement | null>(null);
   const [pluginManagerInitialPluginId, setPluginManagerInitialPluginId] = useState<string | null>(null);
@@ -5130,74 +5143,38 @@ export default function App() {
     refreshSkills();
   }, [refreshSkills]);
 
-  const loadManagedCatalog = useCallback(async (scope: PluginManagerScope) => {
-    const normalizedScope: PluginManagerScope =
-      scope.kind === "user"
-      ? scope
-        : {
-            kind: "project",
-            projectPath: normalizePluginProjectPath(scope.projectPath),
-          };
-    const next = await pluginCatalog(toManagedPluginScope(normalizedScope));
-    if (normalizedScope.kind === "user") {
-      setManagedUserCatalog(next);
-    } else {
-      setManagedProjectCatalogs((current) => ({
-        ...current,
-        [normalizedScope.projectPath]: next,
-      }));
-    }
-    return next;
-  }, []);
-
   const refreshManagedCatalogs = useCallback(
     async (scope: PluginManagerScope = pluginManagerScope) => {
-    const projectPaths = new Set<string>();
-      if (scope.kind === "project")
-        projectPaths.add(normalizePluginProjectPath(scope.projectPath));
-      if (activeProject)
-        projectPaths.add(normalizePluginProjectPath(activeProject));
-    await Promise.all([
-      loadManagedCatalog({ kind: "user" }),
-      ...Array.from(projectPaths, (projectPath) =>
-        loadManagedCatalog({ kind: "project", projectPath }),
-      ),
-    ]);
+      const projectPaths = new Set<string>();
+      if (scope.kind === "project") projectPaths.add(normalizePluginProjectPath(scope.projectPath));
+      if (activeProject) projectPaths.add(normalizePluginProjectPath(activeProject));
+      return refreshPluginsSnapshot([
+        { kind: "user" },
+        ...Array.from(projectPaths, (projectPath) => ({ kind: "project" as const, projectPath })),
+      ]);
     },
-    [activeProject, loadManagedCatalog, pluginManagerScope],
+    [activeProject, pluginManagerScope, refreshPluginsSnapshot],
   );
+  const loadManagedCatalog = refreshManagedCatalogs;
 
-  // Component policy is runtime state, not merely data for the management page. Keep the user
-  // graph and the active project's inherited graph warm even while the page is closed.
-  useEffect(() => {
-    void refreshManagedCatalogs().catch((error) => {
-      console.warn("Could not load plugin catalog", error);
-    });
-  }, [refreshManagedCatalogs]);
-
+  // Subscribe before the initial read so changes during bootstrap cannot be missed.
   useEffect(() => {
     let disposed = false;
     let unsubscribe = () => {};
-    const refreshBundles = () =>
-      listPlugins()
-      .then((next) => {
-        if (!disposed) setPlugins(next);
-      })
-      .catch((error) => console.warn("Could not load plugin bundles", error));
-    void refreshBundles();
-    void onPluginsChanged(() => {
-      void refreshBundles();
-      void refreshManagedCatalogs().catch((error) => {
-        console.warn("Could not refresh plugin catalog", error);
+    const refresh = () => {
+      if (!disposed) void refreshManagedCatalogs().catch((error) => {
+        console.warn("Could not refresh plugin snapshot", error);
       });
-    }).then((stop) => {
-      if (disposed) stop();
-      else unsubscribe = stop;
-    });
-    return () => {
-      disposed = true;
-      unsubscribe();
     };
+    void onPluginsChanged(refresh).then((stop) => {
+      if (disposed) { stop(); return; }
+      unsubscribe = stop;
+      refresh();
+    }).catch((error) => {
+      console.warn("Could not subscribe to plugin changes", error);
+      refresh();
+    });
+    return () => { disposed = true; unsubscribe(); };
   }, [refreshManagedCatalogs]);
 
   const pluginManagerProjects = useMemo(() => {
@@ -5336,6 +5313,10 @@ export default function App() {
     async <T,>(name: string, args?: unknown) => call<T>(name, args, null),
     [],
   );
+  const issueConnectors = useMemo<IssueConnector[]>(() => activePluginConnectorContributions(plugins, activePluginModel.plugins)
+    .filter((connector) => connector.capabilities.includes("issues"))
+    .map((connector) => ({ plugin_id: connector.pluginId, connector_id: connector.id, name: plugins.find((plugin) => plugin.id === connector.pluginId)?.name ?? connector.provider })),
+    [activePluginModel.plugins, plugins]);
   const collaborationConnector = useMemo(
     () => activePluginConnectorContributions(
       plugins,
@@ -5695,9 +5676,6 @@ export default function App() {
     marketCatalog()
       .then(setMarket)
       .catch(() => {});
-    listPlugins()
-      .then(setPlugins)
-      .catch(() => {});
     void refreshManagedCatalogs(scope).catch(() => {});
     refreshSkills();
     setPluginManagerInitialPluginId(pluginId);
@@ -5728,15 +5706,12 @@ export default function App() {
 
   const refreshPluginManagerData = useCallback(
     async (scope: PluginManagerScope = pluginManagerScope) => {
-    const [nextMarket, nextPlugins, nextSkills] = await Promise.all([
+    const [nextMarket] = await Promise.all([
       marketCatalog(),
-      listPlugins(),
       refreshSkills(),
       refreshManagedCatalogs(scope),
     ]);
     setMarket(nextMarket);
-    setPlugins(nextPlugins);
-    setSkills(nextSkills);
     },
     [pluginManagerScope, refreshManagedCatalogs, refreshSkills],
   );
@@ -7890,6 +7865,10 @@ export default function App() {
             scope={pluginManagerScope}
             projects={pluginManagerProjects}
             initialPluginId={pluginManagerInitialPluginId}
+            pluginDetailsExtensions={issueConnectors.map((connector) => ({
+              pluginId: `bundle:${connector.plugin_id}`,
+              content: <IssueConnectorSettings key={`${connector.plugin_id}:${connector.connector_id}`} connector={connector} onOpen={() => setIssueConnector(connector)} />,
+            }))}
             pluginDetailsExtension={collaborationConnector ? {
               pluginId: `bundle:${collaborationConnector.pluginId}`,
               content: <div ref={setFeishuSettingsHost} />,
@@ -8287,6 +8266,11 @@ export default function App() {
               )}
 
               <div className="session-header-context-actions flex min-w-0 shrink-0 items-center gap-2">
+                {issueDeliveries.filter((delivery) => delivery.session_id === activeSession).map((delivery) => (
+                  <Button key={delivery.id} variant="ghost" size="compact" onClick={() => setIssueConnector({ plugin_id: delivery.plugin_id, connector_id: delivery.connector_id, name: delivery.issue.identifier })}>
+                    {delivery.issue.identifier} · {issueStageLabel(delivery.stage, t)}
+                  </Button>
+                ))}
                 <PluginUiSlot
                   slot="session.header"
                   contributions={pluginUiActions["session.header"]}
@@ -8908,8 +8892,14 @@ export default function App() {
           }}
         />
       )}
+      {issueConnector ? <IssueDeliveryDialog
+        connector={issueConnector} projects={projects} providers={providers} repository={activeProject || ""}
+        onOpenSession={(id) => { setIssueConnector(null); setShowPluginManager(false); void selectSession(id); }}
+        onClose={() => setIssueConnector(null)}
+      /> : null}
       {showIssues && componentEnabled("issues.modal") && (
         <IssuesModal
+          issueTrackers={issueConnectors.map((connector) => ({ name: connector.name, open: () => { setShowIssues(false); setIssueConnector(connector); } }))}
           cwd={cwd || "."}
           scenes={scenesSurfaceEnabled ? scenes : []}
           onInsert={(i) => void insertIssue(i)}

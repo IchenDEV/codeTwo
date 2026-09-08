@@ -667,3 +667,143 @@ async fn concurrent_bundle_mutations_cannot_restart_a_runtime_during_uninstall()
         .await
         .is_err());
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn unified_snapshot_tracks_trust_policy_process_and_removal() {
+    let dir = tempfile::tempdir().unwrap();
+    install_runtime_bundle(dir.path(), "snapshot-fixture", true);
+    let app = boot(dir.path()).await;
+    let project = dir.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let args = json!({ "scopes": [{ "kind": "project", "project_path": project }] });
+    let snapshot = app.call("plugins.snapshot", args.clone()).await.unwrap();
+    assert_eq!(snapshot["bundles"].as_array().unwrap().len(), 1);
+    assert_eq!(snapshot["catalogs"].as_array().unwrap().len(), 2);
+    let user = &snapshot["catalogs"][0]["catalog"];
+    let runtime = user["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == "bundle:snapshot-fixture")
+        .unwrap();
+    assert_eq!(runtime["process"]["phase"], "dormant");
+    assert_eq!(
+        user["bundle_states"]["snapshot-fixture"]["status"],
+        "active"
+    );
+    assert_eq!(runtime_start_count(dir.path(), "snapshot-fixture"), 0);
+
+    app.call("bundle.where", Value::Null).await.unwrap();
+    let running = app.call("plugins.snapshot", args.clone()).await.unwrap();
+    let runtime = running["catalogs"][0]["catalog"]["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == "bundle:snapshot-fixture")
+        .unwrap();
+    assert_eq!(runtime["process"]["phase"], "running");
+    change(
+        &app,
+        "bundle:snapshot-fixture",
+        PluginScope::Project {
+            project_path: project.to_string_lossy().into(),
+        },
+        PluginOverride::Disabled,
+    )
+    .await
+    .unwrap();
+    let scoped = app.call("plugins.snapshot", args.clone()).await.unwrap();
+    assert_eq!(
+        scoped["catalogs"][0]["catalog"]["bundle_states"]["snapshot-fixture"]["effective_enabled"],
+        true
+    );
+    assert_eq!(
+        scoped["catalogs"][1]["catalog"]["bundle_states"]["snapshot-fixture"]["status"],
+        "disabled"
+    );
+    assert_eq!(
+        scoped["catalogs"][0]["catalog"]["config_revision"],
+        scoped["catalogs"][1]["catalog"]["config_revision"]
+    );
+
+    app.call(
+        "plugins.set_trusted",
+        json!({ "id": "snapshot-fixture", "value": false }),
+    )
+    .await
+    .unwrap();
+    let untrusted = app.call("plugins.snapshot", args.clone()).await.unwrap();
+    assert_eq!(untrusted["bundles"][0]["trusted"], false);
+    for catalog in untrusted["catalogs"].as_array().unwrap() {
+        assert_eq!(
+            catalog["catalog"]["bundle_states"]["snapshot-fixture"]["effective_enabled"],
+            false
+        );
+        assert_eq!(
+            catalog["catalog"]["bundle_states"]["snapshot-fixture"]["reason"],
+            "untrusted"
+        );
+    }
+    assert!(app.call("bundle.where", Value::Null).await.is_err());
+    app.call("plugins.uninstall", json!({ "id": "snapshot-fixture" }))
+        .await
+        .unwrap();
+    let removed = app.call("plugins.snapshot", args).await.unwrap();
+    assert!(removed["bundles"].as_array().unwrap().is_empty());
+    assert!(removed["catalogs"][0]["catalog"]["bundle_states"]
+        .as_object()
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn snapshot_rejects_unbounded_scope_lists() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = boot(dir.path()).await;
+    let error = app
+        .call(
+            "plugins.snapshot",
+            json!({ "scopes": vec![json!({ "kind": "user" }); 17] }),
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("at most 16"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn snapshot_preserves_query_aliases_while_resolving_canonical_policy() {
+    let dir = tempfile::tempdir().unwrap();
+    install_runtime_bundle(dir.path(), "snapshot-alias", true);
+    let project = dir.path().join("actual");
+    let alias = dir.path().join("alias");
+    std::fs::create_dir(&project).unwrap();
+    std::os::unix::fs::symlink(&project, &alias).unwrap();
+    let app = boot(dir.path()).await;
+    change(
+        &app,
+        "bundle:snapshot-alias",
+        PluginScope::Project {
+            project_path: project.to_string_lossy().into(),
+        },
+        PluginOverride::Disabled,
+    )
+    .await
+    .unwrap();
+    let snapshot = app
+        .call(
+            "plugins.snapshot",
+            json!({"scopes": [{"kind":"project", "project_path": alias}]}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        snapshot["catalogs"][1]["scope"]["project_path"],
+        alias.to_string_lossy().as_ref()
+    );
+    assert_eq!(
+        snapshot["catalogs"][1]["catalog"]["bundle_states"]["snapshot-alias"]["status"],
+        "disabled"
+    );
+}

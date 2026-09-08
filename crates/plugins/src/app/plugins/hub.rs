@@ -1,4 +1,4 @@
-//! Two plugin managers, one for each meaning of the word.
+//! Bundle administration and graph policy share one snapshot and the existing runtime manager.
 //!
 //! [`HubPlugin`] manages **installed bundles** — the data packages users get from GitHub (skills,
 //! subagents, MCP servers, scenes, scaffolds). Nothing in them executes in this process.
@@ -101,6 +101,66 @@ impl From<InstalledPlugin> for PluginInfo {
 }
 
 #[derive(Serialize)]
+struct PluginSnapshot {
+    bundles: Vec<PluginInfo>,
+    catalogs: Vec<ScopedPluginCatalog>,
+}
+
+#[derive(Serialize)]
+struct ScopedPluginCatalog {
+    scope: PluginScope,
+    catalog: crate::app::PluginCatalog,
+}
+
+fn effective_bundle_state(
+    bundle: &PluginInfo,
+    catalog: &crate::app::PluginCatalog,
+) -> crate::app::plugin_manager::EffectivePluginState {
+    use crate::app::plugin_manager::EffectivePluginState;
+    let runtime = catalog
+        .plugins
+        .iter()
+        .find(|entry| entry.id == format!("bundle:{}", bundle.id));
+    let mut state = runtime
+        .map(EffectivePluginState::from_entry)
+        .unwrap_or_else(|| EffectivePluginState {
+            effective_enabled: bundle.enabled,
+            state: if bundle.enabled {
+                crate::app::PluginOverride::Enabled
+            } else {
+                crate::app::PluginOverride::Disabled
+            },
+            status: if bundle.enabled { "active" } else { "disabled" }.into(),
+            missing: Vec::new(),
+            error: bundle
+                .diagnostics
+                .iter()
+                .find(|d| d.level == plugin::PluginDiagnosticLevel::Error)
+                .map(|d| d.message.clone()),
+            reason: None,
+        });
+    let requires_trust = bundle.counts.runtime > 0
+        || bundle
+            .extension_components
+            .iter()
+            .any(|component| component.status == "requires_trust");
+    if !bundle.enabled {
+        state.effective_enabled = false;
+        state.status = "disabled".into();
+        state.reason = Some("bundle_disabled".into());
+    } else if requires_trust && !bundle.trusted {
+        state.effective_enabled = false;
+        state.status = "pending".into();
+        state.reason = Some("untrusted".into());
+    } else if bundle.counts.runtime > 0 && runtime.is_none() {
+        state.effective_enabled = false;
+        state.status = "pending".into();
+        state.reason = Some("runtime_unavailable".into());
+    }
+    state
+}
+
+#[derive(Serialize)]
 struct PluginImportResult {
     plugin: PluginInfo,
 }
@@ -124,6 +184,7 @@ fn connector_allows_operation(
     match operation {
         "resources.list" => has("conversations") || has("documents") || has("tables"),
         operation if operation.starts_with("connection.") => has("connection"),
+        operation if operation.starts_with("issues.") => has("issues"),
         operation if operation.starts_with("conversation.") => has("conversations"),
         operation if operation.starts_with("document.") => has("documents"),
         operation if operation.starts_with("table.") => has("tables"),
@@ -213,6 +274,67 @@ impl Plugin for HubPlugin {
                         .map(PluginInfo::from)
                         .collect::<Vec<_>>(),
                 )
+            }
+        })?;
+
+        #[derive(Default, Deserialize)]
+        struct SnapshotArgs {
+            #[serde(default)]
+            scopes: Vec<PluginScope>,
+        }
+        let snapshot_hub = hub.clone();
+        let snapshot_manager = manager.clone();
+        ctx.command("plugins.snapshot", move |args| {
+            let hub = snapshot_hub.clone();
+            let manager = snapshot_manager.clone();
+            async move {
+                let args: SnapshotArgs = take_args(args)?;
+                if args.scopes.len() > 16 {
+                    return Err(PluginError::new("at most 16 plugin scopes may be queried"));
+                }
+                let mut scopes = vec![PluginScope::User];
+                // Echo query identities for frontend cache keys. The manager canonicalizes each
+                // scope internally; replacing a symlink alias here would strand its caller.
+                for scope in args.scopes {
+                    if !scopes.contains(&scope) {
+                        scopes.push(scope);
+                    }
+                }
+                let _inventory = hub.inventory.lock().await;
+                let bundles = hub
+                    .installed()
+                    .into_iter()
+                    .map(PluginInfo::from)
+                    .collect::<Vec<_>>();
+                // Inventory cannot change under this lock. Retry if concurrent policy changes
+                // cross scope reads; never publish mixed user/project policy revisions.
+                for _ in 0..3 {
+                    let mut catalogs = Vec::new();
+                    for scope in &scopes {
+                        let mut catalog =
+                            manager.catalog(scope.clone()).map_err(PluginError::new)?;
+                        catalog.bundle_states = bundles
+                            .iter()
+                            .map(|bundle| {
+                                (bundle.id.clone(), effective_bundle_state(bundle, &catalog))
+                            })
+                            .collect();
+                        catalogs.push(ScopedPluginCatalog {
+                            scope: scope.clone(),
+                            catalog,
+                        });
+                    }
+                    let first = &catalogs[0].catalog;
+                    if catalogs.iter().all(|item| {
+                        item.catalog.config_revision == first.config_revision
+                            && item.catalog.graph_revision == first.graph_revision
+                    }) {
+                        return json(PluginSnapshot { bundles, catalogs });
+                    }
+                }
+                Err(PluginError::new(
+                    "plugin state changed during snapshot; refresh and retry",
+                ))
             }
         })?;
 

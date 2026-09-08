@@ -319,6 +319,7 @@ export interface PluginManagerPageProps {
   projects?: PluginManagerProject[];
   initialTab?: PluginManagerTab;
   initialPluginId?: string | null;
+  pluginDetailsExtensions?: Array<{ pluginId: string; content: ReactNode }>;
   pluginDetailsExtension?: {
     pluginId: string;
     content: ReactNode;

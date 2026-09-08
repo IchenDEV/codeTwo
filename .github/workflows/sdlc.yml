@@ -24,7 +24,7 @@ jobs:
         with:
           bun-version: 1.3.10
       - name: Test lifecycle and devflow Gates
-        run: bun test script/verify/checks.test.ts script/devflow.test.ts
+        run: bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts
       - name: Validate documentation
         run: bun script/verify/docs.ts
       - name: Validate PR records, changed scope, and review readiness

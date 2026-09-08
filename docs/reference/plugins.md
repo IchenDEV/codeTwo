@@ -223,6 +223,21 @@ a second manager. Bundle code never supplies a React renderer. Third-party contr
 descriptors that C2 renders with its own components, which preserves the webview's trust boundary
 and design system.
 
+`plugins.snapshot` reads installed bundles and the requested user/project catalogs together under
+one inventory lock, retrying reads that cross policy/graph revisions. It always includes the user
+catalog and accepts at most 16 requested scopes. Response scope identities echo the request for
+cache lookup; policy evaluation still canonicalizes project paths internally. The desktop commits the returned snapshot as one
+state update and ignores superseded refresh responses. Existing `plugins.list` and
+`plugins.catalog` remain available for narrower host callers.
+
+Catalog entries include backend-resolved `effective_state` and `effective_components`; snapshot
+catalogs additionally include `bundle_states` keyed by installed id, with install-wide enablement
+and trust applied before runtime policy. `process.phase` observes `dormant`, `starting`, `running`,
+or `failed` separately from the graph adapter's `status`/`running` fields. A ready dormant adapter
+can accept its first command. Process failure retains its diagnostic until reload; the observer
+reports state and never controls a second lifecycle. Runtime observation events refresh desktop
+state without reconciling installed bundle files.
+
 State changes use a two-step protocol:
 
 1. `plugins.plan_change` validates the target, scope and JSON Schema, binds the request to the
@@ -423,3 +438,25 @@ registry.register(move || HostEventsPlugin::new(events.clone()));
 let config = AppConfig::new(&data_dir).with("desktop-events", PluginEntry::default());
 let app = CoreApp::boot_with(config, registry).await?;
 ```
+
+
+## Issue tracker delivery
+
+Bundles with an `issues` connector use the host-rendered issue workspace. The first implementation
+is [Linear](../../packs/linear/README.md), with a local install catalog alongside its manifest.
+`connection.info`, `issues.list`, `issues.get`, `issues.comments`, `issues.attachments`, and
+`issues.sync` are adapter operations; the plugin owns remote authentication and GraphQL details.
+
+The desktop `issue-delivery` runtime owns `issue_delivery.connect`, `disconnect`, `read`,
+`repository`, `start`, `list`, `continue`, `cancel`, `refresh`, `publish`, and `retry_creation` through
+the existing host command transport. These are host-only commands, not additional extension-public
+access to the engine. Credentials use the system keyring; only the selected installed/trusted
+connector receives a credential in its transient request input.
+
+Core persists additive issue-to-task associations with one active issue/workspace/repository tuple.
+The existing task/session/worktree machinery owns execution, and existing persisted prompt receipts
+make initial and review dispatch retryable. Delivery observations retain the original repository,
+branch, PR identity, permitted actions, exact-commit validation receipts, and independent sync state.
+The host uses per-run exclusion, bounded process execution, and at most four concurrent observations
+per tick. Runtime unload cancels its observer tasks; disabling the tracker does not delete Core work.
+The bundle README states platform, attachment, and live-account validation limits.

@@ -51,6 +51,14 @@ impl Event for ConnectorEvent {
     const NAME: &'static str = "connector/event";
 }
 
+/// Process observations changed; installed files and factory identities are unchanged.
+pub struct PluginRuntimeChanged;
+
+impl Event for PluginRuntimeChanged {
+    type Output = ();
+    const NAME: &'static str = "plugins/runtime-changed";
+}
+
 /// A plugin or component policy changed without necessarily rebuilding the plugin graph.
 pub struct PluginPolicyChanged;
 

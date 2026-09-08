@@ -38,7 +38,7 @@
 mod peer;
 mod wire;
 
-pub use peer::{HostHandler, Peer, ProtocolError};
+pub use peer::{HostHandler, Peer, ProtocolError, DEFAULT_COMMAND_TIMEOUT};
 pub use wire::{
     version_is_compatible, CommandSpec, EventParams, HostInfo, InitializeParams, InitializeResult,
     InvokeParams, LogParams, PROTOCOL_VERSION,
@@ -56,6 +56,56 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::OnceCell;
+
+/// Observations only: the existing scope and peer still own every lifecycle transition.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "phase", rename_all = "snake_case")]
+pub enum ProcessObservation {
+    Dormant,
+    Starting,
+    Running,
+    Failed { error: String },
+}
+
+pub(crate) struct ProcessObserver {
+    state: Mutex<ProcessObservation>,
+    context: WeakContext,
+}
+
+impl ProcessObserver {
+    fn new(ctx: &Context) -> Arc<Self> {
+        Arc::new(Self {
+            state: Mutex::new(ProcessObservation::Dormant),
+            context: ctx.weak(),
+        })
+    }
+
+    pub(crate) fn snapshot(&self) -> ProcessObservation {
+        self.state.lock().unwrap().clone()
+    }
+
+    fn set(&self, state: ProcessObservation) {
+        {
+            let mut current = self.state.lock().unwrap();
+            // A response followed immediately by EOF must not turn a terminal peer back into
+            // a running process when activation commits on another task.
+            if matches!(state, ProcessObservation::Running)
+                && matches!(*current, ProcessObservation::Failed { .. })
+            {
+                return;
+            }
+            *current = state;
+        }
+        if let Some(ctx) = self.context.upgrade() {
+            let weak = ctx.weak();
+            ctx.spawn(async move {
+                if let Some(ctx) = weak.upgrade() {
+                    ctx.emit(crate::app::events::PluginRuntimeChanged).await;
+                }
+            });
+        }
+    }
+}
 
 /// A started plugin: the two streams to talk over, and how to stop it.
 pub struct Channel {
@@ -269,6 +319,7 @@ pub struct ProtocolPlugin {
     transport: Arc<dyn Transport>,
     data_dir: Option<PathBuf>,
     handshake_timeout: std::time::Duration,
+    command_timeout: std::time::Duration,
     /// `None` is the 1.0 compatibility path where initialize contributes commands dynamically.
     /// `Some` is the 1.1 static contract: handlers exist before the process and activate it once.
     declared_commands: Option<Vec<PluginRuntimeCommand>>,
@@ -282,6 +333,11 @@ pub struct ProtocolPlugin {
 pub const DEFAULT_HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 impl ProtocolPlugin {
+    pub fn with_command_timeout(mut self, timeout: std::time::Duration) -> ProtocolPlugin {
+        self.command_timeout = timeout;
+        self
+    }
+
     pub fn new(name: impl Into<String>, transport: Arc<dyn Transport>) -> ProtocolPlugin {
         ProtocolPlugin {
             name: name.into(),
@@ -290,6 +346,7 @@ impl ProtocolPlugin {
             transport,
             data_dir: None,
             handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
+            command_timeout: DEFAULT_COMMAND_TIMEOUT,
             declared_commands: None,
         }
     }
@@ -317,6 +374,10 @@ impl ProtocolPlugin {
             transport: Arc::new(transport),
             data_dir: Some(data_dir),
             handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
+            command_timeout: spec
+                .command_timeout_ms
+                .map(std::time::Duration::from_millis)
+                .unwrap_or(DEFAULT_COMMAND_TIMEOUT),
             declared_commands: None,
         }
     }
@@ -391,10 +452,12 @@ struct PendingActivation {
 }
 
 struct ProtocolSession {
+    observer: Arc<ProcessObserver>,
     plugin: String,
     transport: Arc<dyn Transport>,
     data_dir: Option<PathBuf>,
     handshake_timeout: std::time::Duration,
+    command_timeout: std::time::Duration,
 }
 
 impl ProtocolSession {
@@ -407,6 +470,7 @@ impl ProtocolSession {
             std::fs::create_dir_all(dir)?;
         }
 
+        self.observer.set(ProcessObservation::Starting);
         let channel = self.transport.start().await?;
         let guard = ActivationGuard::new(channel.shutdown);
         let shutdown = guard.shutdown.clone();
@@ -422,7 +486,23 @@ impl ProtocolSession {
             ctx: ctx.weak(),
             plugin: self.plugin.clone(),
         });
-        let peer = Peer::new(channel.reader, channel.writer, host);
+        let shutdown = guard.shutdown.clone();
+        let observer = self.observer.clone();
+        let peer = Peer::managed(
+            channel.reader,
+            channel.writer,
+            host,
+            self.command_timeout,
+            Box::new(move |error| {
+                shutdown.run();
+                observer.set(ProcessObservation::Failed { error });
+            }),
+        );
+        let owned = peer.clone();
+        if !ctx.effect(move || owned.close("plugin runtime unloaded".into())) {
+            peer.close("plugin runtime unavailable".into());
+            return Err(PluginError::new("plugin runtime unavailable"));
+        }
         let params = InitializeParams {
             protocol_version: PROTOCOL_VERSION.to_string(),
             host: HostInfo {
@@ -441,16 +521,18 @@ impl ProtocolSession {
                 .map(|dir| dir.to_string_lossy().into_owned()),
             project_path,
         };
-        let result: InitializeResult =
-            tokio::time::timeout(self.handshake_timeout, peer.request("initialize", params))
-                .await
-                .map_err(|_| {
-                    PluginError::new(format!(
-                        "did not answer `initialize` within {:?}",
-                        self.handshake_timeout
-                    ))
-                })?
-                .map_err(|error| PluginError::new(format!("handshake failed: {error}")))?;
+        let result: InitializeResult = tokio::time::timeout(
+            self.handshake_timeout,
+            peer.request_with_timeout("initialize", params, self.handshake_timeout),
+        )
+        .await
+        .map_err(|_| {
+            PluginError::new(format!(
+                "did not answer `initialize` within {:?}",
+                self.handshake_timeout
+            ))
+        })?
+        .map_err(|error| PluginError::new(format!("handshake failed: {error}")))?;
 
         if !version_is_compatible(&result.protocol_version) {
             return Err(PluginError::new(format!(
@@ -566,6 +648,7 @@ impl LazyProtocolRuntime {
             .activation
             .get_or_init(|| async {
                 self.activate_once().await.map_err(|error| {
+                    self.session.observer.set(ProcessObservation::Failed { error: error.to_string() });
                     format!(
                         "plugin activation failed: {error}; reload or disable and re-enable the plugin to retry"
                     )
@@ -591,6 +674,7 @@ impl LazyProtocolRuntime {
         validate_declared_commands(&self.commands, &result)?;
         register_events(&ctx, &peer, &result.events)?;
         guard.commit();
+        self.session.observer.set(ProcessObservation::Running);
         Ok(peer)
     }
 }
@@ -610,11 +694,17 @@ impl Plugin for ProtocolPlugin {
     }
 
     async fn apply(&self, ctx: Context, config: Value) -> PluginResult {
+        let observer = ProcessObserver::new(&ctx);
+        if let Some(manager) = ctx.get::<crate::app::PluginManager>() {
+            manager.observe_process(&self.name, ctx.command_realm().clone(), &observer);
+        }
         let session = Arc::new(ProtocolSession {
+            observer,
             plugin: self.name.clone(),
             transport: self.transport.clone(),
             data_dir: self.data_dir.clone(),
             handshake_timeout: self.handshake_timeout,
+            command_timeout: self.command_timeout,
         });
 
         let Some(declared) = &self.declared_commands else {
@@ -649,6 +739,7 @@ impl Plugin for ProtocolPlugin {
             }
             register_events(&ctx, &peer, &result.events)?;
             guard.commit();
+            session.observer.set(ProcessObservation::Running);
             ctx.effect(move || drop(peer));
             return Ok(());
         };

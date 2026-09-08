@@ -8,7 +8,8 @@ change; ordinary edits need only affected-area rules, code, and tests. The [devf
 
 A user request, Issue, or confirmed Incident starts a change. Record the outcome, constraints,
 owner, observable acceptance, and smallest plan in
-`docs/sdlc/changes/<date>-<slug>/change.md`, using the [single-file template](../templates/change.md).
+`docs/sdlc/changes/<date>-<slug>/`, using four templates: [Intent](../templates/intent.md),
+[Spec](../templates/spec.md), [Plan](../templates/plan.md), and [Verification](../templates/verification.md).
 A mechanical follow-up may update its existing record with the new scope and evidence. Read-only
 work needs no change record or repository checks.
 
@@ -23,22 +24,32 @@ this repository's development state.
 ./script/devflow status
 ```
 
-`new` creates one draft containing Intent, Acceptance criteria, Plan, Verification, and Review and
-release. Edit it directly. Do not create a file or run an approval command for every phase.
-Historical schema-3 stage bundles remain valid and auditable; new work uses schema 4. Do not mix
-formats inside one bundle, bulk rewrite history, or create a parallel specs/plans registry.
+`new` creates all four draft/pending files together. Preparing a draft does not grant execution
+permission. Each fact has one home:
+
+| File | Owns |
+| --- | --- |
+| `intent.md` | Request, outcome, constraints, source, risk, and existing implementation authorization |
+| `spec.md` | Design decisions, unique `AC-N` criteria, and additional high/critical design approval |
+| `plan.md` | Exact scope, implementation ownership, risk-selected checks, and rollback |
+| `verification.md` | One result per criterion, checked revision, verifier, residual risk, review and release |
+
+Do not copy authorization fields into Spec or Plan. Their `accepted` state records readiness under
+the Intent authorization, not a new permission request. Historical schema-3 stage bundles and
+schema-4 single records remain valid and auditable; new work uses schema 5. Do not mix formats
+inside one bundle, bulk rewrite history, or create a parallel specs/plans registry.
 
 ### Authorization and design
 
 A direct implementation request authorizes its bounded local work. Record the named requester,
-date, original decision or session quote, and constraints as `approved_by`, `approved_at`, and
+date, original decision or session quote, and constraints in Intent as `approved_by`, `approved_at`, and
 `approval_source`. For low/medium work, the owner may elaborate the local design and plan within
 that authorization without additional approval rounds. Material scope changes or unresolved
 security, data, or major design decisions require the corresponding human decision.
 
-High/critical records additionally require `design_approved_by`, `design_approved_at`, and
-`design_approval_source`; both intent and design approvers must differ from the implementation
-owner. Reuse an existing explicit decision for the same pending scope; never invent approval or
+High/critical Specs additionally require `design_approved_by`, `design_approved_at`, and
+`design_approval_source`; both intent and design approvers must differ from the Intent and Plan
+implementation owners. Reuse an existing explicit decision for the same pending scope; never invent approval or
 infer it from silence. Names and dates are auditable claims, not authentication.
 
 | Risk | Design and verification |
@@ -48,7 +59,7 @@ infer it from silence. Names and dates are auditable claims, not authentication.
 | High | Security, migrations, persistence/protocol boundaries, release controls, major architecture; independent design decision, integration/rollback proof and independent verification |
 | Critical | Destructive operations, credentials, possible private-data exposure; high-risk requirements plus explicit authorization for each affected operation |
 
-The `scope` field lists exact repository paths or directory prefixes, comma-separated. No globs,
+The Plan `scope` field lists exact repository paths or directory prefixes, comma-separated. No globs,
 traversal, or root-wide scope. Changed paths, deletions, and both rename endpoints must be covered
 by a record added or updated in the same diff. Historical approval alone cannot cover new work.
 
@@ -60,21 +71,27 @@ Read existing owner code and consumers before introducing another abstraction. P
 worktree state. Use the [instance preflight](../../codetwo-operations/references/desktop-instances.md)
 before launching Core; one data directory has one live owner.
 
-Status is stored once:
+Each file stores only its own stage status. Drafts may coexist; accepted stages require accepted
+predecessors. Accept Intent after capturing the existing request, then complete and accept Spec and
+Plan within that authorization. High/critical Spec acceptance additionally requires the recorded
+independent design decision. No stage-specific approval command or repeated confirmation is needed.
+
+Intent, Spec, and Plan use `draft`, `in-review`, `accepted`, or `rejected`. Verification uses:
 
 | Status | Fact and next trigger |
 | --- | --- |
-| `draft` | Proposal; resolve acceptance and authorization before implementation |
-| `accepted` | Authorized scope and design ready; start implementation |
-| `in-progress` | Authorized implementation or verification running; inspect results and fix |
+| `pending` | Evidence is not collected yet; drafts may still be prepared |
+| `in-progress` | Accepted Plan is being implemented or verified |
 | `failed` | Actual FAIL evidence; correct and reverify |
 | `blocked` | Missing decision, dependency, or evidence; `next_trigger` names what must change |
-| `passed` | Every AC checked and backed by current PASS evidence; human review next |
-| `rejected` / `superseded` | Record the decision and successor in `next_trigger`; do not execute |
+| `passed` | Every Spec AC checked and backed by current PASS evidence; human review next |
 
-Use `next_trigger` to identify the next owner/action or blocker. Merge, release, recovery, and
-no-release closure are recorded with links in Review and release, after the real events occur;
-`passed` alone only means verified work. Draft PRs may hold proposals and honest failures.
+Rejected stages also name a concrete `next_trigger`. New relevant changes invalidate affected
+acceptance/evidence: update the owning files and return Verification to `in-progress`, or `pending`
+while a revised predecessor is being decided. Keep old results clearly labeled as prior evidence.
+Merge, release, recovery, and no-release closure live in Verification's Review and release section,
+after the actual events occur; `passed` alone only means verified work. Draft PRs may hold proposals
+and honest failures.
 
 ## Test
 
@@ -85,7 +102,7 @@ or repeat only after relevant changes, failures, or unresolved concerns.
 | --- | --- |
 | Repository files | `bun script/verify/sdlc.ts --worktree` once before handoff; includes structure and scope |
 | Documentation, linked assets, catalog | `bun script/verify/docs.ts` plus `git diff --check` |
-| Authorization/routing rules, lifecycle behavior, template structure, or checkers | `bun test script/verify/checks.test.ts script/devflow.test.ts`; this is also the active lifecycle Eval |
+| Authorization/routing rules, lifecycle behavior, template structure, or checkers | `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts`; this is also the active lifecycle Eval |
 | Rust | Affected crate tests and applicable format/check commands in its existing workflow |
 | Desktop | Affected tests/types/build from `apps/desktop/package.json`; actual window rendering for layout/interaction |
 | Security, data, protocol, packaging | Applicable contract, integration, migration, package, or runtime checks; recovery proof |
@@ -95,7 +112,7 @@ UI acceptance uses the actual rendered app in affected light/dark/narrow states.
 fixture image does not prove product behavior. Lifecycle-only work does not start Core or rerun
 unrelated renderer, Rust, or packaging suites.
 
-Acceptance uses unique `AC-N` checkboxes. Verification maps each id to exactly one current result:
+Spec acceptance uses unique `AC-N` checkboxes. Verification maps each id to exactly one current result:
 
 ```text
 - AC-1: PASS — `relevant-command` passed in the named environment.
@@ -105,7 +122,7 @@ Residual risk: concrete unchecked boundary or remaining limitation.
 
 `passed` requires checked criteria, PASS evidence citing a command or linked artifact, verifier,
 date, mode, and `revision` (commit or explicitly described worktree baseline). High/critical
-verification must be independent of the owner. Failed results retain every criterion mapping and
+verification must be independent of the Intent and Plan implementation owners. Failed results retain every criterion mapping and
 at least one FAIL; record prior attempts separately. Skips state their reason. New relevant changes
 invalidate the affected evidence: return to `in-progress` and recheck before `passed`.
 
@@ -117,7 +134,7 @@ Ready PRs require authorized scope and passing verification. The SDLC workflow r
 branch and metadata Gate when code, PR text, or draft status changes:
 
 ```sh
-PR_BODY='Change: docs/sdlc/changes/<date>-<slug>/change.md' PR_IS_DRAFT=false \
+PR_BODY='Change: docs/sdlc/changes/<date>-<slug>/intent.md' PR_IS_DRAFT=false \
   PR_BASE_SHA=<base-sha> ./script/devflow check-pr
 ```
 

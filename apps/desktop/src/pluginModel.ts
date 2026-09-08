@@ -21,6 +21,7 @@ export const PLUGIN_CONNECTOR_CAPABILITIES = [
   "tables",
   "messaging",
   "turn_notifications",
+  "issues",
 ] as const;
 export type PluginConnectorCapability = (typeof PLUGIN_CONNECTOR_CAPABILITIES)[number];
 
@@ -48,6 +49,7 @@ export interface PluginRuntimeContribution {
   args: string[];
   env: Record<string, string>;
   inject: string[];
+  commandTimeoutMs?: number;
   optionalInject: string[];
   scopeSupport: Array<"user" | "project">;
 }
@@ -134,9 +136,13 @@ export function parsePluginRuntimeContribution(value: unknown): PluginRuntimeCon
   if (!isObject(value)) return null;
   const raw = asObject(value);
   if (!hasOnlyKeys(raw, [
-    "protocol", "command", "args", "env", "inject", "optionalInject", "scopeSupport",
+    "protocol", "command", "args", "env", "inject", "optionalInject", "scopeSupport", "commandTimeoutMs",
   ])) return null;
   if (
+    (raw.commandTimeoutMs !== undefined && (
+      typeof raw.commandTimeoutMs !== "number" || !Number.isInteger(raw.commandTimeoutMs) ||
+      raw.commandTimeoutMs < 1 || raw.commandTimeoutMs > 3_600_000
+    )) ||
     typeof raw.command !== "string" ||
     raw.command.trim().length === 0 ||
     !safeCommand(raw.command) ||
@@ -165,6 +171,7 @@ export function parsePluginRuntimeContribution(value: unknown): PluginRuntimeCon
     inject: strings(raw.inject),
     optionalInject: strings(raw.optionalInject),
     scopeSupport: normalizedScopes,
+    ...(raw.commandTimeoutMs === undefined ? {} : { commandTimeoutMs: raw.commandTimeoutMs as number }),
   };
 }
 

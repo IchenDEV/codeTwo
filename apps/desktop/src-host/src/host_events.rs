@@ -3,7 +3,7 @@
 use codetwo_kernel::{
     async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult, Service,
 };
-use codetwo_plugins::events::{ConnectorEvent, PluginsChanged};
+use codetwo_plugins::events::{ConnectorEvent, PluginRuntimeChanged, PluginsChanged};
 use codetwo_plugins::{EventBus, TerminalEvent, TerminalOutputEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -157,6 +157,12 @@ impl Plugin for HostEventsPlugin {
 
         let host = self.host.clone();
         ctx.on::<PluginsChanged, _>(move |_| {
+            let _ = host.emit("plugins-changed", ());
+            None
+        });
+
+        let host = self.host.clone();
+        ctx.on::<PluginRuntimeChanged, _>(move |_| {
             let _ = host.emit("plugins-changed", ());
             None
         });

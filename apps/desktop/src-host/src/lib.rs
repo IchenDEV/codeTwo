@@ -10,6 +10,7 @@ mod automation;
 mod device_sync;
 mod github;
 mod host_events;
+mod issue_delivery;
 mod lsp;
 mod remote;
 mod scene_mcp;
@@ -183,6 +184,7 @@ pub async fn run() -> Result<(), String> {
     let host = events.clone();
     registry.register(move || automation::AutomationPlugin::new(host.clone()));
     registry.register(|| github::GitHubPlugin);
+    registry.register(|| issue_delivery::IssueDeliveryPlugin);
     let host = events.clone();
     registry.register(move || lsp::LspPlugin::new(host.clone()));
     let host = events.clone();
@@ -198,6 +200,7 @@ pub async fn run() -> Result<(), String> {
     for (name, category, essential, project_scoped) in [
         ("automation", PluginCategory::Automation, false, false),
         ("github", PluginCategory::Integration, false, false),
+        ("issue-delivery", PluginCategory::Integration, false, false),
         ("lsp", PluginCategory::DeveloperTools, false, true),
         ("desktop-events", PluginCategory::Foundation, true, false),
         ("device-sync", PluginCategory::Integration, false, false),
@@ -230,6 +233,7 @@ pub async fn run() -> Result<(), String> {
     let config = AppConfig::new(&data_dir)
         .with("automation", PluginEntry::default())
         .with("github", PluginEntry::default())
+        .with("issue-delivery", PluginEntry::default())
         .with("desktop-events", PluginEntry::default())
         .with("lsp", PluginEntry::default())
         .with("device-sync", PluginEntry::default())
