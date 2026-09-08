@@ -123,11 +123,12 @@ function validateStageCommon(
   expectedStage: string,
   allowedStatuses: Set<string>,
   bundleId: string,
+  schema = SCHEMA_V3,
 ): string[] {
   const errors: string[] = [];
   const path = display(artifact.path);
   if (artifact.metadata.stage !== expectedStage) errors.push(`${path}: stage must be ${expectedStage}`);
-  if (artifact.metadata.schema !== SCHEMA_V3) errors.push(`${path}: schema 3 is required`);
+  if (artifact.metadata.schema !== schema) errors.push(`${path}: schema ${schema} is required`);
   if (artifact.metadata.id !== bundleId) errors.push(`${path}: id must match bundle ${bundleId}`);
   const status = artifact.metadata.status ?? "";
   if (!allowedStatuses.has(status)) errors.push(`${path}: invalid status ${JSON.stringify(status)}`);
@@ -135,7 +136,7 @@ function validateStageCommon(
   if (!isConcrete(artifact.metadata.owner) && !new Set(["draft", "pending"]).has(status)) {
     errors.push(`${path}: requires an assigned owner`);
   }
-  if (expectedStage !== "verification" && !RISK_LEVELS.has(artifact.metadata.risk ?? "")) {
+  if ((schema === SCHEMA_V3 ? expectedStage !== "verification" : expectedStage === "intent") && !RISK_LEVELS.has(artifact.metadata.risk ?? "")) {
     errors.push(`${path}: invalid risk`);
   }
   return errors;
@@ -299,6 +300,83 @@ function validateChangeRecord(root: string, dir: string): { bundle: StageBundle 
   return { bundle: { id, dir, intent, spec, plan, verification }, errors: errors.filter(Boolean) };
 }
 
+// Schema 5 separates facts into four files while reusing evidence/scope/release Gates.
+function validateFourStageBundle(root: string, dir: string, stages: Partial<Record<(typeof STAGE_FILES)[number], Artifact>>): { bundle: StageBundle | null; errors: string[] } {
+  const errors: string[] = [];
+  const id = basename(dir);
+  const intent = stages["intent.md"]!;
+  const spec = stages["spec.md"];
+  const plan = stages["plan.md"];
+  const verification = stages["verification.md"];
+  const risk = intent.metadata.risk ?? "";
+  const headings = [["intent"], ["design", "acceptance criteria"], ["plan"], ["verification", "review and release"]];
+  const fieldOwners: Record<string, string> = {
+    source: "intent", risk: "intent", approved_by: "intent", approved_at: "intent", approval_source: "intent",
+    design_approved_by: "spec", design_approved_at: "spec", design_approval_source: "spec",
+    scope: "plan", revision: "verification", verification_mode: "verification",
+    verified_by: "verification", verified_at: "verification", release_target: "verification",
+  };
+  const implementationOwners = [intent, plan].filter(Boolean).map(stage => normalizedActor(stage!.metadata.owner));
+  for (const [index, fileName] of STAGE_FILES.entries()) {
+    const stage = stages[fileName];
+    if (!stage) { errors.push(`${dir}: missing ${fileName}`); continue; }
+    const name = fileName.replace(".md", "");
+    const status = stage.metadata.status ?? "";
+    const active = index === 3 ? ["in-progress", "passed", "failed"].includes(status) : status === "accepted";
+    errors.push(...validateStageCommon(stage, name, new Set(index === 3
+      ? ["pending", "in-progress", "blocked", "passed", "failed"]
+      : ["draft", "in-review", "accepted", "rejected"]), id, "5"));
+    for (const heading of headings[index]) errors.push(requireHeading(stage, heading) ?? "");
+    for (const [field, owner] of Object.entries(fieldOwners)) {
+      if (field in stage.metadata && owner !== name) errors.push(`${stage.path}: ${field} belongs only in ${owner}.md`);
+    }
+    if (index > 0) {
+      const previousName = STAGE_FILES[index - 1];
+      if (stage.metadata.based_on !== previousName) errors.push(`${stage.path}: based_on must be ${previousName}`);
+      if (active && stages[previousName]?.metadata.status !== "accepted") errors.push(`${stage.path}: ${previousName} must be accepted before ${name}`);
+    }
+    if (status === "accepted" || status === "passed") errors.push(requireNoPlaceholders(stage.path, readFileSync(stage.path, "utf8")) ?? "");
+    if ((status === "blocked" || status === "rejected") && !isConcrete(stage.metadata.next_trigger)) errors.push(`${stage.path}: ${status} requires a concrete next_trigger`);
+    errors.push(...validateLocalLinks(root, stage.path));
+  }
+  if (intent.metadata.status === "accepted") {
+    errors.push(...validateApproval(intent, risk));
+    for (const key of ["source", "approval_source"]) {
+      if (!isConcrete(intent.metadata[key])) errors.push(`${intent.path}: accepted intent requires ${key}`);
+    }
+    if (INDEPENDENT_RISK_LEVELS.has(risk) && implementationOwners.includes(normalizedActor(intent.metadata.approved_by))) errors.push(`${intent.path}: high/critical authorization requires an independent approver`);
+  }
+  if (spec) {
+    errors.push(...validateAcceptanceCriteria(spec));
+    if (spec.metadata.status === "accepted" && INDEPENDENT_RISK_LEVELS.has(risk)) {
+      const m = spec.metadata;
+      if (!isConcrete(m.design_approved_by) || implementationOwners.includes(normalizedActor(m.design_approved_by))
+        || !isValidDate(m.design_approved_at ?? "") || !isConcrete(m.design_approval_source)) errors.push(`${spec.path}: high/critical requires independent design approval, date, and source`);
+    }
+  }
+  if (plan?.metadata.status === "accepted") {
+    if (!isConcrete(plan.metadata.scope)) errors.push(`${plan.path}: plan requires explicit scope`);
+    else errors.push(...validateScope(plan.metadata.scope, plan.path));
+  }
+  // Expose section views only in memory; evidence still lives solely in verification.md.
+  let evidenceView = verification;
+  if (spec && verification) {
+    const evidence = verification.sections.verification ?? "";
+    evidenceView = { ...verification, sections: { ...verification.sections,
+      "automated checks": evidence, "deviations and residual risk": evidence, verdict: evidence } };
+    errors.push(...validateVerificationEvidence(intent, spec, evidenceView));
+    for (const criterion of duplicates(v2Evidence(evidence).map(item => item.id))) errors.push(`${verification.path}: duplicate verification evidence ${criterion}`);
+    if (verification.metadata.status === "passed") {
+      for (const criterion of v2Criteria(spec.sections["acceptance criteria"] ?? "")) {
+        if (criterion.mark.toLowerCase() !== "x") errors.push(`${spec.path}: passed verification requires checked ${criterion.id}`);
+      }
+      if (!isConcrete(verification.metadata.revision)) errors.push(`${verification.path}: passed verification requires verified revision or worktree baseline`);
+      if (INDEPENDENT_RISK_LEVELS.has(risk) && implementationOwners.includes(normalizedActor(verification.metadata.verified_by))) errors.push(`${verification.path}: high/critical verification requires an independent verifier`);
+    }
+  }
+  return { bundle: { id, dir, intent, spec, plan, verification: evidenceView }, errors: errors.filter(Boolean) };
+}
+
 export function validateStageBundle(root: string, bundleDir: string): { bundle: StageBundle | null; errors: string[] } {
   const errors: string[] = [];
   const bundleId = basename(bundleDir);
@@ -317,6 +395,10 @@ export function validateStageBundle(root: string, bundleDir: string): { bundle: 
   }
   const intent = stages["intent.md"];
   if (!intent) return { bundle: null, errors: [...errors, `${display(bundleDir)}: missing intent.md`] };
+  if (Object.values(stages).some(stage => stage.metadata.schema === "5")) {
+    const result = validateFourStageBundle(root, bundleDir, stages);
+    return { bundle: result.bundle, errors: [...errors, ...result.errors] };
+  }
   const spec = stages["spec.md"];
   const plan = stages["plan.md"];
   const verification = stages["verification.md"];
@@ -370,7 +452,7 @@ export function discoverStageBundles(root: string): string[] {
   if (!existsSync(changesRoot)) return [];
   return readdirSync(changesRoot)
     .map((entry) => join(changesRoot, entry))
-    .filter((path) => existsSync(join(path, "intent.md")) || existsSync(join(path, "change.md")))
+    .filter((path) => [...STAGE_FILES, "change.md"].some(file => existsSync(join(path, file))))
     .sort();
 }
 

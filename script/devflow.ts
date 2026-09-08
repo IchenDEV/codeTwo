@@ -40,7 +40,7 @@ function usage(): void {
   ./script/devflow validate [--worktree]
   ./script/devflow check-pr
 
-new creates one draft change.md. Record existing authorization and evidence in that file; no command grants approval.`);
+new creates intent.md, spec.md, plan.md, and verification.md together. Record existing authorization in Intent; no command grants approval.`);
 }
 
 function validateSlug(slug: string): void {
@@ -54,10 +54,6 @@ function titleFromSlug(slug: string): string {
 function changeDir(changeId: string): string {
   if (!CHANGE_ID_RE.test(changeId)) fail(`invalid change id ${JSON.stringify(changeId)}`);
   return join(CHANGES_DIR, changeId);
-}
-
-function stagePath(changeId: string, stage: string): string {
-  return join(changeDir(changeId), `${stage}.md`);
 }
 
 function renderTemplate(templateName: string, id: string, title: string, source: string, risk: string): string {
@@ -81,9 +77,15 @@ function cmdNew(args: string[]): void {
   const destination = changeDir(id);
   if (existsSync(destination)) fail(`${destination} already exists`);
   mkdirSync(destination, { recursive: true });
-  const path = stagePath(id, "change");
-  writeFileSync(path, renderTemplate("change.md", id, titleFromSlug(slug), source, risk));
-  console.log(relative(REPO_ROOT, path).split(sep).join("/"));
+  writeStages(id, slug, source, risk);
+}
+
+function writeStages(id: string, slug: string, source: string, risk: string): void {
+  for (const file of STAGE_FILES) {
+    const path = join(changeDir(id), file);
+    writeFileSync(path, renderTemplate(file, id, titleFromSlug(slug), source, risk));
+    console.log(relative(REPO_ROOT, path).split(sep).join("/"));
+  }
 }
 
 function cmdStatus(args: string[]): void {
@@ -116,11 +118,10 @@ function cmdIncident(args: string[]): void {
       .replaceAll("YYYY-MM-DD", today())
       .replaceAll("Incident title", `${titleFromSlug(slug)} incident`)
       .replaceAll("<deterministic alert, user report, or operational observation>", source)
-      .replace("Link at least one owned change Intent when remediation is needed.\n\nBlocked: pending.\n\nReplace the placeholder with a concrete obstacle only when a follow-up change cannot be created.", `Follow-up: [${id}](../changes/${id}/change.md).`),
+      .replace("Link at least one owned change Intent when remediation is needed.\n\nBlocked: pending.\n\nReplace the placeholder with a concrete obstacle only when a follow-up change cannot be created.", `Follow-up: [${id}](../changes/${id}/intent.md).`),
   );
-  writeFileSync(stagePath(id, "change"), renderTemplate("change.md", id, titleFromSlug(slug), "incident", "high"));
   console.log(relative(REPO_ROOT, incidentPath).split(sep).join("/"));
-  console.log(relative(REPO_ROOT, stagePath(id, "change")).split(sep).join("/"));
+  writeStages(id, slug, "incident", "high");
 }
 
 function cmdAddEval(args: string[]): void {

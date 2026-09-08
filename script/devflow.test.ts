@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const SOURCE_ROOT = join(import.meta.dir, "..");
-const CHANGE_ID = "2026-09-08-single-record-smoke";
+const CHANGE_ID = "2026-09-08-four-stage-smoke";
 
 function withRepository(check: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "codetwo-devflow-"));
@@ -35,20 +35,28 @@ function git(root: string, ...args: string[]): string {
   return r.stdout.trim();
 }
 
-function acceptedRecord(root: string): string {
-  return readFileSync(join(root, "docs/sdlc/changes", CHANGE_ID, "change.md"), "utf8")
-    .replaceAll("[fill]", "Concrete fixture requirement.")
-    .replace("owner: unassigned", "owner: fixture")
-    .replace("scope: pending", "scope: README.md")
-    .replace('approved_by: ""', 'approved_by: "requester"')
-    .replace('approved_at: ""', 'approved_at: "2026-09-08"')
-    .replace('approval_source: ""', 'approval_source: "Fixture user explicitly requested this bounded change."')
-    .replace("status: draft", "status: in-progress");
+function acceptStages(root: string): string {
+  const dir = join(root, "docs/sdlc/changes", CHANGE_ID);
+  for (const stage of ["intent", "spec", "plan"]) {
+    const path = join(dir, `${stage}.md`);
+    const accepted = readFileSync(path, "utf8")
+      .replaceAll("[fill]", "Concrete fixture requirement.")
+      .replace("owner: unassigned", "owner: fixture")
+      .replace("scope: pending", "scope: README.md")
+      .replace('approved_by: ""', 'approved_by: "requester"')
+      .replace('approved_at: ""', 'approved_at: "2026-09-08"')
+      .replace('approval_source: ""', 'approval_source: "Fixture user explicitly requested this bounded change."')
+      .replace("status: draft", "status: accepted");
+    writeFileSync(path, accepted);
+  }
+  return readFileSync(join(dir, "verification.md"), "utf8");
 }
 
-function passedRecord(accepted: string): string {
-  return accepted.replace("status: in-progress", "status: passed")
-    .replace("[ ] AC-1", "[x] AC-1")
+function passStages(root: string, pending: string): string {
+  const path = join(root, "docs/sdlc/changes", CHANGE_ID, "spec.md");
+  writeFileSync(path, readFileSync(path, "utf8").replace("[ ] AC-1", "[x] AC-1"));
+  return pending.replace("status: pending", "status: passed")
+    .replace("owner: unassigned", "owner: fixture")
     .replace('revision: ""', 'revision: "disposable worktree fixture"')
     .replace('verified_by: ""', 'verified_by: "fixture"')
     .replace('verified_at: ""', 'verified_at: "2026-09-08"')
@@ -57,27 +65,28 @@ function passedRecord(accepted: string): string {
     .replace("Residual risk: pending.", "Residual risk: disposable fixture only.");
 }
 
-test("one record runs request, local work, honest failure, verification and Ready PR without stage approval commands", () => {
+test("four files run request, local work, honest failure, verification and Ready PR without stage approval commands", () => {
   withRepository(root => {
-    expect(run(root, ["new", "single-record-smoke", "user", "low"]).status).toBe(0);
-    const path = join(root, "docs/sdlc/changes", CHANGE_ID, "change.md");
-    expect(existsSync(join(root, "docs/sdlc/changes", CHANGE_ID, "intent.md"))).toBe(false);
+    expect(run(root, ["new", "four-stage-smoke", "user", "low"]).status).toBe(0);
+    const path = join(root, "docs/sdlc/changes", CHANGE_ID, "verification.md");
+    expect(existsSync(join(root, "docs/sdlc/changes", CHANGE_ID, "intent.md"))).toBe(true);
+    expect(existsSync(join(root, "docs/sdlc/changes", CHANGE_ID, "change.md"))).toBe(false);
     expect(run(root, ["validate"]).status).toBe(0);
-    const draft = { PR_BODY: `Change: docs/sdlc/changes/${CHANGE_ID}/change.md`, PR_IS_DRAFT: "true" };
+    const draft = { PR_BODY: `Change: docs/sdlc/changes/${CHANGE_ID}/intent.md`, PR_IS_DRAFT: "true" };
     expect(run(root, ["check-pr"], draft).status).toBe(0);
     expect(run(root, ["check-pr"], { ...draft, PR_IS_DRAFT: "false" }).output).toContain("intent must be accepted");
-    const accepted = acceptedRecord(root);
+    const accepted = acceptStages(root);
     writeFileSync(path, accepted);
     expect(run(root, ["validate"]).status).toBe(0);
     expect(run(root, ["check-pr"], { ...draft, PR_IS_DRAFT: "false" }).output).toContain("verification passed");
-    writeFileSync(path, accepted.replace("status: in-progress", "status: failed")
+    writeFileSync(path, accepted.replace("status: pending", "status: failed").replace("owner: unassigned", "owner: fixture")
       .replace("AC-1: BLOCKED — Acceptance has not been checked.", "AC-1: FAIL — `fixture-check` failed.")
       .replace("Verdict: pending.", "Verdict: failed."));
     expect(run(root, ["check-pr"], draft).status).toBe(0);
     expect(run(root, ["check-pr"], { ...draft, PR_IS_DRAFT: "false" }).status).not.toBe(0);
-    writeFileSync(path, passedRecord(accepted));
+    writeFileSync(path, passStages(root, accepted));
     expect(run(root, ["check-pr"], { ...draft, PR_IS_DRAFT: "false" }).status).toBe(0);
-    expect(run(root, ["status", CHANGE_ID]).output).toContain("change.md=passed");
+    expect(run(root, ["status", CHANGE_ID]).output).toContain("verification.md=passed");
   });
 });
 
@@ -89,15 +98,15 @@ test("CI event checks every changed record and scopes implementation; PR text is
     git(root, "add", ".");
     git(root, "commit", "-qm", "baseline");
     const base = git(root, "rev-parse", "HEAD");
-    run(root, ["new", "single-record-smoke", "user", "medium"]);
-    const path = join(root, "docs/sdlc/changes", CHANGE_ID, "change.md");
-    const accepted = acceptedRecord(root);
+    run(root, ["new", "four-stage-smoke", "user", "medium"]);
+    const path = join(root, "docs/sdlc/changes", CHANGE_ID, "verification.md");
+    const accepted = acceptStages(root);
     writeFileSync(path, accepted);
     writeFileSync(join(root, "README.md"), "Changed fixture.\n");
     git(root, "add", "."); git(root, "commit", "-qm", "in progress");
     const eventPath = join(root, "event.json");
     const event = { pull_request: { base: { sha: base }, draft: true,
-      body: `Change: docs/sdlc/changes/${CHANGE_ID}/change.md\n$(touch should-not-exist)` } };
+      body: `Change: docs/sdlc/changes/${CHANGE_ID}/intent.md\n$(touch should-not-exist)` } };
     const check = () => {
       writeFileSync(eventPath, JSON.stringify(event));
       return run(root, ["check-pr"], { GITHUB_EVENT_PATH: eventPath });
@@ -105,7 +114,7 @@ test("CI event checks every changed record and scopes implementation; PR text is
     expect(check().status).toBe(0);
     event.pull_request.draft = false;
     expect(check().output).toContain("verification passed");
-    writeFileSync(path, passedRecord(accepted));
+    writeFileSync(path, passStages(root, accepted));
     git(root, "add", "docs"); git(root, "commit", "-qm", "verified");
     expect(check().status).toBe(0);
     expect(existsSync(join(root, "should-not-exist"))).toBe(false);
@@ -117,7 +126,7 @@ test("CI event checks every changed record and scopes implementation; PR text is
     expect(check().output).toContain("Ready PR");
     event.pull_request.draft = true;
     expect(check().output).toContain("must link changed record");
-    event.pull_request.body += "\nChange: docs/sdlc/changes/2026-09-08-second-record/change.md";
+    event.pull_request.body += "\nChange: docs/sdlc/changes/2026-09-08-second-record/intent.md";
     expect(check().status).toBe(0);
     writeFileSync(join(root, "uncovered.txt"), "Uncovered implementation\n");
     git(root, "add", "uncovered.txt"); git(root, "commit", "-qm", "out of scope");
@@ -128,11 +137,11 @@ test("CI event checks every changed record and scopes implementation; PR text is
 test("incident creates one follow-up and links it, without touching runtime state", () => {
   withRepository(root => {
     expect(run(root, ["incident", "provider-recovery", "monitor"]).status).toBe(0);
-    const record = join(root, "docs/sdlc/changes/2026-09-08-provider-recovery/change.md");
+    const record = join(root, "docs/sdlc/changes/2026-09-08-provider-recovery/intent.md");
     expect(existsSync(record)).toBe(true);
     expect(readFileSync(record, "utf8")).toContain("risk: high");
     const incident = readFileSync(join(root, "docs/sdlc/incidents/2026-09-08-provider-recovery.md"), "utf8");
-    expect(incident).toContain("../changes/2026-09-08-provider-recovery/change.md");
+    expect(incident).toContain("../changes/2026-09-08-provider-recovery/intent.md");
     expect(run(root, ["validate"]).status).toBe(0);
     expect(run(root, ["incident", "provider-recovery", "monitor"]).status).not.toBe(0);
   });

@@ -1,0 +1,12 @@
+{
+  "standardVersion": "1.0.0",
+  "name": "linear-local",
+  "displayName": "Linear for CodeTwo",
+  "plugins": [{
+    "name": "linear", "displayName": "Linear", "version": "0.1.0",
+    "description": "Develop Linear issues and synchronize verified PR delivery.",
+    "category": "Developer Tools", "installationPolicy": "AVAILABLE",
+    "authenticationPolicy": "ON_FIRST_USE", "defaultEnabled": true,
+    "source": { "kind": "local", "path": "./" }
+  }]
+}

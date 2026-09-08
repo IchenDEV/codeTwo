@@ -1,4 +1,5 @@
 import type {
+  EffectivePluginState,
   ManagedPluginCatalog,
   ManagedPluginCatalogEntry,
   ManagedPluginOverride,
@@ -114,10 +115,22 @@ function statusFor(
   return status ?? "pending";
 }
 
+function effectiveState(state: EffectivePluginState): PluginManagerScopedState {
+  return {
+    effectiveEnabled: state.effective_enabled,
+    override: state.state,
+    status: state.status,
+    missingDependencies: state.missing,
+    error: state.error,
+  };
+}
+
 function managerState(
   entry: ManagedPluginCatalogEntry,
   scope: PluginManagerScope
 ): PluginManagerScopedState {
+  if (entry.effective_state)
+    return { ...effectiveState(entry.effective_state), config: entry.config };
   return {
     effectiveEnabled: entry.enabled,
     override:
@@ -155,9 +168,10 @@ function componentState(
   );
   const override = entry.components[componentId] ?? "inherit";
   const componentEffective =
-    scope.kind === "user"
+    entry.effective_components?.[componentId] ??
+    (scope.kind === "user"
       ? entry.enabled && resolveOverride(override, true)
-      : entry.enabled && resolveOverride(override, userEffective);
+      : entry.enabled && resolveOverride(override, userEffective));
   return {
     effectiveEnabled: componentEffective,
     override,
@@ -363,9 +377,14 @@ export function buildPluginManagerCatalog({
             (component) => `${id}:extension:${component.kind}:${component.name}`
           ),
       ],
-      state: policyEntry
-        ? managerState(policyEntry, scope)
-        : bundleState(bundle),
+      state: catalog.bundle_states?.[bundle.id]
+        ? {
+            ...effectiveState(catalog.bundle_states[bundle.id]),
+            config: policyEntry?.config,
+          }
+        : policyEntry
+          ? managerState(policyEntry, scope)
+          : bundleState(bundle),
       configSchema: policyEntry?.schema ?? undefined,
       configurable:
         policyEntry != null &&

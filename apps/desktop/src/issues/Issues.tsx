@@ -96,6 +96,7 @@ function DelegationTrail({
 }
 
 export function IssuesModal({
+  issueTrackers = [],
   cwd,
   scenes,
   onInsert,
@@ -103,6 +104,7 @@ export function IssuesModal({
   onOpenSession,
   onClose,
 }: {
+  issueTrackers?: { name: string; open: () => void }[];
   cwd: string;
   scenes: SceneInfo[];
   onInsert: (issue: Issue) => void;
@@ -137,6 +139,19 @@ export function IssuesModal({
           <DialogTitle>GitHub Issues</DialogTitle>
         </DialogHeader>
 
+        {issueTrackers.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {issueTrackers.map((tracker) => (
+              <Button
+                key={tracker.name}
+                variant="secondary"
+                onClick={tracker.open}
+              >
+                {tracker.name}
+              </Button>
+            ))}
+          </div>
+        ) : null}
         {loading && (
           <p className="text-metadata text-muted-foreground">Loading via gh…</p>
         )}

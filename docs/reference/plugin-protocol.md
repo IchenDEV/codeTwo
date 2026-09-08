@@ -31,6 +31,12 @@ inventing a third.
   a stray `print()` degrades to noise rather than a crash.
 - **stderr** is your log channel. C2 routes it into its own tracing output.
 - The process is killed when the plugin unloads, and it never outlives the app.
+- Frames are limited to **1 MiB including the newline**, even if a process never sends a newline.
+  Each peer admits at most **64 pending host requests**, queues **64 outbound messages**, and runs
+  at most **16 concurrent plugin-to-host callbacks**. Oversized outgoing requests and excess host
+  requests fail before dispatch. Oversized input, callback overflow, or notification/response queue
+  overflow terminates that peer and fails its pending calls. Host callback tasks are cancelled on
+  peer closure.
 
 ## Handshake
 
@@ -98,6 +104,17 @@ fallback/blocking rules, so guessing an internal command name does not grant acc
 
 `command/invoke` only ever names a command declared in the Manifest. Returning a JSON-RPC error turns into a
 readable failure at the caller — the frontend sees `my.greet: <your message>`.
+
+Commands and host callbacks have a **60-second** default deadline. A bundle may set
+`runtime.commandTimeoutMs` to an integer from **1 to 3,600,000** for long operations; this does not
+change the independent 10-second initialize deadline. Older C2 builds that do not recognize this
+optional manifest field reject it; omit it when targeting those builds.
+
+Timeout or cancellation of a sent command terminates the peer's process and fails every pending
+call in that realm. Protocol 1.0 has no cancellation acknowledgement, so cancelling only one remote
+operation cannot be guaranteed. Reload or disable/re-enable the plugin before retrying an activated
+peer; C2 never automatically repeats a command that may already have produced side effects.
+Cancellation during initial activation still permits a subsequent activation attempt.
 An extension command that collides with a global command owned by Core or another module is rejected
 during activation, so a project extension cannot shadow host dispatch. The same project-capable
 extension may register its own command name in both global and project instances.
@@ -302,8 +319,8 @@ rl.on("line", async (line) => {
 - **No sandbox.** A trusted plugin is a process with your user's permissions. Trust is the whole
   OS security boundary; project command/data/process isolation does not restrict filesystem,
   network, environment, or the host-wide JSON event bus. Treat it as such.
-- **No timeout on `command/invoke`.** A plugin that never answers a command hangs that caller — not
-  the graph. The handshake is the only bounded wait.
+- **Process-wide cancellation.** A cancelled or timed-out sent command terminates concurrent work
+  in that plugin realm. Other plugin processes and project realms are unaffected.
 - **One process per activated managed realm.** A project-capable runtime may have one global process
   and separate processes for multiple live projects. Fan out inside one realm if you need more.
 - **Rust plugins are still compile-time.** This protocol is how a plugin gets added without

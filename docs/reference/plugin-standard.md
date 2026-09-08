@@ -175,10 +175,10 @@ The `connectors` array declares integrations that need a richer host-rendered su
 action. Every connector has a stable bundle-local `id`, a provider identifier, a non-empty capability
 set, and one bundle-owned `command`. `provider` selects the matching host adapter: a bundle cannot
 ship renderer code or cause an unrelated provider to be rendered by an existing adapter. C2 currently
-ships the `feishu` provider adapter.
+ships the `feishu` provider adapter and a generic issue-tracker surface selected by the `issues` capability.
 
 The supported capabilities are `connection`, `conversations`, `documents`, `tables`, `messaging`,
-and `turn_notifications`. Add another capability only when a host adapter and a bundle implement its
+and `turn_notifications`, and `issues`. Add another capability only when a host adapter and a bundle implement its
 operation namespace.
 
 The host invokes the connector command with `{ operation, input }`. `operation` is a stable dotted
@@ -204,6 +204,7 @@ The capability declaration bounds the operation namespaces the host may invoke:
 | `tables` | `resources.list`, `table.*` |
 | `messaging` | `message.*` |
 | `turn_notifications` | `notification.*` |
+| `issues` | `issues.*` |
 
 The provider adapter defines the exact operation names and input/output shapes within those
 namespaces. Unknown namespaces and operations outside the declared capabilities fail closed before
@@ -387,8 +388,10 @@ host may register a fail-closed placeholder to preserve the typed bridge.
 - The JSON event bus is host-wide and MUST NOT be treated as project-confidential.
 - Bundle discovery MUST reject traversal, escape through symlinks, oversized files/bundles, and
   unsafe component paths. Installation MUST remain bounded and atomic.
-- Runtime stdout is protocol-only; logs belong on stderr. Handshake time is bounded, but
-  `command/invoke` currently has no host timeout.
+- Runtime stdout is protocol-only; logs belong on stderr. Handshakes have a 10-second deadline;
+  commands and callbacks default to 60 seconds. Optional `runtime.commandTimeoutMs` accepts
+  integers from 1 to 3,600,000 and does not affect the handshake. The protocol contract defines
+  frame, queue, and concurrency limits and process-wide cancellation semantics.
 - On Unix, unload waits for the direct child and kills its process group. Other platforms MUST state
   their weaker process-tree guarantee rather than imply parity.
 - UI surfaces MUST render trusted host descriptors. Arbitrary third-party renderer code is outside

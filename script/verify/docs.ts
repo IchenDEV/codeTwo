@@ -127,8 +127,8 @@ export function validateDocumentation(repositoryRoot: string): string[] {
     }
     if (rule.classification === "change-record" || rule.classification === "change-stage") {
       const body = readFileSync(join(root, path), "utf8");
-      const schema = path.endsWith("/change.md") ? 4 : 3;
-      if (!new RegExp(`^schema: ${schema}$`, "m").test(body)) errors.push(`${path}: canonical change must use schema ${schema}`);
+      const schema = path.endsWith("/change.md") ? "4" : "(?:3|5)";
+      if (!new RegExp(`^schema: ${schema}$`, "m").test(body)) errors.push(`${path}: canonical change must use schema ${schema === "4" ? "4" : "3 or 5"}`);
     }
     if (new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]).has(extname(path).toLowerCase())) {
       if (!localReferences.has(path)) errors.push(`${path}: unreferenced documentation image`);

@@ -37,6 +37,7 @@ pub mod github_skills;
 pub mod handoff;
 pub mod harness;
 pub mod host_tools;
+pub mod issue_delivery;
 pub mod issues;
 pub mod keymap;
 pub mod market;

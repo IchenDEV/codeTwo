@@ -27,7 +27,10 @@ import {
 export const REQUIRED_FILES = [
   ".agents/skills/codetwo-develop/SKILL.md",
   ".agents/skills/codetwo-develop/references/workflow.md",
-  ".agents/skills/codetwo-develop/templates/change.md",
+  ".agents/skills/codetwo-develop/templates/intent.md",
+  ".agents/skills/codetwo-develop/templates/spec.md",
+  ".agents/skills/codetwo-develop/templates/plan.md",
+  ".agents/skills/codetwo-develop/templates/verification.md",
   ".agents/skills/codetwo-develop/templates/eval.md",
   ".agents/skills/codetwo-release/SKILL.md",
   ".agents/skills/codetwo-operations/SKILL.md",

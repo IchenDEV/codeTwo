@@ -12,8 +12,9 @@ checkout.
 - [Workflow](.agents/skills/codetwo-develop/references/workflow.md) owns lifecycle, authorization, risk-based checks, and release
   boundaries. Use codetwo-develop references as needed for daily work. The external ai-native-sdlc
   Skill is for lifecycle setup, audit, or improvement, not ordinary implementation.
-- New changes use one `docs/sdlc/changes/<date>-<slug>/change.md` record, created with
-  `./script/devflow new`. Link existing requests and design decisions; retain historical stage bundles.
+- New changes use `intent.md`, `spec.md`, `plan.md`, and `verification.md` under
+  `docs/sdlc/changes/<date>-<slug>/`, created together with `./script/devflow new`.
+  Link existing requests and design decisions; retain historical records.
 - A direct implementation request authorizes bounded local work. Record its source, requester,
   constraints, and acceptance; elaborate reversible local design and plan without stepwise approval.
   High/critical design still needs an independent human decision. User instructions take precedence
@@ -21,7 +22,7 @@ checkout.
 - Finish implementation, applicable checks, inspection, and fixes. Before repository-file handoff,
   run `bun script/verify/sdlc.ts --worktree`; run `bun script/verify/docs.ts` when documentation or
   links change. Authorization, routing, lifecycle behavior, template structure, or checker changes
-  also run `bun test script/verify/checks.test.ts script/devflow.test.ts` (the active lifecycle Eval).
+  also run `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts` (the active lifecycle Eval).
   Pure wording edits need only applicable documentation and scope checks. Reuse valid evidence.
 - UI changes need actual rendering. A passing local check does not prove remote CI, approval,
   publication, or production recovery. Record actual evidence, skipped checks, and residual risk.

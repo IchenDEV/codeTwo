@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   AGENT_PLUGIN_SCHEMA,
   parsePluginManifest,
+  parsePluginRuntimeContribution,
   pluginUiComponentId,
 } from "../src/pluginModel";
 
@@ -247,4 +248,26 @@ describe("C2 plugin package model", () => {
       })
     ).toThrow("Unknown C2 plugin fields");
   });
+});
+
+test("runtime command deadlines are finite and optional", () => {
+  expect(
+    parsePluginRuntimeContribution({ command: "node" })?.commandTimeoutMs
+  ).toBeUndefined();
+  for (const value of [1, 60_000, 3_600_000]) {
+    expect(
+      parsePluginRuntimeContribution({
+        command: "node",
+        commandTimeoutMs: value,
+      })?.commandTimeoutMs
+    ).toBe(value);
+  }
+  for (const value of [0, -1, 3_600_001, 1.5, null, "60000"]) {
+    expect(
+      parsePluginRuntimeContribution({
+        command: "node",
+        commandTimeoutMs: value,
+      })
+    ).toBeNull();
+  }
 });

@@ -1455,6 +1455,7 @@ export function PluginManagerPage({
   initialTab = "plugins",
   initialPluginId,
   pluginDetailsExtension,
+  pluginDetailsExtensions,
   recovery,
   labels: labelOverrides,
   onScopeChange,
@@ -2015,9 +2016,12 @@ export function PluginManagerPage({
               <PluginDetails
                 plugin={selectedPlugin}
                 detailsExtension={
-                  pluginDetailsExtension?.pluginId === selectedPlugin.id
+                  pluginDetailsExtensions?.find(
+                    (extension) => extension.pluginId === selectedPlugin.id
+                  )?.content ??
+                  (pluginDetailsExtension?.pluginId === selectedPlugin.id
                     ? pluginDetailsExtension.content
-                    : undefined
+                    : undefined)
                 }
                 scope={scope}
                 labels={labels}

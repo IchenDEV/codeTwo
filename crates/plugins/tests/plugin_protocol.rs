@@ -929,15 +929,40 @@ async fn an_untrusted_bundle_that_ships_a_process_is_not_started() {
         "trust is what gates execution, not installation"
     );
 
-    // The trusted one *was* attempted — and failed honestly, because its command does not exist.
+    // Trust makes the static command ready; the process remains dormant until invocation.
     let trusted_scope = app
         .scopes()
         .into_iter()
         .find(|scope| scope.plugin == "bundle:trusted-one");
     let trusted_scope = trusted_scope.expect("the trusted plugin was loaded into the graph");
-    assert_eq!(trusted_scope.status, Status::Failed);
-    assert!(trusted_scope
-        .error
-        .unwrap()
-        .contains("definitely-not-a-real-binary"));
+    assert_eq!(trusted_scope.status, Status::Active);
+    let catalog = app
+        .plugin_manager()
+        .catalog(codetwo_plugins::PluginScope::User)
+        .unwrap();
+    let trusted = catalog
+        .plugins
+        .iter()
+        .find(|entry| entry.id == "bundle:trusted-one")
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&trusted.process).unwrap()["phase"],
+        "dormant"
+    );
+    let error = app
+        .call("fixture.ping", Value::Null)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("definitely-not-a-real-binary"));
+    let catalog = app
+        .plugin_manager()
+        .catalog(codetwo_plugins::PluginScope::User)
+        .unwrap();
+    let trusted = catalog
+        .plugins
+        .iter()
+        .find(|entry| entry.id == "bundle:trusted-one")
+        .unwrap();
+    assert_eq!(trusted.effective_state.as_ref().unwrap().status, "failed");
 }

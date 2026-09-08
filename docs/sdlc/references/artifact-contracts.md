@@ -1,10 +1,14 @@
 # Artifact formats
 
-Use the [canonical workflow](../../../.agents/skills/codetwo-develop/references/workflow.md) and [single change template](../../../.agents/skills/codetwo-develop/templates/change.md)
-for new work. Schema 4 stores authorization, scope, state, acceptance, and evidence once in
-`changes/<date>-<slug>/change.md`.
+Use the [canonical workflow](../../../.agents/skills/codetwo-develop/references/workflow.md) and its
+[Intent](../../../.agents/skills/codetwo-develop/templates/intent.md),
+[Spec](../../../.agents/skills/codetwo-develop/templates/spec.md),
+[Plan](../../../.agents/skills/codetwo-develop/templates/plan.md), and
+[Verification](../../../.agents/skills/codetwo-develop/templates/verification.md) templates for new
+schema-5 changes. Each file owns its facts under one change directory; ordinary implementation
+authorization is recorded once in Intent.
 
-Existing schema-3 `intent.md`, `spec.md`, `plan.md`, and `verification.md` retain their recorded
-approval order and validation rules. Their templates remain for historical reference. Do not mix
-formats or rewrite unrelated historical approvals. The [checker](../../../script/verify/stage-bundle.ts)
-is the format enforcement source; this page preserves links from historical records.
+Historical schema-3 stage bundles and schema-4 `change.md` records retain their validation rules.
+Do not mix formats or rewrite unrelated historical approvals. The
+[checker](../../../script/verify/stage-bundle.ts) is the format enforcement source; this page
+preserves links from historical records.

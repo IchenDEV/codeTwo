@@ -34,6 +34,7 @@ const CONNECTOR_CAPABILITIES: &[&str] = &[
     "tables",
     "messaging",
     "turn_notifications",
+    "issues",
 ];
 const AGENT_PLUGIN_SCHEMA_JSON: &str =
     include_str!("../schemas/agent-plugins/1.0.0/plugin.schema.json");
@@ -192,6 +193,14 @@ pub struct PluginRuntimeSpec {
     /// Protocol version the plugin implements. Major must match the host's.
     #[serde(default = "default_plugin_protocol_version")]
     pub protocol: String,
+    /// Finite host deadline for commands and callbacks; omitted means 60 seconds.
+    #[serde(
+        default,
+        rename = "commandTimeoutMs",
+        deserialize_with = "deserialize_command_timeout",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub command_timeout_ms: Option<u64>,
     /// Executable to run, resolved against `PATH` or the bundle directory.
     pub command: String,
     #[serde(default)]
@@ -210,6 +219,18 @@ pub struct PluginRuntimeSpec {
     /// bundle opts in explicitly.
     #[serde(default = "default_runtime_scope_support", rename = "scopeSupport")]
     pub scope_support: Vec<codetwo_kernel::PluginScopeSupport>,
+}
+
+fn deserialize_command_timeout<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<u64>, D::Error> {
+    let value = u64::deserialize(deserializer)?;
+    if !(1..=3_600_000).contains(&value) {
+        return Err(serde::de::Error::custom(
+            "commandTimeoutMs must be between 1 and 3600000",
+        ));
+    }
+    Ok(Some(value))
 }
 
 fn default_runtime_scope_support() -> Vec<codetwo_kernel::PluginScopeSupport> {

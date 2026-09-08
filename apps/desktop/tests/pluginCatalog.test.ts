@@ -628,3 +628,58 @@ describe("unified plugin catalog adapter", () => {
     ]);
   });
 });
+
+test("backend effective states override optimistic runtime and installation flags", () => {
+  const state = {
+    effective_enabled: false,
+    state: "enabled",
+    status: "pending",
+    missing: [],
+    error: null,
+    reason: "untrusted",
+  };
+  const model = buildPluginManagerCatalog({
+    catalog: {
+      ...emptyCatalog,
+      plugins: [entry("bundle:fixture")],
+      bundle_states: { fixture: state },
+    },
+    bundles: [bundleRecord({ counts: { runtime: 1 }, trusted: false })],
+    skills: [],
+    market: [],
+    scope: { kind: "user" },
+  });
+  expect(model.plugins[0].state.effectiveEnabled).toBe(false);
+  expect(model.plugins[0].state.status).toBe("pending");
+});
+
+test("backend process failure and component inheritance are used without renderer recomputation", () => {
+  const model = buildPluginManagerCatalog({
+    catalog: {
+      ...emptyCatalog,
+      plugins: [
+        entry("workspace", {
+          effective_state: {
+            effective_enabled: true,
+            state: "inherit",
+            status: "failed",
+            missing: [],
+            error: "process exited",
+            reason: "process_failed",
+          },
+          effective_components: { "files.surface": false },
+        }),
+      ],
+    },
+    bundles: [],
+    skills: [],
+    market: [],
+    scope: { kind: "project", projectPath: "/project" },
+  });
+  expect(model.plugins[0].state.status).toBe("failed");
+  expect(model.plugins[0].state.error).toBe("process exited");
+  expect(
+    model.components.find((item) => item.id === "files.surface").state
+      .effectiveEnabled
+  ).toBe(false);
+});

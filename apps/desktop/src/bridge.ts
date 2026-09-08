@@ -1476,7 +1476,23 @@ export interface ManagedPluginDependencies {
   optional: string[];
 }
 
+export interface EffectivePluginState {
+  effective_enabled: boolean;
+  state: ManagedPluginOverride;
+  status: PluginStatus | "disabled";
+  missing: string[];
+  error: string | null;
+  reason: string | null;
+}
+
+export type PluginProcessObservation =
+  | { phase: "dormant" | "starting" | "running" }
+  | { phase: "failed"; error: string };
+
 export interface ManagedPluginCatalogEntry {
+  process?: PluginProcessObservation | null;
+  effective_state?: EffectivePluginState;
+  effective_components?: Record<string, boolean>;
   id: string;
   description: string | null;
   metadata: ManagedPluginMetadata;
@@ -1502,6 +1518,7 @@ export type ManagedPluginRecovery =
   | { kind: "safe_mode"; error: string };
 
 export interface ManagedPluginCatalog {
+  bundle_states?: Record<string, EffectivePluginState>;
   graph_revision: number;
   config_revision: number;
   recovery: ManagedPluginRecovery;
@@ -1595,6 +1612,44 @@ export async function pluginCatalog(
     { scope: managedPluginScopeToWire(scope) },
     null
   );
+}
+
+export interface PluginSnapshot {
+  bundles: PluginInfo[];
+  catalogs: { scope: ManagedPluginScope; catalog: ManagedPluginCatalog }[];
+}
+
+/** One inventory-consistent snapshot; the host always includes the user catalog. */
+export async function pluginSnapshot(
+  scopes: ManagedPluginScope[]
+): Promise<PluginSnapshot> {
+  if (!inDesktop) {
+    return {
+      bundles: await listPlugins(),
+      catalogs: [
+        { kind: "user" } as ManagedPluginScope,
+        ...scopes.filter((scope) => scope.kind !== "user"),
+      ].map((scope) => ({ scope, catalog: EMPTY_MANAGED_PLUGIN_CATALOG })),
+    };
+  }
+  const wire = await call<{
+    bundles: PluginInfo[];
+    catalogs: {
+      scope: ManagedPluginScopeWire;
+      catalog: ManagedPluginCatalog;
+    }[];
+  }>(
+    "plugins.snapshot",
+    { scopes: scopes.map(managedPluginScopeToWire) },
+    null
+  );
+  return {
+    bundles: wire.bundles,
+    catalogs: wire.catalogs.map(({ scope, catalog }) => ({
+      scope: managedPluginScopeFromWire(scope),
+      catalog,
+    })),
+  };
 }
 
 /** Stage a revision-bound change. The returned id is the only value accepted by apply. */

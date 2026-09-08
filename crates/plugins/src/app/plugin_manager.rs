@@ -3,6 +3,7 @@
 //! Frontends should not coordinate a config file and a live loader themselves. They ask this
 //! module to describe the graph, plan a mutation against one revision, then apply that exact plan.
 
+use super::protocol::{ProcessObservation, ProcessObserver};
 use super::{
     bundle_runtime::bundle_runtime_descriptor, normalize_project_path, PluginConfigDocument,
     PluginConfigError, PluginConfigStore, PluginOverride, PluginPolicy, PluginRecoveryState,
@@ -31,6 +32,53 @@ pub struct PluginCatalog {
     pub config_revision: u64,
     pub recovery: PluginRecoveryState,
     pub plugins: Vec<PluginCatalogEntry>,
+    #[serde(default)]
+    pub bundle_states: BTreeMap<String, EffectivePluginState>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EffectivePluginState {
+    pub effective_enabled: bool,
+    pub state: PluginOverride,
+    pub status: String,
+    pub missing: Vec<String>,
+    pub error: Option<String>,
+    pub reason: Option<String>,
+}
+
+impl EffectivePluginState {
+    pub(crate) fn from_entry(entry: &PluginCatalogEntry) -> Self {
+        let mut result = Self {
+            effective_enabled: entry.enabled,
+            state: entry.state,
+            status: if !entry.enabled {
+                "disabled".into()
+            } else {
+                serde_json::to_value(entry.status.unwrap_or(Status::Pending))
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .into()
+            },
+            missing: entry.missing.clone(),
+            error: entry.error.clone(),
+            reason: if !entry.enabled {
+                Some("disabled".into())
+            } else if !entry.missing.is_empty() {
+                Some("missing_dependencies".into())
+            } else {
+                None
+            },
+        };
+        if entry.enabled {
+            if let Some(ProcessObservation::Failed { error }) = &entry.process {
+                result.status = "failed".into();
+                result.error = Some(error.clone());
+                result.reason = Some("process_failed".into());
+            }
+        }
+        result
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -43,6 +91,8 @@ pub struct PluginCatalogEntry {
     pub state: PluginOverride,
     pub enabled: bool,
     pub running: bool,
+    /// Child-process observation, independent of whether its command adapter is ready.
+    pub process: Option<ProcessObservation>,
     pub status: Option<Status>,
     pub missing: Vec<String>,
     pub error: Option<String>,
@@ -55,6 +105,8 @@ pub struct PluginCatalogEntry {
     pub services: Vec<String>,
     /// Per-component policy is already durable even before a UI contribution registry is attached.
     pub components: BTreeMap<String, PluginOverride>,
+    pub effective_components: BTreeMap<String, bool>,
+    pub effective_state: Option<EffectivePluginState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -284,6 +336,7 @@ pub struct PluginManager {
     factory_catalog: Mutex<FactoryCatalogState>,
     context: WeakContext,
     plans: Mutex<HashMap<String, PendingPlan>>,
+    processes: Mutex<HashMap<(String, CommandRealm), std::sync::Weak<ProcessObserver>>>,
     projects: Mutex<HashMap<String, ProjectGraph>>,
     project_idle_ttl: Duration,
     reaper: Mutex<Option<ProjectReaper>>,
@@ -367,6 +420,7 @@ impl PluginManager {
             }),
             context,
             plans: Mutex::new(HashMap::new()),
+            processes: Mutex::new(HashMap::new()),
             projects: Mutex::new(HashMap::new()),
             project_idle_ttl,
             reaper: Mutex::new(None),
@@ -589,6 +643,17 @@ impl PluginManager {
         *reaper = Some(ProjectReaper { cancel, task });
     }
 
+    pub(crate) fn observe_process(
+        &self,
+        name: &str,
+        realm: CommandRealm,
+        observer: &Arc<ProcessObserver>,
+    ) {
+        let mut processes = self.processes.lock().unwrap();
+        processes.retain(|_, observer| observer.strong_count() > 0);
+        processes.insert((name.to_string(), realm), Arc::downgrade(observer));
+    }
+
     pub fn catalog(&self, mut scope: PluginScope) -> Result<PluginCatalog, PluginManagerError> {
         self.reap_idle_projects();
         if let PluginScope::Project { project_path } = &mut scope {
@@ -645,7 +710,43 @@ impl PluginManager {
                 let policy = config.policy(&policy_scope, &entry.name);
                 let default = self.default_entry(&entry.name);
                 let enabled = config.effective_enabled(&policy_scope, &entry.name, default.enabled);
-                PluginCatalogEntry {
+                let process = instance.and_then(|instance| {
+                    self.processes
+                        .lock()
+                        .unwrap()
+                        .get(&(entry.name.clone(), instance.command_realm.clone()))
+                        .and_then(std::sync::Weak::upgrade)
+                        .map(|observer| observer.snapshot())
+                });
+                let user_policy = config.policy(&PluginScope::User, &entry.name);
+                let effective_components = user_policy
+                    .components
+                    .keys()
+                    .chain(policy.components.keys())
+                    .map(|id| {
+                        let inherited = user_policy
+                            .components
+                            .get(id)
+                            .copied()
+                            .unwrap_or_default()
+                            .resolve(true);
+                        let value = policy
+                            .components
+                            .get(id)
+                            .copied()
+                            .unwrap_or_default()
+                            .resolve(if policy_scope == PluginScope::User {
+                                true
+                            } else {
+                                inherited
+                            });
+                        (id.clone(), enabled && value)
+                    })
+                    .collect();
+                let mut entry = PluginCatalogEntry {
+                    effective_components,
+                    effective_state: None,
+                    process,
                     id: entry.name.clone(),
                     description: entry.description,
                     metadata: entry.metadata,
@@ -673,7 +774,9 @@ impl PluginManager {
                         .map(|scope| scope.services.clone())
                         .unwrap_or_default(),
                     components: policy.components,
-                }
+                };
+                entry.effective_state = Some(EffectivePluginState::from_entry(&entry));
+                entry
             })
             .collect();
 
@@ -682,6 +785,7 @@ impl PluginManager {
             config_revision: config.snapshot().revision,
             recovery: config.recovery().clone(),
             plugins,
+            bundle_states: BTreeMap::new(),
         })
     }
 
