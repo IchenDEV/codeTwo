@@ -5,6 +5,27 @@ import { join } from "node:path";
 
 import ts from "typescript";
 
+import config from "../electrobun.config";
+
+test("watch exclusions cover POSIX and Windows runtime paths without hiding source", () => {
+  const globs = config.build.watchIgnore.map(
+    (pattern) => new Bun.Glob(pattern)
+  );
+  const ignored = (path: string) => globs.some((glob) => glob.match(path));
+  for (const path of [
+    "/repo/.codex/run/instances/a/runtime.log",
+    "/repo/target/release/host",
+    "dist/index.html",
+  ]) {
+    expect(ignored(path)).toBe(true);
+    expect(ignored(path.replaceAll("/", "\\"))).toBe(true);
+  }
+  for (const path of ["src/example.ts", "/repo/crates/core/src/lib.rs"]) {
+    expect(ignored(path)).toBe(false);
+    expect(ignored(path.replaceAll("/", "\\"))).toBe(false);
+  }
+});
+
 // Exercise the installed Electrobun watcher itself. Stub only native launch/build so this
 // regression never opens a window or performs a Rust/renderer build.
 test("runtime output cannot restart the dev watcher, while source edits still rebuild", async () => {

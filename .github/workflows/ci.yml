@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review, converted_to_draft]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            taskboard:
+              - 'apps/desktop/src/taskboard/**'
+              - 'apps/desktop/tests/taskBoard*'
+              - 'apps/desktop/stryker.taskboard.config.json'
+              - 'apps/desktop/tsconfig.stryker.json'
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --cwd apps/desktop
+      - name: Test
+        env:
+          TASKBOARD_CHANGED: ${{ steps.changes.outputs.taskboard }}
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts
+          bun script/verify/docs.ts
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            bun script/devflow.ts check-pr
+          else
+            bun script/verify/sdlc.ts
+          fi
+          cd apps/desktop
+          bun run check
+          bunx tsc --noEmit
+          bun run test:ci
+          if [ "$TASKBOARD_CHANGED" = "true" ]; then
+            bun run mutation:taskboard
+          fi
+          bunx vite build

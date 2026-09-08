@@ -12,7 +12,7 @@ Before launching the desktop, read the [instance preflight](../../codetwo-operat
 
 - Rust 1.82 or newer
 - Zig **0.15.2** exactly, required by the embedded Ghostty terminal engine
-- Bun
+- Bun **1.4.2**, matching the pinned CI toolchain
 - Git
 - Your platform's native build tools (Xcode command-line tools on macOS)
 - At least one supported provider CLI if you want to run a real agent turn

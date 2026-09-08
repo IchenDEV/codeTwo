@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -9,6 +9,34 @@ import { REQUIRED_FILES, validateRepository } from "./sdlc";
 
 const BUNDLE_ID = "2026-08-30-example";
 const BUNDLE_DIR = `docs/sdlc/changes/${BUNDLE_ID}`;
+
+test("one PR CI check retains validation while nightly packages main and releases remain manual", () => {
+  const directory = join(import.meta.dir, "../../.github/workflows");
+  const workflows = Object.fromEntries(readdirSync(directory).filter(name => name.endsWith(".yml")).map(name => [
+    name,
+    Bun.YAML.parse(readFileSync(join(directory, name), "utf8")) as {
+      on: Record<string, unknown>;
+      jobs: Record<string, { steps: { run?: string }[] }>;
+    },
+  ]));
+  expect(Object.keys(workflows).filter(name => "pull_request" in workflows[name]!.on)).toEqual(["ci.yml"]);
+  const ci = workflows["ci.yml"]!;
+  expect(Object.keys(ci.jobs)).toEqual(["test"]);
+  const commands = ci.jobs.test!.steps.map(step => step.run ?? "").join("\n");
+  for (const command of [
+    "script/verify/checks.test.ts", "script/verify/four-stage.test.ts", "script/devflow.test.ts",
+    "bun script/verify/docs.ts", "bun script/devflow.ts check-pr", "bun script/verify/sdlc.ts",
+    "bun run check", "bunx tsc --noEmit", "bun run test:ci", "bun run mutation:taskboard", "bunx vite build",
+  ]) expect(commands).toContain(command);
+  expect(commands).not.toContain("build:release");
+  for (const name of ["nightly-macos.yml", "windows-desktop.yml", "release-macos.yml"]) {
+    if (name !== "nightly-macos.yml") expect(workflows[name]!.on).not.toHaveProperty("push");
+    expect(workflows[name]!.on).not.toHaveProperty("pull_request");
+    expect(workflows[name]!.on).toHaveProperty("workflow_dispatch");
+  }
+  expect(workflows["nightly-macos.yml"]!.on).toHaveProperty("schedule");
+  expect(workflows["nightly-macos.yml"]!.on.push).toEqual({ branches: ["main"] });
+});
 
 function write(root: string, path: string, body: string): void {
   const absolute = join(root, path);

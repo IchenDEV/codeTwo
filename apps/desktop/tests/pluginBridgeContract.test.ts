@@ -85,8 +85,8 @@ describe("plugin bridge contract", () => {
     expect(enginePlugin).toContain("model: args.model");
     expect(config).toContain("codetwo-desktop-host");
     expect(config).toContain("codetwo-tool-broker");
-    expect(prepare).toContain(
-      '"cargo", "build", "--release", "-p", "codetwo-desktop-host"'
+    expect(prepare).toMatch(
+      /\[\s*"cargo",\s*"build",\s*"--release",\s*"-p",\s*"codetwo-desktop-host"/u
     );
     expect(prepare).toContain('"bun", "run", "build:tool-broker"');
     expect(config).toContain('postPackage: "scripts/sign-macos-package.ts"');

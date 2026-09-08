@@ -51,7 +51,7 @@ describe("composer geometry contract", () => {
       composer.match(/className="[^"]*size-7 shrink-0 rounded-full[^"]*"/gu)
     ).toHaveLength(2);
     expect(composer).toMatch(
-      /variant="ghost"[\s\S]*size="compact"[\s\S]*focusStyle="inset"/u
+      /variant="ghost"\s+size="compact"\s+focusStyle="inset"/u
     );
     expect(composer).toContain(
       'import { ControlChip as Chip } from "@/components/ui/control-chip";'
@@ -59,7 +59,9 @@ describe("composer geometry contract", () => {
     expect(controlChip).toContain('size="compact"');
     expect(controlChip).toContain('data-slot="control-chip"');
     expect(voiceButton).toContain('className="size-8 shrink-0 rounded-full"');
-    expect(composer).toMatch(/variant="secondary"[\s\S]*onClick=\{onStop\}/u);
+    expect(composer).toMatch(
+      /<Button\s[^>]*variant="secondary"[^>]*onClick=\{onStop\}/u
+    );
     expect(composer).not.toContain('"px-3 pb-2.5 pt-1.5"');
     expect(composer).not.toContain(
       'className="size-8 shrink-0 rounded-(--ds-radius-control) transition-transform active:scale-90"'

@@ -44,7 +44,11 @@ describe("development profile isolation", () => {
       expect(a[key]).not.toBe(b[key]);
       expect(a[key]).not.toBe(c[key]);
     }
-    expect(a.socketPath.length).toBeLessThan(104);
+    if (process.platform !== "win32") {
+      expect(a.socketPath.length).toBeLessThan(104);
+    } else {
+      expect(a.socketPath).toBe(join(a.root, "socket", "scenes.sock"));
+    }
     expect(profileChannel(DESKTOP_CHANNELS.dev, a).identifier).toBe(
       a.identifier
     );
