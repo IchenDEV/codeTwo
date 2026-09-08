@@ -107,14 +107,38 @@ async fn write_output(mut output: mpsc::UnboundedReceiver<Output>) -> Result<(),
         stdout
             .write_all(&encoded)
             .await
-            .map_err(|error| error.to_string())?;
-        stdout.flush().await.map_err(|error| error.to_string())?;
+            .map_err(|error| format!("write desktop stdout: {error}"))?;
+        stdout
+            .flush()
+            .await
+            .map_err(|error| format!("flush desktop stdout: {error}"))?;
     }
     Ok(())
 }
 
 fn now_millis() -> i64 {
     codetwo_core::session::now_millis()
+}
+
+/// Tokio's stdio adapters require blocking descriptors. A spawning runtime can finish
+/// configuring inherited pipes after exec, so the input loop also repairs WouldBlock.
+pub fn configure_stdio() -> Result<(), String> {
+    #[cfg(unix)]
+    for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO] {
+        // SAFETY: fcntl changes only flags on the inherited standard descriptors.
+        let result = unsafe {
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            if flags < 0 {
+                -1
+            } else {
+                libc::fcntl(fd, libc::F_SETFL, flags & !libc::O_NONBLOCK)
+            }
+        };
+        if result < 0 {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+    }
+    Ok(())
 }
 
 /// Boot the core plugin graph and serve the desktop protocol until stdin closes or the host sends
@@ -125,6 +149,10 @@ pub async fn run() -> Result<(), String> {
     codetwo_core::provider::augment_search_path();
 
     let data_dir = data_dir_from_args()?;
+    let mut config = AppConfig::new(&data_dir);
+    config
+        .acquire_data_dir_lock()
+        .map_err(|error| error.to_string())?;
     std::fs::create_dir_all(&data_dir).map_err(|error| {
         format!(
             "could not create desktop data directory {}: {error}",
@@ -137,11 +165,22 @@ pub async fn run() -> Result<(), String> {
     let events = EventSink::new(output_tx.clone());
 
     #[cfg(unix)]
-    let scene_socket_path = data_dir.join("codetwo-scenes.sock");
+    let scene_socket_path = std::env::var_os("CODETWO_SCENE_SOCKET")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| data_dir.join("codetwo-scenes.sock"));
+    #[cfg(unix)]
+    if let Some(parent) = scene_socket_path.parent() {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(parent)
+            .map_err(|error| error.to_string())?;
+    }
     #[cfg(unix)]
     let scene_master_key = uuid::Uuid::new_v4().to_string();
     #[cfg(unix)]
-    let scene_listener = scene_mcp::bind_broker(&scene_socket_path)?;
+    let (scene_listener, _scene_ownership) = scene_mcp::bind_broker(&scene_socket_path)?;
     #[cfg(unix)]
     let desktop_mcp = DesktopMcpConfig {
         command: std::env::current_exe()
@@ -230,7 +269,7 @@ pub async fn run() -> Result<(), String> {
             .expect("host metadata must refer to a registered plugin");
     }
 
-    let config = AppConfig::new(&data_dir)
+    let config = config
         .with("automation", PluginEntry::default())
         .with("github", PluginEntry::default())
         .with("issue-delivery", PluginEntry::default())
@@ -265,10 +304,24 @@ pub async fn run() -> Result<(), String> {
     )?;
 
     let stdin = tokio::io::stdin();
-    let mut lines = BufReader::new(stdin).lines();
+    let mut input = BufReader::new(stdin);
+    let mut line = Vec::new();
     let mut calls = tokio::task::JoinSet::new();
-    while let Some(line) = lines.next_line().await.map_err(|error| error.to_string())? {
-        let request = match serde_json::from_str::<Request>(&line) {
+    loop {
+        match input.read_until(b'\n', &mut line).await {
+            Ok(0) if line.is_empty() => break,
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                configure_stdio()?;
+                tokio::task::yield_now().await;
+                continue;
+            }
+            Err(error) => return Err(format!("read desktop stdin: {error}")),
+        }
+        // Keep partial bytes across WouldBlock, including split UTF-8 code points.
+        let request = serde_json::from_slice::<Request>(&line);
+        line.clear();
+        let request = match request {
             Ok(request) => request,
             Err(error) => {
                 let _ = events.emit("protocol-error", error.to_string());

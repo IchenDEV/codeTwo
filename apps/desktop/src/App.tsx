@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import { asJsonObject, isOneOf, stringField } from "@/lib/jsonValue";
 import { usePersistedNumber } from "@/lib/persist";
+import { useLatestRef, useStableCallback } from "@/lib/useLatestRef";
 import { cn } from "@/lib/utils";
 
 import {
@@ -2428,7 +2429,8 @@ export default function App() {
     });
   }, [editorEmptyByPane, locale]);
 
-  const refreshSessions = async () => {
+  // Startup reads need stable identities even when React Compiler skips this component.
+  const refreshSessions = useStableCallback(async () => {
     const policyVersionsAtStart = new Map(policyVersionsRef.current);
     try {
       const [active, archived, nextPreviews] = await Promise.all([
@@ -2497,7 +2499,7 @@ export default function App() {
       toast(t("toast.sessionLoadFailed", { error: String(error) }), "error");
       return null;
     }
-  };
+  });
 
   const refreshProjects = () => {
     const seq = (projectLoadSeqRef.current += 1);
@@ -2858,7 +2860,7 @@ export default function App() {
       ?.display_name ?? quickQuotaProvider;
   const railQuickQuota = quickQuotaSummary(quickQuotaReport);
 
-  const refreshQuickQuota = () => {
+  const refreshQuickQuota = useCallback(() => {
     const request = (quickQuotaRequestRef.current += 1);
     setQuickQuotaLoading(true);
     void providerQuota(quickQuotaProvider)
@@ -2873,7 +2875,7 @@ export default function App() {
         if (request === quickQuotaRequestRef.current)
           setQuickQuotaLoading(false);
       });
-  };
+  }, [quickQuotaProvider]);
 
   useEffect(() => {
     setQuickQuotaReport(null);
@@ -2896,85 +2898,86 @@ export default function App() {
   // Track whether the user has hand-picked a provider; until then we auto-pick an available one.
   const providerPinned = useRef(false);
 
-  const refreshProviders = async (
-    checkUpdates = false
-  ): Promise<ProviderInfo[]> => {
-    const request = (providerRegistryRequestRef.current += 1);
-    setProvidersStatus("loading");
-    try {
-      let list = checkUpdates
-        ? await listProviders(true)
-        : await loadProviderRegistry(listProviders);
-      if (import.meta.env.DEV) {
-        const query = new URLSearchParams(window.location.search);
-        const fixtureProvider = query.get("mockProviderSettings");
-        if (fixtureProvider != null && fixtureProvider !== "") {
-          const fixtureModels = [
-            ...new Set(
-              (
-                query.get("mockModels") ??
-                "gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna"
-              )
-                .split(",")
-                .map((id) => id.trim())
-                .filter((id) => id.length > 0 && id.length <= 120)
-            ),
-          ]
-            .slice(0, 20)
-            .map((id) => ({ id, name: id, description: null }));
-          list = list.map((candidate) =>
-            candidate.id === fixtureProvider
-              ? {
-                  ...candidate,
-                  available: true,
-                  models: fixtureModels,
-                  management: {
-                    ...candidate.management,
-                    installed: true,
-                    version: "0.151.0",
-                    latest_version: "0.151.0",
-                    update_available: false,
-                    launch_mode: "installed" as const,
-                  },
-                  configuration: {
-                    ...candidate.configuration,
-                    effective_command:
-                      fixtureProvider === "codex"
-                        ? "codex-acp"
-                        : candidate.configuration.effective_command,
-                    effective_args: ["--stdio"],
-                  },
-                }
-              : candidate
-          );
+  const refreshProviders = useCallback(
+    async (checkUpdates = false): Promise<ProviderInfo[]> => {
+      const request = (providerRegistryRequestRef.current += 1);
+      setProvidersStatus("loading");
+      try {
+        let list = checkUpdates
+          ? await listProviders(true)
+          : await loadProviderRegistry(listProviders);
+        if (import.meta.env.DEV) {
+          const query = new URLSearchParams(window.location.search);
+          const fixtureProvider = query.get("mockProviderSettings");
+          if (fixtureProvider != null && fixtureProvider !== "") {
+            const fixtureModels = [
+              ...new Set(
+                (
+                  query.get("mockModels") ??
+                  "gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna"
+                )
+                  .split(",")
+                  .map((id) => id.trim())
+                  .filter((id) => id.length > 0 && id.length <= 120)
+              ),
+            ]
+              .slice(0, 20)
+              .map((id) => ({ id, name: id, description: null }));
+            list = list.map((candidate) =>
+              candidate.id === fixtureProvider
+                ? {
+                    ...candidate,
+                    available: true,
+                    models: fixtureModels,
+                    management: {
+                      ...candidate.management,
+                      installed: true,
+                      version: "0.151.0",
+                      latest_version: "0.151.0",
+                      update_available: false,
+                      launch_mode: "installed" as const,
+                    },
+                    configuration: {
+                      ...candidate.configuration,
+                      effective_command:
+                        fixtureProvider === "codex"
+                          ? "codex-acp"
+                          : candidate.configuration.effective_command,
+                      effective_args: ["--stdio"],
+                    },
+                  }
+                : candidate
+            );
+          }
         }
-      }
-      if (request !== providerRegistryRequestRef.current) return list;
-      setProviders(list);
-      setProvidersStatus("ready");
-      // Default to a provider whose runtime is enabled and launchable. Shipping `grok` as the
-      // default meant a machine without it failed on the first session with a raw spawn error.
-      setProvider((current) => {
-        const selected = list.find((candidate) => candidate.id === current);
-        // Explicitly disabling the selected provider must leave new sessions with a runnable
-        // choice even when that provider had previously been pinned in the Composer.
-        if (selected?.enabled === false) {
-          return list.find((candidate) => candidate.available)?.id ?? current;
+        if (request !== providerRegistryRequestRef.current) return list;
+        setProviders(list);
+        setProvidersStatus("ready");
+        // Default to a provider whose runtime is enabled and launchable. Shipping `grok` as the
+        // default meant a machine without it failed on the first session with a raw spawn error.
+        setProvider((current) => {
+          const selected = list.find((candidate) => candidate.id === current);
+          // Explicitly disabling the selected provider must leave new sessions with a runnable
+          // choice even when that provider had previously been pinned in the Composer.
+          if (selected?.enabled === false) {
+            return list.find((candidate) => candidate.available)?.id ?? current;
+          }
+          if (providerPinned.current) return current;
+          return selected?.available === true
+            ? current
+            : (list.find((candidate) => candidate.available)?.id ?? current);
+        });
+        return list;
+      } catch (error) {
+        if (request === providerRegistryRequestRef.current) {
+          console.error("Could not load the provider registry", error);
+          setProvidersStatus("error");
         }
-        if (providerPinned.current) return current;
-        return selected?.available === true
-          ? current
-          : (list.find((candidate) => candidate.available)?.id ?? current);
-      });
-      return list;
-    } catch (error) {
-      if (request === providerRegistryRequestRef.current) {
-        console.error("Could not load the provider registry", error);
-        setProvidersStatus("error");
+        throw error;
       }
-      throw error;
-    }
-  };
+    },
+    []
+  );
 
   const refreshProviderUpdates = async () => await refreshProviders(true);
 
@@ -3016,12 +3019,49 @@ export default function App() {
     };
   }, [toast]);
 
+  const coreEventCallbacks = useLatestRef({
+    applyAuthoritativeExecutionPolicy,
+    finishPolicyRequest,
+    followDockEvent,
+    handleDockFollow,
+    initializePluginSessionState,
+    invalidatePendingCreation,
+    markSessionStarted,
+    markSessionStopped,
+    promoteActiveComposerDraft,
+    refreshSessions,
+    restoreAcceptedCanvasForProviderError,
+    restoreRejectedExecutionPolicy,
+    removePendingAppshots,
+    toast,
+    t,
+    updateRunningSession,
+  });
   useEffect(() => {
     void refreshSessions();
 
     let unlisten: (() => void) | null = null;
+    let disposed = false;
     void (async () => {
       unlisten = await onEngineEvent((ev: CoreEvent) => {
+        const {
+          applyAuthoritativeExecutionPolicy,
+          finishPolicyRequest,
+          followDockEvent,
+          handleDockFollow,
+          initializePluginSessionState,
+          invalidatePendingCreation,
+          markSessionStarted,
+          markSessionStopped,
+          promoteActiveComposerDraft,
+          refreshSessions,
+          restoreAcceptedCanvasForProviderError,
+          restoreRejectedExecutionPolicy,
+          removePendingAppshots,
+          toast,
+          t,
+          updateRunningSession,
+        } = coreEventCallbacks.current;
         // Shared Task clients refetch the revisioned Task snapshot. The production TaskBoard is
         // still local in this P0 and must not render this control-plane event as transcript data.
         if (ev.event === "task_snapshot_changed") return;
@@ -3824,29 +3864,14 @@ export default function App() {
           (prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined)
         );
       });
+      if (disposed) unlisten();
     })();
 
     return () => {
+      disposed = true;
       if (unlisten) unlisten();
     };
-  }, [
-    applyAuthoritativeExecutionPolicy,
-    finishPolicyRequest,
-    followDockEvent,
-    handleDockFollow,
-    initializePluginSessionState,
-    invalidatePendingCreation,
-    markSessionStarted,
-    markSessionStopped,
-    promoteActiveComposerDraft,
-    refreshSessions,
-    restoreAcceptedCanvasForProviderError,
-    restoreRejectedExecutionPolicy,
-    removePendingAppshots,
-    toast,
-    t,
-    updateRunningSession,
-  ]);
+  }, [coreEventCallbacks, refreshSessions]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -5275,7 +5300,7 @@ export default function App() {
 
   // Skills depend on the workspace: harness skill directories (.claude/skills …) are rescanned
   // for the project the user is in, so the list refreshes on mount and on every project switch.
-  const refreshSkills = async () => {
+  const refreshSkills = useCallback(async () => {
     try {
       const next = await listSkills(cwd || ".");
       setSkills(next);
@@ -5283,7 +5308,7 @@ export default function App() {
     } catch {
       return [];
     }
-  };
+  }, [cwd]);
 
   useEffect(() => {
     void refreshSkills();
@@ -5628,7 +5653,7 @@ export default function App() {
     scenesSurfaceEnabled,
   ]);
 
-  const refreshScenes = async () => {
+  const refreshScenes = useStableCallback(async () => {
     if (!scenesSurfaceEnabled) {
       scenesRef.current = [];
       setScenes([]);
@@ -5639,7 +5664,7 @@ export default function App() {
     scenesRef.current = next;
     setScenes(next);
     return next;
-  };
+  });
 
   // Scenes rescan with the workspace, same contract as skills. Degrades to [] on an older core.
   useEffect(() => {
@@ -5652,7 +5677,7 @@ export default function App() {
     void listPipelines().then((next) => {
       if (componentEnabledRef.current("scenes.surface")) setPipelines(next);
     });
-  }, [refreshScenes, scenesSurfaceEnabled]);
+  }, [cwd, refreshScenes, scenesSurfaceEnabled]);
 
   // The stage track follows the active session's pipeline binding (R9). Refetched at turn
   // boundaries and on banner changes — auto advances, loop re-entries, and artifact captures all
@@ -5703,7 +5728,7 @@ export default function App() {
     checkpointRefreshSeq.current += 1;
   }, [cwd]);
 
-  const refreshGit = () => {
+  const refreshGit = useCallback(() => {
     const target = cwd || ".";
     const request = (gitRefreshSeq.current += 1);
     const fresh = () =>
@@ -5795,9 +5820,9 @@ export default function App() {
         });
       }
     });
-  };
+  }, [cwd]);
 
-  const refreshCheckpoints = () => {
+  const refreshCheckpoints = useCallback(() => {
     const target = cwd || ".";
     // A callback captured before a project switch must not invalidate the current project's load.
     if ((cwdRef.current || ".") !== target) return;
@@ -5828,7 +5853,7 @@ export default function App() {
           });
         }
       });
-  };
+  }, [cwd]);
 
   const openPluginManagerFor = (pluginId: string | null) => {
     const normalizedActiveProject =

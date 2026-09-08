@@ -869,6 +869,7 @@ async fn startup_failure_preserves_the_previous_last_good_snapshot() {
         .await
         .unwrap();
     app.stop().await;
+    drop(app); // Release data-directory ownership before constructing the next Core.
     let last_good_path = data.path().join("plugin-config.last-good.json");
     let original_last_good = std::fs::read(&last_good_path).unwrap();
 
@@ -911,6 +912,7 @@ async fn safe_mode_does_not_create_a_last_good_snapshot_or_escape_on_restart() {
     assert!(app.call("configurable.value", Value::Null).await.is_err());
     assert!(!last_good_path.exists());
     app.stop().await;
+    drop(app); // Release data-directory ownership before constructing the next Core.
 
     let app = CoreApp::boot_with(config(data.path()), registry())
         .await
@@ -1170,6 +1172,7 @@ async fn component_and_project_changes_cannot_bless_an_unrelated_failed_global_p
         .await
         .unwrap();
     app.stop().await;
+    drop(app); // Release data-directory ownership before constructing the next Core.
     let last_good_path = data.path().join("plugin-config.last-good.json");
     let original_last_good = std::fs::read(&last_good_path).unwrap();
     let mut persisted = PluginConfigStore::open(data.path()).unwrap();

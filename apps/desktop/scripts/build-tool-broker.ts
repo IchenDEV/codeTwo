@@ -1,12 +1,17 @@
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { resolveDevProfile } from "./dev-profile";
+
+const profile = resolveDevProfile();
 const desktopRoot = resolve(import.meta.dir, "..");
 const executable =
   process.platform === "win32"
     ? "codetwo-tool-broker.exe"
     : "codetwo-tool-broker";
-const outputDirectory = resolve(desktopRoot, "build", "tool-broker");
+const outputDirectory = profile
+  ? resolve(profile.root, "tool-broker")
+  : resolve(desktopRoot, "build", "tool-broker");
 
 mkdirSync(outputDirectory, { recursive: true });
 const result = Bun.spawnSync(

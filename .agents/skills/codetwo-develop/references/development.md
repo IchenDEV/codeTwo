@@ -34,7 +34,14 @@ cd codeTwo
 
 If this launcher's tracked instance is already running, normal launch refuses to replace it.
 Use `./script/dev/run.sh --logs` or `--telemetry` to inspect it, or `--restart` to explicitly stop
-and rebuild it. These modes do not provide multi-instance isolation.
+and rebuild it. For concurrent workers, use a separate worktree and profile per instance:
+
+```sh
+CODETWO_DEV_PROFILE=feature-a CODETWO_DEV_PORT=1421 ./script/dev/run.sh
+```
+
+The [profile contract](../../../../docs/design/desktop-development-profiles.md) documents isolation,
+renderer ports, stop/restart, and platform verification boundaries.
 
 C2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
 are documented in [Providers](../../../../website/guide/providers.md).
@@ -117,7 +124,7 @@ primitives or visual tokens.
 | --- | --- |
 | Package a nightly or authorized versioned release | [Release guide](../../codetwo-release/references/releasing.md) |
 | Build and operate a remote programming node | [Remote agent](../../codetwo-operations/references/remote-agent.md) |
-| Understand proposed multi-instance isolation | [Profile design](../../../../docs/design/desktop-development-profiles.md), not yet supported |
+| Configure concurrent development instances | [Profile configuration](../../../../docs/design/desktop-development-profiles.md) |
 | Find development/build scripts | [Script index](../../../../script/README.md) |
 
 Bug reports and focused pull requests are welcome. Link the canonical change record, keep scope

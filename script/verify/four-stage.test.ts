@@ -43,8 +43,9 @@ function fixture(run: (root: string) => void, draft = false) {
       intent: `source: user\nrisk: medium\napproved_by: ${draft ? '""' : "chenli"}\napproved_at: ${draft ? '""' : "2026-09-08"}\napproval_source: ${draft ? '""' : '"User requested the three lifecycle rules in this session."'}\n`,
       spec: "based_on: intent.md\ndesign_approved_by: \"\"\ndesign_approved_at: \"\"\ndesign_approval_source: \"\"\n",
       plan: "based_on: spec.md\nscope: README.md, script/verify/\n",
-      verification: "based_on: plan.md\nrevision: worktree based on fixture-v1\nverification_mode: owner\nverified_by: implementer\nverified_at: 2026-09-08\nrelease_target: none\n",
+      verification: "based_on: plan.md\nrevision: worktree based on fixture-v1\nverification_mode: owner\nverified_by: implementer\nverified_at: 2026-09-08\nrelease_target: none\ncleanup_status: complete\n",
     };
+    bodies.verification += "\n## Cleanup\n\nRemoved: none; fixture records only.\nRetained: none.\nProcesses: none started.\nEvidence: `fixture` uses a disposable directory removed in finally.\n";
     for (const stage of STAGES) {
       const status = draft ? (stage === "verification" ? "pending" : "draft") : stage === "verification" ? "passed" : "accepted";
       write(root, `${DIR}/${stage}.md`, `---\nid: ${ID}\nschema: 5\nstage: ${stage}\nstatus: ${status}\nowner: implementer\ncreated: 2026-09-08\nnext_trigger: Human review of verified changes.\n${fields[stage]}---\n\n# ${stage}\n\n${bodies[stage]}`);
@@ -234,5 +235,54 @@ test("changed plan scope covers actual diff and Ready still requires passed veri
     edit(root, "verification", "status: passed", "status: in-progress");
     expect(validateRepository(root, undefined, undefined, true)).toEqual([]);
     expect(validateRepository(root, undefined, undefined, true, true).length).toBeGreaterThan(0);
+  });
+});
+
+
+test("cleanup gate rejects unfinished cleanup, missing evidence and unowned retention", () => {
+  fixture(root => {
+    expect(validateRepository(root)).toEqual([]);
+    edit(root, "verification", "Retained: none.", "Retained: none; fixture output is removed.");
+    expect(validateRepository(root)).toEqual([]);
+    edit(root, "verification", "cleanup_status: complete", "cleanup_status: pending");
+    expect(validateRepository(root).some(e => e.includes("cleanup_status complete"))).toBe(true);
+    edit(root, "verification", "cleanup_status: pending", "cleanup_status: complete");
+    edit(root, "verification", "Evidence: `fixture` uses a disposable directory removed in finally.", "Evidence: pending.");
+    expect(validateRepository(root).some(e => e.includes("cleanup Evidence"))).toBe(true);
+  });
+  fixture(root => {
+    edit(root, "verification", "Retained: none.", "Retained: task-scoped failure trace.");
+    expect(validateRepository(root).some(e => e.includes("Retention owner"))).toBe(true);
+    edit(root, "verification", "Retained: task-scoped failure trace.", "Retained: task-scoped failure trace.\nRetention owner: implementer\nCleanup trigger: remove after the linked failure is resolved");
+    expect(validateRepository(root)).toEqual([]);
+  });
+});
+
+test("failed or blocked work must settle cleanup, while a genuine cleanup blocker stays reportable", () => {
+  fixture(root => {
+    edit(root, "verification", "status: passed", "status: blocked");
+    edit(root, "verification", "cleanup_status: complete", "cleanup_status: pending");
+    expect(validateRepository(root).some(e => e.includes("failed/blocked handoff"))).toBe(true);
+    edit(root, "verification", "cleanup_status: pending", "cleanup_status: blocked");
+    edit(root, "verification", "Retained: none.", "Retained: locked task output.\nRetention owner: implementer\nCleanup trigger: owning process exits\nBlocker: active build still holds its OS lock");
+    expect(validateRepository(root)).toEqual([]);
+  });
+});
+
+test("legacy records remain readable but changed records cannot omit cleanup", () => {
+  fixture(root => {
+    edit(root, "verification", "cleanup_status: complete\n", "");
+    expect(validateRepository(root)).toEqual([]);
+    git(root, "init", "-q");
+    git(root, "config", "user.name", "Fixture");
+    git(root, "config", "user.email", "fixture@example.invalid");
+    git(root, "add", "."); git(root, "commit", "-qm", "legacy baseline");
+    expect(validateRepository(root, undefined, undefined, true)).toEqual([]);
+    edit(root, "plan", "Update the contract", "Update the cleanup contract");
+    expect(validateRepository(root, undefined, undefined, true).some(e => e.includes("requires cleanup_status"))).toBe(true);
+  });
+  fixture(root => {
+    edit(root, "verification", "cleanup_status: complete\n", "");
+    expect(validateRepository(root, undefined, ID).some(e => e.includes("requires cleanup_status"))).toBe(true);
   });
 });

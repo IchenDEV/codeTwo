@@ -181,11 +181,15 @@ describe("Electrobun Plugin Kernel adapter", () => {
   test("rejects pending work if the Kernel output stream closes", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "codetwo-native-host-output-"));
     const kernel = new FakeKernel();
+    let spawns = 0;
     const host = new NativeHost({
       executable: "/fixture/codetwo-desktop-host",
       dataDir,
       onEvent: () => {},
-      spawn: () => kernel,
+      spawn: () => {
+        spawns++;
+        return kernel;
+      },
       startupTimeoutMs: 100,
       shutdownTimeoutMs: 100,
     });
@@ -196,6 +200,15 @@ describe("Electrobun Plugin Kernel adapter", () => {
       kernel.closeOutput();
       expect(pending).rejects.toThrow("output stream closed unexpectedly");
       expect(kernel.killed).toBe(true);
+      const writesAtFailure = kernel.requests.length;
+      const outcomes = await Promise.allSettled(
+        Array.from({ length: 100 }, () => host.call("demo.echo", {}, null))
+      );
+      expect(outcomes.every((outcome) => outcome.status === "rejected")).toBe(
+        true
+      );
+      expect(spawns).toBe(1);
+      expect(kernel.requests.length).toBe(writesAtFailure);
       await host.shutdown();
     } finally {
       rmSync(dataDir, { recursive: true, force: true });

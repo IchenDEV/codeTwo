@@ -2,6 +2,13 @@
 set -euo pipefail
 
 MODE="${1:-run}"
+if [[ "${CODETWO_DEV_PROFILE+x}" == x ]]; then
+  PROFILE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  if [[ -d /opt/homebrew/opt/zig@0.15/bin ]]; then
+    export PATH="/opt/homebrew/opt/zig@0.15/bin:$PATH"
+  fi
+  exec bun "$PROFILE_ROOT/apps/desktop/scripts/run-profile.ts" "$MODE"
+fi
 BUNDLE_ID="dev.codetwo.app.dev"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DESKTOP_DIR="$ROOT_DIR/apps/desktop"

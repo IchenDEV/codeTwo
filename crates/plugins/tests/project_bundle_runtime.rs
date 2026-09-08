@@ -510,6 +510,7 @@ async fn developer_mode_watches_installed_bundle_files_and_persists() {
     assert_eq!(reloaded["last_reload"]["plugins"], json!(["alpha"]));
 
     app.stop().await;
+    drop(app); // Release data-directory ownership before restarting.
     let restarted = boot(data.path()).await;
     let persisted = restarted
         .call("plugins.developer_status", Value::Null)

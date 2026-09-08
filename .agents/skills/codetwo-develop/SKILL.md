@@ -15,3 +15,5 @@ Use Ponytail at default full before selecting an approach, as required by the re
 instructions. Finish authorized implementation and relevant verification; reuse matching evidence.
 Keep templates here and generated change records in `docs/sdlc/changes/` through `./script/devflow`.
 Packaging and runtime operations use the specialized Skills linked by the workflow.
+
+Before handoff, apply the shared [cleanup contract](references/workflow.md#cleanup-and-handoff) and record what was removed or retained, including when work fails or stops.

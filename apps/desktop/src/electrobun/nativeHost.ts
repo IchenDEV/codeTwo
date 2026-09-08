@@ -353,6 +353,7 @@ export class NativeHost {
 
 function defaultSpawn(command: string[]): NativeHostProcess {
   return Bun.spawn(command, {
+    env: process.env,
     stdin: "pipe",
     stdout: "pipe",
     stderr: "inherit",

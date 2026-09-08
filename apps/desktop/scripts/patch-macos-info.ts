@@ -16,7 +16,9 @@ import {
   desktopChannelForIdentifier,
   resolveDesktopChannel,
 } from "./desktop-channel";
+import { profileChannel, resolveDevProfile } from "./dev-profile";
 
+const profile = resolveDevProfile();
 const desktopRoot = join(import.meta.dir, "..");
 const wrapperBundle = process.env.ELECTROBUN_WRAPPER_BUNDLE_PATH;
 const buildDirectory = process.env.ELECTROBUN_BUILD_DIR;
@@ -88,7 +90,7 @@ if (process.platform !== "darwin") {
 const channelName =
   desktopChannelForIdentifier(process.env.ELECTROBUN_APP_IDENTIFIER) ??
   resolveDesktopChannel(process.env.CODETWO_CHANNEL);
-const channel = DESKTOP_CHANNELS[channelName];
+const channel = profileChannel(DESKTOP_CHANNELS[channelName], profile);
 const bundles =
   wrapperBundle != null && wrapperBundle !== ""
     ? [wrapperBundle]
@@ -105,33 +107,27 @@ const descriptions = {
     "C2 turns your dictation into text using macOS's on-device speech recognition. Audio is never sent to a server.",
 };
 
-const updateHelperBuild = join(
-  desktopRoot,
-  "native",
-  "update-helper",
-  ".build",
-  "release"
-);
+const updateHelperBuild = profile
+  ? join(profile.nativeDir, "update-helper", "release")
+  : join(desktopRoot, "native", "update-helper", ".build", "release");
 const updateHelperExecutable = join(updateHelperBuild, "CodeTwoUpdateHelper");
 const sparkleFramework = join(updateHelperBuild, "Sparkle.framework");
-const cloudSyncHelperBuild = join(
-  desktopRoot,
-  "native",
-  "cloud-sync-helper",
-  ".build",
-  "release"
-);
+const cloudSyncHelperBuild = profile
+  ? join(profile.nativeDir, "cloud-sync-helper", "release")
+  : join(desktopRoot, "native", "cloud-sync-helper", ".build", "release");
 const cloudSyncHelperExecutable = join(
   cloudSyncHelperBuild,
   "CodeTwoCloudSyncHelper"
 );
-const windowEffectsLibrary = join(
-  desktopRoot,
-  "native",
-  "window-effects",
-  ".build",
-  "libCodeTwoWindowEffects.dylib"
-);
+const windowEffectsLibrary = profile
+  ? join(profile.nativeDir, "window-effects", "libCodeTwoWindowEffects.dylib")
+  : join(
+      desktopRoot,
+      "native",
+      "window-effects",
+      ".build",
+      "libCodeTwoWindowEffects.dylib"
+    );
 const embeddedRuntimeExecutables = [
   "codetwo-desktop-host",
   "codetwo-tool-broker",

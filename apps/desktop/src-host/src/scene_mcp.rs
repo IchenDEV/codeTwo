@@ -632,7 +632,26 @@ fn required_string(value: &Value, key: &str) -> Result<String, String> {
 }
 
 #[cfg(unix)]
-pub fn bind_broker(path: &std::path::Path) -> Result<tokio::net::UnixListener, String> {
+pub fn bind_broker(
+    path: &std::path::Path,
+) -> Result<(tokio::net::UnixListener, std::fs::File), String> {
+    use fs2::FileExt;
+    // Separate data directories can be explicitly pointed at the same socket. Protect that
+    // resource too, before unlinking it, and retain the inode after exit for future contenders.
+    let ownership = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open({
+            let mut lock_path = path.as_os_str().to_os_string();
+            lock_path.push(".lock");
+            lock_path
+        })
+        .map_err(|error| error.to_string())?;
+    ownership
+        .try_lock_exclusive()
+        .map_err(|error| format!("scene socket already owned: {} ({error})", path.display()))?;
     use std::os::unix::fs::PermissionsExt;
 
     if path.exists() {
@@ -641,7 +660,7 @@ pub fn bind_broker(path: &std::path::Path) -> Result<tokio::net::UnixListener, S
     let listener = tokio::net::UnixListener::bind(path).map_err(|error| error.to_string())?;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
         .map_err(|error| error.to_string())?;
-    Ok(listener)
+    Ok((listener, ownership))
 }
 
 #[cfg(unix)]

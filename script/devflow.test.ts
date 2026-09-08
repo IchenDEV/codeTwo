@@ -52,10 +52,18 @@ function acceptStages(root: string): string {
   return readFileSync(join(dir, "verification.md"), "utf8");
 }
 
+function finishCleanup(text: string): string {
+  return text.replace("cleanup_status: pending", "cleanup_status: complete")
+    .replace("Removed: pending.", "Removed: none; disposable fixture only.")
+    .replace("Retained: pending.", "Retained: none.")
+    .replace("Processes: pending.", "Processes: none started.")
+    .replace("Evidence: pending.", "Evidence: `fixture` removes its temporary directory in finally.");
+}
+
 function passStages(root: string, pending: string): string {
   const path = join(root, "docs/sdlc/changes", CHANGE_ID, "spec.md");
   writeFileSync(path, readFileSync(path, "utf8").replace("[ ] AC-1", "[x] AC-1"));
-  return pending.replace("status: pending", "status: passed")
+  return finishCleanup(pending).replace("status: pending", "status: passed")
     .replace("owner: unassigned", "owner: fixture")
     .replace('revision: ""', 'revision: "disposable worktree fixture"')
     .replace('verified_by: ""', 'verified_by: "fixture"')
@@ -72,6 +80,8 @@ test("four files run request, local work, honest failure, verification and Ready
     expect(existsSync(join(root, "docs/sdlc/changes", CHANGE_ID, "intent.md"))).toBe(true);
     expect(existsSync(join(root, "docs/sdlc/changes", CHANGE_ID, "change.md"))).toBe(false);
     expect(run(root, ["validate"]).status).toBe(0);
+    expect(readFileSync(path, "utf8")).toContain("cleanup_status: pending");
+    expect(readFileSync(path, "utf8")).toContain("## Cleanup");
     const draft = { PR_BODY: `Change: docs/sdlc/changes/${CHANGE_ID}/intent.md`, PR_IS_DRAFT: "true" };
     expect(run(root, ["check-pr"], draft).status).toBe(0);
     expect(run(root, ["check-pr"], { ...draft, PR_IS_DRAFT: "false" }).output).toContain("intent must be accepted");
@@ -79,7 +89,7 @@ test("four files run request, local work, honest failure, verification and Ready
     writeFileSync(path, accepted);
     expect(run(root, ["validate"]).status).toBe(0);
     expect(run(root, ["check-pr"], { ...draft, PR_IS_DRAFT: "false" }).output).toContain("verification passed");
-    writeFileSync(path, accepted.replace("status: pending", "status: failed").replace("owner: unassigned", "owner: fixture")
+    writeFileSync(path, finishCleanup(accepted).replace("status: pending", "status: failed").replace("owner: unassigned", "owner: fixture")
       .replace("AC-1: BLOCKED — Acceptance has not been checked.", "AC-1: FAIL — `fixture-check` failed.")
       .replace("Verdict: pending.", "Verdict: failed."));
     expect(run(root, ["check-pr"], draft).status).toBe(0);
@@ -87,6 +97,8 @@ test("four files run request, local work, honest failure, verification and Ready
     writeFileSync(path, passStages(root, accepted));
     expect(run(root, ["check-pr"], { ...draft, PR_IS_DRAFT: "false" }).status).toBe(0);
     expect(run(root, ["status", CHANGE_ID]).output).toContain("verification.md=passed");
+    writeFileSync(path, passStages(root, accepted).replace("cleanup_status: complete\n", ""));
+    expect(run(root, ["check-pr"], { ...draft, PR_IS_DRAFT: "false" }).output).toContain("requires cleanup_status");
   });
 });
 

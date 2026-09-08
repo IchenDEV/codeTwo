@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { validateRepository } from "./verify/sdlc";
 import { parseArtifact } from "./verify/artifact-parse";
-import { CHANGE_ID_RE, STAGE_FILES, validateStageBundle } from "./verify/stage-bundle";
+import { CHANGE_ID_RE, STAGE_FILES, validateCleanup, validateStageBundle } from "./verify/stage-bundle";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SDLC_ROOT = join(REPO_ROOT, "docs", "sdlc");
@@ -174,6 +174,10 @@ function cmdCheckPr(): void {
         if (bundle[stage]?.metadata.status !== "accepted") fail(`${changeId}: ${stage} must be accepted before Ready PR`);
       }
       if (bundle.verification?.metadata.status !== "passed") fail(`${changeId}: Ready PR requires verification passed`);
+      if (bundle.intent.metadata.schema === "5") {
+        const cleanupErrors = validateCleanup(bundle.verification!, true);
+        if (cleanupErrors.length) fail(cleanupErrors.join("\n"));
+      }
     }
   }
   if (base) {

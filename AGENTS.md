@@ -24,6 +24,9 @@ checkout.
   links change. Authorization, routing, lifecycle behavior, template structure, or checker changes
   also run `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts` (the active lifecycle Eval).
   Pure wording edits need only applicable documentation and scope checks. Reuse valid evidence.
+- Apply the [cleanup and handoff contract](.agents/skills/codetwo-develop/references/workflow.md#cleanup-and-handoff)
+  before every handoff, including failure, blockage or cancellation. Record disposal and accountable
+  retention in Verification; preserve user data, deliverables and other workers' resources.
 - UI changes need actual rendering. A passing local check does not prove remote CI, approval,
   publication, or production recovery. Record actual evidence, skipped checks, and residual risk.
 - PR delivery, merge, release, destructive actions, external messages, and long-running automation
