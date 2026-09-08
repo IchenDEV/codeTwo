@@ -5,10 +5,13 @@ assets for availability; this guide does not assert a successful build or public
 
 ## Nightly package
 
-Every push to `main`, plus the daily 02:17 Asia/Singapore schedule, builds and verifies an Apple
+Every push to main, the daily 02:17 Asia/Singapore schedule, or a manual dispatch builds and verifies an Apple
 Silicon DMG in the [Nightly macOS package](../../../../.github/workflows/nightly-macos.yml) workflow. Download
 `C2-nightly-macos-arm64-<commit>` from that run's artifacts. Nightly packages are ad-hoc signed but
 not Apple-notarized, so they are for testing rather than general distribution.
+
+PRs run the unified CI checks without packaging; main pushes additionally build nightly. The Windows package workflow
+is manual-only; versioned macOS releases retain their explicit dispatch and release Gate.
 
 Development, nightly, and release builds can be installed together. Their macOS identities and
 default data directories are isolated:

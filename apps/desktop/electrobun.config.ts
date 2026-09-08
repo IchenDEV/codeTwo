@@ -88,7 +88,9 @@ export default {
     ],
     // Electrobun passes paths outside the desktop directory as absolute paths to Bun.Glob.
     // Copy inputs may make it watch the whole fresh profile root, including runtime.log/data.
-    watchIgnore: ["dist/**", "**/target/**", "**/.codex/run/**"],
+    watchIgnore: ["dist/**", "**/target/**", "**/.codex/run/**"].flatMap(
+      (pattern) => [pattern, pattern.replaceAll("/", "\\\\")]
+    ),
     mac: {
       createDmg: process.env.ELECTROBUN_CREATE_DMG === "1",
       codesign: process.env.ELECTROBUN_AD_HOC_SIGN === "1",

@@ -181,7 +181,7 @@ existing scope/documentation checks after cleanup without recreating unrelated b
 
 Create/push a PR only when delivery includes it. Link each changed record from the
 [PR template](../../../../.github/pull_request_template.md); do not copy the record's metadata into it.
-Ready PRs require authorized scope and passing verification. The SDLC workflow runs the same
+Ready PRs require authorized scope and passing verification. The unified CI workflow runs the same
 branch and metadata Gate when code, PR text, or draft status changes:
 
 ```sh
@@ -199,9 +199,8 @@ authorization; reuse authorization for the same unexecuted target, never infer i
 
 | Repository mechanism | What it proves |
 | --- | --- |
-| [SDLC contract](../../../../.github/workflows/sdlc.yml) | Record, scope, PR readiness, documentation, and Gate regressions |
-| [Desktop design](../../../../.github/workflows/desktop-design-system.yml) | Configured desktop tests and renderer build |
-| [Windows desktop](../../../../.github/workflows/windows-desktop.yml) | Configured compatibility and package checks |
+| [CI / Test](../../../../.github/workflows/ci.yml) | One PR/main check for records, scope, PR readiness, documentation, Gate regressions, desktop lint/types/tests, conditional TaskBoard mutation tests, and renderer build |
+| [Windows desktop](../../../../.github/workflows/windows-desktop.yml) | Manually dispatched compatibility and package checks |
 | [Pages](../../../../.github/workflows/pages.yml) | Documentation site build/deployment when triggered |
 | [Nightly macOS](../../../../.github/workflows/nightly-macos.yml) | Scheduled development package; not a versioned release approval |
 | [Versioned macOS](../../../../.github/workflows/release-macos.yml) | Named change passes release preflight before packaging and publication |
