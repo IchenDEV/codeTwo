@@ -37,6 +37,7 @@ import type {
   RemotePairingLink,
   RemoteStatus,
 } from "../bridge";
+import { useLanguage } from "../i18n";
 
 function defaultEndpointId(status: RemoteStatus | null): string | null {
   if (!status) return null;
@@ -60,7 +61,18 @@ function protocolLabel(protocol: RemoteClientProtocol): string {
   return "Browser remote";
 }
 
-function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
+function endpointHelp(
+  endpoint: RemoteEndpoint | undefined,
+  locale = "en"
+): string {
+  if (locale === "zh-CN") {
+    if (!endpoint) return "暂无可用配对地址。";
+    if (!endpoint.qr_shareable)
+      return "此地址仅限本机 C2 使用，其他设备无法访问 127.0.0.1。";
+    return endpoint.id.startsWith("tailnet-")
+      ? "请在 Tailscale 中确认此地址；双方须在同一网络并允许该端口。"
+      : "同一局域网内的设备可使用此地址。";
+  }
   if (!endpoint) return "No pairing address is currently available.";
   if (!endpoint.qr_shareable) {
     return "Works only with another C2 instance on this Mac. Other devices cannot reach 127.0.0.1.";
@@ -72,6 +84,8 @@ function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
 }
 
 export function RemoteModal({ onClose }: { onClose: () => void }) {
+  const { locale } = useLanguage();
+  const tr = (en: string, zh: string) => (locale === "zh-CN" ? zh : en);
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [link, setLink] = useState<RemotePairingLink | null>(null);
@@ -251,22 +265,27 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Device connections</DialogTitle>
+          <DialogTitle>{tr("Device connections", "设备连接")}</DialogTitle>
         </DialogHeader>
 
         <Card variant="flat" density="compact" className="p-3">
           <p className="text-body font-medium">
-            Pair this C2 with another device
+            {tr(
+              "Pair this C2 with another device",
+              "连接另一台 C2（此设备主动连接）"
+            )}
           </p>
           <p className="text-metadata text-muted-foreground">
-            Paste a one-time link created on the other C2 device. Conversations,
-            projects, and saved memory sync after pairing.
+            {tr(
+              "Paste a one-time link created on the other C2 device. Conversations, projects, and saved memory sync after pairing.",
+              "粘贴另一台 C2 生成的一次性链接。配对后可同步会话、项目和已保存的记忆。下方的传入连接则供其他设备连接此机。"
+            )}
           </p>
           <div className="flex gap-2">
             <Input
               value={pairingUrl}
               placeholder="http://device:4599/pair#token=…"
-              aria-label="C2 pairing link"
+              aria-label={tr("C2 pairing link", "另一台 C2 的配对链接")}
               onChange={(event) => setPairingUrl(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && pairingUrl.trim() && !pairBusy)
@@ -277,7 +296,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
               disabled={!pairingUrl.trim() || pairBusy}
               onClick={() => void pair()}
             >
-              {pairBusy ? "Pairing…" : "Pair"}
+              {pairBusy ? tr("Pairing\u2026", "正在配对…") : tr("Pair", "连接")}
             </Button>
           </div>
           {pairedMessage != null && pairedMessage !== "" && (
@@ -290,7 +309,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
             <div className="flex items-center justify-between">
               <StatusIndicator
                 tone="success"
-                label={`Incoming connections are on — port ${status.port}`}
+                label={`${tr("Incoming connections are on — port", "允许传入连接 · 端口")} ${status.port}`}
               />
               <Button
                 variant="outline"
@@ -298,7 +317,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 disabled={busy}
                 onClick={() => void turnOff()}
               >
-                Turn off
+                {tr("Turn off", "关闭传入连接")}
               </Button>
             </div>
 
@@ -308,7 +327,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                   id="remote-client-label"
                   className="text-body font-medium"
                 >
-                  Client
+                  {tr("Client", "客户端类型")}
                 </label>
                 <Select
                   value={clientProtocol}
@@ -340,7 +359,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 id="remote-endpoint-label"
                 className="text-body font-medium"
               >
-                Pairing address
+                {tr("Pairing address", "供其他设备使用的地址")}
               </label>
               <Select
                 value={selectedEndpointId ?? undefined}
@@ -356,7 +375,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                   aria-labelledby="remote-endpoint-label"
                   aria-describedby="remote-endpoint-help"
                 >
-                  <SelectValue placeholder="Choose an address" />
+                  <SelectValue
+                    placeholder={tr("Choose an address", "选择地址")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -372,7 +393,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 id="remote-endpoint-help"
                 className="text-metadata text-muted-foreground"
               >
-                {endpointHelp(selectedEndpoint)}
+                {endpointHelp(selectedEndpoint, locale)}
               </p>
             </div>
 
@@ -385,20 +406,35 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
               >
                 <p className="text-metadata text-muted-foreground">
                   {clientProtocol === "c2"
-                    ? "Paste this complete link into Device connections on the other C2 device. "
+                    ? tr(
+                        "Paste this complete link into Device connections on the other C2 device. ",
+                        "在另一台 C2 的设备连接页粘贴此完整链接。"
+                      )
                     : clientProtocol === "t3"
                       ? linkEndpoint?.qr_shareable === true
-                        ? "Scan this inside T3 Code mobile. "
-                        : "Choose a LAN or verified tailnet address for T3 Code mobile. "
-                      : "Open this link in the C2 browser client. "}
-                  The link is one-time and expires in{" "}
-                  {Math.round(link.expires_in / 60)} minutes.
+                        ? tr(
+                            "Scan this inside T3 Code mobile. ",
+                            "请使用 T3 Code 移动端扫描。"
+                          )
+                        : tr(
+                            "Choose a LAN or verified tailnet address for T3 Code mobile. ",
+                            "请为移动端选择局域网或已确认的 Tailscale 地址。"
+                          )
+                      : tr(
+                          "Open this link in the C2 browser client. ",
+                          "在 C2 浏览器客户端打开此链接。"
+                        )}
+                  {tr(
+                    "The link is one-time and expires in",
+                    "链接仅可使用一次，有效期"
+                  )}{" "}
+                  {Math.round(link.expires_in / 60)} {tr("minutes.", "分钟。")}
                 </p>
                 {link.qr_svg && (
                   <div className="rounded-control bg-qr-surface mx-auto w-fit p-2">
                     <img
                       className="block size-44"
-                      alt="Pairing QR code"
+                      alt={tr("Pairing QR code", "配对二维码")}
                       src={`data:image/svg+xml;utf8,${encodeURIComponent(link.qr_svg)}`}
                     />
                   </div>
@@ -416,10 +452,10 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                     {copied ? (
                       <>
                         <Check data-icon="inline-start" aria-hidden />
-                        Copied
+                        {tr("Copied", "已复制")}
                       </>
                     ) : (
-                      "Copy link"
+                      tr("Copy link", "复制链接")
                     )}
                   </Button>
                   <Button
@@ -431,7 +467,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                       !linkBusy && void mintLink(selectedEndpointId)
                     }
                   >
-                    {linkBusy ? "Creating…" : "New link"}
+                    {linkBusy
+                      ? tr("Creating\u2026", "正在生成…")
+                      : tr("New link", "重新生成链接")}
                   </Button>
                 </div>
               </Card>
@@ -443,26 +481,33 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 className="aria-disabled:opacity-50"
                 onClick={() => !linkBusy && void mintLink(selectedEndpointId)}
               >
-                {linkBusy ? "Creating…" : "Create pairing link"}
+                {linkBusy
+                  ? tr("Creating\u2026", "正在生成…")
+                  : tr("Create pairing link", "生成配对链接")}
               </Button>
             )}
           </>
         ) : (
           <>
             <p className="text-metadata text-muted-foreground">
-              Allow another C2 device, T3 Code mobile, or a browser remote to
-              connect over the same LAN or Tailscale tailnet. Access requires a
-              short-lived, one-time link and can be revoked at any time.
+              {tr(
+                "Allow another C2 device, T3 Code mobile, or a browser remote to connect over LAN or Tailscale with a revocable one-time link.",
+                "允许其他 C2、T3 Code 移动端或浏览器通过局域网或 Tailscale 连接此机。使用短期一次性链接，可随时撤销。"
+              )}
             </p>
             <Button disabled={busy} onClick={() => void turnOn()}>
-              {busy ? "Starting…" : "Allow incoming connections"}
+              {busy
+                ? tr("Starting\u2026", "正在启动…")
+                : tr("Allow incoming connections", "允许其他设备连接此 C2")}
             </Button>
           </>
         )}
 
         {devices.length > 0 && (
           <div className="space-y-1.5">
-            <p className="text-body font-medium">Paired devices</p>
+            <p className="text-body font-medium">
+              {tr("Paired devices", "已配对设备")}
+            </p>
             {devices.map((device) => (
               <div
                 key={device.id}
@@ -472,14 +517,16 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                   <p className="text-body">{device.name}</p>
                   <p className="text-metadata text-muted-foreground">
                     {device.direction === "outgoing"
-                      ? "Syncs with this C2"
+                      ? tr("Syncs with this C2", "与此 C2 同步")
                       : device.protocol === "c2"
-                        ? "Can sync into this C2"
-                        : "Can control this C2"}{" "}
-                    · paired{" "}
-                    {new Date(device.created_at * 1000).toLocaleDateString()} ·
-                    last seen{" "}
-                    {new Date(device.last_seen * 1000).toLocaleString()}
+                        ? tr("Can sync into this C2", "可同步至此 C2")
+                        : tr("Can control this C2", "可控制此 C2")}{" "}
+                    · {tr("Paired", "配对时间")}{" "}
+                    {new Date(device.created_at * 1000).toLocaleDateString(
+                      locale
+                    )}{" "}
+                    · {tr("Last seen", "最近在线")}{" "}
+                    {new Date(device.last_seen * 1000).toLocaleString(locale)}
                   </p>
                 </div>
                 <Button
@@ -487,7 +534,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                   size="sm"
                   onClick={() => void revoke(device.id)}
                 >
-                  {device.direction === "outgoing" ? "Disconnect" : "Revoke"}
+                  {device.direction === "outgoing"
+                    ? "Disconnect"
+                    : tr("Revoke", "撤销")}
                 </Button>
               </div>
             ))}
@@ -500,7 +549,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Done
+            {tr("Done", "完成")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -176,7 +176,13 @@ export function CommandPalette({
             {group.commands.map((command) => (
               <CommandItem
                 key={command.id}
-                value={`${command.label} ${command.hint ?? ""} ${command.detail ?? ""} ${command.keywords ?? ""}`}
+                value={command.id}
+                keywords={[
+                  command.label,
+                  command.hint ?? "",
+                  command.detail ?? "",
+                  command.keywords ?? "",
+                ]}
                 onSelect={() => {
                   onClose();
                   command.run();

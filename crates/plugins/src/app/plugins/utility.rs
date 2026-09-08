@@ -20,6 +20,24 @@ struct UsageHistoryReport {
     by_source: Vec<codetwo_core::usage::SourceUsage>,
 }
 
+fn usage_history_report(
+    mut records: Vec<codetwo_core::usage::UsageRecord>,
+    now: i64,
+    days: u32,
+) -> UsageHistoryReport {
+    let days = days.clamp(1, 365) as usize;
+    let (bucket_secs, bucket_count) = if days <= 7 {
+        (3_600, days * 24)
+    } else {
+        (86_400, days)
+    };
+    let history = codetwo_core::usage::history(&records, now, bucket_secs, bucket_count);
+    let end = history.start_ms + bucket_secs * 1000 * bucket_count as i64;
+    records.retain(|record| record.at_ms >= history.start_ms && record.at_ms < end);
+    let by_source = codetwo_core::usage::by_source_detailed(&records, history.start_ms);
+    UsageHistoryReport { history, by_source }
+}
+
 #[async_trait]
 impl Plugin for UsagePlugin {
     fn name(&self) -> &str {
@@ -54,21 +72,7 @@ impl Plugin for UsagePlugin {
                 .await
                 .unwrap_or_default();
             let now = codetwo_core::session::now_millis();
-            let (bucket_secs, bucket_count) = if args.days <= 7 {
-                (3_600i64, 7 * 24)
-            } else {
-                (86_400i64, 30)
-            };
-            let cutoff = now - bucket_secs * 1000 * bucket_count as i64;
-            json(UsageHistoryReport {
-                history: codetwo_core::usage::history(
-                    &scan.records,
-                    now,
-                    bucket_secs,
-                    bucket_count,
-                ),
-                by_source: codetwo_core::usage::by_source_detailed(&scan.records, cutoff),
-            })
+            json(usage_history_report(scan.records, now, args.days))
         })?;
 
         #[derive(Deserialize)]
@@ -132,5 +136,50 @@ impl Plugin for VoicePlugin {
             json(result?)
         })?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn profile_history_honors_days_and_shares_chart_boundaries() {
+        let day = 86_400_000;
+        let now = 100 * day + day / 2;
+        let record = |at_ms| codetwo_core::usage::UsageRecord {
+            at_ms,
+            input_tokens: 10,
+            cached_tokens: 0,
+            output_tokens: 0,
+            source: "codex".into(),
+            model: None,
+            dedupe_key: None,
+        };
+        let report = usage_history_report(
+            vec![
+                record(10 * day + day / 2),
+                record(11 * day),
+                record(now),
+                record(101 * day),
+            ],
+            now,
+            90,
+        );
+        assert_eq!(report.history.bucket_count, 90);
+        assert_eq!(report.history.start_ms, 11 * day);
+        let chart_total: u64 = report
+            .history
+            .series
+            .iter()
+            .flat_map(|series| &series.totals)
+            .sum();
+        let provider_total: u64 = report
+            .by_source
+            .iter()
+            .map(|source| source.total_tokens)
+            .sum();
+        assert_eq!(chart_total, 20);
+        assert_eq!(chart_total, provider_total);
     }
 }

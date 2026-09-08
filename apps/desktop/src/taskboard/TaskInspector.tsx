@@ -44,7 +44,8 @@ export function TaskInspector(props: TaskInspectorProps) {
       onValueChange={(value) => props.onTabChange(value as InspectorTab)}
       className="min-h-0 flex-1 flex-col gap-0"
     >
-      <div className="task-board-inspector-tabs task-board-panel-header flex shrink-0 items-start px-4 py-5">
+      <div className="task-board-inspector-tabs task-board-panel-header flex shrink-0 flex-col items-start gap-2 px-4 py-3">
+        <h2 className="text-body font-semibold break-words">{task.title}</h2>
         <TabsList
           variant="line"
           aria-label={props.t("taskboard.inspectorViews")}

@@ -177,7 +177,7 @@ function MenuItem({
   );
 }
 
-function BrowserWebview({
+export function BrowserWebview({
   label,
   url,
   visible,
@@ -195,7 +195,7 @@ function BrowserWebview({
       renderer={embeddedBrowserRenderer}
       partition="persist:codetwo-browser"
       sandbox=""
-      className={cn(
+      class={cn(
         "absolute inset-0 h-full! w-full! bg-transparent",
         !visible && "invisible"
       )}

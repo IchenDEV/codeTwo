@@ -1215,7 +1215,10 @@ export function ModelPicker({
               className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             >
               <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
-              <span className="text-foreground/80 max-w-28 truncate @lg/composer:max-w-44">
+              <span
+                title={modelLabel}
+                className="text-foreground/80 max-w-28 truncate @lg/composer:max-w-44"
+              >
                 {modelLabel}
               </span>
               <ChevronDown className="size-3 shrink-0 opacity-50" />
@@ -1816,7 +1819,7 @@ export function Composer({
                 <Button
                   variant="secondary"
                   size="icon"
-                  className="size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"
+                  className="size-8 shrink-0 rounded-full"
                   onClick={onStop}
                   aria-label={t("composer.stop")}
                 >
@@ -1836,7 +1839,7 @@ export function Composer({
               <Button
                 size="icon"
                 variant={composerEmpty ? "secondary" : "default"}
-                className="size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"
+                className="size-8 shrink-0 rounded-full"
                 onClick={onRun}
                 disabled={loading}
                 aria-label={
@@ -1899,7 +1902,7 @@ export function Composer({
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 // `relative` anchors the floating control bar below.
                 "min-h-0 flex-1"
-              : "rounded-composer bg-card shadow-raised duration-feedback ease-enter focus-within:focus-ring-inset transition-shadow"
+              : "rounded-composer bg-card shadow-surface duration-feedback ease-enter focus-within:focus-ring-inset transition-shadow"
           )}
         >
           <div
@@ -2021,7 +2024,7 @@ export function Composer({
               className={cn(
                 "flex flex-col gap-1",
                 docMode
-                  ? "raised-material rounded-composer shadow-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"
+                  ? "rounded-composer bg-surface shadow-surface pointer-events-auto mx-auto w-full max-w-3xl p-2"
                   : // Keep every outer edge 8px from the controls. The 24px surface radius then
                     // shares its bottom-right centre with the circular send/stop control.
                     "p-2"

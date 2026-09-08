@@ -4,6 +4,8 @@ Status: **0.9.0 candidate**. The visual foundation is structurally frozen; prove
 patterns may still be added through the admission rules below. The system becomes 1.0.0 only after
 the preview has been checked on Windows with Segoe UI/Cascadia in light and dark mode.
 
+[Design.md](../../Design.md) owns the accepted visual standard and scope. This document owns its component implementation contract.
+
 This document applies to `apps/desktop` only. The website has its own system; only brand and logo
 assets may be shared. The machine-readable sources are
 `apps/desktop/src/design/tokens.css` for static foundations and
@@ -217,11 +219,10 @@ opacity and backdrop filter live in the token system rather than component or fe
 Contrast, Reduced Transparency, and unsupported backdrop-filter engines force the opaque `raised`
 fallback.
 
-Interactive neutral fills form one restrained `quiet → rest → hover` tonal ladder. Quiet supports
-read-only or low-emphasis regions, Rest identifies controls and persistent selection, and Hover is
-the strongest neutral step. The ladder must remain visibly subordinate to text and primary actions;
-fields must not read as dark nested panels. Explicit light/dark foundations and appearance-generated
-themes must stay perceptually aligned, and components may not redefine one step locally.
+Interactive neutral fills follow the `quiet → rest → hover → selected → selected-hover → pressed`
+ladder defined in [Design.md](../../Design.md#color-and-interaction-states). Selection remains visible
+under hover; focus is independent. Ordinary controls use neutral fills, never blue hover or a local
+opacity multiplier. Explicit preview schemes and appearance-generated themes expose the same roles.
 
 In the light scheme, `surface` is only slightly tinted while `raised` and `modal` approach the
 palette background; elevation and placement communicate their transient layer. The dark scheme
@@ -230,8 +231,7 @@ inside Popover, Dialog, Select, Input, Textarea, or a feature module.
 
 C2 blue is fixed for primary actions. Use no more than one primary action per local area.
 Success, warning, destructive, and neutral keyboard focus have dedicated roles. A color change must
-be made centrally, demonstrate the light and dark contrast contract, and land in an isolated
-visual-token commit with light, dark, and narrow screenshots.
+be made centrally, demonstrate the light and dark contrast contract, and include light, dark, and narrow screenshots in the scoped change.
 
 Filled actions always consume an inseparable semantic pair: Primary uses `primary` with
 `primary-foreground`, and Destructive uses `destructive` with `destructive-foreground`. Both pairs
@@ -256,19 +256,11 @@ The default density follows Codex desktop rather than the former compact C2 scal
 sizes remain independently user-configurable, but every derived role and line height comes from
 the shared typography engine instead of page-local arithmetic.
 
-| role | default size / line height | use |
-| --- | --- | --- |
-| Large title | 28 / 34 | rare top-level statement |
-| Page title | 20 / 28 | full-page title |
-| Section | 18 / 24 | section heading |
-| Dialog | 16 / 22 | dialog and panel title |
-| Body / control | 14 / 20 | rows, buttons, menus, single-line body |
-| Prose | 14 / 23 | transcript, Markdown, and multi-line reading content |
-| Callout | 13 / 18 | supporting descriptions and tab labels |
-| Metadata | 12 / 16 | timestamps, paths, counts, and hints |
-| Caption / keycap | 11 / 14 | space-constrained badges and keyboard labels only |
+The authoritative type scale is in [Design.md](../../Design.md#typography): UI 14/20, prose 15/24,
+supporting copy 13/20, metadata 12/16, and new-install code 13/20. Saved code-size preferences are
+preserved. Static CSS fallbacks and the runtime typography resolver must agree.
 
-Code defaults to 12 / 18 and remains independently configurable. Content headings use the shared
+Content headings use the shared
 Dialog, Section, and Page roles. Persistent navigation, settings labels, and descriptive copy may
 not use Caption; 10px is not a product UI role.
 
@@ -352,8 +344,8 @@ Static borders and decorative rings are forbidden. The complete whitelist is:
 
 ## State contracts
 
-Every shared control implements rest, hover, keyboard focus, disabled, and loading. Selected and
-invalid are added where meaningful.
+Every shared control implements rest, hover, pressed, keyboard focus, disabled, and loading. Selected,
+selected-hover and invalid are added where meaningful. The state ladder is owned by Design.md.
 
 - **Focus:** a 2px neutral, high-contrast indicator, visible for keyboard focus only. No blue
   focus ring. Inputs may slightly raise their surface, but must not resize.
@@ -363,8 +355,7 @@ invalid are added where meaningful.
 - **Loading:** stable dimensions with a 14px spinner; do not swap to a differently sized control.
 
 Button variants are Primary, Secondary, Ghost, and Destructive. Secondary is a neutral tonal
-surface, Ghost has no shadow, and Destructive is red only for a destructive action. Outline is not
-a variant. Default and icon buttons are 32px, compact and mini buttons are 28px, and the 36px field
+surface, Ghost has no shadow, and Destructive is red only for a destructive action. Legacy Outline callers share the Secondary neutral visual treatment; no outlined visual system is added. Default and icon buttons are 32px, compact and mini buttons are 28px, and the 36px field
 size is reserved for an action that must align with an input or select. Size changes never
 introduce a different radius. Primary and Destructive own their paired foreground tokens; Secondary
 and Ghost stay on the neutral text hierarchy so the four variants read as one control family.

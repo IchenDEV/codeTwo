@@ -71,6 +71,7 @@ export function WorktreeSettingsPage({
   confirmer?: typeof confirmNative;
 }) {
   const t = useT();
+  const [query, setQuery] = useState("");
   const [worktreesByProject, setWorktreesByProject] = useState<
     Record<string, ProjectWorktreeState>
   >({});
@@ -341,6 +342,13 @@ export function WorktreeSettingsPage({
         </Button>
       </div>
 
+      <Input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        aria-label={t("worktree.search")}
+        placeholder={t("worktree.search")}
+      />
       {projects.length === 0 ? (
         <p className="text-body text-muted-foreground py-6">
           {t("worktree.manageNoProjects")}
@@ -392,70 +400,81 @@ export function WorktreeSettingsPage({
                     {t("worktree.manageEmpty")}
                   </p>
                 ) : (
-                  state.entries.map((entry) => {
-                    const branch = worktreeBranchDisplay(entry.branch);
-                    return (
-                      <Row
-                        key={entry.path}
-                        compact
-                        className="worktree-settings-row"
-                        controlClassName="worktree-settings-actions"
-                        label={entry.session_title ?? branch ?? entry.path}
-                        hint={
-                          <span className="block min-w-0">
-                            <span className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="secondary">
-                                {t(WORKTREE_KIND_LABELS[entry.kind])}
-                              </Badge>
-                              {worktreeStatusBadges(entry).map((badge) => (
-                                <Badge key={badge} variant="secondary">
-                                  {t(WORKTREE_BADGE_LABELS[badge])}
+                  state.entries
+                    .filter(
+                      (entry) =>
+                        `${entry.branch ?? ""} ${entry.path} ${entry.session_title ?? ""}`
+                          .toLocaleLowerCase()
+                          .includes(query.trim().toLocaleLowerCase()) ||
+                        `${candidate.name} ${candidate.path}`
+                          .toLocaleLowerCase()
+                          .includes(query.trim().toLocaleLowerCase())
+                    )
+                    .map((entry) => {
+                      const branch = worktreeBranchDisplay(entry.branch);
+                      return (
+                        <Row
+                          key={entry.path}
+                          compact
+                          className="worktree-settings-row"
+                          controlClassName="worktree-settings-actions"
+                          label={entry.session_title ?? branch ?? entry.path}
+                          hint={
+                            <span className="block min-w-0">
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <Badge variant="secondary">
+                                  {t(WORKTREE_KIND_LABELS[entry.kind])}
                                 </Badge>
-                              ))}
-                              {branch != null && branch !== "" && (
-                                <span className="shrink-0 font-mono">
-                                  {branch}
-                                </span>
-                              )}
+                                {worktreeStatusBadges(entry).map((badge) => (
+                                  <Badge key={badge} variant="secondary">
+                                    {t(WORKTREE_BADGE_LABELS[badge])}
+                                  </Badge>
+                                ))}
+                                {branch != null && branch !== "" && (
+                                  <span className="shrink-0 font-mono">
+                                    {branch}
+                                  </span>
+                                )}
+                              </span>
+                              <span
+                                className="mt-1 block truncate font-mono"
+                                title={entry.path}
+                              >
+                                {entry.path}
+                              </span>
                             </span>
-                            <span
-                              className="mt-1 block truncate font-mono"
-                              title={entry.path}
-                            >
-                              {entry.path}
-                            </span>
-                          </span>
-                        }
-                      >
-                        {entry.session_id != null && entry.session_id !== "" ? (
-                          <Button
-                            variant="secondary"
-                            size="xs"
-                            disabled={discardingWorktree !== null}
-                            onClick={() => onOpenSession(entry.session_id!)}
-                          >
-                            <MessageSquare />
-                            {t("worktree.openConversation")}
-                          </Button>
-                        ) : null}
-                        <Button
-                          variant="destructive"
-                          size="xs"
-                          disabled={discardingWorktree !== null}
-                          onClick={() =>
-                            void discardWorktree(candidate.path, entry)
                           }
                         >
-                          {discardingWorktree === entry.path ? (
-                            <Spinner />
-                          ) : (
-                            <Trash2 />
-                          )}
-                          {t("worktree.discard")}
-                        </Button>
-                      </Row>
-                    );
-                  })
+                          {entry.session_id != null &&
+                          entry.session_id !== "" ? (
+                            <Button
+                              variant="secondary"
+                              size="xs"
+                              disabled={discardingWorktree !== null}
+                              onClick={() => onOpenSession(entry.session_id!)}
+                            >
+                              <MessageSquare />
+                              {t("worktree.openConversation")}
+                            </Button>
+                          ) : null}
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            disabled={discardingWorktree !== null}
+                            onClick={() =>
+                              void discardWorktree(candidate.path, entry)
+                            }
+                          >
+                            {discardingWorktree === entry.path ? (
+                              <Spinner />
+                            ) : (
+                              <Trash2 />
+                            )}
+                            {t("worktree.discard")}
+                          </Button>
+                        </Row>
+                      );
+                    })
                 )}
               </div>
             </section>

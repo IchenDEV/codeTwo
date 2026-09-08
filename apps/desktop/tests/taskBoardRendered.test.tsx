@@ -135,6 +135,21 @@ function githubPullRequest(number, options = {}) {
 }
 
 describe("TaskBoardPage rendered", () => {
+  test("allows the wide inspector to close and reopen without hiding the task collection", async () => {
+    const view = await renderBoard();
+    await click(button(view.container, "隐藏检查器"));
+    expect(
+      view.container.querySelector('[aria-label="任务检查器"]')
+    ).toBeNull();
+    expect(
+      view.container.querySelector('[aria-label="任务列表"]')
+    ).not.toBeNull();
+    await click(view.container.querySelector('[aria-label="显示检查器"]'));
+    expect(
+      view.container.querySelector('[aria-label="任务检查器"]')
+    ).not.toBeNull();
+  });
+
   test("renders the sidebar recovery action supplied by the persistent shell", async () => {
     const view = await renderBoard({
       headerLeadingAction: <button aria-label="展开侧栏" />,
@@ -206,8 +221,8 @@ describe("TaskBoardPage rendered", () => {
     );
     expect(boardScroll?.className).toContain("overflow-x-auto");
     expect(boardScroll?.className).toContain("max-w-full");
-    expect(taskBoardStyles).toContain("repeat(4, minmax(340px, 1fr))");
-    expect(taskBoardStyles).toContain("min-width: calc(1360px + 1.5rem)");
+    expect(taskBoardStyles).toContain("repeat(4, minmax(14rem, 1fr))");
+    expect(taskBoardStyles).toContain("min-width: calc(56rem + 1.5rem)");
     const card = view.container.querySelector("[data-task-card]");
     expect(card?.className).toContain("overflow-hidden");
     expect(card?.querySelector("[data-task-card-meta]")?.className).toContain(
@@ -449,7 +464,7 @@ describe("TaskBoardPage rendered", () => {
     ).toContain("worktrees/session-old");
     expect(
       view.container.querySelector('[aria-label="任务检查器"]')?.textContent
-    ).toContain("选中的 Session");
+    ).toContain("关联会话");
     await click(button(view.container, "打开 Session"));
     expect(opened).toEqual(["session-old"]);
   });

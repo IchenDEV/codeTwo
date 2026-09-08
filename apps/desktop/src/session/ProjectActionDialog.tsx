@@ -125,7 +125,7 @@ export function ProjectActionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-dvh overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-dialog-max overflow-y-auto sm:max-w-lg">
         <form className="flex min-h-0 flex-col gap-5" onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>{t("actionDialog.title")}</DialogTitle>

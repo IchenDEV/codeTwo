@@ -75,7 +75,7 @@
   display: none;
 }
 
-@container (max-width: 60rem) {
+@container (max-width: 76rem) {
   .pull-request-detail-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -111,4 +111,23 @@
     .pull-request-primary-action-label {
     display: inline;
   }
+}
+
+.pull-request-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.pull-request-body th,
+.pull-request-body td {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.pull-request-body blockquote {
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--border);
+  color: var(--muted-foreground);
 }

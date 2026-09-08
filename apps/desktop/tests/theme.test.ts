@@ -20,7 +20,7 @@ describe("theme color resolution", () => {
       "--ds-color-modal": palette.background,
       "--ds-color-fill-quiet": "color-mix(in oklch, #172033 2.5%, #ffffff)",
       "--ds-color-fill-rest": "color-mix(in oklch, #172033 4%, #ffffff)",
-      "--ds-color-fill-hover": "color-mix(in oklch, #172033 6.5%, #ffffff)",
+      "--ds-color-fill-hover": "color-mix(in oklch, #172033 7%, #ffffff)",
     });
   });
 
@@ -41,7 +41,7 @@ describe("theme color resolution", () => {
       "--ds-color-modal": "color-mix(in oklch, #f2f4f8 11%, #18191d)",
       "--ds-color-fill-quiet": "color-mix(in oklch, #f2f4f8 4%, #18191d)",
       "--ds-color-fill-rest": "color-mix(in oklch, #f2f4f8 6%, #18191d)",
-      "--ds-color-fill-hover": "color-mix(in oklch, #f2f4f8 9%, #18191d)",
+      "--ds-color-fill-hover": "color-mix(in oklch, #f2f4f8 12%, #18191d)",
     });
   });
 
@@ -53,4 +53,31 @@ describe("theme color resolution", () => {
     expect(properties["--foreground"]).toBe(properties["--ds-color-text"]);
     expect(properties["--primary"]).toBe(properties["--ds-color-primary"]);
   });
+});
+
+// Selection must not disappear into hover, including in non-default palettes.
+test("interaction roles stay distinct and ordered for every palette", () => {
+  for (const scheme of ["light", "dark"] as const) {
+    for (const source of [
+      palette,
+      { accent: "#b59aff", background: "#221a29", foreground: "#f3edf8" },
+    ]) {
+      const properties = resolveThemeColorProperties(source, scheme, 45);
+      const values = [
+        "rest",
+        "hover",
+        "selected",
+        "selected-hover",
+        "pressed",
+      ].map((role) => properties[`--ds-color-fill-${role}`]);
+      expect(new Set(values).size).toBe(5);
+      const strengths = values.map((value) =>
+        Number(value.match(/ (\d+(?:\.\d+)?)%/)![1])
+      );
+      expect(strengths).toEqual([...strengths].sort((a, b) => a - b));
+      expect(properties["--ds-color-primary-pressed"]).not.toBe(
+        properties["--ds-color-primary-hover"]
+      );
+    }
+  }
 });

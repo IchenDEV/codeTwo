@@ -75,7 +75,7 @@ import type {
   ProviderInfo,
   Sandbox,
 } from "../bridge";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { useToast } from "../ui/toast";
 import { cronFromSchedule, localTimezone, scheduleFromCron } from "./schedule";
@@ -159,9 +159,9 @@ function inputFromDraft(draft: Draft): AutomationInput {
   };
 }
 
-function dateTime(value: number | null): string {
+function dateTime(value: number | null, locale: string): string {
   if (value === null) return "—";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -242,9 +242,21 @@ export function AutomationsPage({
 }) {
   const t = useT();
   const toast = useToast();
+  const { locale } = useLanguage();
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
+  const latestRun = runs.reduce<AutomationRun | null>(
+    (latest, run) =>
+      !latest || run.started_at > latest.started_at ? run : latest,
+    null
+  );
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!runs.some((run) => SPINNING_RUNS.has(run.status))) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, [runs]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -577,7 +589,7 @@ export function AutomationsPage({
                         schedule={scheduleLabel(automation.cron)}
                         status={
                           automation.enabled
-                            ? dateTime(automation.next_run_at)
+                            ? dateTime(automation.next_run_at, locale)
                             : t("automations.paused")
                         }
                         selected={
@@ -772,7 +784,7 @@ export function AutomationsPage({
                       <span>
                         {selected.enabled
                           ? t("automations.next", {
-                              time: dateTime(selected.next_run_at),
+                              time: dateTime(selected.next_run_at, locale),
                             })
                           : t("automations.paused")}
                       </span>
@@ -831,6 +843,20 @@ export function AutomationsPage({
                         ? t("automations.active")
                         : t("automations.paused")}
                     </StatusBadge>
+                  </DetailMetric>
+                  <DetailMetric
+                    icon={<Clock3 className="size-3.5" />}
+                    label={t("automations.history")}
+                  >
+                    <Button
+                      variant="link"
+                      size="compact"
+                      onClick={() => setDetailTab("runs")}
+                    >
+                      {latestRun
+                        ? t(`automations.status.${latestRun.status}`)
+                        : t("automations.noRuns")}
+                    </Button>
                   </DetailMetric>
                 </div>
 
@@ -898,11 +924,27 @@ export function AutomationsPage({
                               {t(`automations.status.${run.status}`)}
                             </span>
                             <span className="text-callout text-muted-foreground block">
-                              {dateTime(run.started_at)}
+                              {dateTime(run.started_at, locale)} ·{" "}
+                              {Math.max(
+                                0,
+                                Math.round(
+                                  ((run.finished_at ?? now) - run.started_at) /
+                                    60_000
+                                )
+                              )}{" "}
+                              {t("automations.minutes")}
+                              {run.status === "starting" && (
+                                <span className="block">
+                                  {t("automations.startingHint")}
+                                </span>
+                              )}
                             </span>
                             {run.error != null && run.error !== "" ? (
                               <span className="text-metadata text-destructive mt-1 block">
-                                {run.error}
+                                {t("automations.failureHint")}
+                                <span className="mt-1 block break-words">
+                                  {run.error}
+                                </span>
                               </span>
                             ) : null}
                           </span>
@@ -1223,6 +1265,18 @@ function AutomationEditor({
           </div>
         </div>
 
+        <p className="text-body text-muted-foreground">
+          {t("automations.scheduleSummary", {
+            timezone: draft.timezone,
+            policy: t(
+              draft.policy === "read_only"
+                ? "automations.permissions.readOnly"
+                : draft.policy === "ask"
+                  ? "automations.permissions.ask"
+                  : "automations.permissions.auto"
+            ),
+          })}
+        </p>
         <div className="bg-border h-px" />
         <div className="flex justify-end gap-2">
           <Button

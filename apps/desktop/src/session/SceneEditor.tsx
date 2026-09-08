@@ -785,57 +785,63 @@ function HookEditor({
               className="rounded-control bg-fill-quiet flex gap-2 p-3"
             >
               <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
-                <Select
-                  items={events}
-                  value={hook.on}
-                  onValueChange={(value) =>
-                    value && setHooks(updateAt(hooks, index, { on: value }))
-                  }
-                >
-                  <SelectTrigger
-                    aria-label={t("sceneEditor.hookEvent")}
-                    className="w-full"
+                <Field>
+                  <FieldLabel>{t("sceneEditor.hookEvent")}</FieldLabel>
+                  <Select
+                    items={events}
+                    value={hook.on}
+                    onValueChange={(value) =>
+                      value && setHooks(updateAt(hooks, index, { on: value }))
+                    }
                   >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectGroup>
-                      {events.map((event) => (
-                        <SelectItem key={event.value} value={event.value}>
-                          {event.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <Select
-                  items={actions}
-                  value={hook.action.kind}
-                  onValueChange={(value) =>
-                    value &&
-                    setHooks(
-                      updateAt(hooks, index, {
-                        action: { kind: value },
-                      })
-                    )
-                  }
-                >
-                  <SelectTrigger
-                    aria-label={t("sceneEditor.hookAction")}
-                    className="w-full"
+                    <SelectTrigger
+                      aria-label={t("sceneEditor.hookEvent")}
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        {events.map((event) => (
+                          <SelectItem key={event.value} value={event.value}>
+                            {event.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel>{t("sceneEditor.hookAction")}</FieldLabel>
+                  <Select
+                    items={actions}
+                    value={hook.action.kind}
+                    onValueChange={(value) =>
+                      value &&
+                      setHooks(
+                        updateAt(hooks, index, {
+                          action: { kind: value },
+                        })
+                      )
+                    }
                   >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectGroup>
-                      {actions.map((action) => (
-                        <SelectItem key={action.value} value={action.value}>
-                          {action.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                    <SelectTrigger
+                      aria-label={t("sceneEditor.hookAction")}
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        {actions.map((action) => (
+                          <SelectItem key={action.value} value={action.value}>
+                            {action.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
                 {hook.on === "artifact_produced" && (
                   <Input
                     aria-label={t("sceneEditor.artifactId")}
@@ -970,6 +976,37 @@ export function SceneEditor({
   const [json, setJson] = useState(() => formatSceneJson(draft));
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [jsonDirty, setJsonDirty] = useState(false);
+  const [editorTab, setEditorTab] = useState("identity");
+  const showIssue = (field: string) => {
+    const section = field.split(".")[0];
+    const tab =
+      section === "hooks"
+        ? "automation"
+        : section === "brief"
+          ? "brief"
+          : section === "artifacts" || section === "exit"
+            ? "outputs"
+            : section === "skills" || section === "constraints"
+              ? "skills"
+              : section === "execution"
+                ? "execution"
+                : section === "$schema"
+                  ? "json"
+                  : "identity";
+    setEditorTab(tab);
+    const inputId =
+      field === "brief.template"
+        ? "scene-brief-template"
+        : field === "title"
+          ? "scene-title"
+          : field === "name"
+            ? "scene-name"
+            : null;
+    if (inputId)
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>(`#${inputId}`)?.focus()
+      );
+  };
 
   const editableOriginal =
     request.kind === "edit" &&
@@ -1126,7 +1163,13 @@ export function SceneEditor({
           {t("sceneEditor.loadError")}
         </div>
       ) : (
-        <Tabs defaultValue="identity" className="min-h-0 flex-1 flex-col gap-0">
+        <Tabs
+          value={editorTab}
+          onValueChange={(value) => {
+            if (typeof value === "string") setEditorTab(value);
+          }}
+          className="min-h-0 flex-1 flex-col gap-0"
+        >
           <div className="bg-card/30 shrink-0">
             <div className="mx-auto w-full max-w-4xl px-8 pt-7">
               <div className="flex flex-col gap-1">
@@ -1163,12 +1206,67 @@ export function SceneEditor({
 
           <ScrollArea className="min-h-0 flex-1">
             <div className="mx-auto w-full max-w-3xl px-8 py-8">
+              {issueMessages.length > 0 && (
+                <details className="text-destructive text-body mb-4" open>
+                  <summary>{t("sceneEditor.validationIssues")}</summary>
+                  <ul>
+                    {issues.map((issue, index) => (
+                      <li key={`${issue.field}-${index}`}>
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="text-destructive h-auto text-left whitespace-normal"
+                          onClick={() => showIssue(issue.field)}
+                        >
+                          {issueMessages[index]} · {issue.field}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               <TabsContent value="identity">
                 <FieldGroup>
                   <SectionIntro
                     title={t("sceneEditor.identityTitle")}
                     description={t("sceneEditor.identityDescription")}
                   />
+                  <Field
+                    data-invalid={issues.some(
+                      (issue) => issue.field === "title"
+                    )}
+                  >
+                    <FieldLabel htmlFor="scene-title">
+                      {t("sceneEditor.titleField")}
+                    </FieldLabel>
+                    <Input
+                      id="scene-title"
+                      value={draft.title}
+                      aria-invalid={issues.some(
+                        (issue) => issue.field === "title"
+                      )}
+                      onInput={(event) =>
+                        setDraft({ ...draft, title: event.currentTarget.value })
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="scene-description">
+                      {t("sceneEditor.descriptionField")}
+                    </FieldLabel>
+                    <Textarea
+                      id="scene-description"
+                      className="min-h-24"
+                      value={draft.description ?? ""}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          description: event.currentTarget.value,
+                        })
+                      }
+                    />
+                  </Field>
                   <Field>
                     <FieldLabel htmlFor="scene-scope">
                       {t("sceneEditor.scope")}
@@ -1241,41 +1339,6 @@ export function SceneEditor({
                       />
                     </Field>
                   </div>
-                  <Field
-                    data-invalid={issues.some(
-                      (issue) => issue.field === "title"
-                    )}
-                  >
-                    <FieldLabel htmlFor="scene-title">
-                      {t("sceneEditor.titleField")}
-                    </FieldLabel>
-                    <Input
-                      id="scene-title"
-                      value={draft.title}
-                      aria-invalid={issues.some(
-                        (issue) => issue.field === "title"
-                      )}
-                      onInput={(event) =>
-                        setDraft({ ...draft, title: event.currentTarget.value })
-                      }
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="scene-description">
-                      {t("sceneEditor.descriptionField")}
-                    </FieldLabel>
-                    <Textarea
-                      id="scene-description"
-                      className="min-h-24"
-                      value={draft.description ?? ""}
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          description: event.currentTarget.value,
-                        })
-                      }
-                    />
-                  </Field>
                   <ListField
                     id="scene-keywords"
                     label={t("sceneEditor.keywords")}
@@ -1292,20 +1355,63 @@ export function SceneEditor({
                     title={t("sceneEditor.executionTitle")}
                     description={t("sceneEditor.executionDescription")}
                   />
-                  <ListField
-                    id="scene-providers"
-                    label={t("sceneEditor.providers")}
-                    description={t("sceneEditor.providersDescription", {
-                      providers: providerHint || t("sceneEditor.noneAvailable"),
+                  <p className="text-body text-muted-foreground">
+                    {t("sceneEditor.providerOrderHint")}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {providers.map((provider) => {
+                      const index =
+                        execution.providers?.indexOf(provider.id) ?? -1;
+                      return (
+                        <Button
+                          key={provider.id}
+                          variant={index >= 0 ? "secondary" : "outline"}
+                          size="sm"
+                          aria-pressed={index >= 0}
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              execution: {
+                                ...execution,
+                                providers:
+                                  index >= 0
+                                    ? execution.providers?.filter(
+                                        (id) => id !== provider.id
+                                      )
+                                    : [
+                                        ...(execution.providers ?? []),
+                                        provider.id,
+                                      ],
+                              },
+                            })
+                          }
+                        >
+                          {index >= 0 ? `${index + 1}. ` : ""}
+                          {provider.display_name}
+                        </Button>
+                      );
                     })}
-                    value={execution.providers}
-                    onChange={(providers) =>
-                      setDraft({
-                        ...draft,
-                        execution: { ...execution, providers },
-                      })
-                    }
-                  />
+                  </div>
+                  <details>
+                    <summary className="text-metadata text-muted-foreground cursor-pointer">
+                      {t("sceneEditor.referencesAdvanced")}
+                    </summary>
+                    <ListField
+                      id="scene-providers"
+                      label={t("sceneEditor.providers")}
+                      description={t("sceneEditor.providersDescription", {
+                        providers:
+                          providerHint || t("sceneEditor.noneAvailable"),
+                      })}
+                      value={execution.providers}
+                      onChange={(providers) =>
+                        setDraft({
+                          ...draft,
+                          execution: { ...execution, providers },
+                        })
+                      }
+                    />
+                  </details>
                   <div className="grid grid-cols-2 gap-4">
                     <Field>
                       <FieldLabel htmlFor="scene-model">
@@ -1313,6 +1419,7 @@ export function SceneEditor({
                       </FieldLabel>
                       <Input
                         id="scene-model"
+                        list="scene-model-options"
                         value={execution.model ?? ""}
                         placeholder={t("sceneEditor.inherit")}
                         onChange={(event) =>
@@ -1332,6 +1439,7 @@ export function SceneEditor({
                       </FieldLabel>
                       <Input
                         id="scene-effort"
+                        list="scene-effort-options"
                         value={execution.reasoning_effort ?? ""}
                         placeholder={t("sceneEditor.inherit")}
                         onChange={(event) =>
@@ -1423,26 +1531,79 @@ export function SceneEditor({
                 </FieldGroup>
               </TabsContent>
 
+              <datalist id="scene-model-options">
+                {[
+                  ...new Map(
+                    providers
+                      .flatMap((provider) => provider.models)
+                      .map((model) => [model.id, model])
+                  ).values(),
+                ].map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </datalist>
+              <datalist id="scene-effort-options">
+                {["low", "medium", "high", "xhigh", "max", "ultra"].map(
+                  (effort) => (
+                    <option key={effort} value={effort} />
+                  )
+                )}
+              </datalist>
               <TabsContent value="skills">
                 <FieldGroup>
                   <SectionIntro
                     title={t("sceneEditor.skillsTitle")}
                     description={t("sceneEditor.skillsDescription")}
                   />
-                  <ListField
-                    id="scene-pinned-skills"
-                    label={t("sceneEditor.pinnedSkills")}
-                    description={t("sceneEditor.pinnedSkillsDescription", {
-                      skills: skillHint || t("sceneEditor.noneAvailable"),
-                    })}
-                    value={draft.skills?.pinned}
-                    onChange={(pinned) =>
-                      setDraft({
-                        ...draft,
-                        skills: { ...draft.skills, pinned },
-                      })
-                    }
-                  />
+                  <div className="max-h-48 space-y-2 overflow-y-auto">
+                    {skills.map((skill) => (
+                      <Field key={skill.id} orientation="horizontal">
+                        <Checkbox
+                          id={`scene-skill-${skill.id}`}
+                          checked={
+                            draft.skills?.pinned?.includes(skill.id) ?? false
+                          }
+                          onCheckedChange={(checked) =>
+                            setDraft({
+                              ...draft,
+                              skills: {
+                                ...draft.skills,
+                                pinned: checked
+                                  ? [...(draft.skills?.pinned ?? []), skill.id]
+                                  : (draft.skills?.pinned ?? []).filter(
+                                      (id) => id !== skill.id
+                                    ),
+                              },
+                            })
+                          }
+                        />
+                        <FieldLabel htmlFor={`scene-skill-${skill.id}`}>
+                          {skill.name}
+                        </FieldLabel>
+                      </Field>
+                    ))}
+                  </div>
+                  <details>
+                    <summary className="text-metadata text-muted-foreground cursor-pointer">
+                      {t("sceneEditor.referencesAdvanced")}
+                    </summary>
+                    <ListField
+                      id="scene-pinned-skills"
+                      label={t("sceneEditor.pinnedSkills")}
+                      description={t("sceneEditor.pinnedSkillsDescription", {
+                        skills: skillHint || t("sceneEditor.noneAvailable"),
+                      })}
+                      value={draft.skills?.pinned}
+                      onChange={(pinned) =>
+                        setDraft({
+                          ...draft,
+                          skills: { ...draft.skills, pinned },
+                        })
+                      }
+                    />
+                  </details>
                   <Field orientation="horizontal">
                     <Checkbox
                       id="scene-suppress-skills"
@@ -1491,6 +1652,7 @@ export function SceneEditor({
                     <ListField
                       id="scene-tools-allow"
                       label={t("sceneEditor.toolsAllow")}
+                      description={t("sceneEditor.toolsReferenceHint")}
                       value={draft.constraints?.tools?.allow}
                       onChange={(allow) =>
                         setDraft({
@@ -1535,8 +1697,15 @@ export function SceneEditor({
                           ...draft,
                           brief: checked
                             ? {
-                                template: "",
-                                slots: [],
+                                template: "{{task}}",
+                                slots: [
+                                  {
+                                    id: "task",
+                                    label: t("taskboard.taskLabel"),
+                                    kind: "text",
+                                    required: true,
+                                  },
+                                ],
                                 clarify: "multi_choice",
                               }
                             : undefined,
@@ -1601,6 +1770,23 @@ export function SceneEditor({
                       />
                       <Separator />
                       <SlotEditor scene={draft} onChange={setDraft} t={t} />
+                      <details open>
+                        <summary>{t("sceneEditor.preview")}</summary>
+                        <pre className="rounded-control bg-fill-rest text-body p-3 break-words whitespace-pre-wrap">
+                          {draft.brief.template.replaceAll(
+                            /\{\{\s*([\w-]+)\s*\}\}/gu,
+                            (match, id: string) => {
+                              const slot = draft.brief?.slots?.find(
+                                (entry) => entry.id === id
+                              );
+                              return (
+                                slot?.default ??
+                                (slot ? `[${slot.label}]` : match)
+                              );
+                            }
+                          )}
+                        </pre>
+                      </details>
                     </>
                   )}
                 </FieldGroup>
@@ -1616,6 +1802,39 @@ export function SceneEditor({
                   <Separator />
                   <CriterionEditor scene={draft} onChange={setDraft} t={t} />
                   <Separator />
+                  <Select
+                    value={null}
+                    onValueChange={(reference) => {
+                      if (reference != null && reference !== "")
+                        setDraft({
+                          ...draft,
+                          exit: {
+                            ...draft.exit,
+                            next: [
+                              ...(draft.exit?.next ?? []),
+                              { scene: reference },
+                            ],
+                          },
+                        });
+                    }}
+                  >
+                    <SelectTrigger aria-label={t("sceneEditor.nextScenes")}>
+                      <SelectValue placeholder={t("sceneEditor.nextScenes")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {scenes.map((scene) => (
+                        <SelectItem
+                          key={scene.reference}
+                          value={scene.reference}
+                          disabled={draft.exit?.next?.some(
+                            (entry) => entry.scene === scene.reference
+                          )}
+                        >
+                          {scene.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <ListField
                     id="scene-next"
                     label={t("sceneEditor.nextScenes")}
@@ -1626,11 +1845,67 @@ export function SceneEditor({
                         ...draft,
                         exit: {
                           ...draft.exit,
-                          next: next.map((scene) => ({ scene })),
+                          next: next.map(
+                            (scene) =>
+                              draft.exit?.next?.find(
+                                (entry) => entry.scene === scene
+                              ) ?? { scene }
+                          ),
                         },
                       })
                     }
                   />
+                  {(draft.exit?.next ?? []).map((entry, index) => (
+                    <fieldset
+                      key={`${entry.scene}-${index}`}
+                      className="space-y-2"
+                    >
+                      <legend className="text-body font-medium">
+                        {entry.scene} · {t("sceneEditor.carryArtifacts")}
+                      </legend>
+                      {(draft.artifacts ?? []).map((artifact) => (
+                        <Field key={artifact.id} orientation="horizontal">
+                          <Checkbox
+                            id={`carry-${index}-${artifact.id}`}
+                            checked={
+                              entry.carry?.includes(artifact.id) ?? false
+                            }
+                            onCheckedChange={(checked) =>
+                              setDraft({
+                                ...draft,
+                                exit: {
+                                  ...draft.exit,
+                                  next: draft.exit?.next?.map((next, at) =>
+                                    at === index
+                                      ? {
+                                          ...next,
+                                          carry: checked
+                                            ? [
+                                                ...(next.carry ?? []),
+                                                artifact.id,
+                                              ]
+                                            : (next.carry ?? []).filter(
+                                                (id) => id !== artifact.id
+                                              ),
+                                        }
+                                      : next
+                                  ),
+                                },
+                              })
+                            }
+                          />
+                          <FieldLabel htmlFor={`carry-${index}-${artifact.id}`}>
+                            {artifact.id}
+                          </FieldLabel>
+                        </Field>
+                      ))}
+                      {(draft.artifacts?.length ?? 0) === 0 && (
+                        <p className="text-body text-muted-foreground">
+                          {t("sceneEditor.artifactsEmpty")}
+                        </p>
+                      )}
+                    </fieldset>
+                  ))}
                 </FieldGroup>
               </TabsContent>
 

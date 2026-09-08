@@ -195,7 +195,7 @@ function Timeline({
                         insetBlockStart: track * 12 + 4,
                       }}
                       label={`${t(KIND_LABEL[record.kind])}: ${record.summary}`}
-                      tooltip={`${record.title} · ${formatTrajectoryDuration(record.endAt - record.startAt)}`}
+                      tooltip={`${record.title} · ${record.startAt > 0 && record.endAt >= record.startAt ? formatTrajectoryDuration(record.endAt - record.startAt) : "—"}`}
                       aria-pressed={selected}
                       onClick={() => onSelect(record)}
                     />
@@ -327,7 +327,11 @@ function Inspector({
         </div>
         <div>
           <dt>{t("trajectory.duration")}</dt>
-          <dd>{formatTrajectoryDuration(record.endAt - record.startAt)}</dd>
+          <dd>
+            {record.startAt > 0 && record.endAt >= record.startAt
+              ? formatTrajectoryDuration(record.endAt - record.startAt)
+              : "—"}
+          </dd>
         </div>
       </dl>
 

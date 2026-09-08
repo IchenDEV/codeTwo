@@ -1,4 +1,6 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { Children, isValidElement } from "react";
+import type { ReactNode } from "react";
 
 import {
   CheckIcon,
@@ -7,7 +9,30 @@ import {
 } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
-const Select = SelectPrimitive.Root;
+function selectItems(
+  children: ReactNode
+): { value: unknown; label: ReactNode }[] {
+  return Children.toArray(children).flatMap((child) => {
+    if (!isValidElement<{ children?: ReactNode; value?: unknown }>(child))
+      return [];
+    if (child.type === SelectItem)
+      return [{ value: child.props.value, label: child.props.children }];
+    return selectItems(child.props.children);
+  });
+}
+
+function Select<Value, Multiple extends boolean | undefined = false>({
+  children,
+  items,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  // The popup is unmounted while closed. Supply labels from our declared items before first open.
+  return (
+    <SelectPrimitive.Root {...props} items={items ?? selectItems(children)}>
+      {children}
+    </SelectPrimitive.Root>
+  );
+}
 
 function SelectGroup(props: SelectPrimitive.Group.Props) {
   return <SelectPrimitive.Group data-slot="select-group" {...props} />;
@@ -30,7 +55,7 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "rounded-control bg-fill-rest text-body duration-feedback ease-enter hover:bg-fill-hover focus-visible:focus-ring aria-invalid:ring-destructive/30 data-placeholder:text-muted-foreground data-[popup-open]:bg-fill-hover data-[size=default]:h-control data-[size=sm]:h-control-mini [&_svg:not([class*='size-'])]:size-icon-control [&_svg:not([class*='text-'])]:text-muted-foreground flex w-fit items-center justify-between gap-2 px-3 py-2 whitespace-nowrap transition-[color,box-shadow,background-color] outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-2 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "rounded-control bg-fill-rest text-body duration-feedback ease-enter hover:bg-fill-hover focus-visible:focus-ring aria-invalid:ring-destructive/30 data-placeholder:text-muted-foreground data-[popup-open]:bg-fill-selected active:bg-fill-pressed data-[size=default]:h-control data-[size=sm]:h-control-mini [&_svg:not([class*='size-'])]:size-icon-control [&_svg:not([class*='text-'])]:text-muted-foreground flex w-fit items-center justify-between gap-2 px-3 py-2 whitespace-nowrap transition-[color,box-shadow,background-color] outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-2 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
       {...props}

@@ -9,7 +9,7 @@
 .settings-page {
   container: settings-page / inline-size;
   max-width: 48rem;
-  padding: 2rem 2rem var(--ds-space-page-end);
+  padding: var(--ds-space-page) var(--ds-space-page) var(--ds-space-page-end);
 }
 
 .session-import-result {
@@ -45,7 +45,7 @@
 
 .settings-profile-page {
   max-width: 64rem;
-  padding: 1.5rem 2rem var(--ds-space-page-end);
+  padding: var(--ds-space-page) var(--ds-space-page) var(--ds-space-page-end);
 }
 
 .settings-worktrees-page {

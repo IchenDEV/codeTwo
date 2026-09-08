@@ -36,8 +36,8 @@
 
 .task-board-kanban {
   display: grid;
-  grid-template-columns: repeat(4, minmax(340px, 1fr));
-  min-width: calc(1360px + 1.5rem);
+  grid-template-columns: repeat(4, minmax(14rem, 1fr));
+  min-width: calc(56rem + 1.5rem);
 }
 
 .task-board-kanban-column {
@@ -67,6 +67,19 @@
   overflow: hidden;
   border-radius: var(--ds-radius-module);
   box-shadow: var(--ds-elevation-surface);
+}
+
+[data-task-board-view][data-inspector-open="false"] .task-board-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.task-board-task-row [data-slot="status-indicator"] {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.task-board-task-row > span:last-child {
+  white-space: nowrap;
 }
 
 .task-board-inspector .task-board-panel-header {

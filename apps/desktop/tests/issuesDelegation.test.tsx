@@ -74,6 +74,7 @@ async function renderModal(props = {}) {
   const mounted = mount(
     <I18nProvider>
       <IssuesModal
+        repoChecker={async () => ({ is_repo: true })}
         cwd="."
         scenes={SCENES}
         onInsert={() => {}}

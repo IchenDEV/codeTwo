@@ -236,7 +236,7 @@ describe("Settings page layout contract", () => {
     expect(layoutSpec.content.settings.bottomPadding).toBe(80);
     expect(source).not.toContain('"settings-page mx-auto w-full pb-20"');
     expect(styles).toMatch(
-      /\.settings-page\s*{[^}]*padding:\s*2rem 2rem var\(--ds-space-page-end\);/s
+      /\.settings-page\s*{[^}]*padding:\s*var\(--ds-space-page\) var\(--ds-space-page\) var\(--ds-space-page-end\);/s
     );
     expect(styles).toMatch(
       /@media \(max-width:\s*44rem\)[\s\S]*?\.settings-page\s*{[^}]*padding:\s*1rem 1rem var\(--ds-space-page-end\);/
@@ -244,7 +244,7 @@ describe("Settings page layout contract", () => {
   });
 
   test("reuses flat setting rows for the Pets catalog and behavior group", () => {
-    expect(petSource).toContain('<ul className="pet-catalog"');
+    expect(petSource).toMatch(/<ul\s+className="pet-catalog(?:\s|")/u);
     expect(petSource).toContain('className="pet-catalog-row"');
     expect(petSource).toContain("<SettingRow");
     expect(petSource).not.toContain('surface="card"');

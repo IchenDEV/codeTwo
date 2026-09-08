@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 import { providerLabel, sessionDiffStat } from "../bridge";
 import type { SessionDiffStat, SessionInfo } from "../bridge";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { td } from "../i18n/dynamic";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { describeContextWindow } from "../session/contextWindow";
@@ -114,6 +114,7 @@ export function MissionControlDialog({
   fetchStat?: (session: string) => Promise<SessionDiffStat | null>;
 }) {
   const t = useT();
+  const { locale } = useLanguage();
   const rows = missionRows(
     sessions,
     runningSessions,
@@ -175,11 +176,20 @@ export function MissionControlDialog({
               {td(t, `mission.state.${r.state}`)}
             </span>
           </div>
+          <p
+            className="text-metadata text-muted-foreground truncate"
+            title={s.project_path ?? s.cwd}
+          >
+            {(s.project_path ?? s.cwd)?.split("/").filter(Boolean).at(-1) ??
+              "—"}{" "}
+            · {new Date(s.created_at).toLocaleString(locale)}
+          </p>
         </div>
         <DiffStatCell session={s.id} fetchStat={fetchStat} />
         <span
           className="text-callout text-muted-foreground w-10 shrink-0 text-right tabular-nums"
-          title={context?.exact}
+          title={`${t("mission.context")}: ${context?.exact ?? "—"}`}
+          aria-label={`${t("mission.context")}: ${context?.exact ?? "—"}`}
         >
           {r.contextPct === null ? "—" : `${Math.round(r.contextPct)}%`}
         </span>
@@ -188,8 +198,8 @@ export function MissionControlDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => open == null && onClose()}>
-      <DialogContent className="max-w-2xl">
+    <Dialog open onOpenChange={(open) => open === false && onClose()}>
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{t("mission.title")}</DialogTitle>
           <DialogDescription>{t("mission.hint")}</DialogDescription>

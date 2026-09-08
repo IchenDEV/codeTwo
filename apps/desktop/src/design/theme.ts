@@ -14,6 +14,9 @@ interface ToneScale {
   fillQuiet: number;
   fillRest: number;
   fillHover: number;
+  fillSelected: number;
+  fillSelectedHover: number;
+  fillPressed: number;
   terminal: number;
 }
 
@@ -25,7 +28,10 @@ const TONE_SCALE: Record<ColorScheme, ToneScale> = {
     muted: 6,
     fillQuiet: 2.5,
     fillRest: 4,
-    fillHover: 6.5,
+    fillHover: 7,
+    fillSelected: 12,
+    fillSelectedHover: 16,
+    fillPressed: 20,
     terminal: 88,
   },
   dark: {
@@ -35,7 +41,10 @@ const TONE_SCALE: Record<ColorScheme, ToneScale> = {
     muted: 14,
     fillQuiet: 4,
     fillRest: 6,
-    fillHover: 9,
+    fillHover: 12,
+    fillSelected: 18,
+    fillSelectedHover: 23,
+    fillPressed: 28,
     terminal: 3,
   },
 };
@@ -105,8 +114,16 @@ export function resolveThemeColorProperties(
     "--ds-color-fill-quiet": mix(foreground, tones.fillQuiet, background),
     "--ds-color-fill-rest": mix(foreground, tones.fillRest, background),
     "--ds-color-fill-hover": mix(foreground, tones.fillHover, background),
+    "--ds-color-fill-selected": mix(foreground, tones.fillSelected, background),
+    "--ds-color-fill-selected-hover": mix(
+      foreground,
+      tones.fillSelectedHover,
+      background
+    ),
+    "--ds-color-fill-pressed": mix(foreground, tones.fillPressed, background),
     "--ds-color-primary": accent,
     "--ds-color-primary-hover": mix(foreground, 8, accent),
+    "--ds-color-primary-pressed": mix(foreground, 16, accent),
     "--ds-color-primary-text": background,
     "--ds-color-focus": foreground,
   };

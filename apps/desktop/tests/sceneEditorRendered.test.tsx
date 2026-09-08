@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { act as reactAct } from "react";
+import { Simulate } from "react-dom/test-utils";
 
 import {
   activateDom,
@@ -96,6 +97,55 @@ function buttonOne(container, alternatives) {
 }
 
 describe("SceneEditor rendered", () => {
+  test("editing follow-up scenes preserves carried artifacts and labels", async () => {
+    activateDom();
+    const { createSceneDocument } =
+      await import("../src/session/sceneEditorModel");
+    const document = {
+      ...createSceneDocument([]),
+      name: "review",
+      title: "Review",
+      artifacts: [{ id: "report", title: "Report", kind: "report" }],
+      exit: {
+        next: [
+          { scene: "builtin:test", label: "Run tests", carry: ["report"] },
+        ],
+      },
+    };
+    let saved = null;
+    const view = renderEditor({
+      request: { kind: "edit", scene: info() },
+      getScene: async () => ({
+        reference: "user:review",
+        source: "user",
+        scene: document,
+      }),
+      saveScene: async (_scope, _cwd, _previous, scene) => {
+        saved = scene;
+        return info();
+      },
+    });
+    await flush();
+    const output = [...dom.document.querySelectorAll('[role="tab"]')].find(
+      (tab) =>
+        ["Outputs", "sceneEditor.tab.outputs"].includes(tab.textContent.trim())
+    );
+    output.click();
+    await flush();
+    const input = dom.document.querySelector("#scene-next");
+    input.value = "builtin:test, builtin:acceptance";
+    Simulate.change(input);
+    await flush();
+    buttonOne(dom.document.body, ["Save scene", "sceneEditor.save"]).click();
+    await flush();
+    expect(saved.exit.next[0]).toEqual({
+      scene: "builtin:test",
+      label: "Run tests",
+      carry: ["report"],
+    });
+    expect(saved.exit.next[1]).toEqual({ scene: "builtin:acceptance" });
+    view.unmount();
+  });
   test("renders the complete editor navigation and saves a structured custom scene", async () => {
     activateDom();
     let captured = null;

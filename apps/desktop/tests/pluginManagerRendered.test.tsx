@@ -299,6 +299,19 @@ async function selectItem(item) {
 }
 
 describe("PluginManagerPage", () => {
+  test("does not show a missing-dependency warning for zero missing dependencies", () => {
+    const { view } = renderManager({
+      plugins: [
+        {
+          ...plugins[0],
+          state: { ...plugins[0].state, missingDependencies: [] },
+        },
+      ],
+    });
+    expect(dom.document.body.textContent).not.toContain("0 missing");
+    view.unmount();
+  });
+
   test("opens a requested plugin and renders only its host-owned settings extension", async () => {
     activateDom();
     const { view } = renderManager({
@@ -859,7 +872,7 @@ describe("PluginManagerPage", () => {
     click(button(view.container, "Marketplace 1"));
     await flush();
     expect(view.container.textContent).toContain("Local tools");
-    click(button(view.container, "Open marketplace"));
+    click(button(view.container, "Load local marketplace"));
     click(button(view.container, "Install"));
     await flush();
     expect(calls.marketplaceOpens).toEqual([true]);

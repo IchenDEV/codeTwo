@@ -51,6 +51,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+import { useT } from "../i18n";
 import { BundleAdministration } from "./BundleAdministration";
 import { SchemaConfigEditor } from "./SchemaConfigEditor";
 import type {
@@ -110,7 +111,7 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   unavailable: "Unavailable",
   refresh: "Refresh",
   newSkill: "New skill",
-  openMarketplace: "Open marketplace",
+  openMarketplace: "Load local marketplace",
   use: "Use",
   applyScaffold: "Add to project",
   scaffoldFiles: (count) => `${count} project files`,
@@ -288,10 +289,10 @@ function StatusSummary({
       <StatusBadge tone={statusTone(state.status)}>
         {labels.status[state.status]}
       </StatusBadge>
-      {state.missingDependencies?.length == null ? null : (
+      {(state.missingDependencies?.length ?? 0) > 0 && (
         <StatusBadge tone="destructive">
           <CircleAlert />
-          {labels.missingCount(state.missingDependencies.length)}
+          {labels.missingCount(state.missingDependencies?.length ?? 0)}
         </StatusBadge>
       )}
     </div>
@@ -380,7 +381,7 @@ function ScopeSelector({
   ];
 
   return (
-    <Field className="w-auto min-w-0">
+    <Field className="w-36 shrink-0">
       <FieldLabel htmlFor="plugin-manager-scope" className="sr-only">
         {labels.scope}
       </FieldLabel>
@@ -826,6 +827,7 @@ function ResourceDetails({
   onRequestChange: (request: PluginManagerChangeRequest) => void;
   onManagePlugin: (pluginId: string) => void;
 }) {
+  const t = useT();
   const individuallyManageable =
     resource.manageable !== false && resource.state.status !== "unsupported";
   const definition =
@@ -882,6 +884,19 @@ function ResourceDetails({
 
       <div className="mt-8 flex flex-col gap-5">
         <StatusSummary state={resource.state} labels={labels} />
+        {resource.skill?.preview != null && resource.skill.preview !== "" && (
+          <details open>
+            <summary>{t("pluginHub.skillContent")}</summary>
+            <pre className="text-body bg-fill-rest rounded-control max-h-96 overflow-auto p-3 break-words whitespace-pre-wrap">
+              {resource.skill.preview}
+            </pre>
+          </details>
+        )}
+        {resource.skill && (
+          <p className="text-body text-muted-foreground">
+            {t("pluginHub.skillUsage")}
+          </p>
+        )}
         {resource.state.error != null && resource.state.error !== "" ? (
           <p
             role="alert"
@@ -1077,13 +1092,23 @@ function PluginDetails({
             {detailsExtension}
           </>
         )}
-        <DetailList
-          title={labels.missingDependencies}
-          values={plugin.state.missingDependencies}
-        />
-        <DetailList title={labels.dependencies} values={plugin.dependencies} />
-        <DetailList title={labels.commands} values={plugin.commands} />
-        <DetailList title={labels.services} values={plugin.services} />
+        {(plugin.state.missingDependencies?.length ?? 0) > 0 && (
+          <DetailList
+            title={labels.missingDependencies}
+            values={plugin.state.missingDependencies}
+          />
+        )}
+        <details>
+          <summary className="text-body cursor-pointer">
+            {labels.dependencies} / {labels.commands} / {labels.services}
+          </summary>
+          <DetailList
+            title={labels.dependencies}
+            values={plugin.dependencies}
+          />
+          <DetailList title={labels.commands} values={plugin.commands} />
+          <DetailList title={labels.services} values={plugin.services} />
+        </details>
         {plugin.state.activeResources?.length == null ? null : (
           <div className="flex flex-col gap-2">
             <h3 className="text-metadata text-muted-foreground font-medium">
@@ -1272,6 +1297,7 @@ function MarketplaceDetails({
   busyId: string | null;
   onInstall: PluginManagerPageProps["onInstallMarketplaceItem"];
 }) {
+  const t = useT();
   const scopeSupported = item.supportedScopes.includes(scope.kind);
   const disabled =
     item.installed ||
@@ -1316,6 +1342,14 @@ function MarketplaceDetails({
         </Button>
       </div>
       <div className="mt-8 flex flex-col gap-5">
+        {!item.installed && !scopeSupported && (
+          <p role="status">{t("pluginHub.scopeUnavailable")}</p>
+        )}
+        {!item.installed &&
+          !item.installable &&
+          (item.diagnostic == null || item.diagnostic === "") && (
+            <p role="status">{t("pluginHub.installUnavailable")}</p>
+          )}
         {item.diagnostic != null && item.diagnostic !== "" ? (
           <p
             role="status"
@@ -1473,6 +1507,7 @@ export function PluginManagerPage({
   onResetPlugin,
 }: PluginManagerPageProps) {
   const labels = { ...DEFAULT_LABELS, ...labelOverrides };
+  const t = useT();
   const [tab, setTab] = useState(initialTab);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -2121,8 +2156,26 @@ export function PluginManagerPage({
             ((tab === "plugins" && !selectedPlugin) ||
               (tab === "marketplace" && !selectedMarketplaceItem) ||
               (isResourceTab(tab) && !selectedResource)) ? (
-              <div className="text-body text-muted-foreground flex min-h-96 items-center justify-center px-6">
-                {labels.noResults}
+              <div className="text-body text-muted-foreground flex min-h-64 flex-col items-center justify-center gap-3 px-6 text-center">
+                <p>
+                  {query.trim() ? labels.noResults : t("pluginHub.emptyHelp")}
+                </p>
+                <p>
+                  {tab === "mcps"
+                    ? t("pluginHub.mcpHelp")
+                    : tab === "hooks"
+                      ? t("pluginHub.hooksHelp")
+                      : t("pluginHub.skillUsage")}
+                </p>
+                {query.trim() && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQuery("")}
+                  >
+                    {t("pluginHub.clearSearch")}
+                  </Button>
+                )}
               </div>
             ) : null}
           </div>

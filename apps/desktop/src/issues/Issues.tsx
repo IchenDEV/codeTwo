@@ -18,7 +18,7 @@ import {
 import { ChevronDown, ChevronRight, Clapperboard } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-import { listGithubIssues, listIssueDelegations } from "../bridge";
+import { gitStatus, listGithubIssues, listIssueDelegations } from "../bridge";
 import type { Issue, IssueDelegation } from "../bridge";
 import { useT } from "../i18n";
 import type { SceneInfo } from "../session/scene";
@@ -96,6 +96,7 @@ function DelegationTrail({
 }
 
 export function IssuesModal({
+  repoChecker = gitStatus,
   issueTrackers = [],
   cwd,
   scenes,
@@ -104,6 +105,7 @@ export function IssuesModal({
   onOpenSession,
   onClose,
 }: {
+  repoChecker?: typeof gitStatus;
   issueTrackers?: { name: string; open: () => void }[];
   cwd: string;
   scenes: SceneInfo[];
@@ -115,13 +117,18 @@ export function IssuesModal({
   const [expanded, setExpanded] = useState<string | null>(null);
   const t = useT();
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [isRepo, setIsRepo] = useState(true);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setErr(null);
-    listGithubIssues(cwd)
+    repoChecker(cwd)
+      .then(async (status) => {
+        setIsRepo(status.is_repo);
+        return status.is_repo ? await listGithubIssues(cwd) : [];
+      })
       .then((i) => {
         setIssues(i);
         setLoading(false);
@@ -130,7 +137,7 @@ export function IssuesModal({
         setErr(String(error));
         setLoading(false);
       });
-  }, [cwd]);
+  }, [cwd, repoChecker]);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -153,10 +160,14 @@ export function IssuesModal({
           </div>
         ) : null}
         {loading && (
-          <p className="text-metadata text-muted-foreground">Loading via gh…</p>
+          <p className="text-metadata text-muted-foreground">
+            {t("issues.loading")}
+          </p>
         )}
         {err != null && err !== "" && (
-          <p className="text-metadata text-destructive">{err}</p>
+          <p role="alert" className="text-metadata text-destructive">
+            {err}
+          </p>
         )}
 
         <ScrollArea className="max-h-dialog-content pe-3">
@@ -236,7 +247,7 @@ export function IssuesModal({
             ))}
             {!loading && (err == null || err === "") && issues.length === 0 && (
               <p className="text-body text-muted-foreground p-2">
-                No open issues (or this dir isn’t a GitHub repo).
+                {isRepo ? t("issues.empty") : t("issues.notRepo")}
               </p>
             )}
           </div>

@@ -14,6 +14,7 @@ const {
   getAppearanceSettings,
   importAppearanceTheme,
   normalizeAppearanceSettings,
+  resolveThemeColor,
   resetAppearanceSettings,
   serializeAppearanceTheme,
   setAppearanceSettings,
@@ -46,6 +47,15 @@ function Harness() {
 }
 
 describe("Appearance settings", () => {
+  test("normalizes shorthand theme tokens for native color inputs", () => {
+    activateDom();
+    dom.document.documentElement.style.setProperty(
+      "--test-short-color",
+      "#fAf"
+    );
+    expect(resolveThemeColor("var(--test-short-color)")).toBe("#ffaaff");
+    expect(resolveThemeColor("#fff")).toBe("#ffffff");
+  });
   test("renders the three official schemes and changes the selected preference", async () => {
     activateDom();
     const view = mount(<Harness />);

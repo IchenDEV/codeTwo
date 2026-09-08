@@ -2979,7 +2979,10 @@ export default function App() {
     []
   );
 
-  const refreshProviderUpdates = async () => await refreshProviders(true);
+  const refreshProviderUpdates = useCallback(
+    async () => await refreshProviders(true),
+    [refreshProviders]
+  );
 
   useEffect(() => {
     void refreshProviders().catch(() => {
@@ -5290,8 +5293,8 @@ export default function App() {
         identity: `session-${hit.session_id}`,
         category: "session",
         label: hit.title,
-        detail: `${t(hit.role === "user" ? "palette.you" : "palette.agent")}: ${hit.snippet}`,
-        hint: hit.archived ? t("palette.archived") : project,
+        detail: `${stored ? new Date(stored.created_at).toLocaleString(locale) : hit.session_id.slice(0, 8)} · ${t(hit.role === "user" ? "palette.you" : "palette.agent")}: ${hit.snippet}`,
+        hint: hit.archived ? `${project} · ${t("palette.archived")}` : project,
         keywords: `${sourcePath} ${hit.cwd}`,
         run: () => void selectSession(hit.session_id),
       };
@@ -7347,6 +7350,7 @@ export default function App() {
       category: "session" as const,
       label: s.title,
       hint: displayProvider(s.provider),
+      detail: `${s.project_path ?? s.cwd ?? "—"} · ${new Date(s.created_at).toLocaleString(locale)}`,
       run: () => void selectSession(s.id),
     })),
   ].filter((command) => {
@@ -7736,6 +7740,12 @@ export default function App() {
           Back row at its foot is the way home. */}
       {showSettings ? (
         <SettingsPage
+          onSelectProject={selectProject}
+          onOpenDevices={
+            componentEnabled("remote.modal")
+              ? () => setShowRemote(true)
+              : undefined
+          }
           sidebarWidth={railWidth}
           initialTab={settingsInitialTab}
           bindings={bindings}
@@ -8207,7 +8217,7 @@ export default function App() {
             >
               {/* ---------------- the session column ---------------- */}
               <main
-                className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                className="bg-background @container/workspace flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
                 ref={mainRef}
               >
                 {/* Tiling workspace: every pane renders the full column body below, so each keeps its
@@ -8645,13 +8655,24 @@ export default function App() {
                             />
                           )}
 
+                        {paneStored?.activity?.state.kind === "failed" && (
+                          <div
+                            role="alert"
+                            className="bg-destructive/10 text-destructive text-body rounded-control mx-4 mt-2 px-3 py-2"
+                          >
+                            <strong>{t("mission.state.failed")}</strong> ·{" "}
+                            {paneStored.activity.state.message}
+                          </div>
+                        )}
                         {/* The same transcript tree serves the main column and document side panel. Keeping the
               rendering path unified prevents the two modes from drifting, while the scroll
               controller preserves the reader's position as streamed content arrives. */}
                         <div
                           className={cn(
                             "flex min-h-0 flex-1",
-                            docMode ? "flex-row" : "flex-col"
+                            docMode
+                              ? "flex-row @max-[48rem]/workspace:flex-col"
+                              : "flex-col"
                           )}
                         >
                           {hasConversationContent && (
@@ -8702,6 +8723,18 @@ export default function App() {
                                   : "order-2 shrink-0 flex-col"
                             )}
                           >
+                            {docMode &&
+                              turns.length === 0 &&
+                              !sessionLoading && (
+                                <div className="document-intro pt-page pb-surface-inset">
+                                  <h1 className="text-heading font-semibold">
+                                    {t("workspace.startTitle")}
+                                  </h1>
+                                  <p className="text-body text-muted-foreground mt-2">
+                                    {t("workspace.startHint")}
+                                  </p>
+                                </div>
+                              )}
                             {/* "What should we build in <project>?" — the project name is the project switcher. */}
                             {!docMode &&
                               turns.length === 0 &&

@@ -82,7 +82,7 @@ export function TaskBoardPage({
       if (width <= 0) return;
       const narrow = width <= NARROW_BOARD_WIDTH_REM * rootFontSize;
       if (narrow && wasNarrow.current !== true) setInspectorOpen(false);
-      if (!narrow) setInspectorOpen(true);
+      if (!narrow && wasNarrow.current === true) setInspectorOpen(true);
       setIsNarrow(narrow);
       wasNarrow.current = narrow;
     };
@@ -176,31 +176,31 @@ export function TaskBoardPage({
           <strong className="truncate">{t("taskboard.allTasks")}</strong>
         </nav>
         <div className="flex-1" />
-        {isNarrow ? (
-          inspectorOpen ? (
-            <Button
-              ref={backToTasksButtonRef}
-              type="button"
-              variant="ghost"
-              size="compact"
-              onClick={() => changeInspectorOpen(false)}
-            >
-              <ChevronLeft aria-hidden />
-              {t("taskboard.backToTasks")}
-            </Button>
-          ) : (
-            <Button
-              ref={showInspectorButtonRef}
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("taskboard.showInspector")}
-              onClick={() => changeInspectorOpen(true)}
-            >
-              <PanelRight aria-hidden />
-            </Button>
-          )
-        ) : null}
+        {inspectorOpen ? (
+          <Button
+            ref={backToTasksButtonRef}
+            type="button"
+            variant="ghost"
+            size="compact"
+            onClick={() => changeInspectorOpen(false)}
+          >
+            <ChevronLeft aria-hidden />
+            {isNarrow
+              ? t("taskboard.backToTasks")
+              : t("taskboard.hideInspector")}
+          </Button>
+        ) : (
+          <Button
+            ref={showInspectorButtonRef}
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("taskboard.showInspector")}
+            onClick={() => changeInspectorOpen(true)}
+          >
+            <PanelRight aria-hidden />
+          </Button>
+        )}
       </div>
       <Separator />
       <div className="task-board-layout min-h-0 flex-1">
@@ -261,7 +261,7 @@ export function TaskBoardPage({
             />
           </section>
         ) : null}
-        {!isNarrow || inspectorOpen ? (
+        {inspectorOpen ? (
           <aside
             aria-label={t("taskboard.inspector")}
             className="task-board-inspector bg-surface min-h-0 min-w-0"

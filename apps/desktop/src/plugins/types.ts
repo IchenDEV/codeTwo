@@ -126,6 +126,7 @@ export interface PluginManagerComponent {
   state: PluginManagerScopedState;
   /** Actions available for a skill shown in the unified component catalog. */
   skill?: {
+    preview?: string | null;
     id: string;
     removable: boolean;
   };

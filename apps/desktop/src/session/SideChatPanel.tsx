@@ -889,14 +889,23 @@ function TransientChatPanel({
             variant="ghost"
             size="icon"
             className="size-7 shrink-0"
+            title={t(labels.hide)}
             aria-label={t(labels.hide)}
             onClick={onClose}
           >
-            <X className="size-4" aria-hidden />
+            <span aria-hidden>−</span>
           </Button>
         </header>
       ) : null}
 
+      {activeTab != null && (
+        <p
+          className="text-metadata text-muted-foreground truncate px-3 py-1"
+          title={activeTab.cwd}
+        >
+          {activeTab.provider} · {activeTab.cwd}
+        </p>
+      )}
       <div
         ref={viewportRef}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"

@@ -21,12 +21,29 @@ import type {
   WorkspaceSearchOptions,
   WorkspaceSearchResult,
 } from "../bridge";
+import { useLanguage } from "../i18n";
 
 const DEFAULT_OPTIONS: WorkspaceSearchOptions = {
   regex: false,
   case_sensitive: false,
   whole_word: false,
 };
+
+function highlightMatch(preview: string, query: string) {
+  const at = query
+    ? preview.toLocaleLowerCase().indexOf(query.toLocaleLowerCase())
+    : -1;
+  if (at < 0) return preview;
+  return (
+    <>
+      {preview.slice(0, at)}
+      <mark className="bg-warning/20 text-foreground">
+        {preview.slice(at, at + query.length)}
+      </mark>
+      {preview.slice(at + query.length)}
+    </>
+  );
+}
 
 let nextSearchRequest = 0;
 
@@ -58,6 +75,8 @@ export function WorkspaceSearchModal({
   onOpen: (match: WorkspaceContentMatch) => void;
   onClose: () => void;
 }) {
+  const { locale } = useLanguage();
+  const tr = (en: string, zh: string) => (locale === "zh-CN" ? zh : en);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
@@ -174,7 +193,10 @@ export function WorkspaceSearchModal({
         initialFocus={queryInputRef}
       >
         <DialogHeader>
-          <DialogTitle>Search workspace contents</DialogTitle>
+          <DialogTitle>
+            {tr("Search workspace contents", "搜索工作区内容")}
+          </DialogTitle>
+          <p className="text-metadata text-muted-foreground break-all">{cwd}</p>
         </DialogHeader>
 
         <div className="space-y-2">
@@ -182,7 +204,7 @@ export function WorkspaceSearchModal({
             htmlFor="workspace-content-query"
             className="text-body font-medium"
           >
-            Search text
+            {tr("Search text", "搜索文字")}
           </label>
           <Input
             ref={queryInputRef}
@@ -195,8 +217,8 @@ export function WorkspaceSearchModal({
             aria-describedby="workspace-search-status"
             placeholder={
               options.regex
-                ? "Enter a regular expression…"
-                : "Find text in workspace files…"
+                ? tr("Enter a regular expression…", "输入正则表达式…")
+                : tr("Find text in workspace files…", "在工作区文件中查找…")
             }
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onInputKeyDown}
@@ -209,7 +231,7 @@ export function WorkspaceSearchModal({
               aria-pressed={options.case_sensitive}
               onClick={() => toggle("case_sensitive")}
             >
-              Match case
+              {tr("Match case", "区分大小写")}
             </Button>
             <Button
               type="button"
@@ -218,7 +240,7 @@ export function WorkspaceSearchModal({
               aria-pressed={options.whole_word}
               onClick={() => toggle("whole_word")}
             >
-              Whole word
+              {tr("Whole word", "全词匹配")}
             </Button>
             <Button
               type="button"
@@ -227,7 +249,7 @@ export function WorkspaceSearchModal({
               aria-pressed={options.regex}
               onClick={() => toggle("regex")}
             >
-              Regular expression
+              {tr("Regular expression", "正则表达式")}
             </Button>
           </div>
         </div>
@@ -238,8 +260,9 @@ export function WorkspaceSearchModal({
           role="status"
           aria-live="polite"
         >
-          {!hasQuery && "Enter text to search file contents."}
-          {hasQuery && visibleLoading && "Searching…"}
+          {!hasQuery &&
+            tr("Enter text to search file contents.", "输入文字搜索文件内容。")}
+          {hasQuery && visibleLoading && tr("Searching…", "正在搜索…")}
           {hasQuery &&
             !visibleLoading &&
             (error == null || error === "") &&
@@ -254,7 +277,7 @@ export function WorkspaceSearchModal({
 
         {error != null && error !== "" && (
           <p role="alert" className="text-metadata text-destructive">
-            Search failed: {error}
+            {tr("Search failed:", "搜索失败：")} {error}
           </p>
         )}
 
@@ -262,6 +285,11 @@ export function WorkspaceSearchModal({
           <ul className="space-y-1" aria-label="Workspace search results">
             {matches.map((match, index) => (
               <li key={`${match.path}:${match.line}:${match.column}:${index}`}>
+                {matches[index - 1]?.path !== match.path && (
+                  <p className="text-body px-2 pt-3 pb-1 font-medium break-all">
+                    {match.path}
+                  </p>
+                )}
                 <Button
                   ref={(node) => {
                     resultRefs.current[index] = node;
@@ -285,23 +313,29 @@ export function WorkspaceSearchModal({
                     </span>
                   </span>
                   <span className="text-metadata text-muted-foreground mt-0.5 block truncate font-mono">
-                    {match.preview || "Blank matching line"}
+                    {highlightMatch(
+                      match.preview,
+                      options.regex ? "" : deferredQuery
+                    )}
                   </span>
                 </Button>
               </li>
             ))}
           </ul>
-          {(hasQuery && !visibleLoading && error == null) ||
-            (error === "" && result && matches.length === 0 && (
+          {hasQuery &&
+            !visibleLoading &&
+            (error == null || error === "") &&
+            result &&
+            matches.length === 0 && (
               <p className="text-body text-muted-foreground py-6 text-center">
-                No matching content.
+                {tr("No matching content.", "没有匹配内容。")}
               </p>
-            ))}
+            )}
         </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Done
+            {tr("Done", "完成")}
           </Button>
         </DialogFooter>
       </DialogContent>
