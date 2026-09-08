@@ -19,7 +19,9 @@ const PET_BUBBLE_MAX_CHARACTERS = 160;
  * Collapse C2's richer session lifecycle into the stable Codex Pet v2 rows.
  * Waiting wins over running because an approval request remains busy at the session level.
  */
-export function petAnimationForActivity(activity: CodeTwoPetActivity): CodeTwoPetAnimation {
+export function petAnimationForActivity(
+  activity: CodeTwoPetActivity
+): CodeTwoPetAnimation {
   if (activity.loading || activity.awaitingInput) return "waiting";
   if (activity.running) return "running";
   if (activity.failed) return "failed";
@@ -30,14 +32,15 @@ export function petAnimationForActivity(activity: CodeTwoPetActivity): CodeTwoPe
 /** Keep the floating bubble glanceable while the transcript remains the canonical response. */
 export function petConversationBubbleForActivity(
   activity: CodeTwoPetActivity,
-  assistantText: string,
+  assistantText: string
 ): string | null {
-  if (!activity.loading && !activity.running && !activity.awaitingInput) return null;
+  if (!activity.loading && !activity.running && !activity.awaitingInput)
+    return null;
 
-  const normalized = assistantText.replace(/\s+/gu, " ").trim();
+  const normalized = assistantText.replaceAll(/\s+/gu, " ").trim();
   if (!normalized) return null;
 
-  const characters = Array.from(normalized);
+  const characters = [...normalized];
   if (characters.length <= PET_BUBBLE_MAX_CHARACTERS) return normalized;
   return `…${characters.slice(-(PET_BUBBLE_MAX_CHARACTERS - 1)).join("")}`;
 }

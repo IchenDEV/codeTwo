@@ -8,17 +8,27 @@ describe("buildFeishuExecutionPrompt", () => {
       objective: "整理待办并检查风险",
       tab: "messages",
       sourceName: "插件评审群",
-      messages: [{
-        id: "m1",
-        senderId: "ou_alice",
-        senderType: "user",
-        senderName: "林小满",
-        senderAvatarUrl: "https://example.invalid/lin-avatar.png",
-        type: "text",
-        text: "缺陷表还有 12 条待验收。",
-        createdAt: "1724900000000",
-      }],
-      related: [{ id: "doc1", name: "需求说明", type: "docx", url: "https://tenant.feishu.cn/docx/doc1", kind: "document" }],
+      messages: [
+        {
+          id: "m1",
+          senderId: "ou_alice",
+          senderType: "user",
+          senderName: "林小满",
+          senderAvatarUrl: "https://example.invalid/lin-avatar.png",
+          type: "text",
+          text: "缺陷表还有 12 条待验收。",
+          createdAt: "1724900000000",
+        },
+      ],
+      related: [
+        {
+          id: "doc1",
+          name: "需求说明",
+          type: "docx",
+          url: "https://tenant.feishu.cn/docx/doc1",
+          kind: "document",
+        },
+      ],
     });
     expect(prompt).toContain("## 飞书对话：插件评审群");
     expect(prompt).toContain("林小满: 缺陷表还有 12 条待验收。");

@@ -1,9 +1,11 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
+
 import { activateDom, dom } from "./domTestHarness";
 
 activateDom();
-dom.window.HTMLCanvasElement.prototype.getContext = () => ({ filter: "" }) as never;
+dom.window.HTMLCanvasElement.prototype.getContext = () =>
+  ({ filter: "" }) as never;
 
 const { docToBlocks } = await import("../src/skillInline");
 const {
@@ -43,14 +45,23 @@ describe("docToBlocks slotCard (macro)", () => {
         skillId: "commit-macro",
         template: "Write a {{style}} commit message for {{scope}}.",
         slots: JSON.stringify([
-          { id: "style", label: "Style", kind: "select", options: ["conventional"] },
+          {
+            id: "style",
+            label: "Style",
+            kind: "select",
+            options: ["conventional"],
+          },
           { id: "scope", label: "Scope", kind: "text" },
         ]),
         values: JSON.stringify({ style: "conventional", scope: "auth" }),
-      }),
+      })
     );
     expect(docToBlocks(editor)).toEqual([
-      { type: "skill", skill_id: "commit-macro", params: { style: "conventional", scope: "auth" } },
+      {
+        type: "skill",
+        skill_id: "commit-macro",
+        params: { style: "conventional", scope: "auth" },
+      },
     ]);
   });
 
@@ -63,16 +74,24 @@ describe("docToBlocks slotCard (macro)", () => {
           { id: "scope" },
         ]),
         values: JSON.stringify({ scope: "auth" }),
-      }),
+      })
     );
     expect(docToBlocks(editor)).toEqual([
-      { type: "skill", skill_id: "commit-macro", params: { style: "conventional", scope: "auth" } },
+      {
+        type: "skill",
+        skill_id: "commit-macro",
+        params: { style: "conventional", scope: "auth" },
+      },
     ]);
   });
 
   test("corrupt JSON props degrade to empty slots and values, never a crash", () => {
     const editor = editorWith(
-      slotCard({ skillId: "commit-macro", slots: "{not json", values: "also not json" }),
+      slotCard({
+        skillId: "commit-macro",
+        slots: "{not json",
+        values: "also not json",
+      })
     );
     expect(docToBlocks(editor)).toEqual([
       { type: "skill", skill_id: "commit-macro", params: {} },
@@ -82,8 +101,12 @@ describe("docToBlocks slotCard (macro)", () => {
   test("keeps its place between text blocks", () => {
     const editor = editorWith(
       { type: "paragraph", content: [{ type: "text", text: "Before" }] },
-      slotCard({ skillId: "m", slots: JSON.stringify([{ id: "a" }]), values: JSON.stringify({ a: "1" }) }),
-      { type: "paragraph", content: [{ type: "text", text: "After" }] },
+      slotCard({
+        skillId: "m",
+        slots: JSON.stringify([{ id: "a" }]),
+        values: JSON.stringify({ a: "1" }),
+      }),
+      { type: "paragraph", content: [{ type: "text", text: "After" }] }
     );
     expect(docToBlocks(editor)).toEqual([
       { type: "text", text: "Before" },
@@ -105,8 +128,12 @@ describe("docToBlocks slotCard (brief)", () => {
           { id: "spec", label: "Spec", kind: "file" },
           { id: "report", label: "Report", kind: "artifact" },
         ]),
-        values: JSON.stringify({ goal: "Ship it", spec: "docs/spec.md", report: "r-1" }),
-      }),
+        values: JSON.stringify({
+          goal: "Ship it",
+          spec: "docs/spec.md",
+          report: "r-1",
+        }),
+      })
     );
     expect(docToBlocks(editor)).toEqual([
       { type: "text", text: "Goal: Ship it\n\nSpec: " },
@@ -125,17 +152,26 @@ describe("docToBlocks slotCard (brief)", () => {
           { id: "spec", kind: "file" },
         ]),
         values: "{}",
-      }),
+      })
     );
-    expect(docToBlocks(editor)).toEqual([{ type: "text", text: "Goal: tbd Spec: " }]);
+    expect(docToBlocks(editor)).toEqual([
+      { type: "text", text: "Goal: tbd Spec: " },
+    ]);
   });
 
   test("corrupt JSON degrades to the bare template prose", () => {
     const editor = editorWith(
-      slotCard({ mode: "brief", template: "Just prose {{gone}}.", slots: "[broken", values: "{broken" }),
+      slotCard({
+        mode: "brief",
+        template: "Just prose {{gone}}.",
+        slots: "[broken",
+        values: "{broken",
+      })
     );
     // The undefined slot's placeholder is dropped; the surrounding prose survives.
-    expect(docToBlocks(editor)).toEqual([{ type: "text", text: "Just prose ." }]);
+    expect(docToBlocks(editor)).toEqual([
+      { type: "text", text: "Just prose ." },
+    ]);
   });
 });
 
@@ -151,10 +187,30 @@ describe("slot helpers", () => {
   });
 
   test("normalizeSlots migrates legacy id strings and defaults unknown kinds to text", () => {
-    expect(normalizeSlots(["style", { id: "x", kind: "weird" }, { id: "s", kind: "select", options: ["a"] }])).toEqual([
+    expect(
+      normalizeSlots([
+        "style",
+        { id: "x", kind: "weird" },
+        { id: "s", kind: "select", options: ["a"] },
+      ])
+    ).toEqual([
       { id: "style", label: "", kind: "text" },
-      { id: "x", label: "", kind: "text", options: undefined, required: false, default: undefined },
-      { id: "s", label: "", kind: "select", options: ["a"], required: false, default: undefined },
+      {
+        id: "x",
+        label: "",
+        kind: "text",
+        options: undefined,
+        required: false,
+        default: undefined,
+      },
+      {
+        id: "s",
+        label: "",
+        kind: "select",
+        options: ["a"],
+        required: false,
+        default: undefined,
+      },
     ]);
   });
 
@@ -180,14 +236,19 @@ describe("slot helpers", () => {
         mode: "brief",
         slots: JSON.stringify([{ id: "goal", required: true }]),
         values: JSON.stringify({ goal: "done" }),
-      }),
+      })
     );
     expect(unfilledRequiredSlots(editor)).toEqual(["Style"]);
   });
 });
 
 describe("briefOfferVisible", () => {
-  const base = { docMode: true, docEmpty: true, hasBrief: true, dismissed: false };
+  const base = {
+    docMode: true,
+    docEmpty: true,
+    hasBrief: true,
+    dismissed: false,
+  };
 
   test("offers only on an empty doc-mode page with an undismissed brief", () => {
     expect(briefOfferVisible(base)).toBe(true);

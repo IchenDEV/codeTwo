@@ -1,10 +1,22 @@
 import type { ElectrobunConfig } from "electrobun";
 
-import { DESKTOP_CHANNELS, resolveDesktopChannel } from "./scripts/desktop-channel";
+import {
+  DESKTOP_CHANNELS,
+  resolveDesktopChannel,
+} from "./scripts/desktop-channel";
 
-const channel = DESKTOP_CHANNELS[resolveDesktopChannel(process.env.CODETWO_CHANNEL, process.argv)];
-const hostExecutable = process.platform === "win32" ? "codetwo-desktop-host.exe" : "codetwo-desktop-host";
-const toolBrokerExecutable = process.platform === "win32" ? "codetwo-tool-broker.exe" : "codetwo-tool-broker";
+const channel =
+  DESKTOP_CHANNELS[
+    resolveDesktopChannel(process.env.CODETWO_CHANNEL, process.argv)
+  ];
+const hostExecutable =
+  process.platform === "win32"
+    ? "codetwo-desktop-host.exe"
+    : "codetwo-desktop-host";
+const toolBrokerExecutable =
+  process.platform === "win32"
+    ? "codetwo-tool-broker.exe"
+    : "codetwo-tool-broker";
 const hostBinary = `../../target/release/${hostExecutable}`;
 const toolBrokerBinary = `build/tool-broker/${toolBrokerExecutable}`;
 
@@ -22,9 +34,13 @@ export default {
       minify: false,
       sourcemap: "external",
       define: {
-        "process.env.CODETWO_APP_IDENTIFIER": JSON.stringify(channel.identifier),
+        "process.env.CODETWO_APP_IDENTIFIER": JSON.stringify(
+          channel.identifier
+        ),
         "process.env.CODETWO_APP_NAME": JSON.stringify(channel.displayName),
-        "process.env.CODETWO_ICLOUD_CONTAINER_IDENTIFIER": JSON.stringify(`iCloud.${channel.identifier}`),
+        "process.env.CODETWO_ICLOUD_CONTAINER_IDENTIFIER": JSON.stringify(
+          `iCloud.${channel.identifier}`
+        ),
       },
     },
     copy: {
@@ -32,7 +48,14 @@ export default {
       [hostBinary]: `bin/${hostExecutable}`,
       [toolBrokerBinary]: `bin/${toolBrokerExecutable}`,
     },
-    watch: ["../../crates", "src-host", "src", "index.html", "vite.config.ts", "scripts/prepare-electrobun.ts"],
+    watch: [
+      "../../crates",
+      "src-host",
+      "src",
+      "index.html",
+      "vite.config.ts",
+      "scripts/prepare-electrobun.ts",
+    ],
     watchIgnore: ["dist/**", "../../target/**"],
     mac: {
       createDmg: process.env.ELECTROBUN_CREATE_DMG === "1",

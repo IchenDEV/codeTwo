@@ -1,4 +1,8 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import type { SuggestionMenuProps } from "@blocknote/react";
+import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
+
+import { Button } from "@/components/ui/button";
 import {
   FileCode,
   FileImage,
@@ -7,13 +11,11 @@ import {
   FileType,
   MessageSquare,
   Package,
-  type AppIcon,
 } from "@/components/ui/icons";
-import type { SuggestionMenuProps } from "@blocknote/react";
+import type { AppIcon } from "@/components/ui/icons";
+import { cn } from "@/lib/utils";
 
 import { useT } from "../i18n";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 /** One workspace file, split for display. The core ranks these; this only draws them. */
 export interface FileItem {
@@ -49,25 +51,53 @@ export interface ArtifactAtItem {
 export type AtItem = ChatItem | ArtifactAtItem | FileItem;
 
 const BY_EXTENSION: Record<string, AppIcon> = {
-  ts: FileCode, tsx: FileCode, js: FileCode, jsx: FileCode, rs: FileCode, py: FileCode,
-  go: FileCode, rb: FileCode, sh: FileCode, css: FileCode, html: FileCode, swift: FileCode,
-  json: FileJson, lock: FileJson,
-  toml: FileType, yaml: FileType, yml: FileType, plist: FileType, conf: FileType, ini: FileType,
-  png: FileImage, jpg: FileImage, jpeg: FileImage, gif: FileImage, svg: FileImage,
-  webp: FileImage, ico: FileImage, icns: FileImage,
+  ts: FileCode,
+  tsx: FileCode,
+  js: FileCode,
+  jsx: FileCode,
+  rs: FileCode,
+  py: FileCode,
+  go: FileCode,
+  rb: FileCode,
+  sh: FileCode,
+  css: FileCode,
+  html: FileCode,
+  swift: FileCode,
+  json: FileJson,
+  lock: FileJson,
+  toml: FileType,
+  yaml: FileType,
+  yml: FileType,
+  plist: FileType,
+  conf: FileType,
+  ini: FileType,
+  png: FileImage,
+  jpg: FileImage,
+  jpeg: FileImage,
+  gif: FileImage,
+  svg: FileImage,
+  webp: FileImage,
+  ico: FileImage,
+  icns: FileImage,
 };
 
 /** A page icon on every row says only "this is a file", which the user already knows. */
 function iconFor(name: string): AppIcon {
   const dot = name.lastIndexOf(".");
-  return (dot > 0 && BY_EXTENSION[name.slice(dot + 1).toLowerCase()]) || FileText;
+  const extension =
+    dot > 0 ? BY_EXTENSION[name.slice(dot + 1).toLowerCase()] : undefined;
+  return extension ?? FileText;
 }
 
 /** Split a name around the matched span so the middle can be emphasised. */
 function parts(item: FileItem): [string, string, string] {
   if (!item.hit) return [item.name, "", ""];
   const [from, to] = item.hit;
-  return [item.name.slice(0, from), item.name.slice(from, to), item.name.slice(to)];
+  return [
+    item.name.slice(0, from),
+    item.name.slice(from, to),
+    item.name.slice(to),
+  ];
 }
 
 function itemKey(item: AtItem): string {
@@ -79,7 +109,9 @@ function itemKey(item: AtItem): string {
 /** Muted group label — only drawn when the list actually mixes chats and files. */
 function GroupLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="px-2 pb-0.5 pt-1.5 text-metadata text-muted-foreground first:pt-1">{children}</p>
+    <p className="text-metadata text-muted-foreground px-2 pt-1.5 pb-0.5 first:pt-1">
+      {children}
+    </p>
   );
 }
 
@@ -96,7 +128,12 @@ function GroupLabel({ children }: { children: ReactNode }) {
  * Past chats sit above the files under their own label: mentioning one inlines its transcript, the
  * way mentioning a file inlines its contents.
  */
-export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: SuggestionMenuProps<AtItem>) {
+export function FileMenu({
+  items,
+  loadingState,
+  selectedIndex,
+  onItemClick,
+}: SuggestionMenuProps<AtItem>) {
   const t = useT();
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -111,7 +148,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
 
   if (loadingState === "loading-initial") {
     return (
-      <div className="raised-material w-menu-wide rounded-module p-3 text-callout text-muted-foreground shadow-menu">
+      <div className="raised-material w-menu-wide rounded-module text-callout text-muted-foreground shadow-menu p-3">
         {t("files.searching")}
       </div>
     );
@@ -119,7 +156,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
 
   if (items.length === 0) {
     return (
-      <div className="raised-material w-menu-wide rounded-module p-3 text-callout text-muted-foreground shadow-menu">
+      <div className="raised-material w-menu-wide rounded-module text-callout text-muted-foreground shadow-menu p-3">
         {t("files.noMatches")}
       </div>
     );
@@ -132,7 +169,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
   return (
     <div
       ref={listRef}
-      className="raised-material max-h-72 w-menu-wide overflow-y-auto rounded-menu p-menu shadow-menu"
+      className="raised-material w-menu-wide rounded-menu p-menu shadow-menu max-h-72 overflow-y-auto"
     >
       {items.map((item, i) => {
         const row =
@@ -148,12 +185,14 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
               onClick={() => onItemClick?.(item)}
               className={cn(
                 "w-full items-baseline gap-2 px-2 py-1",
-                i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
+                i === selectedIndex ? "bg-accent" : "hover:bg-accent/50"
               )}
             >
-              <Package className="size-3.5 shrink-0 self-center text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-body">{item.title}</span>
-              <span className="shrink-0 text-callout text-muted-foreground/70">
+              <Package className="text-muted-foreground size-3.5 shrink-0 self-center" />
+              <span className="text-body min-w-0 flex-1 truncate">
+                {item.title}
+              </span>
+              <span className="text-callout text-muted-foreground/70 shrink-0">
                 {item.artifactKind} · v{item.version}
               </span>
             </Button>
@@ -169,12 +208,14 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
               onClick={() => onItemClick?.(item)}
               className={cn(
                 "w-full items-baseline gap-2 px-2 py-1",
-                i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
+                i === selectedIndex ? "bg-accent" : "hover:bg-accent/50"
               )}
             >
-              <MessageSquare className="size-3.5 shrink-0 self-center text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-body">{item.title}</span>
-              <span className="shrink-0 text-callout text-muted-foreground/70">
+              <MessageSquare className="text-muted-foreground size-3.5 shrink-0 self-center" />
+              <span className="text-body min-w-0 flex-1 truncate">
+                {item.title}
+              </span>
+              <span className="text-callout text-muted-foreground/70 shrink-0">
                 {new Date(item.when).toLocaleDateString()}
               </span>
             </Button>
@@ -194,17 +235,17 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
                   onClick={() => onItemClick?.(item)}
                   className={cn(
                     "w-full items-baseline gap-2 px-2 py-1",
-                    i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
+                    i === selectedIndex ? "bg-accent" : "hover:bg-accent/50"
                   )}
                 >
-                  <Icon className="size-3.5 shrink-0 self-center text-muted-foreground" />
-                  <span className="shrink-0 truncate text-body">
+                  <Icon className="text-muted-foreground size-3.5 shrink-0 self-center" />
+                  <span className="text-body shrink-0 truncate">
                     {before}
                     <span className="text-primary">{match}</span>
                     {after}
                   </span>
                   {item.dir && (
-                    <span className="min-w-0 flex-1 truncate text-right text-callout text-muted-foreground/70">
+                    <span className="text-callout text-muted-foreground/70 min-w-0 flex-1 truncate text-right">
                       {item.dir}
                     </span>
                   )}
@@ -221,7 +262,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
             </div>
           );
         }
-        if (i === firstArtifact && (hasChats || firstFile >= 0)) {
+        if (i === firstArtifact && (hasChats || firstFile !== -1)) {
           return (
             <div key={`artifacts-${itemKey(item)}`}>
               <GroupLabel>{t("files.artifactsGroup")}</GroupLabel>

@@ -60,7 +60,9 @@ export interface GitNextActionProjection {
   primary: GitNextActionItem;
   alternatives: GitNextActionItem[];
   reason: GitNextActionReason;
-  changeRequestLabel: SourceControlInfo["change_request_label"] | "change request";
+  changeRequestLabel:
+    | SourceControlInfo["change_request_label"]
+    | "change request";
 }
 
 export interface GitNextActionInput {
@@ -83,10 +85,12 @@ export interface GitNextActionHandlers {
 const action = (
   id: GitNextActionId,
   destination: GitNextActionDestination,
-  disabled = false,
+  disabled = false
 ): GitNextActionItem => ({ id, destination, disabled: disabled || undefined });
 
-function checkTone(check: GitHubPullRequest["checks"][number]): "success" | "failure" | "pending" {
+function checkTone(
+  check: GitHubPullRequest["checks"][number]
+): "success" | "failure" | "pending" {
   const conclusion = (check.conclusion ?? "").toLocaleUpperCase();
   const status = (check.status ?? "").toLocaleUpperCase();
   if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion)) return "success";
@@ -109,28 +113,32 @@ function checkTone(check: GitHubPullRequest["checks"][number]): "success" | "fai
 
 function canCreateChangeRequest(input: GitNextActionInput): boolean {
   const info = input.sourceControl;
-  return Boolean(
-    input.taskWorktree
-      && !input.pullRequest
-      && info?.create_change_request_supported
-      && (!info.required_cli || info.required_cli_available),
+  return (
+    input.taskWorktree &&
+    !input.pullRequest &&
+    info?.create_change_request_supported === true &&
+    (info.required_cli == null ||
+      info.required_cli === "" ||
+      info.required_cli_available)
   );
 }
 
 function alternativesFor(
   input: GitNextActionInput,
-  primary: GitNextActionItem,
+  primary: GitNextActionItem
 ): GitNextActionItem[] {
   const candidates: GitNextActionItem[] = [];
-  if (input.status?.is_repo) candidates.push(action("source_control", "source_control"));
+  if (input.status?.is_repo === true)
+    candidates.push(action("source_control", "source_control"));
   if ((input.status?.ahead ?? 0) > 0) candidates.push(action("push", "push"));
-  if (input.pullRequest) candidates.push(action("view_pull_request", "pull_request"));
+  if (input.pullRequest)
+    candidates.push(action("view_pull_request", "pull_request"));
   if (canCreateChangeRequest(input)) {
     candidates.push(action("create_change_request", "source_control"));
   }
   if (
-    input.pullRequest?.state.toLocaleUpperCase() === "MERGED"
-      && input.canCleanup
+    input.pullRequest?.state.toLocaleUpperCase() === "MERGED" &&
+    input.canCleanup
   ) {
     candidates.push(action("cleanup_worktree", "cleanup"));
   }
@@ -150,14 +158,18 @@ function alternativesFor(
  * becomes a candidate only when the active session owns a real task worktree and the inspected
  * adapter advertises creation support.
  */
-export function resolveGitNextAction(input: GitNextActionInput): GitNextActionProjection {
-  const changeRequestLabel = input.sourceControl?.change_request_label ?? "change request";
+export function resolveGitNextAction(
+  input: GitNextActionInput
+): GitNextActionProjection {
+  const changeRequestLabel =
+    input.sourceControl?.change_request_label ?? "change request";
   const finish = (
     primary: GitNextActionItem,
-    reason: GitNextActionReason,
+    reason: GitNextActionReason
   ): GitNextActionProjection => ({
     primary,
-    alternatives: primary.disabled ? [] : alternativesFor(input, primary),
+    alternatives:
+      primary.disabled === true ? [] : alternativesFor(input, primary),
     reason,
     changeRequestLabel,
   });
@@ -166,7 +178,9 @@ export function resolveGitNextAction(input: GitNextActionInput): GitNextActionPr
     return finish(action("checking", "none", true), { id: "checking" });
   }
   if (!input.status.is_repo) {
-    return finish(action("unavailable", "none", true), { id: "not_repository" });
+    return finish(action("unavailable", "none", true), {
+      id: "not_repository",
+    });
   }
 
   if (input.status.files.length > 0) {
@@ -176,18 +190,23 @@ export function resolveGitNextAction(input: GitNextActionInput): GitNextActionPr
     });
   }
   if (input.status.ahead > 0) {
-    return finish(action("push", "push"), { id: "ahead", count: input.status.ahead });
+    return finish(action("push", "push"), {
+      id: "ahead",
+      count: input.status.ahead,
+    });
   }
 
-  const pullRequest = input.pullRequest;
+  const { pullRequest } = input;
   if (!pullRequest) {
     if (canCreateChangeRequest(input)) {
       return finish(action("create_change_request", "source_control"), {
         id: "create_change_request",
       });
     }
-    if (input.forgeError) {
-      return finish(action("source_control", "source_control"), { id: "forge_degraded" });
+    if (input.forgeError != null && input.forgeError !== "") {
+      return finish(action("source_control", "source_control"), {
+        id: "forge_degraded",
+      });
     }
     return finish(action("up_to_date", "none", true), { id: "clean" });
   }
@@ -197,16 +216,22 @@ export function resolveGitNextAction(input: GitNextActionInput): GitNextActionPr
     if (input.canCleanup) {
       return finish(action("cleanup_worktree", "cleanup"), { id: "merged" });
     }
-    return finish(action("view_pull_request", "pull_request"), { id: "merged" });
+    return finish(action("view_pull_request", "pull_request"), {
+      id: "merged",
+    });
   }
   if (state !== "OPEN") {
-    return finish(action("view_pull_request", "pull_request"), { id: "closed" });
+    return finish(action("view_pull_request", "pull_request"), {
+      id: "closed",
+    });
   }
 
   const mergeable = pullRequest.mergeable.toLocaleUpperCase();
   const mergeState = pullRequest.merge_state_status.toLocaleUpperCase();
   if (mergeable === "CONFLICTING" || mergeState === "DIRTY") {
-    return finish(action("resolve_conflicts", "source_control"), { id: "conflicts" });
+    return finish(action("resolve_conflicts", "source_control"), {
+      id: "conflicts",
+    });
   }
 
   let failedChecks = 0;
@@ -223,8 +248,12 @@ export function resolveGitNextAction(input: GitNextActionInput): GitNextActionPr
     });
   }
 
-  if (pullRequest.review_decision?.toLocaleUpperCase() === "CHANGES_REQUESTED") {
-    return finish(action("address_review", "pull_request"), { id: "requested_changes" });
+  if (
+    pullRequest.review_decision?.toLocaleUpperCase() === "CHANGES_REQUESTED"
+  ) {
+    return finish(action("address_review", "pull_request"), {
+      id: "requested_changes",
+    });
   }
   if (pendingChecks > 0) {
     return finish(action("view_checks", "pull_request"), {
@@ -242,120 +271,165 @@ export function resolveGitNextAction(input: GitNextActionInput): GitNextActionPr
     return finish(action("review_draft", "pull_request"), { id: "draft" });
   }
   if (pullRequest.review_decision?.toLocaleUpperCase() === "REVIEW_REQUIRED") {
-    return finish(action("view_pull_request", "pull_request"), { id: "awaiting_review" });
+    return finish(action("view_pull_request", "pull_request"), {
+      id: "awaiting_review",
+    });
   }
   if (mergeState === "CLEAN") {
-    return finish(action("merge_pull_request", "pull_request"), { id: "merge_ready" });
+    return finish(action("merge_pull_request", "pull_request"), {
+      id: "merge_ready",
+    });
   }
-  return finish(action("view_pull_request", "pull_request"), { id: "pull_request" });
+  return finish(action("view_pull_request", "pull_request"), {
+    id: "pull_request",
+  });
 }
 
 export function runGitNextAction(
   item: GitNextActionItem,
-  handlers: GitNextActionHandlers,
+  handlers: GitNextActionHandlers
 ): void {
   switch (item.destination) {
-    case "source_control":
+    case "source_control": {
       handlers.openSourceControl();
       break;
-    case "push":
+    }
+    case "push": {
       handlers.push();
       break;
-    case "pull_request":
+    }
+    case "pull_request": {
       handlers.openPullRequest();
       break;
-    case "cleanup":
+    }
+    case "cleanup": {
       handlers.cleanupWorktree();
       break;
-    case "none":
+    }
+    case "none": {
       break;
+    }
   }
 }
 
 export function gitNextActionLabel(
   t: Translate,
   item: GitNextActionItem,
-  changeRequestLabel: GitNextActionProjection["changeRequestLabel"],
+  changeRequestLabel: GitNextActionProjection["changeRequestLabel"]
 ): string {
   switch (item.id) {
-    case "checking":
+    case "checking": {
       return t("git.next.checking");
-    case "unavailable":
+    }
+    case "unavailable": {
       return t("git.next.unavailable");
-    case "up_to_date":
+    }
+    case "up_to_date": {
       return t("git.next.upToDate");
-    case "source_control":
+    }
+    case "source_control": {
       return t("action.open_source_control");
-    case "review_changes":
+    }
+    case "review_changes": {
       return t("git.next.reviewChanges");
-    case "push":
+    }
+    case "push": {
       return t("header.push");
-    case "create_change_request":
+    }
+    case "create_change_request": {
       return t("git.next.createChangeRequest", { label: changeRequestLabel });
-    case "resolve_conflicts":
+    }
+    case "resolve_conflicts": {
       return t("git.next.resolveConflicts");
-    case "review_failed_checks":
+    }
+    case "review_failed_checks": {
       return t("git.next.reviewFailedChecks");
-    case "address_review":
+    }
+    case "address_review": {
       return t("git.next.addressReview");
-    case "view_checks":
+    }
+    case "view_checks": {
       return t("git.next.viewChecks");
-    case "review_remote_updates":
+    }
+    case "review_remote_updates": {
       return t("git.next.reviewRemoteUpdates");
-    case "review_draft":
+    }
+    case "review_draft": {
       return t("git.next.reviewDraft");
-    case "view_pull_request":
+    }
+    case "view_pull_request": {
       return t("git.next.viewChangeRequest", { label: changeRequestLabel });
-    case "merge_pull_request":
+    }
+    case "merge_pull_request": {
       return t("git.next.mergeChangeRequest", { label: changeRequestLabel });
-    case "cleanup_worktree":
+    }
+    case "cleanup_worktree": {
       return t("git.next.cleanupWorktree");
+    }
   }
 }
 
 export function gitNextActionReason(
   t: Translate,
-  projection: GitNextActionProjection,
+  projection: GitNextActionProjection
 ): string {
-  const reason = projection.reason;
+  const { reason } = projection;
   switch (reason.id) {
-    case "checking":
+    case "checking": {
       return t("git.next.reason.checking");
-    case "not_repository":
+    }
+    case "not_repository": {
       return t("git.next.reason.notRepository");
-    case "local_changes":
+    }
+    case "local_changes": {
       return t("git.next.reason.localChanges", { count: reason.count });
-    case "ahead":
+    }
+    case "ahead": {
       return t("git.next.reason.ahead", { count: reason.count });
-    case "create_change_request":
+    }
+    case "create_change_request": {
       return t("git.next.reason.createChangeRequest", {
         label: projection.changeRequestLabel,
       });
-    case "conflicts":
+    }
+    case "conflicts": {
       return t("git.next.reason.conflicts");
-    case "failed_checks":
+    }
+    case "failed_checks": {
       return t("git.next.reason.failedChecks", { count: reason.count });
-    case "requested_changes":
+    }
+    case "requested_changes": {
       return t("git.next.reason.requestedChanges");
-    case "pending_checks":
+    }
+    case "pending_checks": {
       return t("git.next.reason.pendingChecks", { count: reason.count });
-    case "behind":
+    }
+    case "behind": {
       return t("git.next.reason.behind", { count: reason.count });
-    case "draft":
+    }
+    case "draft": {
       return t("git.next.reason.draft");
-    case "awaiting_review":
+    }
+    case "awaiting_review": {
       return t("git.next.reason.awaitingReview");
-    case "merge_ready":
+    }
+    case "merge_ready": {
       return t("git.next.reason.mergeReady");
-    case "merged":
+    }
+    case "merged": {
       return t("git.next.reason.merged");
-    case "closed":
+    }
+    case "closed": {
       return t("git.next.reason.closed");
-    case "pull_request":
+    }
+    case "pull_request": {
       return t("git.next.reason.pullRequest");
-    case "forge_degraded":
+    }
+    case "forge_degraded": {
       return t("git.next.reason.forgeDegraded");
-    case "clean":
+    }
+    case "clean": {
       return t("git.next.reason.clean");
+    }
   }
 }

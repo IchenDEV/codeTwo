@@ -123,7 +123,11 @@
   align-items: center;
   gap: var(--ds-space-inline);
   padding: 0 var(--ds-space-module-inset);
-  background: color-mix(in oklch, var(--appearance-preview-foreground) 4%, var(--appearance-preview-background));
+  background: color-mix(
+    in oklch,
+    var(--appearance-preview-foreground) 4%,
+    var(--appearance-preview-background)
+  );
 }
 
 .appearance-mini-mark,
@@ -131,7 +135,11 @@
 .appearance-mini-send {
   display: block;
   flex: 0 0 auto;
-  background: color-mix(in oklch, var(--appearance-preview-foreground) 14%, transparent);
+  background: color-mix(
+    in oklch,
+    var(--appearance-preview-foreground) 14%,
+    transparent
+  );
   border-radius: var(--ds-radius-micro);
 }
 
@@ -146,7 +154,11 @@
 .appearance-mini-line {
   display: block;
   height: var(--ds-space-inline);
-  background: color-mix(in oklch, var(--appearance-preview-foreground) 14%, transparent);
+  background: color-mix(
+    in oklch,
+    var(--appearance-preview-foreground) 14%,
+    transparent
+  );
   border-radius: var(--ds-radius-micro);
 }
 
@@ -169,7 +181,11 @@
 }
 
 .appearance-mini-sidebar {
-  background: color-mix(in oklch, var(--appearance-preview-foreground) 6%, var(--appearance-preview-background));
+  background: color-mix(
+    in oklch,
+    var(--appearance-preview-foreground) 6%,
+    var(--appearance-preview-background)
+  );
 }
 
 .appearance-mini-line {
@@ -213,7 +229,11 @@
 .appearance-mini-composer {
   position: relative;
   padding: var(--ds-space-control-group);
-  background: color-mix(in oklch, var(--appearance-preview-foreground) 3%, var(--appearance-preview-background));
+  background: color-mix(
+    in oklch,
+    var(--appearance-preview-foreground) 3%,
+    var(--appearance-preview-background)
+  );
   border-radius: var(--ds-radius-control);
 }
 
@@ -232,7 +252,11 @@
 
 .appearance-mini-dock {
   align-items: center;
-  background: color-mix(in oklch, var(--appearance-preview-foreground) 3%, var(--appearance-preview-background));
+  background: color-mix(
+    in oklch,
+    var(--appearance-preview-foreground) 3%,
+    var(--appearance-preview-background)
+  );
 }
 
 .appearance-mini-tool {
@@ -341,7 +365,11 @@
 
 .appearance-theme-swatch::before {
   inset: 22%;
-  background: color-mix(in oklch, var(--appearance-preview-foreground) 22%, transparent);
+  background: color-mix(
+    in oklch,
+    var(--appearance-preview-foreground) 22%,
+    transparent
+  );
 }
 
 .appearance-theme-swatch::after {
@@ -402,21 +430,28 @@
   padding-left: var(--ds-space-surface-inset);
 }
 
-.appearance-setting-group > [data-slot="setting-toggle"] > [data-slot="setting-row"] {
+.appearance-setting-group
+  > [data-slot="setting-toggle"]
+  > [data-slot="setting-row"] {
   padding-right: var(--ds-space-surface-inset);
   padding-left: var(--ds-space-surface-inset);
 }
 
-.appearance-setting-group > [data-slot="setting-row"] + [data-slot="setting-row"] {
+.appearance-setting-group
+  > [data-slot="setting-row"]
+  + [data-slot="setting-row"] {
   box-shadow: inset 0 var(--hairline-width) 0 var(--ds-color-fill-rest);
 }
 
-.appearance-setting-group > [data-slot="setting-toggle"] + [data-slot="setting-row"] {
+.appearance-setting-group
+  > [data-slot="setting-toggle"]
+  + [data-slot="setting-row"] {
   box-shadow: inset 0 var(--hairline-width) 0 var(--ds-color-fill-rest);
 }
 
 .appearance-theme-name-row {
-  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0
+    var(--ds-color-fill-rest);
 }
 
 .appearance-palette-editor {
@@ -431,7 +466,9 @@
   background: var(--ds-color-surface);
 }
 
-.appearance-profile-editor > [data-slot="setting-row"] + [data-slot="setting-row"] {
+.appearance-profile-editor
+  > [data-slot="setting-row"]
+  + [data-slot="setting-row"] {
   box-shadow: inset 0 var(--hairline-width) 0 var(--ds-color-fill-rest);
 }
 

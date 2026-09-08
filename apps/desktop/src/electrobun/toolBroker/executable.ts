@@ -11,11 +11,13 @@ function executable(path: string): boolean {
 }
 
 export function which(command: string): string | null {
-  if (command.includes("/") || command.includes("\\")) return executable(command) ? command : null;
+  if (command.includes("/") || command.includes("\\"))
+    return executable(command) ? command : null;
 
-  const extensions = process.platform === "win32" && !extname(command)
-    ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";")
-    : [""];
+  const extensions =
+    process.platform === "win32" && !extname(command)
+      ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";")
+      : [""];
   for (const directory of (process.env.PATH ?? "").split(delimiter)) {
     if (!directory) continue;
     for (const extension of extensions) {

@@ -1,11 +1,21 @@
+import { afterEach, describe, expect, test } from "bun:test";
+
 // @ts-nocheck
 import { useRef } from "react";
-import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, click, dom, mount, restoreDom, waitFor } from "./domTestHarness";
+
+import {
+  activateDom,
+  click,
+  dom,
+  mount,
+  restoreDom,
+  waitFor,
+} from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
-const { SelectionActions, SelectionToolbar } = await import("../src/session/SelectionActions");
+const { SelectionActions, SelectionToolbar } =
+  await import("../src/session/SelectionActions");
 
 afterEach(() => {
   dom.document.getSelection()?.removeAllRanges();
@@ -53,7 +63,7 @@ describe("SelectionActions", () => {
         onAdd={(text) => calls.push(["add", text])}
         onDetails={(text) => calls.push(["details", text])}
         onAsk={(text) => calls.push(["ask", text])}
-      />,
+      />
     );
 
     const toolbar = view.container.querySelector('[role="toolbar"]');
@@ -61,20 +71,27 @@ describe("SelectionActions", () => {
     // Some rendered suites intentionally install the key-echo translator globally; the action
     // order and callbacks are the stable contract in either localization mode.
     expect(actions).toHaveLength(3);
-    expect(["Add to chat", "selection.addToChat"]).toContain(actions[0].textContent?.trim());
-    expect(["More details", "selection.moreDetails"]).toContain(actions[1].textContent?.trim());
+    expect(["Add to chat", "selection.addToChat"]).toContain(
+      actions[0].textContent?.trim()
+    );
+    expect(["More details", "selection.moreDetails"]).toContain(
+      actions[1].textContent?.trim()
+    );
     expect(["Ask in side chat", "selection.askInSideChat"]).toContain(
-      actions[2].textContent?.trim(),
+      actions[2].textContent?.trim()
     );
     expect(toolbar.querySelectorAll('[data-slot="separator"]')).toHaveLength(2);
 
     actions[0].focus();
     toolbar.dispatchEvent(
-      new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      new dom.window.KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        bubbles: true,
+      })
     );
     expect(dom.document.activeElement).toBe(actions[1]);
     toolbar.dispatchEvent(
-      new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true }),
+      new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })
     );
     expect(dom.document.activeElement).toBe(actions[2]);
 
@@ -88,7 +105,9 @@ describe("SelectionActions", () => {
     activateDom();
     dom.window.localStorage.setItem("codetwo.language", "en");
     const calls = [];
-    const view = mount(<LiveSelectionFixture onAdd={(text) => calls.push(text)} />);
+    const view = mount(
+      <LiveSelectionFixture onAdd={(text) => calls.push(text)} />
+    );
     const selectedText = view.container.querySelector("div").firstChild;
     const range = dom.document.createRange();
     range.selectNodeContents(selectedText);
@@ -102,7 +121,9 @@ describe("SelectionActions", () => {
       const toolbar = dom.document.body.querySelector('[role="toolbar"]');
       expect(toolbar).not.toBeNull();
     });
-    const addButton = [...dom.document.body.querySelectorAll('[role="toolbar"] button')][0];
+    const addButton = [
+      ...dom.document.body.querySelectorAll('[role="toolbar"] button'),
+    ][0];
     click(addButton);
     expect(calls).toEqual(["Selected answer text"]);
 

@@ -51,7 +51,11 @@ describe("contextTone", () => {
 });
 
 describe("deriveBurnRate", () => {
-  const sample = (at: number, output: number, input = 0) => ({ at, input, output });
+  const sample = (at: number, output: number, input = 0) => ({
+    at,
+    input,
+    output,
+  });
 
   test("null with no samples or a single sample", () => {
     expect(deriveBurnRate([])).toBeNull();
@@ -65,29 +69,43 @@ describe("deriveBurnRate", () => {
 
   test("intermediate samples do not skew the endpoint rate", () => {
     expect(
-      deriveBurnRate([sample(0, 0), sample(MINUTE, 500), sample(4 * MINUTE, 400)]),
+      deriveBurnRate([
+        sample(0, 0),
+        sample(MINUTE, 500),
+        sample(4 * MINUTE, 400),
+      ])
     ).toBe(100);
   });
 
   test("null when the window spans less than a minute", () => {
     expect(deriveBurnRate([sample(0, 0), sample(30_000, 300)])).toBeNull();
-    expect(deriveBurnRate([sample(0, 0), sample(BURN_MIN_SPAN_MS - 1, 300)])).toBeNull();
+    expect(
+      deriveBurnRate([sample(0, 0), sample(BURN_MIN_SPAN_MS - 1, 300)])
+    ).toBeNull();
   });
 
   test("a span of exactly one minute qualifies", () => {
-    expect(deriveBurnRate([sample(0, 0), sample(BURN_MIN_SPAN_MS, 90)])).toBe(90);
+    expect(deriveBurnRate([sample(0, 0), sample(BURN_MIN_SPAN_MS, 90)])).toBe(
+      90
+    );
   });
 
   test("samples older than five minutes fall out of the window", () => {
     // The t=0 sample is 6 minutes before the newest — excluded, so the rate is measured
     // between t=2min (100) and t=6min (700): 600 tokens over 4 minutes.
     expect(
-      deriveBurnRate([sample(0, 0), sample(2 * MINUTE, 100), sample(6 * MINUTE, 700)]),
+      deriveBurnRate([
+        sample(0, 0),
+        sample(2 * MINUTE, 100),
+        sample(6 * MINUTE, 700),
+      ])
     ).toBe(150);
   });
 
   test("a sample exactly five minutes old is still inside the window", () => {
-    expect(deriveBurnRate([sample(0, 0), sample(BURN_WINDOW_MS, 500)])).toBe(100);
+    expect(deriveBurnRate([sample(0, 0), sample(BURN_WINDOW_MS, 500)])).toBe(
+      100
+    );
   });
 
   test("null when only one sample remains inside the window", () => {
@@ -99,7 +117,9 @@ describe("deriveBurnRate", () => {
   });
 
   test("null when the counter goes backwards (session reset)", () => {
-    expect(deriveBurnRate([sample(0, 500), sample(2 * MINUTE, 100)])).toBeNull();
+    expect(
+      deriveBurnRate([sample(0, 500), sample(2 * MINUTE, 100)])
+    ).toBeNull();
   });
 });
 

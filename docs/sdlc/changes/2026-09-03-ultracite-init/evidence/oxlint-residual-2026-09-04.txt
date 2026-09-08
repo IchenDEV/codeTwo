@@ -1,0 +1,24 @@
+timestamp=2026-09-04T08:50:00+00:00
+tsc=clean
+oxlint_errors≈4394 (was ≈9282 post-migration; ≈4657 after house offs + component codemod)
+
+cleared:
+  0 react/function-component-definition
+    - PascalCase arrow → function declaration codemod (~349)
+    - HOC unwrap: TurnCard, CanvasEditor, CompositeActionRow, ActivityOrb, ProviderIcon mark(), DesktopPetBridge
+
+strict-boolean-expressions:
+  ~666 → ~280 after oxlint-adapted scripts/codemod-strict-boolean.ts (~387 fixes)
+  remaining mostly nullable-string in `||` coalesce / multi-line JSX predicates
+  codemod hardened: parenthesize bang→|| expansions; skip exprs containing ||/&&
+
+top residual rules (approx):
+  280 typescript(strict-boolean-expressions)
+  171 typescript(no-unsafe-argument)
+  157 typescript(no-unsafe-type-assertion)
+  109 sonarjs(no-duplicate-string)
+  ... curly / unicorn / complexity / hooks exhaustive-deps
+
+notes:
+- Do not run full ultracite fix
+- Feishu template `||` span was corrupted once by mid-string rewrite; restored + skipped

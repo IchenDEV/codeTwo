@@ -1,14 +1,6 @@
 import { useState } from "react";
 
-import {
-  CircleAlert,
-  ExternalLink,
-  PackageCheck,
-  ShieldAlert,
-  ShieldCheck,
-  Trash2,
-} from "@/components/ui/icons";
-
+import { StatusBadge } from "@/components/business/status-badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,12 +13,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { StatusBadge } from "@/components/business/status-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { openExternal } from "../bridge";
+import {
+  CircleAlert,
+  ExternalLink,
+  PackageCheck,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+} from "@/components/ui/icons";
+import { Spinner } from "@/components/ui/spinner";
 
+import { openExternal } from "../bridge";
 import type {
   PluginManagerBundle,
   PluginManagerLabels,
@@ -59,7 +58,7 @@ export function BundleAdministration({
   const uninstallBusy = busyAction === uninstallKey;
   const repositoryUrl = (() => {
     const repository = bundle.repository?.trim();
-    if (!repository) return null;
+    if (repository == null || repository === "") return null;
     try {
       const url = new URL(repository);
       return url.protocol === "https:" || url.protocol === "http:"
@@ -84,12 +83,12 @@ export function BundleAdministration({
       <section
         data-bundle-administration
         aria-labelledby={`bundle-management-${bundle.id}`}
-        className="flex flex-col gap-4 rounded-module bg-fill-quiet p-3"
+        className="rounded-module bg-fill-quiet flex flex-col gap-4 p-3"
       >
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2">
             <PackageCheck
-              className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+              className="text-muted-foreground mt-0.5 size-4 shrink-0"
               aria-hidden="true"
             />
             <div className="min-w-0">
@@ -99,8 +98,8 @@ export function BundleAdministration({
               >
                 {labels.bundleManagement}
               </h3>
-              <p className="mt-1 break-words text-callout text-muted-foreground">
-                {bundle.repository || labels.installedBundle}
+              <p className="text-callout text-muted-foreground mt-1 break-words">
+                {bundle.repository ?? labels.installedBundle}
               </p>
             </div>
           </div>
@@ -118,23 +117,25 @@ export function BundleAdministration({
           )}
         </div>
 
-        {!userScope ? (
+        {userScope ? (
+          bundle.requiresTrust && !bundle.trusted ? (
+            <p className="text-metadata text-muted-foreground flex items-start gap-2">
+              <ShieldAlert
+                className="text-warning mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <span>{labels.trustRequired}</span>
+            </p>
+          ) : null
+        ) : (
           <p className="text-metadata text-muted-foreground">
             {labels.bundleManagementUserOnly}
           </p>
-        ) : bundle.requiresTrust && !bundle.trusted ? (
-          <p className="flex items-start gap-2 text-metadata text-muted-foreground">
-            <ShieldAlert
-              className="mt-0.5 size-4 shrink-0 text-warning"
-              aria-hidden="true"
-            />
-            <span>{labels.trustRequired}</span>
-          </p>
-        ) : null}
+        )}
 
         {bundle.contributions.length ? (
           <div className="flex flex-col gap-2">
-            <h4 className="text-metadata font-medium text-muted-foreground">
+            <h4 className="text-metadata text-muted-foreground font-medium">
               {labels.contributions}
             </h4>
             <div className="flex flex-wrap gap-2">
@@ -150,7 +151,7 @@ export function BundleAdministration({
 
         {bundle.diagnostics.length ? (
           <div className="flex flex-col gap-2">
-            <h4 className="text-metadata font-medium text-muted-foreground">
+            <h4 className="text-metadata text-muted-foreground font-medium">
               {labels.diagnostics}
             </h4>
             <ul className="flex flex-col gap-2">
@@ -159,8 +160,8 @@ export function BundleAdministration({
                   key={`${diagnostic.component ?? "bundle"}:${index}`}
                   className={
                     diagnostic.level === "error"
-                      ? "flex items-start gap-2 text-body text-destructive"
-                      : "flex items-start gap-2 text-body text-muted-foreground"
+                      ? "text-body text-destructive flex items-start gap-2"
+                      : "text-body text-muted-foreground flex items-start gap-2"
                   }
                 >
                   <CircleAlert
@@ -169,8 +170,9 @@ export function BundleAdministration({
                   />
                   <span>
                     {diagnostic.message}
-                    {diagnostic.component ? (
-                      <span className="block text-callout">
+                    {diagnostic.component != null &&
+                    diagnostic.component !== "" ? (
+                      <span className="text-callout block">
                         {diagnostic.component}
                       </span>
                     ) : null}
@@ -184,7 +186,7 @@ export function BundleAdministration({
         {userScope ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              {repositoryUrl ? (
+              {repositoryUrl != null && repositoryUrl !== "" ? (
                 <Button
                   type="button"
                   size="compact"
@@ -248,7 +250,7 @@ export function BundleAdministration({
               id={`keep-plugin-data-${bundle.id}`}
               checked={keepData}
               disabled={uninstallBusy}
-              onCheckedChange={(checked) => setKeepData(checked === true)}
+              onCheckedChange={(checked) => setKeepData(checked)}
             />
             <FieldLabel htmlFor={`keep-plugin-data-${bundle.id}`}>
               {labels.keepPluginData}
@@ -266,9 +268,7 @@ export function BundleAdministration({
                 void confirmUninstall();
               }}
             >
-              {uninstallBusy ? (
-                <Spinner data-icon="inline-start" />
-              ) : null}
+              {uninstallBusy ? <Spinner data-icon="inline-start" /> : null}
               {labels.uninstall}
             </AlertDialogAction>
           </AlertDialogFooter>

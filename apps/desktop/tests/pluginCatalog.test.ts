@@ -91,24 +91,35 @@ function bundleRecord(overrides = {}) {
 
 describe("unified plugin catalog adapter", () => {
   test("keeps the browser preview aligned with Docker's static command manifest", async () => {
-    const preview = (await listPlugins()).find((plugin) => plugin.id === "docker-tools-preview");
+    const preview = (await listPlugins()).find(
+      (plugin) => plugin.id === "docker-tools-preview"
+    );
     const manifest = await Bun.file(
-      new URL("../../../packs/docker/plugin.json", import.meta.url),
+      new URL("../../../packs/docker/plugin.json", import.meta.url)
     ).json();
-    const declared = manifest.extensions["dev.codetwo"].commands.map(({ id, title }) => ({
-      id,
-      title,
-    }));
+    const declared = manifest.extensions["dev.codetwo"].commands.map(
+      ({ id, title }) => ({
+        id,
+        title,
+      })
+    );
 
     expect(preview?.standard_version).toBe("1.2.0");
-    expect(preview?.counts).toMatchObject({ commands: 0, runtime_commands: declared.length });
-    expect(preview?.runtime_commands?.map(({ id, title }) => ({ id, title }))).toEqual(declared);
+    expect(preview?.counts).toMatchObject({
+      commands: 0,
+      runtime_commands: declared.length,
+    });
+    expect(
+      preview?.runtime_commands?.map(({ id, title }) => ({ id, title }))
+    ).toEqual(declared);
   });
 
   test("normalizes project paths and maps the serde scope boundary", () => {
     expect(normalizePluginProjectPath("/tmp/demo///")).toBe("/tmp/demo");
     expect(normalizePluginProjectPath("/")).toBe("/");
-    expect(toManagedPluginScope({ kind: "project", projectPath: "/tmp/demo/" })).toEqual({
+    expect(
+      toManagedPluginScope({ kind: "project", projectPath: "/tmp/demo/" })
+    ).toEqual({
       kind: "project",
       projectPath: "/tmp/demo",
     });
@@ -167,37 +178,78 @@ describe("unified plugin catalog adapter", () => {
       scope: "user",
       counts: { runtime: 1, runtime_commands: 1, skills: 2, connectors: 1 },
       scaffolds: [],
-      extension_components: [{ kind: "lsp", name: "rust", path: "plugin.json#extensions.dev.codetwo.languageServers", status: "ready" }],
-      runtime_commands: [{
-        id: "review.run",
-        title: "Review workspace",
-        description: "Review this workspace.",
-        argsSchema: null,
-      }],
-      connector_contributions: [{
-        id: "workspace",
-        provider: "test-chat",
-        command: "review.run",
-        capabilities: ["conversations" as const],
-      }],
+      extension_components: [
+        {
+          kind: "lsp",
+          name: "rust",
+          path: "plugin.json#extensions.dev.codetwo.languageServers",
+          status: "ready",
+        },
+      ],
+      runtime_commands: [
+        {
+          id: "review.run",
+          title: "Review workspace",
+          description: "Review this workspace.",
+          argsSchema: null,
+        },
+      ],
+      connector_contributions: [
+        {
+          id: "workspace",
+          provider: "test-chat",
+          command: "review.run",
+          capabilities: ["conversations" as const],
+        },
+      ],
       diagnostics: [],
     });
     const model = buildPluginManagerCatalog({
       catalog,
       bundles: [bundle],
-      skills: [{ id: "review-skill", name: "Review", description: "Review", kind: "agent_skill", source: "Plugin · Review Tools", icon: null }],
-      market: [{ id: "browser-tool", name: "Browser tool", description: "Browser", author: "C2", tags: ["mcp"], icon: null, kind: "mcp", installed: false }],
+      skills: [
+        {
+          id: "review-skill",
+          name: "Review",
+          description: "Review",
+          kind: "agent_skill",
+          source: "Plugin · Review Tools",
+          icon: null,
+        },
+      ],
+      market: [
+        {
+          id: "browser-tool",
+          name: "Browser tool",
+          description: "Browser",
+          author: "C2",
+          tags: ["mcp"],
+          icon: null,
+          kind: "mcp",
+          installed: false,
+        },
+      ],
       scope: { kind: "user" },
     });
 
-    expect(model.plugins.map((plugin) => [plugin.id, plugin.source])).toContainEqual(["browser", "host"]);
-    expect(model.plugins.find((plugin) => plugin.id === "kernel")).toBeUndefined();
-    expect(model.plugins.map((plugin) => [plugin.id, plugin.source])).toContainEqual(["bundle:review", "bundle"]);
-    expect(model.plugins.find((plugin) => plugin.id === "browser")).toMatchObject({
+    expect(
+      model.plugins.map((plugin) => [plugin.id, plugin.source])
+    ).toContainEqual(["browser", "host"]);
+    expect(
+      model.plugins.find((plugin) => plugin.id === "kernel")
+    ).toBeUndefined();
+    expect(
+      model.plugins.map((plugin) => [plugin.id, plugin.source])
+    ).toContainEqual(["bundle:review", "bundle"]);
+    expect(
+      model.plugins.find((plugin) => plugin.id === "browser")
+    ).toMatchObject({
       commands: ["browser.navigate"],
       services: ["browser"],
     });
-    expect(model.plugins.find((plugin) => plugin.id === "bundle:review")?.bundle).toMatchObject({
+    expect(
+      model.plugins.find((plugin) => plugin.id === "bundle:review")?.bundle
+    ).toMatchObject({
       id: "review",
       repository: "https://example.test/review",
       trusted: true,
@@ -210,33 +262,62 @@ describe("unified plugin catalog adapter", () => {
         { id: "connectors", label: "Connectors", count: 1 },
       ],
     });
-    expect(model.plugins.find((plugin) => plugin.id === "bundle:review")?.commands)
-      .toEqual(["review.run"]);
-    expect(model.components.find((component) => component.id === "plugin-manager.page")).toBeUndefined();
-    expect(model.components.find((component) => component.id === "device-sync.settings")).toMatchObject({
+    expect(
+      model.plugins.find((plugin) => plugin.id === "bundle:review")?.commands
+    ).toEqual(["review.run"]);
+    expect(
+      model.components.find(
+        (component) => component.id === "plugin-manager.page"
+      )
+    ).toBeUndefined();
+    expect(
+      model.components.find(
+        (component) => component.id === "device-sync.settings"
+      )
+    ).toMatchObject({
       pluginId: "device-sync",
       kind: "settingsSection",
       slot: "settings.sections",
     });
-    expect(model.components.find((component) => component.id === "bundle:review:extension:lsp:rust")?.slot).toBe("plugin.json#extensions.dev.codetwo.languageServers");
-    expect(model.components.some((component) => component.kind === "connector")).toBe(false);
-    expect(model.components.find((component) => component.id === "skill:review-skill")).toMatchObject({
+    expect(
+      model.components.find(
+        (component) => component.id === "bundle:review:extension:lsp:rust"
+      )?.slot
+    ).toBe("plugin.json#extensions.dev.codetwo.languageServers");
+    expect(
+      model.components.some((component) => component.kind === "connector")
+    ).toBe(false);
+    expect(
+      model.components.find(
+        (component) => component.id === "skill:review-skill"
+      )
+    ).toMatchObject({
       pluginId: "bundle:review",
       policyPluginId: "skills",
       manageable: true,
       supportedScopes: ["user", "project"],
     });
-    expect(model.marketplaceItems[0]).toMatchObject({ id: "market:browser-tool", installable: true });
+    expect(model.marketplaceItems[0]).toMatchObject({
+      id: "market:browser-tool",
+      installable: true,
+    });
   });
 
   test("inherits component policy independently before applying the project plugin gate", () => {
     const userCatalog = {
       ...emptyCatalog,
-      plugins: [entry("browser", { enabled: false, components: { "browser.dock": "enabled" } })],
+      plugins: [
+        entry("browser", {
+          enabled: false,
+          components: { "browser.dock": "enabled" },
+        }),
+      ],
     };
     const projectCatalog = {
       ...emptyCatalog,
-      plugins: [entry("browser", { state: "enabled", enabled: true, components: {} })],
+      plugins: [
+        entry("browser", { state: "enabled", enabled: true, components: {} }),
+      ],
     };
     const model = buildPluginManagerCatalog({
       catalog: projectCatalog,
@@ -268,18 +349,31 @@ describe("unified plugin catalog adapter", () => {
       scope: { kind: "project", projectPath: "/tmp/demo" },
     });
 
-    expect(model.components.find((component) => component.id === "browser.dock")?.state).toMatchObject({
+    expect(
+      model.components.find((component) => component.id === "browser.dock")
+        ?.state
+    ).toMatchObject({
       effectiveEnabled: true,
       override: "inherit",
     });
-    expect(pluginManagerComponentEnabled(model.components, "browser.dock")).toBe(true);
-    expect(pluginManagerComponentEnabled(model.components, "browser.dock", false)).toBe(false);
+    expect(
+      pluginManagerComponentEnabled(model.components, "browser.dock")
+    ).toBe(true);
+    expect(
+      pluginManagerComponentEnabled(model.components, "browser.dock", false)
+    ).toBe(false);
   });
 
   test("fails every renderer component closed until the active catalog is ready", () => {
-    expect(pluginManagerComponentEnabled([], "browser.dock", false)).toBe(false);
-    expect(pluginManagerComponentEnabled([], "voice.composer", false)).toBe(false);
-    expect(pluginManagerComponentEnabled([], "plugin-manager.page", false)).toBe(false);
+    expect(pluginManagerComponentEnabled([], "browser.dock", false)).toBe(
+      false
+    );
+    expect(pluginManagerComponentEnabled([], "voice.composer", false)).toBe(
+      false
+    );
+    expect(
+      pluginManagerComponentEnabled([], "plugin-manager.page", false)
+    ).toBe(false);
   });
 
   test("does not misrepresent bundle install provenance as project-local lifecycle support", () => {
@@ -294,9 +388,16 @@ describe("unified plugin catalog adapter", () => {
       enabled: true,
       trusted: true,
       scope: "local",
-        counts: {},
+      counts: {},
       scaffolds: [],
-      extension_components: [{ kind: "hook", name: "session", path: "hooks.json", status: "unsupported" }],
+      extension_components: [
+        {
+          kind: "hook",
+          name: "session",
+          path: "hooks.json",
+          status: "unsupported",
+        },
+      ],
       diagnostics: [],
     });
     const model = buildPluginManagerCatalog({
@@ -327,16 +428,25 @@ describe("unified plugin catalog adapter", () => {
       scope: "user",
       counts: { runtime: 1 },
       scaffolds: [],
-      extension_components: [{ kind: "lsp", name: "rust", path: "plugin.json#extensions.dev.codetwo.languageServers", status: "ready" }],
-      ui_contributions: [{
-        id: "review",
-        slot: "session.header",
-        label: "Review",
-        description: "Review this workspace.",
-        command: "review.run",
-        input: null,
-        order: 0,
-      }],
+      extension_components: [
+        {
+          kind: "lsp",
+          name: "rust",
+          path: "plugin.json#extensions.dev.codetwo.languageServers",
+          status: "ready",
+        },
+      ],
+      ui_contributions: [
+        {
+          id: "review",
+          slot: "session.header",
+          label: "Review",
+          description: "Review this workspace.",
+          command: "review.run",
+          input: null,
+          order: 0,
+        },
+      ],
       diagnostics: [],
     });
     const metadata = {
@@ -351,42 +461,50 @@ describe("unified plugin catalog adapter", () => {
     const uiId = "bundle:review:ui:review";
     const userCatalog = {
       ...emptyCatalog,
-      plugins: [entry("bundle:review", {
-        metadata,
-        state: "enabled",
-        enabled: true,
-        components: { [uiId]: "enabled" },
-      })],
+      plugins: [
+        entry("bundle:review", {
+          metadata,
+          state: "enabled",
+          enabled: true,
+          components: { [uiId]: "enabled" },
+        }),
+      ],
     };
     const projectCatalog = {
       ...emptyCatalog,
-      plugins: [entry("bundle:review", {
-        metadata,
-        state: "disabled",
-        enabled: false,
-        running: false,
-        status: "disposed",
-        components: { [uiId]: "disabled" },
-      })],
+      plugins: [
+        entry("bundle:review", {
+          metadata,
+          state: "disabled",
+          enabled: false,
+          running: false,
+          status: "disposed",
+          components: { [uiId]: "disabled" },
+        }),
+      ],
     };
 
     const model = buildPluginManagerCatalog({
       catalog: projectCatalog,
       userCatalog,
       bundles: [bundle],
-      skills: [{
-        id: "review-skill",
-        name: "Review",
-        description: "Review",
-        kind: "agent_skill",
-        source: "Plugin · Review Tools",
-        icon: null,
-      }],
+      skills: [
+        {
+          id: "review-skill",
+          name: "Review",
+          description: "Review",
+          kind: "agent_skill",
+          source: "Plugin · Review Tools",
+          icon: null,
+        },
+      ],
       market: [],
       scope: { kind: "project", projectPath: "/tmp/demo" },
     });
 
-    const bundlePlugins = model.plugins.filter((plugin) => plugin.id === "bundle:review");
+    const bundlePlugins = model.plugins.filter(
+      (plugin) => plugin.id === "bundle:review"
+    );
     expect(bundlePlugins).toHaveLength(1);
     expect(bundlePlugins[0]).toMatchObject({
       name: "Review Tools",
@@ -394,20 +512,36 @@ describe("unified plugin catalog adapter", () => {
       author: "C2",
       sourceLabel: "GitHub · c2/review",
       supportedScopes: ["user", "project"],
-      state: { effectiveEnabled: false, override: "disabled", status: "disabled" },
+      state: {
+        effectiveEnabled: false,
+        override: "disabled",
+        status: "disabled",
+      },
       bundle: { id: "review", requiresTrust: true, runtimeManaged: true },
     });
-    expect(model.components.find((component) => component.id === extensionId)).toMatchObject({
+    expect(
+      model.components.find((component) => component.id === extensionId)
+    ).toMatchObject({
       manageable: false,
       supportedScopes: ["user"],
       state: { effectiveEnabled: true, status: "active" },
     });
-    expect(model.components.find((component) => component.id === uiId)).toMatchObject({
+    expect(
+      model.components.find((component) => component.id === uiId)
+    ).toMatchObject({
       manageable: true,
       supportedScopes: ["user", "project"],
-      state: { effectiveEnabled: false, override: "disabled", status: "disabled" },
+      state: {
+        effectiveEnabled: false,
+        override: "disabled",
+        status: "disabled",
+      },
     });
-    expect(model.components.find((component) => component.id === "skill:review-skill")).toMatchObject({
+    expect(
+      model.components.find(
+        (component) => component.id === "skill:review-skill"
+      )
+    ).toMatchObject({
       pluginId: "bundle:review",
       manageable: false,
       supportedScopes: ["user"],
@@ -471,8 +605,8 @@ describe("unified plugin catalog adapter", () => {
 
     expect(
       model.components.find(
-        (component) => component.id === "skill:release-review",
-      )?.skill,
+        (component) => component.id === "skill:release-review"
+      )?.skill
     ).toEqual({ id: "release-review", removable: true });
     expect(model.marketplaceItems[0]).toMatchObject({
       id: "marketplace:local-tools:review-tools",

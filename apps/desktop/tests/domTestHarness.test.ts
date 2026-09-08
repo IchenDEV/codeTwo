@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+
 import { dom } from "./domTestHarness";
 
 test("the shared DOM harness exposes the Web Animations query used by ScrollArea", () => {

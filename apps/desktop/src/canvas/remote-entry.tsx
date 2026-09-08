@@ -1,8 +1,11 @@
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 import { CanvasEditor } from "./CanvasEditor";
-import { deriveCanvasManifest, type CanvasManifest } from "./manifest";
-import { DEFAULT_EXPORT_BUDGET, exportCanvasPng, type CanvasExportBudget, type CanvasPngExport } from "./export";
+import { DEFAULT_EXPORT_BUDGET, exportCanvasPng } from "./export";
+import type { CanvasExportBudget, CanvasPngExport } from "./export";
+import { deriveCanvasManifest } from "./manifest";
+import type { CanvasManifest } from "./manifest";
 import { rehydrateEnvelope } from "./serialize";
 import type {
   CanvasEditorHandle,
@@ -18,7 +21,10 @@ declare global {
   }
 }
 
-export interface CanvasIslandMountOptions extends Omit<CanvasEditorProps, "value"> {
+export interface CanvasIslandMountOptions extends Omit<
+  CanvasEditorProps,
+  "value"
+> {
   value?: CanvasEnvelope | null;
   freezePolicy?: CanvasFreezePolicy;
 }
@@ -27,7 +33,10 @@ const roots = new WeakMap<HTMLElement, Root>();
 const propsByRoot = new WeakMap<HTMLElement, CanvasIslandMountOptions>();
 const handlesByRoot = new WeakMap<HTMLElement, CanvasEditorHandle>();
 
-export type CanvasIslandMediaCallbacks = Pick<CanvasIslandMountOptions, "mediaNormalizer" | "assetResolver">;
+export type CanvasIslandMediaCallbacks = Pick<
+  CanvasIslandMountOptions,
+  "mediaNormalizer" | "assetResolver"
+>;
 
 export type CanvasFreezePolicy = "required" | "structure_only";
 
@@ -69,10 +78,15 @@ function render(root: HTMLElement, options: CanvasIslandMountOptions): void {
   const reactRoot = roots.get(root) ?? createRoot(root);
   roots.set(root, reactRoot);
   propsByRoot.set(root, options);
-  reactRoot.render(<CanvasEditor ref={(handle) => setHandle(root, handle)} {...options} />);
+  reactRoot.render(
+    <CanvasEditor ref={(handle) => setHandle(root, handle)} {...options} />
+  );
 }
 
-export function mountCanvasIsland(root: HTMLElement, options: CanvasIslandMountOptions = {}): () => void {
+export function mountCanvasIsland(
+  root: HTMLElement,
+  options: CanvasIslandMountOptions = {}
+): () => void {
   render(root, options);
   return () => unmountCanvasIsland(root);
 }
@@ -85,7 +99,10 @@ export function unmountCanvasIsland(root: HTMLElement): void {
 }
 
 /** Caller-driven reconnect reset: the new envelope is kept only in the mounted page memory. */
-export function resetCanvasIsland(root: HTMLElement, envelope: CanvasEnvelope | null): void {
+export function resetCanvasIsland(
+  root: HTMLElement,
+  envelope: CanvasEnvelope | null
+): void {
   const current = propsByRoot.get(root);
   if (!current) return;
   render(root, { ...current, value: envelope });
@@ -95,7 +112,10 @@ export function resetCanvasIsland(root: HTMLElement, envelope: CanvasEnvelope | 
  * Updates the host-owned media seams without persisting anything in browser storage. The
  * normalizer is used for new paste/drop/file input; the resolver is used to reload opaque refs.
  */
-export function setCanvasIslandMediaCallbacks(root: HTMLElement, callbacks: CanvasIslandMediaCallbacks): void {
+export function setCanvasIslandMediaCallbacks(
+  root: HTMLElement,
+  callbacks: CanvasIslandMediaCallbacks
+): void {
   const current = propsByRoot.get(root);
   if (!current) return;
   render(root, { ...current, ...callbacks });
@@ -106,28 +126,32 @@ export function setCanvasIslandMediaCallbacks(root: HTMLElement, callbacks: Canv
  * any binary output.  The returned object contains no live `BinaryFiles` or browser persistence
  * handles; asset bytes remain in the caller's page-memory/REST boundary.
  */
-export function prepareCanvasIslandDraft(root: HTMLElement): CanvasIslandDraftResult {
+export function prepareCanvasIslandDraft(
+  root: HTMLElement
+): CanvasIslandDraftResult {
   const handle = handlesByRoot.get(root);
   if (!handle) throw new Error("Canvas island is not mounted");
   const sourceEnvelope = handle.getEnvelope();
-  const envelope = sourceEnvelope ?? {
-    engine: "@excalidraw/excalidraw",
-    engineVersion: "0.18.1",
-    schemaVersion: 1,
-    revision: 0,
-    theme: "light",
-    elements: [],
-    appState: {
-      viewBackgroundColor: "white",
-      scrollX: 0,
-      scrollY: 0,
-      zoom: 1,
-      gridSize: 20,
-      gridStep: 5,
-      viewModeEnabled: false,
-    },
-    assetRefs: [],
-  } satisfies CanvasEnvelope;
+  const envelope =
+    sourceEnvelope ??
+    ({
+      engine: "@excalidraw/excalidraw",
+      engineVersion: "0.18.1",
+      schemaVersion: 1,
+      revision: 0,
+      theme: "light",
+      elements: [],
+      appState: {
+        viewBackgroundColor: "white",
+        scrollX: 0,
+        scrollY: 0,
+        zoom: 1,
+        gridSize: 20,
+        gridStep: 5,
+        viewModeEnabled: false,
+      },
+      assetRefs: [],
+    } satisfies CanvasEnvelope);
   return {
     envelope,
     manifest: deriveCanvasManifest(envelope.elements),
@@ -161,45 +185,60 @@ function snapshotFromHandle(handle: CanvasEditorHandle): CanvasSceneSnapshot {
  */
 export async function prepareCanvasIslandFreeze(
   root: HTMLElement,
-  options: CanvasIslandPrepareFreezeOptions = {},
+  options: CanvasIslandPrepareFreezeOptions = {}
 ): Promise<CanvasIslandFreezeResult> {
   const handle = handlesByRoot.get(root);
   if (!handle) throw new Error("Canvas island is not mounted");
   const snapshot = snapshotFromHandle(handle);
   const sourceEnvelope = handle.getEnvelope();
-  const envelope = sourceEnvelope ?? {
-    engine: "@excalidraw/excalidraw",
-    engineVersion: "0.18.1",
-    schemaVersion: 1,
-    revision: 0,
-    theme: "light",
-    elements: snapshot.elements,
-    appState: {
-      viewBackgroundColor: "white",
-      scrollX: 0,
-      scrollY: 0,
-      zoom: 1,
-      gridSize: 20,
-      gridStep: 5,
-      viewModeEnabled: false,
-    },
-    assetRefs: [],
-  } satisfies CanvasEnvelope;
+  const envelope =
+    sourceEnvelope ??
+    ({
+      engine: "@excalidraw/excalidraw",
+      engineVersion: "0.18.1",
+      schemaVersion: 1,
+      revision: 0,
+      theme: "light",
+      elements: snapshot.elements,
+      appState: {
+        viewBackgroundColor: "white",
+        scrollX: 0,
+        scrollY: 0,
+        zoom: 1,
+        gridSize: 20,
+        gridStep: 5,
+        viewModeEnabled: false,
+      },
+      assetRefs: [],
+    } satisfies CanvasEnvelope);
   const mountedResolver = propsByRoot.get(root)?.assetResolver;
   const resolver = options.assetResolver ?? mountedResolver;
-  const suppliedAssets = options.assets ?? (resolver
-    ? (await Promise.all(envelope.assetRefs.map((asset) => resolver(asset)))).filter((asset): asset is NormalizedStaticAsset => Boolean(asset))
-    : []);
-  const hydrated = suppliedAssets.length > 0
-    ? await rehydrateEnvelope(envelope, suppliedAssets)
-    : snapshot;
+  const suppliedAssets =
+    options.assets ??
+    (resolver
+      ? (
+          await Promise.all(
+            envelope.assetRefs.map(async (asset) => await resolver(asset))
+          )
+        ).filter((asset): asset is NormalizedStaticAsset => Boolean(asset))
+      : []);
+  const hydrated =
+    suppliedAssets.length > 0
+      ? await rehydrateEnvelope(envelope, suppliedAssets)
+      : snapshot;
   const exportBudget = { ...DEFAULT_EXPORT_BUDGET, ...options.budget };
-  const pixelPolicy = options.policy ?? propsByRoot.get(root)?.freezePolicy ?? "required";
+  const pixelPolicy =
+    options.policy ?? propsByRoot.get(root)?.freezePolicy ?? "required";
   const freezeEnvelope = sourceEnvelope ?? envelope;
   return {
     envelope: freezeEnvelope,
     manifest: deriveCanvasManifest(freezeEnvelope.elements),
-    exports: await exportCanvasPng(freezeEnvelope.elements, hydrated.appState, hydrated.files, exportBudget),
+    exports: await exportCanvasPng(
+      freezeEnvelope.elements,
+      hydrated.appState,
+      hydrated.files,
+      exportBudget
+    ),
     pixelPolicy,
     theme: freezeEnvelope.theme,
   };

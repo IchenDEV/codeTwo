@@ -20,10 +20,22 @@
   --canvas-ui-muted: var(--ds-color-text-muted, var(--canvas-fallback-muted));
   --canvas-ui-primary: var(--ds-color-primary, var(--canvas-fallback-primary));
   --canvas-ui-focus: var(--ds-color-focus, var(--canvas-fallback-focus));
-  --canvas-ui-fill-rest: var(--ds-color-fill-rest, var(--canvas-fallback-fill-rest));
-  --canvas-ui-fill-hover: var(--ds-color-fill-hover, var(--canvas-fallback-fill-hover));
-  --canvas-ui-primary-text: var(--ds-color-primary-text, var(--canvas-fallback-primary-text));
-  --canvas-ui-destructive: var(--ds-color-destructive, var(--canvas-fallback-destructive));
+  --canvas-ui-fill-rest: var(
+    --ds-color-fill-rest,
+    var(--canvas-fallback-fill-rest)
+  );
+  --canvas-ui-fill-hover: var(
+    --ds-color-fill-hover,
+    var(--canvas-fallback-fill-hover)
+  );
+  --canvas-ui-primary-text: var(
+    --ds-color-primary-text,
+    var(--canvas-fallback-primary-text)
+  );
+  --canvas-ui-destructive: var(
+    --ds-color-destructive,
+    var(--canvas-fallback-destructive)
+  );
   --canvas-radius-module: var(--ds-radius-module, 16px);
   --canvas-radius-control: var(--ds-radius-control, 12px);
   --canvas-button-radius: var(--ds-button-radius, 12px);

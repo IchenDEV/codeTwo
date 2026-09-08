@@ -1,6 +1,14 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+
+import {
+  activateDom,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { TurnCard } = await import("../src/session/TurnCard");
@@ -18,7 +26,7 @@ afterEach(() => {
 function disableCanvasDrawing(): void {
   // The suite only verifies the rendered activity contract. Other Canvas tests install a partial
   // 2D context mock, so make the third-party renderer take its supported no-context path here.
-  const getContext = dom.HTMLCanvasElement.prototype.getContext;
+  const { getContext } = dom.HTMLCanvasElement.prototype;
   dom.HTMLCanvasElement.prototype.getContext = () => null;
   restoreCanvasContext = () => {
     dom.HTMLCanvasElement.prototype.getContext = getContext;
@@ -54,7 +62,7 @@ describe("TurnCard rendered activity", () => {
 
     expect(status?.getAttribute("aria-live")).toBe("polite");
     expect(orb?.getAttribute("aria-hidden")).toBe("true");
-    expect(orb?.getAttribute("data-activity-state")).toBe("working");
+    expect(orb?.dataset.activityState).toBe("working");
     expect(orb?.getAttribute("aria-label")).toBe("Working…");
     expect(orb?.style.width).toBe("20px");
     expect(status?.textContent?.trim().length).toBeGreaterThan(0);
@@ -64,10 +72,12 @@ describe("TurnCard rendered activity", () => {
   test("switches the orb to solving when reasoning has started", () => {
     activateDom();
     disableCanvasDrawing();
-    const rendered = mount(<TurnCard turn={runningTurn(["Checking constraints"])} />);
+    const rendered = mount(
+      <TurnCard turn={runningTurn(["Checking constraints"])} />
+    );
 
     const orb = rendered.container.querySelector('[role="status"] canvas');
-    expect(orb?.getAttribute("data-activity-state")).toBe("solving");
+    expect(orb?.dataset.activityState).toBe("solving");
     expect(orb?.getAttribute("aria-label")).toBe("Solving…");
     rendered.unmount();
   });
@@ -85,13 +95,18 @@ describe("TurnCard rendered activity", () => {
             queuePosition: 2,
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    expect(rendered.container.querySelector("article")?.getAttribute("aria-busy")).toBe("false");
+    expect(
+      rendered.container.querySelector("article")?.getAttribute("aria-busy")
+    ).toBe("false");
     expect(rendered.container.querySelector('[role="status"]')).toBeNull();
     expect(rendered.container.textContent).toContain("queued #2");
-    expect(rendered.container.querySelector('[data-slot="status-badge"]')?.getAttribute("data-tone")).toBe("neutral");
+    expect(
+      rendered.container.querySelector('[data-slot="status-badge"]')?.dataset
+        .tone
+    ).toBe("neutral");
     rendered.unmount();
   });
 
@@ -100,12 +115,16 @@ describe("TurnCard rendered activity", () => {
     disableCanvasDrawing();
     const rendered = mount(
       <I18nProvider>
-        <TurnCard turn={{ ...runningTurn(), endedAt: 2, error: "Provider failed" }} />
-      </I18nProvider>,
+        <TurnCard
+          turn={{ ...runningTurn(), endedAt: 2, error: "Provider failed" }}
+        />
+      </I18nProvider>
     );
 
-    const badge = rendered.container.querySelector('[data-slot="status-badge"]');
-    expect(badge?.getAttribute("data-tone")).toBe("destructive");
+    const badge = rendered.container.querySelector(
+      '[data-slot="status-badge"]'
+    );
+    expect(badge?.dataset.tone).toBe("destructive");
     expect(badge?.textContent).toContain("failed");
     rendered.unmount();
   });
@@ -127,7 +146,7 @@ describe("TurnCard rendered activity", () => {
             task_name: "accessibility_review",
             message: "Check the status announcements.",
           },
-          startedAt: Date.now() - 8_000,
+          startedAt: Date.now() - 8000,
         },
         {
           id: "agent-complete",
@@ -139,7 +158,7 @@ describe("TurnCard rendered activity", () => {
             task_name: "narrow_layout",
             message: "Verify the narrow transcript layout.",
           },
-          startedAt: 1_000,
+          startedAt: 1000,
           endedAt: 17_000,
         },
         {
@@ -152,10 +171,15 @@ describe("TurnCard rendered activity", () => {
             task_name: "renderer_tests",
             message: "Run renderer tests.",
           },
-          startedAt: 2_000,
+          startedAt: 2000,
           endedAt: 13_000,
         },
-        { id: "read-1", title: "Read workspace", status: "completed", kind: "read" },
+        {
+          id: "read-1",
+          title: "Read workspace",
+          status: "completed",
+          kind: "read",
+        },
       ],
       content: [
         { kind: "text", text: "Delegated checks are in progress." },
@@ -168,13 +192,13 @@ describe("TurnCard rendered activity", () => {
     const rendered = mount(
       <I18nProvider>
         <TurnCard turn={turn} />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
     const roster = rendered.container.querySelector("[data-agent-roster]");
-    const rosterTrigger = [...rendered.container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("agents (3)"),
-    );
+    const rosterTrigger = [
+      ...rendered.container.querySelectorAll("button"),
+    ].find((button) => button.textContent?.includes("agents (3)"));
 
     expect(rosterTrigger?.getAttribute("aria-expanded")).toBe("true");
     expect(roster?.textContent).toContain("Active1");
@@ -185,9 +209,15 @@ describe("TurnCard rendered activity", () => {
     expect(roster?.textContent).toContain("completed16s");
     expect(roster?.textContent).toContain("Renderer Tests");
     expect(roster?.textContent).toContain("failed11s");
-    expect(rendered.container.querySelector('[data-tool-call="read-1"]')).not.toBeNull();
-    expect(rendered.container.querySelector('[data-tool-call="agent-active"]')).toBeNull();
-    expect(rendered.container.querySelectorAll("[data-agent-row]")).toHaveLength(3);
+    expect(
+      rendered.container.querySelector('[data-tool-call="read-1"]')
+    ).not.toBeNull();
+    expect(
+      rendered.container.querySelector('[data-tool-call="agent-active"]')
+    ).toBeNull();
+    expect(
+      rendered.container.querySelectorAll("[data-agent-row]")
+    ).toHaveLength(3);
     rendered.unmount();
   });
 
@@ -198,7 +228,8 @@ describe("TurnCard rendered activity", () => {
       <TurnCard
         turn={{
           ...runningTurn(),
-          prompt: "Improve image rendering\n\n[image:image.png]\n\n[image:image.png]",
+          prompt:
+            "Improve image rendering\n\n[image:image.png]\n\n[image:image.png]",
           promptImages: [
             {
               id: "image-1",
@@ -216,10 +247,12 @@ describe("TurnCard rendered activity", () => {
             },
           ],
         }}
-      />,
+      />
     );
 
-    const images = rendered.container.querySelectorAll("[data-prompt-image] img");
+    const images = rendered.container.querySelectorAll(
+      "[data-prompt-image] img"
+    );
     expect(images).toHaveLength(2);
     expect(images[0].getAttribute("alt")).toBe("image.png");
     expect(rendered.container.textContent).toContain("Improve image rendering");
@@ -257,12 +290,16 @@ describe("TurnCard rendered activity", () => {
     const rendered = mount(
       <I18nProvider>
         <TurnCard turn={turn} />
-      </I18nProvider>,
+      </I18nProvider>
     );
-    const trigger = rendered.container.querySelector('[data-slot="collapsible-trigger"]');
+    const trigger = rendered.container.querySelector(
+      '[data-slot="collapsible-trigger"]'
+    );
 
     expect(trigger?.getAttribute("aria-expanded")).toBe("false");
-    expect(rendered.container.querySelector('[aria-label="Tool links"]')).toBeNull();
+    expect(
+      rendered.container.querySelector('[aria-label="Tool links"]')
+    ).toBeNull();
 
     click(trigger!);
     await flush();
@@ -281,17 +318,19 @@ describe("TurnCard rendered activity", () => {
     activateDom();
     disableCanvasDrawing();
     // A leaked key-echo i18n mock can render the trigger label as its raw key; accept both.
-    const MENU_LABELS = ["Turn actions", "templateFrom.menu"];
+    const MENU_LABELS = new Set(["Turn actions", "templateFrom.menu"]);
     const trigger = (rendered) =>
       [...rendered.container.querySelectorAll("button")].find((el) =>
-        MENU_LABELS.includes(el.getAttribute("aria-label")),
+        MENU_LABELS.has(el.getAttribute("aria-label"))
       );
 
     const without = mount(<TurnCard turn={runningTurn()} />);
     expect(trigger(without)).toBeUndefined();
     without.unmount();
 
-    const withMenu = mount(<TurnCard turn={runningTurn()} onSaveTemplate={() => {}} />);
+    const withMenu = mount(
+      <TurnCard turn={runningTurn()} onSaveTemplate={() => {}} />
+    );
     expect(trigger(withMenu)).toBeTruthy();
     withMenu.unmount();
   });
@@ -312,12 +351,16 @@ describe("TurnCard rendered activity", () => {
       endedAt: 2,
     };
     const rendered = mount(<TurnCard turn={turn} />);
-    const ordered = [...rendered.container.querySelectorAll(".codetwo-markdown, [data-tool-call]")];
+    const ordered = [
+      ...rendered.container.querySelectorAll(
+        ".codetwo-markdown, [data-tool-call]"
+      ),
+    ];
 
     expect(ordered).toHaveLength(3);
     expect(ordered[0].textContent).toContain("Before");
     expect(ordered[0].querySelector("strong")?.textContent).toBe("Before");
-    expect(ordered[1].getAttribute("data-tool-call")).toBe("tool-1");
+    expect(ordered[1].dataset.toolCall).toBe("tool-1");
     expect(ordered[2].textContent).toContain("After");
     rendered.unmount();
   });
@@ -330,15 +373,14 @@ describe("TurnCard rendered activity", () => {
       <TurnCard
         turn={{
           ...runningTurn(),
-          text:
-            "[Docs](https://example.com/docs) · [Source](/tmp/project/src/main.ts:42:7) · [Encoded](file:///tmp/project/src/encoded%20file.ts#L8)",
+          text: "[Docs](https://example.com/docs) · [Source](/tmp/project/src/main.ts:42:7) · [Encoded](file:///tmp/project/src/encoded%20file.ts#L8)",
           endedAt: 2,
         }}
         linkActions={{
           workspaceRoot: "/tmp/project",
           openFileLink: (target) => opened.push(target),
         }}
-      />,
+      />
     );
     const links = rendered.container.querySelectorAll(".codetwo-markdown a");
 
@@ -349,7 +391,12 @@ describe("TurnCard rendered activity", () => {
     click(links[2]);
     expect(opened).toEqual([
       { kind: "file", path: "/tmp/project/src/main.ts", line: 42, column: 7 },
-      { kind: "file", path: "/tmp/project/src/encoded file.ts", line: 8, column: undefined },
+      {
+        kind: "file",
+        path: "/tmp/project/src/encoded file.ts",
+        line: 8,
+        column: undefined,
+      },
     ]);
     rendered.unmount();
   });
@@ -380,12 +427,14 @@ describe("TurnCard rendered activity", () => {
     const rendered = mount(
       <I18nProvider>
         <TurnCard turn={turn} />
-      </I18nProvider>,
+      </I18nProvider>
     );
     const group = rendered.container.querySelector("[data-tool-call-group]");
     const trigger = group?.querySelector("button");
     const ordered = [
-      ...rendered.container.querySelectorAll(".codetwo-markdown, [data-tool-call-group]"),
+      ...rendered.container.querySelectorAll(
+        ".codetwo-markdown, [data-tool-call-group]"
+      ),
     ];
 
     expect(ordered).toHaveLength(3);
@@ -413,7 +462,8 @@ describe("TurnCard rendered activity", () => {
     disableCanvasDrawing();
     const tools = Array.from({ length: 8 }, (_, index) => ({
       id: `tool-${index}`,
-      title: index === 7 ? "Searching current styles" : `Read file ${index + 1}`,
+      title:
+        index === 7 ? "Searching current styles" : `Read file ${index + 1}`,
       status: index === 7 ? "in_progress" : "completed",
       kind: index === 7 ? "search" : "read",
     }));
@@ -426,7 +476,7 @@ describe("TurnCard rendered activity", () => {
             content: tools.map((tool) => ({ kind: "tool", toolId: tool.id })),
           }}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
     const group = rendered.container.querySelector("[data-tool-call-group]");
     const trigger = group?.querySelector("button");
@@ -434,7 +484,7 @@ describe("TurnCard rendered activity", () => {
 
     expect(trigger?.getAttribute("aria-expanded")).toBe("true");
     expect(trigger?.textContent).toContain("Searching current styles");
-    expect(history?.getAttribute("data-faded")).toBe("true");
+    expect(history?.dataset.faded).toBe("true");
     expect(history?.classList.contains("tool-call-history--faded")).toBe(true);
     expect(history?.querySelectorAll("[data-tool-call]")).toHaveLength(7);
     rendered.unmount();
@@ -461,7 +511,7 @@ describe("TurnCard rendered activity", () => {
     const rendered = mount(
       <I18nProvider>
         <TurnCard turn={turn} />
-      </I18nProvider>,
+      </I18nProvider>
     );
     const chart = rendered.container.querySelector("[data-chart-block]");
     const svg = chart?.querySelector('svg[role="img"]');

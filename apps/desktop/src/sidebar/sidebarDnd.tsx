@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+
 import {
   useDragDropSortable,
   useDragDropZone,
-  type UseSortableInput,
 } from "@/components/ui/drag-drop";
+import type { UseSortableInput } from "@/components/ui/drag-drop";
 
 export type SidebarDragItem =
   | { kind: "task"; id: string }
@@ -47,10 +48,16 @@ interface DndRenderState {
   isDropTarget: boolean;
 }
 
-function dndId(prefix: string, item: SidebarDragItem | undefined, location: SidebarDropLocation) {
+function dndId(
+  prefix: string,
+  item: SidebarDragItem | undefined,
+  location: SidebarDropLocation
+) {
   if (item) return `${prefix}:${item.kind}:${item.id}`;
-  if (location.kind === "section") return `${prefix}:section:${location.sectionId}`;
-  if (location.kind === "projects") return `${prefix}:projects:${location.sectionId ?? "root"}`;
+  if (location.kind === "section")
+    return `${prefix}:section:${location.sectionId}`;
+  if (location.kind === "projects")
+    return `${prefix}:projects:${location.sectionId ?? "root"}`;
   if (location.kind === "tasks") {
     return `${prefix}:tasks:${location.sectionId ?? "root"}:${location.projectPath ?? "none"}`;
   }
@@ -121,7 +128,9 @@ export function SidebarDropZone({
   collisionPriority?: number;
   children: (state: DndRenderState) => ReactNode;
 }) {
-  const acceptKey = Array.isArray(accept) ? [...accept].sort().join("-") : accept;
+  const acceptKey = Array.isArray(accept)
+    ? [...accept].toSorted().join("-")
+    : accept;
   const droppable = useDragDropZone<SidebarDndData>({
     id: dndId(`zone:${acceptKey}`, undefined, location),
     accept,
@@ -137,25 +146,32 @@ export function SidebarDropZone({
 }
 
 export function sidebarDndData(value: unknown): SidebarDndData | null {
-  if (!value || typeof value !== "object") return null;
+  if (value == null || typeof value !== "object") return null;
   const candidate = value as Partial<SidebarDndData>;
-  if (!candidate.location || typeof candidate.location !== "object") return null;
+  if (!candidate.location || typeof candidate.location !== "object")
+    return null;
   return candidate as SidebarDndData;
 }
 
-export function sidebarTaskContainerCollisionPriority(hasNestedTaskRows: boolean): number {
+export function sidebarTaskContainerCollisionPriority(
+  hasNestedTaskRows: boolean
+): number {
   return hasNestedTaskRows ? 1 : 3;
 }
 
 function sidebarDragTargetIsCompatible(
   source: SidebarDragItem,
-  target: SidebarDndData,
+  target: SidebarDndData
 ): boolean {
   if (source.kind === "section") {
-    return target.location.kind === "sections" || target.item?.kind === "section";
+    return (
+      target.location.kind === "sections" || target.item?.kind === "section"
+    );
   }
   if (source.kind === "project") {
-    return target.location.kind === "projects" || target.location.kind === "section";
+    return (
+      target.location.kind === "projects" || target.location.kind === "section"
+    );
   }
   return target.location.kind === "tasks" || target.location.kind === "section";
 }
@@ -163,23 +179,28 @@ function sidebarDragTargetIsCompatible(
 export function sidebarRememberedDragTarget(
   source: SidebarDragItem | null,
   value: unknown,
-  previous: SidebarDndData | null,
+  previous: SidebarDndData | null
 ): SidebarDndData | null {
   const target = sidebarDndData(value);
-  if (!source || !target || !sidebarDragTargetIsCompatible(source, target)) return null;
-  if (target.item?.kind === source.kind && target.item.id === source.id) return previous;
+  if (!source || !target || !sidebarDragTargetIsCompatible(source, target))
+    return null;
+  if (target.item?.kind === source.kind && target.item.id === source.id)
+    return previous;
   return target;
 }
 
-export function sidebarSortableSnapshot(value: unknown): SidebarSortableSnapshot | null {
-  if (!value || typeof value !== "object") return null;
+export function sidebarSortableSnapshot(
+  value: unknown
+): SidebarSortableSnapshot | null {
+  if (value == null || typeof value !== "object") return null;
   const candidate = value as Partial<SidebarSortableSnapshot>;
   if (
-    typeof candidate.group !== "string"
-    || typeof candidate.initialGroup !== "string"
-    || typeof candidate.index !== "number"
-    || typeof candidate.initialIndex !== "number"
-  ) return null;
+    typeof candidate.group !== "string" ||
+    typeof candidate.initialGroup !== "string" ||
+    typeof candidate.index !== "number" ||
+    typeof candidate.initialIndex !== "number"
+  )
+    return null;
   return {
     group: candidate.group,
     initialGroup: candidate.initialGroup,
@@ -188,7 +209,9 @@ export function sidebarSortableSnapshot(value: unknown): SidebarSortableSnapshot
   };
 }
 
-export function sidebarProjectSectionFromGroup(group: string): string | null | undefined {
+export function sidebarProjectSectionFromGroup(
+  group: string
+): string | null | undefined {
   const prefix = "sidebar-projects:";
   if (!group.startsWith(prefix)) return undefined;
   const sectionId = decodeURIComponent(group.slice(prefix.length));
@@ -196,12 +219,12 @@ export function sidebarProjectSectionFromGroup(group: string): string | null | u
 }
 
 export function sidebarTaskLocationFromGroup(
-  group: string,
+  group: string
 ): Extract<SidebarDropLocation, { kind: "tasks" }> | undefined {
   const prefix = "sidebar-tasks:";
   if (!group.startsWith(prefix)) return undefined;
   const separator = group.indexOf(":", prefix.length);
-  if (separator < 0) return undefined;
+  if (separator === -1) return undefined;
   const sectionId = decodeURIComponent(group.slice(prefix.length, separator));
   const projectPath = decodeURIComponent(group.slice(separator + 1));
   return {
@@ -214,7 +237,7 @@ export function sidebarTaskLocationFromGroup(
 export function sidebarBeforeIdAtFinalIndex(
   destinationIds: readonly string[],
   sourceId: string,
-  finalIndex: number,
+  finalIndex: number
 ): string | null {
   const remaining = destinationIds.filter((id) => id !== sourceId);
   const boundedIndex = Math.min(Math.max(0, finalIndex), remaining.length);
@@ -224,15 +247,14 @@ export function sidebarBeforeIdAtFinalIndex(
 /** Translate dnd-kit's authoritative final sortable state into a sidebar destination. */
 export function sidebarFinalizedDestination(
   item: SidebarDragItem,
-  snapshot: SidebarSortableSnapshot | null,
+  snapshot: SidebarSortableSnapshot | null
 ): SidebarFinalizedDestination | undefined {
   if (
-    !snapshot
-    || (
-      snapshot.group === snapshot.initialGroup
-      && snapshot.index === snapshot.initialIndex
-    )
-  ) return undefined;
+    !snapshot ||
+    (snapshot.group === snapshot.initialGroup &&
+      snapshot.index === snapshot.initialIndex)
+  )
+    return undefined;
 
   if (item.kind === "section") {
     return snapshot.group === "sidebar-sections"

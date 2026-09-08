@@ -6,11 +6,11 @@ import { join } from "node:path";
 import {
   DESKTOP_HOST_PROTOCOL_VERSION,
   NativeHost,
-  type NativeHostProcess,
 } from "../src/electrobun/nativeHost";
+import type { NativeHostProcess } from "../src/electrobun/nativeHost";
 
 class FakeKernel implements NativeHostProcess {
-  readonly requests: Array<Record<string, unknown>> = [];
+  readonly requests: Record<string, unknown>[] = [];
   readonly stdout: ReadableStream<Uint8Array>;
   readonly exited: Promise<number>;
   readonly stdin;
@@ -33,15 +33,18 @@ class FakeKernel implements NativeHostProcess {
     });
     this.stdin = {
       write: (data: string) => this.write(data),
-      flush: () => undefined,
-      end: () => undefined,
+      flush: () => {},
+      end: () => {},
     };
     queueMicrotask(() => {
       this.emit({
         method: "event",
         params: {
           name: "host-ready",
-          payload: { protocol_version: protocolVersion, commands: ["demo.echo"] },
+          payload: {
+            protocol_version: protocolVersion,
+            commands: ["demo.echo"],
+          },
         },
       });
     });
@@ -54,7 +57,9 @@ class FakeKernel implements NativeHostProcess {
 
   emit(message: unknown): void {
     if (!this.closed) {
-      this.controller.enqueue(new TextEncoder().encode(`${JSON.stringify(message)}\n`));
+      this.controller.enqueue(
+        new TextEncoder().encode(`${JSON.stringify(message)}\n`)
+      );
     }
   }
 
@@ -104,7 +109,7 @@ describe("Electrobun Plugin Kernel adapter", () => {
   test("maps calls, project realms, events, errors, and shutdown onto one JSON-lines process", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "codetwo-native-host-"));
     const kernel = new FakeKernel();
-    const events: Array<{ name: string; payload: unknown }> = [];
+    const events: { name: string; payload: unknown }[] = [];
     const commands: string[][] = [];
     const host = new NativeHost({
       executable: "/fixture/codetwo-desktop-host",
@@ -120,21 +125,27 @@ describe("Electrobun Plugin Kernel adapter", () => {
 
     try {
       await host.start();
-      expect(commands).toEqual([[
-        "/fixture/codetwo-desktop-host",
-        "--data-dir",
-        dataDir,
-      ]]);
-      await expect(host.call("demo.echo", { value: 7 }, "/repo")).resolves.toEqual({
+      expect(commands).toEqual([
+        ["/fixture/codetwo-desktop-host", "--data-dir", dataDir],
+      ]);
+      expect(host.call("demo.echo", { value: 7 }, "/repo")).resolves.toEqual({
         name: "demo.echo",
         args: { value: 7 },
         project_path: "/repo",
       });
-      await expect(host.call("demo.error", null, null)).rejects.toThrow("fixture failure");
+      expect(host.call("demo.error", null, null)).rejects.toThrow(
+        "fixture failure"
+      );
 
-      kernel.emit({ method: "event", params: { name: "demo-event", payload: { ok: true } } });
+      kernel.emit({
+        method: "event",
+        params: { name: "demo-event", payload: { ok: true } },
+      });
       await Promise.resolve();
-      expect(events).toContainEqual({ name: "demo-event", payload: { ok: true } });
+      expect(events).toContainEqual({
+        name: "demo-event",
+        payload: { ok: true },
+      });
 
       await host.shutdown();
       expect(kernel.requests.map((request) => request.method)).toEqual([
@@ -154,13 +165,13 @@ describe("Electrobun Plugin Kernel adapter", () => {
     const host = new NativeHost({
       executable: "/fixture/codetwo-desktop-host",
       dataDir,
-      onEvent: () => undefined,
+      onEvent: () => {},
       spawn: () => kernel,
       startupTimeoutMs: 100,
     });
 
     try {
-      await expect(host.start()).rejects.toThrow("protocol mismatch");
+      expect(host.start()).rejects.toThrow("protocol mismatch");
       expect(kernel.killed).toBe(true);
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
@@ -173,7 +184,7 @@ describe("Electrobun Plugin Kernel adapter", () => {
     const host = new NativeHost({
       executable: "/fixture/codetwo-desktop-host",
       dataDir,
-      onEvent: () => undefined,
+      onEvent: () => {},
       spawn: () => kernel,
       startupTimeoutMs: 100,
       shutdownTimeoutMs: 100,
@@ -183,7 +194,7 @@ describe("Electrobun Plugin Kernel adapter", () => {
       await host.start();
       const pending = host.call("demo.hang", null, null);
       kernel.closeOutput();
-      await expect(pending).rejects.toThrow("output stream closed unexpectedly");
+      expect(pending).rejects.toThrow("output stream closed unexpectedly");
       expect(kernel.killed).toBe(true);
       await host.shutdown();
     } finally {

@@ -1,0 +1,18 @@
+timestamp=2026-09-04T08:30:00+00:00
+migration=eslint -> oxlint+oxfmt (Ultracite 7.10.8)
+tsc=clean
+doctor=6 passed, 0 warnings, 0 failed
+stylelint=clean (lint:styles exit 0)
+ultracite_check_errors≈9282 (first oxlint+type-aware+js-plugins pass; not comparable 1:1 to prior eslint ~2149)
+
+done:
+- oxlint.config.ts / oxfmt.config.ts
+- js-plugins: github, sonarjs, react-doctor + eslint-js bridge (oxlint-plugin-eslint)
+- house: func-style declaration, nullish eqeqeq, react function-declaration components
+- product: eslint-js/no-restricted-syntax button/textarea/borderRadius
+- stylelint restored for CSS radius allow-list
+- removed tsconfig baseUrl for tsgolint
+
+residual:
+- better-tailwindcss radius-class ban not re-homed
+- large thematic oxlint residuals; no full autofix

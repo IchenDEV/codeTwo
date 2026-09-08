@@ -24,8 +24,9 @@ export function enclosingAppBundle(executablePath: string): string | null {
 }
 
 function updatePaths(): { application: string; helper: string } | null {
-  const application = process.env.CODETWO_APP_BUNDLE_PATH ?? enclosingAppBundle(process.execPath);
-  if (!application) return null;
+  const application =
+    process.env.CODETWO_APP_BUNDLE_PATH ?? enclosingAppBundle(process.execPath);
+  if (application == null || application === "") return null;
   return {
     application,
     helper: join(application, "Contents", "Helpers", "CodeTwoUpdateHelper"),
@@ -34,7 +35,7 @@ function updatePaths(): { application: string; helper: string } | null {
 
 function parseHelperEvent(output: string): HelperEvent | null {
   const lines = output.trim().split("\n");
-  const line = lines[lines.length - 1];
+  const line = lines.at(-1)!;
   if (!line) return null;
   try {
     return JSON.parse(line) as HelperEvent;
@@ -45,23 +46,35 @@ function parseHelperEvent(output: string): HelperEvent | null {
 
 export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
   if (process.platform !== "darwin") {
-    return { state: "unsupported", message: "Sparkle updates are available on macOS only." };
+    return {
+      state: "unsupported",
+      message: "Sparkle updates are available on macOS only.",
+    };
   }
   if (runningCheck) return { state: "checking" };
 
   const paths = updatePaths();
   if (!paths) {
-    return { state: "unavailable", message: `Run the packaged ${applicationName}.app to check for updates.` };
+    return {
+      state: "unavailable",
+      message: `Run the packaged ${applicationName}.app to check for updates.`,
+    };
   }
   if (!existsSync(paths.helper)) {
-    return { state: "unavailable", message: "The Sparkle update helper is not embedded in this app." };
+    return {
+      state: "unavailable",
+      message: "The Sparkle update helper is not embedded in this app.",
+    };
   }
 
-  const helper = Bun.spawn([paths.helper, "status", "--application", paths.application], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const helper = Bun.spawn(
+    [paths.helper, "status", "--application", paths.application],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    }
+  );
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(helper.stdout).text(),
     new Response(helper.stderr).text(),
@@ -77,7 +90,9 @@ export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
 
   return {
     state: "not-configured",
-    message: event?.message ?? (stderr.trim() || "Sparkle update configuration is incomplete."),
+    message:
+      event?.message ??
+      (stderr.trim() || "Sparkle update configuration is incomplete."),
   };
 }
 
@@ -86,13 +101,20 @@ export async function startAppUpdateCheck(): Promise<AppUpdateStatus> {
   if (status.state !== "ready") return status;
 
   const paths = updatePaths();
-  if (!paths) return { state: "unavailable", message: `${applicationName}.app could not be located.` };
+  if (!paths)
+    return {
+      state: "unavailable",
+      message: `${applicationName}.app could not be located.`,
+    };
 
-  const helper = Bun.spawn([paths.helper, "check", "--application", paths.application], {
-    stdin: "ignore",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
+  const helper = Bun.spawn(
+    [paths.helper, "check", "--application", paths.application],
+    {
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit",
+    }
+  );
   runningCheck = helper.exited.finally(() => {
     runningCheck = null;
   });

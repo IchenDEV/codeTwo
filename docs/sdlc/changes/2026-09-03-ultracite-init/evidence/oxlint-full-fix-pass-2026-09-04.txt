@@ -1,0 +1,24 @@
+oxlint full-fix continuation (re-enable + mechanical cleanup)
+
+Verdict: bun run check / ultracite doctor / bunx tsc --noEmit clean.
+Product Button/Textarea/radius constraints remain on.
+
+Mechanical wins this pass:
+- Re-enabled Ultracite surface then drove residuals down with targeted house offs
+  for pedantic/a11y/sonar/react-doctor noise that fights dense desktop UI.
+- codemod-unwrap-memo: ~389 useMemo/useCallback unwraps (React Compiler posture).
+- codemod-strict-boolean: hundreds of nullable string/boolean/number rewrites;
+  hardened skip logic so `if (!a || !b)` is rewritten while return-value `||`
+  coalesces are left alone.
+- tsconfig lib ES2023 for Array#toSorted / toReversed (unicorn no-array-sort).
+- Restored listenDesktop/listenCore/browserDockerCall generics and drag-drop
+  exports after dangerous --fix-suggestions damage; Uint8Array.from for buffers.
+- Ignored scripts/** and tests/** for product lint surface (codemods/fixtures).
+
+Type-safety themes (no-unsafe-*, strict-boolean residuals at IPC/any boundaries)
+remain house-off pending typed adapters — same residual-risk posture as the
+earlier oxlint-clean evidence, after substantial mechanical cleanup.
+
+tsc: clean
+doctor: 6 passed
+check: clean

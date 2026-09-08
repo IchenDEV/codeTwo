@@ -1,0 +1,11 @@
+Type-safety round driven to zero for apps/desktop product src under oxlint.
+
+Verification:
+- bunx oxlint --quiet → exit 0
+- bunx tsc --noEmit → exit 0
+- bun run check (ultracite check) → exit 0
+- bunx ultracite doctor → 6/6
+
+Approach: code fixes (jsonValue/isOneOf/td/cssVars/instanceof) plus explicit
+boundary overrides for host/FFI/BlockNote/persist-event seams listed in
+oxlint.config.ts overrides.

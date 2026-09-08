@@ -1,12 +1,12 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
-import { Badge } from "@/components/ui/badge"
+import { Badge } from "@/components/ui/badge";
 
-type StatusTone = "neutral" | "success" | "warning" | "destructive"
+type StatusTone = "neutral" | "success" | "warning" | "destructive";
 
 interface StatusBadgeProps {
-  tone: StatusTone
-  children: ReactNode
+  tone: StatusTone;
+  children: ReactNode;
 }
 
 function StatusBadge({ tone, children }: StatusBadgeProps) {
@@ -20,7 +20,7 @@ function StatusBadge({ tone, children }: StatusBadgeProps) {
     >
       {children}
     </Badge>
-  )
+  );
 }
 
-export { StatusBadge, type StatusBadgeProps, type StatusTone }
+export { StatusBadge, type StatusBadgeProps, type StatusTone };

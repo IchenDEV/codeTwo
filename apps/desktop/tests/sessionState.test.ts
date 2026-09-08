@@ -44,15 +44,25 @@ describe("session event isolation", () => {
   test("does not render a background session into the active transcript", () => {
     expect(
       shouldRenderSessionEvent(
-        { event: "agent_text", session: "session-a", message_id: "1", text: "late A" },
-        "session-b",
-      ),
+        {
+          event: "agent_text",
+          session: "session-a",
+          message_id: "1",
+          text: "late A",
+        },
+        "session-b"
+      )
     ).toBe(false);
     expect(
       shouldRenderSessionEvent(
-        { event: "agent_text", session: "session-b", message_id: "2", text: "current B" },
-        "session-b",
-      ),
+        {
+          event: "agent_text",
+          session: "session-b",
+          message_id: "2",
+          text: "current B",
+        },
+        "session-b"
+      )
     ).toBe(true);
   });
 
@@ -67,11 +77,16 @@ describe("session event isolation", () => {
     expect(shouldRenderSessionEvent(late, "session-b")).toBe(false);
     // Once session-a is bound to a (background) pane, its turns render into that pane.
     expect(
-      shouldRenderSessionEvent(late, "session-b", null, new Set(["session-a", "session-b"])),
+      shouldRenderSessionEvent(
+        late,
+        "session-b",
+        null,
+        new Set(["session-a", "session-b"])
+      )
     ).toBe(true);
     // A session bound to no pane at all stays filtered out.
     expect(
-      shouldRenderSessionEvent(late, "session-b", null, new Set(["session-b"])),
+      shouldRenderSessionEvent(late, "session-b", null, new Set(["session-b"]))
     ).toBe(false);
   });
 
@@ -88,9 +103,14 @@ describe("session event isolation", () => {
   test("keeps global errors and permissions actionable", () => {
     expect(
       shouldRenderSessionEvent(
-        { event: "error", session: null, message: "startup failed", terminal: true },
-        null,
-      ),
+        {
+          event: "error",
+          session: null,
+          message: "startup failed",
+          terminal: true,
+        },
+        null
+      )
     ).toBe(true);
     expect(
       shouldRenderSessionEvent(
@@ -101,8 +121,8 @@ describe("session event isolation", () => {
           title: "Write a file",
           options: [],
         },
-        "session-b",
-      ),
+        "session-b"
+      )
     ).toBe(true);
   });
 
@@ -114,17 +134,28 @@ describe("session event isolation", () => {
       terminal: true,
       request_id: "remote-1",
     } as const;
-    expect(shouldRenderSessionEvent(error, "session-a", "desktop-1")).toBe(false);
+    expect(shouldRenderSessionEvent(error, "session-a", "desktop-1")).toBe(
+      false
+    );
     expect(shouldRenderSessionEvent(error, "session-a", "remote-1")).toBe(true);
   });
 
   test("only terminal errors end a running turn", () => {
-    const warning = { event: "error", session: "session-a", message: "fallback", terminal: false } as const;
+    const warning = {
+      event: "error",
+      session: "session-a",
+      message: "fallback",
+      terminal: false,
+    } as const;
     const afterWarning = applyEvent([newTurn("prompt")], warning);
     expect(isTerminalSessionEvent(warning)).toBe(false);
     expect(isRunning(afterWarning[0])).toBe(true);
 
-    const failure = { ...warning, message: "provider stopped", terminal: true } as const;
+    const failure = {
+      ...warning,
+      message: "provider stopped",
+      terminal: true,
+    } as const;
     const afterFailure = applyEvent(afterWarning, failure);
     expect(isTerminalSessionEvent(failure)).toBe(true);
     expect(isRunning(afterFailure[0])).toBe(false);
@@ -134,46 +165,75 @@ describe("session event isolation", () => {
     expect(
       matchesSessionCreation(
         { event: "session_created", session: "ours", request_id: "desktop-1" },
-        "desktop-1",
-      ),
+        "desktop-1"
+      )
     ).toBe(true);
     expect(
       matchesSessionCreation(
         { event: "session_created", session: "remote", request_id: "remote-1" },
-        "desktop-1",
-      ),
+        "desktop-1"
+      )
     ).toBe(false);
     expect(
       matchesSessionCreation(
         { event: "session_created", session: "late", request_id: "desktop-1" },
-        null,
-      ),
+        null
+      )
     ).toBe(false);
   });
 
   test("queues concurrent permission requests without overwriting either session", () => {
-    const first = { session: "session-a", requestId: "request-1", title: "A", options: [] };
-    const second = { session: "session-b", requestId: "request-2", title: "B", options: [] };
+    const first = {
+      session: "session-a",
+      requestId: "request-1",
+      title: "A",
+      options: [],
+    };
+    const second = {
+      session: "session-b",
+      requestId: "request-2",
+      title: "B",
+      options: [],
+    };
     const queue = enqueuePermission(enqueuePermission([], first), second);
 
-    expect(queue.map((request) => request.session)).toEqual(["session-a", "session-b"]);
-    expect(enqueuePermission(queue, { ...first, title: "A updated" })[0].title).toBe("A updated");
+    expect(queue.map((request) => request.session)).toEqual([
+      "session-a",
+      "session-b",
+    ]);
+    expect(
+      enqueuePermission(queue, { ...first, title: "A updated" })[0].title
+    ).toBe("A updated");
   });
 
   test("projects pending inputs onto the active chat", () => {
     const queue = [
-      { session: "session-a", requestId: "request-a1", title: "A1", options: [] },
-      { session: "session-b", requestId: "request-b1", title: "B1", options: [] },
-      { session: "session-a", requestId: "request-a2", title: "A2", options: [] },
+      {
+        session: "session-a",
+        requestId: "request-a1",
+        title: "A1",
+        options: [],
+      },
+      {
+        session: "session-b",
+        requestId: "request-b1",
+        title: "B1",
+        options: [],
+      },
+      {
+        session: "session-a",
+        requestId: "request-a2",
+        title: "A2",
+        options: [],
+      },
     ];
 
-    expect(pendingInputsForSession(queue, "session-a").map((item) => item.requestId)).toEqual([
-      "request-a1",
-      "request-a2",
-    ]);
-    expect(pendingInputsForSession(queue, "session-b").map((item) => item.requestId)).toEqual([
-      "request-b1",
-    ]);
+    expect(
+      pendingInputsForSession(queue, "session-a").map((item) => item.requestId)
+    ).toEqual(["request-a1", "request-a2"]);
+    expect(
+      pendingInputsForSession(queue, "session-b").map((item) => item.requestId)
+    ).toEqual(["request-b1"]);
     expect(pendingInputsForSession(queue, null)).toEqual([]);
   });
 
@@ -210,7 +270,9 @@ describe("session event isolation", () => {
         ],
       },
     };
-    const queue = permissionsFromSessions([{ id: "session-a", activity: awaiting }]);
+    const queue = permissionsFromSessions([
+      { id: "session-a", activity: awaiting },
+    ]);
     expect(activityIsBusy(awaiting)).toBe(true);
     expect(queue.map((item) => item.requestId)).toEqual([
       "permission-first",
@@ -262,7 +324,7 @@ describe("session event isolation", () => {
         },
       ],
       "session-a",
-      activity,
+      activity
     );
 
     expect(queue[0]).toMatchObject({
@@ -289,15 +351,28 @@ describe("session event isolation", () => {
     };
 
     expect(
-      permissionQueueAfterAnswer([pending, other], "session-a", "question-1", false),
+      permissionQueueAfterAnswer(
+        [pending, other],
+        "session-a",
+        "question-1",
+        false
+      )
     ).toEqual([pending, other]);
     expect(
-      permissionQueueAfterAnswer([pending, other], "session-a", "question-1", true),
+      permissionQueueAfterAnswer(
+        [pending, other],
+        "session-a",
+        "question-1",
+        true
+      )
     ).toEqual([other]);
   });
 
   test("tracks a remotely started turn without creating an idle warning turn", () => {
-    const started = applyEvent([], { event: "turn_started", session: "session-a" });
+    const started = applyEvent([], {
+      event: "turn_started",
+      session: "session-a",
+    });
     expect(started).toHaveLength(1);
     expect(isRunning(started[0])).toBe(true);
 
@@ -352,7 +427,7 @@ describe("session event isolation", () => {
         message_id: "chunk-1",
         text: "winner answer",
       },
-      "winning-request",
+      "winning-request"
     );
 
     expect(turns).toHaveLength(2);
@@ -363,28 +438,41 @@ describe("session event isolation", () => {
 
   test("keeps queued prompts pending until their own native turn starts", () => {
     const active = { ...newTurn("active", "active-request"), accepted: true };
-    let turns = [active, { ...newTurn("next", "queued-request"), delivery: "queued" as const }];
+    let turns = [
+      active,
+      { ...newTurn("next", "queued-request"), delivery: "queued" as const },
+    ];
     turns = applyEvent(turns, {
       event: "prompt_queued",
       session: "session-a",
       request_id: "queued-request",
       position: 2,
     });
-    expect(turns[1]).toMatchObject({ delivery: "queued", queuePosition: 2, accepted: false });
+    expect(turns[1]).toMatchObject({
+      delivery: "queued",
+      queuePosition: 2,
+      accepted: false,
+    });
 
     turns = applyEvent(turns, {
       event: "turn_started",
       session: "session-a",
       request_id: "queued-request",
     });
-    expect(turns[1]).toMatchObject({ accepted: true, streamBoundaryKnown: true });
+    expect(turns[1]).toMatchObject({
+      accepted: true,
+      streamBoundaryKnown: true,
+    });
     expect(turns[1].delivery).toBeUndefined();
     expect(turns[1].queuePosition).toBeUndefined();
   });
 
   test("moves the stream boundary to a provider-accepted steering prompt", () => {
     const active = { ...newTurn("active", "active-request"), accepted: true };
-    const steer = { ...newTurn("change course", "steer-request"), delivery: "steer" as const };
+    const steer = {
+      ...newTurn("change course", "steer-request"),
+      delivery: "steer" as const,
+    };
     let turns = applyEvent([active, steer], {
       event: "steer_accepted",
       session: "session-a",
@@ -400,7 +488,7 @@ describe("session event isolation", () => {
         message_id: "chunk-1",
         text: "steered answer",
       },
-      "steer-request",
+      "steer-request"
     );
 
     expect(isRunning(turns[0])).toBe(false);
@@ -415,27 +503,43 @@ describe("session event isolation", () => {
   test("compares the submitted editor revision structurally", () => {
     const submitted = [
       { type: "text", text: "ship it" },
-      { type: "skill", skill_id: "reviewer", params: { depth: "full", tone: "direct" } },
+      {
+        type: "skill",
+        skill_id: "reviewer",
+        params: { depth: "full", tone: "direct" },
+      },
     ] as const;
     expect(
       sameDocBlocks(submitted, [
         { type: "text", text: "ship it" },
-        { type: "skill", skill_id: "reviewer", params: { tone: "direct", depth: "full" } },
-      ]),
+        {
+          type: "skill",
+          skill_id: "reviewer",
+          params: { tone: "direct", depth: "full" },
+        },
+      ])
     ).toBe(true);
     expect(
       sameDocBlocks(submitted, [
         { type: "text", text: "ship it, then preserve this new draft" },
-        { type: "skill", skill_id: "reviewer", params: { depth: "full", tone: "direct" } },
-      ]),
+        {
+          type: "skill",
+          skill_id: "reviewer",
+          params: { depth: "full", tone: "direct" },
+        },
+      ])
     ).toBe(false);
-    expect(matchesSubmittedEditorRevision(submitted, 7, submitted, 7)).toBe(true);
-    expect(matchesSubmittedEditorRevision(submitted, 8, submitted, 7)).toBe(false);
+    expect(matchesSubmittedEditorRevision(submitted, 7, submitted, 7)).toBe(
+      true
+    );
+    expect(matchesSubmittedEditorRevision(submitted, 8, submitted, 7)).toBe(
+      false
+    );
     expect(
       sameDocBlocks(
         [{ type: "session", session_id: "source", through_seq: 11 }],
-        [{ type: "session", session_id: "source", through_seq: 12 }],
-      ),
+        [{ type: "session", session_id: "source", through_seq: 12 }]
+      )
     ).toBe(false);
   });
 
@@ -458,10 +562,12 @@ describe("session event isolation", () => {
     expect(
       withoutUnacceptedTurn(
         [cancelled, accepted, unrelated],
-        "cancelled-request",
-      ),
+        "cancelled-request"
+      )
     ).toEqual([accepted, unrelated]);
-    expect(withoutUnacceptedTurn([accepted], "accepted-request")).toEqual([accepted]);
+    expect(withoutUnacceptedTurn([accepted], "accepted-request")).toEqual([
+      accepted,
+    ]);
   });
 
   test("does not reopen a persisted tail for optimistic pre-acceptance state", () => {
@@ -485,17 +591,21 @@ describe("session event isolation", () => {
         cwd: "/tmp/repo-worktree/packages/app",
         worktree_path: "/tmp/repo-worktree",
         project_path: "/repo/packages/app",
-      }),
+      })
     ).toBe("/repo/packages/app");
     expect(
-      sessionProjectPath({ cwd: "/repo", worktree_path: null, project_path: null }),
+      sessionProjectPath({
+        cwd: "/repo",
+        worktree_path: null,
+        project_path: null,
+      })
     ).toBe("/repo");
     expect(
       sessionProjectPath({
         cwd: "/legacy-worktree",
         worktree_path: "/legacy-worktree",
         project_path: null,
-      }),
+      })
     ).toBeNull();
   });
 
@@ -505,7 +615,7 @@ describe("session event isolation", () => {
         cwd: "/tmp/repo-worktree",
         worktree_path: "/tmp/repo-worktree",
         project_path: "/repo",
-      }),
+      })
     ).toBe("/repo");
   });
 
@@ -515,7 +625,7 @@ describe("session event isolation", () => {
         cwd: "/legacy-worktree",
         worktree_path: "/legacy-worktree",
         project_path: null,
-      }),
+      })
     ).toBeNull();
   });
 
@@ -525,17 +635,19 @@ describe("session event isolation", () => {
       worktree_path: null,
       project_path: null,
     };
-    expect(sessionCreationSource("/selected-project", "/stale-cwd", normalSession)).toBe(
-      "/selected-project",
-    );
+    expect(
+      sessionCreationSource("/selected-project", "/stale-cwd", normalSession)
+    ).toBe("/selected-project");
     expect(sessionCreationSource(null, "/stale-cwd", normalSession)).toBe(
-      "/repo-from-session",
+      "/repo-from-session"
     );
     expect(sessionCreationSource(null, "/plain-cwd", null)).toBe("/plain-cwd");
   });
 
   test("fails closed when an active id has neither a list shell nor a receipt", () => {
-    expect(sessionCreationSource("/selected-project", "/isolated/cwd", null, true)).toBeNull();
+    expect(
+      sessionCreationSource("/selected-project", "/isolated/cwd", null, true)
+    ).toBeNull();
   });
 
   test("uses a correlated worktree receipt instead of its isolated cwd", () => {
@@ -554,14 +666,21 @@ describe("session event isolation", () => {
       request_id: "ours",
     });
     expect(receipt).not.toBeNull();
-    expect(sessionCreationSource(null, receipt!.cwd, receipt, true)).toBe("/repo/packages/app");
+    expect(sessionCreationSource(null, receipt!.cwd, receipt, true)).toBe(
+      "/repo/packages/app"
+    );
     expect(sessionCreationBaseline(receipt)).toBeUndefined();
     expect(
-      sessionShellWithReceipt("created", undefined, { session: "created", shell: receipt! })
-        ?.worktree_baseline?.kind,
+      sessionShellWithReceipt("created", undefined, {
+        session: "created",
+        shell: receipt!,
+      })?.worktree_baseline?.kind
     ).toBe("current");
     expect(
-      sessionShellWithReceipt("other", undefined, { session: "created", shell: receipt! }),
+      sessionShellWithReceipt("other", undefined, {
+        session: "created",
+        shell: receipt!,
+      })
     ).toBeUndefined();
   });
 
@@ -581,21 +700,24 @@ describe("session event isolation", () => {
       activeSessionWorktreeState("created", undefined, {
         session: "created",
         shell: knownReceipt,
-      }),
-    ).toEqual({ baseline: knownReceipt.worktree_baseline, legacyUnknown: false });
+      })
+    ).toEqual({
+      baseline: knownReceipt.worktree_baseline,
+      legacyUnknown: false,
+    });
 
     expect(
       activeSessionWorktreeState("created", undefined, {
         session: "created",
         shell: { ...knownReceipt, worktree_baseline: null },
-      }),
+      })
     ).toEqual({ baseline: null, legacyUnknown: true });
 
     expect(
       activeSessionWorktreeState("other", undefined, {
         session: "created",
         shell: knownReceipt,
-      }),
+      })
     ).toEqual({ baseline: null, legacyUnknown: false });
   });
 
@@ -606,7 +728,7 @@ describe("session event isolation", () => {
         session: "legacy",
         cwd: "/possibly-isolated",
         request_id: "ours",
-      }),
+      })
     ).toBeNull();
   });
 
@@ -616,13 +738,13 @@ describe("session event isolation", () => {
       sessionCreationBaseline({
         worktree_path: "/legacy-worktree",
         worktree_baseline: null,
-      }),
+      })
     ).toBeUndefined();
     expect(
       sessionCreationBaseline({
         worktree_path: null,
         worktree_baseline: null,
-      }),
+      })
     ).toBeNull();
     expect(
       sessionCreationBaseline({
@@ -634,7 +756,7 @@ describe("session event isolation", () => {
           sha: "0123456789abcdef",
           display: "origin/main",
         },
-      }),
+      })
     ).toBe("origin_default");
     expect(
       sessionCreationBaseline({
@@ -646,7 +768,7 @@ describe("session event isolation", () => {
           sha: "0123456789abcdef",
           display: "HEAD",
         },
-      }),
+      })
     ).toBeUndefined();
   });
 
@@ -670,14 +792,25 @@ describe("session event isolation", () => {
     ];
 
     expect(sessionCreationBaselineSha(null, options, true)).toBeNull();
-    expect(sessionCreationBaselineSha("current", options, true)).toBeUndefined();
-    expect(sessionCreationBaselineSha("current", options, false)).toBe("0123456789abcdef");
-    expect(sessionCreationBaselineSha("origin_default", options, false)).toBeUndefined();
-    expect(sessionCreationBaselineSha("origin_default", [], false)).toBeUndefined();
+    expect(
+      sessionCreationBaselineSha("current", options, true)
+    ).toBeUndefined();
+    expect(sessionCreationBaselineSha("current", options, false)).toBe(
+      "0123456789abcdef"
+    );
+    expect(
+      sessionCreationBaselineSha("origin_default", options, false)
+    ).toBeUndefined();
+    expect(
+      sessionCreationBaselineSha("origin_default", [], false)
+    ).toBeUndefined();
   });
 
   test("gates the worktree picker only when every baseline is unavailable", () => {
-    const unavailable = (kind: "current" | "origin_default", reason: string) => ({
+    const unavailable = (
+      kind: "current" | "origin_default",
+      reason: string
+    ) => ({
       kind,
       resolved: null,
       unavailable_reason: reason,
@@ -700,7 +833,9 @@ describe("session event isolation", () => {
       unavailable("origin_default", "origin/HEAD is unavailable"),
     ];
 
-    expect(worktreeGatingReason(false, gated, false)).toBe("not a git repository");
+    expect(worktreeGatingReason(false, gated, false)).toBe(
+      "not a git repository"
+    );
     // One usable baseline keeps the picker open; loading and empty results decide nothing yet.
     expect(worktreeGatingReason(false, partial, false)).toBeNull();
     expect(worktreeGatingReason(false, gated, true)).toBeNull();
@@ -733,7 +868,7 @@ describe("execution policy projection", () => {
       sessionExecutionPolicy({
         permission_mode: "accept_edits",
         sandbox_policy: "read_only",
-      }),
+      })
     ).toEqual({ mode: "accept_edits", sandbox: "read_only" });
     expect(sessionExecutionPolicy(null)).toBeNull();
   });
@@ -745,28 +880,40 @@ describe("execution policy projection", () => {
 
   test("reconciles only the session named by an authoritative policy event", () => {
     const rows = [
-      { id: "session-a", permission_mode: "ask" as const, sandbox_policy: "workspace_write" as const },
-      { id: "session-b", permission_mode: "yolo" as const, sandbox_policy: "danger_full_access" as const },
+      {
+        id: "session-a",
+        permission_mode: "ask" as const,
+        sandbox_policy: "workspace_write" as const,
+      },
+      {
+        id: "session-b",
+        permission_mode: "yolo" as const,
+        sandbox_policy: "danger_full_access" as const,
+      },
     ];
 
     expect(
       withSessionExecutionPolicy(rows, "session-a", {
         mode: "accept_edits",
         sandbox: "read_only",
-      }),
+      })
     ).toEqual([
-      { id: "session-a", permission_mode: "accept_edits", sandbox_policy: "read_only" },
+      {
+        id: "session-a",
+        permission_mode: "accept_edits",
+        sandbox_policy: "read_only",
+      },
       rows[1],
     ]);
   });
 
   test("freezes the policy picker from creation capture through its authoritative receipt", () => {
     expect(executionPolicyChangeDisabled(true, null, new Set())).toBe(true);
-    expect(executionPolicyChangeDisabled(false, "session-a", new Set(["session-a"]))).toBe(
-      true,
-    );
-    expect(executionPolicyChangeDisabled(false, "session-b", new Set(["session-a"]))).toBe(
-      false,
-    );
+    expect(
+      executionPolicyChangeDisabled(false, "session-a", new Set(["session-a"]))
+    ).toBe(true);
+    expect(
+      executionPolicyChangeDisabled(false, "session-b", new Set(["session-a"]))
+    ).toBe(false);
   });
 });

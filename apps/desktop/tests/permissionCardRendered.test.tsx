@@ -1,6 +1,15 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
+
+import {
+  activateDom,
+  button,
+  click,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { PermissionCard } = await import("../src/session/PermissionCard");
@@ -29,7 +38,7 @@ function renderCard(onAnswer = () => {}) {
         pendingCount={2}
         onAnswer={onAnswer}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
 }
 
@@ -38,10 +47,12 @@ describe("PermissionCard", () => {
     const rendered = renderCard();
 
     expect(rendered.container.querySelector('[role="dialog"]')).toBeNull();
-    expect(rendered.container.querySelector('[data-testid="permission-card"]')).not.toBeNull();
+    expect(
+      rendered.container.querySelector('[data-testid="permission-card"]')
+    ).not.toBeNull();
     expect(rendered.container.textContent).toContain("gh pr list --state open");
     expect(rendered.container.textContent).toContain(
-      "Session-wide approvals apply only to this chat.",
+      "Session-wide approvals apply only to this chat."
     );
     expect(rendered.container.textContent).toContain("2 requests pending");
   });

@@ -1,0 +1,29 @@
+timestamp=2026-09-04T05:43:49.461174+00:00
+tsc=clean
+eslint_errors=3223 messages=3251
+style_rules:
+      0 require-unicode-regexp
+      0 @typescript-eslint/naming-convention
+      0 arrow-body-style
+      0 unicorn/consistent-arrow-return-style
+    161 unicorn/consistent-boolean-name
+      0 prettier/prettier (after prettier write + arrow-return off)
+      0 func-style
+top12:
+    223 @typescript-eslint/strict-boolean-expressions
+    200 @typescript-eslint/no-unsafe-member-access
+    161 unicorn/consistent-boolean-name
+    129 @typescript-eslint/no-unsafe-type-assertion
+     88 react-doctor/no-effect-with-fresh-deps
+     83 react-hooks/exhaustive-deps
+     80 @typescript-eslint/no-unsafe-assignment
+     75 react-hooks/todo
+     74 @typescript-eslint/no-unnecessary-condition
+     64 react-hooks/set-state-in-effect
+     63 react-doctor/only-export-components
+     61 @typescript-eslint/no-unsafe-call
+
+notes:
+- boolean-locals codemod: fixed shorthand property breakage; expand-shorthand before rename
+- corrupted unicode autofixes restored (u flag at end, not inside char class)
+- house: arrow-body-style off for .ts; unicorn consistent-arrow-return-style off (Prettier wins); UPPER_CASE object/type props allowed

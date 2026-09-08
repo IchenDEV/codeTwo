@@ -11,7 +11,9 @@ describe("LSP file paths", () => {
   test("round-trips Windows drive paths", () => {
     const path = "C:\\Users\\Ada Lovelace\\项目\\main.rs";
     const uri = pathToUri(path);
-    expect(uri).toBe("file:///C%3A/Users/Ada%20Lovelace/%E9%A1%B9%E7%9B%AE/main.rs");
+    expect(uri).toBe(
+      "file:///C%3A/Users/Ada%20Lovelace/%E9%A1%B9%E7%9B%AE/main.rs"
+    );
     expect(uriToPath(uri)).toBe(path);
   });
 

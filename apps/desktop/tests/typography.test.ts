@@ -8,10 +8,12 @@ import {
 
 describe("Codex-aligned typography engine", () => {
   test("resolves every semantic role and compatibility alias from the default controls", () => {
-    expect(resolveTypographyProperties({
-      uiFontSize: DEFAULT_UI_FONT_SIZE,
-      codeFontSize: DEFAULT_CODE_FONT_SIZE,
-    })).toEqual({
+    expect(
+      resolveTypographyProperties({
+        uiFontSize: DEFAULT_UI_FONT_SIZE,
+        codeFontSize: DEFAULT_CODE_FONT_SIZE,
+      })
+    ).toEqual({
       "--ds-type-large-title-size": "28px",
       "--ds-type-large-title-leading": "34px",
       "--ds-type-page-title-size": "20px",
@@ -44,7 +46,10 @@ describe("Codex-aligned typography engine", () => {
   });
 
   test("keeps the hierarchy and paired leading when users adjust UI and code independently", () => {
-    const properties = resolveTypographyProperties({ uiFontSize: 16, codeFontSize: 14 });
+    const properties = resolveTypographyProperties({
+      uiFontSize: 16,
+      codeFontSize: 14,
+    });
 
     expect(properties["--ds-type-body-size"]).toBe("16px");
     expect(properties["--ds-type-body-leading"]).toBe("22px");

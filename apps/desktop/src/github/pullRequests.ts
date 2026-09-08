@@ -1,4 +1,7 @@
-import type { GitHubPullRequestDetail, GitHubPullRequestSummary } from "../bridge";
+import type {
+  GitHubPullRequestDetail,
+  GitHubPullRequestSummary,
+} from "../bridge";
 import type { GitHubPullRequestReference } from "../taskboard/taskBoard";
 
 export type PullRequestView = "all" | "reviewing" | "authored";
@@ -21,7 +24,7 @@ export interface PullRequestGroup {
 }
 
 export function githubPullRequestReference(
-  item: GitHubPullRequestSummary,
+  item: GitHubPullRequestSummary
 ): GitHubPullRequestReference {
   const repository = item.repository.nameWithOwner.trim();
   return {
@@ -40,19 +43,23 @@ function searchableText(item: GitHubPullRequestSummary): string {
     item.author.login,
     String(item.number),
     ...item.labels.map((label) => label.name),
-  ].filter(Boolean).join(" ").toLocaleLowerCase();
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase();
 }
 
 export function filterPullRequests(
   items: GitHubPullRequestSummary[],
   view: PullRequestView,
   readiness: PullRequestReadiness,
-  query: string,
+  query: string
 ): GitHubPullRequestSummary[] {
   const needle = query.trim().toLocaleLowerCase();
   return items.filter((item) => {
     if (view === "authored" && !item.authored) return false;
-    if (view === "reviewing" && !item.reviewRequested && !item.reviewed) return false;
+    if (view === "reviewing" && !item.reviewRequested && !item.reviewed)
+      return false;
     if (readiness === "draft" && !item.isDraft) return false;
     if (readiness === "ready" && item.isDraft) return false;
     return !needle || searchableText(item).includes(needle);
@@ -61,7 +68,7 @@ export function filterPullRequests(
 
 export function groupPullRequests(
   items: GitHubPullRequestSummary[],
-  view: PullRequestView,
+  view: PullRequestView
 ): PullRequestGroup[] {
   if (view === "authored") return [{ id: "authored", items }];
   const assigned = new Set<string>();
@@ -79,7 +86,10 @@ export function groupPullRequests(
   return groups.filter((group) => group.items.length > 0);
 }
 
-export function shortPullRequestAge(timestamp: string, now = Date.now()): string {
+export function shortPullRequestAge(
+  timestamp: string,
+  now = Date.now()
+): string {
   const elapsed = Math.max(0, now - Date.parse(timestamp));
   if (!Number.isFinite(elapsed) || elapsed < 60_000) return "now";
   if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)}m`;
@@ -88,43 +98,49 @@ export function shortPullRequestAge(timestamp: string, now = Date.now()): string
   return `${Math.floor(elapsed / 604_800_000)}w`;
 }
 
-export function pullRequestCheckState(detail: GitHubPullRequestDetail):
-  | "none"
-  | "pending"
-  | "failed"
-  | "passed" {
+export function pullRequestCheckState(
+  detail: GitHubPullRequestDetail
+): "none" | "pending" | "failed" | "passed" {
   if (detail.checks.length === 0) return "none";
-  if (detail.checks.some((check) => pullRequestCheckResult(check) === "failed")) return "failed";
-  if (detail.checks.some((check) => pullRequestCheckResult(check) === "pending")) return "pending";
+  if (detail.checks.some((check) => pullRequestCheckResult(check) === "failed"))
+    return "failed";
+  if (
+    detail.checks.some((check) => pullRequestCheckResult(check) === "pending")
+  )
+    return "pending";
   return "passed";
 }
 
 export function pullRequestCheckResult(
-  check: GitHubPullRequestDetail["checks"][number],
+  check: GitHubPullRequestDetail["checks"][number]
 ): PullRequestCheckResult {
   const conclusion = check.conclusion.toLocaleUpperCase();
   if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion)) return "passed";
-  if ([
-    "FAILURE",
-    "ERROR",
-    "CANCELLED",
-    "TIMED_OUT",
-    "ACTION_REQUIRED",
-    "STALE",
-    "STARTUP_FAILURE",
-  ].includes(conclusion)) return "failed";
+  if (
+    [
+      "FAILURE",
+      "ERROR",
+      "CANCELLED",
+      "TIMED_OUT",
+      "ACTION_REQUIRED",
+      "STALE",
+      "STARTUP_FAILURE",
+    ].includes(conclusion)
+  )
+    return "failed";
   return "pending";
 }
 
 export function pullRequestMergeReadiness(
-  detail: GitHubPullRequestDetail,
+  detail: GitHubPullRequestDetail
 ): PullRequestMergeReadiness {
   if (detail.state.toLocaleUpperCase() !== "OPEN") return "closed";
   if (detail.isDraft) return "draft";
   if (
-    detail.mergeable.toLocaleUpperCase() === "CONFLICTING"
-    || detail.mergeStateStatus.toLocaleUpperCase() === "DIRTY"
-  ) return "conflicting";
+    detail.mergeable.toLocaleUpperCase() === "CONFLICTING" ||
+    detail.mergeStateStatus.toLocaleUpperCase() === "DIRTY"
+  )
+    return "conflicting";
 
   const checks = pullRequestCheckState(detail);
   if (checks === "failed") return "checks_failed";

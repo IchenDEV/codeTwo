@@ -1,17 +1,18 @@
-import { useId, type ReactNode } from "react"
-import { Check } from "@/components/ui/icons"
+import { useId } from "react";
+import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
+import { Check } from "@/components/ui/icons";
 
 interface SelectableRowProps {
-  label: string
-  accessibilityContext?: string
-  description?: string | null
-  leading?: ReactNode
-  meta?: ReactNode
-  selected: boolean
-  disabled?: boolean
-  onSelect: () => void
+  label: string;
+  accessibilityContext?: string;
+  description?: string | null;
+  leading?: ReactNode;
+  meta?: ReactNode;
+  selected: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
 }
 
 function SelectableRow({
@@ -24,19 +25,23 @@ function SelectableRow({
   disabled = false,
   onSelect,
 }: SelectableRowProps) {
-  const descriptionId = useId()
-  const leadingId = useId()
-  const metaId = useId()
-  const describedBy = [
-    leading ? leadingId : null,
-    description ? descriptionId : null,
-    meta ? metaId : null,
-  ]
-    .filter(Boolean)
-    .join(" ") || undefined
-  const accessibleName = accessibilityContext && accessibilityContext !== label
-    ? `${label}, ${accessibilityContext}`
-    : label
+  const descriptionId = useId();
+  const leadingId = useId();
+  const metaId = useId();
+  const describedBy =
+    [
+      leading == null ? null : leadingId,
+      description != null && description !== "" ? descriptionId : null,
+      meta == null ? null : metaId,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
+  const accessibleName =
+    accessibilityContext != null &&
+    accessibilityContext !== "" &&
+    accessibilityContext !== label
+      ? `${label}, ${accessibilityContext}`
+      : label;
 
   return (
     <Button
@@ -50,7 +55,11 @@ function SelectableRow({
       aria-pressed={selected}
       disabled={disabled}
       onClick={onSelect}
-      className={description ? "items-start" : "items-center"}
+      className={
+        description != null && description !== ""
+          ? "items-start"
+          : "items-center"
+      }
     >
       <span
         data-slot="selectable-row-indicator"
@@ -59,30 +68,30 @@ function SelectableRow({
       >
         {selected ? <Check className="size-3.5" /> : null}
       </span>
-      {leading ? (
+      {leading == null ? null : (
         <span
           id={leadingId}
           data-slot="selectable-row-leading"
-          className="flex h-[1lh] shrink-0 items-center gap-inline"
+          className="gap-inline flex h-[1lh] shrink-0 items-center"
         >
           {leading}
         </span>
-      ) : null}
+      )}
       <span data-slot="selectable-row-content" className="min-w-0 flex-1">
         <span data-slot="selectable-row-label" className="block truncate">
           {label}
         </span>
-        {description ? (
+        {description != null && description !== "" ? (
           <span
             id={descriptionId}
             data-slot="selectable-row-description"
-            className="line-clamp-2 whitespace-normal break-words"
+            className="line-clamp-2 break-words whitespace-normal"
           >
             {description}
           </span>
         ) : null}
       </span>
-      {meta ? (
+      {meta == null ? null : (
         <span
           id={metaId}
           data-slot="selectable-row-meta"
@@ -90,9 +99,9 @@ function SelectableRow({
         >
           {meta}
         </span>
-      ) : null}
+      )}
     </Button>
-  )
+  );
 }
 
-export { SelectableRow, type SelectableRowProps }
+export { SelectableRow, type SelectableRowProps };

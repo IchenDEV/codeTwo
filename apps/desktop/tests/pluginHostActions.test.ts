@@ -20,57 +20,70 @@ class FakeActionAdapter implements HostActionAdapter {
   }
 }
 
-const installed = [{
-  id: "agent-session-monitor",
-  enabled: true,
-  trusted: true,
-  ui_contributions: [{
-    id: "agent-sessions",
-    slot: "host.actions",
-    label: "Agent sessions",
-    order: 0,
-  }],
-}];
+const installed = [
+  {
+    id: "agent-session-monitor",
+    enabled: true,
+    trusted: true,
+    ui_contributions: [
+      {
+        id: "agent-sessions",
+        slot: "host.actions",
+        label: "Agent sessions",
+        order: 0,
+      },
+    ],
+  },
+];
 
 const catalog = {
-  plugins: [{
-    id: "bundle:agent-session-monitor",
-    enabled: true,
-    running: true,
-    components: {},
-  }],
+  plugins: [
+    {
+      id: "bundle:agent-session-monitor",
+      enabled: true,
+      running: true,
+      components: {},
+    },
+  ],
 };
 
 describe("plugin host actions", () => {
   test("reuses UI contributions to render actions and route clicks", async () => {
-    const calls: Array<{ name: string; args: unknown }> = [];
+    const calls: { name: string; args: unknown }[] = [];
     const adapter = new FakeActionAdapter();
     const controller = new PluginHostActionController(async (name, args) => {
       calls.push({ name, args });
       if (name === "plugins.list") return installed;
       if (name === "plugins.catalog") return catalog;
-      if ((args as { context?: { operation?: string } }).context?.operation === "render") {
+      if (
+        (args as { context?: { operation?: string } }).context?.operation ===
+        "render"
+      ) {
         return {
-          items: [{
-            id: "session-1",
-            label: "Fix flaky test",
-            detail: "RUNNING",
-            state: "running",
-            enabled: true,
-            input: { session: "session-1" },
-            accessibilityLabel: "Fix flaky test, running",
-          }],
+          items: [
+            {
+              id: "session-1",
+              label: "Fix flaky test",
+              detail: "RUNNING",
+              state: "running",
+              enabled: true,
+              input: { session: "session-1" },
+              accessibilityLabel: "Fix flaky test, running",
+            },
+          ],
         };
       }
       return true;
     }, adapter);
 
     await controller.start();
-    expect(adapter.items).toEqual([expect.objectContaining({
-      contributionKey: "agent-session-monitor:agent-sessions",
-      id: "session-1",
-      state: "running",
-    })]);
+    expect(adapter.items).toEqual([
+      expect.objectContaining({
+        contributionKey: "agent-session-monitor:agent-sessions",
+        id: "session-1",
+        state: "running",
+      }),
+    ]);
 
     controller.invoke("agent-session-monitor:agent-sessions", "session-1");
     await Bun.sleep(0);

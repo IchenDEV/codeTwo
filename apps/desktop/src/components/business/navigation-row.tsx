@@ -1,21 +1,25 @@
-import { type ReactNode } from "react"
+import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface NavigationRowProps {
-  label: string
-  leading: ReactNode
-  meta?: ReactNode
-  current?: boolean
-  disabled?: boolean
-  busy?: boolean
-  accessibilityLabel?: string
-  tooltip?: string
-  className?: string
-  labelClassName?: string
-  onSelect: () => void
+  label: string;
+  leading: ReactNode;
+  meta?: ReactNode;
+  current?: boolean;
+  disabled?: boolean;
+  busy?: boolean;
+  accessibilityLabel?: string;
+  tooltip?: string;
+  className?: string;
+  labelClassName?: string;
+  onSelect: () => void;
 }
 
 function NavigationRow({
@@ -50,7 +54,7 @@ function NavigationRow({
         data-slot="navigation-row-leading"
         className={cn(
           "flex shrink-0 items-center justify-center",
-          current ? "text-current" : "text-muted-foreground",
+          current ? "text-current" : "text-muted-foreground"
         )}
         aria-hidden="true"
       >
@@ -62,24 +66,24 @@ function NavigationRow({
       >
         {label}
       </span>
-      {meta ? (
+      {meta == null ? null : (
         <span
           data-slot="navigation-row-meta"
-          className="flex shrink-0 items-center gap-control-group"
+          className="gap-control-group flex shrink-0 items-center"
         >
           {meta}
         </span>
-      ) : null}
+      )}
     </Button>
-  )
+  );
 
-  if (!tooltip) return row
+  if (tooltip == null || tooltip === "") return row;
   return (
     <Tooltip>
       <TooltipTrigger render={row} />
       <TooltipContent side="right">{tooltip}</TooltipContent>
     </Tooltip>
-  )
+  );
 }
 
-export { NavigationRow, type NavigationRowProps }
+export { NavigationRow, type NavigationRowProps };

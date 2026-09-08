@@ -18,13 +18,17 @@ export type ProjectActionIssue =
   | "preview_invalid"
   | "keybinding_conflict";
 
-export function projectActionId(name: string, actions: ProjectScript[]): string {
-  const stem = name
-    .normalize("NFKD")
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 56) || "action";
+export function projectActionId(
+  name: string,
+  actions: ProjectScript[]
+): string {
+  const stem =
+    name
+      .normalize("NFKD")
+      .toLocaleLowerCase()
+      .replaceAll(/[^a-z0-9]+/gu, "-")
+      .replaceAll(/^-+|-+$/gu, "")
+      .slice(0, 56) || "action";
   const ids = new Set(actions.map((action) => action.id));
   if (!ids.has(stem)) return stem;
   for (let suffix = 2; suffix < 10_000; suffix += 1) {
@@ -37,7 +41,7 @@ export function projectActionId(name: string, actions: ProjectScript[]): string 
 export function projectActionIssue(
   draft: ProjectActionDraft,
   bindings: KeymapEntry[],
-  actions: ProjectScript[],
+  actions: ProjectScript[]
 ): { issue: ProjectActionIssue; conflict?: string } | null {
   if (!draft.name.trim()) return { issue: "name_required" };
   if (draft.kind === "prompt") {
@@ -58,9 +62,14 @@ export function projectActionIssue(
   if (draft.keybinding) {
     const builtin = bindings.find(([, key]) => key === draft.keybinding);
     if (builtin) return { issue: "keybinding_conflict", conflict: builtin[2] };
-    const action = actions.find((candidate) => candidate.keybinding === draft.keybinding);
+    const action = actions.find(
+      (candidate) => candidate.keybinding === draft.keybinding
+    );
     if (action) {
-      return { issue: "keybinding_conflict", conflict: action.name || action.id };
+      return {
+        issue: "keybinding_conflict",
+        conflict: action.name || action.id,
+      };
     }
   }
   return null;
@@ -69,7 +78,13 @@ export function projectActionIssue(
 export function projectActionBindings(actions: ProjectScript[]): KeymapEntry[] {
   return actions.flatMap((action) =>
     action.keybinding
-      ? [[`project_action:${action.id}`, action.keybinding, action.name || action.id] as KeymapEntry]
-      : [],
+      ? [
+          [
+            `project_action:${action.id}`,
+            action.keybinding,
+            action.name || action.id,
+          ] as KeymapEntry,
+        ]
+      : []
   );
 }

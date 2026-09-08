@@ -1,14 +1,34 @@
-export const TASK_STATUSES = ["todo", "in_progress", "in_review", "done"] as const;
+export const TASK_STATUSES = [
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+] as const;
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-export const TASK_BOARD_LANES = ["queue", "running", "needs_you", "done"] as const;
+export const TASK_BOARD_LANES = [
+  "queue",
+  "running",
+  "needs_you",
+  "done",
+] as const;
 
 export type TaskBoardLane = (typeof TASK_BOARD_LANES)[number];
 
-export type TaskSessionActivityKind = "idle" | "running" | "awaiting_input" | "failed";
+export type TaskSessionActivityKind =
+  | "idle"
+  | "running"
+  | "awaiting_input"
+  | "failed";
 
-export const TASK_PRIORITIES = ["none", "low", "medium", "high", "urgent"] as const;
+export const TASK_PRIORITIES = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
 export const PRIORITIES = TASK_PRIORITIES;
 
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
@@ -45,12 +65,13 @@ export interface BoardTask {
  */
 export function taskBoardLane(
   task: Pick<BoardTask, "status">,
-  activity: TaskSessionActivityKind = "idle",
+  activity: TaskSessionActivityKind = "idle"
 ): TaskBoardLane {
   if (task.status === "done") return "done";
   if (task.status === "in_review") return "needs_you";
   if (task.status === "todo") return "queue";
-  if (activity === "awaiting_input" || activity === "failed") return "needs_you";
+  if (activity === "awaiting_input" || activity === "failed")
+    return "needs_you";
   if (activity === "running") return "running";
   return "queue";
 }
@@ -74,7 +95,8 @@ export interface StorageLike {
 export const TASKBOARD_STORAGE_KEY = "codetwo.taskboard.v1";
 export const TASKBOARD_SNAPSHOT_VERSION = 3 as const;
 
-export const CORRUPT_BOARD_WARNING = "无法读取已保存的任务看板，已恢复为示例任务。";
+export const CORRUPT_BOARD_WARNING =
+  "无法读取已保存的任务看板，已恢复为示例任务。";
 export const LOAD_BOARD_WARNING = "无法访问本地任务数据，已恢复为示例任务。";
 export const SAVE_BOARD_WARNING = "任务已更新，但暂时无法保存到本地。";
 
@@ -149,7 +171,8 @@ const DEFAULT_TASK_DATA: readonly Omit<
   {
     id: "seed-session-link",
     title: "设计会话关联入口",
-    description: "让任务可以跳转到相关编码会话，同时保持任务状态由看板独立管理。",
+    description:
+      "让任务可以跳转到相关编码会话，同时保持任务状态由看板独立管理。",
     status: "todo",
     priority: "medium",
     labels: ["产品", "会话"],
@@ -214,17 +237,20 @@ const ENGLISH_SEED_COPY: Record<
 > = {
   "seed-define-workflow": {
     title: "Confirm the task workflow",
-    description: "Agree on the entry criteria for To do, In progress, In review, and Done.",
+    description:
+      "Agree on the entry criteria for To do, In progress, In review, and Done.",
     labels: ["Product", "Workflow"],
   },
   "seed-local-persistence": {
     title: "Add local task persistence",
-    description: "Save the board and explain clearly when stored data is damaged or unavailable.",
+    description:
+      "Save the board and explain clearly when stored data is damaged or unavailable.",
     labels: ["Engineering", "Reliability"],
   },
   "seed-review-mobile-layout": {
     title: "Review the narrow board layout",
-    description: "Verify horizontal browsing, task menus, and filters in a narrow window.",
+    description:
+      "Verify horizontal browsing, task menus, and filters in a narrow window.",
     labels: ["Design", "Responsive"],
   },
   "seed-empty-state-copy": {
@@ -234,27 +260,32 @@ const ENGLISH_SEED_COPY: Record<
   },
   "seed-session-link": {
     title: "Design the session link entry point",
-    description: "Let a task open its coding sessions while the board remains the source of task state.",
+    description:
+      "Let a task open its coding sessions while the board remains the source of task state.",
     labels: ["Product", "Sessions"],
   },
   "seed-accessibility-notes": {
     title: "Document keyboard and accessibility behavior",
-    description: "Cover focus order, button names, and a non-drag path for moving tasks.",
+    description:
+      "Cover focus order, button names, and a non-drag path for moving tasks.",
     labels: ["Accessibility", "Docs"],
   },
   "seed-filter-search": {
     title: "Implement task filters and search",
-    description: "Narrow tasks by query, priority, and label without changing their order.",
+    description:
+      "Narrow tasks by query, priority, and label without changing their order.",
     labels: ["Engineering", "Search"],
   },
   "seed-review-drag-order": {
     title: "Verify drag ordering across columns",
-    description: "Check same-column reordering, cross-column moves, and filtered task order.",
+    description:
+      "Check same-column reordering, cross-column moves, and filtered task order.",
     labels: ["Testing", "Interaction"],
   },
   "seed-priority-guidelines": {
     title: "Define task priority guidelines",
-    description: "Clarify when to use no, low, medium, high, and urgent priority.",
+    description:
+      "Clarify when to use no, low, medium, high, and urgent priority.",
     labels: ["Product", "Guidelines"],
   },
 };
@@ -270,16 +301,20 @@ function cloneTask(task: BoardTask): BoardTask {
 
 /** Returns a fresh localized starter board so consumers cannot mutate the shared template. */
 export function seedTasks(locale: "en" | "zh-CN" = "zh-CN"): BoardTask[] {
-  return DEFAULT_TASK_DATA.map((task) => cloneTask({
-    ...(locale === "en" ? { ...task, ...ENGLISH_SEED_COPY[task.id] } : task),
-    pullRequest: null,
-    pullRequestLinkRevision: 0,
-  }));
+  return DEFAULT_TASK_DATA.map((task) =>
+    cloneTask({
+      ...(locale === "en" ? { ...task, ...ENGLISH_SEED_COPY[task.id] } : task),
+      pullRequest: null,
+      pullRequestLinkRevision: 0,
+    })
+  );
 }
 
 export const DEFAULT_TASKS: BoardTask[] = seedTasks();
 
-export function createInitialTaskBoardState(locale: "en" | "zh-CN" = "zh-CN"): TaskBoardState {
+export function createInitialTaskBoardState(
+  locale: "en" | "zh-CN" = "zh-CN"
+): TaskBoardState {
   return { tasks: seedTasks(locale), warning: null };
 }
 
@@ -298,7 +333,10 @@ function normalizeLabels(labels: readonly string[] | undefined): string[] {
 let fallbackId = 0;
 
 function generatedTaskId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
   fallbackId += 1;
@@ -323,11 +361,11 @@ export interface CreateBoardTaskOptions {
 /** Builds a complete task outside the reducer, keeping reducer evaluation deterministic and pure. */
 export function createBoardTask(
   input: CreateBoardTaskInput,
-  options: CreateBoardTaskOptions = {},
+  options: CreateBoardTaskOptions = {}
 ): BoardTask {
   const now = options.now ?? Date.now();
   return {
-    id: options.id?.trim() || generatedTaskId(),
+    id: options.id?.trim() ?? generatedTaskId(),
     title: input.title.trim() || "未命名任务",
     description: input.description?.trim() ?? "",
     status: input.status ?? "todo",
@@ -355,38 +393,45 @@ function normalizeSessionIds(values: readonly string[] | undefined): string[] {
 }
 
 export function latestTaskSessionId(task: BoardTask): string | null {
-  return task.sessionIds[task.sessionIds.length - 1] ?? null;
+  return task.sessionIds.at(-1)! ?? null;
 }
 
 export function taskForSession(
   tasks: readonly BoardTask[],
-  sessionId: string,
+  sessionId: string
 ): BoardTask | null {
   return tasks.find((task) => task.sessionIds.includes(sessionId)) ?? null;
 }
 
-export function githubPullRequestIdentity(reference: GitHubPullRequestReference): string {
+export function githubPullRequestIdentity(
+  reference: GitHubPullRequestReference
+): string {
   return `${reference.provider}:${reference.host}/${reference.repository.toLowerCase()}#${reference.number}`;
 }
 
 function samePullRequestReference(
   left: GitHubPullRequestReference | null,
-  right: GitHubPullRequestReference | null,
+  right: GitHubPullRequestReference | null
 ): boolean {
   if (left === null || right === null) return left === right;
-  return githubPullRequestIdentity(left) === githubPullRequestIdentity(right)
-    && left.url === right.url;
+  return (
+    githubPullRequestIdentity(left) === githubPullRequestIdentity(right) &&
+    left.url === right.url
+  );
 }
 
 export function taskForPullRequest(
   tasks: readonly BoardTask[],
-  reference: GitHubPullRequestReference,
+  reference: GitHubPullRequestReference
 ): BoardTask | null {
   const identity = githubPullRequestIdentity(reference);
-  return tasks.find((task) =>
-    task.pullRequest !== null
-    && githubPullRequestIdentity(task.pullRequest) === identity
-  ) ?? null;
+  return (
+    tasks.find(
+      (task) =>
+        task.pullRequest !== null &&
+        githubPullRequestIdentity(task.pullRequest) === identity
+    ) ?? null
+  );
 }
 
 /**
@@ -398,18 +443,22 @@ export function associateTaskPullRequest(
   tasks: readonly BoardTask[],
   taskId: string,
   reference: GitHubPullRequestReference,
-  now = Date.now(),
+  now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
-  if (index < 0) return null;
+  if (index === -1) return null;
   const identity = githubPullRequestIdentity(reference);
-  const target = tasks[index]!;
-  const linkedElsewhere = tasks.some((task, taskIndex) =>
-    taskIndex !== index
-    && task.pullRequest !== null
-    && githubPullRequestIdentity(task.pullRequest) === identity
+  const target = tasks[index];
+  const linkedElsewhere = tasks.some(
+    (task, taskIndex) =>
+      taskIndex !== index &&
+      task.pullRequest !== null &&
+      githubPullRequestIdentity(task.pullRequest) === identity
   );
-  if (samePullRequestReference(target.pullRequest, reference) && !linkedElsewhere) {
+  if (
+    samePullRequestReference(target.pullRequest, reference) &&
+    !linkedElsewhere
+  ) {
     return tasks.map(cloneTask);
   }
 
@@ -423,8 +472,8 @@ export function associateTaskPullRequest(
       };
     }
     if (
-      task.pullRequest === null
-      || githubPullRequestIdentity(task.pullRequest) !== identity
+      task.pullRequest === null ||
+      githubPullRequestIdentity(task.pullRequest) !== identity
     ) {
       return cloneTask(task);
     }
@@ -443,26 +492,28 @@ export function unlinkTaskPullRequest(
   taskId: string,
   expectedIdentity: string,
   expectedRevision: number,
-  now = Date.now(),
+  now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
   const task = tasks[index];
   if (
-    index < 0
-    || !task?.pullRequest
-    || task.pullRequestLinkRevision !== expectedRevision
-    || githubPullRequestIdentity(task.pullRequest) !== expectedIdentity
+    index === -1 ||
+    !task?.pullRequest ||
+    task.pullRequestLinkRevision !== expectedRevision ||
+    githubPullRequestIdentity(task.pullRequest) !== expectedIdentity
   ) {
     return null;
   }
-  return tasks.map((candidate, candidateIndex) => candidateIndex === index
-    ? {
-        ...cloneTask(candidate),
-        updatedAt: Math.max(now, candidate.createdAt, candidate.updatedAt),
-        pullRequest: null,
-        pullRequestLinkRevision: candidate.pullRequestLinkRevision + 1,
-      }
-    : cloneTask(candidate));
+  return tasks.map((candidate, candidateIndex) =>
+    candidateIndex === index
+      ? {
+          ...cloneTask(candidate),
+          updatedAt: Math.max(now, candidate.createdAt, candidate.updatedAt),
+          pullRequest: null,
+          pullRequestLinkRevision: candidate.pullRequestLinkRevision + 1,
+        }
+      : cloneTask(candidate)
+  );
 }
 
 /**
@@ -473,23 +524,23 @@ export function associateTaskSession(
   tasks: readonly BoardTask[],
   taskId: string,
   sessionId: string,
-  now = Date.now(),
+  now = Date.now()
 ): BoardTask[] | null {
   const index = tasks.findIndex((task) => task.id === taskId);
-  if (index < 0) return null;
-  const task = tasks[index]!;
+  if (index === -1) return null;
+  const task = tasks[index];
   const alreadyLinked = task.sessionIds.includes(sessionId);
   const linkedElsewhere = tasks.some(
     (candidate, candidateIndex) =>
-      candidateIndex !== index && candidate.sessionIds.includes(sessionId),
+      candidateIndex !== index && candidate.sessionIds.includes(sessionId)
   );
   const status = task.status === "todo" ? "in_progress" : task.status;
   const updatedAt = Math.max(now, task.createdAt, task.updatedAt);
   if (
-    alreadyLinked
-    && !linkedElsewhere
-    && status === task.status
-    && updatedAt === task.updatedAt
+    alreadyLinked &&
+    !linkedElsewhere &&
+    status === task.status &&
+    updatedAt === task.updatedAt
   ) {
     return tasks.map(cloneTask);
   }
@@ -497,7 +548,9 @@ export function associateTaskSession(
     ...task,
     status,
     updatedAt,
-    sessionIds: alreadyLinked ? [...task.sessionIds] : [...task.sessionIds, sessionId],
+    sessionIds: alreadyLinked
+      ? [...task.sessionIds]
+      : [...task.sessionIds, sessionId],
   };
   return tasks.map((candidate, candidateIndex) => {
     if (candidateIndex === index) return updated;
@@ -515,11 +568,11 @@ export function associateTaskSession(
 export function sortBoardTasks(tasks: readonly BoardTask[]): BoardTask[] {
   return tasks
     .map((task, index) => ({ task, index }))
-    .sort(
+    .toSorted(
       (a, b) =>
-        STATUS_INDEX[a.task.status] - STATUS_INDEX[b.task.status]
-        || a.task.order - b.task.order
-        || a.index - b.index,
+        STATUS_INDEX[a.task.status] - STATUS_INDEX[b.task.status] ||
+        a.task.order - b.task.order ||
+        a.index - b.index
     )
     .map(({ task }) => task);
 }
@@ -533,7 +586,7 @@ function normalizedSearchValue(value: string): string {
 /** Applies facets without sorting, preserving the caller's (including a filtered drag view's) order. */
 export function filterBoardTasks(
   tasks: readonly BoardTask[],
-  filters: BoardFilters,
+  filters: BoardFilters
 ): BoardTask[] {
   const query = normalizedSearchValue(filters.query);
   const priorities = new Set(filters.priorities);
@@ -541,7 +594,8 @@ export function filterBoardTasks(
 
   return tasks.filter((task) => {
     if (priorities.size > 0 && !priorities.has(task.priority)) return false;
-    if (labels.size > 0 && !task.labels.some((label) => labels.has(label))) return false;
+    if (labels.size > 0 && !task.labels.some((label) => labels.has(label)))
+      return false;
     if (!query) return true;
     const searchable = [
       task.id,
@@ -557,7 +611,9 @@ export function filterBoardTasks(
           ]
         : []),
     ];
-    return searchable.some((value) => normalizedSearchValue(value).includes(query));
+    return searchable.some((value) =>
+      normalizedSearchValue(value).includes(query)
+    );
   });
 }
 
@@ -579,7 +635,9 @@ export function boardLabels(tasks: readonly BoardTask[]): string[] {
 
 export const collectLabels = boardLabels;
 
-export function countTasksByStatus(tasks: readonly BoardTask[]): Record<TaskStatus, number> {
+export function countTasksByStatus(
+  tasks: readonly BoardTask[]
+): Record<TaskStatus, number> {
   const counts: Record<TaskStatus, number> = {
     todo: 0,
     in_progress: 0,
@@ -597,38 +655,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isTaskStatus(value: unknown): value is TaskStatus {
-  return typeof value === "string" && (TASK_STATUSES as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (TASK_STATUSES as readonly string[]).includes(value)
+  );
 }
 
 function isTaskPriority(value: unknown): value is TaskPriority {
-  return typeof value === "string" && (TASK_PRIORITIES as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (TASK_PRIORITIES as readonly string[]).includes(value)
+  );
 }
 
 function isGitHubRepository(value: string): boolean {
   const [owner, name, extra] = value.split("/");
-  return extra === undefined
-    && owner !== undefined
-    && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner)
-    && name !== undefined
-    && name.length <= 100
-    && /^[A-Za-z0-9._-]+$/.test(name);
+  return (
+    extra === undefined &&
+    owner !== undefined &&
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner) &&
+    name !== undefined &&
+    name.length <= 100 &&
+    /^[A-Za-z0-9._-]+$/.test(name)
+  );
 }
 
 function parseGitHubPullRequestReference(
-  value: unknown,
+  value: unknown
 ): GitHubPullRequestReference | null | undefined {
   if (value === null) return null;
   if (!isRecord(value)) return undefined;
   const { provider, host, repository, number, url } = value;
   if (
-    provider !== "github"
-    || typeof host !== "string"
-    || host.toLowerCase() !== "github.com"
-    || typeof repository !== "string"
-    || typeof number !== "number"
-    || !Number.isSafeInteger(number)
-    || number <= 0
-    || typeof url !== "string"
+    provider !== "github" ||
+    typeof host !== "string" ||
+    host.toLowerCase() !== "github.com" ||
+    typeof repository !== "string" ||
+    typeof number !== "number" ||
+    !Number.isSafeInteger(number) ||
+    number <= 0 ||
+    typeof url !== "string"
   ) {
     return undefined;
   }
@@ -638,17 +704,17 @@ function parseGitHubPullRequestReference(
     const parsed = new URL(url);
     const path = parsed.pathname.split("/").filter(Boolean);
     if (
-      parsed.protocol !== "https:"
-      || parsed.hostname.toLowerCase() !== "github.com"
-      || parsed.username
-      || parsed.password
-      || parsed.search
-      || parsed.hash
-      || path.length !== 4
-      || path[2] !== "pull"
-      || path[3] !== String(number)
-      || `${path[0]}/${path[1]}`.toLowerCase()
-        !== normalizedRepository.toLowerCase()
+      parsed.protocol !== "https:" ||
+      parsed.hostname.toLowerCase() !== "github.com" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash ||
+      path.length !== 4 ||
+      path[2] !== "pull" ||
+      path[3] !== String(number) ||
+      `${path[0]}/${path[1]}`.toLowerCase() !==
+        normalizedRepository.toLowerCase()
     ) {
       return undefined;
     }
@@ -666,7 +732,10 @@ function parseGitHubPullRequestReference(
 
 type SupportedBoardSnapshotVersion = 1 | 2 | typeof TASKBOARD_SNAPSHOT_VERSION;
 
-function parseTask(value: unknown, version: SupportedBoardSnapshotVersion): BoardTask | null {
+function parseTask(
+  value: unknown,
+  version: SupportedBoardSnapshotVersion
+): BoardTask | null {
   if (!isRecord(value)) return null;
   const {
     id,
@@ -683,38 +752,44 @@ function parseTask(value: unknown, version: SupportedBoardSnapshotVersion): Boar
     pullRequest,
     pullRequestLinkRevision,
   } = value;
-  const persistedSessionIds = version === 1
-    ? (typeof linkedSessionId === "string" ? [linkedSessionId] : [])
-    : sessionIds;
-  const persistedPullRequest = version < 3
-    ? null
-    : parseGitHubPullRequestReference(pullRequest);
-  const persistedPullRequestRevision = version < 3 ? 0 : pullRequestLinkRevision;
+  const persistedSessionIds =
+    version === 1
+      ? typeof linkedSessionId === "string"
+        ? [linkedSessionId]
+        : []
+      : sessionIds;
+  const persistedPullRequest =
+    version < 3 ? null : parseGitHubPullRequestReference(pullRequest);
+  const persistedPullRequestRevision =
+    version < 3 ? 0 : pullRequestLinkRevision;
   if (
-    typeof id !== "string"
-    || !id.trim()
-    || typeof title !== "string"
-    || !title.trim()
-    || typeof description !== "string"
-    || !isTaskStatus(status)
-    || !isTaskPriority(priority)
-    || !Array.isArray(labels)
-    || !labels.every((label) => typeof label === "string")
-    || typeof order !== "number"
-    || !Number.isFinite(order)
-    || typeof createdAt !== "number"
-    || !Number.isSafeInteger(createdAt)
-    || createdAt < 0
-    || typeof updatedAt !== "number"
-    || !Number.isSafeInteger(updatedAt)
-    || updatedAt < createdAt
-    || !Array.isArray(persistedSessionIds)
-    || !persistedSessionIds.every((sessionId) => typeof sessionId === "string" && sessionId.trim())
-    || persistedPullRequest === undefined
-    || typeof persistedPullRequestRevision !== "number"
-    || !Number.isSafeInteger(persistedPullRequestRevision)
-    || persistedPullRequestRevision < 0
-    || persistedPullRequestRevision >= Number.MAX_SAFE_INTEGER
+    typeof id !== "string" ||
+    !id.trim() ||
+    typeof title !== "string" ||
+    !title.trim() ||
+    typeof description !== "string" ||
+    !isTaskStatus(status) ||
+    !isTaskPriority(priority) ||
+    !Array.isArray(labels) ||
+    !labels.every((label) => typeof label === "string") ||
+    typeof order !== "number" ||
+    !Number.isFinite(order) ||
+    typeof createdAt !== "number" ||
+    !Number.isSafeInteger(createdAt) ||
+    createdAt < 0 ||
+    typeof updatedAt !== "number" ||
+    !Number.isSafeInteger(updatedAt) ||
+    updatedAt < createdAt ||
+    !Array.isArray(persistedSessionIds) ||
+    !persistedSessionIds.every(
+      (sessionId) =>
+        typeof sessionId === "string" && sessionId.trim().length > 0
+    ) ||
+    persistedPullRequest === undefined ||
+    typeof persistedPullRequestRevision !== "number" ||
+    !Number.isSafeInteger(persistedPullRequestRevision) ||
+    persistedPullRequestRevision < 0 ||
+    persistedPullRequestRevision >= Number.MAX_SAFE_INTEGER
   ) {
     return null;
   }
@@ -741,22 +816,20 @@ function corruptBoardState(locale: "en" | "zh-CN" = "zh-CN"): TaskBoardState {
 /** Parses and validates the complete snapshot boundary; no unchecked persisted value reaches the UI. */
 export function parseBoardSnapshot(
   raw: string,
-  locale: "en" | "zh-CN" = "zh-CN",
+  locale: "en" | "zh-CN" = "zh-CN"
 ): TaskBoardState {
   try {
     const value: unknown = JSON.parse(raw);
     if (
-      !isRecord(value)
-      || (
-        value.version !== 1
-        && value.version !== 2
-        && value.version !== TASKBOARD_SNAPSHOT_VERSION
-      )
-      || !Array.isArray(value.tasks)
+      !isRecord(value) ||
+      (value.version !== 1 &&
+        value.version !== 2 &&
+        value.version !== TASKBOARD_SNAPSHOT_VERSION) ||
+      !Array.isArray(value.tasks)
     ) {
       return corruptBoardState(locale);
     }
-    const version = value.version;
+    const { version } = value;
     const tasks: BoardTask[] = [];
     const ids = new Set<string>();
     const claimedSessions = new Set<string>();
@@ -797,13 +870,15 @@ function defaultStorage(): StorageLike | null {
 
 export function loadBoardSnapshot(
   storage?: StorageLike | null,
-  locale: "en" | "zh-CN" = "zh-CN",
+  locale: "en" | "zh-CN" = "zh-CN"
 ): TaskBoardState {
   const resolvedStorage = storage === undefined ? defaultStorage() : storage;
   if (!resolvedStorage) return createInitialTaskBoardState(locale);
   try {
     const raw = resolvedStorage.getItem(TASKBOARD_STORAGE_KEY);
-    return raw === null ? createInitialTaskBoardState(locale) : parseBoardSnapshot(raw, locale);
+    return raw === null
+      ? createInitialTaskBoardState(locale)
+      : parseBoardSnapshot(raw, locale);
   } catch {
     return { tasks: seedTasks(locale), warning: LOAD_BOARD_WARNING };
   }
@@ -813,7 +888,7 @@ export const loadTaskBoard = loadBoardSnapshot;
 
 export function saveBoardSnapshot(
   value: readonly BoardTask[] | TaskBoardState,
-  storage?: StorageLike | null,
+  storage?: StorageLike | null
 ): BoardSaveResult {
   const resolvedStorage = storage === undefined ? defaultStorage() : storage;
   if (!resolvedStorage) return { ok: false, warning: SAVE_BOARD_WARNING };
@@ -836,49 +911,71 @@ export type BoardAction =
   | { type: "create"; task: BoardTask }
   | { type: "update"; task: BoardTask }
   | { type: "delete"; id: string }
-  | { type: "move"; id: string; status: TaskStatus; beforeId?: string; now?: number }
+  | {
+      type: "move";
+      id: string;
+      status: TaskStatus;
+      beforeId?: string;
+      now?: number;
+    }
   | { type: "hydrate"; tasks: BoardTask[]; warning?: string | null };
 
 export type TaskBoardAction = BoardAction;
 
-function tasksInStatus(tasks: readonly BoardTask[], status: TaskStatus, omittedId?: string): BoardTask[] {
-  return sortBoardTasks(tasks).filter((task) => task.status === status && task.id !== omittedId);
+function tasksInStatus(
+  tasks: readonly BoardTask[],
+  status: TaskStatus,
+  omittedId?: string
+): BoardTask[] {
+  return sortBoardTasks(tasks).filter(
+    (task) => task.status === status && task.id !== omittedId
+  );
 }
 
 function reindexStatuses(
   tasks: readonly BoardTask[],
-  orderedByStatus: ReadonlyMap<TaskStatus, readonly BoardTask[]>,
+  orderedByStatus: ReadonlyMap<TaskStatus, readonly BoardTask[]>
 ): BoardTask[] {
   const placement = new Map<string, { status: TaskStatus; order: number }>();
   for (const [status, statusTasks] of orderedByStatus) {
-    statusTasks.forEach((task, order) => placement.set(task.id, { status, order }));
+    statusTasks.forEach((task, order) =>
+      placement.set(task.id, { status, order })
+    );
   }
   return tasks.map((task) => {
     const next = placement.get(task.id);
-    if (!next || (task.status === next.status && task.order === next.order)) return task;
+    if (!next || (task.status === next.status && task.order === next.order))
+      return task;
     return { ...task, status: next.status, order: next.order };
   });
 }
 
 function sameTask(left: BoardTask, right: BoardTask): boolean {
-  return left.id === right.id
-    && left.title === right.title
-    && left.description === right.description
-    && left.status === right.status
-    && left.priority === right.priority
-    && left.order === right.order
-    && left.createdAt === right.createdAt
-    && left.updatedAt === right.updatedAt
-    && left.pullRequestLinkRevision === right.pullRequestLinkRevision
-    && samePullRequestReference(left.pullRequest, right.pullRequest)
-    && left.sessionIds.length === right.sessionIds.length
-    && left.sessionIds.every((sessionId, index) => sessionId === right.sessionIds[index])
-    && left.labels.length === right.labels.length
-    && left.labels.every((label, index) => label === right.labels[index]);
+  return (
+    left.id === right.id &&
+    left.title === right.title &&
+    left.description === right.description &&
+    left.status === right.status &&
+    left.priority === right.priority &&
+    left.order === right.order &&
+    left.createdAt === right.createdAt &&
+    left.updatedAt === right.updatedAt &&
+    left.pullRequestLinkRevision === right.pullRequestLinkRevision &&
+    samePullRequestReference(left.pullRequest, right.pullRequest) &&
+    left.sessionIds.length === right.sessionIds.length &&
+    left.sessionIds.every(
+      (sessionId, index) => sessionId === right.sessionIds[index]
+    ) &&
+    left.labels.length === right.labels.length &&
+    left.labels.every((label, index) => label === right.labels[index])
+  );
 }
 
 /** Pure board state transitions. Time and ID generation deliberately happen before dispatch. */
-export function boardReducer(state: TaskBoardState, action: BoardAction): TaskBoardState {
+export function boardReducer(
+  state: TaskBoardState,
+  action: BoardAction
+): TaskBoardState {
   switch (action.type) {
     case "create": {
       if (state.tasks.some((task) => task.id === action.task.id)) return state;
@@ -887,7 +984,10 @@ export function boardReducer(state: TaskBoardState, action: BoardAction): TaskBo
       task.order = current.length;
       return {
         ...state,
-        tasks: reindexStatuses([...state.tasks, task], new Map([[task.status, [...current, task]]])),
+        tasks: reindexStatuses(
+          [...state.tasks, task],
+          new Map([[task.status, [...current, task]]])
+        ),
       };
     }
     case "update": {
@@ -897,13 +997,21 @@ export function boardReducer(state: TaskBoardState, action: BoardAction): TaskBo
       if (previous.status === replacement.status) {
         return {
           ...state,
-          tasks: state.tasks.map((task) => (task.id === replacement.id ? replacement : task)),
+          tasks: state.tasks.map((task) =>
+            task.id === replacement.id ? replacement : task
+          ),
         };
       }
       const source = tasksInStatus(state.tasks, previous.status, previous.id);
-      const target = tasksInStatus(state.tasks, replacement.status, previous.id);
+      const target = tasksInStatus(
+        state.tasks,
+        replacement.status,
+        previous.id
+      );
       replacement.order = target.length;
-      const replaced = state.tasks.map((task) => (task.id === replacement.id ? replacement : task));
+      const replaced = state.tasks.map((task) =>
+        task.id === replacement.id ? replacement : task
+      );
       return {
         ...state,
         tasks: reindexStatuses(
@@ -911,17 +1019,22 @@ export function boardReducer(state: TaskBoardState, action: BoardAction): TaskBo
           new Map([
             [previous.status, source],
             [replacement.status, [...target, replacement]],
-          ]),
+          ])
         ),
       };
     }
     case "delete": {
       const task = state.tasks.find((candidate) => candidate.id === action.id);
       if (!task) return state;
-      const tasks = state.tasks.filter((candidate) => candidate.id !== action.id);
+      const tasks = state.tasks.filter(
+        (candidate) => candidate.id !== action.id
+      );
       return {
         ...state,
-        tasks: reindexStatuses(tasks, new Map([[task.status, tasksInStatus(tasks, task.status)]])),
+        tasks: reindexStatuses(
+          tasks,
+          new Map([[task.status, tasksInStatus(tasks, task.status)]])
+        ),
       };
     }
     case "move": {
@@ -930,40 +1043,58 @@ export function boardReducer(state: TaskBoardState, action: BoardAction): TaskBo
       const target = tasksInStatus(state.tasks, action.status, moving.id);
       let insertionIndex = target.length;
       if (action.beforeId !== undefined) {
-        insertionIndex = target.findIndex((task) => task.id === action.beforeId);
+        insertionIndex = target.findIndex(
+          (task) => task.id === action.beforeId
+        );
         // A supplied anchor is exact: stale or cross-column IDs must not turn into an append.
         if (insertionIndex < 0) return state;
       }
       const nextTarget = [...target];
       nextTarget.splice(insertionIndex, 0, moving);
-      const currentTargetIds = tasksInStatus(state.tasks, action.status).map((task) => task.id);
+      const currentTargetIds = tasksInStatus(state.tasks, action.status).map(
+        (task) => task.id
+      );
       const nextTargetIds = nextTarget.map((task) => task.id);
       if (
-        moving.status === action.status
-        && currentTargetIds.length === nextTargetIds.length
-        && currentTargetIds.every((id, index) => id === nextTargetIds[index])
+        moving.status === action.status &&
+        currentTargetIds.length === nextTargetIds.length &&
+        currentTargetIds.every((id, index) => id === nextTargetIds[index])
       ) {
         return state;
       }
 
-      const orderings = new Map<TaskStatus, readonly BoardTask[]>([[action.status, nextTarget]]);
+      const orderings = new Map<TaskStatus, readonly BoardTask[]>([
+        [action.status, nextTarget],
+      ]);
       if (moving.status !== action.status) {
-        orderings.set(moving.status, tasksInStatus(state.tasks, moving.status, moving.id));
+        orderings.set(
+          moving.status,
+          tasksInStatus(state.tasks, moving.status, moving.id)
+        );
       }
-      const timestampedTasks = action.now === undefined
-        ? state.tasks
-        : state.tasks.map((task) => (
-            task.id === moving.id
-              ? { ...task, updatedAt: Math.max(action.now!, task.createdAt, task.updatedAt) }
-              : task
-          ));
+      const timestampedTasks =
+        action.now === undefined
+          ? state.tasks
+          : state.tasks.map((task) =>
+              task.id === moving.id
+                ? {
+                    ...task,
+                    updatedAt: Math.max(
+                      action.now!,
+                      task.createdAt,
+                      task.updatedAt
+                    ),
+                  }
+                : task
+            );
       return { ...state, tasks: reindexStatuses(timestampedTasks, orderings) };
     }
-    case "hydrate":
+    case "hydrate": {
       return {
         tasks: action.tasks.map(cloneTask),
         warning: action.warning ?? null,
       };
+    }
   }
 }
 

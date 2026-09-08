@@ -1,8 +1,17 @@
-// @ts-nocheck
-import { act as reactAct } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { activateDom, button, dom, flush, mount, restoreDom, text } from "./domTestHarness";
+// @ts-nocheck
+import { act as reactAct } from "react";
+
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+  text,
+} from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
@@ -15,13 +24,17 @@ afterEach(() => {
 
 async function press(element: Element) {
   await reactAct(async () => {
-    element.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 1,
-    }));
-    element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    element.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      })
+    );
+    element.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
   });
   await flush();
 }
@@ -58,16 +71,19 @@ describe("GitDockContent", () => {
           onOpenPullRequest={() => calls.push("pull-request")}
           onCleanupWorktree={() => calls.push("cleanup")}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    expect(text(view.container, "2 local commits have not been pushed.")).not.toBeNull();
+    expect(
+      text(view.container, "2 local commits have not been pushed.")
+    ).not.toBeNull();
     await press(button(view.container, "Push"));
     expect(calls).toEqual(["push"]);
 
     await press(button(view.container, "More Git actions"));
-    const sourceControl = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
-      .find((item) => item.textContent?.includes("Source control"));
+    const sourceControl = [
+      ...dom.document.body.querySelectorAll('[role="menuitem"]'),
+    ].find((item) => item.textContent?.includes("Source control"));
     if (!sourceControl) throw new Error("Source control alternative not found");
     await press(sourceControl);
     expect(calls).toEqual(["push", "source-control"]);
@@ -92,14 +108,21 @@ describe("GitDockContent", () => {
           onOpenPullRequest={() => {}}
           onCleanupWorktree={() => {}}
         />
-      </I18nProvider>,
+      </I18nProvider>
     );
 
-    const unavailableButton = button(view.container, "Source control unavailable");
+    const unavailableButton = button(
+      view.container,
+      "Source control unavailable"
+    );
     expect(unavailableButton.disabled).toBe(true);
     expect(unavailableButton.dataset.variant).toBe("secondary");
-    expect(text(view.container, "The current workspace is not a Git repository.")).not.toBeNull();
-    expect(view.container.querySelector('[aria-label="More Git actions"]')).toBeNull();
+    expect(
+      text(view.container, "The current workspace is not a Git repository.")
+    ).not.toBeNull();
+    expect(
+      view.container.querySelector('[aria-label="More Git actions"]')
+    ).toBeNull();
     view.unmount();
   });
 });
