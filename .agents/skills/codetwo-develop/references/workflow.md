@@ -126,6 +126,57 @@ verification must be independent of the Intent and Plan implementation owners. F
 at least one FAIL; record prior attempts separately. Skips state their reason. New relevant changes
 invalidate the affected evidence: return to `in-progress` and recheck before `passed`.
 
+## Cleanup and handoff
+
+Cleanup is part of every work cycle: development, verification, review fixes, packaging and
+runtime diagnosis. Perform it before handing work back, including failed, blocked or cancelled
+work; do not wait for merge or a later user reminder. Clean obsolete retries during long tasks
+instead of accumulating another complete build/profile for every attempt.
+
+In Plan, name the task-owned scratch/output roots and processes. Prefer ignored
+`.codex/run/<change-id>/<worker-id>/` roots or the existing desktop profile directories; keep
+different workers' ownership explicit. Use `finally`/exit handlers for disposable test fixtures
+and short-lived children, plus a final inventory because crashes can bypass handlers.
+
+At each handoff:
+
+1. Inspect the exact task-owned paths, processes, ports and locks. For substantial output, measure
+   disk use before and after. A stopped shell is not proof that all children have exited.
+2. Stop only task-owned test processes through their owner/launcher, then verify exit and released
+   ownership. Never kill another worker or the user's running app to make cleanup succeed.
+3. Remove obsolete test bundles, dedicated Cargo/Swift/renderer outputs, temporary worktrees,
+   sockets, downloads, failed probes and redundant logs that this task created. Remove temporary
+   worktrees only after their source changes are safely handed off and Git confirms they are clean.
+   Preview the exact
+   candidates before removal. Validate path boundaries and ownership; do not use broad recursive
+   deletion or remove a live lock inode. Do not erase shared toolchain/package caches by default.
+4. Keep user data, credentials, source edits, input files and requested deliverables. Consolidate
+   necessary evidence into a small task-owned directory. For any retained temporary resource,
+   record its path, purpose, responsible owner and the next cleanup checkpoint or expiry. Check
+   those retained items on the next continuation; "keep for later" is not a retention policy.
+5. Record the result in Verification's `## Cleanup`. No temporary output still requires an explicit
+   "none" with the inspection evidence; do not mark cleanup complete without checking.
+
+Use `cleanup_status: pending | complete | blocked` in Verification only. `complete` means every
+owned resource was removed or deliberately retained with accountable follow-up. It does not mean
+all acceptance criteria passed. If safe cleanup is impossible, use `blocked`, state the specific
+Blocker and Cleanup trigger, preserve the resource, and report it; cleanup never grants new
+permission to delete user data, terminate unrelated processes or dispose of release deliverables.
+The current implementation request authorizes ordinary cleanup of its own disposable artifacts;
+no additional approval round is needed for that bounded cleanup.
+
+The Cleanup section uses `Removed`, `Retained`, `Processes` and `Evidence` labels. Evidence cites
+an actual inspection/cleanup command or linked report. `Retained: none` needs no retention fields;
+otherwise add `Retention owner` and `Cleanup trigger`. Blocked cleanup also needs `Blocker`.
+
+New templates include these fields. Unchanged historical records remain readable. Worktree and
+branch checks require cleanup metadata on changed schema-5 bundles, and schema-5 Ready PR/release
+checks require it even without a diff. Pending cleanup cannot accompany failed/blocked handoff;
+passed verification requires complete cleanup. The checker validates declarations and evidence
+references, not filesystem deletion; the agent must still inspect and clean actual resources.
+Do not change a failed/blocked product verdict just because cleanup is complete. Re-run the
+existing scope/documentation checks after cleanup without recreating unrelated build outputs.
+
 ## Review and release
 
 Create/push a PR only when delivery includes it. Link each changed record from the

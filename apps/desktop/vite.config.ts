@@ -4,6 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+import { resolveDevProfile } from "./scripts/dev-profile";
+
+const profile = resolveDevProfile();
 const webCoreTarget =
   process.env.CODETWO_WEB_CORE_URL ?? "http://127.0.0.1:4599";
 
@@ -18,21 +21,25 @@ export default defineConfig({
     tailwindcss(),
   ],
   base: "./",
+  cacheDir: profile ? path.join(profile.root, "vite-cache") : undefined,
   clearScreen: false,
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },
   server: {
-    port: 1420,
+    port: profile?.port ?? 1420,
     strictPort: true,
-    proxy: {
-      "/api": { target: webCoreTarget, changeOrigin: true },
-      "/ws": { target: webCoreTarget, changeOrigin: true, ws: true },
-    },
+    proxy:
+      profile && process.env.CODETWO_WEB_CORE_URL === undefined
+        ? undefined
+        : {
+            "/api": { target: webCoreTarget, changeOrigin: true },
+            "/ws": { target: webCoreTarget, changeOrigin: true, ws: true },
+          },
   },
   build: {
     target: "es2021",
-    outDir: "dist",
+    outDir: profile?.rendererDir ?? "dist",
     emptyOutDir: true,
     rollupOptions: {
       input: {

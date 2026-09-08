@@ -20,6 +20,7 @@ import {
   isCanonicalStagePath,
   planCoversPath,
   validateLocalLinks,
+  validateCleanup,
   validateStageBundle,
   type StageBundle,
 } from "./stage-bundle";
@@ -185,6 +186,14 @@ function validateChangedArtifactGate(
       .filter(Boolean) as string[],
   );
 
+  for (const id of changedBundleIds) {
+    const bundle = bundles.get(id);
+    if (bundle?.intent.metadata.schema === "5" && bundle.verification && bundle.verification.metadata.cleanup_status === undefined) {
+      errors.push(...validateCleanup(bundle.verification, true));
+    }
+  }
+  if (errors.length > 0) return errors;
+
   if (ready) {
     for (const id of changedBundleIds) {
       const bundle = bundles.get(id);
@@ -221,6 +230,10 @@ function validateReleaseGate(bundles: Map<string, StageBundle>, changeId: string
   const verification = bundle.verification;
   if (verification?.metadata.status !== "passed") {
     return [`release change ${changeId} requires verification passed`];
+  }
+  if (bundle.intent.metadata.schema === "5") {
+    const errors = validateCleanup(verification, true);
+    if (errors.length) return errors;
   }
   const target = verification.metadata.release_target ?? "";
   if (!isConcrete(target) || target.toLowerCase().replace(/\.$/, "") === "none") {

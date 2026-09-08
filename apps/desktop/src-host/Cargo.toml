@@ -19,8 +19,12 @@ codetwo-server = { path = "../../../crates/server" }
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 tempfile = "3"
+fs2 = "0.4.3"
 url = "2"
 keyring = { version = "=3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [lib]
 name = "codetwo_desktop_host"

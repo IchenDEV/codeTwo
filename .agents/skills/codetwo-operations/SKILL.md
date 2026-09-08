@@ -14,3 +14,5 @@ Load only the matching reference:
 Read-only diagnosis does not authorize stopping a user's Core, replacing live data, moving tasks,
 or sending messages. Keep recovery within the authorized target and action; preserve one Core
 owner per data directory. Packaging or publication follows the [release Skill](../codetwo-release/SKILL.md).
+
+Before handoff, apply the shared [cleanup contract](../codetwo-develop/references/workflow.md#cleanup-and-handoff) and record what was removed or retained, including when work fails or stops.

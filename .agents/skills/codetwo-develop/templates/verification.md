@@ -11,6 +11,7 @@ verification_mode: owner
 verified_by: ""
 verified_at: ""
 release_target: none
+cleanup_status: pending
 ---
 
 # Verification: {{TITLE}}
@@ -21,6 +22,15 @@ release_target: none
 
 Verdict: pending.
 Residual risk: pending.
+
+## Cleanup
+
+Removed: pending.
+Retained: pending.
+Retention owner: pending.
+Cleanup trigger: pending.
+Processes: pending.
+Evidence: pending.
 
 ## Review and release
 

@@ -1,8 +1,16 @@
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { resolveDevProfile } from "./dev-profile";
+
+const profile = resolveDevProfile();
 const desktopRoot = resolve(import.meta.dir, "..");
 const repositoryRoot = resolve(desktopRoot, "../..");
+// Electrobun invokes preBuild only after its downloaded binaries are fully prepared.
+writeFileSync(
+  resolve(desktopRoot, "node_modules", ".codetwo-electrobun-ready"),
+  "1"
+);
 
 function run(command: string[], cwd: string): void {
   const result = Bun.spawnSync(command, {
@@ -17,30 +25,24 @@ function run(command: string[], cwd: string): void {
 run(["bun", "run", "build:renderer"], desktopRoot);
 run(["bun", "run", "build:tool-broker"], desktopRoot);
 
-const hostExecutable =
-  process.platform === "win32"
-    ? "codetwo-desktop-host.exe"
-    : "codetwo-desktop-host";
-const hostBinaryPath = resolve(
-  repositoryRoot,
-  "target",
-  "release",
-  hostExecutable
+// Cargo's incremental build checks source freshness; existence alone can select an old host.
+run(
+  [
+    "cargo",
+    "build",
+    "--release",
+    "-p",
+    "codetwo-desktop-host",
+    ...(profile ? ["--target-dir", profile.targetDir] : []),
+  ],
+  repositoryRoot
 );
-if (existsSync(hostBinaryPath)) {
-  console.log(
-    `Skipping cargo build: ${hostExecutable} already exists at ${hostBinaryPath}`
-  );
-} else {
-  run(
-    ["cargo", "build", "--release", "-p", "codetwo-desktop-host"],
-    repositoryRoot
-  );
-}
 
 if (process.platform === "darwin") {
   const windowEffectsRoot = resolve(desktopRoot, "native", "window-effects");
-  const windowEffectsBuild = resolve(windowEffectsRoot, ".build");
+  const windowEffectsBuild = profile
+    ? resolve(profile.nativeDir, "window-effects")
+    : resolve(windowEffectsRoot, ".build");
   mkdirSync(windowEffectsBuild, { recursive: true });
   run(
     [
@@ -68,6 +70,14 @@ if (process.platform === "darwin") {
       "release",
       "--package-path",
       resolve(desktopRoot, "native", "update-helper"),
+      ...(profile
+        ? [
+            "--scratch-path",
+            resolve(profile.nativeDir, "update-helper"),
+            "--cache-path",
+            resolve(profile.nativeDir, "swift-cache"),
+          ]
+        : []),
     ],
     desktopRoot
   );
@@ -80,6 +90,14 @@ if (process.platform === "darwin") {
       "release",
       "--package-path",
       resolve(desktopRoot, "native", "cloud-sync-helper"),
+      ...(profile
+        ? [
+            "--scratch-path",
+            resolve(profile.nativeDir, "cloud-sync-helper"),
+            "--cache-path",
+            resolve(profile.nativeDir, "swift-cache"),
+          ]
+        : []),
     ],
     desktopRoot
   );

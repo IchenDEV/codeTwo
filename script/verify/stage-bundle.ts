@@ -300,6 +300,44 @@ function validateChangeRecord(root: string, dir: string): { bundle: StageBundle 
   return { bundle: { id, dir, intent, spec, plan, verification }, errors: errors.filter(Boolean) };
 }
 
+// Existing untouched records remain readable. Worktree/PR gates require adoption on changed
+// schema-5 bundles, so deleting the cleanup fields cannot bypass the handoff check.
+export function validateCleanup(verification: Artifact, required = false): string[] {
+  const status = verification.metadata.cleanup_status;
+  if (status === undefined && !required) return [];
+  const path = display(verification.path);
+  const errors: string[] = [];
+  if (!["pending", "complete", "blocked"].includes(status ?? "")) {
+    return [`${path}: requires cleanup_status pending, complete, or blocked`];
+  }
+  const section = verification.sections.cleanup ?? "";
+  if (!section.trim()) errors.push(`${path}: requires ## Cleanup`);
+  if (verification.metadata.status === "passed" && status !== "complete") {
+    errors.push(`${path}: passed verification requires cleanup_status complete`);
+  }
+  if (["failed", "blocked"].includes(verification.metadata.status) && status === "pending") {
+    errors.push(`${path}: failed/blocked handoff must record cleanup complete or blocked`);
+  }
+  if (status === "pending") return errors;
+  for (const label of ["Removed", "Retained", "Processes", "Evidence"]) {
+    if (!isConcrete(labelValue(section, label))) errors.push(`${path}: Cleanup requires concrete ${label}`);
+  }
+  const retained = labelValue(section, "Retained") ?? "";
+  if (status === "blocked" || !/^none(?:[.;:\s—-]|$)/i.test(retained)) {
+    for (const label of ["Retention owner", "Cleanup trigger"]) {
+      if (!isConcrete(labelValue(section, label))) errors.push(`${path}: retained resources require ${label}`);
+    }
+  }
+  if (status === "blocked" && !isConcrete(labelValue(section, "Blocker"))) {
+    errors.push(`${path}: blocked cleanup requires Blocker`);
+  }
+  const evidence = labelValue(section, "Evidence") ?? "";
+  if (!evidence.includes("`") && linkTargets(evidence).length === 0) {
+    errors.push(`${path}: cleanup Evidence must cite an inspection/cleanup command or linked artifact`);
+  }
+  return errors;
+}
+
 // Schema 5 separates facts into four files while reusing evidence/scope/release Gates.
 function validateFourStageBundle(root: string, dir: string, stages: Partial<Record<(typeof STAGE_FILES)[number], Artifact>>): { bundle: StageBundle | null; errors: string[] } {
   const errors: string[] = [];
@@ -314,7 +352,7 @@ function validateFourStageBundle(root: string, dir: string, stages: Partial<Reco
     source: "intent", risk: "intent", approved_by: "intent", approved_at: "intent", approval_source: "intent",
     design_approved_by: "spec", design_approved_at: "spec", design_approval_source: "spec",
     scope: "plan", revision: "verification", verification_mode: "verification",
-    verified_by: "verification", verified_at: "verification", release_target: "verification",
+    verified_by: "verification", verified_at: "verification", release_target: "verification", cleanup_status: "verification",
   };
   const implementationOwners = [intent, plan].filter(Boolean).map(stage => normalizedActor(stage!.metadata.owner));
   for (const [index, fileName] of STAGE_FILES.entries()) {
@@ -358,6 +396,7 @@ function validateFourStageBundle(root: string, dir: string, stages: Partial<Reco
     if (!isConcrete(plan.metadata.scope)) errors.push(`${plan.path}: plan requires explicit scope`);
     else errors.push(...validateScope(plan.metadata.scope, plan.path));
   }
+  if (verification) errors.push(...validateCleanup(verification));
   // Expose section views only in memory; evidence still lives solely in verification.md.
   let evidenceView = verification;
   if (spec && verification) {

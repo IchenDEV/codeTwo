@@ -155,12 +155,18 @@ const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 if (process.platform === "darwin") {
   ApplicationMenu.setApplicationMenu(macOSApplicationMenu());
 }
+const profileDataDir = process.env.CODETWO_PROFILE_DATA_DIR;
+const profileSceneSocket = process.env.CODETWO_PROFILE_SCENE_SOCKET;
 const dataDir =
   process.env.CODETWO_DATA_DIR ??
+  (profileDataDir === "" ? undefined : profileDataDir) ??
   join(
     Utils.paths.appData,
     process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev"
   );
+if (profileSceneSocket != null && profileSceneSocket !== "") {
+  process.env.CODETWO_SCENE_SOCKET = profileSceneSocket;
+}
 const desktopPetPositionPath = join(dataDir, "desktop-pet-window.json");
 const desktopPetWidth = 184;
 const desktopPetHeights = { small: 156, medium: 180, large: 204 } as const;

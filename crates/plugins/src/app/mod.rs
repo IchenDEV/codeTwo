@@ -53,6 +53,7 @@
 //! ```
 
 mod bundle_runtime;
+mod data_dir_lock;
 pub mod events;
 mod plugin_config;
 mod plugin_manager;
@@ -106,13 +107,42 @@ pub(crate) fn json<T: Serialize>(value: T) -> Result<Value, PluginError> {
 }
 
 /// What to boot: where the data lives, and which plugins to run with what config.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AppConfig {
     pub plugins: LoaderConfig,
     data_dir: Option<PathBuf>,
+    data_dir_lock: Option<Arc<data_dir_lock::DataDirLock>>,
+}
+
+impl Clone for AppConfig {
+    fn clone(&self) -> Self {
+        Self {
+            plugins: self.plugins.clone(),
+            data_dir: self.data_dir.clone(),
+            data_dir_lock: None,
+        }
+    }
 }
 
 impl AppConfig {
+    /// Acquire before a host touches state outside the plugin graph (for example its socket).
+    /// Boot also calls this, so all CoreApp hosts obey the same ownership boundary.
+    pub fn acquire_data_dir_lock(&mut self) -> Result<(), KernelError> {
+        if self.data_dir_lock.is_none() {
+            if let Some(path) = &self.data_dir {
+                self.data_dir_lock = Some(Arc::new(
+                    data_dir_lock::DataDirLock::acquire(path).map_err(|message| {
+                        KernelError::Config {
+                            name: "core-ownership".into(),
+                            message,
+                        }
+                    })?,
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Every built-in, storing under `data_dir`.
     pub fn new(data_dir: impl Into<PathBuf>) -> AppConfig {
         let data_dir = data_dir.into();
@@ -127,6 +157,7 @@ impl AppConfig {
         AppConfig {
             plugins,
             data_dir: Some(data_dir),
+            data_dir_lock: None,
         }
     }
 
@@ -151,6 +182,7 @@ impl AppConfig {
         AppConfig {
             plugins: LoaderConfig::default(),
             data_dir: None,
+            data_dir_lock: None,
         }
     }
 
@@ -160,6 +192,7 @@ impl AppConfig {
         AppConfig {
             plugins: LoaderConfig::default(),
             data_dir: Some(data_dir.into()),
+            data_dir_lock: None,
         }
     }
 
@@ -184,6 +217,7 @@ pub struct CoreApp {
     loader: Arc<Mutex<Loader>>,
     plugin_config: Arc<Mutex<PluginConfigStore>>,
     plugin_manager: Arc<PluginManager>,
+    _data_dir_lock: Option<Arc<data_dir_lock::DataDirLock>>,
 }
 
 impl CoreApp {
@@ -201,6 +235,7 @@ impl CoreApp {
         mut config: AppConfig,
         registry: codetwo_kernel::PluginRegistry,
     ) -> Result<CoreApp, KernelError> {
+        config.acquire_data_dir_lock()?;
         let app = App::new();
         let plugin_config = Arc::new(Mutex::new(match &config.data_dir {
             Some(data_dir) => {
@@ -297,6 +332,7 @@ impl CoreApp {
             }
         }
         Ok(CoreApp {
+            _data_dir_lock: config.data_dir_lock,
             app,
             loader,
             plugin_config,
@@ -458,5 +494,26 @@ fn apply_persisted_user_policy(
                 entry.config = plugin_config;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cloning_configuration_does_not_clone_core_ownership() {
+        let data = tempfile::tempdir().unwrap();
+        let mut config = AppConfig::bare_in(data.path());
+        config.acquire_data_dir_lock().unwrap();
+        let duplicate = config.clone();
+        let first = CoreApp::boot(config).await.unwrap();
+        assert!(CoreApp::boot(duplicate).await.is_err());
+        first.stop().await;
+        drop(first);
+        let restarted = CoreApp::boot(AppConfig::bare_in(data.path()))
+            .await
+            .unwrap();
+        restarted.stop().await;
     }
 }

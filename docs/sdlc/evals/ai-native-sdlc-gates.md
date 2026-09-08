@@ -31,6 +31,9 @@ template-loading and Skill-reference regression cases. The
 [four-stage contract](../changes/2026-09-08-four-stage-sdlc/intent.md) restores separate Intent, Spec,
 Plan, and Verification files while retaining reusable request authorization and risk-based gates.
 
+The [workflow cleanup change](../changes/2026-09-08-workflow-cleanup/intent.md) adds handoff cleanup
+after repeated accumulation of disposable profile builds and probes.
+
 ## Fixed input and environment
 
 Run `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts` from a CodeTwo checkout. CI pins Bun 1.3.10. Branch-diff
@@ -68,6 +71,11 @@ deploy, or modify the user's application data.
 - PR event JSON drives the base comparison and draft readiness; PR text never becomes shell code.
 - Incident creation produces one linked follow-up rather than asking the operator to create it twice.
 
+- New/change-touched schema-5 records require cleanup tracking; deleting the field cannot bypass
+  worktree, Ready PR or release checks. Pending cleanup blocks a passed result. Retained temporary
+  resources require an owner and cleanup trigger; genuine blockers remain reportable. Historical
+  untouched records remain readable. Tests clean their temporary repositories in `finally`.
+
 ## Scoring and failure classes
 
 Assertions are deterministic. A false pass is an enforcement regression. A false failure is a
@@ -77,17 +85,17 @@ must not be reported as a lifecycle verdict.
 ## Last result
 
 Result: pass.
-Revision: Four-stage SDLC worktree based on 948b703b on 2026-09-08, linked in Provenance.
+Revision: Workflow cleanup worktree based on 21ea4f3f on 2026-09-08, linked in Provenance.
 Evidence: `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts`
-passed 28 tests and 217 assertions on Bun 1.4.2, and the same suite passed on CI-pinned Bun 1.3.10
-using `npx --yes --package=bun@1.3.10 bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts`. The independent `verify_four_stage` agent authored 14 of these
-contract tests and ran the complete suite. Cases cover generated drafts, ordinary authorization
-reuse, independent high-risk design and verification, metadata ownership, checked criteria,
-missing/duplicate/failing evidence, revision, schema compatibility, actual Git diff scope,
-Draft/Ready/release gates, and Incident links. No provider or app runtime was started; writes and
-commits were confined to disposable repositories. A missing-Intent directory alongside valid
-records first reproduced a false pass; discovery now includes every stage filename and that
-regression passes.
+passed 31 tests and 245 assertions on Bun 1.4.2. New cases cover generated cleanup tracking,
+pending cleanup blocking a passed result, incomplete retention/evidence, reportable cleanup
+blockers, historical read compatibility, changed-record omission, and Ready PR/release omission
+without a base comparison. Fixtures remove their temporary directories in `finally`. No GUI,
+provider or native runtime was started.
 
-These deterministic tests and instruction inspection do not establish model behavioral improvement.
-Reduced pauses and context use remain unmeasured without model replay.
+Prior evidence: the four-stage suite passed 28 tests and 217 assertions on Bun 1.4.2 and CI-pinned
+Bun 1.3.10. That older cross-version run is not evidence for the cleanup increment; the current
+increment was checked locally on Bun 1.4.2. Remote CI was not run.
+
+These deterministic tests enforce record completeness, not actual filesystem deletion or model
+behavior. Agents must execute and inspect cleanup; this change adds no deletion daemon or scheduler.
