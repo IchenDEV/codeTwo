@@ -36,10 +36,18 @@ Residual risk: Three pre-existing process integration tests remain skipped. Wind
 - `focus-final.json`, `light-final.json`, `contrast.json` hold sampled computed values and derived contrast ratios. Browser error/warn logs were empty at final inspection.
 - Initial full suite exposed four old assertions expecting selection to equal hover; these were updated to the accepted independent selection roles. Initial native build caught two unformatted tests; final format/build passed. Visual QA also caught the inherited accent/50 focus rule and low separation over native sidebar vibrancy; final focus and selection markers address both.
 
+### PR preflight
+
+PR delivery was requested after local implementation. `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts` passed 32 tests. Added a regression covering empty checkout labels and preventing empty paths from requesting/counting pull requests; the taskboard suite passed 68 tests across three files. This supplements, rather than replaces or combines with, the 900-pass desktop suite above.
+
+The initial mutation score was 94.23% because six empty-path guard mutants survived. After adding the boundary test, `bunx stryker run stryker.taskboard.config.json --ignorePatterns 'build,dist,native/**/.build' --concurrency 12` passed with **100%**, 104 killed, zero survived, zero timeouts and 118 type-invalid mutations. Generated native outputs were excluded because copying the local Sparkle framework symlink was unsupported; mutation targets, test command, TypeScript checker and 100% threshold were unchanged. Increased worker count affected parallelism only.
+
+Actual PR body and base-branch scope are preflighted with `./script/devflow check-pr` before creation and readiness. Delivery: [PR #230](https://github.com/IchenDEV/codeTwo/pull/230). Remote CI and human review are separate from these local results.
+
 ## Cleanup
 
-Removed: Test draft cleared; temporary browser tab 3 closed; renderer-only preview session 3386 stopped with Ctrl-C, port 1420 released. Removed the one-off update.py, superseded failed-suite/build/preview logs, and obsolete temporary window-restoration capture.
-Retained: Source changes, Design.md, existing user data and dependencies, final development app, final validation logs and visual evidence. Previous visible-UI remediation changes are preserved.
+Removed: Stryker sandboxes were disposed after verification, including the failed copy sandbox; no checker/test workers remain. Test draft cleared; temporary browser tab 3 closed; renderer-only preview session 3386 stopped with Ctrl-C, port 1420 released. Removed the one-off update.py, superseded failed-suite/build/preview logs, and obsolete temporary window-restoration capture.
+Retained: PR preflight logs in `.codex/run/pr-ui-coherence/` and `apps/desktop/reports/taskboard-mutation.json` for review; source changes, Design.md, existing user data and dependencies, final development app, final validation logs and visual evidence. Previous visible-UI remediation changes are preserved.
 Retention owner: codex / current visual-coherence change; the running development app is retained for the user's review.
 Cleanup trigger: Stop the retained development instance when the user ends review or a later authorized rebuild replaces it; retain evidence until this diff is accepted or withdrawn. User data is not temporary cleanup material.
 Processes: launcher 21517, runtime 21518 and Core 21520 are the single live development instance. No test shell or preview server remains. The original light theme, empty draft, no-scene selection, pet and window dimensions are restored.
