@@ -6,7 +6,7 @@ status: passed
 owner: codex
 created: 2026-09-08
 based_on: plan.md
-revision: "worktree based on 6a2884ce with prior visible UI remediation"
+revision: "worktree based on e810a4fe with MissionControl boolean typing fix"
 verification_mode: owner
 verified_by: codex
 verified_at: 2026-09-09
@@ -41,6 +41,8 @@ Residual risk: Three pre-existing process integration tests remain skipped. Wind
 PR delivery was requested after local implementation. `bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts` passed 32 tests. Added a regression covering empty checkout labels and preventing empty paths from requesting/counting pull requests; the taskboard suite passed 68 tests across three files. This supplements, rather than replaces or combines with, the 900-pass desktop suite above.
 
 The initial mutation score was 94.23% because six empty-path guard mutants survived. After adding the boundary test, `bunx stryker run stryker.taskboard.config.json --ignorePatterns 'build,dist,native/**/.build' --concurrency 12` passed with **100%**, 104 killed, zero survived, zero timeouts and 118 type-invalid mutations. Generated native outputs were excluded because copying the local Sparkle framework symlink was unsupported; mutation targets, test command, TypeScript checker and 100% threshold were unchanged. Increased worker count affected parallelism only.
+
+Remote CI run 34306172419 rejected a redundant boolean comparison in MissionControl. The callback now explicitly types its boolean parameter and uses direct negation, resolving both the CI comparison rule and local strict-boolean inference. Desktop `bun run check`, `bunx tsc --noEmit`, and the two MissionControl suites (13 passed) pass after this equivalent-expression change; logs are in `.codex/run/pr-ui-coherence/` as `lint-ci-fix.log`, `types-ci-fix.log`, and `mission-ci-fix.log`. Prior native rendering/build evidence remains applicable to the unchanged behavior.
 
 Actual PR body and base-branch scope are preflighted with `./script/devflow check-pr` before creation and readiness. Delivery: [PR #230](https://github.com/IchenDEV/codeTwo/pull/230). Remote CI and human review are separate from these local results.
 

@@ -198,7 +198,7 @@ export function MissionControlDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => open === false && onClose()}>
+    <Dialog open onOpenChange={(open: boolean) => !open && onClose()}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{t("mission.title")}</DialogTitle>
