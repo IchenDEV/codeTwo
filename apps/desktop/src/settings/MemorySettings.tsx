@@ -238,7 +238,7 @@ function StatButton({
       focusStyle="inset"
       data-selected={active ? "true" : "false"}
       className={cn(
-        "memory-stat",
+        "memory-stat w-auto",
         active && "is-active",
         warning === true && value > 0 && "is-warning"
       )}
@@ -286,7 +286,7 @@ function MemoryRow({
         variant="ghost"
         size="row"
         focusStyle="inset"
-        className="memory-row-main"
+        className="memory-row-main flex-col items-stretch"
         onClick={onOpen}
       >
         <span dir="auto" className="memory-row-content">

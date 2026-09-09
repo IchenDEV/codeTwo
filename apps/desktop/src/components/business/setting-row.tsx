@@ -53,7 +53,7 @@ function SettingRow({
       data-disabled={disabled ? "true" : undefined}
       aria-disabled={disabled || undefined}
       className={cn(
-        "min-h-control-field gap-x-page-section flex min-w-0 flex-wrap items-center justify-between",
+        "min-h-control-field gap-x-section flex min-w-0 flex-wrap items-center justify-between",
         density === "compact"
           ? "gap-y-inline py-inline"
           : "gap-y-module-inset py-module-inset",

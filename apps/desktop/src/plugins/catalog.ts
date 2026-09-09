@@ -528,6 +528,7 @@ export function buildPluginManagerCatalog({
       manageable: ownerEntry != null,
       state,
       skill: {
+        preview: skill.preview ?? skill.macro_template,
         id: skill.id,
         removable:
           Boolean(skill.source?.startsWith("GitHub · ")) ||

@@ -507,6 +507,30 @@ export function ProfileSettings({
                   );
                 })}
               </div>
+              <div className="text-metadata text-muted-foreground mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {summary.buckets[0] != null &&
+                    dateFormatter.format(summary.buckets[0].startMs)}{" "}
+                  –{" "}
+                  {summary.buckets.at(-1) != null &&
+                    dateFormatter.format(summary.buckets.at(-1)!.startMs)}
+                </span>
+                <span
+                  className="flex items-center gap-1"
+                  aria-label={t("profile.heatmapLegend")}
+                >
+                  <span>0</span>
+                  {[0.22, 0.5, 0.75, 1].map((opacity) => (
+                    <span
+                      key={opacity}
+                      className="bg-primary rounded-micro size-3"
+                      style={{ opacity }}
+                      aria-hidden
+                    />
+                  ))}
+                  <span>{fmtTokens(summary.peakTokens)}</span>
+                </span>
+              </div>
             </section>
 
             {summary.activeDays === 0 ? (

@@ -32,6 +32,7 @@ import type { SceneInfo } from "./scene";
 import { SourceBadge } from "./SceneChip";
 import { SceneEditor } from "./SceneEditor";
 import type { SceneEditorRequest } from "./SceneEditor";
+import { ScenePreview } from "./ScenePreview";
 
 function SceneCard({
   scene,
@@ -128,6 +129,7 @@ function SceneCard({
           <Copy data-icon="inline-start" />
           {t("sceneEditor.duplicate")}
         </Button>
+        <ScenePreview scene={scene} />
         <TooltipButton
           label={`${t("scene.exportSkill")}: ${sceneTitle(scene, locale)}`}
           tooltip={t("scene.exportSkill")}

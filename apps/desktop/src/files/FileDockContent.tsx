@@ -1,5 +1,8 @@
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
-import { FileText, X } from "@/components/ui/icons";
+import { FileText, FolderTree, X } from "@/components/ui/icons";
+import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import { useT } from "../i18n";
@@ -36,11 +39,25 @@ export function FileDockContent({
 }: FileDockContentProps) {
   const t = useT();
   const dirtyPaths = useDirtyPaths();
+  const [browsing, setBrowsing] = useState(false);
+  const showTree = browsing || activeFile == null || activeFile === "";
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 min-w-0 flex-1"
+      data-file-dock-view={showTree ? "browser" : "editor"}
+    >
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="dock-content-tabbar flex shrink-0 items-center gap-0.5 overflow-x-auto px-2">
+          <TooltipButton
+            label={t("action.open_files")}
+            variant="ghost"
+            size="icon-xs"
+            aria-pressed={showTree}
+            onClick={() => setBrowsing((current) => !current)}
+          >
+            <FolderTree className="size-3.5" />
+          </TooltipButton>
           {openFiles.map((path) => {
             const name = path.split("/").pop() ?? path;
             const active = path === activeFile;
@@ -52,7 +69,10 @@ export function FileDockContent({
                 size="row"
                 focusStyle="inset"
                 data-selected={active ? "true" : "false"}
-                onClick={() => onActiveFile(path)}
+                onClick={() => {
+                  onActiveFile(path);
+                  setBrowsing(false);
+                }}
                 title={path}
                 className={cn(
                   "group px-module-inset text-metadata relative h-full max-w-48 shrink-0 gap-1.5",
@@ -83,10 +103,20 @@ export function FileDockContent({
           })}
         </div>
 
-        {activeFile != null &&
-        activeFile !== "" &&
-        cwd != null &&
-        cwd !== "" ? (
+        {showTree ? (
+          <FilePanel
+            cwd={cwd}
+            onInsert={onInsertFile}
+            onOpen={(path) => {
+              setBrowsing(false);
+              onOpenFile(path);
+            }}
+            openPath={activeFile ?? highlightFile ?? null}
+          />
+        ) : activeFile != null &&
+          activeFile !== "" &&
+          cwd != null &&
+          cwd !== "" ? (
           <FileViewer
             key={activeFile}
             cwd={cwd}
@@ -103,15 +133,6 @@ export function FileDockContent({
             </p>
           </div>
         )}
-      </div>
-
-      <div className="dock-content-split flex w-60 shrink-0 flex-col">
-        <FilePanel
-          cwd={cwd}
-          onInsert={onInsertFile}
-          onOpen={onOpenFile}
-          openPath={activeFile ?? highlightFile ?? null}
-        />
       </div>
     </div>
   );

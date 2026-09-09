@@ -208,6 +208,10 @@
   --color-fill-quiet: var(--ds-color-fill-quiet);
   --color-fill-rest: var(--ds-color-fill-rest);
   --color-fill-hover: var(--ds-color-fill-hover);
+  --color-fill-selected: var(--ds-color-fill-selected);
+  --color-fill-selected-hover: var(--ds-color-fill-selected-hover);
+  --color-fill-pressed: var(--ds-color-fill-pressed);
+  --color-primary-pressed: var(--ds-color-primary-pressed);
 
   /* The terminal surface stays dark in both schemes, so its chrome can't use --foreground: in
      light mode that would paint near-black text on a near-black panel. These are the on-terminal
@@ -349,14 +353,12 @@
 /* Product code names the focus contract; token width, color, and offset stay in CSS. */
 @utility focus-ring {
   outline-offset: var(--ds-focus-offset);
-  outline: var(--ds-focus-width) solid
-    color-mix(in srgb, var(--color-ring) 50%, transparent);
+  outline: var(--ds-focus-width) solid var(--ds-color-focus);
 }
 
 @utility focus-ring-inset {
   outline-offset: calc(-1 * var(--ds-focus-width));
-  outline: var(--ds-focus-width) solid
-    color-mix(in srgb, var(--color-ring) 50%, transparent);
+  outline: var(--ds-focus-width) solid var(--ds-color-focus);
 }
 
 @layer base {
@@ -1243,6 +1245,8 @@ html[data-appearance-pointer-cursors="false"]
      safe — the grid is measured against the padded box, not the raw one. The background matches
      the renderer's own, so the padding ring is invisible rather than a frame around the canvas. */
   .terminal {
+    min-height: 0;
+    min-width: 0;
     flex: 1;
     height: 100%;
     width: 100%;
@@ -1448,13 +1452,23 @@ pre {
      document must be able to scroll up out from under it. */
   padding-block: 14px 96px;
 }
-/* Full-bleed, editor-style: the page owns its column edge to edge. The inline padding is the
-   drag/insert handle gutter (left) and a matching breath on the right — not a centring mat; the
-   centred-measure look kept a third of a wide pane empty on each side. */
+/* The document, introductory copy and footer share one readable measure. */
+.document-intro,
 .bn-doc-mode .bn-editor {
-  padding-inline: 36px 24px;
+  box-sizing: border-box;
+  width: calc(100% - var(--ds-space-page) * 2);
+  max-width: 48rem;
+  margin-inline: auto;
+  padding-inline: var(--ds-space-surface-inset);
+}
+.bn-doc-mode .bn-editor {
   font-size: var(--ds-type-prose-size);
   line-height: var(--ds-type-prose-leading);
+}
+/* BlockNote's placeholder inherits its own weak gray unless explicitly bridged. */
+.bn-inline-content:has(> .ProseMirror-trailingBreak:only-child)::before {
+  color: var(--ds-color-text-muted);
+  opacity: 1;
 }
 .bn-doc-mode .bn-block-content[data-content-type="paragraph"] {
   line-height: var(--ds-type-prose-leading);
@@ -1747,5 +1761,16 @@ pre {
 
   .session-header-actions {
     gap: 0.25rem;
+  }
+}
+
+@container dock (max-width: 640px) {
+  .trajectory-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(140px, 40%);
+  }
+  .trajectory-inspector {
+    min-width: 0;
+    overflow: auto;
   }
 }

@@ -398,6 +398,7 @@ export interface MacroSlotInfo {
 }
 
 export interface SkillInfo {
+  preview?: string | null;
   id: string;
   name: string;
   description: string;

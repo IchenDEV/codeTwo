@@ -77,7 +77,7 @@ export function taskPriorityLabel(
 function normalizeLabels(value: string): string[] {
   const labels: string[] = [];
   const seen = new Set<string>();
-  for (const part of value.split(/[,，]/u)) {
+  for (const part of value.split(/[,，;；\n]/u)) {
     const label = part.trim();
     if (!label || seen.has(label)) continue;
     seen.add(label);

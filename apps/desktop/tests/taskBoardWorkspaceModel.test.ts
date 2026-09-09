@@ -156,6 +156,15 @@ describe("TaskBoard workspace model", () => {
     expect(checkoutLabel(t, session(), null)).toBe("taskboard.noCheckout:");
   });
 
+  test("empty checkout paths are unavailable and never request or count pull requests", () => {
+    const noCheckout = session({ cwd: "" });
+    expect(checkoutLabel(t, noCheckout, "")).toBe("taskboard.noCheckout:");
+    expect(openPullRequestCount([noCheckout], new Map())).toBe(0);
+    expect(
+      openPullRequestCount([noCheckout], new Map([["", pullRequest("open")]]))
+    ).toBe(0);
+  });
+
   test("maps every activity state to status copy and tone", () => {
     const awaiting = session({
       activity: {

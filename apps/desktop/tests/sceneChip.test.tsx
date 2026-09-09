@@ -222,7 +222,7 @@ describe("SceneChip", () => {
 
     const content = dom.document.body.textContent ?? "";
     expect(content).toContain("Auto scene");
-    expect(content).toContain("No scene");
+    expect(content).toContain("Keep current configuration");
     expect(content).toContain("Manage scenes");
     expect(content).not.toContain("Memory on");
     expect(content).not.toContain("No worktree");
@@ -500,7 +500,9 @@ describe("SceneChip", () => {
   test("falls back to the no-scene label", () => {
     activateDom();
     const rendered = renderChip(config({ activeScene: null }));
-    expect(rendered.container.textContent).toContain("No scene");
+    expect(rendered.container.textContent).toContain(
+      "Keep current configuration"
+    );
   });
 
   test("keeps Auto visible with the agent-selected scene and enables it from the menu", async () => {

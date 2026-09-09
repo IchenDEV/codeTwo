@@ -51,6 +51,7 @@ import type {
   GitHubReviewAction,
   SourceControlInfo,
 } from "../bridge";
+import { PullRequestBody } from "../github/PullRequestBody";
 import { useT } from "../i18n";
 import { diffLinePresentation, diffPreviewLines } from "./state";
 
@@ -547,9 +548,9 @@ export function GitHubPullRequestPanel({
                 <h4 className="text-metadata text-muted-foreground font-semibold tracking-wider uppercase">
                   {t("githubPr.description")}
                 </h4>
-                <p className="text-metadata text-muted-foreground whitespace-pre-wrap">
-                  {pullRequest.body || t("githubPr.noDescription")}
-                </p>
+                <PullRequestBody
+                  body={pullRequest.body || t("githubPr.noDescription")}
+                />
               </section>
 
               <section className="space-y-1.5">

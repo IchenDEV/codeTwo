@@ -281,18 +281,23 @@ async function fileMenuItems(cwd: string, query: string): Promise<FileItem[]> {
   // file you wanted didn't make the cut.
   const paths = await listFiles(cwd || ".", query, 60).catch(() => []);
   const q = query.toLowerCase();
-  return paths.map((path) => {
-    const cut = path.lastIndexOf("/");
-    const name = cut === -1 ? path : path.slice(cut + 1);
-    const at = q ? name.toLowerCase().indexOf(q) : -1;
-    return {
-      kind: "file" as const,
-      path,
-      name,
-      dir: cut === -1 ? "" : path.slice(0, cut + 1),
-      hit: at < 0 ? null : ([at, at + q.length] as [number, number]),
-    };
-  });
+  return paths
+    .filter(
+      (path) =>
+        ![".DS_Store", "Thumbs.db"].includes(path.split("/").at(-1) ?? "")
+    )
+    .map((path) => {
+      const cut = path.lastIndexOf("/");
+      const name = cut === -1 ? path : path.slice(cut + 1);
+      const at = q ? name.toLowerCase().indexOf(q) : -1;
+      return {
+        kind: "file" as const,
+        path,
+        name,
+        dir: cut === -1 ? "" : path.slice(0, cut + 1),
+        hit: at < 0 ? null : ([at, at + q.length] as [number, number]),
+      };
+    });
 }
 
 // Past chats for the same picker: mentioning one inlines its transcript as context, so a planning

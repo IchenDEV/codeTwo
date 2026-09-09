@@ -10,17 +10,19 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
+        default:
+          "bg-primary text-primary-foreground hover:bg-primary-hover active:bg-primary-pressed",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive-hover",
-        outline: "bg-fill-rest hover:bg-accent hover:text-accent-foreground",
+        outline:
+          "bg-fill-rest text-foreground hover:bg-fill-hover active:bg-fill-pressed",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "bg-fill-rest text-foreground hover:bg-fill-hover active:bg-fill-pressed",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+          "hover:bg-fill-hover hover:text-foreground active:bg-fill-pressed",
         link: "text-primary underline-offset-4 hover:underline",
         selectable:
-          "text-foreground hover:bg-fill-hover data-[selected=true]:bg-fill-rest data-[selected=true]:hover:bg-fill-hover bg-transparent disabled:data-[selected=true]:opacity-100",
+          "text-foreground hover:bg-fill-hover data-[selected=true]:bg-fill-selected data-[selected=true]:hover:bg-fill-selected-hover active:bg-fill-pressed data-[selected=true]:active:bg-fill-pressed relative bg-transparent before:absolute before:inset-y-2 before:left-0.5 before:w-0.5 before:rounded-full before:bg-current before:opacity-0 data-[selected=true]:before:opacity-100 disabled:data-[selected=true]:opacity-100",
       },
       size: {
         default: "h-control px-4 py-2 has-[>svg]:px-3",

@@ -23,6 +23,13 @@ import {
   Wrench,
 } from "@/components/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cssVars } from "@/lib/cssVars";
 import { cn } from "@/lib/utils";
 
@@ -162,6 +169,8 @@ const EMPTY_PROJECTS: Project[] = [];
  * you went to, which is what earns the explicit way back.
  */
 export function SettingsPage({
+  onSelectProject,
+  onOpenDevices,
   sidebarWidth = 288,
   bindings,
   capturing,
@@ -235,6 +244,8 @@ export function SettingsPage({
   diagnosticsExporter,
 }: {
   /** Matches the persisted width of the main session rail. */
+  onSelectProject?: (path: string) => void;
+  onOpenDevices?: () => void;
   sidebarWidth?: number;
   bindings: KeymapEntry[];
   capturing: string | null;
@@ -444,7 +455,9 @@ export function SettingsPage({
               onClick={restore}
             >
               <RotateCcw className="size-3.5" />
-              {t("settings.restoreDefaults")}
+              {tab === "general"
+                ? t("settings.restoreLanguage")
+                : t("settings.restoreDefaults")}
             </Button>
           )}
         </header>
@@ -457,6 +470,28 @@ export function SettingsPage({
               tab === "worktrees" && "settings-worktrees-page"
             )}
           >
+            {tab === "project" && onSelectProject && (
+              <Select
+                value={projectPath}
+                onValueChange={(path) => {
+                  if (path != null && path !== "") onSelectProject(path);
+                }}
+              >
+                <SelectTrigger
+                  aria-label={t("settings.project")}
+                  className="mb-4 w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((item) => (
+                    <SelectItem key={item.path} value={item.path}>
+                      {item.name} · {item.path}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {tab === "general" && (
               <GeneralSettingsPage
                 statusLoader={updateStatusLoader}
@@ -494,6 +529,7 @@ export function SettingsPage({
 
             {tab === "sync" && deviceSyncEnabled && (
               <DeviceSyncSettingsPage
+                onOpenDevices={onOpenDevices}
                 loader={deviceSyncStatusLoader}
                 enabledSaver={deviceSyncEnabledSaver}
                 syncStarter={deviceSyncStarter}

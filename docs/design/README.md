@@ -5,7 +5,8 @@ been implemented. Read [technical reference](../reference/README.md) for current
 
 | Document | Status and purpose |
 | --- | --- |
-| [Design system](system.md) | Current desktop visual and interaction contract |
+| [Design standard](../../Design.md) | Accepted visual values, interaction states, density and scope |
+| [Design system](system.md) | Shared component and token implementation contract |
 | [Scenes 2.0](scenes-v2.md) | Accepted product contract; implementation pending |
 | [Scenes 2.0 implementation plan](scenes-v2-implementation-plan.md) | Delivery plan for that contract; does not authorize work by itself |
 | [Development profiles](desktop-development-profiles.md) | Required isolation design; profile launches are not yet supported |

@@ -40,6 +40,7 @@
   --ds-foundation-type-12: 12px;
   --ds-foundation-type-13: 13px;
   --ds-foundation-type-14: 14px;
+  --ds-foundation-type-15: 15px;
   --ds-foundation-type-16: 16px;
   --ds-foundation-type-18: 18px;
   --ds-foundation-type-20: 20px;
@@ -129,7 +130,7 @@
   /* Appearance theme library. Product code references these names; raw palette values stay here. */
   --ds-theme-code2-light-accent: #356de6;
   --ds-theme-code2-light-background: #ffffff;
-  --ds-theme-code2-light-foreground: #172033;
+  --ds-theme-code2-light-foreground: #202123;
   --ds-theme-code2-dark-accent: #77a7ff;
   --ds-theme-code2-dark-background: #18191d;
   --ds-theme-code2-dark-foreground: #f2f4f8;
@@ -199,16 +200,16 @@
   --ds-type-dialog-leading: var(--ds-foundation-leading-22);
   --ds-type-body-size: var(--ds-foundation-type-14);
   --ds-type-body-leading: var(--ds-foundation-leading-20);
-  --ds-type-prose-size: var(--ds-foundation-type-14);
-  --ds-type-prose-leading: var(--ds-foundation-leading-23);
+  --ds-type-prose-size: var(--ds-foundation-type-15);
+  --ds-type-prose-leading: var(--ds-foundation-leading-24);
   --ds-type-callout-size: var(--ds-foundation-type-13);
-  --ds-type-callout-leading: var(--ds-foundation-leading-18);
+  --ds-type-callout-leading: var(--ds-foundation-leading-20);
   --ds-type-metadata-size: var(--ds-foundation-type-12);
   --ds-type-metadata-leading: var(--ds-foundation-leading-16);
   --ds-type-caption-size: var(--ds-foundation-type-11);
   --ds-type-caption-leading: var(--ds-foundation-leading-14);
-  --ds-type-code-size: var(--ds-foundation-type-12);
-  --ds-type-code-leading: var(--ds-foundation-leading-18);
+  --ds-type-code-size: var(--ds-foundation-type-13);
+  --ds-type-code-leading: var(--ds-foundation-leading-20);
   --ds-font-weight-regular: 400;
   --ds-font-weight-medium: 600;
 
@@ -247,9 +248,33 @@
   --ds-color-text-muted: var(--ds-foundation-light-text-muted);
   --ds-color-fill-quiet: var(--ds-foundation-light-fill-quiet);
   --ds-color-fill-rest: var(--ds-foundation-light-fill-rest);
-  --ds-color-fill-hover: var(--ds-foundation-light-fill-hover);
+  --ds-color-fill-hover: color-mix(
+    in oklch,
+    var(--ds-color-text) 7%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-selected: color-mix(
+    in oklch,
+    var(--ds-color-text) 12%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-selected-hover: color-mix(
+    in oklch,
+    var(--ds-color-text) 16%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-pressed: color-mix(
+    in oklch,
+    var(--ds-color-text) 20%,
+    var(--ds-color-canvas)
+  );
   --ds-color-primary: var(--ds-foundation-light-primary);
   --ds-color-primary-hover: var(--ds-foundation-light-primary-hover);
+  --ds-color-primary-pressed: color-mix(
+    in oklch,
+    var(--ds-color-text) 16%,
+    var(--ds-color-primary)
+  );
   --ds-color-primary-text: var(--ds-foundation-light-primary-text);
   --ds-color-success: var(--ds-foundation-light-success);
   --ds-color-warning: var(--ds-foundation-light-warning);
@@ -322,9 +347,33 @@
   --ds-color-text-muted: var(--ds-foundation-light-text-muted);
   --ds-color-fill-quiet: var(--ds-foundation-light-fill-quiet);
   --ds-color-fill-rest: var(--ds-foundation-light-fill-rest);
-  --ds-color-fill-hover: var(--ds-foundation-light-fill-hover);
+  --ds-color-fill-hover: color-mix(
+    in oklch,
+    var(--ds-color-text) 7%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-selected: color-mix(
+    in oklch,
+    var(--ds-color-text) 12%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-selected-hover: color-mix(
+    in oklch,
+    var(--ds-color-text) 16%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-pressed: color-mix(
+    in oklch,
+    var(--ds-color-text) 20%,
+    var(--ds-color-canvas)
+  );
   --ds-color-primary: var(--ds-foundation-light-primary);
   --ds-color-primary-hover: var(--ds-foundation-light-primary-hover);
+  --ds-color-primary-pressed: color-mix(
+    in oklch,
+    var(--ds-color-text) 16%,
+    var(--ds-color-primary)
+  );
   --ds-color-primary-text: var(--ds-foundation-light-primary-text);
   --ds-color-success: var(--ds-foundation-light-success);
   --ds-color-warning: var(--ds-foundation-light-warning);
@@ -367,9 +416,33 @@
   --ds-color-text-muted: var(--ds-foundation-dark-text-muted);
   --ds-color-fill-quiet: var(--ds-foundation-dark-fill-quiet);
   --ds-color-fill-rest: var(--ds-foundation-dark-fill-rest);
-  --ds-color-fill-hover: var(--ds-foundation-dark-fill-hover);
+  --ds-color-fill-hover: color-mix(
+    in oklch,
+    var(--ds-color-text) 12%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-selected: color-mix(
+    in oklch,
+    var(--ds-color-text) 18%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-selected-hover: color-mix(
+    in oklch,
+    var(--ds-color-text) 23%,
+    var(--ds-color-canvas)
+  );
+  --ds-color-fill-pressed: color-mix(
+    in oklch,
+    var(--ds-color-text) 28%,
+    var(--ds-color-canvas)
+  );
   --ds-color-primary: var(--ds-foundation-dark-primary);
   --ds-color-primary-hover: var(--ds-foundation-dark-primary-hover);
+  --ds-color-primary-pressed: color-mix(
+    in oklch,
+    var(--ds-color-text) 16%,
+    var(--ds-color-primary)
+  );
   --ds-color-primary-text: var(--ds-foundation-dark-primary-text);
   --ds-color-success: var(--ds-foundation-dark-success);
   --ds-color-warning: var(--ds-foundation-dark-warning);

@@ -19,6 +19,7 @@ import {
 } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
+import { fitTerminal } from "./resize";
 import { useTerminalSettings } from "./settings";
 
 const FALLBACK_MONO =
@@ -106,23 +107,7 @@ export function TerminalPanel({
   // xterm's fit addon throws on those. The dock's resize event reaches every mounted instance, so
   // this guard is what keeps a panel resize from spraying errors from the hidden ones.
   const refit = useCallback(() => {
-    const el = boxRef.current;
-    const term = termRef.current;
-    if (
-      !el ||
-      !term ||
-      el.offsetParent === null ||
-      el.clientWidth === 0 ||
-      el.clientHeight === 0
-    ) {
-      return false;
-    }
-    try {
-      fitRef.current?.fit();
-      return true;
-    } catch {
-      return false;
-    }
+    return fitTerminal(boxRef.current, termRef.current, fitRef.current);
   }, []);
 
   useEffect(() => {
@@ -168,6 +153,10 @@ export function TerminalPanel({
     refit();
 
     let disposed = false;
+    let attached = false;
+    let pendingInput = "";
+    let stopVisibilityWait: (() => void) | null = null;
+    let stopMeasureWait: (() => void) | null = null;
     let stopOutput: (() => void) | null = null;
     let stopExit: (() => void) | null = null;
 
@@ -175,6 +164,46 @@ export function TerminalPanel({
       // Output that lands while we're still attaching has to wait for the restore dump, or it
       // would be painted first and then overwritten by the older state.
       let pending: string[] | null = [];
+
+      await document.fonts?.ready;
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if (
+            disposed ||
+            (el.offsetParent !== null &&
+              el.clientWidth > 0 &&
+              el.clientHeight > 0 &&
+              getComputedStyle(el).visibility !== "hidden")
+          )
+            stopVisibilityWait?.();
+        };
+        const visibilityObserver = new ResizeObserver(check);
+        stopVisibilityWait = () => {
+          visibilityObserver.disconnect();
+          window.removeEventListener("resize", check);
+          resolve();
+        };
+        visibilityObserver.observe(el);
+        window.addEventListener("resize", check);
+        check();
+      });
+      if (disposed) return;
+      // A visible element can precede xterm's first character measurement. Starting a shell
+      // with its fallback 80 columns makes right prompts wrap before the first real fit.
+      await new Promise<void>((resolve) => {
+        let frame = 0;
+        stopMeasureWait = () => {
+          cancelAnimationFrame(frame);
+          resolve();
+        };
+        const measure = () => {
+          if (disposed || fit.proposeDimensions()) stopMeasureWait?.();
+          else frame = requestAnimationFrame(measure);
+        };
+        measure();
+      });
+      if (disposed) return;
+      refit();
 
       stopOutput = await onPtyOutput((p) => {
         if (p.id !== id || p.project_path !== projectPath) return;
@@ -186,7 +215,11 @@ export function TerminalPanel({
           term.write(`\r\n\u001B[2m${t("terminal.exited")}\u001B[0m\r\n`);
         }
       });
-      if (disposed) return;
+      if (disposed) {
+        stopOutput?.();
+        stopExit?.();
+        return;
+      }
 
       const { restore } = await ptySpawn(id, cwd, term.rows, term.cols, {
         tmuxSession: tmux ? id : null,
@@ -194,17 +227,28 @@ export function TerminalPanel({
       });
       if (disposed) return;
 
+      attached = true;
       if (restore) term.write(restore);
       const queued = pending ?? [];
       pending = null;
       for (const chunk of queued) term.write(chunk);
+      if (pendingInput) {
+        void ptyWrite(id, pendingInput);
+        pendingInput = "";
+      }
     })();
 
     const dataSub = term.onData((d) => {
-      void ptyWrite(id, d);
+      if (attached) void ptyWrite(id, d);
+      else pendingInput += d;
     });
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const onResize = () => {
-      if (refit()) void ptyResize(id, term.rows, term.cols);
+      clearTimeout(resizeTimer);
+      // Wait for panel animations and font layout to settle before signalling the shell.
+      resizeTimer = setTimeout(() => {
+        if (refit() && attached) void ptyResize(id, term.rows, term.cols);
+      }, 120);
     };
     window.addEventListener("resize", onResize);
 
@@ -216,7 +260,10 @@ export function TerminalPanel({
 
     return () => {
       disposed = true;
+      stopVisibilityWait?.();
+      stopMeasureWait?.();
       observer.disconnect();
+      clearTimeout(resizeTimer);
       window.removeEventListener("resize", onResize);
       dataSub.dispose();
       stopOutput?.();

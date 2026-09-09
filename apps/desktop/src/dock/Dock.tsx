@@ -276,7 +276,10 @@ export function Dock({
       />
 
       {/* Pin the animated dimension so panel content does not reflow while it sweeps. */}
-      <div className="flex min-h-0 flex-1 flex-col" style={{ width: applied }}>
+      <div
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        style={{ width: applied }}
+      >
         {shown === "home" ? (
           <>
             {/* The fixed shell titlebar keeps this empty state on the workspace and rail baseline. */}
@@ -315,16 +318,19 @@ export function Dock({
             onValueChange={(v) => {
               if (isOneOf(v, DOCK_SURFACES)) onTab(v);
             }}
-            className="flex min-h-0 flex-1 flex-col gap-0"
+            className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden"
           >
             {/* The shared 46px height matches the main header, so this tab row and the breadcrumb
             share one vertical centre and one continuous bottom border. It drags the window for the
             same reason: the overlay title bar leaves nothing else to grab. */}
             <div
               data-dock-titlebar
-              className="window-titlebar electrobun-webkit-app-region-drag flex items-center gap-1 px-3"
+              className="window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-1 px-3"
             >
-              <TabsList variant="toolbar">
+              <TabsList
+                variant="toolbar"
+                className="min-w-0 flex-1 justify-start overflow-x-auto"
+              >
                 {visibleSurfaces.map(({ id, icon: Icon, titleKey }) => (
                   <TabsTrigger
                     key={id}
@@ -343,11 +349,10 @@ export function Dock({
                   </TabsTrigger>
                 ))}
               </TabsList>
-              <div className="electrobun-webkit-app-region-drag flex-1" />
               <Button
                 variant="ghost"
                 size="compact"
-                className="w-(--ds-control-normal) px-0"
+                className="w-(--ds-control-normal) shrink-0 px-0"
                 onClick={onClose}
                 title={t("dock.close")}
               >
@@ -359,7 +364,7 @@ export function Dock({
               <TabsContent
                 key={id}
                 value={id}
-                className="m-0 flex min-h-0 flex-1"
+                className="m-0 flex min-h-0 min-w-0 flex-1 overflow-hidden"
               >
                 {content[id]}
               </TabsContent>

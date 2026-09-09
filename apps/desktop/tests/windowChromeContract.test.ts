@@ -108,7 +108,7 @@ describe("macOS window chrome contract", () => {
       /\.macos-window-glass \.glass-rail\s*\{[^}]*--appearance-macos-panel-tint-opacity/su
     );
     expect(appSource).toContain(
-      'className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"'
+      'className="bg-background @container/workspace flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"'
     );
   });
 
@@ -270,14 +270,14 @@ describe("macOS window chrome contract", () => {
   });
 
   test("uses the shared compact toolbar treatment for dock tabs", () => {
-    expect(dockSource).toContain('<TabsList variant="toolbar">');
+    expect(dockSource).toMatch(/<TabsList\s+variant="toolbar"/u);
     expect(dockSource).not.toContain("data-[state=active]");
     expect(tabsSource).toContain("toolbar:");
     expect(tabsSource).toContain(
       "group-data-[orientation=horizontal]/tabs:data-[variant=toolbar]:h-control gap-1 bg-transparent p-0"
     );
     expect(tabsSource).toContain(
-      "group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary"
+      "group-data-[variant=toolbar]/tabs-list:data-active:bg-fill-selected"
     );
     expect(tabsSource).toContain(
       "group-data-[variant=toolbar]/tabs-list:data-active:text-primary"

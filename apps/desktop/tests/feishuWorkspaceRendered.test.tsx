@@ -37,7 +37,16 @@ const partialConnection = {
   problem: "",
 };
 
-function renderFeishu(callCommand, overrides = {}) {
+function renderFeishu(callCommand, overrides = {}, savedExpansion = true) {
+  if (
+    savedExpansion &&
+    !dom.window.localStorage.getItem("codetwo.feishu.sections.v1")
+  ) {
+    dom.window.localStorage.setItem(
+      "codetwo.feishu.sections.v1",
+      JSON.stringify({ messages: false, documents: false, bases: false })
+    );
+  }
   const navigationHost = dom.document.createElement("div");
   const settingsHost = dom.document.createElement("div");
   dom.document.body.append(navigationHost);
@@ -68,6 +77,50 @@ function resourceButton(container, name) {
 }
 
 describe("FeishuWorkspacePage", () => {
+  test("new resource groups start collapsed and retain an explicit expansion after remount", async () => {
+    activateDom();
+    const callCommand = async (name) =>
+      name === "connection.status"
+        ? {
+            ...partialConnection,
+            authorized: true,
+            needsUserAuthorization: false,
+          }
+        : {
+            configured: true,
+            problem: "",
+            chats: [],
+            documents: [],
+            bases: [],
+            warnings: [],
+          };
+    const view = renderFeishu(callCommand, { detailVisible: false }, false);
+    await waitFor(() =>
+      expect(
+        view.navigationHost.querySelector(
+          '[data-feishu-section-toggle="messages"]'
+        )
+      ).not.toBeNull()
+    );
+    const toggle = view.navigationHost.querySelector(
+      '[data-feishu-section-toggle="messages"]'
+    );
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    click(toggle);
+    await flush();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    view.unmount();
+    const next = renderFeishu(callCommand, { detailVisible: false }, false);
+    await waitFor(() =>
+      expect(
+        next.navigationHost
+          .querySelector('[data-feishu-section-toggle="messages"]')
+          ?.getAttribute("aria-expanded")
+      ).toBe("true")
+    );
+    next.unmount();
+  });
+
   test("renders contacts, documents, and bases as one flat directory with real avatars", async () => {
     activateDom();
     dom.window.localStorage.setItem("codetwo.language", "en");

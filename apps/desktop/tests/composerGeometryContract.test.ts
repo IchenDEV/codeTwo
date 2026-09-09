@@ -26,7 +26,7 @@ describe("composer geometry contract", () => {
     expect(composer).not.toContain("function ComposerLiquidSurface");
     expect(composer).not.toContain("data-gooey-composer");
     expect(composer).toContain(
-      '"rounded-composer bg-card shadow-raised duration-feedback ease-enter focus-within:focus-ring-inset transition-shadow"'
+      '"rounded-composer bg-card shadow-surface duration-feedback ease-enter focus-within:focus-ring-inset transition-shadow"'
     );
   });
 
@@ -40,13 +40,9 @@ describe("composer geometry contract", () => {
     expect(composer).toContain('"composer-mode-transition flex flex-col"');
     expect(composer).not.toContain("reducedMotion");
     expect(composer).toContain(
-      '"raised-material rounded-composer shadow-raised pointer-events-auto mx-auto w-full max-w-3xl p-2"'
+      '"rounded-composer bg-surface shadow-surface pointer-events-auto mx-auto w-full max-w-3xl p-2"'
     );
-    expect(
-      composer.match(
-        /"size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"/gu
-      )
-    ).toHaveLength(2);
+    expect(composer.match(/"size-8 shrink-0 rounded-full"/gu)).toHaveLength(2);
     expect(
       composer.match(/className="[^"]*size-7 shrink-0 rounded-full[^"]*"/gu)
     ).toHaveLength(2);

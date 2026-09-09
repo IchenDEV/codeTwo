@@ -63,7 +63,7 @@ export function TranscriptPane({
       className={cn(
         "relative min-h-0",
         variant === "side"
-          ? "animate-slide-in-right bg-fill-quiet order-2 w-[360px] max-w-[38%] shrink-0 border-s"
+          ? "animate-slide-in-right bg-fill-quiet order-2 w-[560px] max-w-[55%] shrink-0 border-s @max-[48rem]/workspace:order-1 @max-[48rem]/workspace:h-1/2 @max-[48rem]/workspace:w-full @max-[48rem]/workspace:max-w-none"
           : "order-1 flex-1"
       )}
     >

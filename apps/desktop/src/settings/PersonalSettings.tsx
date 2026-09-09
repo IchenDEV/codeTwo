@@ -208,6 +208,12 @@ export function GeneralSettingsPage({
           className="text-metadata w-44"
         />
       </Row>
+      <p
+        className="text-body bg-fill-rest rounded-control p-3 font-mono"
+        style={{ fontFamily: terminal.fontFamily, fontSize: terminal.fontSize }}
+      >
+        {t("settings.fontPreview")}
+      </p>
       <Row label={t("settings.termFontSize")}>
         <Input
           size="compact"
@@ -279,6 +285,9 @@ export function ImportSettingsPage({
 
   return (
     <Page title={t("settings.import")} description={t("settings.importHint")}>
+      <p className="text-body text-muted-foreground pb-4">
+        {t("settings.importLocations")}
+      </p>
       <GroupHeading>{t("settings.importFromFiles")}</GroupHeading>
       <Row
         icon={<Download className="text-muted-foreground size-4" />}
@@ -361,6 +370,7 @@ export function KeybindingsSettingsPage({
   onReset?: (action: string) => void;
 }) {
   const t = useT();
+  const [query, setQuery] = useState("");
   const byAction = new Map(bindings.map((binding) => [binding[0], binding]));
   const conflicts = (() => {
     const seen = new Map<string, number>();
@@ -381,7 +391,20 @@ export function KeybindingsSettingsPage({
         .map((binding) => binding[0])
         .filter((action) => !known.has(action)),
     },
-  ].filter((group) => group.actions.length > 0);
+  ]
+    .map((group) => ({
+      ...group,
+      actions: group.actions.filter((action) => {
+        const entry = byAction.get(action);
+        if (!entry) return false;
+        const labelKey = `action.${action}`;
+        const label = labelKey in EN_STRINGS ? td(t, labelKey) : entry[2];
+        return `${label} ${action} ${formatCombo(entry[1])}`
+          .toLocaleLowerCase()
+          .includes(query.trim().toLocaleLowerCase());
+      }),
+    }))
+    .filter((group) => group.actions.length > 0);
 
   function renderRow(action: string) {
     const entry = byAction.get(action);
@@ -431,8 +454,20 @@ export function KeybindingsSettingsPage({
       title={t("settings.keybindings")}
       description={t("settings.keysHint", { mod: MOD_LABEL })}
     >
+      <Input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        aria-label={t("settings.shortcutSearch")}
+        placeholder={t("settings.shortcutSearch")}
+      />
+      {groups.length === 0 && (
+        <p role="status" className="text-muted-foreground text-body py-4">
+          {t("settings.noSearchResults")}
+        </p>
+      )}
       {groups.map((group) => (
-        <div key={group.title}>
+        <div key={group.title} className="max-w-xl">
           <GroupHeading>{group.title}</GroupHeading>
           <div className="space-y-0.5">{group.actions.map(renderRow)}</div>
         </div>

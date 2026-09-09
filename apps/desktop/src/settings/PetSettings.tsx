@@ -5,6 +5,7 @@ import { SettingToggle } from "@/components/business/setting-toggle";
 import { SettingsSection } from "@/components/business/settings-section";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Check, RefreshCw } from "@/components/ui/icons";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -52,6 +53,7 @@ export function PetSettings({
 } = {}) {
   const t = useT();
   const settings = useAppearanceSettings();
+  const [query, setQuery] = useState("");
   const [previewAnimation, setPreviewAnimation] =
     useState<CodeTwoPetAnimation>("idle");
   const [catalog, setCatalog] = useState<PetCatalogItem[]>([]);
@@ -152,67 +154,96 @@ export function PetSettings({
           </>
         }
       >
-        <ul className="pet-catalog" aria-label={t("settings.petPicker")}>
-          {pets.map((pet) => {
-            const selected =
-              pet.source === settings.petSource && pet.id === settings.petId;
-            const description =
-              pet.source === "builtin"
-                ? t("settings.petDescription")
-                : pet.description;
-            return (
-              <li className="pet-catalog-item" key={`${pet.source}:${pet.id}`}>
-                <SettingRow
-                  className="pet-catalog-row"
-                  label={
-                    pet.source === "builtin"
-                      ? t("settings.petName")
-                      : pet.displayName
-                  }
-                  description={description}
-                  leading={
-                    <div
-                      className="pet-catalog-avatar"
-                      aria-label={t("settings.petPreviewLabel", {
-                        name: pet.displayName,
-                      })}
-                    >
-                      <CodeTwoPetSprite
-                        key={`${pet.source}-${pet.id}-${previewAnimation}`}
-                        animation={previewAnimation}
-                        size={PREVIEW_SIZE}
-                        src={pet.spritesheetUrl}
-                        spriteVersionNumber={pet.spriteVersionNumber}
-                        playing={false}
-                        frame={0}
-                        title={pet.displayName}
-                      />
-                    </div>
-                  }
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          aria-label={t("settings.petSearch")}
+          placeholder={t("settings.petSearch")}
+        />
+        <ul
+          className="pet-catalog max-h-64 overflow-y-auto"
+          aria-label={t("settings.petPicker")}
+        >
+          {pets
+            .filter((pet) =>
+              `${pet.displayName} ${pet.description}`
+                .toLocaleLowerCase()
+                .includes(query.trim().toLocaleLowerCase())
+            )
+            .map((pet) => {
+              const selected =
+                pet.source === settings.petSource && pet.id === settings.petId;
+              const description =
+                pet.source === "builtin"
+                  ? t("settings.petDescription")
+                  : pet.description;
+              return (
+                <li
+                  className="pet-catalog-item"
+                  key={`${pet.source}:${pet.id}`}
                 >
-                  {selected ? (
-                    <span className="pet-selected-status">
-                      <Check className="size-3.5" aria-hidden="true" />
-                      {t("settings.petSelected")}
-                    </span>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="pet-select-button"
-                      aria-label={t("settings.petSelectNamed", {
-                        name: pet.displayName,
-                      })}
-                      onClick={() => selectPet(pet)}
-                    >
-                      {t("settings.petSelect")}
-                    </Button>
-                  )}
-                </SettingRow>
-              </li>
-            );
-          })}
+                  <SettingRow
+                    className="pet-catalog-row"
+                    label={
+                      pet.source === "builtin"
+                        ? t("settings.petName")
+                        : pet.displayName
+                    }
+                    description={description}
+                    leading={
+                      <div
+                        className="pet-catalog-avatar"
+                        aria-label={t("settings.petPreviewLabel", {
+                          name: pet.displayName,
+                        })}
+                      >
+                        <CodeTwoPetSprite
+                          key={`${pet.source}-${pet.id}-${previewAnimation}`}
+                          animation={previewAnimation}
+                          size={PREVIEW_SIZE}
+                          src={pet.spritesheetUrl}
+                          spriteVersionNumber={pet.spriteVersionNumber}
+                          playing={false}
+                          frame={0}
+                          title={pet.displayName}
+                        />
+                      </div>
+                    }
+                  >
+                    {selected ? (
+                      <span className="pet-selected-status">
+                        <Check className="size-3.5" aria-hidden="true" />
+                        {t("settings.petSelected")}
+                      </span>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="pet-select-button"
+                        aria-label={t("settings.petSelectNamed", {
+                          name: pet.displayName,
+                        })}
+                        onClick={() => selectPet(pet)}
+                      >
+                        {t("settings.petSelect")}
+                      </Button>
+                    )}
+                  </SettingRow>
+                </li>
+              );
+            })}
 
+          {catalogState === "ready" &&
+            !pets.some((pet) =>
+              `${pet.displayName} ${pet.description}`
+                .toLocaleLowerCase()
+                .includes(query.trim().toLocaleLowerCase())
+            ) && (
+              <li className="pet-catalog-state" role="status">
+                {t("settings.noSearchResults")}
+              </li>
+            )}
           {catalogState === "loading" ? (
             <li className="pet-catalog-state" role="status">
               <Spinner />

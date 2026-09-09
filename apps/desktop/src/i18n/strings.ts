@@ -350,7 +350,7 @@ export const en = {
   "git.next.moreActions": "More Git actions",
   "git.next.checking": "Checking Git…",
   "git.next.unavailable": "Source control unavailable",
-  "git.next.upToDate": "Up to date",
+  "git.next.upToDate": "No local changes",
   "git.next.reviewChanges": "Review changes",
   "git.next.createChangeRequest": "Create {label}",
   "git.next.resolveConflicts": "Resolve conflicts",
@@ -598,7 +598,7 @@ export const en = {
     "Manage C2 Plugin Standard bundles and their components.",
   "pluginHub.newSkill": "New skill",
   "pluginHub.github": "Install from GitHub",
-  "pluginHub.openMarketplace": "Open marketplace",
+  "pluginHub.openMarketplace": "Load local marketplace",
   "pluginHub.githubRepository": "GitHub plugin repository",
   "pluginHub.githubPlaceholder": "owner/repo or a GitHub /tree/ URL",
   "pluginHub.githubHint":
@@ -1144,6 +1144,7 @@ export const en = {
   "profile.sessions": "Sessions",
   "profile.currentStreak": "Current streak",
   "profile.tokenActivity": "Token activity",
+  "profile.heatmapLegend": "Daily tokens, from zero to the peak day",
   "profile.last90Days": "Last 90 days",
   "profile.noActivity": "No activity yet",
   "profile.noActivityHint":
@@ -1163,6 +1164,59 @@ export const en = {
   "profile.shared": "Profile shared.",
   "profile.copied": "Profile summary copied.",
   "profile.shareFailed": "The profile could not be shared or copied.",
+  "dock.closeTerminal": "Close terminal {number}",
+  "settings.restoreLanguage": "Reset language",
+  "feishu.sidebarAuthHint": "Connect Feishu to browse resources.",
+  "settings.backendSetup": "Backend setup",
+  "settings.backendSetupHint":
+    "Install the backend from its official distribution and enable its desktop integration. Recheck after installation. Detected means available locally; it does not confirm a connected browser or grant access.",
+  "settings.backendRecheck": "Recheck",
+  "settings.connectDevices": "Connect devices…",
+  "settings.fontPreview": "Aa 0123 — Terminal preview · 中文预览",
+  "settings.importLocations":
+    "Codex: ~/.codex/sessions; Claude Code: ~/.claude/projects. For Cursor and T3 Code, select the existing local database. In the file chooser, use Go to Folder to enter a hidden directory.",
+  "worktree.search": "Search project, branch or path",
+  "sceneEditor.validationIssues": "Fields to complete",
+  "pluginHub.skillUsage":
+    "Use a skill from the / menu in the prompt editor. Its description explains when it applies; enabling it here does not run it.",
+  "pluginHub.scopeUnavailable":
+    "This item does not support the selected scope. Choose another scope to install it.",
+  "pluginHub.installUnavailable":
+    "This catalog entry has no supported installer. Load a local marketplace or install the owning plugin.",
+  "pluginHub.emptyHelp":
+    "No item selected. Install a component or select one from the list.",
+  "pluginHub.mcpHelp":
+    "MCP servers are contributed by plugins. Install a plugin with an MCP server, then manage it here.",
+  "pluginHub.hooksHelp":
+    "This tab lists plugin Hooks. Scene Hooks are configured in the scene editor’s Automation tab.",
+  "pluginHub.clearSearch": "Clear search",
+  "issues.empty": "No open GitHub issues.",
+  "issues.notRepo":
+    "The selected directory is not a Git repository. Choose a project repository first.",
+  "issues.loading": "Loading GitHub issues…",
+  "workspace.startTitle": "What would you like to build?",
+  "workspace.startHint":
+    "Describe the outcome, add files with @ or choose a skill with /. Send when ready.",
+  "automations.minutes": "min",
+  "automations.startingHint":
+    "Preparing the workspace and provider. Open this run for details if it takes longer than expected.",
+  "automations.failureHint":
+    "This run did not complete. Check the provider and workspace, then retry when ready.",
+  "automations.scheduleSummary":
+    "Schedule time zone: {timezone}. Execution policy: {policy}. Saving schedules future runs.",
+  "sceneEditor.preview": "Preview configuration",
+  "pluginHub.skillContent": "Skill content",
+  "sceneEditor.providerOrderHint":
+    "Select providers in priority order; select again to remove. Numbers show fallback order.",
+  "sceneEditor.toolsReferenceHint":
+    "Tool names come from the provider. Enter exact names; leave empty to inherit. This does not install tools or grant permissions.",
+  "sceneEditor.carryArtifacts": "Carry artifacts",
+  "files.referenceTitle": "Add a file reference",
+  "files.referenceHint":
+    "Choose a file to add it to the prompt as an @ reference. Use the Files panel to open the editor.",
+  "files.referenceLimit":
+    "Up to 300 matching files are shown. Narrow your query to find more specific files.",
+  "sceneEditor.referencesAdvanced": "Custom references (advanced)",
   "settings.general": "General",
   "settings.generalHint":
     "Language, software updates, and how the terminal renders.",
@@ -1246,6 +1300,23 @@ export const en = {
   "settings.pets": "Pets",
   "settings.petsHint":
     "Choose how your desktop companion appears and responds while you work.",
+  "settings.petSearch": "Search pets by name or description",
+  "settings.shortcutSearch": "Search actions or shortcuts",
+  "settings.noSearchResults": "No matching results.",
+  "mission.context": "Context usage",
+  "browserPermissions.title": "Browser",
+  "browserPermissions.description":
+    "Experimental website permissions granted permanently to C2 Browser. Sensitive actions and downloads always require one-time approval.",
+  "browserPermissions.adapter": "Default browser adapter",
+  "browserPermissions.adapterHint":
+    "Ordinary requests use C2 Browser. Explicit Chrome, existing-tab, or existing-login requests use Chrome.",
+  "browserPermissions.experimental": "Experimental",
+  "browserPermissions.access": "Permanent website access",
+  "browserPermissions.empty":
+    "No websites have permanent access. Open a website in C2 Browser and grant access when prompted to add it here.",
+  "browserPermissions.untrusted": "Website content remains untrusted.",
+  "browserPermissions.revoke": "Revoke",
+  "browserPermissions.failed": "Could not update website permissions.",
   "settings.petPicker": "Pick a pet",
   "settings.petPickerHint":
     "Pets float on the desktop, follow the active task, and stay independent of conversations.",
@@ -1415,7 +1486,7 @@ export const en = {
   "settings.computerUseLoading": "Loading Computer Use backends…",
   "settings.computerUseLoadFailed":
     "Could not update Computer Use settings: {error}",
-  "settings.computerUseAvailable": "Available",
+  "settings.computerUseAvailable": "Detected locally",
   "settings.computerUseUnavailable": "Unavailable",
   "settings.appshots": "Appshots",
   "settings.appshotsHint":
@@ -1435,7 +1506,7 @@ export const en = {
   "settings.appshotsHotkeyCommandOption2": "⌘⌥2",
   "settings.appshotsDestination": "Destination",
   "settings.appshotsDestinationHint":
-    "Choose which Composer receives a new Appshot.",
+    "Choose which draft receives the capture. Automatic uses the current session, or a new draft when the current session is archived. It attaches content without sending it.",
   "settings.appshotsDestinationAutomatic": "Automatic",
   "settings.appshotsDestinationCurrent": "Current session",
   "settings.appshotsDestinationNew": "New session",
@@ -1470,7 +1541,7 @@ export const en = {
   "settings.browserUseLoading": "Loading Browser Use backends…",
   "settings.browserUseLoadFailed":
     "Could not update Browser Use settings: {error}",
-  "settings.browserUseAvailable": "Available",
+  "settings.browserUseAvailable": "Detected locally",
   "settings.browserUseUnavailable": "Unavailable",
   "settings.browser": "Browser",
   "settings.installed": "Installed",
@@ -2098,7 +2169,7 @@ export const en = {
   "action.next_session": "Next session",
   "action.cycle_scene": "Cycle scene",
   "scene.chip": "Scene",
-  "scene.none": "No scene",
+  "scene.none": "Keep current configuration",
   "scene.noneHint": "Keep the current posture; nothing is loaded or unloaded.",
   "scene.auto": "Auto scene",
   "scene.autoActive": "Auto · {scene}",
@@ -2205,7 +2276,7 @@ export const en = {
   "taskboard.copyCheckout": "Copy checkout path",
   "taskboard.checkoutCopied": "Checkout path copied.",
   "taskboard.copyCheckoutFailed": "Could not copy the checkout path.",
-  "taskboard.primaryPullRequest": "Primary PR",
+  "taskboard.primaryPullRequest": "Linked PR",
   "taskboard.checksTitle": "Checks",
   "taskboard.deliveryCheck": "Pull request status",
   "taskboard.notAvailable": "Not available",
@@ -2219,7 +2290,7 @@ export const en = {
   "taskboard.relationshipTitle": "Relationship",
   "taskboard.relationshipDescription":
     "A Task keeps the intent and owns Session history. Each Session owns its checkout and can resolve at most one current pull request.",
-  "taskboard.currentProjection": "Current projection",
+  "taskboard.currentProjection": "Task progress",
   "taskboard.none": "None",
   "taskboard.new": "New task",
   "taskboard.search": "Search tasks",
@@ -2311,7 +2382,8 @@ export const en = {
   "taskboard.editor.priority": "Priority",
   "taskboard.editor.labels": "Labels",
   "taskboard.editor.labelsPlaceholder": "Enter comma-separated labels",
-  "taskboard.editor.labelsHint": "Duplicate labels are merged automatically.",
+  "taskboard.editor.labelsHint":
+    "Separate labels with commas, semicolons or newlines. Duplicate labels are merged automatically.",
   "taskboard.editor.cancel": "Cancel",
   "taskboard.editor.save": "Save changes",
   "taskboard.editor.create": "Create task",
@@ -2600,7 +2672,7 @@ export const en = {
   "sceneEditor.criterionDescription": "Condition description",
   "sceneEditor.nextScenes": "Suggested next scenes",
   "sceneEditor.nextScenesDescription":
-    "Comma-separated scene references. Carry details remain editable in Full JSON.",
+    "Choose a scene above or enter references separated by commas. Select which artifacts to carry below.",
   "sceneEditor.automationTitle": "Declarative automation",
   "sceneEditor.automationDescription":
     "Hooks can suggest, notify, or run an existing macro. They cannot execute arbitrary commands or loosen permissions.",
@@ -3245,7 +3317,7 @@ export const zhCN: Record<StringKey, string> = {
   "git.next.moreActions": "更多 Git 操作",
   "git.next.checking": "正在检查 Git…",
   "git.next.unavailable": "源代码管理不可用",
-  "git.next.upToDate": "已是最新",
+  "git.next.upToDate": "无本地改动",
   "git.next.reviewChanges": "审阅改动",
   "git.next.createChangeRequest": "创建 {label}",
   "git.next.resolveConflicts": "解决冲突",
@@ -3457,7 +3529,7 @@ export const zhCN: Record<StringKey, string> = {
   "pluginHub.description": "管理遵循 C2 插件标准的插件包及其组件。",
   "pluginHub.newSkill": "新建技能",
   "pluginHub.github": "从 GitHub 安装",
-  "pluginHub.openMarketplace": "打开插件市场",
+  "pluginHub.openMarketplace": "加载本地插件市场",
   "pluginHub.githubRepository": "GitHub 插件仓库",
   "pluginHub.githubPlaceholder": "owner/repo 或 GitHub /tree/ 链接",
   "pluginHub.githubHint":
@@ -3962,6 +4034,7 @@ export const zhCN: Record<StringKey, string> = {
   "profile.sessions": "会话",
   "profile.currentStreak": "当前连续使用",
   "profile.tokenActivity": "Token 活跃度",
+  "profile.heatmapLegend": "每日 Token 用量，从零到最高单日用量",
   "profile.last90Days": "最近 90 天",
   "profile.noActivity": "还没有使用记录",
   "profile.noActivityHint": "完成第一次 C2 会话后，本地使用记录会显示在这里。",
@@ -3980,6 +4053,55 @@ export const zhCN: Record<StringKey, string> = {
   "profile.shared": "Profile 已分享。",
   "profile.copied": "Profile 摘要已复制。",
   "profile.shareFailed": "无法分享或复制 Profile。",
+  "dock.closeTerminal": "关闭终端 {number}",
+  "settings.restoreLanguage": "恢复语言设置",
+  "feishu.sidebarAuthHint": "登录后查看飞书资料。",
+  "settings.backendSetup": "安装与检测",
+  "settings.backendSetupHint":
+    "从后端官方渠道安装并启用桌面集成，再重新检测。“已检测到”仅表示本机可用，不表示浏览器已连接，也不会授予访问权限。",
+  "settings.backendRecheck": "重新检测",
+  "settings.connectDevices": "连接设备…",
+  "settings.fontPreview": "Aa 0123 — 终端字体预览",
+  "settings.importLocations":
+    "Codex 会话通常位于 ~/.codex/sessions，Claude Code 位于 ~/.claude/projects。Cursor、T3 Code 选择已有的本地数据库；文件选择器中可使用“前往文件夹”输入隐藏目录。",
+  "worktree.search": "搜索项目、分支或路径",
+  "sceneEditor.validationIssues": "待完善的字段",
+  "pluginHub.skillUsage":
+    "在提示词编辑器中输入 / 选择技能；描述说明其适用场景，在这里启用不会立即执行。",
+  "pluginHub.scopeUnavailable": "此项目不支持当前作用域，请切换作用域后安装。",
+  "pluginHub.installUnavailable":
+    "此目录条目尚无受支持的安装方式。可加载本地市场或安装所属插件。",
+  "pluginHub.emptyHelp": "尚未选择项目。请从列表选择，或先安装相应组件。",
+  "pluginHub.mcpHelp":
+    "MCP 服务器由插件提供。安装包含 MCP 服务器的插件后，可在此管理。",
+  "pluginHub.hooksHelp":
+    "这里列出插件 Hook；场景 Hook 在场景编辑器的自动化页配置。",
+  "pluginHub.clearSearch": "清除搜索",
+  "issues.empty": "没有打开的 GitHub Issue。",
+  "issues.notRepo": "当前目录不是 Git 仓库，请先选择项目仓库。",
+  "issues.loading": "正在加载 GitHub Issue…",
+  "workspace.startTitle": "想要完成什么？",
+  "workspace.startHint":
+    "写下希望完成的结果，用 @ 引用文件或用 / 选择技能，准备好后发送。",
+  "automations.minutes": "分钟",
+  "automations.startingHint":
+    "正在准备工作区与供应商。如长时间未开始，请打开本次运行查看详情。",
+  "automations.failureHint":
+    "本次运行未完成。请检查供应商和工作区，解决后可重新运行。",
+  "automations.scheduleSummary":
+    "计划时区：{timezone}。执行策略：{policy}。保存后将按计划执行。",
+  "sceneEditor.preview": "预览配置",
+  "pluginHub.skillContent": "技能内容",
+  "sceneEditor.providerOrderHint":
+    "按优先顺序选择供应商，再次点击可移除。数字表示回退顺序。",
+  "sceneEditor.toolsReferenceHint":
+    "工具名称由供应商定义，请填写准确名称，留空则继承。此设置不会安装工具或授予权限。",
+  "sceneEditor.carryArtifacts": "携带产物",
+  "files.referenceTitle": "添加文件引用",
+  "files.referenceHint":
+    "选择文件，将它作为 @ 引用加入提示词；编辑文件请使用右侧文件面板。",
+  "files.referenceLimit": "最多显示 300 个匹配文件，可缩小搜索范围定位文件。",
+  "sceneEditor.referencesAdvanced": "自定义引用（高级）",
   "settings.general": "通用",
   "settings.generalHint": "应用语言、软件更新与终端显示设置。",
   "settings.import": "导入",
@@ -4054,6 +4176,23 @@ export const zhCN: Record<StringKey, string> = {
     "选择配色方案、调整主题，并设置 C2 全局使用的字体。",
   "settings.pets": "宠物",
   "settings.petsHint": "设置桌面宠物的显示方式与状态反馈。",
+  "settings.petSearch": "按名称或描述搜索宠物",
+  "settings.shortcutSearch": "搜索操作或快捷键",
+  "settings.noSearchResults": "没有匹配的结果。",
+  "mission.context": "上下文用量",
+  "browserPermissions.title": "浏览器",
+  "browserPermissions.description":
+    "管理 C2 浏览器的永久网站授权（实验功能）。敏感操作与下载仍需逐次批准。",
+  "browserPermissions.adapter": "默认浏览器适配器",
+  "browserPermissions.adapterHint":
+    "一般请求使用 C2 浏览器；明确要求 Chrome、已有标签页或现有登录状态时使用 Chrome。",
+  "browserPermissions.experimental": "实验功能",
+  "browserPermissions.access": "永久网站授权",
+  "browserPermissions.empty":
+    "尚未永久授权任何网站。在 C2 浏览器打开网站，并在访问请求中批准后，这里会显示授权记录。",
+  "browserPermissions.untrusted": "网站内容仍按不可信输入处理。",
+  "browserPermissions.revoke": "撤销授权",
+  "browserPermissions.failed": "无法更新网站授权。",
   "settings.petPicker": "选择宠物",
   "settings.petPickerHint":
     "宠物独立悬浮在桌面上，跟随当前任务，不占用对话空间。",
@@ -4210,7 +4349,7 @@ export const zhCN: Record<StringKey, string> = {
   "settings.computerUseBackends": "已检测后端",
   "settings.computerUseLoading": "正在载入 Computer Use 后端…",
   "settings.computerUseLoadFailed": "无法更新 Computer Use 设置：{error}",
-  "settings.computerUseAvailable": "可用",
+  "settings.computerUseAvailable": "本机已检测到",
   "settings.computerUseUnavailable": "不可用",
   "settings.appshots": "Appshots",
   "settings.appshotsHint":
@@ -4228,7 +4367,8 @@ export const zhCN: Record<StringKey, string> = {
   "settings.appshotsHotkeyCommandShift2": "⌘⇧2",
   "settings.appshotsHotkeyCommandOption2": "⌘⌥2",
   "settings.appshotsDestination": "发送到",
-  "settings.appshotsDestinationHint": "选择新 Appshot 要放入哪个输入区。",
+  "settings.appshotsDestinationHint":
+    "自动模式放入当前会话；当前会话已归档时创建新草稿。截图只加入输入区，不会自动发送。",
   "settings.appshotsDestinationAutomatic": "自动",
   "settings.appshotsDestinationCurrent": "当前会话",
   "settings.appshotsDestinationNew": "新会话",
@@ -4260,7 +4400,7 @@ export const zhCN: Record<StringKey, string> = {
   "settings.browserUseBackends": "已检测后端",
   "settings.browserUseLoading": "正在载入 Browser Use 后端…",
   "settings.browserUseLoadFailed": "无法更新 Browser Use 设置：{error}",
-  "settings.browserUseAvailable": "可用",
+  "settings.browserUseAvailable": "本机已检测到",
   "settings.browserUseUnavailable": "不可用",
   "settings.browser": "浏览器",
   "settings.installed": "已安装",
@@ -4837,7 +4977,7 @@ export const zhCN: Record<StringKey, string> = {
   "action.next_session": "下一个会话",
   "action.cycle_scene": "轮换场景",
   "scene.chip": "场景",
-  "scene.none": "无场景",
+  "scene.none": "保留当前配置",
   "scene.noneHint": "保持当前姿态，不加载或卸载任何内容。",
   "scene.auto": "自动场景",
   "scene.autoActive": "自动 · {scene}",
@@ -4932,14 +5072,14 @@ export const zhCN: Record<StringKey, string> = {
   "taskboard.hideInspector": "隐藏检查器",
   "taskboard.selectTask": "选择一个任务以查看详情。",
   "taskboard.currentSessionTitle": "当前 Session",
-  "taskboard.selectedSession": "选中的 Session",
+  "taskboard.selectedSession": "关联会话",
   "taskboard.taskLabel": "任务",
   "taskboard.activityLabel": "状态",
   "taskboard.checkoutTitle": "检出目录",
   "taskboard.copyCheckout": "复制检出目录路径",
   "taskboard.checkoutCopied": "已复制检出目录路径。",
   "taskboard.copyCheckoutFailed": "无法复制检出目录路径。",
-  "taskboard.primaryPullRequest": "Primary PR",
+  "taskboard.primaryPullRequest": "关联 PR",
   "taskboard.checksTitle": "检查",
   "taskboard.deliveryCheck": "Pull request 状态",
   "taskboard.notAvailable": "不可用",
@@ -4953,7 +5093,7 @@ export const zhCN: Record<StringKey, string> = {
   "taskboard.relationshipTitle": "关系",
   "taskboard.relationshipDescription":
     "Task 保存目标并拥有 Session 历史；每个 Session 拥有自己的检出目录，并且最多解析出一个当前 pull request。",
-  "taskboard.currentProjection": "当前投影",
+  "taskboard.currentProjection": "任务进展",
   "taskboard.none": "无",
   "taskboard.new": "新建任务",
   "taskboard.search": "搜索任务",
@@ -5035,11 +5175,12 @@ export const zhCN: Record<StringKey, string> = {
   "taskboard.editor.titleRequired": "请输入任务标题",
   "taskboard.editor.description": "描述",
   "taskboard.editor.descriptionPlaceholder": "补充背景、验收标准或实现提示…",
-  "taskboard.editor.status": "状态",
+  "taskboard.editor.status": "任务状态",
   "taskboard.editor.priority": "优先级",
   "taskboard.editor.labels": "标签",
   "taskboard.editor.labelsPlaceholder": "输入标签，用逗号分隔",
-  "taskboard.editor.labelsHint": "相同标签会自动合并。",
+  "taskboard.editor.labelsHint":
+    "可用逗号、分号或换行分隔；相同标签会自动合并。",
   "taskboard.editor.cancel": "取消",
   "taskboard.editor.save": "保存更改",
   "taskboard.editor.create": "创建任务",
@@ -5315,7 +5456,7 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.criterionDescription": "条件说明",
   "sceneEditor.nextScenes": "建议的后续场景",
   "sceneEditor.nextScenesDescription":
-    "以逗号分隔场景引用；产物携带细节可在“完整 JSON”中编辑。",
+    "从上方选择场景，或输入逗号分隔的引用；在下方勾选要携带的产物。",
   "sceneEditor.automationTitle": "声明式自动化",
   "sceneEditor.automationDescription":
     "Hook 可以建议、通知或运行现有 Macro，但不能执行任意命令，也不能放宽权限。",

@@ -1322,8 +1322,9 @@ export function SessionRail({
                       ?.focus({ preventScroll: true })
                   }
                   className={cn(
-                    "session-rail-row group rounded-control hover:bg-fill-quiet focus-within:bg-fill-quiet data-[popup-open]:bg-fill-hover relative cursor-default px-2 py-1.5 transition-[box-shadow,opacity] outline-none data-[sidebar-dragging=true]:opacity-45",
-                    s.id === activeSession && "bg-fill-hover"
+                    "session-rail-row group rounded-control hover:bg-fill-hover focus-within:bg-fill-hover active:bg-fill-pressed data-[popup-open]:bg-fill-hover relative cursor-default px-2 py-1.5 transition-[box-shadow,opacity] outline-none data-[sidebar-dragging=true]:opacity-45",
+                    s.id === activeSession &&
+                      "bg-fill-selected hover:bg-fill-selected-hover focus-within:bg-fill-selected active:bg-fill-pressed before:absolute before:inset-y-3 before:left-0.5 before:w-0.5 before:rounded-full before:bg-current"
                   )}
                 >
                   <Button
@@ -2177,7 +2178,6 @@ export function SessionRail({
                     className="text-muted-foreground mr-2 size-7 shrink-0"
                     aria-label={t("rail.collapse")}
                     onClick={onToggleCollapse}
-                    disabled={taskBoardOpen && !overlay}
                   >
                     <PanelLeft className="size-4" />
                   </Button>

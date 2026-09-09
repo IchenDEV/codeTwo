@@ -38,7 +38,7 @@ describe("toolbar Tabs selected state", () => {
 
     expect(list?.querySelector('[aria-hidden="true"]')).toBeNull();
     expect(active?.className).toContain(
-      "group-data-[variant=toolbar]/tabs-list:data-active:bg-secondary"
+      "group-data-[variant=toolbar]/tabs-list:data-active:bg-fill-selected"
     );
     expect(active?.className).not.toContain(
       "group-data-[variant=toolbar]/tabs-list:data-active:bg-transparent"

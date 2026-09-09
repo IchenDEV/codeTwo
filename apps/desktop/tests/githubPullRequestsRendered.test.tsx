@@ -161,7 +161,7 @@ describe("PullRequestsPage", () => {
       inspectorRadius: "modal",
       inspectorElevation: "raised",
     });
-    expect(pullRequestCss).toContain("@container (max-width: 60rem)");
+    expect(pullRequestCss).toContain("@container (max-width: 76rem)");
     expect(pullRequestCss).toContain(".pull-request-inspector");
     expect(pullRequestCss).toContain("margin: var(--ds-space-surface-inset)");
     expect(pullRequestCss).toContain("margin-inline-start: 0");

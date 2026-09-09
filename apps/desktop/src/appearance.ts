@@ -544,11 +544,16 @@ function cssVariableName(value: string): string | null {
 
 export function resolveThemeColor(value: string): string {
   const variable = cssVariableName(value);
-  if (variable == null || variable === "" || typeof document === "undefined")
-    return value;
-  return getComputedStyle(document.documentElement)
-    .getPropertyValue(variable)
-    .trim();
+  const resolved =
+    variable != null && variable !== "" && typeof document !== "undefined"
+      ? getComputedStyle(document.documentElement)
+          .getPropertyValue(variable)
+          .trim()
+      : value;
+  // Native color inputs require six digits, while CSS tokens may use shorthand.
+  return /^#[\da-f]{3}$/iu.test(resolved)
+    ? `#${[...resolved.slice(1)].map((digit) => digit + digit).join("")}`.toLowerCase()
+    : resolved;
 }
 
 export function materializeTheme(theme: AppearanceTheme): AppearanceTheme {

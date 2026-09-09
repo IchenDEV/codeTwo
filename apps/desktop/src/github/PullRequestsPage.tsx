@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useDeferredValue,
   useEffect,
   useRef,
@@ -71,6 +70,7 @@ import type {
 import { useT } from "../i18n";
 import { taskForPullRequest } from "../taskboard/taskBoard";
 import type { BoardTask } from "../taskboard/taskBoard";
+import { PullRequestBody } from "./PullRequestBody";
 import {
   filterPullRequests,
   githubPullRequestReference,
@@ -124,114 +124,6 @@ function avatar(login: string): ReactNode {
       />
     </span>
   );
-}
-
-function inlineMarkdown(value: string): ReactNode[] {
-  const parts = value.split(/(`[^`]+`|https?:\/\/[^\s)]+)/gu).filter(Boolean);
-  return parts.map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code
-          key={index}
-          className="rounded-micro bg-fill-quiet text-callout px-1 font-mono"
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    if (/^https?:\/\//u.test(part)) {
-      return (
-        <a
-          key={index}
-          className="text-primary underline-offset-2 hover:underline"
-          href={part}
-          onClick={(event) => {
-            event.preventDefault();
-            void openExternal(part);
-          }}
-        >
-          {part}
-        </a>
-      );
-    }
-    return <Fragment key={index}>{part}</Fragment>;
-  });
-}
-
-function PullRequestBody({ body }: { body: string }) {
-  const blocks: ReactNode[] = [];
-  const lines = body.replaceAll("\r\n", "\n").split("\n");
-  for (let index = 0; index < lines.length;) {
-    const line = lines[index] ?? "";
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-    if (line.startsWith("```")) {
-      const code: string[] = [];
-      index += 1;
-      while (index < lines.length && !(lines[index] ?? "").startsWith("```")) {
-        code.push(lines[index] ?? "");
-        index += 1;
-      }
-      blocks.push(
-        <pre key={`code-${index}`}>
-          <code>{code.join("\n")}</code>
-        </pre>
-      );
-      index += 1;
-      continue;
-    }
-    const heading = /^(#{2,3})\s+(.+)$/u.exec(line);
-    if (heading) {
-      const content = inlineMarkdown(heading[2] ?? "");
-      blocks.push(
-        heading[1]?.length === 2 ? (
-          <h2 key={`heading-${index}`}>{content}</h2>
-        ) : (
-          <h3 key={`heading-${index}`}>{content}</h3>
-        )
-      );
-      index += 1;
-      continue;
-    }
-    const bullet = /^\s*[-*]\s+(.+)$/u.exec(line);
-    const ordered = /^\s*\d+[.)]\s+(.+)$/u.exec(line);
-    if (bullet || ordered) {
-      const items: ReactNode[] = [];
-      const matcher = bullet ? /^\s*[-*]\s+(.+)$/u : /^\s*\d+[.)]\s+(.+)$/u;
-      while (index < lines.length) {
-        const match = matcher.exec(lines[index] ?? "");
-        if (!match) break;
-        items.push(
-          <li key={`item-${index}`}>{inlineMarkdown(match[1] ?? "")}</li>
-        );
-        index += 1;
-      }
-      blocks.push(
-        bullet ? (
-          <ul key={`list-${index}`}>{items}</ul>
-        ) : (
-          <ol key={`list-${index}`}>{items}</ol>
-        )
-      );
-      continue;
-    }
-    const paragraph = [line.trim()];
-    index += 1;
-    while (
-      index < lines.length &&
-      (lines[index] ?? "").trim() &&
-      !/^(#{2,3})\s|^\s*[-*]\s|^\s*\d+[.)]\s|^```/u.test(lines[index] ?? "")
-    ) {
-      paragraph.push((lines[index] ?? "").trim());
-      index += 1;
-    }
-    blocks.push(
-      <p key={`paragraph-${index}`}>{inlineMarkdown(paragraph.join(" "))}</p>
-    );
-  }
-  return <div className="pull-request-body text-foreground/90">{blocks}</div>;
 }
 
 function readinessTone(readiness: PullRequestMergeReadiness): StatusTone {
@@ -891,8 +783,13 @@ export function PullRequestsPage({
                           >
                             <span className="flex min-w-0 items-center gap-2">
                               <FileCode2 className="text-muted-foreground size-3.5 shrink-0" />
-                              <span className="text-callout truncate font-mono">
-                                {file.path}
+                              <span className="min-w-0" title={file.path}>
+                                <span className="text-callout block truncate font-mono">
+                                  {file.path.split("/").at(-1)}
+                                </span>
+                                <span className="text-metadata text-muted-foreground block truncate">
+                                  {file.path}
+                                </span>
                               </span>
                             </span>
                             <span className="text-success tabular-nums">
@@ -919,13 +816,13 @@ export function PullRequestsPage({
                         </p>
                       ) : (
                         <div className="divide-border rounded-module bg-surface divide-y overflow-hidden border">
-                          {detail.checks.map((check) => {
+                          {detail.checks.map((check, index) => {
                             const result = pullRequestCheckResult(check);
                             const failed = result === "failed";
                             const passed = result === "passed";
                             return (
                               <div
-                                key={check.name}
+                                key={`${check.name}:${check.detailsUrl ?? index}`}
                                 className="min-h-control-field text-body flex items-center gap-3 px-3 py-2"
                               >
                                 {passed ? (
@@ -935,8 +832,22 @@ export function PullRequestsPage({
                                 ) : (
                                   <Clock3 className="text-warning size-3.5 shrink-0" />
                                 )}
-                                <span className="min-w-0 flex-1 truncate">
-                                  {check.name}
+                                <span
+                                  className="min-w-0 flex-1"
+                                  title={check.detailsUrl ?? check.name}
+                                >
+                                  <span className="block truncate">
+                                    {check.name}
+                                  </span>
+                                  {check.detailsUrl != null &&
+                                    check.detailsUrl !== "" && (
+                                      <span className="text-metadata text-muted-foreground block truncate">
+                                        {check.detailsUrl.replace(
+                                          /^https?:\/\/github.com\//u,
+                                          ""
+                                        )}
+                                      </span>
+                                    )}
                                 </span>
                                 <span
                                   className={cn(

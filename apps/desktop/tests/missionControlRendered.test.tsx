@@ -75,6 +75,18 @@ function renderDialog(overrides = {}) {
 }
 
 describe("MissionControlDialog", () => {
+  test("the close button dismisses without selecting or reviewing a task", async () => {
+    activateDom();
+    const { calls } = renderDialog();
+    await waitFor(() =>
+      expect(button(dom.document.body, "Close")).not.toBeNull()
+    );
+    click(button(dom.document.body, "Close"));
+    expect(calls.closed).toBe(1);
+    expect(calls.selected).toEqual([]);
+    expect(calls.reviewed).toEqual([]);
+  });
+
   test("renders one row per session with title, scene pill, and context", async () => {
     activateDom();
     renderDialog();

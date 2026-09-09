@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { Simulate } from "react-dom/test-utils";
+
 import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
@@ -45,6 +47,30 @@ function findButton(container: HTMLElement, label: string): HTMLButtonElement {
 }
 
 describe("Pet settings", () => {
+  test("filters catalog without hiding behavior controls", async () => {
+    activateDom();
+    const view = mount(
+      <I18nProvider>
+        <PetSettings loadCatalog={loadCatalog} />
+      </I18nProvider>
+    );
+    await flush();
+    const search = view.container.querySelector('input[type="search"]');
+    Object.getOwnPropertyDescriptor(
+      dom.window.HTMLInputElement.prototype,
+      "value"
+    )!.set!.call(search, "columbina");
+    Simulate.change(search);
+    await flush();
+    expect(view.container.querySelectorAll(".pet-catalog-item")).toHaveLength(
+      1
+    );
+    expect(
+      view.container.querySelector(".pet-catalog-item").textContent
+    ).toContain("Columbina");
+    expect(view.container.querySelector(".pet-setting-group")).not.toBeNull();
+    view.unmount();
+  });
   test("renders the real companion preview and persists show, activity, and size controls", async () => {
     activateDom();
     const view = mount(

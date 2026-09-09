@@ -42,14 +42,19 @@ export function TerminalDockContent({
 
   useEffect(() => {
     let stop: (() => void) | null = null;
+    let disposed = false;
     setTitles({});
     void (async () => {
       stop = await onPtyTitle(({ id, title, project_path }) => {
         if (project_path !== projectPath) return;
         setTitles((current) => ({ ...current, [id]: title }));
       });
+      if (disposed) stop();
     })();
-    return () => stop?.();
+    return () => {
+      disposed = true;
+      stop?.();
+    };
   }, [projectPath]);
 
   const activeId = terminalId(sessionKey, activeSlot, tmux);
@@ -57,6 +62,12 @@ export function TerminalDockContent({
     const text = (await ptyDump(activeId, true)).trimEnd();
     if (text) onSendText(text);
   };
+
+  function newTerminal() {
+    setSlots((current) => [...current, nextSlot]);
+    setActiveSlot(nextSlot);
+    setNextSlot((current) => current + 1);
+  }
 
   function closeSlot(slot: number) {
     const remaining = slots.filter((candidate) => candidate !== slot);
@@ -70,41 +81,44 @@ export function TerminalDockContent({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="dock-content-tabbar flex shrink-0 items-center gap-0.5 overflow-x-auto px-2">
         {slots.map((slot) => (
-          <Button
-            key={slot}
-            type="button"
-            variant="selectable"
-            size="row"
-            focusStyle="inset"
-            data-selected={slot === activeSlot ? "true" : "false"}
-            title={titles[terminalId(sessionKey, slot, tmux)] || undefined}
-            onClick={() => {
-              setActiveSlot(slot);
-              setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-            }}
-            className={cn(
-              "group px-module-inset text-metadata relative h-full max-w-40 shrink-0 gap-1.5",
-              slot === activeSlot
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <span className="truncate">
-              {terminalLabel(titles[terminalId(sessionKey, slot, tmux)], slot)}
-            </span>
-            {slots.length > 1 && (
-              <X
-                className="hover:text-destructive size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeSlot(slot);
-                }}
-              />
-            )}
-            {slot === activeSlot && (
-              <span className="bg-primary absolute inset-x-1.5 -bottom-px h-0.5 rounded-none" />
-            )}
-          </Button>
+          <div key={slot} className="group flex shrink-0 items-center">
+            <Button
+              type="button"
+              variant="selectable"
+              size="row"
+              focusStyle="inset"
+              data-selected={slot === activeSlot ? "true" : "false"}
+              title={titles[terminalId(sessionKey, slot, tmux)] || undefined}
+              onClick={() => {
+                setActiveSlot(slot);
+                setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+              }}
+              className={cn(
+                "group px-module-inset text-metadata relative h-full max-w-40 shrink-0 gap-1.5",
+                slot === activeSlot
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className="truncate">
+                {terminalLabel(
+                  titles[terminalId(sessionKey, slot, tmux)],
+                  slot
+                )}
+              </span>
+              {slot === activeSlot && (
+                <span className="bg-primary absolute inset-x-1.5 -bottom-px h-0.5 rounded-none" />
+              )}
+            </Button>
+            <TooltipButton
+              label={t("dock.closeTerminal", { number: slot })}
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => closeSlot(slot)}
+            >
+              <X className="size-3" />
+            </TooltipButton>
+          </div>
         ))}
         <TooltipButton
           label={t("dock.newTerminal")}
@@ -112,11 +126,7 @@ export function TerminalDockContent({
           variant="ghost"
           size="icon-xs"
           className="text-muted-foreground"
-          onClick={() => {
-            setSlots((current) => [...current, nextSlot]);
-            setActiveSlot(nextSlot);
-            setNextSlot((current) => current + 1);
-          }}
+          onClick={newTerminal}
         >
           <Plus className="size-3" />
         </TooltipButton>
@@ -127,6 +137,7 @@ export function TerminalDockContent({
           variant="ghost"
           size="icon-xs"
           className="text-muted-foreground"
+          disabled={slots.length === 0}
           onClick={() => void sendToAgent()}
         >
           <CornerUpLeft className="size-3" />
@@ -140,6 +151,14 @@ export function TerminalDockContent({
           {t("dock.tmux")}
         </label>
       </div>
+      {slots.length === 0 && (
+        <div className="flex flex-1 items-center justify-center">
+          <Button variant="outline" size="sm" onClick={newTerminal}>
+            <Plus />
+            {t("dock.newTerminal")}
+          </Button>
+        </div>
+      )}
       {slots.map((slot) => (
         <div
           key={slot}

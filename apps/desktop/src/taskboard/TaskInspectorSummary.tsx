@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus";
 
@@ -8,6 +9,8 @@ import { taskPriorityLabel, taskStatusLabel } from "./TaskEditorDialog";
 import type { SessionProjection } from "./workspaceTypes";
 
 interface TaskInspectorSummaryProps {
+  onOpenSession?: (id: string) => void;
+  onStartTask?: (task: BoardTask) => void;
   t: Translate;
   task: BoardTask;
   session: SessionProjection | null;
@@ -17,6 +20,7 @@ interface TaskInspectorSummaryProps {
 export function TaskInspectorDetails({ t, task }: TaskInspectorSummaryProps) {
   return (
     <div className="grid gap-5">
+      <h3 className="text-body font-semibold break-words">{task.title}</h3>
       <InspectorSection title={t("taskboard.taskDetails")}>
         <div className="rounded-module bg-fill-rest text-body grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 p-3">
           <span className="text-muted-foreground">
@@ -64,24 +68,34 @@ export function TaskInspectorInsights({
   task,
   session,
   pullRequest,
+  onOpenSession,
+  onStartTask,
 }: TaskInspectorSummaryProps) {
   return (
     <div className="grid gap-5">
-      <InspectorSection title={t("taskboard.relationshipTitle")}>
-        <p className="rounded-module bg-fill-rest text-body p-3 leading-relaxed">
-          {t("taskboard.relationshipDescription")}
-        </p>
-      </InspectorSection>
       <InspectorSection title={t("taskboard.currentProjection")}>
+        {session && onOpenSession ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenSession(session.id)}
+          >
+            {t("taskboard.openSession")}
+          </Button>
+        ) : onStartTask ? (
+          <Button variant="outline" size="sm" onClick={() => onStartTask(task)}>
+            {t("taskboard.startTask")}
+          </Button>
+        ) : null}
         <div className="rounded-module bg-fill-rest text-body grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 p-3">
           <span className="text-muted-foreground">
             {t("taskboard.taskLabel")}
           </span>
-          <strong className="truncate">{task.title}</strong>
+          <strong className="break-words">{task.title}</strong>
           <span className="text-muted-foreground">
             {t("taskboard.selectedSession")}
           </span>
-          <strong className="truncate">
+          <strong className="break-words">
             {session?.title ?? t("taskboard.none")}
           </strong>
           <span className="text-muted-foreground">

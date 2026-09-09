@@ -10,12 +10,15 @@ function ScrollArea({
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      className={cn(
+        "relative flex min-h-0 flex-col overflow-hidden",
+        className
+      )}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="rounded-module focus-visible:focus-ring size-full transition-[color,box-shadow] outline-none"
+        className="rounded-module focus-visible:focus-ring min-h-0 w-full flex-1 transition-[color,box-shadow] outline-none"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>

@@ -134,7 +134,7 @@
   min-width: 0;
   align-items: center;
   gap: 0.25rem;
-  overflow-x: auto;
+  flex-wrap: wrap;
   padding: var(--ds-space-surface-inset);
   box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0
     var(--ds-color-fill-rest);

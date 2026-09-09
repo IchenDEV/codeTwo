@@ -109,6 +109,7 @@ enum SceneSaveScope {
 /// sees the same data; frontends must not reconstruct it from the storage representation.
 #[derive(Serialize)]
 struct SkillInfo {
+    preview: Option<String>,
     id: String,
     name: String,
     description: String,
@@ -137,6 +138,15 @@ impl SkillInfo {
             SkillKind::Macro => "macro",
         };
         SkillInfo {
+            preview: match &skill.payload {
+                SkillPayload::Fragment { text } => Some(text.clone()),
+                SkillPayload::AgentSkill {
+                    inline_text,
+                    skill_ref,
+                } => inline_text.clone().or_else(|| Some(skill_ref.clone())),
+                SkillPayload::Macro { template, .. } => Some(template.clone()),
+                _ => None,
+            },
             id: skill.id.clone(),
             name: skill.name.clone(),
             description: skill.description.clone(),
@@ -560,5 +570,28 @@ fn editable_scene_dir(
             .ok_or_else(|| {
                 codetwo_kernel::PluginError::new("a project is required for project scenes")
             }),
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+
+    #[test]
+    fn skill_preview_preserves_fragment_content() {
+        let skill = Skill {
+            id: "review".into(),
+            name: "Review".into(),
+            description: "Review code".into(),
+            icon: None,
+            source: None,
+            payload: SkillPayload::Fragment {
+                text: "Review the diff.".into(),
+            },
+        };
+        let info = SkillInfo::from_skill(&skill);
+        assert_eq!(info.preview.as_deref(), Some("Review the diff."));
+        assert_eq!(info.id, "review");
+        assert_eq!(info.kind, "fragment");
     }
 }

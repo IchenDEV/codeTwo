@@ -376,6 +376,30 @@ function TypographyProfileEditor({
       aria-label={`${label} ${t("settings.typography")}`}
     >
       <ProfileHeading scheme={scheme} palette={palette} />
+      <div className="bg-fill-rest rounded-control flex flex-col gap-1 p-3">
+        <span
+          style={{
+            fontFamily: UI_FONTS.find((font) => font.id === profile.uiFont)
+              ?.stack,
+            fontWeight: FONT_WEIGHTS.find(
+              (weight) => weight.id === profile.uiFontWeight
+            )?.value,
+          }}
+        >
+          Aa · 中文 · 0123456789
+        </span>
+        <code
+          style={{
+            fontFamily: CODE_FONTS.find((font) => font.id === profile.codeFont)
+              ?.stack,
+            fontWeight: FONT_WEIGHTS.find(
+              (weight) => weight.id === profile.codeFontWeight
+            )?.value,
+          }}
+        >
+          const value = 42;
+        </code>
+      </div>
       <SettingRow
         label={t("settings.interfaceFont")}
         description={t("settings.interfaceFontHint")}
@@ -395,7 +419,11 @@ function TypographyProfileEditor({
             <SelectContent position="popper" align="end">
               <SelectGroup>
                 {UI_FONTS.map((font) => (
-                  <SelectItem key={font.id} value={font.id}>
+                  <SelectItem
+                    key={font.id}
+                    value={font.id}
+                    style={{ fontFamily: font.stack }}
+                  >
                     {font.label}
                   </SelectItem>
                 ))}
@@ -444,7 +472,11 @@ function TypographyProfileEditor({
             <SelectContent position="popper" align="end">
               <SelectGroup>
                 {CODE_FONTS.map((font) => (
-                  <SelectItem key={font.id} value={font.id}>
+                  <SelectItem
+                    key={font.id}
+                    value={font.id}
+                    style={{ fontFamily: font.stack }}
+                  >
                     {font.label}
                   </SelectItem>
                 ))}
@@ -666,6 +698,46 @@ export function AppearanceSettings({
 
       <section
         className="appearance-section"
+        aria-labelledby="appearance-typography"
+      >
+        <h2 id="appearance-typography" className="appearance-settings-heading">
+          {t("settings.typography")}
+        </h2>
+        <div className="appearance-profile-grid">
+          {PROFILE_SCHEMES.map((scheme) => (
+            <TypographyProfileEditor
+              key={scheme}
+              scheme={scheme}
+              palette={activeTheme[scheme]}
+              profile={settings[scheme]}
+              onChange={(patch) => updateProfile(scheme, patch)}
+            />
+          ))}
+        </div>
+        <div className="appearance-setting-group">
+          <RangeSetting
+            label={t("settings.interfaceFontSize")}
+            hint={t("settings.interfaceFontSizeHint")}
+            value={settings.uiFontSize}
+            min={12}
+            max={16}
+            suffix=" px"
+            onChange={(uiFontSize) => setAppearanceSettings({ uiFontSize })}
+          />
+          <RangeSetting
+            label={t("settings.codeFontSize")}
+            hint={t("settings.codeFontSizeHint")}
+            value={settings.codeFontSize}
+            min={11}
+            max={18}
+            suffix=" px"
+            onChange={(codeFontSize) => setAppearanceSettings({ codeFontSize })}
+          />
+        </div>
+      </section>
+
+      <section
+        className="appearance-section"
         aria-labelledby="appearance-themes"
       >
         <div className="appearance-section-header">
@@ -792,46 +864,6 @@ export function AppearanceSettings({
               onChange={(key, color) => editColor("dark", key, color)}
             />
           </div>
-        </div>
-      </section>
-
-      <section
-        className="appearance-section"
-        aria-labelledby="appearance-typography"
-      >
-        <h2 id="appearance-typography" className="appearance-settings-heading">
-          {t("settings.typography")}
-        </h2>
-        <div className="appearance-profile-grid">
-          {PROFILE_SCHEMES.map((scheme) => (
-            <TypographyProfileEditor
-              key={scheme}
-              scheme={scheme}
-              palette={activeTheme[scheme]}
-              profile={settings[scheme]}
-              onChange={(patch) => updateProfile(scheme, patch)}
-            />
-          ))}
-        </div>
-        <div className="appearance-setting-group">
-          <RangeSetting
-            label={t("settings.interfaceFontSize")}
-            hint={t("settings.interfaceFontSizeHint")}
-            value={settings.uiFontSize}
-            min={12}
-            max={16}
-            suffix=" px"
-            onChange={(uiFontSize) => setAppearanceSettings({ uiFontSize })}
-          />
-          <RangeSetting
-            label={t("settings.codeFontSize")}
-            hint={t("settings.codeFontSizeHint")}
-            value={settings.codeFontSize}
-            min={11}
-            max={18}
-            suffix=" px"
-            onChange={(codeFontSize) => setAppearanceSettings({ codeFontSize })}
-          />
         </div>
       </section>
 

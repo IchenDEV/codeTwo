@@ -1,5 +1,5 @@
 export const DEFAULT_UI_FONT_SIZE = 14;
-export const DEFAULT_CODE_FONT_SIZE = 12;
+export const DEFAULT_CODE_FONT_SIZE = 13;
 
 export interface TypographyPreferences {
   uiFontSize: number;
@@ -44,10 +44,10 @@ export function resolveTypographyProperties({
     "--ds-type-dialog-leading": px(22 + uiDelta),
     "--ds-type-body-size": px(uiFontSize),
     "--ds-type-body-leading": px(20 + uiDelta),
-    "--ds-type-prose-size": px(uiFontSize),
-    "--ds-type-prose-leading": px(23 + uiDelta),
+    "--ds-type-prose-size": px(uiFontSize + 1),
+    "--ds-type-prose-leading": px(24 + uiDelta),
     "--ds-type-callout-size": px(callout),
-    "--ds-type-callout-leading": px(18 + uiDelta),
+    "--ds-type-callout-leading": px(20 + uiDelta),
     "--ds-type-metadata-size": px(metadata),
     "--ds-type-metadata-leading": px(16 + uiDelta),
     "--ds-type-caption-size": px(caption),

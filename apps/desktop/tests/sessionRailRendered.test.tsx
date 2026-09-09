@@ -1299,11 +1299,11 @@ describe("SessionRail row layout", () => {
 
     expect(row?.dataset.sessionDensity).toBe("compact");
     expect(row?.parentElement?.className).toContain("gap-0.5");
-    expect(activeRow?.className).toContain("bg-fill-hover");
+    expect(activeRow?.className).toContain("bg-fill-selected");
     expect(activeRow?.className).toContain("rounded-control");
     expect(activeRow?.className.split(/\s+/)).not.toContain("bg-accent");
-    expect(row?.className).toContain("hover:bg-fill-quiet");
-    expect(row?.className).toContain("focus-within:bg-fill-quiet");
+    expect(row?.className).toContain("hover:bg-fill-hover");
+    expect(row?.className).toContain("focus-within:bg-fill-hover");
     expect(
       row?.querySelector('[data-session-line="title"]')?.className
     ).toContain("gap-2");
@@ -1428,9 +1428,11 @@ describe("SessionRail row layout", () => {
     );
 
     expect(list?.dataset.sessionSelection).toBe("instant");
-    expect(activeRow?.className.split(/\s+/)).toContain("bg-fill-hover");
+    expect(activeRow?.className.split(/\s+/)).toContain("bg-fill-selected");
     expect(activeRow?.className).not.toContain("transition-[background-color");
-    expect(inactiveRow?.className.split(/\s+/)).not.toContain("bg-fill-hover");
+    expect(inactiveRow?.className.split(/\s+/)).not.toContain(
+      "bg-fill-selected"
+    );
 
     view.unmount();
   });

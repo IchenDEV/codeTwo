@@ -235,12 +235,12 @@ function readCollapsedSections(): ResourceSectionState {
       localStorage.getItem(RESOURCE_SECTIONS_KEY) ?? "{}"
     ) as Record<string, unknown>;
     return {
-      messages: parsed.messages === true,
-      documents: parsed.documents === true,
-      bases: parsed.bases === true,
+      messages: parsed.messages !== false,
+      documents: parsed.documents !== false,
+      bases: parsed.bases !== false,
     };
   } catch {
-    return { messages: false, documents: false, bases: false };
+    return { messages: true, documents: true, bases: true };
   }
 }
 
@@ -1844,7 +1844,7 @@ export function FeishuWorkspacePage({
           <div className="rounded-control flex items-center gap-2 px-2 py-1.5">
             <p className="text-fine text-muted-foreground min-w-0 flex-1 leading-relaxed">
               {enabled
-                ? t("feishu.authorizationRequiredHint")
+                ? t("feishu.sidebarAuthHint")
                 : t("feishu.pluginNotReadyHint")}
             </p>
             <Button

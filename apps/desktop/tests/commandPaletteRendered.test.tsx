@@ -49,6 +49,28 @@ const commands = [
 ];
 
 describe("CommandPalette", () => {
+  test("same-titled tasks keep one selected result and distinct command identities", async () => {
+    const view = mount(
+      <I18nProvider>
+        <CommandPalette
+          commands={["first", "second"].map((id) => ({
+            id,
+            category: "session",
+            label: "hi",
+            hint: "Codex",
+            run: () => {},
+          }))}
+          onClose={() => {}}
+        />
+      </I18nProvider>
+    );
+    await flush();
+    expect(
+      dom.document.body.querySelectorAll('[cmdk-item][aria-selected="true"]')
+    ).toHaveLength(1);
+    view.unmount();
+  });
+
   test("renders the glass surface, grouped results, and keyboard footer", () => {
     const view = mount(
       <I18nProvider>

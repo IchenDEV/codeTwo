@@ -6,7 +6,7 @@ import {
   resolveTypographyProperties,
 } from "../src/design/typography";
 
-describe("Codex-aligned typography engine", () => {
+describe("C2 typography engine", () => {
   test("resolves every semantic role and compatibility alias from the default controls", () => {
     expect(
       resolveTypographyProperties({
@@ -24,17 +24,17 @@ describe("Codex-aligned typography engine", () => {
       "--ds-type-dialog-leading": "22px",
       "--ds-type-body-size": "14px",
       "--ds-type-body-leading": "20px",
-      "--ds-type-prose-size": "14px",
-      "--ds-type-prose-leading": "23px",
+      "--ds-type-prose-size": "15px",
+      "--ds-type-prose-leading": "24px",
       "--ds-type-callout-size": "13px",
-      "--ds-type-callout-leading": "18px",
+      "--ds-type-callout-leading": "20px",
       "--ds-type-metadata-size": "12px",
       "--ds-type-metadata-leading": "16px",
       "--ds-type-caption-size": "11px",
       "--ds-type-caption-leading": "14px",
-      "--ds-type-code-size": "12px",
-      "--ds-type-code-leading": "18px",
-      "--appearance-code-size": "12px",
+      "--ds-type-code-size": "13px",
+      "--ds-type-code-leading": "20px",
+      "--appearance-code-size": "13px",
       "--text-cap": "11px",
       "--text-fine": "13px",
       "--text-hint": "12px",
@@ -53,7 +53,7 @@ describe("Codex-aligned typography engine", () => {
 
     expect(properties["--ds-type-body-size"]).toBe("16px");
     expect(properties["--ds-type-body-leading"]).toBe("22px");
-    expect(properties["--ds-type-prose-leading"]).toBe("25px");
+    expect(properties["--ds-type-prose-leading"]).toBe("26px");
     expect(properties["--ds-type-callout-size"]).toBe("15px");
     expect(properties["--ds-type-metadata-size"]).toBe("14px");
     expect(properties["--ds-type-caption-size"]).toBe("13px");

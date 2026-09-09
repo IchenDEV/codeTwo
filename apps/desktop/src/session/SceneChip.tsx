@@ -40,6 +40,7 @@ import { useToast } from "../ui/toast";
 import type { SessionConfig } from "./config";
 import { sceneTitle } from "./scene";
 import type { SceneInfo, SceneSource } from "./scene";
+import { ScenePreview } from "./ScenePreview";
 
 /** Source pill naming where the scene came from (builtin / user / project / plugin). */
 export function SourceBadge({ source }: { source: SceneSource }) {
@@ -251,7 +252,7 @@ export function ScenePicker({
   };
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center justify-between gap-3 pr-8">
             <DialogTitle>{t("scene.pickerTitle")}</DialogTitle>
@@ -311,6 +312,7 @@ export function ScenePicker({
                   }}
                 />
               </div>
+              <ScenePreview scene={scene} />
               <TooltipButton
                 label={`${t("sceneEditor.duplicate")}: ${sceneTitle(scene, locale)}`}
                 tooltip={t("sceneEditor.duplicate")}
@@ -321,18 +323,18 @@ export function ScenePicker({
               >
                 <Copy />
               </TooltipButton>
-              {(scene.source === "user" || scene.source === "project") && (
-                <TooltipButton
-                  label={`${t("sceneEditor.edit")}: ${sceneTitle(scene, locale)}`}
-                  tooltip={t("sceneEditor.edit")}
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground shrink-0"
-                  onClick={() => onEdit(scene)}
-                >
-                  <Pencil />
-                </TooltipButton>
-              )}
+
+              <TooltipButton
+                label={`${t("sceneEditor.edit")}: ${sceneTitle(scene, locale)}`}
+                tooltip={t("sceneEditor.edit")}
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground shrink-0"
+                onClick={() => onEdit(scene)}
+              >
+                <Pencil />
+              </TooltipButton>
+
               <TooltipButton
                 label={t("scene.exportSkill")}
                 variant="ghost"

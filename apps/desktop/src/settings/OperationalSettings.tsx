@@ -76,6 +76,8 @@ function BackendSettingsPage({
   const [settings, setSettings] = useState<ComputerUseSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const t = useT();
+  const [attempt, setAttempt] = useState(0);
   const copyRef = useRef(copy);
   copyRef.current = copy;
 
@@ -92,7 +94,7 @@ function BackendSettingsPage({
     return () => {
       active = false;
     };
-  }, [loader]);
+  }, [loader, attempt]);
 
   const selection = settings?.selections["*"] ?? "automatic";
   const selectionLabel =
@@ -134,6 +136,18 @@ function BackendSettingsPage({
   return (
     <Page title={copy.title} description={copy.description}>
       <p className="text-metadata text-muted-foreground pb-2">{copy.scope}</p>
+      <Row
+        label={t("settings.backendSetup")}
+        hint={t("settings.backendSetupHint")}
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setAttempt((value) => value + 1)}
+        >
+          {t("settings.backendRecheck")}
+        </Button>
+      </Row>
       {error != null && error !== "" && (
         <p className="text-metadata text-destructive pb-2">{error}</p>
       )}
@@ -341,10 +355,12 @@ function syncHint(
 }
 
 export function DeviceSyncSettingsPage({
+  onOpenDevices,
   loader = getDeviceSyncStatus,
   enabledSaver = setDeviceSyncEnabled,
   syncStarter = syncDeviceDataNow,
 }: {
+  onOpenDevices?: () => void;
   loader?: () => Promise<DeviceSyncStatus>;
   enabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
   syncStarter?: () => Promise<DeviceSyncStatus>;
@@ -413,6 +429,11 @@ export function DeviceSyncSettingsPage({
 
   return (
     <Page title={t("settings.sync")} description={t("settings.syncHint")}>
+      {onOpenDevices && (
+        <Button variant="outline" size="sm" onClick={onOpenDevices}>
+          {t("settings.connectDevices")}
+        </Button>
+      )}
       <SettingToggle
         label={t("settings.pairedDeviceSync")}
         description={syncHint(t, status)}
@@ -673,13 +694,23 @@ export function DeveloperSettingsPage({
 }
 
 export function BrowserPermissionsSettingsPage() {
+  const t = useT();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [origins, setOrigins] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
-    void browserPermissions().then((next) => {
-      if (active) setOrigins(next);
-    });
+    void browserPermissions()
+      .then((next) => {
+        if (active) setOrigins(next);
+      })
+      .catch((cause: unknown) => {
+        if (active) setError(String(cause));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -687,20 +718,26 @@ export function BrowserPermissionsSettingsPage() {
 
   return (
     <Page
-      title="Browser"
-      description="Experimental website permissions granted permanently to C2 Browser. Sensitive actions and downloads always require one-time approval."
+      title={t("browserPermissions.title")}
+      description={t("browserPermissions.description")}
     >
       <Row
         icon={<Globe className="text-muted-foreground size-5" />}
-        label="Default browser adapter"
-        hint="Ordinary requests use C2 Browser. Explicit Chrome, existing-tab, or existing-login requests use Chrome."
+        label={t("browserPermissions.adapter")}
+        hint={t("browserPermissions.adapterHint")}
       >
-        <Badge variant="outline">Experimental</Badge>
+        <Badge variant="outline">{t("browserPermissions.experimental")}</Badge>
       </Row>
-      <GroupHeading>Permanent website access</GroupHeading>
-      {origins.length === 0 ? (
+      <GroupHeading>{t("browserPermissions.access")}</GroupHeading>
+      {loading ? (
+        <Spinner />
+      ) : error != null && error !== "" ? (
+        <p role="alert" className="text-destructive text-body py-4">
+          {t("browserPermissions.failed")} {error}
+        </p>
+      ) : origins.length === 0 ? (
         <p className="py-section text-body text-muted-foreground">
-          No origins have permanent access.
+          {t("browserPermissions.empty")}
         </p>
       ) : (
         origins.map((origin) => (
@@ -708,19 +745,21 @@ export function BrowserPermissionsSettingsPage() {
             key={origin}
             compact
             label={origin}
-            hint="Website content remains untrusted."
+            hint={t("browserPermissions.untrusted")}
           >
             <TooltipButton
-              label="Revoke"
+              label={t("browserPermissions.revoke")}
               variant="ghost"
               size="icon"
               className="text-muted-foreground hover:text-destructive size-7"
               onClick={() => {
-                void browserRevokePermission(origin).then(() => {
-                  setOrigins((current) =>
-                    current.filter((item) => item !== origin)
-                  );
-                });
+                void browserRevokePermission(origin)
+                  .then(() => {
+                    setOrigins((current) =>
+                      current.filter((item) => item !== origin)
+                    );
+                  })
+                  .catch((cause: unknown) => setError(String(cause)));
               }}
             >
               <Trash2 className="size-3.5" />

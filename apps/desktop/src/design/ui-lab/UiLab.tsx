@@ -29,10 +29,16 @@ import {
   pullRequestPanelApi,
   pullRequestTasks,
 } from "./fixtures";
+import { SettingsScenario } from "./SettingsScenario";
 
 import "./ui-lab.css";
 
-type UiLabRoute = "home" | "design-system" | "pull-requests" | "pr-dock";
+type UiLabRoute =
+  | "home"
+  | "design-system"
+  | "pull-requests"
+  | "pr-dock"
+  | "settings";
 interface UiLabCard {
   route: UiLabRoute;
   icon: ComponentType<{ className?: string }>;
@@ -43,6 +49,14 @@ interface UiLabCard {
 }
 
 const catalogCards: readonly UiLabCard[] = [
+  {
+    route: "settings",
+    icon: Palette,
+    title: "Settings controls",
+    description: "Production appearance, catalog search and editor sizing.",
+    tags: ["Forms", "Overflow"],
+    fixture: true,
+  },
   {
     route: "design-system",
     icon: Palette,
@@ -91,7 +105,8 @@ function routeFromLocation(): UiLabRoute {
   const value = new URLSearchParams(window.location.search).get("ui-lab");
   return value === "design-system" ||
     value === "pull-requests" ||
-    value === "pr-dock"
+    value === "pr-dock" ||
+    value === "settings"
     ? value
     : "home";
 }
@@ -307,8 +322,22 @@ function PullRequestDockScenario() {
       <div className="ui-lab-dock-layout">
         <ConversationFixture />
         <Dock
-          availableSurfaces={["pull-request"]}
+          availableSurfaces={[
+            "trajectory",
+            "browser",
+            "terminal",
+            "side-chat",
+            "files",
+            "git",
+            "pull-request",
+          ]}
           content={{
+            trajectory: <p className="p-4">Execution trajectory fixture</p>,
+            browser: <p className="p-4">Browser fixture</p>,
+            terminal: <p className="p-4">Terminal fixture</p>,
+            "side-chat": <p className="p-4">Side chat fixture</p>,
+            files: <p className="p-4">Files fixture</p>,
+            git: <p className="p-4">Git fixture</p>,
             "pull-request": (
               <ScrollArea className="h-full min-h-0 flex-1">
                 <div className="text-metadata p-4">
@@ -441,5 +470,11 @@ export function UiLab({ route: routeOverride }: { route?: UiLabRoute }) {
   }
   if (route === "pull-requests") return <PullRequestsScenario />;
   if (route === "pr-dock") return <PullRequestDockScenario />;
+  if (route === "settings")
+    return (
+      <ScenarioShell route="settings" title="Settings controls">
+        <SettingsScenario />
+      </ScenarioShell>
+    );
   return <Catalog />;
 }

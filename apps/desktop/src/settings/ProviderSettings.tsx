@@ -599,11 +599,7 @@ export function ProviderSettingsPage({
             operation?.id === provider.id ? operation.action : null;
           const status = enabled
             ? management.installed
-              ? management.version != null && management.version !== ""
-                ? t("settings.providerInstalledVersion", {
-                    version: management.version,
-                  })
-                : t("settings.installed")
+              ? t("settings.installed")
               : management.launch_mode === "on_demand"
                 ? t("settings.providerReadyOnDemand")
                 : t("settings.notInstalled")
