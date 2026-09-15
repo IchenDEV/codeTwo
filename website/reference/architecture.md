@@ -22,8 +22,8 @@ it through a small submission/event interface.
    │  keymap     shared keybindings                                         │
    │  pty        embedded-terminal PTYs                                     │
    └───────────▲───────────────────────▲──────────────────────▲───────────┘
-      Electrobun desktop          ratatui TUI          codetwo-server (remote)
-  (React + Rust sidecar)        (crates/tui)          (Axum WebSocket)
+      Electrobun desktop          NAPI addon          codetwo-server (remote)
+  (React + Rust sidecar)        (crates/napi)         (Axum WebSocket)
 ```
 
 ## The SQ/EQ interface
@@ -34,7 +34,8 @@ PermissionRequest, TurnEnded, Error, …). See the [Op / Event protocol](/refere
 
 - The **desktop** sends typed Electrobun RPC to a bundled Rust sidecar; one JSON-lines bridge
   carries named commands in and event streams out.
-- The **TUI** calls the engine in-process and renders Events in its draw loop.
+- The **NAPI addon** loads the same core in-process for Bun; the renderer reaches it through the
+  typed bridge, and the standalone server exposes it over WebSocket.
 - The **server** forwards Ops from WebSocket clients and broadcasts Events back.
 
 This is codex's Submission-Queue / Event-Queue pattern: one agent loop, many renderers.

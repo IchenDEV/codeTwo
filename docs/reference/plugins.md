@@ -124,8 +124,8 @@ let app = CoreApp::boot(AppConfig::new("~/.codetwo")).await?;
 let status = app.call("git.status", json!({ "cwd": "/repo" })).await?;
 ```
 
-`AppConfig` is data. Trim the app by editing it — the TUI does exactly this, because a terminal
-frontend has no use for scenes, key bindings, or the market:
+`AppConfig` is data. Trim the app by editing it — a headless host does exactly this, because it
+has no use for scenes, key bindings, or the market:
 
 ```rust
 let config = AppConfig::new(&dir).without("scenes").without("keymap").without("market");
@@ -175,7 +175,7 @@ impl Plugin for IssuesPlugin {
 }
 ```
 
-Register it in `crates/plugins/src/app/plugins/mod.rs` (`builtin_registry`) and add its name to
+Register it in `crates/core/src/plugins/app/plugins/mod.rs` (`builtin_registry`) and add its name to
 `BUILTIN`. Add it to `CORE` only when host ownership is required to preserve a product, data, or
 security invariant. That is the whole integration.
 
@@ -371,7 +371,7 @@ CoreApp::boot_with(config, registry).await?;
 ```
 
 A full desktop adapter adds only host-owned automation, event, language-server, browser, voice,
-native-action, and remote modules; product commands remain behind the same command seam as the TUI and server. C2's
+native-action, and remote modules; product commands remain behind the same command seam as the server. C2's
 Electrobun adapter packages that Rust graph as `codetwo-desktop-host`; Bun owns only shell-native
 window, dialog, update, and process-lifecycle operations.
 
@@ -398,8 +398,9 @@ The application migration is complete:
   workspace I/O and search, projects, artifacts, canvas/document compilation, terminal/PTY/tmux,
   usage, voice, issues/delegation, scene commands, pipelines, memory, Git, market, skills and the
   engine all adapt `codetwo-core` capabilities into commands from plugin scopes.
-- `codetwo-tui` boots that graph and consumes its typed event and engine services. It trims plugins
-  it does not need through `AppConfig` rather than constructing a separate application.
+- `codetwo-napi` loads that graph in-process for Bun and consumes the same typed event and engine
+  services. It trims plugins it does not need through `AppConfig` rather than constructing a
+  separate application.
 - The standalone `codetwo-server` also boots `CoreApp`, then gives the graph's engine, store,
   event-bus and canvas services to its streaming protocol adapter.
 - The Electrobun desktop boots that same graph in `codetwo-desktop-host`, adding individually owned

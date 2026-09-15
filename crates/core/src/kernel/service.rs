@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// A named capability shared through a [`Context`](crate::kernel::Context).
 ///
 /// ```
-/// # use codetwo_kernel::Service;
+/// # use codetwo_core::kernel::Service;
 /// struct Store;
 /// impl Service for Store { const NAME: &'static str = "store"; }
 /// ```

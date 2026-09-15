@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import { act as reactAct } from "react";
+
 import {
   activateDom,
   button,
@@ -13,7 +15,8 @@ import {
 } from "./domTestHarness";
 
 activateDom();
-const { AutomationsPage } = await import("../src/automation/AutomationsPage");
+const { AutomationsPage, defaultAutomationActions } =
+  await import("../src/automation/AutomationsPage");
 const { I18nProvider } = await import("../src/i18n");
 const { ToastProvider } = await import("../src/ui/toast");
 const appSource = readFileSync(
@@ -198,6 +201,68 @@ describe("AutomationsPage layout", () => {
     expect(automationSource).toContain(
       '<StatusBadge tone={automation.enabled ? "success" : "neutral"}>'
     );
+  });
+
+  test("defaults its actions to the desktop bridge and keeps the replay control", () => {
+    expect(automationSource).toContain("actions = defaultAutomationActions");
+    expect(automationSource).toContain("subscribeToAlerts: onAutomationAlert");
+    expect(automationSource).toContain("rerun: rerunAutomation");
+    expect(automationSource).toContain('t("automations.rerun")');
+    expect(automationSource).toContain("<RotateCcw");
+  });
+
+  test("renders a failure alert toast with a rerun action", async () => {
+    activateDom();
+    let deliver: ((alert: Record<string, unknown>) => void) | null = null;
+    const view = mount(
+      <I18nProvider>
+        <ToastProvider>
+          <AutomationsPage
+            projects={[
+              {
+                name: "mini-game",
+                path: "/tmp/mini-game",
+                last_opened_at: Date.now(),
+              },
+            ]}
+            providers={[]}
+            defaultProject="/tmp/mini-game"
+            defaultProvider="codex"
+            onAddProject={() => {}}
+            onOpenSession={() => {}}
+            actions={{
+              ...defaultAutomationActions,
+              subscribeToAlerts: async (cb) => {
+                deliver = cb as (alert: Record<string, unknown>) => void;
+                return () => {};
+              },
+            }}
+          />
+        </ToastProvider>
+      </I18nProvider>
+    );
+    await flush();
+
+    expect(deliver).not.toBeNull();
+    await reactAct(async () => {
+      deliver?.({
+        automation_id: "a1",
+        run_id: "r1",
+        automation_name: "Nightly triage",
+        status: "failed",
+        error: "provider exited 1",
+      });
+    });
+    await flush();
+
+    const alert = view.container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Automation failed: Nightly triage");
+    const rerun = [...(alert?.querySelectorAll("button") ?? [])].find(
+      (item) => item.textContent?.trim() === "Run again"
+    );
+    expect(rerun).not.toBeUndefined();
+
+    view.unmount();
   });
 
   test("keeps create and edit work in the detail pane instead of opening a dialog", async () => {

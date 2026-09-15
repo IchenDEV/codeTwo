@@ -11,8 +11,10 @@ import Electrobun, {
   Utils,
 } from "electrobun/bun";
 
+import type { AutomationAlert } from "../bridge";
 import { macOSApplicationMenu } from "./applicationMenu";
 import { AppshotManager } from "./appshots";
+import { automationAlertNotification } from "./automationAlert";
 import {
   nativeContextMenuAction,
   nativeContextMenuConfig,
@@ -284,6 +286,12 @@ const host = new NativeHost({
   dataDir,
   onEvent: (event) => {
     pluginHostActions?.handleHostEvent(event);
+    if (event.name === "automation-alert") {
+      const alert = event.payload as Partial<AutomationAlert> | null;
+      Utils.showNotification(
+        automationAlertNotification(alert, applicationName)
+      );
+    }
     if (rendererReady) rpc.send.event(event);
     else queuedEvents.push(event);
   },

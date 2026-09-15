@@ -67,6 +67,201 @@ pub struct DiffResult {
     pub truncation_reason: Option<String>,
     pub returned_bytes: usize,
     pub files: usize,
+    /// Structured view of [`DiffResult::text`], parsed once from the same bounded bytes. Additive:
+    /// older payloads without it still deserialize, and every existing consumer keeps using `text`.
+    #[serde(default)]
+    pub file_diffs: Vec<FileDiff>,
+}
+
+/// One file section of a unified diff, with its hunks and line counts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileDiff {
+    /// The post-image path (`b/…`), or the pre-image path for a deletion.
+    pub path: String,
+    /// The pre-image path when it differs, as for a rename.
+    #[serde(default)]
+    pub old_path: Option<String>,
+    #[serde(default)]
+    pub additions: u64,
+    #[serde(default)]
+    pub deletions: u64,
+    #[serde(default)]
+    pub hunks: Vec<DiffHunk>,
+}
+
+/// One `@@` hunk with parsed ranges and line-numbered content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffHunk {
+    pub old_start: u32,
+    pub old_lines: u32,
+    pub new_start: u32,
+    pub new_lines: u32,
+    pub lines: Vec<DiffLine>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiffLineKind {
+    Context,
+    Added,
+    Removed,
+}
+
+/// One line of a hunk. `old_line`/`new_line` are the 1-based numbers to show in each gutter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffLine {
+    pub kind: DiffLineKind,
+    #[serde(default)]
+    pub old_line: Option<u32>,
+    #[serde(default)]
+    pub new_line: Option<u32>,
+    pub text: String,
+}
+
+/// Parse a unified diff into per-file hunks. Pure over already-bounded text: it never runs git and
+/// cannot exceed the input, so the diff limits and the flat `text` field are unchanged.
+pub fn parse_unified_diff(text: &str) -> Vec<FileDiff> {
+    let mut files: Vec<FileDiff> = Vec::new();
+    let mut current: Option<FileDiff> = None;
+    let mut hunk: Option<DiffHunk> = None;
+    let mut old_no = 0u32;
+    let mut new_no = 0u32;
+
+    fn strip_ab(value: &str) -> String {
+        let value = value.trim();
+        value
+            .strip_prefix("a/")
+            .or_else(|| value.strip_prefix("b/"))
+            .unwrap_or(value)
+            .to_string()
+    }
+
+    for raw in text.lines() {
+        if let Some(rest) = raw.strip_prefix("diff --git ") {
+            if let Some(mut file) = current.take() {
+                if let Some(pending) = hunk.take() {
+                    file.hunks.push(pending);
+                }
+                files.push(file);
+            }
+            let path = rest
+                .split_once(" b/")
+                .map(|(_, post)| post.trim().to_string())
+                .unwrap_or_else(|| strip_ab(rest));
+            current = Some(FileDiff {
+                path,
+                ..Default::default()
+            });
+            continue;
+        }
+        let Some(file) = current.as_mut() else {
+            continue;
+        };
+        if raw.starts_with("@@") {
+            if let Some(pending) = hunk.take() {
+                file.hunks.push(pending);
+            }
+            let (old_start, old_lines, new_start, new_lines) = parse_hunk_header(raw);
+            old_no = old_start;
+            new_no = new_start;
+            hunk = Some(DiffHunk {
+                old_start,
+                old_lines,
+                new_start,
+                new_lines,
+                lines: Vec::new(),
+            });
+            continue;
+        }
+        if let Some(value) = raw.strip_prefix("rename from ") {
+            file.old_path = Some(strip_ab(value));
+            continue;
+        }
+        if let Some(value) = raw.strip_prefix("rename to ") {
+            file.path = strip_ab(value);
+            continue;
+        }
+        if let Some(value) = raw.strip_prefix("+++ ") {
+            if value.trim() != "/dev/null" {
+                file.path = strip_ab(value);
+            }
+            continue;
+        }
+        if let Some(value) = raw.strip_prefix("--- ") {
+            if value.trim() != "/dev/null" {
+                file.old_path = Some(strip_ab(value));
+            }
+            continue;
+        }
+        let Some(active) = hunk.as_mut() else {
+            continue;
+        };
+        if raw == "\\ No newline at end of file" {
+            continue;
+        }
+        let line = if let Some(rest) = raw.strip_prefix('+') {
+            file.additions = file.additions.saturating_add(1);
+            let line = DiffLine {
+                kind: DiffLineKind::Added,
+                old_line: None,
+                new_line: Some(new_no),
+                text: rest.to_string(),
+            };
+            new_no = new_no.saturating_add(1);
+            line
+        } else if let Some(rest) = raw.strip_prefix('-') {
+            file.deletions = file.deletions.saturating_add(1);
+            let line = DiffLine {
+                kind: DiffLineKind::Removed,
+                old_line: Some(old_no),
+                new_line: None,
+                text: rest.to_string(),
+            };
+            old_no = old_no.saturating_add(1);
+            line
+        } else {
+            let line = DiffLine {
+                kind: DiffLineKind::Context,
+                old_line: Some(old_no),
+                new_line: Some(new_no),
+                text: raw.strip_prefix(' ').unwrap_or(raw).to_string(),
+            };
+            old_no = old_no.saturating_add(1);
+            new_no = new_no.saturating_add(1);
+            line
+        };
+        active.lines.push(line);
+    }
+    if let Some(mut file) = current.take() {
+        if let Some(pending) = hunk.take() {
+            file.hunks.push(pending);
+        }
+        files.push(file);
+    }
+    files
+}
+
+/// `@@ -oldStart[,oldCount] +newStart[,newCount] @@ optional heading`. A missing `,count` means one.
+fn parse_hunk_header(raw: &str) -> (u32, u32, u32, u32) {
+    let spec = raw
+        .trim_start_matches('@')
+        .split("@@")
+        .next()
+        .unwrap_or("")
+        .trim();
+    let mut parts = spec.split_whitespace();
+    let old = parts.next().unwrap_or("-0").trim_start_matches('-');
+    let new = parts.next().unwrap_or("+0").trim_start_matches('+');
+    let (old_start, old_lines) = parse_hunk_range(old);
+    let (new_start, new_lines) = parse_hunk_range(new);
+    (old_start, old_lines, new_start, new_lines)
+}
+
+fn parse_hunk_range(value: &str) -> (u32, u32) {
+    match value.split_once(',') {
+        Some((start, count)) => (start.parse().unwrap_or(0), count.parse().unwrap_or(0)),
+        None => (value.parse().unwrap_or(0), 1),
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -625,12 +820,14 @@ async fn diff_with_limits(
         push_reason(&mut selection.reasons, "stdout_limit");
     }
     let returned_bytes = text.len();
+    let file_diffs = parse_unified_diff(&text);
     Ok(DiffResult {
         text,
         truncated: !selection.reasons.is_empty(),
         truncation_reason: joined_reasons(&selection.reasons),
         returned_bytes,
         files: selection.files.len(),
+        file_diffs,
     })
 }
 
@@ -1753,6 +1950,21 @@ mod tests {
         assert!(all.text.contains("+three"), "{}", all.text);
         let stat = diff_stat(&repo.path).await.unwrap();
         assert_eq!((stat.added, stat.deleted, stat.files), (1, 1, 1));
+
+        // The structured view is derived from the same bounded text for a real worktree change:
+        // one file, one hunk, and the staged line counted with its new-side number.
+        assert_eq!(all.file_diffs.len(), 1);
+        let file = &all.file_diffs[0];
+        assert_eq!(file.path, "both.txt");
+        assert_eq!((file.additions, file.deletions), (1, 1));
+        assert_eq!(file.hunks.len(), 1);
+        let added = file.hunks[0]
+            .lines
+            .iter()
+            .find(|line| line.kind == DiffLineKind::Added)
+            .expect("an added line");
+        assert_eq!(added.old_line, None);
+        assert!(added.new_line.is_some());
     }
 
     #[tokio::test]
@@ -2035,5 +2247,104 @@ mod tests {
             std::fs::read_to_string(repo.path.join("a.txt")).unwrap(),
             "1\n"
         );
+    }
+
+    #[test]
+    fn parses_per_file_hunks_with_line_numbers_and_counts() {
+        let text = "\
+diff --git a/src/a.rs b/src/a.rs
+index 1111111..2222222 100644
+--- a/src/a.rs
++++ b/src/a.rs
+@@ -1,3 +1,4 @@ fn main
+ unchanged
+-removed
++added one
++added two
+ trailing
+diff --git a/b.txt b/b.txt
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/b.txt
+@@ -0,0 +1 @@
++hello
+";
+        let files = parse_unified_diff(text);
+        assert_eq!(files.len(), 2);
+
+        let a = &files[0];
+        assert_eq!(a.path, "src/a.rs");
+        assert_eq!(a.old_path.as_deref(), Some("src/a.rs"));
+        assert_eq!(a.additions, 2);
+        assert_eq!(a.deletions, 1);
+        assert_eq!(a.hunks.len(), 1);
+        let hunk = &a.hunks[0];
+        assert_eq!((hunk.old_start, hunk.old_lines), (1, 3));
+        assert_eq!((hunk.new_start, hunk.new_lines), (1, 4));
+        assert_eq!(hunk.lines.len(), 5);
+        // Context line 1 sits in both gutters.
+        assert_eq!(hunk.lines[0].kind, DiffLineKind::Context);
+        assert_eq!(hunk.lines[0].old_line, Some(1));
+        assert_eq!(hunk.lines[0].new_line, Some(1));
+        // Removed line 2 has only an old number; the added lines advance the new gutter.
+        assert_eq!(hunk.lines[1].kind, DiffLineKind::Removed);
+        assert_eq!(hunk.lines[1].old_line, Some(2));
+        assert_eq!(hunk.lines[1].new_line, None);
+        assert_eq!(hunk.lines[1].text, "removed");
+        assert_eq!(hunk.lines[2].new_line, Some(2));
+        assert_eq!(hunk.lines[3].new_line, Some(3));
+        assert_eq!(hunk.lines[4].new_line, Some(4));
+
+        // A new file resolves its path from `+++` and ignores the `/dev/null` pre-image.
+        let b = &files[1];
+        assert_eq!(b.path, "b.txt");
+        assert_eq!(b.old_path, None);
+        assert_eq!(b.additions, 1);
+        assert_eq!(b.deletions, 0);
+        assert_eq!(b.hunks[0].old_lines, 0);
+    }
+
+    #[test]
+    fn parses_renames_and_tolerates_empty_or_truncated_text() {
+        let rename = "\
+diff --git a/old.rs b/new.rs
+similarity index 100%
+rename from old.rs
+rename to new.rs
+";
+        let files = parse_unified_diff(rename);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "new.rs");
+        assert_eq!(files[0].old_path.as_deref(), Some("old.rs"));
+        assert!(files[0].hunks.is_empty());
+
+        // A bare hunk header uses the one-line default count.
+        let single = parse_unified_diff("@@ -7 +9 @@\n-old\n+new\n");
+        assert_eq!(single.len(), 0, "a hunk without a file header is ignored");
+        let with_header = parse_unified_diff(
+            "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -7 +9 @@\n-old\n+new\n",
+        );
+        assert_eq!(with_header.len(), 1);
+        let hunk = &with_header[0].hunks[0];
+        assert_eq!((hunk.old_start, hunk.old_lines), (7, 1));
+        assert_eq!((hunk.new_start, hunk.new_lines), (9, 1));
+        assert_eq!(hunk.lines[0].old_line, Some(7));
+        assert_eq!(hunk.lines[1].new_line, Some(9));
+
+        assert!(parse_unified_diff("").is_empty());
+        // A truncated tail (no more `diff --git`) must not invent extra files or panic.
+        let truncated = "\
+diff --git a/a.rs b/a.rs
+--- a/a.rs
++++ b/a.rs
+@@ -1,2 +1,2 @@
+-keep
++changed";
+        let parsed = parse_unified_diff(truncated);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].hunks.len(), 1);
+        assert_eq!(parsed[0].additions, 1);
+        assert_eq!(parsed[0].deletions, 1);
     }
 }

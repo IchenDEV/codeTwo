@@ -35,13 +35,12 @@ Yes — any ACP-speaking command works. The provider registry is just a launch s
 
 ### Does the desktop app open a window headlessly?
 
-No — the desktop app needs a display. On a server, use the [TUI](/guide/tui) or
-[remote control](/guide/remote).
+No — the desktop app needs a display. On a server, use [remote control](/guide/remote).
 
 ### How do I run the tests?
 
 ```sh
-cargo test -p codetwo-core -p codetwo-tui -p codetwo-server
+cargo test -p codetwo-core -p codetwo-server
 ```
 
 They're offline: a mock ACP agent, real `git`, and a real PTY — no provider or network needed.

@@ -6,7 +6,7 @@ Open it from the package button at the foot of the session rail, the
 [command palette](/guide/keybindings), or with `Mod+Shift+M`.
 
 > [!IMPORTANT]
-> Desktop, TUI, and server use the same Rust bundle manager and live process runtime. The desktop
+> Desktop and server use the same Rust bundle manager and live process runtime. The desktop
 > supports installation, trust, enablement, project realms, UI actions, language servers, and live
 > lifecycle changes through its bundled Rust host.
 

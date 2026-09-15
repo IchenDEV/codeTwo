@@ -304,7 +304,7 @@ onMounted(() => {
             data-architecture-flow
             data-motion
             role="img"
-            aria-label="Coding CLIs connect over ACP to the Rust core, which powers Desktop, TUI, and Remote surfaces"
+            aria-label="Coding CLIs connect over ACP to the Rust core, which powers the Desktop and Remote surfaces"
           >
           <div class="architecture-node"><span>Coding CLIs</span></div>
           <svg class="flow-arrow" aria-hidden="true" viewBox="0 0 100 20">
@@ -326,7 +326,6 @@ onMounted(() => {
             </svg>
             <div class="architecture-outputs">
               <div class="output-node"><span>Desktop</span></div>
-              <div class="output-node"><span>TUI</span></div>
               <div class="output-node"><span>Remote</span></div>
             </div>
           </div>

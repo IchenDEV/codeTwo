@@ -21,8 +21,8 @@ C2 由一个 Rust 核心和三个前端组成。核心不感知具体 UI；各�
    │  keymap     跨界面共享快捷键                                         │
    │  pty        内嵌终端 PTY                                             │
    └───────────▲───────────────────────▲──────────────────────▲───────────┘
-      Electrobun 桌面端           ratatui TUI          codetwo-server（远程）
-   （React + Rust sidecar）       （crates/tui）          （Axum WebSocket）
+      Electrobun 桌面端           NAPI addon          codetwo-server（远程）
+   （React + Rust sidecar）       （crates/napi）         （Axum WebSocket）
 ```
 
 ## SQ/EQ 接口
@@ -30,7 +30,7 @@ C2 由一个 Rust 核心和三个前端组成。核心不感知具体 UI；各�
 前端不会直接操作 ACP。前端写入 **Op**（如 `NewSession`、`Prompt`、`Cancel`、`AnswerPermission`、`SetPermissionMode`、`SetModel`），并消费 **Event** 流（如 `AgentText`、`ToolCall`、`PermissionRequest`、`TurnEnded`、`Error`）。详见 [Op / Event 协议（英文）](/reference/protocol)。
 
 - **桌面端**通过类型化 Electrobun RPC 调用内置 Rust sidecar；同一条 JSON Lines 桥接既传递具名命令，也回传事件流。
-- **TUI** 在进程内调用引擎，并在绘制循环中渲染 Event。
+- **NAPI 插件**为 Bun 在进程内加载同一核心，渲染端通过类型化桥接访问；独立服务端则通过 WebSocket 暴露同一核心。
 - **服务端**从 WebSocket 客户端接收 Op，再向客户端广播 Event。
 
 这就是 C2 的 Submission Queue / Event Queue 模式：一个智能体循环，对应多种渲染界面。

@@ -76,7 +76,7 @@ of 16,000 Unicode scalar values, with an omission marker when older context was 
 In the session rail, pin an active chat to keep it above the recency-sorted list. Archiving a chat
 also removes its pin; restoring it returns it to the ordinary active list until you pin it again.
 The rail also reflects the core-owned **Running**, **Awaiting Input**, and **Failed** states. Their
-revisioned snapshot survives a renderer reload and stays consistent across Desktop, TUI, and remote
+revisioned snapshot survives a renderer reload and stays consistent across Desktop and remote
 clients. If C2 itself restarts during a running or waiting turn, the unrecoverable task becomes
 **Failed (interrupted)** instead of leaving a stale permission control behind.
 

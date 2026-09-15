@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   started_at      INTEGER NOT NULL,
   finished_at     INTEGER,
   error           TEXT,
+  prompt          TEXT NOT NULL DEFAULT '',
   FOREIGN KEY (automation_id) REFERENCES automations(id)
 );
 CREATE INDEX IF NOT EXISTS automation_runs_task
@@ -94,7 +95,26 @@ fn archive_legacy_work_schema(conn: &Connection) -> rusqlite::Result<()> {
 
 pub(crate) fn install(conn: &Connection) -> rusqlite::Result<()> {
     archive_legacy_work_schema(conn)?;
-    conn.execute_batch(SCHEMA)
+    conn.execute_batch(SCHEMA)?;
+    ensure_run_prompt_column(conn)
+}
+
+/// Snapshot column for [`AutomationRun`]. Additive, and re-runnable so a store written before a
+/// run recorded its instruction repairs itself on the next open without losing history rows.
+fn ensure_run_prompt_column(conn: &Connection) -> rusqlite::Result<()> {
+    if !table_has_column(conn, "automation_runs", "prompt")? {
+        conn.execute(
+            "ALTER TABLE automation_runs ADD COLUMN prompt TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+    conn.execute(
+        "UPDATE automation_runs
+         SET prompt=COALESCE((SELECT prompt FROM automations WHERE id=automation_id),'')
+         WHERE prompt=''",
+        [],
+    )?;
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,6 +191,13 @@ impl AutomationRunStatus {
     pub fn is_active(self) -> bool {
         matches!(self, Self::Starting | Self::Running | Self::NeedsAttention)
     }
+
+    /// True when a run moving from `previous` to `next` should raise a user-facing alert: it newly
+    /// failed or newly needs attention. Same-status updates and every other transition stay quiet,
+    /// so a burst of provider events cannot storm the notification channel.
+    pub fn alerts_for_transition(previous: Self, next: Self) -> bool {
+        previous != next && matches!(next, Self::Failed | Self::NeedsAttention)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,6 +210,9 @@ pub struct AutomationRun {
     pub started_at: i64,
     pub finished_at: Option<i64>,
     pub error: Option<String>,
+    /// The instruction exactly as it was when this run was created. Empty only for rows written
+    /// before snapshots existed; replay then falls back to the automation's live prompt.
+    pub prompt: String,
 }
 
 /// Return the first matching minute strictly after `after_ms`.
@@ -345,11 +375,12 @@ fn run_from_row(row: &Row<'_>) -> rusqlite::Result<AutomationRun> {
         started_at: row.get(5)?,
         finished_at: row.get(6)?,
         error: row.get(7)?,
+        prompt: row.get(8)?,
     })
 }
 
 const RUN_COLUMNS: &str =
-    "id,automation_id,session_id,status,scheduled_for,started_at,finished_at,error";
+    "id,automation_id,session_id,status,scheduled_for,started_at,finished_at,error,prompt";
 
 impl Store {
     pub fn list_automations(&self) -> Result<Vec<Automation>, StoreError> {
@@ -537,7 +568,7 @@ impl Store {
             return Ok(None);
         }
         let next = next_automation_run_after(&automation.cron, &automation.timezone, now)?;
-        let run = new_run(automation_id, scheduled_for, now);
+        let run = new_run(automation_id, &automation.prompt, scheduled_for, now);
         tx.execute(
             "UPDATE automations SET next_run_at=?2,last_run_at=?3,updated_at=?3 WHERE id=?1",
             rusqlite::params![automation_id, next, now],
@@ -570,10 +601,60 @@ impl Store {
         if has_active_run(&tx, automation_id)? {
             return Ok(None);
         }
-        let run = new_run(automation_id, now, now);
+        let run = new_run(automation_id, &automation.prompt, now, now);
         tx.execute(
             "UPDATE automations SET last_run_at=?2,updated_at=?2 WHERE id=?1",
             rusqlite::params![automation_id, now],
+        )?;
+        insert_run(&tx, &run)?;
+        tx.commit()?;
+        automation.last_run_at = Some(now);
+        automation.updated_at = now;
+        Ok(Some((automation, run)))
+    }
+
+    /// Replay a recorded run with the instruction snapshot it executed. The automation's current
+    /// provider, project, worktree, and permission configuration still apply; only the instruction
+    /// is replayed. `None` when the run is unknown or its automation already has an active run.
+    pub fn rerun_automation_run(
+        &self,
+        run_id: &str,
+        now: i64,
+    ) -> Result<Option<(Automation, AutomationRun)>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let source: Option<AutomationRun> = tx
+            .query_row(
+                &format!("SELECT {RUN_COLUMNS} FROM automation_runs WHERE id=?1"),
+                [run_id],
+                run_from_row,
+            )
+            .optional()?;
+        let Some(source) = source else {
+            return Ok(None);
+        };
+        let automation = tx
+            .query_row(
+                &format!("SELECT {AUTOMATION_COLUMNS} FROM automations WHERE id=?1"),
+                [source.automation_id.as_str()],
+                automation_from_row,
+            )
+            .optional()?;
+        let Some(mut automation) = automation else {
+            return Ok(None);
+        };
+        if has_active_run(&tx, &automation.id)? {
+            return Ok(None);
+        }
+        let prompt = if source.prompt.is_empty() {
+            automation.prompt.clone()
+        } else {
+            source.prompt
+        };
+        let run = new_run(&automation.id, &prompt, now, now);
+        tx.execute(
+            "UPDATE automations SET last_run_at=?2,updated_at=?2 WHERE id=?1",
+            rusqlite::params![automation.id, now],
         )?;
         insert_run(&tx, &run)?;
         tx.commit()?;
@@ -676,7 +757,7 @@ fn has_active_run(conn: &Connection, automation_id: &str) -> rusqlite::Result<bo
     )
 }
 
-fn new_run(automation_id: &str, scheduled_for: i64, now: i64) -> AutomationRun {
+fn new_run(automation_id: &str, prompt: &str, scheduled_for: i64, now: i64) -> AutomationRun {
     AutomationRun {
         id: uuid::Uuid::new_v4().to_string(),
         automation_id: automation_id.to_string(),
@@ -686,20 +767,22 @@ fn new_run(automation_id: &str, scheduled_for: i64, now: i64) -> AutomationRun {
         started_at: now,
         finished_at: None,
         error: None,
+        prompt: prompt.to_string(),
     }
 }
 
 fn insert_run(conn: &Connection, run: &AutomationRun) -> Result<(), StoreError> {
     conn.execute(
         "INSERT INTO automation_runs
-         (id,automation_id,session_id,status,scheduled_for,started_at,finished_at,error)
-         VALUES (?1,?2,NULL,?3,?4,?5,NULL,NULL)",
+         (id,automation_id,session_id,status,scheduled_for,started_at,finished_at,error,prompt)
+         VALUES (?1,?2,NULL,?3,?4,?5,NULL,NULL,?6)",
         rusqlite::params![
             run.id,
             run.automation_id,
             run.status.as_db(),
             run.scheduled_for,
             run.started_at,
+            run.prompt,
         ],
     )?;
     Ok(())
@@ -857,5 +940,120 @@ mod tests {
 
         assert!(store.delete_automation(&created.id).unwrap());
         assert!(store.list_automation_runs(None, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn alerts_fire_only_on_a_new_failure_or_attention_state() {
+        use AutomationRunStatus::{Failed, Interrupted, NeedsAttention, Running, Starting, Succeeded};
+        assert!(AutomationRunStatus::alerts_for_transition(Running, Failed));
+        assert!(AutomationRunStatus::alerts_for_transition(
+            Running,
+            NeedsAttention
+        ));
+        assert!(AutomationRunStatus::alerts_for_transition(
+            NeedsAttention,
+            Failed
+        ));
+        assert!(!AutomationRunStatus::alerts_for_transition(Failed, Failed));
+        assert!(!AutomationRunStatus::alerts_for_transition(
+            Running,
+            Succeeded
+        ));
+        assert!(!AutomationRunStatus::alerts_for_transition(
+            Running,
+            Interrupted
+        ));
+        assert!(!AutomationRunStatus::alerts_for_transition(
+            Starting, Running
+        ));
+    }
+
+    #[test]
+    fn runs_snapshot_their_instruction_and_a_rerun_replays_it() {
+        let store = Store::open_in_memory().unwrap();
+        let created = store.create_automation(input(), 1_786_500_000_000).unwrap();
+        let due = created.next_run_at.unwrap();
+        let (_, run) = store
+            .claim_scheduled_automation_run(&created.id, due)
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.prompt, "Review the repository");
+
+        store
+            .set_automation_run_status(&run.id, AutomationRunStatus::Failed, Some("boom"), due + 5)
+            .unwrap();
+
+        // Editing the live instruction must not change what a replay executes.
+        let mut edited = input();
+        edited.prompt = "Something else entirely".into();
+        store.update_automation(&created.id, edited, due + 10).unwrap();
+
+        let (_, replay) = store
+            .rerun_automation_run(&run.id, due + 20)
+            .unwrap()
+            .unwrap();
+        assert_eq!(replay.prompt, "Review the repository");
+
+        // The replay is now the active run, so a second one is refused; an unknown id resolves to
+        // nothing rather than creating a run.
+        assert!(store.rerun_automation_run(&run.id, due + 30).unwrap().is_none());
+        assert!(store.rerun_automation_run("missing", due + 30).unwrap().is_none());
+    }
+
+    #[test]
+    fn older_run_rows_gain_the_instruction_snapshot_from_their_automation() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE automations (
+               id TEXT PRIMARY KEY,
+               name TEXT NOT NULL,
+               prompt TEXT NOT NULL,
+               project_path TEXT NOT NULL,
+               provider TEXT NOT NULL,
+               cron TEXT NOT NULL,
+               timezone TEXT NOT NULL,
+               enabled INTEGER NOT NULL DEFAULT 1,
+               use_worktree INTEGER NOT NULL DEFAULT 1,
+               permission_mode TEXT NOT NULL,
+               sandbox_policy TEXT NOT NULL,
+               next_run_at INTEGER,
+               last_run_at INTEGER,
+               created_at INTEGER NOT NULL,
+               updated_at INTEGER NOT NULL
+             );
+             CREATE TABLE automation_runs (
+               id TEXT PRIMARY KEY,
+               automation_id TEXT NOT NULL,
+               session_id TEXT,
+               status TEXT NOT NULL,
+               scheduled_for INTEGER NOT NULL,
+               started_at INTEGER NOT NULL,
+               finished_at INTEGER,
+               error TEXT
+             );
+             INSERT INTO automations
+               (id,name,prompt,project_path,provider,cron,timezone,permission_mode,sandbox_policy,created_at,updated_at)
+             VALUES ('a1','Nightly','Old instruction','/work/p','\"codex\"','0 9 * * *','UTC','\"yolo\"','\"workspace_write\"',1,1);
+             INSERT INTO automation_runs
+               (id,automation_id,status,scheduled_for,started_at)
+             VALUES ('r1','a1','failed',1,1);",
+        )
+        .unwrap();
+
+        install(&conn).unwrap();
+        install(&conn).unwrap();
+
+        let prompt: String = conn
+            .query_row(
+                "SELECT prompt FROM automation_runs WHERE id='r1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(prompt, "Old instruction");
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM automation_runs", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 1);
     }
 }

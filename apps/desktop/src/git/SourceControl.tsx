@@ -48,6 +48,7 @@ import type {
   GitFile,
   GitStatus,
 } from "../bridge";
+import { DiffReview } from "./DiffReview";
 import { GitSyncStatus } from "./GitSyncStatus";
 import {
   changeRequestPresentation,
@@ -113,21 +114,30 @@ function DiffView({ state }: { state: DiffState }) {
     );
   }
 
+  const notice =
+    state.result.truncated || preview.truncated ? (
+      <div className="sticky top-0 z-10">
+        <p
+          role="status"
+          className="bg-warning/10 px-surface-inset text-metadata text-warning-foreground py-2"
+        >
+          {state.result.truncated
+            ? `Preview truncated by the ${(state.result.truncation_reason ?? "resource").replaceAll("_", " ")} limit.`
+            : "Preview rendering is limited to 4,000 lines."}
+        </p>
+        <Separator />
+      </div>
+    ) : null;
+
+  // The structured view is the review surface; the flat blob stays as the fallback for a diff the
+  // parser could not section (for example a purely truncated tail).
+  if (state.result.file_diffs.length > 0) {
+    return <DiffReview files={state.result.file_diffs} notice={notice} />;
+  }
+
   return (
     <div>
-      {(state.result.truncated || preview.truncated) && (
-        <div className="sticky top-0 z-10">
-          <p
-            role="status"
-            className="bg-warning/10 px-surface-inset text-metadata text-warning-foreground py-2"
-          >
-            {state.result.truncated
-              ? `Preview truncated by the ${(state.result.truncation_reason ?? "resource").replaceAll("_", " ")} limit.`
-              : "Preview rendering is limited to 4,000 lines."}
-          </p>
-          <Separator />
-        </div>
-      )}
+      {notice}
       <pre className="diff">
         {preview.lines.map((line, index) => {
           const presentation = diffLinePresentation(line);

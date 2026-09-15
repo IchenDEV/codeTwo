@@ -16,6 +16,7 @@ import type {
   SceneArtifactRecord,
 } from "../bridge";
 import { useT } from "../i18n";
+import { ArtifactPreview } from "./ArtifactPreview";
 
 /**
  * The horizontal stage track (docs/reference/scenes.md §UI contract): a pipeline-bound session renders its
@@ -45,10 +46,11 @@ function StagePopover({
 }) {
   const t = useT();
   const artifacts = newestPerKey(stage.artifacts);
+  const [expanded, setExpanded] = useState<number | null>(null);
   return (
     <PopoverContent
       align="start"
-      className="w-64 p-2"
+      className="w-80 p-2"
       data-testid={`stage-popover-${stage.id}`}
     >
       <PopoverTitle className="sr-only">{stage.title}</PopoverTitle>
@@ -62,14 +64,32 @@ function StagePopover({
       ) : (
         <ul className="pb-1">
           {artifacts.map((record) => (
-            <li
-              key={record.id}
-              className="text-body flex items-baseline gap-1.5 px-1 py-0.5"
-            >
-              <span className="min-w-0 flex-1 truncate">{record.title}</span>
-              <span className="text-metadata text-muted-foreground shrink-0">
-                v{record.version}
-              </span>
+            <li key={record.id} className="flex flex-col">
+              <Button
+                type="button"
+                variant="ghost"
+                size="row"
+                focusStyle="inset"
+                data-testid={`stage-artifact-${record.id}`}
+                aria-expanded={expanded === record.id}
+                onClick={() =>
+                  setExpanded((current) =>
+                    current === record.id ? null : record.id
+                  )
+                }
+              >
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {record.title}
+                </span>
+                <span className="text-metadata text-muted-foreground shrink-0">
+                  v{record.version}
+                </span>
+              </Button>
+              {expanded === record.id ? (
+                <div className="p-1">
+                  <ArtifactPreview artifact={record.artifact} />
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

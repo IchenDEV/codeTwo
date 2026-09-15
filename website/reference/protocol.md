@@ -1,8 +1,7 @@
 # Op / Event protocol
 
 Every frontend talks to the core through two JSON-serializable types: **Op** (submissions in) and
-**Event** (events out). This is the contract the desktop bridge, the TUI, and the remote server all
-use.
+**Event** (events out). This is the contract the desktop bridge and the remote server use.
 
 ## Ops (client → core)
 

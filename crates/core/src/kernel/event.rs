@@ -23,7 +23,7 @@ pub(crate) type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// to the answer and are dispatched with [`Context::bail`](crate::kernel::Context::bail).
 ///
 /// ```
-/// # use codetwo_kernel::Event;
+/// # use codetwo_core::kernel::Event;
 /// /// Fired before a turn is sent. Any listener may refuse it with a reason.
 /// pub struct BeforeTurn { pub session: String }
 /// impl Event for BeforeTurn {

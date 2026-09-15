@@ -44,7 +44,7 @@
 //! # Booting
 //!
 //! ```no_run
-//! # use codetwo_plugins::{AppConfig, CoreApp};
+//! # use codetwo_core::plugins::{AppConfig, CoreApp};
 //! # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
 //! let app = CoreApp::boot(AppConfig::new("/home/me/.codetwo")).await?;
 //! let status = app.call("git.status", serde_json::json!({ "cwd": "/repo" })).await?;
@@ -501,6 +501,23 @@ fn apply_persisted_user_policy(
 mod ownership_tests {
     use super::*;
 
+    /// A concurrent `fork`/`exec` elsewhere in the test process can briefly keep the released
+    /// data-dir `flock` alive through an inherited file description. Ownership is still exclusive;
+    /// this only tolerates the transient hand-off so the test asserts eventual restart.
+    async fn boot_within(data_dir: &std::path::Path, timeout: std::time::Duration) -> CoreApp {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            match CoreApp::boot(AppConfig::bare_in(data_dir)).await {
+                Ok(app) => return app,
+                Err(error) if std::time::Instant::now() < deadline => {
+                    tracing::debug!("retrying boot after transient ownership: {error}");
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+                Err(error) => panic!("boot did not succeed within the release window: {error}"),
+            }
+        }
+    }
+
     #[tokio::test]
     async fn cloning_configuration_does_not_clone_core_ownership() {
         let data = tempfile::tempdir().unwrap();
@@ -511,9 +528,7 @@ mod ownership_tests {
         assert!(CoreApp::boot(duplicate).await.is_err());
         first.stop().await;
         drop(first);
-        let restarted = CoreApp::boot(AppConfig::bare_in(data.path()))
-            .await
-            .unwrap();
+        let restarted = boot_within(data.path(), std::time::Duration::from_secs(5)).await;
         restarted.stop().await;
     }
 }

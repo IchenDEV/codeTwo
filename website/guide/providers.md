@@ -111,7 +111,7 @@ tools with a real portable MCP boundary across providers; private provider runti
 
 ### Configure Cua or another computer-use MCP
 
-C2 reads `host-tools.json` from its data directory. TUI/server use
+C2 reads `host-tools.json` from its data directory. The server uses
 `~/.codetwo/host-tools.json`; desktop uses the Electrobun app-data directory, or the directory in
 `CODETWO_DATA_DIR` when that environment variable is set. In **Settings → Computer Use**, choose
 one global Automatic, disabled, or compatible backend policy. Cua Driver is shown as
@@ -252,7 +252,7 @@ MCP servers are fixed when an ACP session starts. Every surface resolves them th
 Tool Broker:
 
 - packaged Electrobun desktop's Rust host invokes the compiled sibling `codetwo-tool-broker` over
-  JSON-RPC; TUI and server use the same boundary;
+  JSON-RPC; the server uses the same boundary;
 - the Rust core injects the returned plan for both `session/new` and `session/load`;
 - the broker returns only native capability ids and standard MCP specs. OpenAI's private
   `node_repl` endpoint never crosses the Codex adapter boundary;
@@ -271,7 +271,7 @@ initialize → session/new → session/prompt → stream session/update
            → answer session/request_permission → read StopReason
 ```
 
-This common transport is what lets the desktop app, TUI, and remote client share one provider-neutral
+This common transport is what lets the desktop app and remote client share one provider-neutral
 session and event model.
 
 Providers that expose MCP support can receive extra tools at session start. In C2, MCP servers can

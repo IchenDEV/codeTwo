@@ -626,6 +626,42 @@ impl Plugin for ArtifactsPlugin {
             }
         })?;
 
+        #[derive(Deserialize)]
+        struct ReadTextArgs {
+            id: String,
+            #[serde(default)]
+            max_bytes: Option<usize>,
+        }
+        let reading_text = artifacts.clone();
+        ctx.command("artifacts.read_text", move |args| {
+            let artifacts = reading_text.clone();
+            async move {
+                let args: ReadTextArgs = take_args(args)?;
+                let maximum = args
+                    .max_bytes
+                    .unwrap_or(crate::artifact::MAX_ARTIFACT_PREVIEW_BYTES)
+                    .min(crate::artifact::MAX_ARTIFACT_PREVIEW_BYTES);
+                json(artifacts.read_text(&args.id, maximum).map_err(PluginError::new)?)
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct ListArgs {
+            session: String,
+        }
+        let listing = artifacts.clone();
+        ctx.command("artifacts.list", move |args| {
+            let artifacts = listing.clone();
+            async move {
+                let args: ListArgs = take_args(args)?;
+                json(
+                    artifacts
+                        .list_for_session(&args.session)
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
         ctx.command("artifacts.reveal", move |args| {
             let artifacts = artifacts.clone();
             async move {

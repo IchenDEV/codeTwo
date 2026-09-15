@@ -162,7 +162,7 @@ You receive only the events you name in `events`. The host publishes:
 
 This list is the contract. Typed Rust events do not cross a pipe, so each entry is a deliberate
 decision to expose one — see `publish_host_events` in
-`crates/plugins/src/app/plugins/extensions.rs`.
+`crates/core/src/plugins/app/plugins/extensions.rs`.
 Because activation is command-driven, event subscriptions begin only after the first command
 has successfully initialized the process; events emitted while the runtime is dormant are not
 buffered or replayed.

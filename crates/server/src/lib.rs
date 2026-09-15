@@ -803,6 +803,7 @@ pub async fn bind_and_serve_with_web_ui(
             "/api/team/v1/tasks/:id/suggestions/:suggestion_id/approve",
             post(team_approve_suggestion),
         )
+        .route("/api/artifacts/:id", get(artifact_download))
         .route("/api/terminals", get(list_terminals))
         .route("/api/terminals/:id/kill", post(kill_terminal))
         .route("/term/*path", get(term_asset))
@@ -1316,6 +1317,75 @@ async fn canvas_get_snapshot(
         Ok(Some(snapshot)) => Json(CanvasSnapshotResponse::from(snapshot)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "canvas snapshot not found").into_response(),
         Err(error) => canvas_error(error),
+    }
+}
+
+/// Download one stored artifact by its opaque id. Device-authenticated like the canvas byte routes;
+/// the filename is sanitized so a provider-chosen display name cannot inject headers.
+async fn artifact_download(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    let Some(artifacts) = codetwo_core::ArtifactStore::from_store(st.store.clone()) else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "artifact storage is unavailable").into_response();
+    };
+    let reference = match artifacts.metadata(&id) {
+        Ok(reference) => reference,
+        Err(codetwo_core::artifact::ArtifactError::NotFound) => {
+            return (StatusCode::NOT_FOUND, "artifact not found").into_response()
+        }
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "artifact unavailable").into_response()
+        }
+    };
+    let bytes = match artifacts.get(&id) {
+        Ok(bytes) => bytes,
+        Err(codetwo_core::artifact::ArtifactError::NotFound) => {
+            return (StatusCode::NOT_FOUND, "artifact not found").into_response()
+        }
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "artifact unavailable").into_response()
+        }
+    };
+    let mime = HeaderValue::from_str(&reference.mime_type)
+        .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
+    let mut response = bytes.into_response();
+    response.headers_mut().insert(header::CONTENT_TYPE, mime);
+    if let Ok(disposition) = HeaderValue::from_str(&format!(
+        "attachment; filename=\"{}\"",
+        artifact_download_filename(&reference.display_name)
+    )) {
+        response
+            .headers_mut()
+            .insert(header::CONTENT_DISPOSITION, disposition);
+    }
+    response
+}
+
+/// Keep only ASCII alphanumerics and `.`, `-`, `_`; every other character (quotes, slashes,
+/// newlines, non-ASCII) becomes `_`. The stem is capped and a name is always produced.
+fn artifact_download_filename(display_name: &str) -> String {
+    let mut cleaned: String = display_name
+        .chars()
+        .map(|value| {
+            if value.is_ascii_alphanumeric() || matches!(value, '.' | '-' | '_') {
+                value
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if cleaned.len() > 80 {
+        cleaned.truncate(80);
+    }
+    if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
+        "artifact.bin".to_string()
+    } else {
+        cleaned
     }
 }
 
@@ -2714,6 +2784,18 @@ mod tests {
     use std::process::Command;
     use std::sync::Arc;
     use std::time::Duration;
+
+    #[test]
+    fn artifact_download_filenames_are_sanitized() {
+        let name = super::artifact_download_filename;
+        assert_eq!(name("report.md"), "report.md");
+        assert_eq!(name("../../etc/passwd"), ".._.._etc_passwd");
+        assert_eq!(name("a\"b\nc d"), "a_b_c_d");
+        assert_eq!(name(""), "artifact.bin");
+        assert_eq!(name("."), "artifact.bin");
+        assert_eq!(name("  "), "__");
+        assert_eq!(name(&"x".repeat(200)).len(), 80);
+    }
 
     fn endpoint(id: &str, qr_shareable: bool) -> PairingEndpoint {
         PairingEndpoint {

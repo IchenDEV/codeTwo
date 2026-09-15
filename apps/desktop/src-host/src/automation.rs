@@ -66,6 +66,37 @@ impl AutomationRuntime {
         let _ = self.host.emit("automation-changed", automation_id);
     }
 
+    /// A run that a user must notice: it failed, or it is waiting on a permission/input it cannot
+    /// answer unattended. Emitted once per transition so a burst of provider events cannot storm
+    /// the notification channel.
+    fn emit_alert(
+        &self,
+        automation_id: &str,
+        run_id: &str,
+        status: AutomationRunStatus,
+        error: Option<&str>,
+    ) {
+        let name = self
+            .store
+            .automation(automation_id)
+            .ok()
+            .flatten()
+            .map(|automation| automation.name)
+            .unwrap_or_default();
+        if let Err(send_error) = self.host.emit(
+            "automation-alert",
+            serde_json::json!({
+                "automation_id": automation_id,
+                "run_id": run_id,
+                "automation_name": name,
+                "status": status,
+                "error": error,
+            }),
+        ) {
+            eprintln!("automation alert for {run_id} could not be sent: {send_error}");
+        }
+    }
+
     pub async fn schedule_loop(self: Arc<Self>) {
         let mut tick = tokio::time::interval(Duration::from_secs(TICK_SECONDS));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -170,6 +201,9 @@ impl AutomationRuntime {
                     continue;
                 }
             };
+            if run.status == status {
+                continue;
+            }
             if let Err(store_error) =
                 self.store
                     .set_automation_run_status(&run.id, status, error, super::now_millis())
@@ -179,6 +213,9 @@ impl AutomationRuntime {
                     run.id
                 );
                 continue;
+            }
+            if AutomationRunStatus::alerts_for_transition(run.status, status) {
+                self.emit_alert(&run.automation_id, &run.id, status, error);
             }
             self.notify(&run.automation_id);
         }
@@ -192,6 +229,20 @@ impl AutomationRuntime {
             .map_err(|error| error.to_string())?
         else {
             return Err("automation not found or already has an active run".into());
+        };
+        self.clone().spawn(automation, run.clone());
+        Ok(run)
+    }
+
+    /// Replay a recorded run's instruction snapshot as a fresh run.
+    pub fn rerun(self: &Arc<Self>, run_id: &str) -> Result<AutomationRun, String> {
+        let now = super::now_millis();
+        let Some((automation, run)) = self
+            .store
+            .rerun_automation_run(run_id, now)
+            .map_err(|error| error.to_string())?
+        else {
+            return Err("run not found or its automation already has an active run".into());
         };
         self.clone().spawn(automation, run.clone());
         Ok(run)
@@ -285,7 +336,7 @@ impl AutomationRuntime {
             .submit(Op::Prompt {
                 session,
                 doc: vec![DocBlock::Text {
-                    text: automation.prompt,
+                    text: run.prompt.clone(),
                 }],
                 request_id: Some(prompt_request),
             })
@@ -304,6 +355,12 @@ impl AutomationRuntime {
         ) {
             eprintln!("automation run {run_id} failure could not be persisted: {error}");
         }
+        self.emit_alert(
+            automation_id,
+            run_id,
+            AutomationRunStatus::Failed,
+            Some(message),
+        );
         self.notify(automation_id);
     }
 }
@@ -466,6 +523,19 @@ impl Plugin for AutomationPlugin {
                         .list_automation_runs(args.automation_id.as_deref(), args.limit)
                         .map_err(PluginError::new)?,
                 )
+            }
+        })?;
+
+        let service = runtime.clone();
+        ctx.command("automation.rerun", move |args| {
+            let service = service.clone();
+            async move {
+                #[derive(Deserialize)]
+                struct RunIdArgs {
+                    run_id: String,
+                }
+                let args: RunIdArgs = take_args(args)?;
+                json(service.rerun(&args.run_id).map_err(PluginError::new)?)
             }
         })?;
 

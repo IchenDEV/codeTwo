@@ -28,6 +28,7 @@ import {
   Pencil,
   Play,
   Plus,
+  RotateCcw,
   Search,
   Trash2,
   X,
@@ -59,7 +60,9 @@ import {
   deleteAutomation,
   listAutomationRuns,
   listAutomations,
+  onAutomationAlert,
   onAutomationChanged,
+  rerunAutomation,
   runAutomationNow,
   setAutomationEnabled,
   updateAutomation,
@@ -67,6 +70,7 @@ import {
 } from "../bridge";
 import type {
   Automation,
+  AutomationAlert,
   AutomationInput,
   AutomationRun,
   AutomationRunStatus,
@@ -223,6 +227,26 @@ function AutomationRow({
   );
 }
 
+export interface AutomationPageActions {
+  subscribeToAlerts: (
+    cb: (alert: AutomationAlert) => void
+  ) => Promise<() => void>;
+  loadAutomations: () => Promise<Automation[]>;
+  loadRuns: (automationId?: string | null) => Promise<AutomationRun[]>;
+  rerun: (runId: string) => Promise<AutomationRun>;
+}
+
+/**
+ * The desktop bridge calls this page makes. Injected as one object so a test can supply fixtures
+ * without globally mocking the bridge module, which would leak into every other test file.
+ */
+export const defaultAutomationActions: AutomationPageActions = {
+  subscribeToAlerts: onAutomationAlert,
+  loadAutomations: listAutomations,
+  loadRuns: listAutomationRuns,
+  rerun: rerunAutomation,
+};
+
 export function AutomationsPage({
   projects,
   providers,
@@ -231,6 +255,7 @@ export function AutomationsPage({
   onAddProject,
   onOpenSession,
   headerLeadingAction,
+  actions = defaultAutomationActions,
 }: {
   projects: Project[];
   providers: ProviderInfo[];
@@ -239,7 +264,9 @@ export function AutomationsPage({
   onAddProject: () => void;
   onOpenSession: (session: string) => void;
   headerLeadingAction?: ReactNode;
+  actions?: AutomationPageActions;
 }) {
+  const { subscribeToAlerts, loadAutomations, loadRuns, rerun } = actions;
   const t = useT();
   const toast = useToast();
   const { locale } = useLanguage();
@@ -302,7 +329,7 @@ export function AutomationsPage({
     ].filter((group) => group.items.length > 0);
   })();
   const refresh = useCallback(async () => {
-    const next = await listAutomations();
+    const next = await loadAutomations();
     setAutomations(next);
     setSelectedId((current) =>
       current != null &&
@@ -312,11 +339,14 @@ export function AutomationsPage({
         : (next[0]?.id ?? null)
     );
     setLoading(false);
-  }, []);
+  }, [loadAutomations]);
 
-  const refreshRuns = useCallback(async (id: string | null) => {
-    setRuns(id != null && id !== "" ? await listAutomationRuns(id) : []);
-  }, []);
+  const refreshRuns = useCallback(
+    async (id: string | null) => {
+      setRuns(id != null && id !== "" ? await loadRuns(id) : []);
+    },
+    [loadRuns]
+  );
 
   useEffect(() => {
     void refresh().catch((error: unknown) => {
@@ -336,6 +366,42 @@ export function AutomationsPage({
   useEffect(() => {
     void refreshRuns(selectedId);
   }, [refreshRuns, selectedId]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    void subscribeToAlerts((alert) => {
+      const name = alert.automation_name || t("automations.title");
+      toast(
+        t(
+          alert.status === "needs_attention"
+            ? "automations.alertNeedsAttention"
+            : "automations.alertFailed",
+          { name }
+        ),
+        "error",
+        {
+          label: t("automations.rerun"),
+          run: () => {
+            void rerun(alert.run_id)
+              .then(() => {
+                void refresh();
+              })
+              .catch((error: unknown) => {
+                toast(
+                  t("automations.rerunFailed", { error: String(error) }),
+                  "error"
+                );
+              });
+          },
+        }
+      );
+      void refresh();
+      void refreshRuns(selectedId);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [t, toast, refresh, refreshRuns, selectedId, subscribeToAlerts]);
 
   useEffect(() => {
     if (draft) return;
@@ -423,6 +489,17 @@ export function AutomationsPage({
       toast(t("automations.started"), "success");
     } catch (error) {
       toast(t("automations.runFailed", { error: String(error) }), "error");
+    }
+  };
+
+  const rerunRun = async (runId: string) => {
+    try {
+      await rerun(runId);
+      await refresh();
+      await refreshRuns(selectedId);
+      toast(t("automations.rerunStarted"), "success");
+    } catch (error) {
+      toast(t("automations.rerunFailed", { error: String(error) }), "error");
     }
   };
 
@@ -890,70 +967,91 @@ export function AutomationsPage({
                       const Icon = runIcon(run.status);
                       const openable = run.session_id !== null;
                       return (
-                        <Button
-                          key={run.id}
-                          type="button"
-                          variant="ghost"
-                          size="row"
-                          focusStyle="inset"
-                          disabled={!openable}
-                          className="min-h-control-field bg-fill-quiet grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 disabled:opacity-80"
-                          onClick={() =>
-                            run.session_id != null &&
-                            run.session_id !== "" &&
-                            onOpenSession(run.session_id)
-                          }
-                        >
-                          {SPINNING_RUNS.has(run.status) ? (
-                            <Spinner className="text-primary" />
-                          ) : Icon ? (
-                            <Icon
-                              className={cn(
-                                "size-4",
-                                run.status === "needs_attention" &&
-                                  "text-warning",
-                                run.status === "succeeded" && "text-success",
-                                (run.status === "failed" ||
-                                  run.status === "interrupted") &&
-                                  "text-destructive"
-                              )}
-                            />
-                          ) : null}
-                          <span className="min-w-0">
-                            <span className="block font-medium">
-                              {t(`automations.status.${run.status}`)}
-                            </span>
-                            <span className="text-callout text-muted-foreground block">
-                              {dateTime(run.started_at, locale)} ·{" "}
-                              {Math.max(
-                                0,
-                                Math.round(
-                                  ((run.finished_at ?? now) - run.started_at) /
-                                    60_000
-                                )
-                              )}{" "}
-                              {t("automations.minutes")}
-                              {run.status === "starting" && (
-                                <span className="block">
-                                  {t("automations.startingHint")}
+                        <div key={run.id} className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="row"
+                            focusStyle="inset"
+                            disabled={!openable}
+                            className="min-h-control-field bg-fill-quiet grid min-w-0 flex-1 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 disabled:opacity-80"
+                            onClick={() =>
+                              run.session_id != null &&
+                              run.session_id !== "" &&
+                              onOpenSession(run.session_id)
+                            }
+                          >
+                            {SPINNING_RUNS.has(run.status) ? (
+                              <Spinner className="text-primary" />
+                            ) : Icon ? (
+                              <Icon
+                                className={cn(
+                                  "size-4",
+                                  run.status === "needs_attention" &&
+                                    "text-warning",
+                                  run.status === "succeeded" && "text-success",
+                                  (run.status === "failed" ||
+                                    run.status === "interrupted") &&
+                                    "text-destructive"
+                                )}
+                              />
+                            ) : null}
+                            <span className="min-w-0">
+                              <span className="block font-medium">
+                                {t(`automations.status.${run.status}`)}
+                              </span>
+                              <span className="text-callout text-muted-foreground block">
+                                {dateTime(run.started_at, locale)} ·{" "}
+                                {Math.max(
+                                  0,
+                                  Math.round(
+                                    ((run.finished_at ?? now) -
+                                      run.started_at) /
+                                      60_000
+                                  )
+                                )}{" "}
+                                {t("automations.minutes")}
+                                {run.status === "starting" && (
+                                  <span className="block">
+                                    {t("automations.startingHint")}
+                                  </span>
+                                )}
+                              </span>
+                              {run.error != null && run.error !== "" ? (
+                                <span className="text-metadata text-destructive mt-1 block">
+                                  {t("automations.failureHint")}
+                                  <span className="mt-1 block break-words">
+                                    {run.error}
+                                  </span>
                                 </span>
-                              )}
+                              ) : null}
                             </span>
-                            {run.error != null && run.error !== "" ? (
-                              <span className="text-metadata text-destructive mt-1 block">
-                                {t("automations.failureHint")}
-                                <span className="mt-1 block break-words">
-                                  {run.error}
-                                </span>
+                            {openable ? (
+                              <span className="text-metadata text-primary">
+                                {t("automations.openRun")}
                               </span>
                             ) : null}
-                          </span>
-                          {openable ? (
-                            <span className="text-metadata text-primary">
-                              {t("automations.openRun")}
-                            </span>
-                          ) : null}
-                        </Button>
+                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  aria-label={t("automations.rerun")}
+                                  disabled={activeRun !== null}
+                                  onClick={() => void rerunRun(run.id)}
+                                >
+                                  <RotateCcw className="size-3.5" />
+                                </Button>
+                              }
+                            />
+                            <TooltipContent>
+                              {t("automations.rerun")}
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       );
                     })}
                   </div>
