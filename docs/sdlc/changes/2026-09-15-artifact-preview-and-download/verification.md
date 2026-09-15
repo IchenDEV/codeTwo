@@ -6,7 +6,7 @@ status: passed
 owner: chenli
 created: 2026-09-15
 based_on: plan.md
-revision: pending-record-commit
+revision: 0bb373052113a2b57bad1005770fd580c1a36133
 verification_mode: owner
 verified_by: chenli
 verified_at: 2026-09-15
