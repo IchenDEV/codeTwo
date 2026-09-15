@@ -284,6 +284,30 @@ const host = new NativeHost({
   dataDir,
   onEvent: (event) => {
     pluginHostActions?.handleHostEvent(event);
+    if (event.name === "automation-alert") {
+      const alert = event.payload as {
+        automation_name?: string;
+        status?: string;
+        error?: string | null;
+      } | null;
+      const title =
+        typeof alert?.automation_name === "string" &&
+        alert.automation_name !== ""
+          ? alert.automation_name
+          : `${applicationName} automation`;
+      const reason =
+        typeof alert?.error === "string" && alert.error !== ""
+          ? `: ${alert.error}`
+          : "";
+      Utils.showNotification({
+        title,
+        body:
+          alert?.status === "needs_attention"
+            ? "Automation needs attention"
+            : `Automation failed${reason}`,
+        silent: false,
+      });
+    }
     if (rendererReady) rpc.send.event(event);
     else queuedEvents.push(event);
   },

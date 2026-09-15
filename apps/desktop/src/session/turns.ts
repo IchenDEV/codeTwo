@@ -689,7 +689,9 @@ export function applyEvent(
       break;
     }
     case "artifact_produced": {
-      throw new Error('Not implemented yet: "artifact_produced" case');
+      // A scene-layer fact, never a transcript part: the artifact surfaces through the session's
+      // artifact list, so turn projection deliberately ignores it.
+      break;
     }
     case "context_window": {
       throw new Error('Not implemented yet: "context_window" case');

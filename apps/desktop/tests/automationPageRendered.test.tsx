@@ -200,6 +200,15 @@ describe("AutomationsPage layout", () => {
     );
   });
 
+  test("wires failure alerts to a rerun action and a per-run replay control", () => {
+    // The harness has no host event channel, so the failure-alert subscription is asserted at the
+    // source level; the store-side replay behavior is covered by the core tests.
+    expect(automationSource).toContain("onAutomationAlert(");
+    expect(automationSource).toContain("rerunAutomation(");
+    expect(automationSource).toContain('t("automations.rerun")');
+    expect(automationSource).toContain("<RotateCcw");
+  });
+
   test("keeps create and edit work in the detail pane instead of opening a dialog", async () => {
     activateDom();
     const view = mount(

@@ -27,9 +27,7 @@ import {
   CircleCheck,
   Clock3,
   Copy,
-  Download,
   ExternalLink,
-  FolderOpen,
   GitFork,
   MoreHorizontal,
   Search,
@@ -41,15 +39,8 @@ import { TooltipButton } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/ui/toast";
 
-import {
-  canvasGetSnapshot,
-  getArtifact,
-  getPromptImage,
-  openExternal,
-  revealArtifact,
-  saveArtifactAs,
-} from "../bridge";
-import type { ArtifactRef, CanvasSnapshot } from "../bridge";
+import { canvasGetSnapshot, getPromptImage, openExternal } from "../bridge";
+import type { CanvasSnapshot } from "../bridge";
 import { useLanguage, useT } from "../i18n";
 import {
   agentActivityState,
@@ -57,6 +48,7 @@ import {
   isAgentActivityTool,
 } from "./agentActivity";
 import type { AgentActivity, AgentActivityState } from "./agentActivity";
+import { ArtifactPreview } from "./ArtifactPreview";
 import { MarkdownContent } from "./MarkdownContent";
 import type { BuiltinLinkActions } from "./MarkdownContent";
 import {
@@ -121,12 +113,6 @@ function toolIcon(tool: ToolEntry) {
 
 function toolHasOutput(tool: ToolEntry): boolean {
   return (tool.outputs?.length ?? 0) > 0;
-}
-
-function prettySize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function promptTextWithoutImageMarkers(
@@ -222,95 +208,6 @@ export function safeResourceLink(
   } catch {
     return null;
   }
-}
-
-function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    let objectUrl: string | null = null;
-    void getArtifact(artifact.id)
-      .then((bytes) => {
-        if (!alive) return;
-        objectUrl = URL.createObjectURL(
-          new Blob([Uint8Array.from(bytes).buffer], {
-            type: artifact.mime_type,
-          })
-        );
-        setUrl(objectUrl);
-      })
-      .catch(() => alive && setError(true));
-    return () => {
-      alive = false;
-      if (objectUrl != null && objectUrl !== "") URL.revokeObjectURL(objectUrl);
-    };
-  }, [artifact.id, artifact.mime_type]);
-
-  return (
-    <figure className="rounded-module bg-fill-quiet min-w-0 overflow-hidden border">
-      <div className="image-checker flex min-h-32 items-center justify-center">
-        {url != null && url !== "" ? (
-          <img
-            src={url}
-            alt={artifact.display_name}
-            className="max-h-96 w-full object-contain"
-            onError={() => setError(true)}
-          />
-        ) : (
-          <span
-            className={cn(
-              "text-callout text-muted-foreground px-4 py-10",
-              error && "text-destructive"
-            )}
-          >
-            {error ? "Image unavailable" : "Loading image…"}
-          </span>
-        )}
-      </div>
-      <figcaption className="bg-background/60 text-callout text-muted-foreground flex flex-wrap items-center gap-2 px-2.5 py-2">
-        <span className="text-foreground min-w-0 flex-1 truncate">
-          {artifact.display_name}
-        </span>
-        <span>
-          {artifact.width} × {artifact.height}
-        </span>
-        <span>{prettySize(artifact.bytes)}</span>
-        <TooltipButton
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          label="Save As"
-          onClick={() => {
-            setActionError(null);
-            void saveArtifactAs(artifact.id, artifact.display_name).catch(() =>
-              setActionError("Could not save image")
-            );
-          }}
-        >
-          <Download className="size-3.5" />
-        </TooltipButton>
-        <TooltipButton
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          label="Reveal in file manager"
-          onClick={() => {
-            setActionError(null);
-            void revealArtifact(artifact.id).catch(() =>
-              setActionError("Could not reveal image")
-            );
-          }}
-        >
-          <FolderOpen className="size-3.5" />
-        </TooltipButton>
-        {actionError != null && actionError !== "" && (
-          <span className="text-destructive basis-full">{actionError}</span>
-        )}
-      </figcaption>
-    </figure>
-  );
 }
 
 function ToolCallBlock({
@@ -425,7 +322,7 @@ function ToolCallBlock({
             aria-label="Generated images"
           >
             {images.map((artifact) => (
-              <ArtifactImage key={artifact.id} artifact={artifact} />
+              <ArtifactPreview key={artifact.id} artifact={artifact} />
             ))}
           </div>
         ) : null}

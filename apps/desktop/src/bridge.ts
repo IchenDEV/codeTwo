@@ -469,6 +469,16 @@ export interface AutomationRun {
   started_at: number;
   finished_at: number | null;
   error: string | null;
+  /** The instruction as recorded when the run started; replayed by `rerunAutomation`. */
+  prompt: string;
+}
+
+export interface AutomationAlert {
+  automation_id: string;
+  run_id: string;
+  automation_name: string;
+  status: AutomationRunStatus;
+  error: string | null;
 }
 
 export interface SessionInfo {
@@ -2467,6 +2477,20 @@ export async function runAutomationNow(id: string): Promise<AutomationRun> {
   return await call<AutomationRun>("automation.run_now", { id });
 }
 
+export async function rerunAutomation(runId: string): Promise<AutomationRun> {
+  return await call<AutomationRun>("automation.rerun", { run_id: runId });
+}
+
+export async function onAutomationAlert(
+  cb: (alert: AutomationAlert) => void
+): Promise<() => void> {
+  if (!inDesktop)
+    return () => {
+      /* empty */
+    };
+  return listenDesktop<AutomationAlert>("automation-alert", cb);
+}
+
 export async function onAutomationChanged(
   cb: (automationId: string) => void
 ): Promise<() => void> {
@@ -2609,6 +2633,24 @@ export async function saveArtifactAs(
 
 export async function revealArtifact(id: string): Promise<void> {
   if (inDesktop) await call("artifacts.reveal", { id });
+}
+
+/** The artifacts a session produced, newest first. */
+export async function listArtifacts(session: string): Promise<ArtifactRef[]> {
+  if (!inDesktop) return [];
+  return await call<ArtifactRef[]>("artifacts.list", { session });
+}
+
+/** A bounded UTF-8 view of a text artifact for preview; rejects binary and oversized bodies. */
+export async function readArtifactText(
+  id: string,
+  maxBytes?: number
+): Promise<string> {
+  if (!inDesktop) return "";
+  return await call<string>("artifacts.read_text", {
+    id,
+    max_bytes: maxBytes ?? null,
+  });
 }
 
 /** Load a bounded local visualize fragment; the host validates its canonical root and file type. */
@@ -3452,12 +3494,38 @@ export async function gitCheckpoints(cwd: string): Promise<Checkpoint[]> {
 
 export type GitDiffScope = "all" | "staged" | "unstaged";
 
+export type GitDiffLineKind = "context" | "added" | "removed";
+
+export interface GitDiffLine {
+  kind: GitDiffLineKind;
+  old_line: number | null;
+  new_line: number | null;
+  text: string;
+}
+
+export interface GitDiffHunk {
+  old_start: number;
+  old_lines: number;
+  new_start: number;
+  new_lines: number;
+  lines: GitDiffLine[];
+}
+
+export interface GitFileDiff {
+  path: string;
+  old_path: string | null;
+  additions: number;
+  deletions: number;
+  hunks: GitDiffHunk[];
+}
+
 export interface GitDiffResult {
   text: string;
   truncated: boolean;
   truncation_reason: string | null;
   returned_bytes: number;
   files: number;
+  file_diffs: GitFileDiff[];
 }
 
 export interface GitDiffStat {
@@ -3474,6 +3542,7 @@ const EMPTY_DIFF: GitDiffResult = {
   truncation_reason: null,
   returned_bytes: 0,
   files: 0,
+  file_diffs: [],
 };
 
 export async function gitDiff(

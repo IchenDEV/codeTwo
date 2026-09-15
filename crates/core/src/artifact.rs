@@ -92,6 +92,8 @@ pub enum ArtifactError {
     NotFound,
     #[error("artifact is too large ({0} bytes; maximum is 20 MiB)")]
     TooLarge(usize),
+    #[error("artifact text preview exceeds the {0} byte limit")]
+    PreviewTooLarge(usize),
     #[error("unsupported image format")]
     UnsupportedFormat,
     #[error("image dimensions exceed 100 megapixels")]
@@ -221,6 +223,12 @@ impl ArtifactStore {
         let extension = match mime_type {
             "text/markdown" => "md",
             "text/plain" => "txt",
+            "text/html" => "html",
+            "image/svg+xml" => "svg",
+            "application/json" => "json",
+            "text/csv" => "csv",
+            "text/yaml" => "yaml",
+            "application/xml" => "xml",
             _ => return Err(ArtifactError::UnsupportedFormat),
         };
         let bytes = text.as_bytes();
@@ -328,6 +336,31 @@ impl ArtifactStore {
         Ok(data)
     }
 
+    /// Metadata for one stored artifact, without reading its bytes.
+    pub fn metadata(&self, id: &str) -> Result<ArtifactRef, ArtifactError> {
+        if id.len() > 128 || id.is_empty() {
+            return Err(ArtifactError::NotFound);
+        }
+        let conn = self.store.conn.lock().unwrap();
+        let reference = conn
+            .query_row(
+                "SELECT id,mime_type,byte_count,width,height,display_name FROM artifacts WHERE id=?1",
+                [id],
+                |row| {
+                    Ok(ArtifactRef {
+                        id: row.get(0)?,
+                        mime_type: row.get(1)?,
+                        bytes: row.get::<_, i64>(2)?.max(0) as u64,
+                        width: row.get::<_, i64>(3)?.max(0) as u32,
+                        height: row.get::<_, i64>(4)?.max(0) as u32,
+                        display_name: row.get(5)?,
+                    })
+                },
+            )
+            .optional()?;
+        reference.ok_or(ArtifactError::NotFound)
+    }
+
     pub fn path_for_reveal(&self, id: &str) -> Result<PathBuf, ArtifactError> {
         let conn = self.store.conn.lock().unwrap();
         let storage_name: Option<String> = conn
@@ -352,7 +385,45 @@ impl ArtifactStore {
         fs::write(destination, data)?;
         Ok(())
     }
+
+    /// A bounded UTF-8 view of a text artifact for preview. Binary bodies are rejected rather than
+    /// lossily decoded, and an oversized body is rejected rather than silently truncated.
+    pub fn read_text(&self, id: &str, max_bytes: usize) -> Result<String, ArtifactError> {
+        let data = self.get(id)?;
+        if data.len() > max_bytes {
+            return Err(ArtifactError::PreviewTooLarge(max_bytes));
+        }
+        String::from_utf8(data)
+            .map_err(|_| ArtifactError::InvalidData("artifact is not UTF-8 text".into()))
+    }
+
+    /// The artifacts a session produced, newest first. Joined through `artifact_refs`, so a blob
+    /// shared with another session is only returned for sessions that actually referenced it.
+    pub fn list_for_session(&self, session_id: &str) -> Result<Vec<ArtifactRef>, ArtifactError> {
+        let conn = self.store.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT a.id,a.mime_type,a.byte_count,a.width,a.height,a.display_name
+             FROM artifact_refs r JOIN artifacts a ON a.id=r.artifact_id
+             WHERE r.session_id=?1
+             ORDER BY r.rowid DESC",
+        )?;
+        let rows = statement.query_map([session_id], |row| {
+            Ok(ArtifactRef {
+                id: row.get(0)?,
+                mime_type: row.get(1)?,
+                bytes: row.get::<_, i64>(2)?.max(0) as u64,
+                width: row.get::<_, i64>(3)?.max(0) as u32,
+                height: row.get::<_, i64>(4)?.max(0) as u32,
+                display_name: row.get(5)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(ArtifactError::from)
+    }
 }
+
+/// Default preview bound for [`ArtifactStore::read_text`].
+pub const MAX_ARTIFACT_PREVIEW_BYTES: usize = 1024 * 1024;
 
 pub struct ToolOutputNormalizer {
     artifacts: Option<ArtifactStore>,
@@ -809,14 +880,80 @@ mod tests {
     }
 
     #[test]
-    fn save_document_rejects_unknown_mime_types() {
+    fn save_document_accepts_the_widened_allow_list_and_rejects_the_rest() {
         let dir = tempdir().unwrap();
         let store = Arc::new(Store::open(dir.path().join("codetwo.db").to_str().unwrap()).unwrap());
         let artifacts = ArtifactStore::from_store(store).unwrap();
+
+        for (mime, extension) in [
+            ("text/html", "html"),
+            ("image/svg+xml", "svg"),
+            ("application/json", "json"),
+            ("text/csv", "csv"),
+            ("text/yaml", "yaml"),
+            ("application/xml", "xml"),
+        ] {
+            let body = format!("<{mime}>");
+            let saved = artifacts
+                .save_document(&body, mime, None, "s1", &format!("t-{extension}"))
+                .unwrap();
+            assert_eq!(saved.mime_type, mime);
+            assert_eq!(saved.display_name, format!("document.{extension}"));
+            assert_eq!(artifacts.read_text(&saved.id, 4096).unwrap(), body);
+        }
+
         assert!(matches!(
-            artifacts.save_document("<html/>", "text/html", None, "s1", "t1"),
+            artifacts.save_document("%PDF", "application/pdf", None, "s1", "t1"),
             Err(ArtifactError::UnsupportedFormat)
         ));
+    }
+
+    #[test]
+    fn read_text_rejects_binary_and_oversized_bodies() {
+        let dir = tempdir().unwrap();
+        let store = Arc::new(Store::open(dir.path().join("codetwo.db").to_str().unwrap()).unwrap());
+        let artifacts = ArtifactStore::from_store(store).unwrap();
+
+        let text = artifacts
+            .save_document("hello", "text/plain", None, "s1", "t1")
+            .unwrap();
+        assert_eq!(artifacts.read_text(&text.id, 4096).unwrap(), "hello");
+        assert!(matches!(
+            artifacts.read_text(&text.id, 3),
+            Err(ArtifactError::PreviewTooLarge(3))
+        ));
+
+        // A raster image is stored as binary; a text preview must refuse it, not lossily decode.
+        let image = artifacts
+            .save_image(&png(), Some("pixel.png"), "s1", "t2")
+            .unwrap();
+        assert!(matches!(
+            artifacts.read_text(&image.id, MAX_ARTIFACT_PREVIEW_BYTES),
+            Err(ArtifactError::InvalidData(_))
+        ));
+    }
+
+    #[test]
+    fn list_for_session_returns_only_that_sessions_artifacts() {
+        let dir = tempdir().unwrap();
+        let store = Arc::new(Store::open(dir.path().join("codetwo.db").to_str().unwrap()).unwrap());
+        let artifacts = ArtifactStore::from_store(store).unwrap();
+
+        artifacts
+            .save_document("one", "text/plain", Some("one.txt"), "s1", "t1")
+            .unwrap();
+        artifacts
+            .save_document("two", "text/markdown", Some("two.md"), "s1", "t2")
+            .unwrap();
+        artifacts
+            .save_document("other", "text/plain", Some("other.txt"), "s2", "t3")
+            .unwrap();
+
+        let listed = artifacts.list_for_session("s1").unwrap();
+        assert_eq!(listed.len(), 2);
+        let names: Vec<&str> = listed.iter().map(|a| a.display_name.as_str()).collect();
+        assert!(names.contains(&"one.txt") && names.contains(&"two.md"));
+        assert!(artifacts.list_for_session("nobody").unwrap().is_empty());
     }
 
     #[test]
