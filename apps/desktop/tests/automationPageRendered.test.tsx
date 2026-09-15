@@ -15,7 +15,8 @@ import {
 } from "./domTestHarness";
 
 activateDom();
-const { AutomationsPage } = await import("../src/automation/AutomationsPage");
+const { AutomationsPage, defaultAutomationActions } =
+  await import("../src/automation/AutomationsPage");
 const { I18nProvider } = await import("../src/i18n");
 const { ToastProvider } = await import("../src/ui/toast");
 const appSource = readFileSync(
@@ -202,10 +203,10 @@ describe("AutomationsPage layout", () => {
     );
   });
 
-  test("defaults the alert subscription to the desktop bridge and keeps the replay control", () => {
-    expect(automationSource).toContain("subscribeToAlerts = onAutomationAlert");
-    expect(automationSource).toContain("subscribeToAlerts(");
-    expect(automationSource).toContain("rerunAutomation(");
+  test("defaults its actions to the desktop bridge and keeps the replay control", () => {
+    expect(automationSource).toContain("actions = defaultAutomationActions");
+    expect(automationSource).toContain("subscribeToAlerts: onAutomationAlert");
+    expect(automationSource).toContain("rerun: rerunAutomation");
     expect(automationSource).toContain('t("automations.rerun")');
     expect(automationSource).toContain("<RotateCcw");
   });
@@ -229,9 +230,12 @@ describe("AutomationsPage layout", () => {
             defaultProvider="codex"
             onAddProject={() => {}}
             onOpenSession={() => {}}
-            subscribeToAlerts={async (cb) => {
-              deliver = cb as (alert: Record<string, unknown>) => void;
-              return () => {};
+            actions={{
+              ...defaultAutomationActions,
+              subscribeToAlerts: async (cb) => {
+                deliver = cb as (alert: Record<string, unknown>) => void;
+                return () => {};
+              },
             }}
           />
         </ToastProvider>

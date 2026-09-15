@@ -227,6 +227,26 @@ function AutomationRow({
   );
 }
 
+export interface AutomationPageActions {
+  subscribeToAlerts: (
+    cb: (alert: AutomationAlert) => void
+  ) => Promise<() => void>;
+  loadAutomations: () => Promise<Automation[]>;
+  loadRuns: (automationId?: string | null) => Promise<AutomationRun[]>;
+  rerun: (runId: string) => Promise<AutomationRun>;
+}
+
+/**
+ * The desktop bridge calls this page makes. Injected as one object so a test can supply fixtures
+ * without globally mocking the bridge module, which would leak into every other test file.
+ */
+export const defaultAutomationActions: AutomationPageActions = {
+  subscribeToAlerts: onAutomationAlert,
+  loadAutomations: listAutomations,
+  loadRuns: listAutomationRuns,
+  rerun: rerunAutomation,
+};
+
 export function AutomationsPage({
   projects,
   providers,
@@ -235,7 +255,7 @@ export function AutomationsPage({
   onAddProject,
   onOpenSession,
   headerLeadingAction,
-  subscribeToAlerts = onAutomationAlert,
+  actions = defaultAutomationActions,
 }: {
   projects: Project[];
   providers: ProviderInfo[];
@@ -244,11 +264,9 @@ export function AutomationsPage({
   onAddProject: () => void;
   onOpenSession: (session: string) => void;
   headerLeadingAction?: ReactNode;
-  /** Injected for tests; production uses the desktop bridge subscription. */
-  subscribeToAlerts?: (
-    cb: (alert: AutomationAlert) => void
-  ) => Promise<() => void>;
+  actions?: AutomationPageActions;
 }) {
+  const { subscribeToAlerts, loadAutomations, loadRuns, rerun } = actions;
   const t = useT();
   const toast = useToast();
   const { locale } = useLanguage();
@@ -311,7 +329,7 @@ export function AutomationsPage({
     ].filter((group) => group.items.length > 0);
   })();
   const refresh = useCallback(async () => {
-    const next = await listAutomations();
+    const next = await loadAutomations();
     setAutomations(next);
     setSelectedId((current) =>
       current != null &&
@@ -321,11 +339,14 @@ export function AutomationsPage({
         : (next[0]?.id ?? null)
     );
     setLoading(false);
-  }, []);
+  }, [loadAutomations]);
 
-  const refreshRuns = useCallback(async (id: string | null) => {
-    setRuns(id != null && id !== "" ? await listAutomationRuns(id) : []);
-  }, []);
+  const refreshRuns = useCallback(
+    async (id: string | null) => {
+      setRuns(id != null && id !== "" ? await loadRuns(id) : []);
+    },
+    [loadRuns]
+  );
 
   useEffect(() => {
     void refresh().catch((error: unknown) => {
@@ -361,7 +382,7 @@ export function AutomationsPage({
         {
           label: t("automations.rerun"),
           run: () => {
-            void rerunAutomation(alert.run_id)
+            void rerun(alert.run_id)
               .then(() => {
                 void refresh();
               })
@@ -473,7 +494,7 @@ export function AutomationsPage({
 
   const rerunRun = async (runId: string) => {
     try {
-      await rerunAutomation(runId);
+      await rerun(runId);
       await refresh();
       await refreshRuns(selectedId);
       toast(t("automations.rerunStarted"), "success");

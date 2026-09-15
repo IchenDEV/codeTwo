@@ -44,9 +44,9 @@ OS notification's delivery is not observable without the packaged app and is rec
 - AC-5: PASS — `bun test tests/automationPageRendered.test.tsx` mounts the real page with an
   injected alert subscription and asserts the rendered `role="alert"` toast reads
   `Automation failed: Nightly triage` and exposes a `Run again` action;
-  `bun test tests/automationRunHistoryRendered.test.tsx` mocks the desktop bridge, renders the Runs
-  tab with a failed run, finds the per-row `aria-label="Run again"` control, clicks it, and asserts
-  `rerunAutomation("r1")` was called.
+  `bun test tests/automationRunHistoryRendered.test.tsx` injects the page's bridge actions
+  (`actions`), renders the Runs tab with a failed run, finds the per-row `aria-label="Run again"`
+  control, clicks it, and asserts the injected rerun action received `"r1"`.
 - AC-6: PASS — `cargo test -p codetwo-core --lib automation` ran
   `older_run_rows_gain_the_instruction_snapshot_from_their_automation`: an old-schema
   `automation_runs` table opens twice without error, keeps its one row, and backfills

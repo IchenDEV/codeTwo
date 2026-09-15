@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   activateDom,
@@ -46,23 +46,15 @@ const runs = [
 ];
 const rerunCalls: string[] = [];
 
-mock.module("../src/bridge", () => ({
-  listAutomations: async () => automations,
-  listAutomationRuns: async () => runs,
-  onAutomationChanged: async () => () => {},
-  onAutomationAlert: async () => () => {},
-  rerunAutomation: async (id: string) => {
-    rerunCalls.push(id);
+const actions = {
+  subscribeToAlerts: async () => () => {},
+  loadAutomations: async () => automations,
+  loadRuns: async () => runs,
+  rerun: async (runId: string) => {
+    rerunCalls.push(runId);
     return runs[0];
   },
-  runAutomationNow: async () => runs[0],
-  createAutomation: async () => automations[0],
-  updateAutomation: async () => automations[0],
-  deleteAutomation: async () => true,
-  setAutomationEnabled: async () => automations[0],
-  confirmNative: async () => true,
-  providerLabel: () => "Codex",
-}));
+};
 
 activateDom();
 const { AutomationsPage } = await import("../src/automation/AutomationsPage");
@@ -75,7 +67,7 @@ afterEach(() => {
 });
 
 describe("AutomationsPage run history", () => {
-  test("exposes a per-run replay control that calls the rerun command", async () => {
+  test("exposes a per-run replay control that invokes the rerun action", async () => {
     rerunCalls.length = 0;
     const view = mount(
       <I18nProvider>
@@ -95,6 +87,7 @@ describe("AutomationsPage run history", () => {
             defaultProvider="codex"
             onAddProject={() => {}}
             onOpenSession={() => {}}
+            actions={actions}
           />
         </ToastProvider>
       </I18nProvider>
