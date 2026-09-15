@@ -1,12 +1,14 @@
 # C2 — a document-first coding-agent app.
 # Cargo workspace:
 #   crates/core          — unified product engine: kernel + domain + plugins + protocol
+#   crates/napi          — NAPI native addon bridge for Bun/Node (loads CoreApp in-process)
 #   crates/server        — headless Axum server, WebSocket, remote/web UI
-#   apps/desktop/src-host — Electrobun desktop sidecar, links CoreApp
+#   apps/desktop/src-host — Electrobun desktop sidecar (legacy JSON-lines bridge, being replaced by napi)
 [workspace]
 resolver = "2"
 members = [
     "crates/core",
+    "crates/napi",
     "crates/server",
     "apps/desktop/src-host",
 ]
