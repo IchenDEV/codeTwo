@@ -94,6 +94,7 @@ function renderRail(overrides = {}) {
           onRename={() => {}}
           onPin={() => {}}
           onArchive={() => {}}
+          onAddProject={() => {}}
           displayProvider={() => "Codex"}
           onOpenMarket={() => {}}
           onOpenAutomations={() => {}}
@@ -1470,6 +1471,31 @@ describe("SessionRail row layout", () => {
       expect(copied).toEqual(["meaningful"]);
       expect(dom.document.body.textContent).toContain("Session ID copied.");
     });
+
+    view.unmount();
+  });
+});
+
+describe("SessionRail empty projects", () => {
+  test("offers adding a Project when none are registered", () => {
+    activateDom();
+    let added = 0;
+    const view = renderRail({
+      projects: [],
+      sessions: [],
+      previews: {},
+      onAddProject: () => {
+        added += 1;
+      },
+    });
+
+    expect(view.container.textContent).toContain("No projects yet");
+    const addButton = [...view.container.querySelectorAll("button")].find(
+      (item) => item.textContent?.trim() === "Add a project…"
+    );
+    expect(addButton).toBeTruthy();
+    click(addButton);
+    expect(added).toBe(1);
 
     view.unmount();
   });

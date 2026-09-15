@@ -26,7 +26,7 @@ describe("composer geometry contract", () => {
     expect(composer).not.toContain("function ComposerLiquidSurface");
     expect(composer).not.toContain("data-gooey-composer");
     expect(composer).toContain(
-      '"rounded-composer bg-card shadow-surface duration-feedback ease-enter focus-within:focus-ring-inset transition-shadow"'
+      '"rounded-composer bg-card shadow-surface duration-feedback ease-enter focus-within:shadow-raised transition-shadow"'
     );
   });
 

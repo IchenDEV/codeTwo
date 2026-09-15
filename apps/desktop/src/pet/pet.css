@@ -12,6 +12,11 @@
   display: grid;
   cursor: pointer;
   place-items: center;
+  /* The shared icon button fixes a 28-32px control box. The mascot is a sprite up to 136px, so
+     sizing the button to its content keeps the whole pet inside the window instead of clipping
+     the lower frames against the window edge. */
+  width: fit-content;
+  height: fit-content;
   padding: 0;
   border: 0;
   color: inherit;

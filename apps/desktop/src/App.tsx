@@ -7858,6 +7858,7 @@ export default function App() {
             }}
             onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
             onRemoveProject={(path) => void requestProjectRemoval(path)}
+            onAddProject={() => void addProjectFolder()}
             displayProvider={displayProvider}
             onOpenMarket={() => {
               setShowTaskBoard(false);

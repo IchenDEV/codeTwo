@@ -106,7 +106,7 @@ export function CodeTwoPet({
         type="button"
         variant="ghost"
         size="icon"
-        className="codetwo-pet-mascot"
+        className="codetwo-pet-mascot electrobun-webkit-app-region-drag"
         onClick={greet}
       >
         <CodeTwoPetSprite
