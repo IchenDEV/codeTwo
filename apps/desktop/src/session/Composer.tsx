@@ -1902,7 +1902,7 @@ export function Composer({
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 // `relative` anchors the floating control bar below.
                 "min-h-0 flex-1"
-              : "rounded-composer bg-card shadow-surface duration-feedback ease-enter focus-within:focus-ring-inset transition-shadow"
+              : "rounded-composer bg-card shadow-surface duration-feedback ease-enter focus-within:shadow-raised transition-shadow"
           )}
         >
           <div

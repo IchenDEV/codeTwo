@@ -58,15 +58,21 @@ document.addEventListener("contextmenu", (e) => {
 
 // Electrobun drag regions include their descendants. Mark interactive descendants explicitly so
 // title-bar buttons, fields and links keep receiving clicks instead of starting a window move.
+// An element that opts into dragging itself (the desktop pet mascot) is left alone: it wants the
+// move gesture, and a plain click still reaches it because Electrobun starts the move over RPC
+// rather than swallowing the DOM event.
 const interactiveSelector =
   "button, input, textarea, select, a, summary, [role='button'], [contenteditable='true']";
+const dragRegionClass = "electrobun-webkit-app-region-drag";
 const protectInteractiveNode = (node: Node) => {
   if (!(node instanceof Element)) return;
-  if (node.matches(interactiveSelector))
-    node.classList.add("electrobun-webkit-app-region-no-drag");
-  for (const element of node.querySelectorAll(interactiveSelector)) {
+  const mark = (element: Element) => {
+    if (element.classList.contains(dragRegionClass)) return;
     element.classList.add("electrobun-webkit-app-region-no-drag");
-  }
+  };
+  if (node.matches(interactiveSelector)) mark(node);
+  for (const element of node.querySelectorAll(interactiveSelector))
+    mark(element);
 };
 protectInteractiveNode(document.documentElement);
 new MutationObserver((records) => {

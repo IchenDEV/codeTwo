@@ -61,6 +61,7 @@ import {
   Copy,
   Folder,
   FolderOpen,
+  FolderPlus,
   FolderX,
   GitBranch,
   GitMerge,
@@ -271,6 +272,7 @@ export function SessionRail({
   onArchive,
   onDiscardWorktree,
   onRemoveProject,
+  onAddProject,
   displayProvider,
   onOpenMarket,
   onOpenAutomations,
@@ -328,6 +330,8 @@ export function SessionRail({
   onDiscardWorktree: (session: SessionInfo) => void;
   /** Removes a registered Project from the rail, after confirmation; sessions stay on disk. */
   onRemoveProject: (path: string) => void;
+  /** Picks a directory and registers it as a Project — the only path once the list is empty. */
+  onAddProject: () => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
   displayProvider: (p: SessionInfo["provider"]) => string;
   onOpenMarket: () => void;
@@ -2321,9 +2325,20 @@ export function SessionRail({
               projectEntries.length === 0 &&
               taskSections.sections.length === 0 &&
               creatingSectionFor === undefined ? (
-                <p className="text-callout text-muted-foreground px-2 py-3">
-                  {t("rail.empty")} {t("rail.emptyHint")}
-                </p>
+                <div className="flex flex-col items-start gap-2 px-2 py-3">
+                  <p className="text-callout text-muted-foreground">
+                    {t("rail.projectsEmpty")}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="compact"
+                    onClick={onAddProject}
+                  >
+                    <FolderPlus className="size-4" />
+                    {t("rail.addProject")}
+                  </Button>
+                </div>
               ) : (
                 <>
                   <SidebarDropZone
@@ -2365,7 +2380,7 @@ export function SessionRail({
                                 : "rail.showSection",
                               { name: t("rail.allProjects") }
                             )}
-                            className="text-foreground/55 hover:text-foreground min-w-0 justify-start gap-1 font-normal"
+                            className="text-foreground/55 hover:text-foreground min-w-0 flex-1 justify-start gap-1 font-normal"
                           >
                             <span className="truncate">
                               {t("rail.allProjects")}
@@ -2380,6 +2395,15 @@ export function SessionRail({
                               aria-hidden="true"
                             />
                           </CollapsibleTrigger>
+                          <TooltipButton
+                            label={t("rail.addProject")}
+                            variant="ghost"
+                            size="icon-xs"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={onAddProject}
+                          >
+                            <FolderPlus className="size-4" />
+                          </TooltipButton>
                         </div>
                         <CollapsibleContent data-default-project-content>
                           <SidebarDropZone
