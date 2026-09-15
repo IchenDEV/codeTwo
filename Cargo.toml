@@ -1,15 +1,16 @@
 # C2 — a document-first coding-agent app.
-# Cargo workspace. Members are added as each milestone lands:
-#   crates/core          (M0/M1) — the shared brain: ACP client, sessions, skills, ...
-#   crates/tui           (M3)    — ratatui frontend, links core
-#   apps/desktop/src-host  (M2)  — native desktop sidecar, links core
+# Cargo workspace:
+#   crates/kernel        — reactive plugin runtime (cordis port)
+#   crates/core          — shared product core: ACP, sessions, skills, providers, persistence
+#   crates/plugins       — built-in adapters, CoreApp graph, extension bundles, plugin protocol
+#   crates/server        — headless Axum server, WebSocket, remote/web UI
+#   apps/desktop/src-host — Electrobun desktop sidecar, links CoreApp
 [workspace]
 resolver = "2"
 members = [
     "crates/kernel",
     "crates/core",
     "crates/plugins",
-    "crates/tui",
     "crates/server",
     "apps/desktop/src-host",
 ]

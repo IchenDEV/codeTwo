@@ -31,7 +31,7 @@ bun build --compile "$ROOT_DIR/apps/desktop/src/electrobun/toolBrokerRpc.ts" \
   bunx vite build --mode web --outDir "$TARGET_DIR/$PROFILE/web-ui" --emptyOutDir
 )
 
-cargo_args=(build -p codetwo-tui -p codetwo-server)
+cargo_args=(build -p codetwo-server)
 if [[ "$PROFILE" == "release" ]]; then
   cargo_args+=(--release)
 fi
@@ -40,4 +40,4 @@ fi
   cargo "${cargo_args[@]}"
 )
 
-echo "Rust hosts, Web UI, and $broker_name are ready in $TARGET_DIR/$PROFILE"
+echo "Server, Web UI, and $broker_name are ready in $TARGET_DIR/$PROFILE"
