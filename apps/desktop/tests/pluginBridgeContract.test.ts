@@ -37,7 +37,7 @@ describe("plugin bridge contract", () => {
     );
     const host = readFileSync(resolve(desktop, "src-host/src/lib.rs"), "utf-8");
     const enginePlugin = readFileSync(
-      resolve(repository, "crates/plugins/src/app/plugins/engine.rs"),
+      resolve(repository, "crates/core/src/plugins/app/plugins/engine.rs"),
       "utf-8"
     );
     const config = readFileSync(
@@ -118,7 +118,7 @@ describe("plugin bridge contract", () => {
   test("registers every static command used by the renderer bridge", () => {
     const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf-8");
     const pluginSources = [
-      ...rustFiles(resolve(repository, "crates/plugins/src/app/plugins")),
+      ...rustFiles(resolve(repository, "crates/core/src/plugins/app/plugins")),
       ...rustFiles(resolve(desktop, "src-host/src")),
     ]
       .map((path) => readFileSync(path, "utf-8"))

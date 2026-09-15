@@ -6,7 +6,7 @@ status: accepted
 owner: chenli
 created: 2026-09-15
 based_on: spec.md
-scope: apps/desktop/src/pet/pet.css, apps/desktop/src/pet/CodeTwoPet.tsx, apps/desktop/src/main.tsx, apps/desktop/src/sidebar/SessionRail.tsx, apps/desktop/src/session/Composer.tsx, apps/desktop/src/App.tsx, apps/desktop/tests/sessionRailRendered.test.tsx, apps/desktop/tests/composerGeometryContract.test.ts, docs/sdlc/changes/2026-09-15-desktop-pet-projects-composer
+scope: apps/desktop/src/pet/pet.css, apps/desktop/src/pet/CodeTwoPet.tsx, apps/desktop/src/main.tsx, apps/desktop/src/sidebar/SessionRail.tsx, apps/desktop/src/session/Composer.tsx, apps/desktop/src/App.tsx, apps/desktop/tests/sessionRailRendered.test.tsx, apps/desktop/tests/composerGeometryContract.test.ts, apps/desktop/tests/pluginBridgeContract.test.ts, apps/desktop/tests/t3RemoteContract.test.ts, docs/sdlc/changes/2026-09-15-desktop-pet-projects-composer
 ---
 
 # Plan: Desktop pet, empty-project add, composer tone
@@ -23,6 +23,9 @@ scope: apps/desktop/src/pet/pet.css, apps/desktop/src/pet/CodeTwoPet.tsx, apps/d
    accent-tinted draft (`bg-card`/`bg-surface` → `bg-accent`) was implemented, rendered, then
    reverted after the user asked to keep the input white.
 7. Add a rail empty-project regression test and update the composer geometry contract string.
+8. Fix the CI failure reported in run 34988233344: the `pluginBridgeContract` and `t3RemoteContract`
+   suites still read the removed `crates/plugins/...` paths, so point them at the merged
+   `crates/core/src/plugins/app/plugins/...` locations.
 
 Checks by risk (low, renderer-only): `bun test` on the affected suites, `bunx tsc --noEmit`,
 `bun run lint:styles`, scoped `ultracite check`, plus rendered measurement in the Vite preview

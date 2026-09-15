@@ -46,3 +46,5 @@ Core/host changes.
 - [x] AC-4: The Composer keeps its white/neutral surface with no accent tint; focusing the compact
       card raises the floating elevation shadow instead of drawing a border.
 - [x] AC-5: `bun test` on the affected suites, `tsc --noEmit`, `lint:styles` and code lint pass.
+- [x] AC-6: The CI "Desktop tests" step passes: `pluginBridgeContract` and `t3RemoteContract` read the
+      merged `crates/core/src/plugins/app/plugins/...` paths instead of the removed `crates/plugins/...`.

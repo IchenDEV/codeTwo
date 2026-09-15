@@ -40,10 +40,12 @@ cleanup_status: complete
   tests/composerGeometryContract.test.ts tests/pluginComponentPolicyContract.test.ts
   tests/petSettings.test.tsx tests/titlebarDoubleClick.test.ts` → **51 pass, 0 fail**. `bunx tsc
   --noEmit` clean. `bun run lint:styles` clean. Scoped `ultracite check` clean on all changed files.
-  Full desktop suite: **899 pass, 3 skip, 3 fail** — the 3 failures are pre-existing
-  `pluginBridgeContract.test.ts` cases that read the removed `crates/plugins/...` paths from the
-  earlier architecture-simplification merge, untouched by this change. `bun script/verify/sdlc.ts
-  --worktree` and `bun script/verify/docs.ts` both pass.
+  Full desktop suite: **902 pass, 3 skip, 0 fail**. `bun script/verify/sdlc.ts --worktree` and
+  `bun script/verify/docs.ts` both pass.
+- AC-6: PASS — CI run [34988233344](https://github.com/IchenDEV/codeTwo/actions/runs/34988233344)
+  failed the "Desktop tests" step with `ENOENT crates/plugins/src/app/plugins/{engine,handoff}.rs`.
+  The two suites now read `crates/core/src/plugins/app/plugins/{engine,handoff}.rs`; they pass
+  locally (`7 pass` across both) and the full desktop suite is green (902 pass, 0 fail).
 
 Verdict: verified
 Residual risk: The Electrobun native window move for the pet body was verified only at the class
