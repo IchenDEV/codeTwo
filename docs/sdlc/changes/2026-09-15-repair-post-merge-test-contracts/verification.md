@@ -6,7 +6,7 @@ status: passed
 owner: chenli
 created: 2026-09-15
 based_on: plan.md
-revision: 9de1ebb12e833ebfdfc07a725f65a4ecf31de5b7 + uncommitted worktree changes
+revision: 5e85358f47036d4aaa4a2853fb805eae2bd9f93e (rebased base) + uncommitted worktree changes
 verification_mode: owner
 verified_by: chenli
 verified_at: 2026-09-15
@@ -19,10 +19,11 @@ next_trigger: chenli reviews verified work.
 
 ## Verification
 
-- AC-1: PASS — from `apps/desktop`, `bun test tests/pluginBridgeContract.test.ts` reports
-  `3 pass / 0 fail` (previously all three threw `ENOENT` on the deleted `crates/plugins` path).
+- AC-1: PASS — `bun test tests/pluginBridgeContract.test.ts` reports `3 pass / 0 fail` from
+  `apps/desktop`. Upstream PR #232 (`46256251`) applied the same repoint first and this branch
+  rebased onto it, so the file is unchanged from the base here.
 - AC-2: PASS — `bun test tests/t3RemoteContract.test.ts tests/pluginBridgeContract.test.ts` reports
-  `7 pass / 0 fail`.
+  `7 pass / 0 fail`; the same upstream fix covers this file.
 - AC-3: PASS — `cargo test -p codetwo-core --test architecture_boundary` reports
   `2 passed; 0 failed`, and `cargo check --workspace --all-targets` finishes clean (it previously
   aborted on the missing `crates/plugins/Cargo.toml`).
@@ -41,10 +42,14 @@ no failures; `cargo test -p codetwo-server` reports every group ok; from `apps/d
 `bunx vite build` all pass.
 
 Verdict: verified.
-Residual risk: the wider documentation set still describes a TUI surface that the architecture
-change removed (`website/guide/tui.md`, and TUI prose in
-`docs/reference/{plugins,memory,plugin-standard,architecture}.md`); that narrative cleanup is out of
-scope here and does not affect any check.
+
+The branch rebased onto `5e85358f` (which already carries #232), and
+`cargo test -p codetwo-core --lib`, `cargo test -p codetwo-core --test architecture_boundary`,
+`cargo test -p codetwo-server --test artifact_download`, and the full desktop
+`bun run lint` / `bunx tsc --noEmit` / `bun test` (`909 pass / 3 skip / 0 fail`) / `bunx vite build`
+all pass on that base.
+Residual risk: none from this repair; the documentation narrative noted here has since been cleared
+by `2026-09-15-purge-tui-documentation`.
 
 ## Cleanup
 

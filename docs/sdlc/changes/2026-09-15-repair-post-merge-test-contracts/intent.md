@@ -38,6 +38,10 @@ nothing to do with the current feature work:
 Outcome: every check that the architecture change broke is green again, and the boundary test now
 asserts the merged-crate contract instead of the superseded one.
 
+Upstream note: PR #232 (`46256251`) fixed items 1 and 2 first. This branch rebased onto that merge,
+so those two files carry no diff here; the remaining items, the flake fix, and the documentation
+corrections are this change's contribution.
+
 Constraints: do not weaken the ownership-exclusivity assertion; do not delete the boundary test's
 intent (only retarget it); do not rewrite the remaining TUI prose in the wider documentation set.
 Non-goals: a full TUI-narrative documentation cleanup and the runtime/feature work in the

@@ -13,18 +13,18 @@ scope: docs/sdlc/changes/2026-09-15-repair-post-merge-test-contracts/intent.md, 
 
 ## Plan
 
-1. `apps/desktop/tests/pluginBridgeContract.test.ts` — repoint the two `crates/plugins` reads to
-   `crates/core/src/plugins/app/plugins`.
-2. `apps/desktop/tests/t3RemoteContract.test.ts` — repoint the handoff read to the core path.
-3. `crates/core/tests/architecture_boundary.rs` — replace the pre-merge assertions with
+1. `apps/desktop/tests/{pluginBridgeContract,t3RemoteContract}.test.ts` — repoint their
+   `crates/plugins` reads at `crates/core/src/plugins/app/plugins`. Upstream PR #232 applied the
+   identical fix before this branch; the rebase brought it in, so these two files carry no diff here.
+2. `crates/core/tests/architecture_boundary.rs` — replace the pre-merge assertions with
    `core_is_the_single_composition_root` and `hosts_depend_only_on_core`.
-4. `crates/core/src/kernel/{event,plugin,service}.rs` and `crates/core/src/plugins/app/mod.rs` — fix
+3. `crates/core/src/kernel/{event,plugin,service}.rs` and `crates/core/src/plugins/app/mod.rs` — fix
    the four doctest imports to `codetwo_core::{kernel,plugins}`.
-5. `crates/core/src/plugins/app/data_dir_lock.rs` — add the `acquire_within` retry helper and a
+4. `crates/core/src/plugins/app/data_dir_lock.rs` — add the `acquire_within` retry helper and a
    deterministic release test; use the helper in the ownership test.
-6. `crates/core/src/plugins/app/mod.rs` — retry the post-release CoreApp boot within a bounded
+5. `crates/core/src/plugins/app/mod.rs` — retry the post-release CoreApp boot within a bounded
    deadline in `cloning_configuration_does_not_clone_core_ownership`.
-7. Reference docs and both architecture diagrams — cite the merged paths and the NAPI addon.
+6. Reference docs and both architecture diagrams — cite the merged paths and the NAPI addon.
 
 Checks by risk and affected behavior:
 
