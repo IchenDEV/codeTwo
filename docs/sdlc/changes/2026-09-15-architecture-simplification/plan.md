@@ -6,7 +6,7 @@ status: accepted
 owner: chenli
 created: 2026-09-15
 based_on: spec.md
-scope: Cargo.toml, crates/core, crates/napi, crates/server/Cargo.toml, crates/server/src, apps/desktop/src-host/Cargo.toml, apps/desktop/src-host/src, .github/workflows/ci.yml, AGENTS.md, README.md, docs/reference/architecture.md, docs/reference/plugins.md, script/build/hosts.sh, .agents/skills/codetwo-develop/references/development.md, .agents/skills/codetwo-develop/references/workflow.md, docs/sdlc/changes/2026-09-15-architecture-simplification, docs/archive/research
+scope: Cargo.toml, Cargo.lock, crates/core, crates/napi, crates/kernel, crates/plugins, crates/tui, crates/server/Cargo.toml, crates/server/src, apps/desktop/src-host/Cargo.toml, apps/desktop/src-host/src, .github/workflows/ci.yml, AGENTS.md, README.md, docs/reference/architecture.md, docs/reference/plugins.md, script/build/hosts.sh, .agents/skills/codetwo-develop/references/development.md, .agents/skills/codetwo-develop/references/workflow.md, docs/sdlc/changes/2026-09-15-architecture-simplification, docs/sdlc/changes/2026-08-26-plugin-hot-reload/verification.md, docs/archive/research
 ---
 
 # Plan: Architecture simplification

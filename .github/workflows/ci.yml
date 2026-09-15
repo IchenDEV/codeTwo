@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  sdlc:
-    name: SDLC and desktop
+  test:
+    name: Validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -27,6 +27,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - uses: dtolnay/rust-toolchain@stable
       - uses: dorny/paths-filter@v3
         id: changes
         with:
@@ -36,6 +37,11 @@ jobs:
               - 'apps/desktop/tests/taskBoard*'
               - 'apps/desktop/stryker.taskboard.config.json'
               - 'apps/desktop/tsconfig.stryker.json'
+            rust:
+              - 'crates/**'
+              - 'apps/desktop/src-host/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
       - name: Install dependencies
         run: bun install --frozen-lockfile --cwd apps/desktop
       - name: SDLC checks
@@ -64,20 +70,14 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: bunx vite build
-
-  rust:
-    name: Rust workspace
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
       - name: Install Zig 0.15.2
+        if: steps.changes.outputs.rust == 'true'
         run: |
-          HOMEBREW_NO_AUTO_UPDATE=1 sudo apt-get install -y snapd || true
           curl -L https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz | tar xJ -C /tmp
           echo "/tmp/zig-x86_64-linux-0.15.2" >> "$GITHUB_PATH"
-      - name: Check workspace
+      - name: Rust workspace check
+        if: steps.changes.outputs.rust == 'true'
         run: cargo check --workspace --all-targets
-      - name: Test workspace
+      - name: Rust workspace test
+        if: steps.changes.outputs.rust == 'true'
         run: cargo test --workspace
