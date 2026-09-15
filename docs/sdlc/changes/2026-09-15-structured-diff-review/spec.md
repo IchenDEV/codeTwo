@@ -34,12 +34,12 @@ existing add/remove/hunk color tokens. It replaces the flat `<pre>` in `SourceCo
 
 ## Acceptance criteria
 
-- [ ] AC-1: `DiffResult.file_diffs` lists every `diff --git` section in order with its resolved
+- [x] AC-1: `DiffResult.file_diffs` lists every `diff --git` section in order with its resolved
       path, additions, and deletions.
-- [ ] AC-2: Hunk headers parse old/new start and count, including the omitted `,count` form, and each
+- [x] AC-2: Hunk headers parse old/new start and count, including the omitted `,count` form, and each
       line carries the correct old/new line number by kind (context both, added new, removed old).
-- [ ] AC-3: A rename populates `old_path` and a `/dev/null` side never becomes a path.
-- [ ] AC-4: Empty text and a truncated text parse without panicking, and the parsed file count never
+- [x] AC-3: A rename populates `old_path` and a `/dev/null` side never becomes a path.
+- [x] AC-4: Empty text and a truncated text parse without panicking, and the parsed file count never
       exceeds the sections present in the input.
-- [ ] AC-5: The desktop renders per-file collapsible sections with `+N −M` statistics and old/new
+- [x] AC-5: The desktop renders per-file collapsible sections with `+N −M` statistics and old/new
       line-number gutters for a real worktree diff.

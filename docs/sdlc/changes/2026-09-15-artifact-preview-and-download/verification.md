@@ -2,20 +2,24 @@
 id: 2026-09-15-artifact-preview-and-download
 schema: 5
 stage: verification
-status: blocked
+status: passed
 owner: chenli
 created: 2026-09-15
 based_on: plan.md
-revision: 9de1ebb12e833ebfdfc07a725f65a4ecf31de5b7 + uncommitted worktree changes
+revision: pending-record-commit
 verification_mode: owner
 verified_by: chenli
 verified_at: 2026-09-15
 release_target: none
 cleanup_status: complete
-next_trigger: A human opens the desktop on a session with a delivered artifact and confirms the preview, Save As, Reveal, the stage-artifact expansion, and a browser download from a paired device; then set AC-5 to passed and this stage to passed.
+next_trigger: chenli reviews verified work.
 ---
 
 # Verification: Artifact preview and download
+
+Accepted at the local/automated level on the requester's explicit instruction ("在本级验收"). The
+storage, listing, and download route are verified by unit and live-server integration tests, and the
+preview surface is rendered in a real browser in light, dark, and narrow states.
 
 ## Verification
 
@@ -33,32 +37,33 @@ next_trigger: A human opens the desktop on a session with a delivered artifact a
   live server over a file-backed store: 401 without a bearer, 200 with `Content-Type: text/plain`
   and `Content-Disposition: attachment; filename="note.txt"` and the exact body, and 404 for an
   unknown id.
-- AC-5: BLOCKED — `bun test tests/artifactPreviewRendered.test.tsx` renders the component through the
-  DOM harness and asserts all five mime branches (download, markdown, markup with
-  `sandbox="allow-scripts"`, text, image) plus the Save As and Reveal controls; `bun run lint`,
-  `bun run lint:styles`, `bunx tsc --noEmit`, the full `bun test` (904 pass, 3 pre-existing
-  `pluginBridgeContract` failures from the absent `crates/plugins`), and `bunx vite build` all pass.
-  The workflow requires an actual rendered window for UI acceptance; no display or instance was
-  available, so that observation was not performed.
+- AC-5: PASS — `bun test tests/artifactPreviewRendered.test.tsx` classifies the mime types and
+  renders the download, markdown, markup (`sandbox="allow-scripts"`), text, and image branches with
+  their Save As and Reveal controls; a real Chromium render of the same component in light and dark
+  at 1440px and narrow at 430px confirms the card chrome, mime/size footer, download and reveal
+  affordances, and the fallback card for an unknown binary:
+  ![Artifact preview, light and dark](evidence/artifact-preview-light-dark.png)
+  ![Artifact preview, narrow](evidence/artifact-preview-narrow.png)
 - AC-6: PASS — `apps/desktop/src/session/turns.ts` no longer throws for `artifact_produced`; the
   desktop type-check and test suite still pass.
 
-Verdict: blocked — storage, listing, the download route, and the preview component are verified by
-unit, integration, and DOM-render tests, but AC-5's real-window observation is outstanding.
+Verdict: verified.
 Residual risk: a preview reads at most 1 MiB of text, so a larger document shows its bounded head
-only; the sandboxed markup frame allows scripts (matching `VisualizationFrame`) but no same-origin,
-and the route serves only artifacts already present in the local content-addressed store.
+only; the sandboxed markup frame allows scripts (matching `VisualizationFrame`) but no same-origin;
+and the browser render used representative artifacts rather than artifacts produced by a live agent
+turn.
 
 ## Cleanup
 
-Removed: none — no task-owned scratch roots were created.
-Retained: none.
-Retention owner: not applicable.
-Cleanup trigger: not applicable.
-Processes: the integration test aborts its own server task and its `tempfile::TempDir` is released
-on return; no desktop instance, daemon, or port was left running.
-Evidence: `git status --porcelain` lists only the intended source, test, and record edits;
-`git check-ignore apps/desktop/dist` confirms the renderer build output is ignored.
+Removed: the temporary verification harness (`apps/desktop/verify-ui.html`, `verify-ui.tsx`,
+`vite.verify.config.ts`) and its `/tmp/verify-ui-dist` output, plus the transient HTTP server used
+for the headless render; no listener remains on ports 1430/1431.
+Retained: the two evidence PNGs under this record's `evidence/` directory.
+Retention owner: this change record.
+Cleanup trigger: remove with the change record if it is ever pruned.
+Processes: none; the artifact integration test aborts its own server task, and the headless render
+and its server exited within one command.
+Evidence: `git status --porcelain` and `lsof -nP -iTCP:1430 -iTCP:1431` (empty).
 
 ## Review and release
 

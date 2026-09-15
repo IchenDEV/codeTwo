@@ -1950,6 +1950,21 @@ mod tests {
         assert!(all.text.contains("+three"), "{}", all.text);
         let stat = diff_stat(&repo.path).await.unwrap();
         assert_eq!((stat.added, stat.deleted, stat.files), (1, 1, 1));
+
+        // The structured view is derived from the same bounded text for a real worktree change:
+        // one file, one hunk, and the staged line counted with its new-side number.
+        assert_eq!(all.file_diffs.len(), 1);
+        let file = &all.file_diffs[0];
+        assert_eq!(file.path, "both.txt");
+        assert_eq!((file.additions, file.deletions), (1, 1));
+        assert_eq!(file.hunks.len(), 1);
+        let added = file.hunks[0]
+            .lines
+            .iter()
+            .find(|line| line.kind == DiffLineKind::Added)
+            .expect("an added line");
+        assert_eq!(added.old_line, None);
+        assert!(added.new_line.is_some());
     }
 
     #[tokio::test]

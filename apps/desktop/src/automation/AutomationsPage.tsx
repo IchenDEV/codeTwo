@@ -70,6 +70,7 @@ import {
 } from "../bridge";
 import type {
   Automation,
+  AutomationAlert,
   AutomationInput,
   AutomationRun,
   AutomationRunStatus,
@@ -234,6 +235,7 @@ export function AutomationsPage({
   onAddProject,
   onOpenSession,
   headerLeadingAction,
+  subscribeToAlerts = onAutomationAlert,
 }: {
   projects: Project[];
   providers: ProviderInfo[];
@@ -242,6 +244,10 @@ export function AutomationsPage({
   onAddProject: () => void;
   onOpenSession: (session: string) => void;
   headerLeadingAction?: ReactNode;
+  /** Injected for tests; production uses the desktop bridge subscription. */
+  subscribeToAlerts?: (
+    cb: (alert: AutomationAlert) => void
+  ) => Promise<() => void>;
 }) {
   const t = useT();
   const toast = useToast();
@@ -342,7 +348,7 @@ export function AutomationsPage({
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-    void onAutomationAlert((alert) => {
+    void subscribeToAlerts((alert) => {
       const name = alert.automation_name || t("automations.title");
       toast(
         t(
@@ -374,7 +380,7 @@ export function AutomationsPage({
       unlisten = dispose;
     });
     return () => unlisten?.();
-  }, [t, toast, refresh, refreshRuns, selectedId]);
+  }, [t, toast, refresh, refreshRuns, selectedId, subscribeToAlerts]);
 
   useEffect(() => {
     if (draft) return;

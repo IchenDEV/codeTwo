@@ -54,14 +54,14 @@ of throwing.
 
 ## Acceptance criteria
 
-- [ ] AC-1: `save_document` accepts the widened allow-list and still rejects an unknown mime; the
+- [x] AC-1: `save_document` accepts the widened allow-list and still rejects an unknown mime; the
       stored ref carries the requested mime and a matching extension.
-- [ ] AC-2: `read_text` returns the stored UTF-8 body, rejects non-UTF-8 bytes, and rejects a body
+- [x] AC-2: `read_text` returns the stored UTF-8 body, rejects non-UTF-8 bytes, and rejects a body
       over its `max_bytes`.
-- [ ] AC-3: `list_for_session` returns the session's artifacts and no other session's.
-- [ ] AC-4: `GET /api/artifacts/:id` requires device auth, returns the stored bytes with the stored
+- [x] AC-3: `list_for_session` returns the session's artifacts and no other session's.
+- [x] AC-4: `GET /api/artifacts/:id` requires device auth, returns the stored bytes with the stored
       `Content-Type`, and always sends a sanitized `Content-Disposition` filename; an unknown id is
       `404`.
-- [ ] AC-5: `ArtifactPreview` renders markdown, sandboxed HTML/SVG, bounded text, and raster images
+- [x] AC-5: `ArtifactPreview` renders markdown, sandboxed HTML/SVG, bounded text, and raster images
       by mime, and exposes download and reveal for each.
-- [ ] AC-6: `artifact_produced` no longer throws in turn projection.
+- [x] AC-6: `artifact_produced` no longer throws in turn projection.

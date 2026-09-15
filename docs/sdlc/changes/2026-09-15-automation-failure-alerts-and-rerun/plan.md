@@ -6,7 +6,7 @@ status: accepted
 owner: chenli
 created: 2026-09-15
 based_on: spec.md
-scope: docs/sdlc/changes/2026-09-15-automation-failure-alerts-and-rerun/intent.md, docs/sdlc/changes/2026-09-15-automation-failure-alerts-and-rerun/spec.md, docs/sdlc/changes/2026-09-15-automation-failure-alerts-and-rerun/plan.md, docs/sdlc/changes/2026-09-15-automation-failure-alerts-and-rerun/verification.md, crates/core/src/automation.rs, apps/desktop/src-host/src/automation.rs, apps/desktop/src/electrobun/index.ts, apps/desktop/src/bridge.ts, apps/desktop/src/automation/AutomationsPage.tsx, apps/desktop/src/i18n/strings.ts, apps/desktop/tests/automationPageRendered.test.tsx
+scope: docs/sdlc/changes/2026-09-15-automation-failure-alerts-and-rerun/intent.md, docs/sdlc/changes/2026-09-15-automation-failure-alerts-and-rerun/spec.md, docs/sdlc/changes/2026-09-15-automation-failure-alerts-and-rerun/plan.md, docs/sdlc/changes/2026-09-15-automation-failure-alerts-and-rerun/verification.md, crates/core/src/automation.rs, apps/desktop/src-host/src/automation.rs, apps/desktop/src/electrobun/index.ts, apps/desktop/src/electrobun/automationAlert.ts, apps/desktop/src/bridge.ts, apps/desktop/src/automation/AutomationsPage.tsx, apps/desktop/src/i18n/strings.ts, apps/desktop/tests/automationPageRendered.test.tsx, apps/desktop/tests/automationAlert.test.ts, apps/desktop/tests/automationRunHistoryRendered.test.tsx
 ---
 
 # Plan: Automation failure alerts and rerun semantics

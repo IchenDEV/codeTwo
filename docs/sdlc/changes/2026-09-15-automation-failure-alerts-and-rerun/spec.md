@@ -53,17 +53,17 @@ No automatic retry or turn timeout is introduced.
 
 ## Acceptance criteria
 
-- [ ] AC-1: A claimed scheduled run and a manual run each persist the instruction snapshot, and the
+- [x] AC-1: A claimed scheduled run and a manual run each persist the instruction snapshot, and the
       executed prompt is the snapshot even after the automation prompt is edited.
-- [ ] AC-2: Rerunning a recorded run creates a new run that replays that run's snapshot; rerun is
+- [x] AC-2: Rerunning a recorded run creates a new run that replays that run's snapshot; rerun is
       refused while the automation has an active run and returns no run for an unknown id.
-- [ ] AC-3: A run that transitions into `failed` or `needs_attention` emits exactly one
+- [x] AC-3: A run that transitions into `failed` or `needs_attention` emits exactly one
       `automation-alert` event for that transition, with automation id, run id, name, status, and
       error; `succeeded`/`interrupted` transitions and repeated same-status updates emit none.
-- [ ] AC-4: The desktop main process shows a native OS notification for `automation-alert`.
-- [ ] AC-5: The renderer shows an alert toast with a rerun action for `automation-alert`, and the run
+- [x] AC-4: The desktop main process shows a native OS notification for `automation-alert`.
+- [x] AC-5: The renderer shows an alert toast with a rerun action for `automation-alert`, and the run
       history exposes a rerun action that appends a new run.
-- [ ] AC-6: Opening a store whose `automation_runs` predates the snapshot column succeeds, preserves
+- [x] AC-6: Opening a store whose `automation_runs` predates the snapshot column succeeds, preserves
       every existing row, and backfills the snapshot from the owning automation's prompt.
-- [ ] AC-7: Failure paths stay honest: an unknown rerun target and an active-run rerun surface an
+- [x] AC-7: Failure paths stay honest: an unknown rerun target and an active-run rerun surface an
       error rather than silently creating or dropping a run.
