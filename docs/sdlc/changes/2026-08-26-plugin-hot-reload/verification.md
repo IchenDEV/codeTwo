@@ -19,7 +19,7 @@ release_identity: ""
 ## Automated checks
 
 The implementation contains targeted reload and developer-mode integration coverage in
-`crates/plugins/tests/project_bundle_runtime.rs`, plus bridge and rendered settings tests under
+`crates/core/src/plugins/app/bundle_runtime.rs`, plus bridge and rendered settings tests under
 `apps/desktop/tests`. On 2026-08-29, focused desktop coverage passed 4 tests with 46 assertions.
 The Rust reload/developer tests were attempted but did not start because the unchanged
 `libghostty-vt-sys` build failed first with Zig's `use of undeclared identifier 'INFINITY'` error.
@@ -30,7 +30,7 @@ Verdict: verified.
 
 ### Acceptance evidence
 
-- AC-1: PASS — [`project_bundle_runtime.rs`](../../../../crates/plugins/tests/project_bundle_runtime.rs) retains targeted runtime-reload coverage.
+- AC-1: PASS — [`project_bundle_runtime.rs`](../../../../crates/core/src/plugins/app/bundle_runtime.rs) retains targeted runtime-reload coverage.
 - AC-2: PASS — `bun test` focused desktop coverage passed 4 tests with 46 assertions on 2026-08-29.
 - AC-3: PASS — [`apps/desktop/tests`](../../../../apps/desktop/tests) retains bridge and rendered settings coverage.
 - AC-4: PASS — [`plugins.md`](../../../reference/plugins.md#developing-an-installed-bundle) documents the installed-directory and native-plugin boundaries.
@@ -41,7 +41,7 @@ blocker; repository integration evidence does not prove public product release.
 ## Behavioral evidence
 
 The implementation contains targeted reload and developer-mode integration coverage in
-`crates/plugins/tests/project_bundle_runtime.rs`, plus bridge and rendered settings tests under
+`crates/core/src/plugins/app/bundle_runtime.rs`, plus bridge and rendered settings tests under
 `apps/desktop/tests`. On 2026-08-29, focused desktop coverage passed 4 tests with 46 assertions.
 The Rust reload/developer tests were attempted but did not start because the unchanged
 `libghostty-vt-sys` build failed first with Zig's `use of undeclared identifier 'INFINITY'` error.
@@ -52,7 +52,7 @@ Verdict: verified.
 
 ### Acceptance evidence
 
-- AC-1: PASS — [`project_bundle_runtime.rs`](../../../../crates/plugins/tests/project_bundle_runtime.rs) retains targeted runtime-reload coverage.
+- AC-1: PASS — [`project_bundle_runtime.rs`](../../../../crates/core/src/plugins/app/bundle_runtime.rs) retains targeted runtime-reload coverage.
 - AC-2: PASS — `bun test` focused desktop coverage passed 4 tests with 46 assertions on 2026-08-29.
 - AC-3: PASS — [`apps/desktop/tests`](../../../../apps/desktop/tests) retains bridge and rendered settings coverage.
 - AC-4: PASS — [`plugins.md`](../../../reference/plugins.md#developing-an-installed-bundle) documents the installed-directory and native-plugin boundaries.

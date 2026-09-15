@@ -51,7 +51,7 @@ use codetwo_core::{
     TaskBudget, TaskHandoffManager, TaskId, TaskStatus, TranscriptCursor, TranscriptEntry,
     DEFAULT_TRANSCRIPT_TURNS,
 };
-use codetwo_plugins::PluginManager;
+use codetwo_core::plugins::PluginManager;
 
 const MAX_HANDOFF_BODY_BYTES: usize = 384 * 1024 * 1024;
 const MAX_DEVICE_SYNC_BODY_BYTES: usize = 64 * 1024 * 1024;

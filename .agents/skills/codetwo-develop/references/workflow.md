@@ -199,7 +199,7 @@ authorization; reuse authorization for the same unexecuted target, never infer i
 
 | Repository mechanism | What it proves |
 | --- | --- |
-| [CI / Test](../../../../.github/workflows/ci.yml) | One PR/main check for records, scope, PR readiness, documentation, Gate regressions, desktop lint/types/tests, conditional TaskBoard mutation tests, and renderer build |
+| [CI](../../../../.github/workflows/ci.yml) | Records, scope, PR readiness, documentation, Gate regressions, desktop lint/types/tests, conditional TaskBoard mutation tests, renderer build, and conditional Rust workspace check/test |
 | [Windows desktop](../../../../.github/workflows/windows-desktop.yml) | Manually dispatched compatibility and package checks |
 | [Pages](../../../../.github/workflows/pages.yml) | Documentation site build/deployment when triggered |
 | [Nightly macOS](../../../../.github/workflows/nightly-macos.yml) | Scheduled development package; not a versioned release approval |

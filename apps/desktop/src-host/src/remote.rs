@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use codetwo_core::{Engine, Event, Member, MemberId, Store, WorkspaceId, WorkspaceRole};
-use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
-use codetwo_plugins::{CanvasService, EngineService, EventBus, PluginManager, StoreService};
+use codetwo_core::kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
+use codetwo_core::plugins::{CanvasService, EngineService, EventBus, PluginManager, StoreService};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast;

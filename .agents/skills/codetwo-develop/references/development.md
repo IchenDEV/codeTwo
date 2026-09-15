@@ -51,11 +51,8 @@ are documented in [Providers](../../../../website/guide/providers.md).
 From the repository root:
 
 ```sh
-# Build the TUI, server, shared Web UI, and Bun Tool Broker
+# Build the server, shared Web UI, and Bun Tool Broker
 ./script/build/hosts.sh release
-
-# Terminal interface
-./target/release/codetwo-tui
 
 # Paired compact remote client
 ./target/release/codetwo-server

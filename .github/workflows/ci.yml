@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   test:
-    name: Test
+    name: Validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -27,6 +27,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - uses: dtolnay/rust-toolchain@stable
       - uses: dorny/paths-filter@v3
         id: changes
         with:
@@ -36,12 +37,14 @@ jobs:
               - 'apps/desktop/tests/taskBoard*'
               - 'apps/desktop/stryker.taskboard.config.json'
               - 'apps/desktop/tsconfig.stryker.json'
+            rust:
+              - 'crates/**'
+              - 'apps/desktop/src-host/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
       - name: Install dependencies
         run: bun install --frozen-lockfile --cwd apps/desktop
-      - name: Test
-        env:
-          TASKBOARD_CHANGED: ${{ steps.changes.outputs.taskboard }}
-          NODE_OPTIONS: --max-old-space-size=4096
+      - name: SDLC checks
         run: |
           bun test script/verify/checks.test.ts script/verify/four-stage.test.ts script/devflow.test.ts
           bun script/verify/docs.ts
@@ -50,11 +53,31 @@ jobs:
           else
             bun script/verify/sdlc.ts
           fi
-          cd apps/desktop
+      - name: Desktop lint and typecheck
+        working-directory: apps/desktop
+        run: |
           bun run check
           bunx tsc --noEmit
-          bun run test:ci
-          if [ "$TASKBOARD_CHANGED" = "true" ]; then
-            bun run mutation:taskboard
-          fi
-          bunx vite build
+      - name: Desktop tests
+        working-directory: apps/desktop
+        run: bun run test:ci
+      - name: TaskBoard mutation testing
+        if: steps.changes.outputs.taskboard == 'true'
+        working-directory: apps/desktop
+        run: bun run mutation:taskboard
+      - name: Build desktop renderer
+        working-directory: apps/desktop
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: bunx vite build
+      - name: Install Zig 0.15.2
+        if: steps.changes.outputs.rust == 'true'
+        run: |
+          curl -L https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz | tar xJ -C /tmp
+          echo "/tmp/zig-x86_64-linux-0.15.2" >> "$GITHUB_PATH"
+      - name: Rust workspace check
+        if: steps.changes.outputs.rust == 'true'
+        run: cargo check --workspace --all-targets
+      - name: Rust workspace test
+        if: steps.changes.outputs.rust == 'true'
+        run: cargo test --workspace

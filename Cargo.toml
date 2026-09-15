@@ -1,15 +1,14 @@
 # C2 — a document-first coding-agent app.
-# Cargo workspace. Members are added as each milestone lands:
-#   crates/core          (M0/M1) — the shared brain: ACP client, sessions, skills, ...
-#   crates/tui           (M3)    — ratatui frontend, links core
-#   apps/desktop/src-host  (M2)  — native desktop sidecar, links core
+# Cargo workspace:
+#   crates/core          — unified product engine: kernel + domain + plugins + protocol
+#   crates/napi          — NAPI native addon bridge for Bun/Node (loads CoreApp in-process)
+#   crates/server        — headless Axum server, WebSocket, remote/web UI
+#   apps/desktop/src-host — Electrobun desktop sidecar (legacy JSON-lines bridge, being replaced by napi)
 [workspace]
 resolver = "2"
 members = [
-    "crates/kernel",
     "crates/core",
-    "crates/plugins",
-    "crates/tui",
+    "crates/napi",
     "crates/server",
     "apps/desktop/src-host",
 ]
@@ -31,9 +30,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 tracing = "0.1"
 
 # Local crates
-codetwo-kernel = { path = "crates/kernel" }
 codetwo-core = { path = "crates/core" }
-codetwo-plugins = { path = "crates/plugins" }
 
 [patch.crates-io]
 # 0.2.1 links Ghostty's Windows static archive under the Unix library name. Keep the published

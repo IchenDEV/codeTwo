@@ -1,10 +1,11 @@
-//! C2 core — product domain and execution capabilities shared by every host.
+//! C2 core — the unified product engine.
 //!
-//! Nothing in here depends on a UI, Kernel lifecycle, extension Bundle, or host protocol. The
-//! `codetwo-plugins` crate adapts these capabilities into runtime modules and exposes `CoreApp` to
-//! desktop, TUI, and server hosts.
+//! Contains the reactive plugin kernel, product domain, execution capabilities, built-in adapters,
+//! extension bundle management, and plugin protocol. Every host (desktop, server) depends on this
+//! single crate.
 //!
 //! Module map:
+//! - [`kernel`] — Cordis-style reactive plugin runtime: contexts, services, injections, commands.
 //! - [`acp`] — Agent Client Protocol client (JSON-RPC over stdio) used to drive provider CLIs.
 //! - [`provider`] — registry of provider launch specs (Claude Code / Codex / Grok).
 //! - [`models`] — built-in model lists for providers that don't report their own over ACP.
@@ -14,6 +15,8 @@
 //! - [`event`] — the Op/Event types exchanged with frontends.
 //! - [`error`] — shared error types.
 
+pub mod kernel;
+pub mod plugins;
 pub mod acp;
 pub mod activity;
 pub mod agent_skill_v2;

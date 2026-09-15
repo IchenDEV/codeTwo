@@ -40,7 +40,7 @@ GitHub compare 在冻结点与复核终点之间显示 **9 个 commit、67 个�
 
 CodeTwo 的精确重启故障已被另一种设计规避：[`Store::normalize_interrupted_activities`](../../../crates/core/src/store.rs) 在新进程展示 session list 前，把持久化的 `Running/AwaitingInput` 转成不可操作的 `Interrupted`；不存在 callback 的旧 pending input 不会继续呈现为可回答卡片。
 
-但当前 [`engine.answer_permission`](../../../crates/plugins/src/app/plugins/engine.rs) command 在 `Engine::submit(Op::AnswerPermission)` 成功后固定返回 `true`，而 [`Engine::answer_permission`](../../../crates/core/src/engine.rs) 本身已经能对 wrong-session、unknown、duplicate request 返回 `false`。Desktop 因此无法得到真实业务确认。`ActivityTracker::answer_permission` 还会忽略 oneshot receiver 已关闭时的 `send` 结果。
+但当前 [`engine.answer_permission`](../../../crates/core/src/plugins/app/plugins/engine.rs) command 在 `Engine::submit(Op::AnswerPermission)` 成功后固定返回 `true`，而 [`Engine::answer_permission`](../../../crates/core/src/engine.rs) 本身已经能对 wrong-session、unknown、duplicate request 返回 `false`。Desktop 因此无法得到真实业务确认。`ActivityTracker::answer_permission` 还会忽略 oneshot receiver 已关闭时的 `send` 结果。
 
 ### [推断或建议]
 

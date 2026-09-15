@@ -41,9 +41,9 @@ whole turn, and only then send it to the agent you choose.
   derived memories retain their sources and can be pinned or forgotten.
 - **Git-aware execution.** Use per-session worktrees, automatic checkpoints, diffs, revert, and
   explicit commit/push flows.
-- **Three surfaces.** C2 ships an Electrobun desktop app, a ratatui TUI, and a paired remote web
-  client. All three compose the same Rust Core through the same plugin runtime; Electrobun is the
-  desktop shell and relays one command/event protocol to its bundled Rust host.
+- **Two surfaces.** C2 ships an Electrobun desktop app and a paired remote web client. Both
+  compose the same Rust Core through the same plugin runtime; Electrobun is the desktop shell
+  and relays one command/event protocol to its bundled Rust host.
 
 ## How it fits together
 
@@ -55,10 +55,10 @@ Claude Code · Codex · Grok · Cursor · OpenCode 1 · OpenCode 2 · Pi · Kimi
                  Rust product core
                          │
                Plugin composition layer
-                    ┌─────────┼─────────┐
-                    │         │         │
-                Desktop      TUI      Remote
-          Electrobun + React  ratatui  Axum + WebSocket
+                    ┌─────────┴─────────┐
+                    │                   │
+                Desktop              Remote
+          Electrobun + React    Axum + WebSocket
 ```
 
 C2's internals form a runtime-module graph inspired by
@@ -83,10 +83,8 @@ For package channels, signing limitations, and authorized publication, use the
 
 | Path                             | Purpose                                                                     |
 | -------------------------------- | --------------------------------------------------------------------------- |
-| [`crates/kernel`](crates/kernel) | Reactive plugin runtime and command registry                                |
-| [`crates/core`](crates/core)     | Plugin-independent product domain: ACP, sessions, providers, policy, and persistence |
-| [`crates/plugins`](crates/plugins) | Core adapters, built-in runtime graph, extension bundles, protocol, and marketplace |
-| [`crates/tui`](crates/tui)       | ratatui frontend                                                            |
+| [`crates/core`](crates/core)     | Unified engine: kernel runtime, product domain, built-in plugins, protocol  |
+| [`crates/napi`](crates/napi)     | NAPI native addon bridge for Bun/Node (loads CoreApp in-process)            |
 | [`crates/server`](crates/server) | Headless server, pairing, WebSocket protocol, and remote client             |
 | [`apps/desktop`](apps/desktop)   | Electrobun + React + BlockNote desktop app                                  |
 | [`packages/tool-broker`](packages/tool-broker) | Provider-neutral special-tool catalog and immutable routing plans |

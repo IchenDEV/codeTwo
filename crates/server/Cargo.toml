@@ -20,8 +20,7 @@ name = "codetwo-agent"
 path = "src/bin/codetwo-agent.rs"
 
 [dependencies]
-codetwo-core = { workspace = true, features = ["terminal"] }
-codetwo-plugins.workspace = true
+codetwo-core.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
