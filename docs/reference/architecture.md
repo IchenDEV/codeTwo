@@ -49,29 +49,25 @@ command invocation starts the process. Spec:
 ## Layers
 
 ```
-   crates/core                         crates/kernel
-   product domain and execution       generic plugin lifecycle
-             │                              │
-             └──────────┐      ┌────────────┘
-                        ▼      ▼
-                  crates/plugins
-       built-in adapters, CoreApp, Bundles and protocol
-                 │          │          │
-                 ▼          ▼          ▼
-            crates/tui  crates/server  apps/desktop/src-host
-                                      (CoreApp + desktop host modules)
-                      │ versioned JSON-lines commands + events
-   apps/desktop/src/electrobun + browser/electrobun.ts  (platform implementation)
+                     crates/core
+   unified engine: kernel + product domain + plugins + protocol
+                 │                    │
+                 ▼                    ▼
+          crates/server        apps/desktop/src-host
+          (Axum + WebSocket)   (CoreApp + desktop host modules)
+                                     │
+                              crates/napi (NAPI native addon bridge)
+                                     │
+   apps/desktop/src/electrobun  (Bun platform — loads codetwo.node)
                       │
    apps/desktop/src/container.ts  (the renderer's only desktop-shell port)
                       │ typed capabilities; no Electrobun imports above this line
    apps/desktop/src/bridge.ts + product content  (React + Vite + BlockNote)
 ```
 
-The forbidden edges are part of the design: `codetwo-core` must not depend on
-`codetwo-kernel` or `codetwo-plugins`, and `codetwo-kernel` remains product-agnostic. Shared
-composition belongs in `codetwo-plugins`; a host may additionally provide platform-specific
-Kernel modules, but those modules must not leak back into Core.
+The kernel, product domain, and plugin composition are unified in `crates/core` as internal
+modules (`core::kernel`, `core::plugins`). The kernel module remains product-agnostic
+internally, but lives in the same crate for dependency simplicity.
 
 Compact host actions follow that boundary without a second plugin model. Bundles reuse the existing
 `ui` contribution and `plugins.invoke_ui` path through the semantic `host.actions` slot. Electrobun

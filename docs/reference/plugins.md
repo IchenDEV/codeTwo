@@ -12,7 +12,7 @@ rules, see the [C2 Plugin Standard 1.2.0](plugin-standard.md). This document foc
 implementation and rationale.
 
 The internal model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
-[`crates/kernel`](../../crates/kernel). Cordis' claim is that an application is not a program with
+[`crates/core/src/kernel`](../../crates/core/src/kernel). Cordis' claim is that an application is not a program with
 extension points bolted on; it is a graph of plugins that happens to boot. We agree, and this is
 what taking that seriously looks like in a Rust codebase.
 

@@ -4,6 +4,12 @@ Follow the global Codex contract and the repository's existing architecture and 
 changes narrowly scoped, preserve unrelated worktree state, and verify claims against the live
 checkout.
 
+## Architecture
+
+Three Rust crates: `crates/core` (unified engine: kernel + domain + plugins), `crates/napi`
+(NAPI native addon for Bun), `crates/server` (Axum WebSocket + web UI). One desktop app at
+`apps/desktop` (Electrobun + React). Plugin packs under `packs/` follow Plugin Standard 1.2.
+
 ## Development lifecycle
 
 - Project procedures belong to the matching Skill: [develop](.agents/skills/codetwo-develop/SKILL.md),

@@ -83,9 +83,8 @@ For package channels, signing limitations, and authorized publication, use the
 
 | Path                             | Purpose                                                                     |
 | -------------------------------- | --------------------------------------------------------------------------- |
-| [`crates/kernel`](crates/kernel) | Reactive plugin runtime and command registry                                |
-| [`crates/core`](crates/core)     | Plugin-independent product domain: ACP, sessions, providers, policy, and persistence |
-| [`crates/plugins`](crates/plugins) | Core adapters, built-in runtime graph, extension bundles, protocol, and marketplace |
+| [`crates/core`](crates/core)     | Unified engine: kernel runtime, product domain, built-in plugins, protocol  |
+| [`crates/napi`](crates/napi)     | NAPI native addon bridge for Bun/Node (loads CoreApp in-process)            |
 | [`crates/server`](crates/server) | Headless server, pairing, WebSocket protocol, and remote client             |
 | [`apps/desktop`](apps/desktop)   | Electrobun + React + BlockNote desktop app                                  |
 | [`packages/tool-broker`](packages/tool-broker) | Provider-neutral special-tool catalog and immutable routing plans |
