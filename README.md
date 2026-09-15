@@ -72,7 +72,7 @@ lifecycle, scope, security, and host behavior follow the
 ## Build from source
 
 Start with [source setup and local development](.agents/skills/codetwo-develop/references/development.md). It covers the pinned
-Zig toolchain, desktop launch, TUI/server builds, and relevant checks. Provider setup is in the
+Zig toolchain, desktop launch, server builds, and relevant checks. Provider setup is in the
 [user guide](website/guide/providers.md).
 
 For package channels, signing limitations, and authorized publication, use the

@@ -90,6 +90,6 @@ initialize → session/new → session/prompt → stream session/update
            → answer session/request_permission → read StopReason
 ```
 
-正是这层统一传输，让桌面端、TUI 和远程客户端可以共享与 Provider 无关的会话与事件模型。
+正是这层统一传输，让桌面端和远程客户端可以共享与 Provider 无关的会话与事件模型。
 
 支持 MCP 的 Provider 可以在会话开始时接收额外工具。C2 的 MCP Server 来自 **MCP Skill**；完整说明见[技能文档（英文）](/guide/editor#skill-kinds)和[市场（英文）](/guide/market)。

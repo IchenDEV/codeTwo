@@ -4,7 +4,7 @@ Status: **current implementation contract**. Source code wins when this document
 checkout disagree.
 
 C2 drives existing coding CLIs (Claude Code, Codex, Grok) over the **Agent Client
-Protocol (ACP)** and presents them through a **document-first** UI. The desktop, TUI, and server all
+Protocol (ACP)** and presents them through a **document-first** UI. The desktop and server both
 compose the same plugin-independent Rust Core through one plugin runtime. Electrobun is a
 desktop-shell adapter, not a second business runtime.
 
@@ -13,19 +13,18 @@ desktop-shell adapter, not a second business runtime.
 - **ACP is the common abstraction.** JSON-RPC over stdio supports native ACP CLIs and adapters
   through one provider registry. We implement the client loop once and treat each backend as a
   launch command.
-- **Core has one direction of dependency.** `codetwo-core` owns product behavior and knows nothing
-  about plugin lifecycle, extension Bundles, or host protocols. `codetwo-plugins` depends on Core
-  and the generic Kernel, adapting Core capabilities into the shared `CoreApp` graph. The TUI,
-  server, and desktop host depend on that composition layer. The desktop packages
+- **One crate owns the whole stack.** `codetwo-core` contains the kernel runtime, product behavior,
+  the plugin composition root, extension Bundle management, and host protocols. The server, NAPI
+  addon, and desktop host depend on that single crate. The desktop packages
   `codetwo-desktop-host`, which boots the same graph plus desktop-owned
   automation, device-sync, event, language-server, and remote adapters. Bun owns windows, dialogs,
   updates, native action adapters, and the narrow JSON-lines process transport.
 
 ## Shape: an internal runtime-module graph
 
-Everything below is a kernel **runtime module**. `crates/kernel` is a Rust port of
+Everything below is a kernel **runtime module**. `crates/core/src/kernel` is a Rust port of
 [cordis](https://github.com/cordiverse/cordis): contexts, services published by name, declared
-injections, and scopes that undo everything a plugin did when it unloads. `crates/plugins` owns the
+injections, and scopes that undo everything a plugin did when it unloads. `crates/core/src/plugins` owns the
 composition root, built-in adapters, extension Bundle management, and process protocol;
 `CoreApp::boot(AppConfig)` assembles them from config rather than from a constructor.
 
@@ -99,13 +98,15 @@ plus three merge retries so a concurrent writer yields an explicit conflict inst
 Frontends never touch ACP directly. They push [`Op`]s (NewSession, Prompt, Cancel,
 AnswerPermission, …) and consume [`Event`]s (AgentText, ToolCall, PermissionRequest, TurnEnded, …).
 - Electrobun desktop: the renderer makes one typed `call` RPC; Bun relays it to the bundled Rust
-  Plugin Kernel, and reverse event envelopes carry engine, terminal, automation, and LSP streams.
-- TUI: calls the same core engine in-process, renders `Event`s in its draw loop.
+  host and, in-process, to the NAPI addon, and reverse event envelopes carry engine, terminal,
+  automation, and LSP streams.
+- NAPI addon and server: `crates/napi` loads the same `CoreApp` in-process for Bun, and
+  `codetwo-server` exposes it over WebSocket.
 
 The Rust M1 engine consumes `Op`s and, by driving `core::acp`, produces `Event`s. Its ACP
 `ClientHandler` translates `session/update` → `Event`s and routes `session/request_permission`
 through the permission engine (auto-answer or surface an `Ask`). Desktop permission and sandbox
-modes therefore have the same semantics as the TUI/server; a displayed policy is still not an
+modes therefore have the same semantics as the server; a displayed policy is still not an
 OS-enforced sandbox unless the selected provider supplies one.
 
 ## ACP client (`core::acp`)
@@ -153,7 +154,7 @@ short routing/safety instructions. It never contains a provider-private endpoint
                              │
                         Rust CoreApp
                ┌─────────────┼─────────────┐
-     Electrobun desktop   ratatui TUI   Axum server
+     Electrobun desktop   NAPI addon   Axum server
 
  SelectionStore ── host-tools.json
        ▲                    │
@@ -224,7 +225,7 @@ durable learning.
 A skill has one of four kinds: `Fragment`, `AgentSkill`, `Mcp`, `Macro`. The document editor
 serializes to neutral `DocBlock`s (text + skill blocks); `compile()` lowers them into a
 `CompiledPrompt` = the markdown prompt (for `session/prompt`) plus MCP servers and agent-skills (for
-`session/new`). The compiler lives in the core so the TUI reuses it verbatim.
+`session/new`). The compiler lives in the core so every frontend reuses it verbatim.
 
 ## Terminal (`core::term`, `core::pty`)
 
@@ -237,8 +238,8 @@ The point of putting that state in the core is that **a terminal outlives whatev
 Terminals are keyed by a stable id (`<session>-<slot>[-tmux]`), and attaching to one returns a VT
 dump of its scrollback, screen, and cursor. A dock tab switch, a session change, or an app restart
 re-attaches and replays; only closing the tab kills the child. It also means the terminal is
-*readable*: `TerminalHandle::text` hands plain text to the agent, and the TUI can render the same
-grid without a second emulator.
+*readable*: `TerminalHandle::text` hands plain text to the agent, and a frontend can render the
+same grid without a second emulator.
 
 `libghostty-vt` is `!Send`, so each terminal owns a dedicated thread reached over a command
 channel; the PTY reader feeds the same queue, which is why VT state is never observed mid-write.

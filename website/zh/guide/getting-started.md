@@ -6,7 +6,7 @@ C2 尚未发布预编译安装包，需要从源码运行。项目由 Cargo 工�
 
 | 工具 | 用途 | 说明 |
 | --- | --- | --- |
-| **Rust**（1.82+） | 构建核心、TUI、服务端和桌面端 sidecar | [rustup.rs](https://rustup.rs) |
+| **Rust**（1.82+） | 构建核心、服务端、NAPI 插件和桌面端 sidecar | [rustup.rs](https://rustup.rs) |
 | **Zig**（必须为 0.15.2） | 构建内嵌的 Ghostty 终端引擎 | [ziglang.org](https://ziglang.org/download/) |
 | **Bun** | 构建 Electrobun 宿主和桌面端渲染器 | [bun.sh](https://bun.sh) |
 | **git** | 工作树、检查点和版本控制 | 通常已安装 |
@@ -46,7 +46,7 @@ git clone https://github.com/IchenDEV/codeTwo
 cd codeTwo
 
 # 构建并运行离线测试套件：使用模拟 ACP 智能体、真实 git 和真实 PTY
-cargo test -p codetwo-core -p codetwo-tui -p codetwo-server
+cargo test -p codetwo-core -p codetwo-server
 ```
 
 ## 运行桌面应用
@@ -55,12 +55,6 @@ cargo test -p codetwo-core -p codetwo-tui -p codetwo-server
 cd apps/desktop
 bun install --frozen-lockfile
 bun run dev              # 构建渲染器与 Rust sidecar，并打开 Electrobun 窗口
-```
-
-## 运行 TUI
-
-```sh
-cargo run -p codetwo-tui
 ```
 
 ## 运行远程控制服务

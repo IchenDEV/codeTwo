@@ -179,7 +179,6 @@ export default defineConfig({
             { text: "Keybindings & palette", link: "/guide/keybindings" },
             { text: "Terminal & tmux", link: "/guide/terminal" },
             { text: "Remote control", link: "/guide/remote" },
-            { text: "The TUI", link: "/guide/tui" },
           ],
         },
       ],

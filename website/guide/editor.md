@@ -94,8 +94,8 @@ When you run, C2 compiles the document into a `CompiledPrompt`:
 - **mcpServers** — servers from MCP skills, attached when the session is created.
 - **agentSkills** — provider-native skills referenced.
 
-The compiler lives in the Rust core, so the TUI produces identical prompts from the same building
-blocks. Unknown skill ids are surfaced as a warning rather than silently dropped.
+The compiler lives in the Rust core, so the remote client produces identical prompts from the
+same building blocks. Unknown skill ids are surfaced as a warning rather than silently dropped.
 
 ## Managing your library
 

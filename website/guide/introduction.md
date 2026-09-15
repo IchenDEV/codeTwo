@@ -35,8 +35,8 @@ actions.
 
 ## What it shares with the category
 
-- One GUI (and TUI) over **nine agent CLIs** — Claude Code, Codex, Grok, Cursor, OpenCode 1,
-  OpenCode 2, Pi, Kimi, ZCode/GLM — via the
+- One GUI over **eleven agent CLIs** — Claude Code, Codex, Grok, Cursor, OpenCode 1,
+  OpenCode 2, Pi, Kimi, ZCode/GLM, Amp, Droid — via the
   [Agent Client Protocol](/guide/providers).
 - **Git worktree** isolation per session, **checkpoints/diff/revert**, and commit/push from the UI.
   See [Git](/guide/git).
@@ -52,14 +52,13 @@ skills, git, and the PTY. Three frontends link it:
 | Surface | Stack |
 | --- | --- |
 | Desktop | Electrobun + React + BlockNote + Rust sidecar |
-| Terminal | ratatui |
 | Remote | Axum WebSocket + T3 Code mobile compatibility + a mobile web client |
 
 Read more in the [Architecture](/reference/architecture) reference.
 
 ## Status
 
-C2 is early but functional and heavily tested (offline test suite across the core, TUI, and
+C2 is early but functional and heavily tested (an offline test suite across the core and
 server). C2 does not ship its own native mobile binary; the remote listener works with T3 Code
 mobile over a local LAN or Tailscale tailnet instead. Hosted relay access and a visual browser
 element-picker remain out of scope. See the [FAQ](/reference/faq).

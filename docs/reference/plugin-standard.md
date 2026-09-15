@@ -19,7 +19,7 @@ possible.
 | **Bundle** | An installable, versioned directory of metadata, data, and optional code. Installation is data-only. | One root `plugin.json` |
 | **Contribution** | Declarative content such as a Skill, MCP definition, Scene, Pipeline, scaffold, or C2-owned UI descriptor. | Component-specific schema or file convention |
 | **Runtime module** | Behavior loaded into the graph: a compiled `Plugin` or a trusted child process. | Commands, events, services, dependencies, and cleanup |
-| **Host adapter** | The narrow implementation that connects a runtime module to Rust, Electrobun/Bun, TUI, server, or a native OS service. | Host capability profile and the typed `call` boundary |
+| **Host adapter** | The narrow implementation that connects a runtime module to Rust, Electrobun/Bun, server, or a native OS service. | Host capability profile and the typed `call` boundary |
 | **Policy** | Durable user/project intent, trust, configuration, recovery, and lifecycle decisions. | `catalog -> plan_change -> apply_change`, plus `reset` |
 
 Runtime modules also have a product role: **Core** is host-owned and not controlled by extension
@@ -350,11 +350,11 @@ Plugin boundaries for current features are fixed as follows:
 
 ## 7. Host capability profiles
 
-The Rust core is the reference C2 1.2 runtime. The TUI and server may intentionally omit UI or
+The Rust core is the reference C2 1.2 runtime. The server may intentionally omit UI or
 host-native plugins through configuration while retaining the same graph and command semantics.
 
 The Electrobun desktop packages the reference runtime as `codetwo-desktop-host`. That executable
-boots the same `CoreApp` and managed plugin graph used by the TUI and server, then adds desktop-owned
+boots the same `CoreApp` and managed plugin graph used by the server, then adds desktop-owned
 automation, device-sync, language-server, event, and remote adapters. Electrobun owns windows,
 dialogs, updates, manual webviews, native action adapters, and one versioned command/event
 relay; it does not implement plugin lifecycle.

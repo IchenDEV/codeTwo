@@ -203,7 +203,7 @@ pub trait Plugin: Send + Sync + 'static {
 /// A plugin from a plain closure, for the small ones that do not deserve a type.
 ///
 /// ```no_run
-/// # use codetwo_kernel::{App, FnPlugin};
+/// # use codetwo_core::kernel::{App, FnPlugin};
 /// # async fn demo(app: &App) {
 /// app.ctx().plugin(
 ///     FnPlugin::new("greeter", |ctx, _config| async move {

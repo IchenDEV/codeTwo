@@ -94,6 +94,6 @@ block is never persisted as a user-authored message.
 - Derived capture is intentionally conservative and can miss an implicit preference or decision.
 - Search is lexical, not embedding-based; it works offline but will miss some semantic matches.
 - The desktop app exposes inspection controls today. The core data remains available to other
-  frontends, but the TUI and remote UI do not yet have a memory manager.
+  frontends, but the remote UI does not yet have a memory manager.
 - Disabling recall leaves stored rows untouched. **Forget** deactivates an editable derived row;
   **Undo** reactivates it. Raw transcripts and the L3 profile are inspection-only.

@@ -41,6 +41,6 @@ prompt — rules included, skills expanded, macros substituted, and `@`-mentione
 That's byte-for-byte what goes to the agent.
 
 ::: tip
-Because rules are applied at compile time by the core, the [TUI](/guide/tui) and
-[remote](/guide/remote) sessions get them too — not just the desktop app.
+Because rules are applied at compile time by the core, [remote](/guide/remote) sessions get
+them too — not just the desktop app.
 :::

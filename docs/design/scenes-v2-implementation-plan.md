@@ -33,7 +33,7 @@ creation, revisioned graph changes, Work Item attempt results, user controls, an
 Snapshots. It hides planner validation, serial scheduling, Session leasing, capability readiness,
 budgets, loop detection, Artifact provenance, and crash recovery.
 
-The desktop, TUI, server, and plugins consume the same SQ/EQ events and snapshots. Provider
+The desktop, server, and plugins consume the same SQ/EQ events and snapshots. Provider
 inference remains behind existing ACP Sessions. The first release uses ordinary CodeTwo Sessions
 for execution and does not treat provider-native subagents as controllable Work Item Agents.
 
@@ -321,7 +321,7 @@ integration edits until the owning module and its tests already exist.
 - Expose Task start, control, patch proposal handling, and snapshot refresh through shared Core
   operations and events.
 - Include request correlation and revision receipts.
-- Update exhaustive Desktop, TUI, and server event consumers with safe unsupported rendering.
+- Update exhaustive desktop and server event consumers with safe unsupported rendering.
 - Add serialization, old-client fallback, and event-order tests.
 
 #### Commit 26: Add a thin desktop Task state adapter

@@ -7,7 +7,7 @@ Electrobun desktop shell and Bun-built React renderer.
 
 | Tool                     | Why                                         | Notes                                         |
 | ------------------------ | ------------------------------------------- | --------------------------------------------- |
-| **Rust** (1.82+)         | builds the core, TUI, server, and desktop sidecar | [rustup.rs](https://rustup.rs)           |
+| **Rust** (1.82+)         | builds the core, server, NAPI addon, and desktop sidecar | [rustup.rs](https://rustup.rs)     |
 | **Zig** (0.15.2 exactly) | builds the embedded Ghostty terminal engine | [ziglang.org](https://ziglang.org/download/)  |
 | **Bun**                  | builds the Electrobun shell, renderer, and Tool Broker | [bun.sh](https://bun.sh)            |
 | **git**                  | worktrees, checkpoints, source control      | usually already installed                     |
@@ -49,7 +49,7 @@ git clone https://github.com/IchenDEV/codeTwo
 cd codeTwo
 
 # Build + run the offline test suite (uses a mock ACP agent, real git, real pty)
-cargo test -p codetwo-core -p codetwo-tui -p codetwo-server
+cargo test -p codetwo-core -p codetwo-server
 ```
 
 ## Run the desktop app
@@ -58,12 +58,6 @@ cargo test -p codetwo-core -p codetwo-tui -p codetwo-server
 cd apps/desktop
 bun install --frozen-lockfile
 bun run dev              # builds the renderer + Rust sidecar and opens Electrobun
-```
-
-## Run the TUI
-
-```sh
-cargo run -p codetwo-tui
 ```
 
 ## Run remote control
