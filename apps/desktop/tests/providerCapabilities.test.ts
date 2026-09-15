@@ -230,6 +230,48 @@ describe("provider capability wire compatibility", () => {
     ).toBe("ready");
   });
 
+  test("gates Computer Use on the OpenAI signature instead of a pinned host version", () => {
+    for (const hostVersion of ["99.0.0", "1.2.3", null]) {
+      const evidence: HostToolEvidence = { ...readyEvidence, hostVersion };
+      const codex = projectProviderToolset(evidence, "codex");
+      const claude = projectProviderToolset(evidence, "claude_code");
+      expect(
+        codex.capabilities.find((item) => item.id === "computer_use")
+      ).toMatchObject({
+        state: "ready",
+        reason: "The signed OpenAI Computer Use service is available to Codex.",
+      });
+      expect(
+        claude.capabilities.find((item) => item.id === "computer_use")?.state
+      ).toBe("ready");
+      for (const toolset of [codex, claude]) {
+        for (const capability of toolset.capabilities) {
+          expect(`${capability.reason} ${capability.fix ?? ""}`).not.toContain(
+            "verified range"
+          );
+        }
+      }
+    }
+  });
+
+  test("keeps Computer Use unavailable for an unsigned host with no version", () => {
+    const unsigned: HostToolEvidence = {
+      ...readyEvidence,
+      hostPresent: true,
+      hostVerified: false,
+      hostVersion: null,
+    };
+    const codex = projectProviderToolset(unsigned, "codex");
+    expect(
+      codex.capabilities.find((item) => item.id === "computer_use")
+    ).toMatchObject({
+      state: "unavailable",
+      reason:
+        "A verified ChatGPT host and Computer Use service were not found.",
+    });
+    expect(codex.mcpServers).toEqual([]);
+  });
+
   test("describes the chart and visualize renderer contracts to providers", () => {
     const blocks = withRichResponseInstructions([
       { type: "text", text: "hello" },
@@ -293,7 +335,10 @@ describe("provider capability wire compatibility", () => {
 
       const configured = loadConfiguredComputerUse(directory);
       expect(configured.errors).toEqual([]);
-      expect(configured.bridges).toHaveLength(1);
+      expect(configured.bridges.map((bridge) => bridge.id)).toContain("cua");
+      expect(configured.bridges.map((bridge) => bridge.id)).not.toContain(
+        "disabled-brand"
+      );
       const evidence = {
         ...readyEvidence,
         hostPresent: false,
@@ -308,6 +353,59 @@ describe("provider capability wire compatibility", () => {
       ).toContain("Cua Driver");
       expect(projectProviderToolset(evidence, "codex").mcpServers).toEqual([]);
     } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("registers pi-computer-use as a selectable built-in computer-use backend", () => {
+    const directory = mkdtempSync(join(tmpdir(), "codetwo-pi-computer-use-"));
+    const previousHelper = process.env.PI_COMPUTER_USE_HELPER_APP_PATH;
+    const previousBridge = process.env.CODETWO_PI_COMPUTER_USE_BRIDGE;
+    try {
+      process.env.PI_COMPUTER_USE_HELPER_APP_PATH =
+        "/Applications/pi-computer-use.app";
+      process.env.CODETWO_PI_COMPUTER_USE_BRIDGE =
+        "/usr/local/bin/pi-computer-use-mcp";
+
+      const configured = loadConfiguredComputerUse(directory);
+      expect(
+        configured.backends.find((backend) => backend.id === "pi-computer-use")
+      ).toMatchObject({ available: true, providers: [], excludeProviders: [] });
+      expect(
+        configured.bridges.find((bridge) => bridge.id === "pi-computer-use")
+          ?.server
+      ).toEqual({
+        name: "pi-computer-use",
+        command: "/usr/local/bin/pi-computer-use-mcp",
+        args: [],
+        env: [],
+      });
+
+      const evidence: HostToolEvidence = {
+        ...readyEvidence,
+        hostPresent: false,
+        configuredComputerUse: configured.bridges,
+        computerUseSelections: { "*": "pi-computer-use" },
+        computerUseBackends: configured.backends,
+      };
+      const claude = projectProviderToolset(evidence, "claude_code");
+      expect(claude.mcpServers.map((server) => server.name)).toContain(
+        "pi-computer-use"
+      );
+      expect(
+        claude.capabilities.find((item) => item.id === "computer_use")?.state
+      ).not.toBe("unavailable");
+    } finally {
+      if (previousHelper === undefined) {
+        delete process.env.PI_COMPUTER_USE_HELPER_APP_PATH;
+      } else {
+        process.env.PI_COMPUTER_USE_HELPER_APP_PATH = previousHelper;
+      }
+      if (previousBridge === undefined) {
+        delete process.env.CODETWO_PI_COMPUTER_USE_BRIDGE;
+      } else {
+        process.env.CODETWO_PI_COMPUTER_USE_BRIDGE = previousBridge;
+      }
       rmSync(directory, { recursive: true, force: true });
     }
   });

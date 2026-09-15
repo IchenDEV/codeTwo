@@ -170,6 +170,51 @@ describe("Computer Use settings", () => {
     expect(trigger?.textContent).toContain("Cua Driver");
     view.unmount();
   });
+
+  test("offers the Pi Computer Use backend as a selectable option", async () => {
+    const saved = [];
+    const withPi = {
+      selections: { "*": "automatic" },
+      backends: [
+        {
+          id: "pi-computer-use",
+          display_name: "Pi Computer Use",
+          available: true,
+          reason: "pi-computer-use and its macOS helper app are installed.",
+          providers: [],
+          exclude_providers: [],
+        },
+      ],
+      errors: [],
+    };
+    const view = mount(
+      settings(
+        async () => withPi,
+        async (backend) => {
+          saved.push(backend);
+          return { ...withPi, selections: { "*": backend } };
+        }
+      )
+    );
+
+    await waitFor(() => {
+      expect(view.container.textContent).toContain("Pi Computer Use");
+    });
+
+    const trigger = view.container.querySelector(
+      "[data-computer-use-selection]"
+    );
+    await openSelect(trigger);
+    const pi = [
+      ...dom.document.body.querySelectorAll('[data-slot="select-item"]'),
+    ].find((item) => item.textContent?.trim() === "Pi Computer Use");
+    expect(pi).toBeDefined();
+    await selectItem(pi);
+
+    expect(saved).toEqual(["pi-computer-use"]);
+    expect(trigger?.textContent).toContain("Pi Computer Use");
+    view.unmount();
+  });
 });
 
 describe("Browser Use settings", () => {
