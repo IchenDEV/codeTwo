@@ -1,10 +1,10 @@
 //! Scope-owned forwarding from core broadcasts to the desktop host protocol.
 
-use codetwo_kernel::{
+use codetwo_core::kernel::{
     async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult, Service,
 };
-use codetwo_plugins::events::{ConnectorEvent, PluginRuntimeChanged, PluginsChanged};
-use codetwo_plugins::{EventBus, TerminalEvent, TerminalOutputEvent};
+use codetwo_core::plugins::events::{ConnectorEvent, PluginRuntimeChanged, PluginsChanged};
+use codetwo_core::plugins::{EventBus, TerminalEvent, TerminalOutputEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;

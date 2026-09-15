@@ -432,8 +432,10 @@ dependencies = [
  "block2",
  "chrono",
  "chrono-tz",
+ "fs2",
  "image",
  "libghostty-vt",
+ "notify",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
@@ -460,8 +462,6 @@ version = "0.0.0"
 dependencies = [
  "blake3",
  "codetwo-core",
- "codetwo-kernel",
- "codetwo-plugins",
  "codetwo-server",
  "fs2",
  "futures-util",
@@ -477,41 +477,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codetwo-kernel"
-version = "0.0.0"
-dependencies = [
- "async-trait",
- "serde",
- "serde_json",
- "thiserror 2.0.19",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "codetwo-plugins"
-version = "0.0.0"
-dependencies = [
- "async-trait",
- "base64",
- "blake3",
- "chrono",
- "codetwo-core",
- "codetwo-kernel",
- "fs2",
- "notify",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "codetwo-server"
 version = "0.0.0"
 dependencies = [
@@ -519,7 +484,6 @@ dependencies = [
  "axum",
  "chrono",
  "codetwo-core",
- "codetwo-plugins",
  "futures-util",
  "libc",
  "qrcode",

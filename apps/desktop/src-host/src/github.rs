@@ -3,7 +3,7 @@
 //! The renderer supplies repository coordinates and reviewed enum values; command construction,
 //! branch/PR binding checks and non-interactive process policy stay inside this host plugin.
 
-use codetwo_kernel::{async_trait, Context, Plugin, PluginError, PluginResult};
+use codetwo_core::kernel::{async_trait, Context, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;

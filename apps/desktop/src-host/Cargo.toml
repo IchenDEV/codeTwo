@@ -13,8 +13,6 @@ tokio.workspace = true
 uuid.workspace = true
 blake3 = "1"
 codetwo-core.workspace = true
-codetwo-kernel.workspace = true
-codetwo-plugins.workspace = true
 codetwo-server = { path = "../../../crates/server" }
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }

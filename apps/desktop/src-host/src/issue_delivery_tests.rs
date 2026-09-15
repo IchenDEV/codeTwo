@@ -1,7 +1,7 @@
 use super::*;
 use codetwo_core::{session::Session, skill::SkillLibrary};
-use codetwo_kernel::{App, PluginEntry};
-use codetwo_plugins::{AppConfig, CoreApp};
+use codetwo_core::kernel::{App, PluginEntry};
+use codetwo_core::plugins::{AppConfig, CoreApp};
 
 struct RejectCredentials;
 #[async_trait]
@@ -432,10 +432,10 @@ async fn checkout_binding_rejects_discard_remote_branch_and_repository_changes()
 fn install_test_connector(controller: &Controller) -> Connector {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../packs/linear");
     let bundle =
-        codetwo_plugins::bundle::from_local(&source, "test fixture", "test-linear").unwrap();
-    let plugin = codetwo_plugins::bundle::install(&controller.hub.dir, bundle).unwrap();
-    codetwo_plugins::bundle::set_enabled(&controller.hub.dir, &plugin.id, true).unwrap();
-    codetwo_plugins::bundle::set_trusted(&controller.hub.dir, &plugin.id, true).unwrap();
+        codetwo_core::plugins::bundle::from_local(&source, "test fixture", "test-linear").unwrap();
+    let plugin = codetwo_core::plugins::bundle::install(&controller.hub.dir, bundle).unwrap();
+    codetwo_core::plugins::bundle::set_enabled(&controller.hub.dir, &plugin.id, true).unwrap();
+    codetwo_core::plugins::bundle::set_trusted(&controller.hub.dir, &plugin.id, true).unwrap();
     Connector {
         plugin_id: plugin.id,
         connector_id: "issues".into(),
@@ -456,20 +456,20 @@ async fn connector_gate_precedes_credentials_and_replaces_caller_secret() {
             Ok(json!({"id":"issue-1"}))
         })
         .unwrap();
-    codetwo_plugins::bundle::set_trusted(&controller.hub.dir, &connector.plugin_id, false).unwrap();
+    codetwo_core::plugins::bundle::set_trusted(&controller.hub.dir, &connector.plugin_id, false).unwrap();
     assert!(controller
         .invoke(&connector, "issues.get", json!({}), None)
         .await
         .is_err());
     assert!(credentials.0.lock().unwrap().is_empty());
-    codetwo_plugins::bundle::set_trusted(&controller.hub.dir, &connector.plugin_id, true).unwrap();
-    codetwo_plugins::bundle::set_enabled(&controller.hub.dir, &connector.plugin_id, false).unwrap();
+    codetwo_core::plugins::bundle::set_trusted(&controller.hub.dir, &connector.plugin_id, true).unwrap();
+    codetwo_core::plugins::bundle::set_enabled(&controller.hub.dir, &connector.plugin_id, false).unwrap();
     assert!(controller
         .invoke(&connector, "issues.get", json!({}), None)
         .await
         .is_err());
     assert!(credentials.0.lock().unwrap().is_empty());
-    codetwo_plugins::bundle::set_enabled(&controller.hub.dir, &connector.plugin_id, true).unwrap();
+    codetwo_core::plugins::bundle::set_enabled(&controller.hub.dir, &connector.plugin_id, true).unwrap();
     let wrong = Connector {
         plugin_id: connector.plugin_id.clone(),
         connector_id: "not-owned".into(),
@@ -980,11 +980,11 @@ global.fetch = async (url, options) => {
     let data = temp.path().join("data");
     let plugins = Paths::new(&data).plugins();
     let bundle =
-        codetwo_plugins::bundle::from_local(&source, "offline contract fixture", "linear-offline")
+        codetwo_core::plugins::bundle::from_local(&source, "offline contract fixture", "linear-offline")
             .unwrap();
-    let installed = codetwo_plugins::bundle::install(&plugins, bundle).unwrap();
-    codetwo_plugins::bundle::set_enabled(&plugins, &installed.id, true).unwrap();
-    codetwo_plugins::bundle::set_trusted(&plugins, &installed.id, true).unwrap();
+    let installed = codetwo_core::plugins::bundle::install(&plugins, bundle).unwrap();
+    codetwo_core::plugins::bundle::set_enabled(&plugins, &installed.id, true).unwrap();
+    codetwo_core::plugins::bundle::set_trusted(&plugins, &installed.id, true).unwrap();
     let app = CoreApp::boot(
         AppConfig::bare_in(&data)
             .with("paths", PluginEntry::with_config(json!({"data_dir":data})))

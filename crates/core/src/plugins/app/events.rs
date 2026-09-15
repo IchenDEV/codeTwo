@@ -1,0 +1,104 @@
+//! Typed events on the kernel bus.
+//!
+//! These are how plugins learn about each other without holding each other. The engine does not
+//! know the skill library exists; it listens for [`SkillsChanged`]. The cost tracker does not know
+//! the engine exists; it listens for [`EngineEvent`]. Delete either plugin and the other keeps
+//! working — which is the property a giant `AppState` could never give us.
+
+use crate::kernel::{CommandRealm, Event};
+use serde::Serialize;
+use serde_json::Value;
+use std::path::PathBuf;
+
+/// The skill library was rebuilt (a skill was saved or deleted, a plugin was toggled, the
+/// workspace changed). Anything holding a compiled copy should take a fresh one.
+pub struct SkillsChanged;
+
+impl Event for SkillsChanged {
+    type Output = ();
+    const NAME: &'static str = "skills/changed";
+}
+
+/// The scene/pipeline library was re-resolved.
+pub struct ScenesChanged;
+
+impl Event for ScenesChanged {
+    type Output = ();
+    const NAME: &'static str = "scenes/changed";
+}
+
+/// The set of installed plugin bundles changed.
+pub struct PluginsChanged;
+
+impl Event for PluginsChanged {
+    type Output = ();
+    const NAME: &'static str = "plugins/changed";
+}
+
+/// A provider event emitted by an installed connector Runtime.
+///
+/// External processes cannot publish typed kernel events directly. The protocol host adds the
+/// authenticated plugin id before emitting this internal event, so consumers never trust a bundle
+/// id supplied in the extension payload.
+#[derive(Clone, Serialize)]
+pub struct ConnectorEvent {
+    pub plugin_id: String,
+    pub event: Value,
+}
+
+impl Event for ConnectorEvent {
+    type Output = ();
+    const NAME: &'static str = "connector/event";
+}
+
+/// Process observations changed; installed files and factory identities are unchanged.
+pub struct PluginRuntimeChanged;
+
+impl Event for PluginRuntimeChanged {
+    type Output = ();
+    const NAME: &'static str = "plugins/runtime-changed";
+}
+
+/// A plugin or component policy changed without necessarily rebuilding the plugin graph.
+pub struct PluginPolicyChanged;
+
+impl Event for PluginPolicyChanged {
+    type Output = ();
+    const NAME: &'static str = "plugins/policy-changed";
+}
+
+/// The frontend moved to a different workspace.
+pub struct WorkspaceChanged {
+    pub cwd: PathBuf,
+}
+
+impl Event for WorkspaceChanged {
+    type Output = ();
+    const NAME: &'static str = "workspace/changed";
+}
+
+/// One event from the agent loop, republished on the kernel bus.
+///
+/// [`crate::plugins::app::EventBus`] carries the same stream over a broadcast channel for consumers that
+/// want a receiver (the desktop event pump, the remote server). This carries it to *plugins*, so a
+/// listener is owned by a scope and disappears when that plugin unloads.
+pub struct EngineEvent(pub crate::event::Event);
+
+impl Event for EngineEvent {
+    type Output = ();
+    const NAME: &'static str = "engine/event";
+}
+
+/// One terminal event from any live terminal plugin instance, including project-isolated ones.
+///
+/// [`crate::plugins::app::TerminalService`] retains its broadcast stream for core and server consumers.
+/// This typed mirror crosses service isolation so a host event bridge needs only one listener.
+pub struct TerminalOutputEvent {
+    pub realm: CommandRealm,
+    pub event: crate::plugins::app::TerminalEvent,
+}
+
+impl Event for TerminalOutputEvent {
+    type Output = ();
+    const NAME: &'static str = "terminal/output";
+}

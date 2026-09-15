@@ -14,10 +14,10 @@ use codetwo_core::{
     task::TaskId,
     worktree::WorktreeBaseline,
 };
-use codetwo_kernel::{
+use codetwo_core::kernel::{
     async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
 };
-use codetwo_plugins::{events::EngineEvent, EngineService, Paths, PluginHub, StoreService};
+use codetwo_core::plugins::{events::EngineEvent, EngineService, Paths, PluginHub, StoreService};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{

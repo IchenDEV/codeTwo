@@ -14,8 +14,8 @@ use codetwo_core::device_sync::{
 };
 use codetwo_core::session::now_millis;
 use codetwo_core::Store;
-use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult, Service};
-use codetwo_plugins::StoreService;
+use codetwo_core::kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult, Service};
+use codetwo_core::plugins::StoreService;
 use futures_util::future::join_all;
 use reqwest::{Client, Response, Url};
 use serde::de::DeserializeOwned;

@@ -14,10 +14,10 @@ use codetwo_core::worktree::WorktreeBaseline;
 use codetwo_core::{
     Automation, AutomationInput, AutomationRun, AutomationRunStatus, Engine, Event, Op, Store,
 };
-use codetwo_kernel::{
+use codetwo_core::kernel::{
     async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
 };
-use codetwo_plugins::{EngineService, EventBus, StoreService};
+use codetwo_core::plugins::{EngineService, EventBus, StoreService};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::broadcast;

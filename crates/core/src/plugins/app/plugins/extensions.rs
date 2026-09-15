@@ -1,0 +1,142 @@
+//! Third-party plugins: the bridge between installed bundles and the running graph.
+//!
+//! This is where the two senses of "plugin" finally meet. `plugin-hub` manages *bundles* — data a
+//! user installed from GitHub. This plugin looks through them for the ones that ship a `runtime`
+//! block, and loads each host adapter as a real member of the kernel graph over
+//! [the plugin protocol](crate::plugins::app::protocol).
+//!
+//! It also publishes the host's typed events onto the JSON bus, because a plugin in another
+//! process cannot listen for a Rust type. That republication is deliberately explicit and small:
+//! it is the app's public event surface, and it should be chosen rather than leaked.
+
+use crate::plugins::app::bundle_runtime::ExtensionRuntimeHost;
+use crate::plugins::app::events::{EngineEvent, PluginsChanged, ScenesChanged, SkillsChanged};
+use crate::plugins::app::json;
+use crate::plugins::app::service::PluginHub;
+use crate::plugins::app::PluginManager;
+use crate::kernel::{async_trait, Context, Injection, Plugin, PluginResult};
+use serde_json::{json as jval, Value};
+use std::sync::Arc;
+
+pub struct ExtensionsPlugin;
+
+#[async_trait]
+impl Plugin for ExtensionsPlugin {
+    fn name(&self) -> &str {
+        "extensions"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Hosts installed process bundles over the plugin protocol.")
+    }
+
+    fn inject(&self) -> Injection {
+        Injection::required(["plugin-hub", "plugin-manager"])
+    }
+
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        let hub = ctx.expect::<PluginHub>()?;
+        let manager = ctx.expect::<PluginManager>()?;
+
+        ctx.provide(Arc::new(ExtensionRuntimeHost))?;
+        publish_host_events(&ctx);
+        {
+            let _inventory = hub.inventory.lock().await;
+            manager
+                .sync_installed_bundles(&hub.dir)
+                .map_err(crate::kernel::PluginError::new)?;
+        }
+
+        let runtime = ctx.runtime().clone();
+        let listed_hub = hub.clone();
+        ctx.command_described(
+            "extensions.list",
+            Some("Process bundles whose host adapter is ready, and bundles waiting for trust."),
+            move |_| {
+                let runtime = runtime.clone();
+                let hub = listed_hub.clone();
+                async move {
+                    let installed = hub.installed();
+                    let ready = runtime
+                        .scopes()
+                        .into_iter()
+                        .filter(|scope| {
+                            scope.status == crate::kernel::Status::Active
+                                && scope.command_realm == crate::kernel::CommandRealm::Global
+                                && scope.plugin.starts_with("bundle:")
+                        })
+                        .filter_map(|scope| {
+                            scope.plugin.strip_prefix("bundle:").map(str::to_string)
+                        })
+                        .collect::<Vec<_>>();
+                    let untrusted = installed
+                        .into_iter()
+                        .filter(|plugin| plugin.runtime.is_some() && !plugin.trusted)
+                        .map(|plugin| plugin.id)
+                        .collect::<Vec<_>>();
+                    json(jval!({ "ready": ready, "untrusted": untrusted }))
+                }
+            },
+        )?;
+
+        // The installed directory is an external desired set. Reconcile it into ordinary loader
+        // factories so plans, project realms, fallback blockers and teardown all use one path.
+        let manager = manager.clone();
+        let hub = hub.clone();
+        ctx.on::<PluginsChanged, _>(move |_| {
+            // Hub mutations hold this lock through their own reconcile and flush, so their
+            // notification is already current. An independently emitted notification acquires
+            // the lock here and reconciles one stable filesystem snapshot.
+            let Ok(_inventory) = hub.inventory.try_lock() else {
+                return None;
+            };
+            if let Err(error) = manager.sync_installed_bundles(&hub.dir) {
+                tracing::error!(%error, "could not reconcile installed plugin runtimes");
+            }
+            None
+        });
+        Ok(())
+    }
+}
+
+/// The host's public event surface, in the form a process in another language can consume.
+///
+/// Typed Rust events do not cross a pipe. Each of these is a deliberate choice to expose one —
+/// the list is the contract, and adding to it is an API decision.
+fn publish_host_events(ctx: &Context) {
+    let weak = ctx.weak();
+    ctx.on_async::<EngineEvent, _, _>(move |event| {
+        let weak = weak.clone();
+        async move {
+            let Some(ctx) = weak.upgrade() else {
+                return None;
+            };
+            if let Ok(payload) = serde_json::to_value(&event.0) {
+                ctx.emit_json("engine/event", payload).await;
+            }
+            None
+        }
+    });
+
+    let weak = ctx.weak();
+    ctx.on_async::<SkillsChanged, _, _>(move |_| {
+        let weak = weak.clone();
+        async move {
+            if let Some(ctx) = weak.upgrade() {
+                ctx.emit_json("skills/changed", Value::Null).await;
+            }
+            None
+        }
+    });
+
+    let weak = ctx.weak();
+    ctx.on_async::<ScenesChanged, _, _>(move |_| {
+        let weak = weak.clone();
+        async move {
+            if let Some(ctx) = weak.upgrade() {
+                ctx.emit_json("scenes/changed", Value::Null).await;
+            }
+            None
+        }
+    });
+}

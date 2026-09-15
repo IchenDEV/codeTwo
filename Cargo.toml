@@ -1,16 +1,12 @@
 # C2 — a document-first coding-agent app.
 # Cargo workspace:
-#   crates/kernel        — reactive plugin runtime (cordis port)
-#   crates/core          — shared product core: ACP, sessions, skills, providers, persistence
-#   crates/plugins       — built-in adapters, CoreApp graph, extension bundles, plugin protocol
+#   crates/core          — unified product engine: kernel + domain + plugins + protocol
 #   crates/server        — headless Axum server, WebSocket, remote/web UI
 #   apps/desktop/src-host — Electrobun desktop sidecar, links CoreApp
 [workspace]
 resolver = "2"
 members = [
-    "crates/kernel",
     "crates/core",
-    "crates/plugins",
     "crates/server",
     "apps/desktop/src-host",
 ]
@@ -32,9 +28,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 tracing = "0.1"
 
 # Local crates
-codetwo-kernel = { path = "crates/kernel" }
 codetwo-core = { path = "crates/core" }
-codetwo-plugins = { path = "crates/plugins" }
 
 [patch.crates-io]
 # 0.2.1 links Ghostty's Windows static archive under the Unix library name. Keep the published

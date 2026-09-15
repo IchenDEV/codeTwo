@@ -10,7 +10,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use codetwo_plugins::{
+use codetwo_core::plugins::{
     AppConfig, CanvasService, CoreApp, EngineService, EventBus, PluginManager, StoreService,
 };
 use codetwo_server::{
