@@ -120,7 +120,7 @@ export function SessionHeaderActions({
   );
   return (
     <div
-      className="session-header-actions flex shrink-0 items-center gap-2"
+      className="session-header-actions gap-inline flex shrink-0 items-center"
       role="group"
       aria-label={t("header.actions")}
     >

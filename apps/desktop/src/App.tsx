@@ -312,7 +312,6 @@ import {
   planPluginManagerChange,
 } from "./plugins/lifecycle";
 import { usePluginSnapshot } from "./plugins/usePluginSnapshot";
-import { ProjectIcon } from "./projects/ProjectIcon";
 import { loadProviderRegistry } from "./providers/registry";
 import { RemoteModal } from "./remote/Remote";
 import { Composer } from "./session/Composer";
@@ -8420,16 +8419,6 @@ export default function App() {
                         >
                           {railExpandAction}
                           {/* Breadcrumb, reference-style: project / thread. */}
-                          <span className="session-header-project-icon flex shrink-0 items-center">
-                            {activeProjectRecord ? (
-                              <ProjectIcon
-                                project={activeProjectRecord}
-                                size={18}
-                              />
-                            ) : (
-                              <Folder className="text-muted-foreground size-3.5" />
-                            )}
-                          </span>
                           {activeProjectName != null &&
                             activeProjectName !== "" && (
                               <>
@@ -8475,7 +8464,7 @@ export default function App() {
 
                           <div className="electrobun-webkit-app-region-drag flex-1" />
 
-                          <div className="session-header-toolbar [&_svg]:text-muted-foreground flex min-w-0 shrink-0 items-center gap-4">
+                          <div className="session-header-toolbar [&_svg]:text-muted-foreground gap-inline flex min-w-0 shrink-0 items-center">
                             {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                   is in flight — and the way back to the answer without leaving the mode for good. */}
                             {docMode && hasConversationContent && (

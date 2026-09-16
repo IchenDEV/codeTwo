@@ -253,7 +253,7 @@ export function CheckoutBar({
               aria-expanded={open}
             >
               <Folder className="size-3.5 shrink-0" aria-hidden="true" />
-              <span className="text-body text-foreground/85 min-w-0 truncate">
+              <span className="text-body text-muted-foreground min-w-0 truncate">
                 {modeLabel}
               </span>
               <ChevronDown
@@ -366,7 +366,7 @@ export function CheckoutBar({
           size="compact"
           focusStyle="inset"
           onClick={checkout.onOpen}
-          className="bg-foreground/[0.04] px-module-inset text-callout text-foreground/80 ml-auto shrink-0 gap-1.5 font-mono"
+          className="bg-foreground/[0.04] px-module-inset text-callout text-muted-foreground ml-auto shrink-0 gap-1.5 font-mono"
           aria-label={t("checkout.openSourceControl", {
             branch: checkout.branch,
           })}
@@ -1695,6 +1695,20 @@ export function Composer({
 
       {pluginActions}
 
+      {/* Session configuration shares the control row with attach, voice and run: one strip, one
+          baseline. The chips row wraps inside its own measure when the composer is narrow. */}
+      <SessionControls
+        config={config}
+        models={models}
+        currentModel={currentModel}
+        defaultModel={defaultModel}
+        onModel={onModel}
+        configOptions={configOptions}
+        onConfigOption={onConfigOption}
+        modelChangeDisabled={running || loading}
+        showWorktreePicker={!checkout}
+      />
+
       <div className="flex-1" />
 
       {/* Document mode is the app's own feature — it deserves a control you can see, not just a
@@ -2022,7 +2036,7 @@ export function Composer({
           >
             <div
               className={cn(
-                "flex flex-col gap-1",
+                "flex min-w-0 items-center gap-0.5",
                 docMode
                   ? "rounded-composer bg-surface shadow-surface pointer-events-auto mx-auto w-full max-w-3xl p-2"
                   : // Keep every outer edge 8px from the controls. The 24px surface radius then
@@ -2030,18 +2044,7 @@ export function Composer({
                     "p-2"
               )}
             >
-              <SessionControls
-                config={config}
-                models={models}
-                currentModel={currentModel}
-                defaultModel={defaultModel}
-                onModel={onModel}
-                configOptions={configOptions}
-                onConfigOption={onConfigOption}
-                modelChangeDisabled={running || loading}
-                showWorktreePicker={!checkout}
-              />
-              <div className="flex items-center gap-0.5">{controls}</div>
+              {controls}
             </div>
           </div>
         </div>

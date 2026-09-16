@@ -374,17 +374,15 @@ describe("SessionRail row layout", () => {
       '[data-session-id="meaningful"]'
     );
     expect(groupedRow?.className).not.toContain("ml-6");
-    expect(toggle?.className).toContain("px-2");
+    expect(toggle?.getAttribute("data-size")).toBe("row");
+    expect(toggle?.className).toContain("min-h-navigation-row");
+    expect(toggle?.className).toContain("px-module-inset");
     expect(groupedRow?.className).toContain("px-2");
+    // One content column: the project mark, the nav marks and the session text all sit on the
+    // rail's single 16px edge, so the session content adds no padding of its own.
     expect(
       groupedRow?.querySelector("[data-session-content]")?.className
-    ).toContain("pl-1.5");
-    expect(
-      groupedRow?.querySelector("[data-session-content]")?.className
-    ).not.toContain("pl-2");
-    expect(
-      groupedRow?.querySelector("[data-session-content]")?.className
-    ).not.toContain("pl-6");
+    ).not.toContain("pl-");
 
     click(toggle);
     await waitFor(() => {
@@ -1085,15 +1083,12 @@ describe("SessionRail row layout", () => {
     ).toBeTruthy();
     expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(2);
     expect(row?.textContent).not.toContain("repo");
+    expect(
+      row?.querySelector("[data-session-content]")?.className
+    ).not.toContain("pl-");
     expect(row?.querySelector("[data-session-content]")?.className).toContain(
-      "pl-1.5"
+      "z-10"
     );
-    expect(
-      row?.querySelector("[data-session-content]")?.className
-    ).not.toContain("pl-2");
-    expect(
-      row?.querySelector("[data-session-content]")?.className
-    ).not.toContain("pl-6");
 
     view.unmount();
   });
@@ -1158,17 +1153,40 @@ describe("SessionRail row layout", () => {
     ).toContain("Checkout");
 
     await waitFor(() => {
-      expect(
-        view.container.querySelector(
-          '[data-session-id="isolated"] [data-session-pull-request="merged"]'
-        )?.textContent
-      ).toContain("#84 Merged");
-      expect(
-        view.container.querySelector(
-          '[data-session-id="regular"] [data-session-pull-request="ci_failed"]'
-        )?.textContent
-      ).toContain("#83 CI failed");
+      const merged = view.container.querySelector(
+        '[data-session-id="isolated"] [data-session-pull-request="merged"]'
+      );
+      const failed = view.container.querySelector(
+        '[data-session-id="regular"] [data-session-pull-request="ci_failed"]'
+      );
+      // The state travels by colour and the shared tooltip/accessible name, not by visible words.
+      expect(merged?.textContent).toContain("#84");
+      expect(merged?.textContent).not.toContain("Merged");
+      expect(merged?.getAttribute("title")).toContain("Merged");
+      expect(merged?.getAttribute("aria-label")).toContain("Merged");
+      expect(failed?.textContent).toContain("#83");
+      expect(failed?.textContent).not.toContain("CI failed");
+      expect(failed?.getAttribute("title")).toContain("CI failed");
     });
+
+    // The provenance marks are inline meta, not pills: no fill and no pill padding, so their text
+    // edge matches the row title's edge on the shared content container.
+    for (const selector of [
+      '[data-session-id="isolated"] [data-session-checkout-kind="worktree"]',
+      '[data-session-id="regular"] [data-session-pull-request="ci_failed"]',
+    ]) {
+      const badge = view.container.querySelector(selector);
+      expect(badge?.classList.contains("bg-fill-quiet")).toBe(false);
+      expect(badge?.classList.contains("rounded-micro")).toBe(false);
+      expect(badge?.classList.contains("px-1")).toBe(false);
+    }
+    const row = view.container.querySelector('[data-session-id="regular"]');
+    const titleLine = row?.querySelector('[data-session-line="title"]');
+    const workspaceLine = row?.querySelector('[data-session-line="workspace"]');
+    expect(titleLine?.parentElement).toBe(workspaceLine?.parentElement);
+    expect(titleLine?.parentElement?.hasAttribute("data-session-content")).toBe(
+      true
+    );
 
     view.unmount();
   });
