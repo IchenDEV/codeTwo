@@ -202,7 +202,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
       </figcaption>
       {spec.series.length > 1 ? (
         <div
-          className="mb-1.5 flex flex-wrap gap-x-3 gap-y-1"
+          className="-ms-surface-inset mb-1.5 flex flex-wrap gap-x-3 gap-y-1"
           aria-label={t("chart.series")}
         >
           {spec.series.map((series, index) => (

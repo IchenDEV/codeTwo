@@ -408,6 +408,7 @@ import type {
   SessionCreationShell,
 } from "./session/sessionEvents";
 import { SessionHeaderActions } from "./session/SessionHeaderActions";
+import { SessionTitlePair } from "./session/SessionTitlePair";
 import { QuickChatPanel, SideChatPanel } from "./session/SideChatPanel";
 import type { TransientChatSeed } from "./session/SideChatPanel";
 import { StageTrack } from "./session/StageTrack";
@@ -8453,22 +8454,14 @@ export default function App() {
                           <span className="session-header-title electrobun-webkit-app-region-drag text-ui max-w-96 truncate font-medium">
                             {activeTitle}
                           </span>
-                          {/* The session title trails the task title for context — unless both carry the same
-                name (a task created from a single-prompt thread), which would print it twice. */}
-                          {activeBoardTask &&
-                          activeSessionTitle != null &&
-                          activeSessionTitle !== "" &&
-                          activeSessionTitle.trim() !==
-                            activeBoardTask.title.trim() ? (
-                            <>
-                              <span className="text-ui text-muted-foreground/50 shrink-0">
-                                /
-                              </span>
-                              <span className="electrobun-webkit-app-region-drag text-fine text-muted-foreground max-w-64 truncate">
-                                {activeSessionTitle}
-                              </span>
-                            </>
-                          ) : null}
+                          {/* The session title trails the task title for context — unless both name the
+                same thread (a task created from a single-prompt thread). */}
+                          {activeBoardTask == null ? null : (
+                            <SessionTitlePair
+                              taskTitle={activeBoardTask.title}
+                              sessionTitle={activeSessionTitle}
+                            />
+                          )}
                           {!activeBoardTask &&
                           activeSession != null &&
                           activeSession !== "" ? (
