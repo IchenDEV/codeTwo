@@ -43,20 +43,11 @@
   margin-left: auto;
 }
 
-.settings-profile-page {
-  max-width: 64rem;
-  padding: var(--ds-space-page) var(--ds-space-page) var(--ds-space-page-end);
-}
-
-.settings-worktrees-page {
-  max-width: 64rem;
-}
-
 .worktree-policy-card {
   overflow: hidden;
   margin-top: var(--ds-space-module-inset);
   border-radius: var(--ds-radius-module);
-  background: var(--ds-color-fill-quiet);
+  background: var(--ds-color-surface);
   box-shadow: var(--ds-elevation-surface);
 }
 
@@ -93,7 +84,7 @@
 .worktree-project-card {
   overflow: hidden;
   border-radius: var(--ds-radius-module);
-  background: var(--ds-color-fill-quiet);
+  background: var(--ds-color-surface);
   box-shadow: var(--ds-elevation-surface);
 }
 
@@ -189,7 +180,7 @@
 .profile-editor,
 .profile-activity-surface {
   border-radius: var(--ds-radius-module);
-  background: var(--ds-color-fill-quiet);
+  background: var(--ds-color-surface);
 }
 
 .profile-editor {
@@ -342,17 +333,9 @@
     margin-left: 0;
   }
 
-  .settings-profile-page {
-    padding: 1rem 1rem var(--ds-space-page-end);
-  }
-
   .session-import-result {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .settings-worktrees-page {
-    padding: 1rem 1rem var(--ds-space-page-end);
   }
 
   .worktree-settings-row {

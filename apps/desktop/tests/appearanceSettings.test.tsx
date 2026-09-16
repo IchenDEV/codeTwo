@@ -120,9 +120,9 @@ describe("Appearance settings", () => {
         .querySelector('[aria-label="Interface font size"]')
         ?.closest('[data-slot="setting-row"]')
     ).not.toBeNull();
-    expect(view.container.querySelectorAll(".appearance-section")).toHaveLength(
-      6
-    );
+    expect(
+      view.container.querySelectorAll('[data-slot="settings-section"]')
+    ).toHaveLength(6);
     expect(
       view.container.querySelectorAll(".appearance-setting-group")
     ).toHaveLength(2);

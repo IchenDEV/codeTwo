@@ -161,7 +161,7 @@ describe("Settings page layout contract", () => {
     expect(source).toContain(
       "<ProfileSettings providerNames={providerNames} />"
     );
-    expect(styles).toContain(".settings-profile-page");
+    expect(styles).not.toContain(".settings-profile-page");
     expect(styles).toContain(".profile-activity-grid");
     expect(styles).toContain("@container settings-page (max-width: 40rem)");
     expect(styles).toMatch(
@@ -187,8 +187,9 @@ describe("Settings page layout contract", () => {
     expect(appearanceStyles).toMatch(
       /\.appearance-settings\s*{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*gap:\s*var\(--ds-space-page-section\);/s
     );
-    expect(appearanceStyles).toMatch(
-      /\.appearance-section\s*{[^}]*gap:\s*var\(--ds-space-surface-inset\);/s
+    expect(appearanceStyles).not.toContain(".appearance-section");
+    expect(appearanceStyles).toContain(
+      ".appearance-profile-grid + .appearance-setting-group"
     );
     expect(appearanceStyles).toContain(".appearance-setting-group");
     expect(appearanceStyles).toContain(".appearance-editor-surface");

@@ -33,7 +33,7 @@ function SettingsSection({
           <h2
             id={accessibleHeadingId}
             data-slot="settings-section-title"
-            className="text-body text-content font-medium"
+            className="text-body text-content font-semibold"
           >
             {title}
           </h2>
