@@ -35,19 +35,122 @@
 }
 
 .task-board-kanban {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(14rem, 1fr));
-  min-width: calc(56rem + 1.5rem);
+  --task-board-column-width: 17rem;
+  display: flex;
+  min-height: 100%;
+  align-items: stretch;
+  gap: 0.5rem;
 }
 
 .task-board-kanban-column {
-  align-self: stretch;
+  display: flex;
+  flex: 0 0 var(--task-board-column-width);
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding: 0.5rem;
+  border-radius: var(--ds-radius-module);
+  background: var(--ds-color-fill-quiet);
+}
+
+.task-board-kanban-column[data-task-column="running"] {
+  background: color-mix(
+    in oklch,
+    var(--ds-color-success) 8%,
+    var(--ds-color-fill-quiet)
+  );
+}
+
+.task-board-kanban-column[data-task-column="needs_you"] {
+  background: color-mix(
+    in oklch,
+    var(--ds-color-warning) 7%,
+    var(--ds-color-fill-quiet)
+  );
+}
+
+.task-board-kanban-column[data-task-column="done"] {
+  background: color-mix(
+    in oklch,
+    var(--ds-color-success) 4%,
+    var(--ds-color-fill-quiet)
+  );
+}
+
+.task-board-kanban-cards {
+  display: grid;
+  flex: 1;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 0.5rem;
+  min-height: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  overscroll-behavior-block: contain;
+  border-radius: var(--ds-radius-control);
+}
+
+/* Drop feedback strengthens the lane's own status tint instead of boxing the card area. */
+.task-board-kanban-column[data-drop-target] {
+  background: var(--ds-color-fill-rest);
+}
+
+.task-board-kanban-column[data-task-column="running"][data-drop-target] {
+  background: color-mix(
+    in oklch,
+    var(--ds-color-success) 16%,
+    var(--ds-color-fill-quiet)
+  );
+}
+
+.task-board-kanban-column[data-task-column="needs_you"][data-drop-target] {
+  background: color-mix(
+    in oklch,
+    var(--ds-color-warning) 14%,
+    var(--ds-color-fill-quiet)
+  );
+}
+
+.task-board-kanban-column[data-task-column="done"][data-drop-target] {
+  background: color-mix(
+    in oklch,
+    var(--ds-color-success) 9%,
+    var(--ds-color-fill-quiet)
+  );
 }
 
 .task-board-card {
   content-visibility: auto;
   contain-intrinsic-size: auto 6.75rem;
   overflow-wrap: anywhere;
+}
+
+.task-board-card-grip {
+  opacity: 0;
+}
+
+.task-board-card:hover .task-board-card-grip,
+.task-board-card:focus-within .task-board-card-grip {
+  opacity: 1;
+}
+
+.task-board-card[data-dragging] {
+  cursor: grabbing;
+  box-shadow: var(--ds-elevation-raised);
+}
+
+/* The library's insert-anchor keeps the dragged card's slot; show it faintly instead of hiding it. */
+.task-board-card[data-dnd-placeholder] {
+  visibility: visible;
+  opacity: 0.4;
+}
+
+.task-board-card[data-drop-edge="before"] {
+  box-shadow: 0 -2px 0 0 var(--ds-color-focus);
+}
+
+.task-board-card[data-drop-edge="after"] {
+  box-shadow: 0 2px 0 0 var(--ds-color-focus);
 }
 
 .task-board-kanban-column [data-slot="status-indicator"] {
@@ -173,7 +276,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-board-row-action {
+  .task-board-row-action,
+  .task-board-card-grip {
     transition-duration: 0.01ms;
   }
 }

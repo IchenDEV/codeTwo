@@ -4,7 +4,7 @@ import { confirmNative } from "@/bridge";
 import type { Translate } from "@/i18n";
 import type { useToast } from "@/ui/toast";
 
-import { createBoardTask, filterBoardTasks } from "./taskBoard";
+import { createBoardTask, filterBoardTasks, nextTaskNumber } from "./taskBoard";
 import type {
   BoardAction,
   BoardFilters,
@@ -74,6 +74,7 @@ export function useTaskBoardActions(options: TaskBoardActionsOptions) {
     } else {
       const task = createBoardTask({
         ...value,
+        number: nextTaskNumber(options.tasks),
         order: nextColumnOrder(options.tasks, value.status),
       });
       options.dispatch({ type: "create", task });

@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { useLanguage } from "@/i18n";
 
 import type { BoardTask, TaskPriority } from "./taskBoard";
+import { laneStatus } from "./taskBoard";
 import { TaskBoardCollection } from "./TaskBoardCollection";
 import { TaskBoardHeader } from "./TaskBoardHeader";
 import { TaskEditorDialog } from "./TaskEditorDialog";
@@ -144,8 +145,18 @@ export function TaskBoardPage({
     clearFilters,
     keepInspectorInPlace: isNarrow,
   });
-  const moveTask = (task: BoardTask, status: BoardTask["status"]): void =>
-    data.dispatch({ type: "move", id: task.id, status, now: Date.now() });
+  const moveTask = (
+    task: BoardTask,
+    status: BoardTask["status"],
+    beforeId?: string
+  ): void =>
+    data.dispatch({
+      type: "move",
+      id: task.id,
+      status,
+      beforeId,
+      now: Date.now(),
+    });
   const changeInspectorOpen = (open: boolean): void => {
     if (!open && isNarrow) restoreInspectorFocus.current = true;
     setInspectorOpen(open);
@@ -245,7 +256,7 @@ export function TaskBoardPage({
               remainingTaskCount={remainingTaskCount}
               activeFilterCount={activeFilterCount}
               expandedTaskIds={selection.expandedTaskIds}
-              selectedTaskId={selection.selectedTask?.id ?? null}
+              selectedTaskId={selection.selectedTaskId}
               selectedSessionId={selection.selectedSession?.id ?? null}
               pullRequestsByPath={pullRequestsByPath}
               onToggleTask={actions.toggleTask}
@@ -254,6 +265,7 @@ export function TaskBoardPage({
               onEditTask={(task) => actions.openEditor(task, task.status)}
               onDeleteTask={(task) => void actions.deleteTask(task)}
               onMoveTask={moveTask}
+              onAddTask={(lane) => actions.openEditor(null, laneStatus(lane))}
               onStartTask={onStartTask}
               onShowMore={() =>
                 setVisibleTaskLimit((limit) => limit + INITIAL_TASK_LIMIT)
