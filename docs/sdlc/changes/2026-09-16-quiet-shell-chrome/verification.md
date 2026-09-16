@@ -65,5 +65,6 @@ Rollback: See plan.md.
 Release: No release requested; merge and external actions require their own authorization.
 Review: [PR #238](https://github.com/IchenDEV/codeTwo/pull/238) carries this change on branch
 t3code/quiet-shell-chrome, based on main 833ecb8b; the hosted CI Validate job passed (run
-35075609711, job 104727185571, 2m44s).
+35075609711, job 104727185571, 2m44s) and again on the rail-alignment follow-up (run 35084873013,
+job 104757219623, 3m12s).
 Feedback: Link an Incident and regression Eval when a real failure occurs.
