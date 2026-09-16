@@ -127,5 +127,6 @@ Rollback: revert the taskboard, i18n, and test edits plus the new modules; exist
 snapshots keep loading because v4 parsing is additive and no persisted field was renamed.
 Release: No release requested; merge and external actions require their own authorization.
 Review: [PR #237](https://github.com/IchenDEV/codeTwo/pull/237) carries this change on branch
-t3code/multica-kanban-design.
+t3code/multica-kanban-design; the hosted Validate job passed on the code revision 7178600a
+(run 35071350449) and on the record revision 788dd43a (run 35073185753).
 Feedback: Link an Incident and regression Eval when a real failure occurs.
