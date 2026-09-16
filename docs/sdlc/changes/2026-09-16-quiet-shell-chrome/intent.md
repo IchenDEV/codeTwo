@@ -45,7 +45,23 @@ Follow-up review in the same session added four more marks on the running build:
 7. the session header's leading project mark should go entirely ("去掉前面的icon");
 8. the selected rail row's left selection bar should go ("去掉这个组件前面的线"); the selected fill
    remains as the selection state;
-9. the checkout bar's chips should use the quiet grey label ("改成输入框里面的按钮灰色字").
+9. the checkout bar's chips should use the quiet grey label ("改成输入框里面的按钮灰色字");
+10. the sidebar still reads as misaligned ("明显对齐还有问题"), and the user asked for the check to run
+    against the real app through the web server instead of a screenshot ("对齐的用webserver检查").
+
+Measured on the web server against a copy of the running dev data dir (rail 288px, 1728px viewport):
+
+| element | before | after |
+| --- | --- | --- |
+| feature nav rows (icon) | 16 | 16 |
+| "All projects" label | 16 | 16 |
+| project header (folder / name) | 20 / 44 | 16 / 40 |
+| session title, summary, badges | 22 | 16 |
+
+The project header's Button carried no `size`, so it fell back to the default control padding whose
+`has-[>svg]:px-3` (12px) beat the local `px-2`; the session content added `pl-1.5` (6px) on top of the
+row's own inset. Outcome: one 16px content edge for every rail mark and every row's text, with the
+labels of the two header rows sharing the 40px text column.
 
 Constraints: no control is added, removed, or demoted — this is spacing, plane, and structure only.
 Keep every aria-label, tooltip, popover, and keyboard path, the rail's drag/context-menu behaviour,

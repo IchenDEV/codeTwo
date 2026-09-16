@@ -28,6 +28,8 @@ cleanup_status: complete
 - AC-8: PASS — `shellChromeContract` asserts the selected rail row keeps `bg-fill-selected` and no longer emits `before:inset-y-3`/`before:rounded-full`; the rendered rail test still passes with the fill as the only selection state.
 - AC-9: PASS — In the renderer the checkout chip's label computed `oklch(0.49583 0.00272918 none)` (the muted foreground) instead of the former `text-foreground/85`, and `shellChromeContract` covers the source change for both chips.
 
+- AC-10: PASS — Measured through the web server against a copy of the running dev data dir (rail 288px, 1728px viewport): feature nav icons and the "All projects" label already sat on 16; the project header's folder moved 20 → 16 and its name 44 → 40 (the trigger takes the shared `row` size, whose `px-module-inset` replaces the default padding's `has-[>svg]:px-3`), and the session title, summary and badges moved 22 → 16 (the content drops `pl-1.5`, inheriting the row's own inset). Capture `browser-artifacts/browser-screenshot-127-0-0-1-mu3vzusk-255a6c42.png`; `shellChromeContract` and the updated `sessionRailRendered` assertions hold the one-edge contract.
+
 Verdict: verified.
 Residual risk: the rail rows, the project mark and the branch chip need session/project data that the
 Core-less renderer does not have, so their evidence is structural plus the rendered rail/header

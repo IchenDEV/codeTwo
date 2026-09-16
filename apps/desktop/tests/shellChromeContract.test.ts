@@ -59,9 +59,21 @@ describe("shell chrome contract", () => {
     }
     expect(checkout).toContain("text-fine text-foreground/55");
     expect(pullRequest).toContain("text-fine flex shrink-0 items-center");
+    expect(rail).toContain('className="pointer-events-none relative z-10"');
+  });
+
+  test("keeps one content edge across the rail's rows", () => {
+    // Every rail row's leading mark and text share the 16px column: the nav rows and the
+    // all-projects toggle reach it through the shared row size, the project header used to sit at
+    // 20 because an unsized Button fell back to the default control padding, and the session
+    // content added 6px on top of the row inset.
+    expect(rail).toContain('className="pointer-events-none relative z-10"');
+    expect(rail).not.toContain("pl-1.5");
+    expect(rail).toMatch(/variant="ghost"\s+size="row"\s+focusStyle="inset"/u);
     expect(rail).toContain(
-      'className="pointer-events-none relative z-10 pl-1.5"'
+      'className="rounded-control text-body focus-visible:focus-ring-inset flex min-w-0 flex-1 items-center gap-2 leading-4 outline-none hover:bg-transparent dark:hover:bg-transparent"'
     );
+    expect(rail).not.toContain("text-ui");
   });
 
   test("carries the pull-request state by colour, not by words", () => {

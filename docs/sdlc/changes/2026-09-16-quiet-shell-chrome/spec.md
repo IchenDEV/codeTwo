@@ -44,6 +44,11 @@ based_on: intent.md
    `before:` vertical bar; nothing else changes and the row's other states are untouched.
 8. **Quiet checkout-bar labels.** The checkout chip and the branch chip switch their label colour
    from `text-foreground/85` and `text-foreground/80` to the muted foreground.
+9. **One rail content edge.** Every rail row's leading mark and text sit on the same 16px column:
+   the project header's trigger takes the shared `row` size (its unsized Button had fallen back to
+   the default control padding, whose `has-[>svg]:px-3` beat the local `px-2`), and the session
+   content drops the extra `pl-1.5` so it inherits the row's own inset. Header labels keep their
+   40px text column, which the nav rows already use.
 
 ## Acceptance criteria
 
@@ -63,3 +68,5 @@ based_on: intent.md
   no `ProjectIcon`/`Folder` fallback remains in that header.
 - [x] AC-8: The selected rail row renders its selected fill with no leading bar.
 - [x] AC-9: The checkout chip and the branch chip render their labels in the muted foreground.
+- [x] AC-10: Every rail row's leading mark and text share one 16px content edge, and the header rows'
+  labels share the 40px column.

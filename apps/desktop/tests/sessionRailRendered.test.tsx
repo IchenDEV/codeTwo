@@ -374,17 +374,15 @@ describe("SessionRail row layout", () => {
       '[data-session-id="meaningful"]'
     );
     expect(groupedRow?.className).not.toContain("ml-6");
-    expect(toggle?.className).toContain("px-2");
+    expect(toggle?.getAttribute("data-size")).toBe("row");
+    expect(toggle?.className).toContain("min-h-navigation-row");
+    expect(toggle?.className).toContain("px-module-inset");
     expect(groupedRow?.className).toContain("px-2");
+    // One content column: the project mark, the nav marks and the session text all sit on the
+    // rail's single 16px edge, so the session content adds no padding of its own.
     expect(
       groupedRow?.querySelector("[data-session-content]")?.className
-    ).toContain("pl-1.5");
-    expect(
-      groupedRow?.querySelector("[data-session-content]")?.className
-    ).not.toContain("pl-2");
-    expect(
-      groupedRow?.querySelector("[data-session-content]")?.className
-    ).not.toContain("pl-6");
+    ).not.toContain("pl-");
 
     click(toggle);
     await waitFor(() => {
@@ -1085,15 +1083,12 @@ describe("SessionRail row layout", () => {
     ).toBeTruthy();
     expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(2);
     expect(row?.textContent).not.toContain("repo");
+    expect(
+      row?.querySelector("[data-session-content]")?.className
+    ).not.toContain("pl-");
     expect(row?.querySelector("[data-session-content]")?.className).toContain(
-      "pl-1.5"
+      "z-10"
     );
-    expect(
-      row?.querySelector("[data-session-content]")?.className
-    ).not.toContain("pl-2");
-    expect(
-      row?.querySelector("[data-session-content]")?.className
-    ).not.toContain("pl-6");
 
     view.unmount();
   });

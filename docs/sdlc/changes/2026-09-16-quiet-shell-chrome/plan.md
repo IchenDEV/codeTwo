@@ -37,6 +37,10 @@ scope: apps/desktop/src/App.tsx, apps/desktop/src/session/SessionHeaderActions.t
     mark and its narrow-window rule (AC-7); `apps/desktop/src/session/Composer.tsx` moves the
     checkout and branch chip labels to the muted foreground (AC-9).
 
+11. Review follow-up (AC-10): `apps/desktop/src/sidebar/SessionRail.tsx` gives the project trigger
+    the shared `row` size and drops the session content's extra left padding, with the two rail tests
+    updated to the one-edge contract. Verified through the web server (see the checks below).
+
 Checks by risk and affected behavior:
 
 - Desktop: `bun run lint`, `bunx tsc --noEmit`, `bun test`, `bun run build:renderer` from
