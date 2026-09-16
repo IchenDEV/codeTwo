@@ -6,7 +6,7 @@ status: passed
 owner: chenli
 created: 2026-09-15
 based_on: plan.md
-revision: worktree 9823fc74 (branch t3code/fix-tool-card-alignment) plus this uncommitted change
+revision: 901778b6 (branch t3code/fix-tool-card-alignment), re-checked after merging origin/main in b7c460a9
 verification_mode: owner
 verified_by: chenli
 verified_at: 2026-09-15
@@ -82,4 +82,5 @@ authorized.
 Rollback: revert the class additions and the three regression cases; no data, protocol, or
 persistence surface is involved.
 Release: No release requested; merge and external actions require their own authorization.
+Review: [PR #235](https://github.com/IchenDEV/codeTwo/pull/235) carries this change on branch t3code/fix-tool-card-alignment; the hosted CI Validate job passed (run 35053999997).
 Feedback: Link an Incident and regression Eval when a real failure occurs.
