@@ -30,14 +30,14 @@ const titlebarSource = source("../src/electrobun/titlebar.ts");
 const rpcSource = source("../src/electrobun/rpc.ts");
 
 describe("macOS window chrome contract", () => {
-  test("centers the native macOS traffic lights with one fixed position", () => {
+  test("centers the native macOS traffic lights on the rail's leading content column", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toContain("trafficLightOffset");
     expect(electrobunHost).toMatch(
-      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 16\);[\s\S]*?\}\s*rendererReady = true;/u
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(16, 16\);[\s\S]*?\}\s*rendererReady = true;/u
     );
     expect(electrobunHost).toContain(
-      'mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(22, 16))'
+      'mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(16, 16))'
     );
     expect(electrobunHost).not.toContain("ResizeObserver");
     expect(electrobunHost).not.toContain("getBoundingClientRect");
@@ -46,7 +46,7 @@ describe("macOS window chrome contract", () => {
         electrobunHost.matchAll(/setWindowButtonPosition\(([^)]*)\)/gu),
         (match) => match[1]
       )
-    ).toEqual(["22, 16", "22, 16"]);
+    ).toEqual(["16, 16", "16, 16"]);
   });
 
   test("routes custom titlebar double-clicks through the user's macOS window action", () => {

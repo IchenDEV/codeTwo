@@ -502,7 +502,7 @@ if (process.platform === "darwin") {
   }
   // AppKit can reset standard-window-button frames during its own resize layout pass. Reapply the
   // same fixed position afterward; the 46px titlebar has no runtime geometry to measure.
-  mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(22, 16));
+  mainWindow.on("resize", () => mainWindow.setWindowButtonPosition(16, 16));
 }
 
 mainWindow.webview.on("dom-ready", () => {
@@ -510,8 +510,9 @@ mainWindow.webview.on("dom-ready", () => {
     mainWindow.webview.executeJavascript(
       'document.documentElement.classList.add("macos-window-glass")'
     );
-    // Center the 14px native controls in the shared 46px Codex-aligned title row.
-    mainWindow.setWindowButtonPosition(22, 16);
+    // Share the rail's leading content column (mx-2 + px-2 = 16px) and center the 14px native
+    // controls in the shared 46px title row.
+    mainWindow.setWindowButtonPosition(16, 16);
   }
   rendererReady = true;
   rpc.send.hostStatus({ ready: true });

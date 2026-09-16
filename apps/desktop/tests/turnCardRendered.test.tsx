@@ -457,6 +457,124 @@ describe("TurnCard rendered activity", () => {
     rendered.unmount();
   });
 
+  test("leads tool-card titles from the shared icon edge", async () => {
+    activateDom();
+    disableCanvasDrawing();
+    const turn = {
+      ...runningTurn(),
+      content: [
+        { kind: "tool", toolId: "search-1", transcriptSeq: 11 },
+        { kind: "tool", toolId: "search-2", transcriptSeq: 12 },
+      ],
+      tools: [
+        {
+          id: "search-1",
+          title: 'Search tools: "codetwo scenes"',
+          status: "completed",
+          kind: "other",
+          outputs: [{ type: "text", text: "catalog" }],
+        },
+        {
+          id: "search-2",
+          title: 'Search tools: "codetwo openai"',
+          status: "completed",
+          kind: "other",
+          outputs: [{ type: "text", text: "computer use" }],
+        },
+      ],
+      endedAt: 2,
+    };
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard turn={turn} />
+      </I18nProvider>
+    );
+    const group = rendered.container.querySelector("[data-tool-call-group]");
+    const trigger = group?.querySelector("button");
+    const title = trigger?.querySelector("span.flex-1");
+
+    // A native <button> centers text by default; the row trigger must opt back into the leading
+    // edge so the title sits beside the tool icon instead of floating mid-row. The trigger also
+    // drops its start inset so that icon lines up with the transcript text column.
+    expect(trigger?.classList.contains("justify-start")).toBe(true);
+    expect(trigger?.classList.contains("text-start")).toBe(true);
+    expect(trigger?.classList.contains("has-[>svg]:ps-0")).toBe(true);
+    expect(title?.classList.contains("min-w-0")).toBe(true);
+    expect(title?.classList.contains("flex-1")).toBe(true);
+    expect(title?.classList.contains("truncate")).toBe(true);
+
+    click(trigger!);
+    await flush();
+
+    const compact = group?.querySelector("[data-tool-call] button");
+    expect(compact?.classList.contains("text-start")).toBe(true);
+    expect(compact?.classList.contains("has-[>svg]:ps-0")).toBe(true);
+    expect(compact?.textContent).toContain("Search tools");
+    rendered.unmount();
+  });
+
+  test("keeps a standalone tool row on the shared content column", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard
+          turn={{
+            ...runningTurn(),
+            tools: [
+              {
+                id: "run-1",
+                title: "Run renderer verification",
+                status: "in_progress",
+              },
+            ],
+          }}
+        />
+      </I18nProvider>
+    );
+    const row = rendered.container.querySelector('[data-tool-call="run-1"]');
+
+    // The no-output row carries its own inset; only the end side stays so the leading icon shares
+    // the markdown text edge.
+    expect(row?.classList.contains("pe-1")).toBe(true);
+    expect(row?.classList.contains("px-1")).toBe(false);
+    rendered.unmount();
+  });
+
+  test("keeps the chart legend on the shared content column", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const source = `\`\`\`chart\n${JSON.stringify({
+      type: "bar",
+      title: "Build time",
+      xLabel: "Release",
+      yLabel: "Seconds",
+      labels: ["1.0", "1.1"],
+      series: [
+        { name: "Desktop", values: [42, 31] },
+        { name: "Windows", values: [30, 28] },
+      ],
+    })}\n\`\`\``;
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard
+          turn={{
+            ...runningTurn(),
+            text: source,
+            textDeltas: [source],
+            content: [{ kind: "text", text: source, transcriptSeq: 11 }],
+            endedAt: 2,
+          }}
+        />
+      </I18nProvider>
+    );
+    const legend = rendered.container.querySelector("figure [aria-label]");
+
+    expect(legend?.children).toHaveLength(2);
+    expect(legend?.classList.contains("-ms-surface-inset")).toBe(true);
+    rendered.unmount();
+  });
+
   test("keeps an active tool history open with a bounded Codex-style fade", () => {
     activateDom();
     disableCanvasDrawing();

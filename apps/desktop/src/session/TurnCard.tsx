@@ -265,7 +265,7 @@ function ToolCallBlock({
     return (
       <div
         className={cn(
-          "text-body text-muted-foreground flex min-w-0 items-center gap-2 px-1",
+          "text-body text-muted-foreground flex min-w-0 items-center gap-2 pe-1",
           compact ? "py-1" : "my-3 py-1.5"
         )}
         data-tool-call={tool.id}
@@ -292,7 +292,7 @@ function ToolCallBlock({
           />
         }
         className={cn(
-          "group text-muted-foreground hover:text-foreground h-auto w-full min-w-0 justify-start gap-2",
+          "group text-muted-foreground hover:text-foreground h-auto w-full min-w-0 justify-start gap-2 text-start has-[>svg]:ps-0",
           compact ? "py-1" : "py-1.5"
         )}
       >
@@ -396,7 +396,7 @@ function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
             focusStyle="inset"
           />
         }
-        className="group text-muted-foreground hover:text-foreground h-auto w-full min-w-0 justify-start gap-2 py-1.5"
+        className="group text-muted-foreground hover:text-foreground h-auto w-full min-w-0 justify-start gap-2 py-1.5 text-start has-[>svg]:ps-0"
       >
         <LatestIcon className="size-3.5 shrink-0" aria-hidden />
         <span className="min-w-0 flex-1 truncate" title={latest.title}>
