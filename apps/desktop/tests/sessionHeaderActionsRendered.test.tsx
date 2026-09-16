@@ -111,7 +111,8 @@ describe("SessionHeaderActions", () => {
     activateDom();
     const { view } = renderActions();
     const group = view.container.querySelector(".session-header-actions");
-    expect(group?.classList.contains("gap-2")).toBe(true);
+    expect(group?.classList.contains("gap-inline")).toBe(true);
+    expect(group?.classList.contains("gap-2")).toBe(false);
     expect(group?.classList.contains("rounded-control")).toBe(false);
     expect(group?.classList.contains("p-0.5")).toBe(false);
 

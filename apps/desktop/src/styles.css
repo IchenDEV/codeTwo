@@ -1793,10 +1793,6 @@ pre {
 }
 
 @container session-header (max-width: 36rem) {
-  .session-header-actions {
-    gap: var(--ds-space-surface-inset);
-  }
-
   .session-header-action-label {
     display: none;
   }
@@ -1814,7 +1810,6 @@ pre {
 }
 
 @container session-header (max-width: 28rem) {
-  .session-header-project-icon,
   .session-header-project-context,
   .session-header [data-plugin-ui-slot="session.header"] {
     display: none;
@@ -1822,10 +1817,6 @@ pre {
 
   .session-header-title {
     min-width: 3rem;
-  }
-
-  .session-header-actions {
-    gap: 0.25rem;
   }
 }
 

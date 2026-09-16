@@ -1019,7 +1019,7 @@ export function SessionRail({
         aria-label={t(
           isWorktree ? "rail.gitWorktreeHint" : "rail.gitCheckoutHint"
         )}
-        className="rounded-micro bg-fill-quiet text-fine text-foreground/55 flex shrink-0 items-center gap-0.5 px-1 leading-4"
+        className="text-fine text-foreground/55 flex shrink-0 items-center gap-0.5 leading-4"
       >
         <GitBranch className="size-2.5" aria-hidden="true" />
         {t(isWorktree ? "rail.gitWorktree" : "rail.gitCheckout")}
@@ -1032,7 +1032,7 @@ export function SessionRail({
           title={`#${pullRequest.number} · ${pullRequestLabel}`}
           aria-label={`#${pullRequest.number} · ${pullRequestLabel}`}
           className={cn(
-            "rounded-micro bg-fill-quiet text-fine flex shrink-0 items-center gap-0.5 px-1 leading-4",
+            "text-fine flex shrink-0 items-center gap-0.5 leading-4",
             pullRequestTone
           )}
         >
@@ -1043,7 +1043,7 @@ export function SessionRail({
           ) : (
             <GitPullRequest className="size-2.5" aria-hidden="true" />
           )}
-          #{pullRequest.number} {pullRequestLabel}
+          #{pullRequest.number}
         </span>
       ) : null;
     const provenanceInSummary = pullRequest === null;
@@ -1328,7 +1328,7 @@ export function SessionRail({
                   className={cn(
                     "session-rail-row group rounded-control hover:bg-fill-hover focus-within:bg-fill-hover active:bg-fill-pressed data-[popup-open]:bg-fill-hover relative cursor-default px-2 py-1.5 transition-[box-shadow,opacity] outline-none data-[sidebar-dragging=true]:opacity-45",
                     s.id === activeSession &&
-                      "bg-fill-selected hover:bg-fill-selected-hover focus-within:bg-fill-selected active:bg-fill-pressed before:absolute before:inset-y-3 before:left-0.5 before:w-0.5 before:rounded-full before:bg-current"
+                      "bg-fill-selected hover:bg-fill-selected-hover focus-within:bg-fill-selected active:bg-fill-pressed"
                   )}
                 >
                   <Button

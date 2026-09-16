@@ -204,10 +204,10 @@ describe("macOS window chrome contract", () => {
       '"session-header window-titlebar electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 pr-4"'
     );
     expect(appSource).toContain(
-      'className="session-header-toolbar [&_svg]:text-muted-foreground flex min-w-0 shrink-0 items-center gap-4"'
+      'className="session-header-toolbar [&_svg]:text-muted-foreground gap-inline flex min-w-0 shrink-0 items-center"'
     );
     expect(sessionHeaderActionsSource).toContain(
-      'className="session-header-actions flex shrink-0 items-center gap-2"'
+      'className="session-header-actions gap-inline flex shrink-0 items-center"'
     );
     expect(sessionHeaderActionsSource).toContain(
       "session-header-action-main bg-fill-rest text-foreground hover:bg-fill-hover hover:text-foreground"
