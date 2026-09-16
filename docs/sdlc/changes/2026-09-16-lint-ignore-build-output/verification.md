@@ -42,4 +42,7 @@ Approval: the fix and its PR were requested directly by the user (pr); merge and
 authorized.
 Rollback: See plan.md.
 Release: No release requested; merge and external actions require their own authorization.
+Review: [PR #240](https://github.com/IchenDEV/codeTwo/pull/240) carries this change on branch
+t3code/lint-ignore-build-output, based on main 833ecb8b; the hosted CI Validate job passed (run
+35086020084, job 104760912876, 2m58s).
 Feedback: Link an Incident and regression Eval when a real failure occurs.
