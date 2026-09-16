@@ -31,7 +31,7 @@ const buttonVariants = cva(
         field:
           "h-control-field gap-inline px-surface-inset has-[>svg]:px-module-inset",
         xs: "h-control-mini rounded-control text-metadata gap-1 px-2 has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-control-mini rounded-control has-[>svg]:px-module-inset gap-1.5 px-3",
+        sm: "h-control-mini gap-inline px-surface-inset has-[>svg]:px-module-inset",
         lg: "h-control-field rounded-control px-6 has-[>svg]:px-4",
         icon: "size-control",
         "icon-xs":

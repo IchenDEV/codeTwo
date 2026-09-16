@@ -85,6 +85,7 @@ import {
   originLabelKey,
 } from "./memory-model";
 import type { MemoryFilter, MemoryView } from "./memory-model";
+import { GroupHeading } from "./SettingsPrimitives";
 
 import "./memory-settings.css";
 
@@ -616,7 +617,7 @@ function DetailPanel({
       </div>
       <section className="memory-detail-section">
         <div className="memory-detail-section-title">
-          <h3>{t("memory.evidence")}</h3>
+          <GroupHeading className="pt-0">{t("memory.evidence")}</GroupHeading>
           <Button
             variant="ghost"
             size="xs"
@@ -662,7 +663,7 @@ function DetailPanel({
         )}
       </section>
       <section className="memory-detail-section">
-        <h3>{t("memory.usageHistory")}</h3>
+        <GroupHeading className="pt-0">{t("memory.usageHistory")}</GroupHeading>
         {usages.length === 0 ? (
           <p className="memory-detail-muted">{t("memory.noUsage")}</p>
         ) : (
@@ -1061,7 +1062,9 @@ export function MemorySettingsPage({
         </summary>
         <div className="memory-disclosure-body">
           <div className="memory-policy-column">
-            <h2>{t("memory.globalDefaults")}</h2>
+            <GroupHeading className="pt-0">
+              {t("memory.globalDefaults")}
+            </GroupHeading>
             <SettingToggle
               checked={settings.enabled}
               label={t("memory.enabled")}
@@ -1093,7 +1096,9 @@ export function MemorySettingsPage({
             />
           </div>
           <div className="memory-policy-column">
-            <h2>{t("memory.projectOverrides")}</h2>
+            <GroupHeading className="pt-0">
+              {t("memory.projectOverrides")}
+            </GroupHeading>
             <p className="text-metadata text-muted-foreground">
               {t("memory.projectOverridesHint")}
             </p>

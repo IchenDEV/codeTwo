@@ -6,44 +6,9 @@
   gap: var(--ds-space-page-section);
 }
 
-.appearance-section {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--ds-space-surface-inset);
-}
-
-.appearance-section-header {
-  display: flex;
-  min-width: 0;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--ds-space-section);
-}
-
-.appearance-section-actions {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--ds-space-control-group);
-}
-
-.appearance-settings-heading {
-  margin: 0;
-  color: var(--ds-color-text);
-  font-size: var(--ds-type-section-size);
-  font-weight: var(--ds-font-weight-medium);
-  line-height: var(--ds-type-section-leading);
-}
-
-.appearance-section-hint {
-  max-width: 36rem;
-  margin: var(--ds-space-optical) 0 0;
-  color: var(--ds-color-text-muted);
-  font-size: var(--ds-type-body-size);
-  line-height: var(--ds-type-body-leading);
+/* The typography section stacks two blocks inside one shared SettingsSection content. */
+.appearance-profile-grid + .appearance-setting-group {
+  margin-top: var(--ds-space-surface-inset);
 }
 
 .appearance-scheme-grid {
@@ -563,16 +528,6 @@
   .appearance-palette-grid,
   .appearance-profile-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .appearance-section-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--ds-space-module-inset);
-  }
-
-  .appearance-section-actions {
-    justify-content: flex-start;
   }
 }
 

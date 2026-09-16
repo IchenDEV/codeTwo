@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { SettingRow } from "@/components/business/setting-row";
 import { SettingToggle } from "@/components/business/setting-toggle";
+import { SettingsSection } from "@/components/business/settings-section";
 import { ViewSwitcher } from "@/components/business/view-switcher";
 import { Button } from "@/components/ui/button";
 import { Copy, Download, Plus, Trash2, Upload } from "@/components/ui/icons";
@@ -664,16 +665,10 @@ export function AppearanceSettings({
 
   return (
     <div className="appearance-settings">
-      <section
-        className="appearance-section"
-        aria-labelledby="appearance-color-scheme"
+      <SettingsSection
+        title={t("settings.colorScheme")}
+        headingId="appearance-color-scheme"
       >
-        <h2
-          id="appearance-color-scheme"
-          className="appearance-settings-heading"
-        >
-          {t("settings.colorScheme")}
-        </h2>
         <div
           className="appearance-scheme-grid"
           role="radiogroup"
@@ -694,15 +689,12 @@ export function AppearanceSettings({
             </label>
           ))}
         </div>
-      </section>
+      </SettingsSection>
 
-      <section
-        className="appearance-section"
-        aria-labelledby="appearance-typography"
+      <SettingsSection
+        title={t("settings.typography")}
+        headingId="appearance-typography"
       >
-        <h2 id="appearance-typography" className="appearance-settings-heading">
-          {t("settings.typography")}
-        </h2>
         <div className="appearance-profile-grid">
           {PROFILE_SCHEMES.map((scheme) => (
             <TypographyProfileEditor
@@ -734,17 +726,13 @@ export function AppearanceSettings({
             onChange={(codeFontSize) => setAppearanceSettings({ codeFontSize })}
           />
         </div>
-      </section>
+      </SettingsSection>
 
-      <section
-        className="appearance-section"
-        aria-labelledby="appearance-themes"
-      >
-        <div className="appearance-section-header">
-          <h2 id="appearance-themes" className="appearance-settings-heading">
-            {t("settings.themes")}
-          </h2>
-          <div className="appearance-section-actions">
+      <SettingsSection
+        title={t("settings.themes")}
+        headingId="appearance-themes"
+        actions={
+          <>
             <Button
               variant="secondary"
               size="sm"
@@ -774,8 +762,9 @@ export function AppearanceSettings({
               }
               tabIndex={-1}
             />
-          </div>
-        </div>
+          </>
+        }
+      >
         <div className="appearance-theme-grid">
           {catalog.map((theme) => (
             <ThemeCard
@@ -789,27 +778,18 @@ export function AppearanceSettings({
             />
           ))}
         </div>
-      </section>
+      </SettingsSection>
 
-      <section
-        className="appearance-section appearance-editor-section"
-        aria-labelledby="appearance-theme-editor"
-      >
-        <div className="appearance-section-header">
-          <div>
-            <h2
-              id="appearance-theme-editor"
-              className="appearance-settings-heading"
-            >
-              {t("settings.themeEditor")}
-            </h2>
-            <p className="appearance-section-hint">
-              {activeTheme.builtin
-                ? t("settings.builtinThemeHint")
-                : t("settings.customThemeHint")}
-            </p>
-          </div>
-          <div className="appearance-section-actions">
+      <SettingsSection
+        title={t("settings.themeEditor")}
+        headingId="appearance-theme-editor"
+        description={
+          activeTheme.builtin
+            ? t("settings.builtinThemeHint")
+            : t("settings.customThemeHint")
+        }
+        actions={
+          <>
             <Button
               variant="ghost"
               size="sm"
@@ -829,8 +809,9 @@ export function AppearanceSettings({
                 <Trash2 />
               </TooltipButton>
             )}
-          </div>
-        </div>
+          </>
+        }
+      >
         <div className="appearance-editor-surface">
           {!activeTheme.builtin && (
             <SettingRow
@@ -865,15 +846,12 @@ export function AppearanceSettings({
             />
           </div>
         </div>
-      </section>
+      </SettingsSection>
 
-      <section
-        className="appearance-section"
-        aria-labelledby="appearance-surfaces"
+      <SettingsSection
+        title={t("settings.surfaces")}
+        headingId="appearance-surfaces"
       >
-        <h2 id="appearance-surfaces" className="appearance-settings-heading">
-          {t("settings.surfaces")}
-        </h2>
         <div className="appearance-profile-grid">
           {PROFILE_SCHEMES.map((scheme) => (
             <SurfaceProfileEditor
@@ -885,15 +863,12 @@ export function AppearanceSettings({
             />
           ))}
         </div>
-      </section>
+      </SettingsSection>
 
-      <section
-        className="appearance-section"
-        aria-labelledby="appearance-preferences"
+      <SettingsSection
+        title={t("settings.appearancePreferences")}
+        headingId="appearance-preferences"
       >
-        <h2 id="appearance-preferences" className="appearance-settings-heading">
-          {t("settings.appearancePreferences")}
-        </h2>
         <div className="appearance-setting-group">
           <SettingToggle
             label={t("settings.pointerCursors")}
@@ -954,7 +929,7 @@ export function AppearanceSettings({
             />
           </SettingRow>
         </div>
-      </section>
+      </SettingsSection>
 
       {status && (
         <p className="appearance-status" role="status">

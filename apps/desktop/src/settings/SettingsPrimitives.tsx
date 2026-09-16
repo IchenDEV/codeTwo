@@ -55,9 +55,20 @@ export function ProjectRow(props: RowProps) {
   );
 }
 
-export function GroupHeading({ children }: { children: ReactNode }) {
+export function GroupHeading({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <h3 className="pt-section text-body text-foreground font-semibold">
+    <h3
+      className={cn(
+        "pt-section text-body text-content font-semibold",
+        className
+      )}
+    >
       {children}
     </h3>
   );

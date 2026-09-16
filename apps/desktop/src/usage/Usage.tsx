@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
+import { PageHeader } from "@/components/business/page-header";
 import { QuotaProgress } from "@/components/business/quota-progress";
 import { Button } from "@/components/ui/button";
 import {
@@ -697,15 +698,11 @@ function UsageView({
         </DialogHeader>
       ) : (
         <div className="pb-3">
-          <div className="flex items-center gap-2">
-            <h1 className="text-page font-semibold tracking-tight">
-              {t("usage.title")}
-            </h1>
-            {controls}
-          </div>
-          <p className="text-metadata text-muted-foreground pt-1.5">
-            {t("usage.description")}
-          </p>
+          <PageHeader
+            title={t("usage.title")}
+            description={t("usage.description")}
+            actions={controls}
+          />
         </div>
       )}
 

@@ -31,7 +31,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cssVars } from "@/lib/cssVars";
-import { cn } from "@/lib/utils";
 
 import { resetVisualAppearanceSettings } from "../appearance";
 import {
@@ -463,13 +462,7 @@ export function SettingsPage({
         </header>
 
         <ScrollArea key={tab} className="min-h-0 flex-1">
-          <div
-            className={cn(
-              "settings-page mx-auto w-full",
-              tab === "profile" && "settings-profile-page",
-              tab === "worktrees" && "settings-worktrees-page"
-            )}
-          >
+          <div className="settings-page mx-auto w-full">
             {tab === "project" && onSelectProject && (
               <Select
                 value={projectPath}
