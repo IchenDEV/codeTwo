@@ -53,7 +53,11 @@ and this record bundle; `du -sh apps/desktop/dist` reported 48M before removal.
 
 ## Review and release
 
-Approval: awaiting chenli's review of the verified work.
+Approval: implementation and PR delivery were requested directly by the user (开始按照顺序打勾修复,
+then pr); merge and release are not authorized.
 Rollback: See plan.md.
 Release: No release requested; merge and external actions require their own authorization.
+Review: [PR #236](https://github.com/IchenDEV/codeTwo/pull/236) carries this change on branch
+t3code/cube-computer-ui-cleanup-study; the hosted CI Validate job passed (run 35070958654, job
+104712090561, 2m38s).
 Feedback: Link an Incident and regression Eval when a real failure occurs.
