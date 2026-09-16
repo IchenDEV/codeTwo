@@ -358,9 +358,9 @@ export function loadConfiguredComputerUse(dataDir: string): {
   const path = join(dataDir, HOST_TOOLS_CONFIG_FILE);
   if (!existsSync(path)) {
     return {
-      bridges: [],
+      bridges: builtinComputerUseBridges(),
       selections: {},
-      backends: [cuaDriverOption()],
+      backends: builtinComputerUseBackends(),
       errors: [],
     };
   }
@@ -371,7 +371,7 @@ export function loadConfiguredComputerUse(dataDir: string): {
     return {
       bridges: [],
       selections: {},
-      backends: [cuaDriverOption()],
+      backends: builtinComputerUseBackends(),
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }
@@ -388,7 +388,7 @@ export function loadConfiguredComputerUse(dataDir: string): {
     return {
       bridges: [],
       selections,
-      backends: [cuaDriverOption()],
+      backends: builtinComputerUseBackends(),
       errors: [
         `schema ${JSON.stringify(document.schema_version)} is unsupported; expected 1`,
       ],
@@ -492,6 +492,19 @@ export function loadConfiguredComputerUse(dataDir: string): {
       option.reason !== ""
     )
       errors.push(option.reason);
+  }
+  if (!ids.has(PI_COMPUTER_USE_BACKEND)) {
+    const option = piComputerUseOption();
+    backends.push(option);
+    if (option.available && piComputerUseServer() !== null) {
+      bridges.push(piComputerUseBridge());
+    } else if (
+      selectedIds.has(PI_COMPUTER_USE_BACKEND) &&
+      option.reason != null &&
+      option.reason !== ""
+    ) {
+      errors.push(option.reason);
+    }
   }
   for (const selection of selectedIds) {
     if (!backends.some((backend) => backend.id === selection)) {
@@ -709,6 +722,83 @@ function cuaDriverBridge(): ConfiguredComputerUseBridge {
   };
 }
 
+const PI_COMPUTER_USE_BACKEND = "pi-computer-use";
+
+function piComputerUseHelperApp(): string | null {
+  const explicit = string(process.env.PI_COMPUTER_USE_HELPER_APP_PATH);
+  if (explicit != null) return explicit;
+  if (process.platform !== "darwin") return null;
+  if (existsSync("/Applications/pi-computer-use.app")) {
+    return "/Applications/pi-computer-use.app";
+  }
+  const home = string(process.env.HOME);
+  if (home == null) return null;
+  return existsSync(join(home, "Applications", "pi-computer-use.app"))
+    ? join(home, "Applications", "pi-computer-use.app")
+    : null;
+}
+
+function piComputerUseServer(): AcpStdioMcpServer | null {
+  if (piComputerUseHelperApp() === null) return null;
+  const override = string(process.env.CODETWO_PI_COMPUTER_USE_BRIDGE);
+  if (override != null) {
+    return {
+      name: PI_COMPUTER_USE_BACKEND,
+      command: override,
+      args: [],
+      env: [],
+    };
+  }
+  if (!/^(?:bun|node)(?:\.exe)?$/iu.test(basename(process.execPath))) {
+    return null;
+  }
+  const bridge = join(import.meta.dir, "piComputerUseMcp.ts");
+  if (!existsSync(bridge)) return null;
+  return {
+    name: PI_COMPUTER_USE_BACKEND,
+    command: process.execPath,
+    args: [bridge],
+    env: [],
+  };
+}
+
+function piComputerUseOption(): ComputerUseBackendOption {
+  const available = piComputerUseServer() !== null;
+  return {
+    id: PI_COMPUTER_USE_BACKEND,
+    displayName: "Pi Computer Use",
+    available,
+    reason: available
+      ? "pi-computer-use and its macOS helper app are installed."
+      : "Install @injaneity/pi-computer-use with its macOS helper app, and run C2 from Bun or set CODETWO_PI_COMPUTER_USE_BRIDGE.",
+    providers: [],
+    excludeProviders: [],
+  };
+}
+
+function piComputerUseBridge(): ConfiguredComputerUseBridge {
+  return {
+    id: PI_COMPUTER_USE_BACKEND,
+    enabled: false,
+    displayName: "Pi Computer Use",
+    version: null,
+    providers: [],
+    excludeProviders: [],
+    server: piComputerUseServer()!,
+  };
+}
+
+function builtinComputerUseBackends(): ComputerUseBackendOption[] {
+  return [cuaDriverOption(), piComputerUseOption()];
+}
+
+function builtinComputerUseBridges(): ConfiguredComputerUseBridge[] {
+  const bridges: ConfiguredComputerUseBridge[] = [];
+  if (cuaDriverOption().available) bridges.push(cuaDriverBridge());
+  if (piComputerUseServer() !== null) bridges.push(piComputerUseBridge());
+  return bridges;
+}
+
 export function computerUseSettings(
   evidence: HostToolEvidence
 ): ComputerUseSettings {
@@ -844,9 +934,9 @@ export function detectHostToolEvidence(
     dataDir != null && dataDir !== ""
       ? loadConfiguredComputerUse(dataDir)
       : {
-          bridges: [],
+          bridges: builtinComputerUseBridges(),
           selections: {},
-          backends: [cuaDriverOption()],
+          backends: builtinComputerUseBackends(),
           errors: [],
         };
   const browserConfigured =
