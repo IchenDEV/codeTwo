@@ -178,7 +178,7 @@ The shared business set is:
 
 | module | owns | current callers |
 | --- | --- | --- |
-| `PageHeader` | page heading hierarchy, description measure, responsive action placement | Automations, Plugin Hub, Scene Studio, Task Board |
+| `PageHeader` | page heading hierarchy, description measure, responsive action placement | Automations, Plugin Hub, Scene Studio, Task Board, settings pages |
 | `SearchField` | labelled search input, icon geometry, optional accessible clear action | Automations, Docker, Task Board, Plugin Manager, Memory, Trajectory |
 | `Empty` primitive | empty-state hierarchy, media, description, and action composition | Automations, Pull Requests |
 | `SelectableRow` | compact picker choice, visible selection mark, accessible selected/disabled state, description and metadata layout | Composer mode, memory, collaboration, worktree, provider, and model pickers; Scene picker; Checkout picker |
@@ -190,6 +190,15 @@ The shared business set is:
 | `StatusBadge` | neutral, success, warning, and destructive status-pill treatment | Automations, Turn Card, Plugin Manager and bundle administration, Scene chip/popover, GitHub pull-request detail |
 | `StatusIndicator` | semantic dot-and-label status with theme-managed tones | Docker, Device connections |
 | `SettingToggle` | visible label and description association, immediate boolean control, disabled presentation, and row layout | Project actions, Memory, Sync, Project scheduling, Appshots, Pets |
+
+The settings cohort composes those primitives once, in `src/settings/SettingsPrimitives.tsx`: `Page`
+wraps `SettingsPanel`/`PageHeader`, `Row` and `ProjectRow` wrap `SettingRow` (the project variant
+adding the shared trailing control lane), and `GroupHeading` owns the 14px/600 group label used by
+the pages whose sections already own their spacing. Settings pages consume that module instead of
+re-deriving the anatomy; the module is cohort-local rather than a business primitive, and it is
+subject to the same lint restrictions as every other product file. Current callers: General,
+Import, Keybindings, Project, Worktrees, Memory, Providers, Appshots, and the Appearance, Pets and
+Sync pages that are wrapped through `SettingsPage`.
 
 `SelectableRow` is deliberately limited to persistent selection inside compact pickers. Radio or
 checkbox questions use `ChoiceRow`; navigation/current-page rows, disclosure rows, and master-detail

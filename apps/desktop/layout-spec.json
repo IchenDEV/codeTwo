@@ -32,7 +32,7 @@
     }
   },
   "shell": {
-    "titlebarHeight": 48,
+    "titlebarHeight": 46,
     "regions": {
       "navigationRail": {
         "defaultWidth": 288,
@@ -114,9 +114,9 @@
     }
   },
   "verticalRhythm": {
-    "titlebarHeight": 48,
-    "normalControlHeight": 28,
-    "fieldControlHeight": 32,
+    "titlebarHeight": 46,
+    "normalControlHeight": 32,
+    "fieldControlHeight": 36,
     "sectionGap": 16,
     "pageSectionGap": 32
   },

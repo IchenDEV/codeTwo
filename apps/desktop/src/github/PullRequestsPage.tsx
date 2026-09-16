@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 
+import { LoadFeedback } from "@/components/business/load-feedback";
 import { MasterDetailRow } from "@/components/business/master-detail-row";
 import { StatusBadge } from "@/components/business/status-badge";
 import type { StatusTone } from "@/components/business/status-badge";
@@ -461,28 +462,17 @@ export function PullRequestsPage({
         <ScrollArea className="min-h-0 flex-1">
           <div className="px-3 pb-4">
             {loading && items.length === 0 ? (
-              <div
-                role="status"
-                className="text-body text-muted-foreground flex items-center justify-center gap-2 py-12"
-              >
-                <ActivityOrb state="searching" visualSize={14} />
-                {t("pullRequests.loading")}
-              </div>
+              <LoadFeedback
+                state="loading"
+                message={t("pullRequests.loading")}
+              />
             ) : error != null && error !== "" ? (
-              <div
-                role="alert"
-                className="text-body text-muted-foreground mx-1 flex flex-col items-center gap-3 py-12 text-center"
-              >
-                <CircleAlert className="text-destructive size-4" />
-                <p className="max-w-72">{error}</p>
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  onClick={() => void reload()}
-                >
-                  {t("pullRequests.retry")}
-                </Button>
-              </div>
+              <LoadFeedback
+                state="error"
+                message={error}
+                retryLabel={t("pullRequests.retry")}
+                onRetry={() => void reload()}
+              />
             ) : groups.length === 0 ? (
               <Empty className="py-section">
                 <EmptyHeader>
@@ -682,32 +672,21 @@ export function PullRequestsPage({
         </header>
         {selected ? (
           detailState?.loading === true && !detail ? (
-            <div
-              role="status"
-              className="text-body text-muted-foreground flex min-h-0 flex-1 items-center justify-center gap-2"
-            >
-              <ActivityOrb state="searching" visualSize={14} />
-              {t("pullRequests.loadingDetail")}
-            </div>
+            <LoadFeedback
+              state="loading"
+              message={t("pullRequests.loadingDetail")}
+            />
           ) : detailState?.error != null && detailState.error !== "" ? (
-            <div
-              role="alert"
-              className="text-body text-muted-foreground flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
-            >
-              <CircleAlert className="text-destructive size-4" />
-              <p>{detailState.error}</p>
-              <Button
-                variant="secondary"
-                size="compact"
-                onClick={() => {
-                  const current = selected;
-                  setSelectedId(null);
-                  setTimeout(() => setSelectedId(current.id), 0);
-                }}
-              >
-                {t("pullRequests.retry")}
-              </Button>
-            </div>
+            <LoadFeedback
+              state="error"
+              message={detailState.error}
+              retryLabel={t("pullRequests.retry")}
+              onRetry={() => {
+                const current = selected;
+                setSelectedId(null);
+                setTimeout(() => setSelectedId(current.id), 0);
+              }}
+            />
           ) : detail ? (
             <div className="pull-request-detail-workspace min-h-0 flex-1">
               <ScrollArea className="pull-request-primary min-h-0">
