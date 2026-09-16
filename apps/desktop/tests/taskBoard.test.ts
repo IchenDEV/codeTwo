@@ -11,6 +11,7 @@ import {
   TASK_PRIORITIES,
   TASK_BOARD_LANES,
   TASK_STATUSES,
+  assignTaskNumbers,
   associateTaskPullRequest,
   associateTaskSession,
   boardLabels,
@@ -19,8 +20,10 @@ import {
   createBoardTask,
   createInitialTaskBoardState,
   filterBoardTasks,
+  laneStatus,
   loadBoardSnapshot,
   githubPullRequestIdentity,
+  nextTaskNumber,
   parseBoardSnapshot,
   saveBoardSnapshot,
   seedTasks,
@@ -117,6 +120,7 @@ function task(
 ): BoardTask {
   return {
     id,
+    number: 0,
     title: `Task ${id}`,
     description: `Description ${id}`,
     status,
@@ -171,6 +175,7 @@ describe("task board model constants and creation", () => {
     ]);
     expect(PRIORITIES).toBe(TASK_PRIORITIES);
     expect(TASKBOARD_STORAGE_KEY).toBe("codetwo.taskboard.v1");
+    expect(TASKBOARD_SNAPSHOT_VERSION).toBe(4);
   });
 
   test("returns deterministic, realistic Chinese seed tasks as fresh objects", () => {
@@ -196,6 +201,9 @@ describe("task board model constants and creation", () => {
       done: 2,
     });
     expect(first.every((item) => item.sessionIds.length === 0)).toBe(true);
+    expect(first.map((item) => item.number)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9,
+    ]);
 
     first[0].title = "mutated";
     first[0].labels.push("mutated");
@@ -205,6 +213,7 @@ describe("task board model constants and creation", () => {
   test("creates a complete normalized task with injectable identity and time", () => {
     const created = createBoardTask(
       {
+        number: 12,
         title: "  修复筛选交互  ",
         description: "  保留任务顺序  ",
         status: "in_progress",
@@ -217,6 +226,7 @@ describe("task board model constants and creation", () => {
 
     expect(created).toEqual({
       id: "task-7",
+      number: 12,
       title: "修复筛选交互",
       description: "保留任务顺序",
       status: "in_progress",
@@ -229,6 +239,38 @@ describe("task board model constants and creation", () => {
       pullRequest: null,
       pullRequestLinkRevision: 0,
     });
+
+    const unnumbered = createBoardTask({ title: "未编号" }, { now: BASE_TIME });
+    expect(unnumbered.number).toBe(0);
+    expect(
+      createBoardTask({ title: "非法编号", number: -3 }, { now: BASE_TIME })
+        .number
+    ).toBe(0);
+  });
+
+  test("assigns, advances, and repairs display numbers", () => {
+    expect(nextTaskNumber([])).toBe(1);
+    expect(nextTaskNumber([task("a", "todo", 0), task("b", "todo", 0)])).toBe(
+      1
+    );
+    expect(
+      nextTaskNumber([
+        task("a", "todo", 0, { number: 4 }),
+        task("b", "todo", 0, { number: 2 }),
+      ])
+    ).toBe(5);
+
+    const repaired = assignTaskNumbers([
+      task("zero", "todo", 0, { number: 0 }),
+      task("kept", "todo", 0, { number: 5 }),
+      task("missing-number", "todo", 0, { number: Number.NaN }),
+      task("duplicate", "todo", 0, { number: 5 }),
+      task("negative", "todo", 0, { number: -2 }),
+    ]);
+    expect(repaired.map((item) => item.number)).toEqual([1, 5, 2, 3, 4]);
+    expect(assignTaskNumbers(repaired).map((item) => item.number)).toEqual([
+      1, 5, 2, 3, 4,
+    ]);
   });
 
   test("adds durable sessions to a task history and starts todo work", () => {
@@ -342,11 +384,16 @@ describe("task board projection helpers", () => {
     expect(taskBoardLane(task("failed", "in_progress"), "failed")).toBe(
       "needs_you"
     );
-    expect(taskBoardLane(task("paused", "in_progress"), "idle")).toBe("queue");
+    expect(taskBoardLane(task("idle", "in_progress"), "idle")).toBe("running");
     expect(taskBoardLane(task("review", "in_review"), "running")).toBe(
       "needs_you"
     );
     expect(taskBoardLane(task("done", "done"), "failed")).toBe("done");
+
+    expect(laneStatus("queue")).toBe("todo");
+    expect(laneStatus("running")).toBe("in_progress");
+    expect(laneStatus("needs_you")).toBe("in_review");
+    expect(laneStatus("done")).toBe("done");
   });
 
   test("sorts by column and order without mutating, with stable equal-order tasks", () => {
@@ -449,6 +496,7 @@ describe("task board persistence", () => {
 
     const savedTasks = [
       task("saved", "in_progress", 3, {
+        number: 7,
         labels: ["本地"],
         pullRequest: pullRequest(),
         pullRequestLinkRevision: 2,
@@ -524,6 +572,7 @@ describe("task board persistence", () => {
         {
           ...rawTask,
           id: "normalized",
+          number: 1,
           title: "Normalized title",
           labels: ["UI"],
           sessionIds: ["session-1", "session-2"],
@@ -543,6 +592,7 @@ describe("task board persistence", () => {
     );
 
     expect(loaded.warning).toBeNull();
+    expect(loaded.tasks[0]?.number).toBe(1);
     expect(loaded.tasks[0]?.sessionIds).toEqual(["session-old"]);
     expect(loaded.tasks[0]?.pullRequest).toBeNull();
     expect(loaded.tasks[0]?.pullRequestLinkRevision).toBe(0);
@@ -627,6 +677,15 @@ describe("task board reducer", () => {
 
     expect(idsForStatus(next, "todo")).toEqual(["a", "b", "c"]);
     expect(next.tasks.find((item) => item.id === "c")?.order).toBe(2);
+    expect(next.tasks.find((item) => item.id === "c")?.number).toBe(1);
+    const numbered = boardReducer(
+      state([
+        task("existing", "todo", 0, { number: 9 }),
+        task("adjacent", "done", 0, { number: 3 }),
+      ]),
+      { type: "create", task: task("fresh", "todo", 0, { number: 1_000 }) }
+    );
+    expect(numbered.tasks.find((item) => item.id === "fresh")?.number).toBe(10);
     expect(next.tasks.find((item) => item.id === "c")?.labels).not.toBe(
       created.labels
     );

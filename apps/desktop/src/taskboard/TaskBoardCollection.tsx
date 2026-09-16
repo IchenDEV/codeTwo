@@ -1,7 +1,7 @@
 import type { Locale, Translate } from "@/i18n";
 import type { SidebarPullRequestStatus } from "@/sidebar/sidebarGitStatus";
 
-import type { BoardTask, TaskStatus } from "./taskBoard";
+import type { BoardTask, TaskBoardLane, TaskStatus } from "./taskBoard";
 import { TaskBoardKanban } from "./TaskBoardKanban";
 import { TaskBoardList } from "./TaskBoardList";
 import type { ProjectedTask, TaskBoardView } from "./workspaceTypes";
@@ -23,7 +23,8 @@ interface TaskBoardCollectionProps {
   onSelectSession: (taskId: string, sessionId: string) => void;
   onEditTask: (task: BoardTask) => void;
   onDeleteTask: (task: BoardTask) => void;
-  onMoveTask: (task: BoardTask, status: TaskStatus) => void;
+  onMoveTask: (task: BoardTask, status: TaskStatus, beforeId?: string) => void;
+  onAddTask: (lane: TaskBoardLane) => void;
   onStartTask?: (task: BoardTask) => void;
   onShowMore: () => void;
 }
@@ -42,6 +43,7 @@ export function TaskBoardCollection(props: TaskBoardCollectionProps) {
         onEditTask={props.onEditTask}
         onDeleteTask={props.onDeleteTask}
         onMoveTask={props.onMoveTask}
+        onAddTask={props.onAddTask}
         onStartTask={props.onStartTask}
       />
     );

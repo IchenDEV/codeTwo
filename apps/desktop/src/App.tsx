@@ -462,6 +462,7 @@ import {
   createBoardTask,
   githubPullRequestIdentity,
   loadBoardSnapshot,
+  nextTaskNumber,
   saveBoardSnapshot,
   taskForPullRequest,
   taskForSession,
@@ -4068,6 +4069,7 @@ export default function App() {
         title: summary.slice(0, 72) || "未命名任务",
         status: "todo",
         priority: "none",
+        number: nextTaskNumber(board.tasks),
         order: board.tasks.filter((candidate) => candidate.status === "todo")
           .length,
       });
@@ -4708,6 +4710,7 @@ export default function App() {
         status: "in_progress",
         priority: "none",
         labels: ["GitHub", "PR"],
+        number: nextTaskNumber(current),
         order: current.filter((task) => task.status === "in_progress").length,
       });
       tasks = [...tasks, target];

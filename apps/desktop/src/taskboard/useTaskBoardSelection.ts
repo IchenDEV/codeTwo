@@ -33,13 +33,20 @@ export function useTaskBoardSelection(
       if (selectedSessionId !== null) setSelectedSessionId(null);
       return;
     }
-    if (selectedTaskId !== selectedProjectedTask.task.id) {
-      setSelectedTaskId(selectedProjectedTask.task.id);
+    // The Inspector falls back to the first visible Task, but the board and list only highlight a
+    // Task the user actually picked: the fallback is never written into the selection, and a
+    // deleted selection is dropped instead of jumping to another row.
+    if (
+      selectedTaskId !== null &&
+      !allTasks.some(({ task }) => task.id === selectedTaskId)
+    ) {
+      setSelectedTaskId(null);
     }
     const nextSessionId = selectedSession?.id ?? null;
     if (selectedSessionId !== nextSessionId)
       setSelectedSessionId(nextSessionId);
   }, [
+    allTasks,
     selectedProjectedTask,
     selectedSession,
     selectedSessionId,

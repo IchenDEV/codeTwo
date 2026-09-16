@@ -221,8 +221,11 @@ describe("TaskBoardPage rendered", () => {
     );
     expect(boardScroll?.className).toContain("overflow-x-auto");
     expect(boardScroll?.className).toContain("max-w-full");
-    expect(taskBoardStyles).toContain("repeat(4, minmax(14rem, 1fr))");
-    expect(taskBoardStyles).toContain("min-width: calc(56rem + 1.5rem)");
+    expect(taskBoardStyles).toContain("--task-board-column-width: 17rem");
+    expect(taskBoardStyles).toContain(
+      "flex: 0 0 var(--task-board-column-width)"
+    );
+    expect(taskBoardStyles).toContain("overflow-y: auto");
     const card = view.container.querySelector("[data-task-card]");
     expect(card?.className).toContain("overflow-hidden");
     expect(card?.querySelector("[data-task-card-meta]")?.className).toContain(
@@ -230,7 +233,29 @@ describe("TaskBoardPage rendered", () => {
     );
     expect(card?.textContent).not.toContain("0 个会话");
     expect(card?.textContent).not.toContain("PR 0");
+    expect(card?.textContent).toContain("TASK-2");
+    expect(card?.textContent).toContain("保存看板快照");
+    expect(card?.textContent).toContain("紧急");
+    expect(card?.textContent).toContain("工程");
+    expect(card?.querySelector('[data-slot="status-badge"]')).toBeNull();
     expect(view.container.textContent).toContain("接入任务本地持久化");
+    const runningColumn = view.container.querySelector(
+      '[data-task-column="running"]'
+    );
+    const queueColumn = view.container.querySelector(
+      '[data-task-column="queue"]'
+    );
+    expect(runningColumn?.querySelectorAll("[data-task-card]")).toHaveLength(1);
+    expect(queueColumn?.querySelector("[data-task-card]")).toBeNull();
+    expect(
+      view.container.querySelectorAll("[data-task-column-cards]")
+    ).toHaveLength(4);
+    expect(
+      view.container.querySelectorAll('[aria-label="在队列中新建任务"]')
+    ).toHaveLength(1);
+    expect(
+      view.container.querySelectorAll('[aria-label="在已完成中新建任务"]')
+    ).toHaveLength(1);
     expect(dom.window.localStorage.getItem(TASKBOARD_VIEW_STORAGE_KEY)).toBe(
       "board"
     );
@@ -242,6 +267,122 @@ describe("TaskBoardPage rendered", () => {
     expect(dom.window.localStorage.getItem(TASKBOARD_VIEW_STORAGE_KEY)).toBe(
       "list"
     );
+  });
+
+  test("renders the dense board card contract with activity, labels, and overflow", async () => {
+    const task = createBoardTask(
+      {
+        title: "丰富的卡片",
+        description: "描述预览第一行",
+        status: "todo",
+        priority: "urgent",
+        labels: ["前端", "体验", "回归"],
+        sessionIds: ["session-running"],
+      },
+      { id: "TASK-CARD", now: 1_700_000_000_000 }
+    );
+    storeTasks([task]);
+    const view = await renderBoard({
+      sessions: [
+        {
+          id: "session-running",
+          title: "执行中的会话",
+          running: true,
+          activity: {
+            revision: 1,
+            state: { kind: "running", turn_id: "turn-1" },
+          },
+        },
+      ],
+    });
+    await click(button(view.container, "看板"));
+
+    const card = view.container.querySelector('[data-task-card="TASK-CARD"]');
+    expect(card?.textContent).toContain("TASK-1");
+    expect(card?.textContent).toContain("丰富的卡片");
+    expect(card?.textContent).toContain("描述预览第一行");
+    expect(card?.textContent).toContain("紧急");
+    expect(
+      [...(card?.querySelectorAll("[data-task-label]") ?? [])].map(
+        (label) => label.textContent
+      )
+    ).toEqual(["前端", "体验"]);
+    expect(card?.textContent).toContain("+1");
+    const sessionCount = card?.querySelector("[data-session-count]");
+    expect(sessionCount?.textContent).toContain("1 个会话");
+    expect(sessionCount?.querySelector("svg")).not.toBeNull();
+    expect(card?.querySelector('[data-slot="status-badge"]')?.textContent).toBe(
+      "处理中"
+    );
+  });
+
+  test("projects idle work into running and attention into needs you", async () => {
+    const idle = createBoardTask(
+      { title: "空闲进行中", status: "in_progress" },
+      { id: "TASK-IDLE", now: 1_700_000_000_000 }
+    );
+    const waiting = createBoardTask(
+      {
+        title: "等待输入的进行中",
+        status: "in_progress",
+        sessionIds: ["session-waiting"],
+      },
+      { id: "TASK-WAITING", now: 1_700_000_000_001 }
+    );
+    storeTasks([idle, waiting]);
+    const view = await renderBoard({
+      sessions: [
+        {
+          id: "session-waiting",
+          title: "等待",
+          activity: {
+            revision: 1,
+            state: { kind: "awaiting_input", turn_id: "turn-1", pending: [] },
+          },
+        },
+      ],
+    });
+    await click(button(view.container, "看板"));
+
+    const running = view.container.querySelector(
+      '[data-task-column="running"]'
+    );
+    const needsYou = view.container.querySelector(
+      '[data-task-column="needs_you"]'
+    );
+    expect(running?.textContent).toContain("空闲进行中");
+    expect(running?.textContent).not.toContain("等待输入的进行中");
+    expect(needsYou?.textContent).toContain("等待输入的进行中");
+    expect(
+      needsYou?.querySelector('[data-slot="status-badge"]')?.textContent
+    ).toBe("等待输入");
+  });
+
+  test("creates a Task from a lane header in that lane's stage", async () => {
+    const view = await renderBoard();
+    await click(button(view.container, "看板"));
+    await click(button(view.container, "在队列中新建任务"));
+
+    const title = dom.document.body.querySelector(
+      'input[placeholder="例如：完善任务筛选体验"]'
+    );
+    await setValue(title, "从列头新建");
+    await click(button(dom.document.body, "创建任务"));
+
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("从列头新建")
+    );
+    const snapshot = JSON.parse(
+      dom.window.localStorage.getItem(TASKBOARD_STORAGE_KEY)
+    );
+    expect(
+      snapshot.tasks.find((task) => task.title === "从列头新建").status
+    ).toBe("todo");
+    expect(
+      view.container
+        .querySelector('[data-task-column="queue"]')
+        ?.querySelectorAll("[data-task-card]").length
+    ).toBe(4);
   });
 
   test("restores a valid view preference and falls back from an invalid value", async () => {
@@ -285,6 +426,24 @@ describe("TaskBoardPage rendered", () => {
     expect(
       view.container.querySelector('[aria-label="任务检查器"]')?.textContent
     ).toContain("为第一次使用看板的成员准备简洁、可行动的中文引导。");
+  });
+
+  test("highlights a board card only after the user picks it", async () => {
+    const view = await renderBoard();
+    await click(button(view.container, "看板"));
+
+    expect(
+      view.container.querySelector('[data-task-card][data-selected="true"]')
+    ).toBeNull();
+    expect(
+      view.container.querySelector('[aria-label="任务检查器"]')?.textContent
+    ).toContain("完善空状态与操作提示");
+
+    await click(button(view.container, "选择任务：完善空状态与操作提示"));
+    expect(
+      view.container.querySelector('[data-task-card][data-selected="true"]')
+        ?.dataset.taskCard
+    ).toBe("seed-empty-state-copy");
   });
 
   test("keeps a large persisted list progressive on first render", async () => {

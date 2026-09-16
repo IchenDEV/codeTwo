@@ -28,6 +28,7 @@ const t: Translate = (key, values) =>
 function task(overrides: Partial<BoardTask> = {}): BoardTask {
   return {
     id: "task-1",
+    number: 1,
     title: "Task",
     description: "",
     status: "in_progress",
@@ -257,7 +258,7 @@ describe("TaskBoard workspace model", () => {
       { id: "s1", number: 1, current: true },
     ]);
     expect(projected.currentSession?.id).toBe("s1");
-    expect(projected.lane).toBe("queue");
+    expect(projected.lane).toBe("running");
     const [allArchived] = projectTasks(
       [task({ sessionIds: ["s2"] })],
       sessions

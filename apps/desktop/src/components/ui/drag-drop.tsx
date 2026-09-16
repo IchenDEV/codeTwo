@@ -1,4 +1,5 @@
 import { PointerActivationConstraints } from "@dnd-kit/dom";
+import { OptimisticSortingPlugin } from "@dnd-kit/dom/sortable";
 import {
   DragDropProvider as DndKitProvider,
   KeyboardSensor,
@@ -7,6 +8,7 @@ import {
 } from "@dnd-kit/react";
 import type {
   DragEndEvent,
+  DragMoveEvent,
   DragOverEvent,
   DragStartEvent,
   UseDroppableInput,
@@ -23,6 +25,7 @@ function DragDropRoot(props: ComponentProps<typeof DndKitProvider>) {
 export {
   DragDropRoot,
   KeyboardSensor,
+  OptimisticSortingPlugin,
   PointerActivationConstraints,
   PointerSensor,
   useDroppable as useDragDropZone,
@@ -30,6 +33,7 @@ export {
 };
 export type {
   DragEndEvent,
+  DragMoveEvent,
   DragOverEvent,
   DragStartEvent,
   UseDroppableInput,

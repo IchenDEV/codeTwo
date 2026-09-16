@@ -43,6 +43,8 @@ export interface GitHubPullRequestReference {
 
 export interface BoardTask {
   id: string;
+  /** Stable display identity, rendered as `TASK-{number}`. Unique per board, assigned by the reducer. */
+  number: number;
   title: string;
   description: string;
   status: TaskStatus;
@@ -61,7 +63,9 @@ export interface BoardTask {
 
 /**
  * Board lanes are a projection, not another persisted workflow field. A Task keeps its durable
- * stage while the latest Session supplies live execution and attention state.
+ * stage while the latest Session supplies live attention state. `running` is the durable
+ * `in_progress` stage (idle work stays visible where it is), while `awaiting_input` and `failed`
+ * route to `needs_you` so attention survives the drop that put the Task in progress.
  */
 export function taskBoardLane(
   task: Pick<BoardTask, "status">,
@@ -72,8 +76,51 @@ export function taskBoardLane(
   if (task.status === "todo") return "queue";
   if (activity === "awaiting_input" || activity === "failed")
     return "needs_you";
-  if (activity === "running") return "running";
-  return "queue";
+  return "running";
+}
+
+/** The durable stage a lane's drop writes. The inverse of `taskBoardLane` for drag targets. */
+export function laneStatus(lane: TaskBoardLane): TaskStatus {
+  if (lane === "queue") return "todo";
+  if (lane === "running") return "in_progress";
+  if (lane === "needs_you") return "in_review";
+  return "done";
+}
+
+/** Next free display number; unnumbered or repaired tasks can never collide with it. */
+export function nextTaskNumber(tasks: readonly BoardTask[]): number {
+  let next = 1;
+  for (const task of tasks) {
+    if (Number.isSafeInteger(task.number) && task.number >= next)
+      next = task.number + 1;
+  }
+  return next;
+}
+
+/**
+ * Repairs task numbers in place order: a positive, unused number is kept, and anything else gets
+ * the next free number. Used by snapshot migration and the save boundary so a numbering glitch
+ * never discards a board (unlike identity fields such as `id`, which stay strict).
+ */
+export function assignTaskNumbers(tasks: readonly BoardTask[]): BoardTask[] {
+  const used = new Set<number>();
+  for (const task of tasks) {
+    if (Number.isSafeInteger(task.number) && task.number > 0)
+      used.add(task.number);
+  }
+  const claimed = new Set<number>();
+  let next = 1;
+  return tasks.map((task) => {
+    const number = task.number;
+    if (Number.isSafeInteger(number) && number > 0 && !claimed.has(number)) {
+      claimed.add(number);
+      return task;
+    }
+    while (used.has(next)) next += 1;
+    used.add(next);
+    claimed.add(next);
+    return { ...task, number: next };
+  });
 }
 
 export interface BoardFilters {
@@ -93,7 +140,7 @@ export interface StorageLike {
 }
 
 export const TASKBOARD_STORAGE_KEY = "codetwo.taskboard.v1";
-export const TASKBOARD_SNAPSHOT_VERSION = 3 as const;
+export const TASKBOARD_SNAPSHOT_VERSION = 4 as const;
 
 export const CORRUPT_BOARD_WARNING =
   "无法读取已保存的任务看板，已恢复为示例任务。";
@@ -122,6 +169,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
 >[] = [
   {
     id: "seed-define-workflow",
+    number: 1,
     title: "确认任务流转规则",
     description: "和团队确认待处理、进行中、待审阅与已完成四个阶段的进入条件。",
     status: "done",
@@ -134,6 +182,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
   },
   {
     id: "seed-local-persistence",
+    number: 2,
     title: "接入任务本地持久化",
     description: "保存看板快照，并在数据损坏或浏览器存储不可用时提供清晰反馈。",
     status: "in_progress",
@@ -146,6 +195,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
   },
   {
     id: "seed-review-mobile-layout",
+    number: 3,
     title: "审阅移动端看板布局",
     description: "验证窄屏下的横向浏览、任务操作菜单与筛选体验。",
     status: "in_review",
@@ -158,6 +208,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
   },
   {
     id: "seed-empty-state-copy",
+    number: 4,
     title: "完善空状态与操作提示",
     description: "为第一次使用看板的成员准备简洁、可行动的中文引导。",
     status: "todo",
@@ -170,6 +221,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
   },
   {
     id: "seed-session-link",
+    number: 5,
     title: "设计会话关联入口",
     description:
       "让任务可以跳转到相关编码会话，同时保持任务状态由看板独立管理。",
@@ -183,6 +235,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
   },
   {
     id: "seed-accessibility-notes",
+    number: 6,
     title: "补充键盘操作与无障碍说明",
     description: "覆盖焦点顺序、按钮名称以及不用拖拽也能移动任务的操作路径。",
     status: "todo",
@@ -195,6 +248,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
   },
   {
     id: "seed-filter-search",
+    number: 7,
     title: "实现看板筛选与搜索",
     description: "支持按关键词、优先级和标签缩小任务范围，并保持原有排序。",
     status: "in_progress",
@@ -207,6 +261,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
   },
   {
     id: "seed-review-drag-order",
+    number: 8,
     title: "验证跨列拖拽顺序",
     description: "检查同列重排、跨列移动和筛选状态下的任务顺序是否稳定。",
     status: "in_review",
@@ -219,6 +274,7 @@ const DEFAULT_TASK_DATA: readonly Omit<
   },
   {
     id: "seed-priority-guidelines",
+    number: 9,
     title: "整理任务优先级规范",
     description: "明确无、低、中、高和紧急五档优先级的使用场景。",
     status: "done",
@@ -344,6 +400,8 @@ function generatedTaskId(): string {
 }
 
 export interface CreateBoardTaskInput {
+  /** Display number; callers normally omit it and let the reducer assign `max+1`. */
+  number?: number;
   title: string;
   description?: string;
   status?: TaskStatus;
@@ -364,8 +422,15 @@ export function createBoardTask(
   options: CreateBoardTaskOptions = {}
 ): BoardTask {
   const now = options.now ?? Date.now();
+  const providedNumber = input.number;
   return {
     id: options.id?.trim() ?? generatedTaskId(),
+    number:
+      typeof providedNumber === "number" &&
+      Number.isSafeInteger(providedNumber) &&
+      providedNumber > 0
+        ? providedNumber
+        : 0,
     title: input.title.trim() || "未命名任务",
     description: input.description?.trim() ?? "",
     status: input.status ?? "todo",
@@ -730,7 +795,11 @@ function parseGitHubPullRequestReference(
   };
 }
 
-type SupportedBoardSnapshotVersion = 1 | 2 | typeof TASKBOARD_SNAPSHOT_VERSION;
+type SupportedBoardSnapshotVersion =
+  | 1
+  | 2
+  | 3
+  | typeof TASKBOARD_SNAPSHOT_VERSION;
 
 function parseTask(
   value: unknown,
@@ -739,6 +808,7 @@ function parseTask(
   if (!isRecord(value)) return null;
   const {
     id,
+    number,
     title,
     description,
     status,
@@ -762,6 +832,13 @@ function parseTask(
     version < 3 ? null : parseGitHubPullRequestReference(pullRequest);
   const persistedPullRequestRevision =
     version < 3 ? 0 : pullRequestLinkRevision;
+  const persistedNumber =
+    version >= 4 &&
+    typeof number === "number" &&
+    Number.isSafeInteger(number) &&
+    number > 0
+      ? number
+      : 0;
   if (
     typeof id !== "string" ||
     !id.trim() ||
@@ -795,6 +872,8 @@ function parseTask(
   }
   return {
     id: id.trim(),
+    // v4 numbers are repaired in `parseBoardSnapshot`, so a malformed value never drops the board.
+    number: persistedNumber,
     title: title.trim(),
     description,
     status,
@@ -824,6 +903,7 @@ export function parseBoardSnapshot(
       !isRecord(value) ||
       (value.version !== 1 &&
         value.version !== 2 &&
+        value.version !== 3 &&
         value.version !== TASKBOARD_SNAPSHOT_VERSION) ||
       !Array.isArray(value.tasks)
     ) {
@@ -854,7 +934,7 @@ export function parseBoardSnapshot(
       }
       tasks.push(task);
     }
-    return { tasks, warning: null };
+    return { tasks: assignTaskNumbers(tasks), warning: null };
   } catch {
     return corruptBoardState(locale);
   }
@@ -896,7 +976,7 @@ export function saveBoardSnapshot(
   try {
     const snapshot: BoardSnapshot = {
       version: TASKBOARD_SNAPSHOT_VERSION,
-      tasks: tasks.map(cloneTask),
+      tasks: assignTaskNumbers(tasks).map(cloneTask),
     };
     resolvedStorage.setItem(TASKBOARD_STORAGE_KEY, JSON.stringify(snapshot));
     return { ok: true };
@@ -953,6 +1033,7 @@ function reindexStatuses(
 function sameTask(left: BoardTask, right: BoardTask): boolean {
   return (
     left.id === right.id &&
+    left.number === right.number &&
     left.title === right.title &&
     left.description === right.description &&
     left.status === right.status &&
@@ -981,6 +1062,7 @@ export function boardReducer(
       if (state.tasks.some((task) => task.id === action.task.id)) return state;
       const current = tasksInStatus(state.tasks, action.task.status);
       const task = cloneTask(action.task);
+      task.number = nextTaskNumber(state.tasks);
       task.order = current.length;
       return {
         ...state,
