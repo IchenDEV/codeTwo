@@ -6,7 +6,7 @@ status: passed
 owner: chenli
 created: 2026-09-16
 based_on: plan.md
-revision: worktree on branch t3code/multica-kanban-design, based on 8d1f32d7
+revision: 7178600a (branch t3code/multica-kanban-design), based on 8d1f32d7
 verification_mode: owner
 verified_by: chenli
 verified_at: 2026-09-16
@@ -126,4 +126,6 @@ Merge, release, and external actions are not authorized.
 Rollback: revert the taskboard, i18n, and test edits plus the new modules; existing `localStorage`
 snapshots keep loading because v4 parsing is additive and no persisted field was renamed.
 Release: No release requested; merge and external actions require their own authorization.
+Review: [PR #237](https://github.com/IchenDEV/codeTwo/pull/237) carries this change on branch
+t3code/multica-kanban-design.
 Feedback: Link an Incident and regression Eval when a real failure occurs.
