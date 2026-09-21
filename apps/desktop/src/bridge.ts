@@ -211,6 +211,7 @@ export async function syncDeviceDataNow(): Promise<DeviceSyncStatus> {
 export interface ProviderInfo {
   id: string;
   display_name: string;
+  custom: boolean;
   available: boolean;
   enabled: boolean;
   needs_node: boolean;
@@ -235,6 +236,14 @@ export interface ProviderRuntimeConfiguration extends ProviderRuntimeOverride {
   missing_environment: string[];
   effective_command: string;
   effective_args: string[];
+}
+
+export interface CustomProviderConfiguration {
+  id: string;
+  display_name: string;
+  command: string;
+  args: string[];
+  forwarded_environment: string[];
 }
 
 export interface ProviderManagementInfo {
@@ -336,9 +345,10 @@ function normalizeBrowserUseSettings(
 
 type ProviderInfoWire = Omit<
   ProviderInfo,
-  "capabilities" | "enabled" | "management" | "configuration"
+  "capabilities" | "custom" | "enabled" | "management" | "configuration"
 > & {
   capabilities?: ProviderCapability[] | null;
+  custom?: boolean | null;
   enabled?: boolean | null;
   management?: ProviderManagementInfo | null;
   configuration?: ProviderRuntimeConfiguration | null;
@@ -370,6 +380,7 @@ export function normalizeProviderInfo(
 ): ProviderInfo {
   return {
     ...provider,
+    custom: provider.custom ?? false,
     enabled: provider.enabled ?? true,
     capabilities: provider.capabilities ?? [],
     configuration:
@@ -1769,6 +1780,7 @@ const fallbackProvider = (
 ): ProviderInfo => ({
   id,
   display_name,
+  custom: false,
   available: false,
   enabled: true,
   needs_node,
@@ -1935,6 +1947,24 @@ export async function configureProvider(
     configuration,
   });
   return providers.map(normalizeProviderInfo);
+}
+
+export async function registerCustomProvider(
+  configuration: CustomProviderConfiguration
+): Promise<void> {
+  if (!inDesktop)
+    throw new Error(
+      "Custom provider registration is available in the C2 desktop app"
+    );
+  await call<boolean>("providers.register", { configuration });
+}
+
+export async function removeCustomProvider(provider: string): Promise<void> {
+  if (!inDesktop)
+    throw new Error(
+      "Custom provider removal is available in the C2 desktop app"
+    );
+  await call<boolean>("providers.remove", { provider });
 }
 
 export async function installProvider(

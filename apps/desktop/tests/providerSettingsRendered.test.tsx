@@ -1,7 +1,17 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
+import { act as reactAct } from "react";
+import { Simulate } from "react-dom/test-utils";
+
+import {
+  activateDom,
+  button,
+  dom,
+  flush,
+  mount,
+  restoreDom,
+} from "./domTestHarness";
 
 activateDom();
 const { SettingsPage } = await import("../src/settings/SettingsPage");
@@ -14,6 +24,23 @@ afterEach(() => {
   dom.document.body.replaceChildren();
   restoreDom();
 });
+
+async function setValue(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string
+) {
+  await reactAct(async () => {
+    const prototype =
+      element instanceof dom.window.HTMLTextAreaElement
+        ? dom.window.HTMLTextAreaElement.prototype
+        : dom.window.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(
+      element,
+      value
+    );
+    Simulate.change(element);
+  });
+}
 
 describe("Provider settings capabilities", () => {
   test("shows only capabilities the provider can actually expose", async () => {
@@ -344,6 +371,126 @@ describe("Provider settings capabilities", () => {
       dom.localStorage.getItem("codetwo.providerModelPreferences")
     ).toContain("gpt-5.6-terra");
 
+    view.unmount();
+  });
+
+  test("registers and removes a user-configured ACP agent", async () => {
+    const registered = [];
+    const removed = [];
+    const confirmations = [];
+    const customProvider = {
+      id: "existing-agent",
+      display_name: "Existing Agent",
+      available: true,
+      enabled: true,
+      custom: true,
+      needs_node: false,
+      models: [],
+      capabilities: [],
+      management: {
+        installed: true,
+        version: null,
+        latest_version: null,
+        update_available: null,
+        check_error: null,
+        install_supported: false,
+        upgrade_supported: false,
+        launch_mode: "installed",
+      },
+      configuration: {
+        display_name: "Existing Agent",
+        command: "existing-agent",
+        args: ["acp"],
+        home_path: null,
+        home_environment: null,
+        forwarded_environment: [],
+        missing_environment: [],
+        effective_command: "existing-agent",
+        effective_args: ["acp"],
+      },
+    };
+    const view = mount(
+      <I18nProvider>
+        <SettingsPage
+          bindings={[]}
+          capturing={null}
+          onCapture={() => {}}
+          providers={[customProvider]}
+          provider="existing-agent"
+          projectPath="/workspace"
+          project={null}
+          onProjectWorktreeMode={async () => {}}
+          memoryEnabled={false}
+          initialTab="providers"
+          onClose={() => {}}
+          onReloadProviders={async () => [customProvider]}
+          customProviderRegistrar={async (configuration) => {
+            registered.push(configuration);
+          }}
+          customProviderRemover={async (id) => {
+            removed.push(id);
+          }}
+          customProviderRemoveConfirmer={async (message) => {
+            confirmations.push(message);
+            return true;
+          }}
+        />
+      </I18nProvider>
+    );
+    await flush();
+
+    await reactAct(async () => button(view.container, "Add ACP Agent").click());
+    await setValue(
+      view.container.querySelector<HTMLInputElement>("#custom-provider-id")!,
+      "my-agent"
+    );
+    await setValue(
+      view.container.querySelector<HTMLInputElement>("#custom-provider-name")!,
+      "My Agent"
+    );
+    await setValue(
+      view.container.querySelector<HTMLInputElement>(
+        "#custom-provider-command"
+      )!,
+      "/opt/my-agent"
+    );
+    await setValue(
+      view.container.querySelector<HTMLTextAreaElement>(
+        "#custom-provider-args"
+      )!,
+      "acp\n--stdio"
+    );
+    await setValue(
+      view.container.querySelector<HTMLTextAreaElement>(
+        "#custom-provider-environment"
+      )!,
+      "MY_AGENT_TOKEN"
+    );
+    await flush();
+    expect(button(view.container, "Add Agent").disabled).toBe(false);
+    await reactAct(async () => button(view.container, "Add Agent").click());
+    await flush();
+
+    expect(registered).toEqual([
+      {
+        id: "my-agent",
+        display_name: "My Agent",
+        command: "/opt/my-agent",
+        args: ["acp", "--stdio"],
+        forwarded_environment: ["MY_AGENT_TOKEN"],
+      },
+    ]);
+
+    await reactAct(async () =>
+      view.container
+        .querySelector('[data-provider-disclosure="existing-agent"]')
+        ?.click()
+    );
+    await reactAct(async () => button(view.container, "Remove Agent").click());
+    await flush();
+
+    expect(confirmations[0]).toContain("Existing Agent");
+    expect(removed).toEqual(["existing-agent"]);
     view.unmount();
   });
 });

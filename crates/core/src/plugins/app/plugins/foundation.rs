@@ -10,7 +10,8 @@ use crate::plugins::app::{json, take_args};
 use crate::host_tools::HostToolDiscovery;
 use crate::provider::default_registry;
 use crate::provider_lifecycle::{
-    ProviderLifecycleAction, ProviderLifecycleManager, ProviderRuntimeOverride,
+    CustomProviderConfiguration, ProviderLifecycleAction, ProviderLifecycleManager,
+    ProviderRuntimeOverride,
 };
 use crate::store::Store;
 use crate::kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
@@ -252,6 +253,10 @@ impl Plugin for ProvidersPlugin {
             provider: String,
             configuration: ProviderRuntimeOverride,
         }
+        #[derive(Deserialize)]
+        struct CustomProviderArgs {
+            configuration: CustomProviderConfiguration,
+        }
 
         let enabled_service = service.clone();
         let enabled_context = ctx.clone();
@@ -284,6 +289,38 @@ impl Plugin for ProvidersPlugin {
                 let summaries = service.summaries().await;
                 context.reload();
                 json(summaries)
+            }
+        })?;
+
+        let registered_service = service.clone();
+        let registered_context = ctx.clone();
+        ctx.command("providers.register", move |args| {
+            let service = registered_service.clone();
+            let context = registered_context.clone();
+            async move {
+                let args: CustomProviderArgs = take_args(args)?;
+                service
+                    .lifecycle()
+                    .register_custom_provider(args.configuration)
+                    .map_err(PluginError::new)?;
+                context.reload();
+                json(true)
+            }
+        })?;
+
+        let removed_service = service.clone();
+        let removed_context = ctx.clone();
+        ctx.command("providers.remove", move |args| {
+            let service = removed_service.clone();
+            let context = removed_context.clone();
+            async move {
+                let args: ProviderActionArgs = take_args(args)?;
+                service
+                    .lifecycle()
+                    .remove_custom_provider(&args.provider)
+                    .map_err(PluginError::new)?;
+                context.reload();
+                json(true)
             }
         })?;
 

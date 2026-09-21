@@ -1421,7 +1421,26 @@ export const en = {
   "settings.providers": "Providers",
   "settings.restoreDefaults": "Restore defaults",
   "settings.providersHint":
-    "Enable providers for new sessions, install their local runtimes, and keep installed versions current.",
+    "Enable providers for new sessions, manage built-in runtimes, or add any local Agent that speaks ACP over stdio.",
+  "settings.customProviderAddAction": "Add ACP Agent",
+  "settings.customProviderTitle": "Custom ACP Agent",
+  "settings.customProviderHint":
+    "C2 launches this local command directly and uses the same ACP session and permission flow as built-in providers.",
+  "settings.customProviderId": "Agent ID",
+  "settings.customProviderIdHint":
+    "Starts with a lowercase letter; use lowercase letters, numbers, dots, dashes, or underscores.",
+  "settings.customProviderCommandHint":
+    "Executable or absolute path. The command must speak ACP over stdin and stdout; shell expressions are not evaluated.",
+  "settings.customProviderArgumentsHint":
+    "Optional; one exact launch argument per line.",
+  "settings.customProviderAdd": "Add Agent",
+  "settings.customProviderAdding": "Adding…",
+  "settings.customProviderCancel": "Cancel",
+  "settings.customProviderAdded": "Added {provider} for new sessions.",
+  "settings.customProviderRemove": "Remove Agent",
+  "settings.customProviderRemoveConfirm":
+    "Remove {provider} from C2? Existing sessions and provider-owned files will not be deleted.",
+  "settings.customProviderRemoved": "Removed {provider} from C2.",
   "settings.providerChecked": "Checked just now",
   "settings.providerChecking": "Checking…",
   "settings.providerRefresh": "Refresh",
@@ -4294,7 +4313,25 @@ export const zhCN: Record<StringKey, string> = {
   "settings.providers": "供应商",
   "settings.restoreDefaults": "恢复默认",
   "settings.providersHint":
-    "管理新会话可用的 Provider，安装本地运行时并保持版本更新。",
+    "管理新会话可用的 Provider、内置运行时，或添加任何通过 stdio 支持 ACP 的本地 Agent。",
+  "settings.customProviderAddAction": "添加 ACP Agent",
+  "settings.customProviderTitle": "自定义 ACP Agent",
+  "settings.customProviderHint":
+    "C2 会直接启动这个本地命令，并复用与内置 Provider 相同的 ACP 会话和权限流程。",
+  "settings.customProviderId": "Agent ID",
+  "settings.customProviderIdHint":
+    "以小写字母开头；仅使用小写字母、数字、点、短横线或下划线。",
+  "settings.customProviderCommandHint":
+    "填写可执行程序名或绝对路径。命令必须通过 stdin/stdout 使用 ACP；不会执行 shell 表达式。",
+  "settings.customProviderArgumentsHint": "可选；每行填写一个完整的启动参数。",
+  "settings.customProviderAdd": "添加 Agent",
+  "settings.customProviderAdding": "正在添加…",
+  "settings.customProviderCancel": "取消",
+  "settings.customProviderAdded": "已为新会话添加 {provider}。",
+  "settings.customProviderRemove": "移除 Agent",
+  "settings.customProviderRemoveConfirm":
+    "从 C2 中移除 {provider}？已有会话和 Agent 自己的文件不会被删除。",
+  "settings.customProviderRemoved": "已从 C2 移除 {provider}。",
   "settings.providerChecked": "刚刚检查",
   "settings.providerChecking": "正在检查…",
   "settings.providerRefresh": "刷新",
