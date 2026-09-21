@@ -1,9 +1,9 @@
-//! Durable provider enablement and the reviewed install/upgrade recipes exposed by the UI.
+//! Durable provider enablement, reviewed install recipes, and explicit user-registered ACP agents.
 //!
-//! Renderer input chooses only a provider id and an action. Executables, package names, URLs and
-//! flags remain fixed here so the plugin bridge never becomes an arbitrary process launcher.
+//! Built-in launch definitions stay fixed here. Custom definitions are validated, saved without
+//! environment values, and launched directly without involving a shell.
 
-use crate::provider::{which, Provider};
+use crate::provider::{which, LaunchSpec, Provider, ProviderId};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -67,6 +67,20 @@ pub struct ProviderRuntimeConfiguration {
     pub missing_environment: Vec<String>,
     pub effective_command: String,
     pub effective_args: Vec<String>,
+}
+
+/// One user-registered local command that speaks ACP over stdio.
+///
+/// Environment values remain host-owned; only the names to forward are durable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CustomProviderConfiguration {
+    pub id: String,
+    pub display_name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub forwarded_environment: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -252,6 +266,8 @@ struct ProviderLifecycleState {
     enabled: HashMap<String, bool>,
     #[serde(default)]
     runtime: HashMap<String, ProviderRuntimeOverride>,
+    #[serde(default)]
+    custom: Vec<CustomProviderConfiguration>,
 }
 
 impl Default for ProviderLifecycleState {
@@ -260,6 +276,7 @@ impl Default for ProviderLifecycleState {
             schema_version: 1,
             enabled: HashMap::new(),
             runtime: HashMap::new(),
+            custom: Vec::new(),
         }
     }
 }
@@ -284,7 +301,7 @@ impl ProviderLifecycleManager {
     }
 
     pub fn enabled(&self, provider_id: &str) -> Result<bool, String> {
-        recipe(provider_id)?;
+        self.ensure_registered(provider_id)?;
         Ok(self
             .state
             .lock()
@@ -296,7 +313,7 @@ impl ProviderLifecycleManager {
     }
 
     pub fn set_enabled(&self, provider_id: &str, enabled: bool) -> Result<(), String> {
-        recipe(provider_id)?;
+        self.ensure_registered(provider_id)?;
         let mut state = self.state.lock().unwrap();
         let mut next = state.clone();
         next.enabled.insert(provider_id.to_string(), enabled);
@@ -310,7 +327,34 @@ impl ProviderLifecycleManager {
         provider_id: &str,
         configuration: ProviderRuntimeOverride,
     ) -> Result<(), String> {
-        recipe(provider_id)?;
+        if recipe(provider_id).is_err() {
+            if configuration.home_path.is_some() {
+                return Err("custom providers do not support a managed config directory".into());
+            }
+            let mut state = self.state.lock().unwrap();
+            let Some(index) = state.custom.iter().position(|item| item.id == provider_id) else {
+                return Err(format!("unknown provider {provider_id:?}"));
+            };
+            let configuration = validate_custom_provider(CustomProviderConfiguration {
+                id: provider_id.to_string(),
+                display_name: configuration
+                    .display_name
+                    .ok_or_else(|| "custom provider display name is required".to_string())?,
+                command: configuration
+                    .command
+                    .ok_or_else(|| "custom provider runtime command is required".to_string())?,
+                args: configuration.args.unwrap_or_default(),
+                forwarded_environment: configuration.forwarded_environment,
+            })?;
+            if configuration.id != provider_id {
+                return Err("custom provider id cannot be changed".into());
+            }
+            let mut next = state.clone();
+            next.custom[index] = configuration;
+            save_state(&self.data_dir, &self.state_path, &next)?;
+            *state = next;
+            return Ok(());
+        }
         let configuration = validate_runtime_configuration(provider_id, configuration)?;
         let mut state = self.state.lock().unwrap();
         let mut next = state.clone();
@@ -328,7 +372,31 @@ impl ProviderLifecycleManager {
         &self,
         provider: &Provider,
     ) -> Result<ProviderRuntimeConfiguration, String> {
-        recipe(provider.id.as_str())?;
+        if recipe(provider.id.as_str()).is_err() {
+            let state = self.state.lock().unwrap();
+            let configured = state
+                .custom
+                .iter()
+                .find(|item| item.id == provider.id.as_str())
+                .ok_or_else(|| format!("unknown provider {:?}", provider.id.as_str()))?;
+            let missing_environment = configured
+                .forwarded_environment
+                .iter()
+                .filter(|name| std::env::var_os(name).is_none())
+                .cloned()
+                .collect();
+            return Ok(ProviderRuntimeConfiguration {
+                display_name: Some(configured.display_name.clone()),
+                command: Some(configured.command.clone()),
+                args: Some(configured.args.clone()),
+                home_path: None,
+                home_environment: None,
+                forwarded_environment: configured.forwarded_environment.clone(),
+                missing_environment,
+                effective_command: provider.launch.command.clone(),
+                effective_args: provider.launch.args.clone(),
+            });
+        }
         let configured = self
             .state
             .lock()
@@ -442,7 +510,31 @@ impl ProviderLifecycleManager {
                 provider.needs_node = false;
             }
         }
-        let configured = self.state.lock().unwrap().runtime.clone();
+        let state = self.state.lock().unwrap().clone();
+        for configuration in &state.custom {
+            let mut launch = LaunchSpec {
+                command: expand_home(&configuration.command),
+                args: configuration.args.clone(),
+                env: Vec::new(),
+                cwd: None,
+            };
+            for name in &configuration.forwarded_environment {
+                if let Some(value) = std::env::var_os(name) {
+                    set_launch_environment(
+                        &mut launch.env,
+                        name,
+                        value.to_string_lossy().into_owned(),
+                    );
+                }
+            }
+            providers.push(Provider {
+                id: ProviderId::Custom(configuration.id.clone()),
+                display_name: configuration.display_name.clone(),
+                launch,
+                needs_node: false,
+            });
+        }
+        let configured = state.runtime;
         for provider in &mut providers {
             let Some(configuration) = configured.get(provider.id.as_str()) else {
                 continue;
@@ -473,6 +565,57 @@ impl ProviderLifecycleManager {
             }
         }
         providers
+    }
+
+    pub fn register_custom_provider(
+        &self,
+        configuration: CustomProviderConfiguration,
+    ) -> Result<(), String> {
+        let configuration = validate_custom_provider(configuration)?;
+        if recipe(&configuration.id).is_ok() {
+            return Err(format!(
+                "provider id {:?} belongs to a built-in provider",
+                configuration.id
+            ));
+        }
+        let mut state = self.state.lock().unwrap();
+        if state.custom.iter().any(|item| item.id == configuration.id) {
+            return Err(format!("provider {:?} already exists", configuration.id));
+        }
+        let mut next = state.clone();
+        next.custom.push(configuration);
+        save_state(&self.data_dir, &self.state_path, &next)?;
+        *state = next;
+        Ok(())
+    }
+
+    pub fn remove_custom_provider(&self, provider_id: &str) -> Result<(), String> {
+        let mut state = self.state.lock().unwrap();
+        let Some(index) = state.custom.iter().position(|item| item.id == provider_id) else {
+            return Err(format!("unknown custom provider {provider_id:?}"));
+        };
+        let mut next = state.clone();
+        next.custom.remove(index);
+        next.enabled.remove(provider_id);
+        save_state(&self.data_dir, &self.state_path, &next)?;
+        *state = next;
+        Ok(())
+    }
+
+    fn ensure_registered(&self, provider_id: &str) -> Result<(), String> {
+        if recipe(provider_id).is_ok()
+            || self
+                .state
+                .lock()
+                .unwrap()
+                .custom
+                .iter()
+                .any(|item| item.id == provider_id)
+        {
+            Ok(())
+        } else {
+            Err(format!("unknown provider {provider_id:?}"))
+        }
     }
 
     pub async fn apply(
@@ -733,6 +876,53 @@ fn valid_environment_name(name: &str) -> bool {
         && name.len() <= 128
 }
 
+fn valid_custom_provider_id(id: &str) -> bool {
+    let mut characters = id.chars();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    id.len() <= 64
+        && first.is_ascii_lowercase()
+        && characters.all(|character| {
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || matches!(character, '-' | '_' | '.')
+        })
+}
+
+fn validate_custom_provider(
+    configuration: CustomProviderConfiguration,
+) -> Result<CustomProviderConfiguration, String> {
+    let id = configuration.id.trim();
+    if !valid_custom_provider_id(id) {
+        return Err(
+            "custom provider id must start with a lowercase letter and contain only lowercase letters, digits, '.', '-', or '_'"
+                .into(),
+        );
+    }
+    let normalized = validate_runtime_configuration(
+        id,
+        ProviderRuntimeOverride {
+            display_name: Some(configuration.display_name),
+            command: Some(configuration.command),
+            args: Some(configuration.args),
+            home_path: None,
+            forwarded_environment: configuration.forwarded_environment,
+        },
+    )?;
+    Ok(CustomProviderConfiguration {
+        id: id.to_string(),
+        display_name: normalized
+            .display_name
+            .ok_or_else(|| "custom provider display name is required".to_string())?,
+        command: normalized
+            .command
+            .ok_or_else(|| "custom provider runtime command is required".to_string())?,
+        args: normalized.args.unwrap_or_default(),
+        forwarded_environment: normalized.forwarded_environment,
+    })
+}
+
 fn validate_runtime_configuration(
     provider_id: &str,
     configuration: ProviderRuntimeOverride,
@@ -825,9 +1015,17 @@ fn load_state(path: &Path) -> ProviderLifecycleState {
     if state.schema_version != 1 {
         return ProviderLifecycleState::default();
     }
+    let mut seen = HashSet::new();
+    state.custom = std::mem::take(&mut state.custom)
+        .into_iter()
+        .filter_map(|configuration| validate_custom_provider(configuration).ok())
+        .filter(|configuration| {
+            recipe(&configuration.id).is_err() && seen.insert(configuration.id.clone())
+        })
+        .collect();
     state
         .enabled
-        .retain(|id, _| RECIPES.iter().any(|recipe| recipe.id == id));
+        .retain(|id, _| RECIPES.iter().any(|recipe| recipe.id == id) || seen.contains(id));
     state
         .runtime
         .retain(|id, _| RECIPES.iter().any(|recipe| recipe.id == id));
@@ -1000,6 +1198,168 @@ mod tests {
                 },
             )
             .is_err());
+    }
+
+    #[test]
+    fn custom_acp_agents_are_durable_editable_and_removable() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = ProviderLifecycleManager::open(directory.path());
+        manager
+            .register_custom_provider(CustomProviderConfiguration {
+                id: "my-agent".into(),
+                display_name: "My Agent".into(),
+                command: "~/bin/my-agent".into(),
+                args: vec!["acp".into()],
+                forwarded_environment: vec!["MY_AGENT_TOKEN".into()],
+            })
+            .unwrap();
+
+        let reopened = ProviderLifecycleManager::open(directory.path());
+        let providers = reopened.prepare_registry(crate::provider::default_registry());
+        let custom = providers
+            .iter()
+            .find(|provider| provider.id.as_str() == "my-agent")
+            .unwrap();
+        assert_eq!(
+            custom.id,
+            crate::provider::ProviderId::Custom("my-agent".into())
+        );
+        assert_eq!(custom.display_name, "My Agent");
+        assert!(custom.launch.command.ends_with("/bin/my-agent"));
+        assert_eq!(custom.launch.args, ["acp"]);
+        assert!(!custom.needs_node);
+        assert!(!custom.id.supports_native_subagents());
+
+        let configuration = reopened.runtime_configuration(custom).unwrap();
+        assert_eq!(configuration.display_name.as_deref(), Some("My Agent"));
+        assert_eq!(configuration.command.as_deref(), Some("~/bin/my-agent"));
+        assert_eq!(configuration.forwarded_environment, ["MY_AGENT_TOKEN"]);
+        assert_eq!(configuration.missing_environment, ["MY_AGENT_TOKEN"]);
+
+        reopened
+            .set_runtime_configuration(
+                "my-agent",
+                ProviderRuntimeOverride {
+                    display_name: Some("My Edited Agent".into()),
+                    command: Some("my-edited-agent".into()),
+                    args: Some(vec!["--stdio".into()]),
+                    forwarded_environment: vec![],
+                    ..ProviderRuntimeOverride::default()
+                },
+            )
+            .unwrap();
+        let edited = reopened.prepare_registry(crate::provider::default_registry());
+        let edited = edited
+            .iter()
+            .find(|provider| provider.id.as_str() == "my-agent")
+            .unwrap();
+        assert_eq!(edited.display_name, "My Edited Agent");
+        assert_eq!(edited.launch.command, "my-edited-agent");
+        assert_eq!(edited.launch.args, ["--stdio"]);
+
+        assert!(reopened
+            .set_runtime_configuration(
+                "my-agent",
+                ProviderRuntimeOverride {
+                    display_name: Some("Broken Agent".into()),
+                    command: Some("broken-agent".into()),
+                    args: Some(vec![]),
+                    forwarded_environment: vec!["TOKEN=value".into()],
+                    ..ProviderRuntimeOverride::default()
+                },
+            )
+            .is_err());
+        let unchanged = reopened.prepare_registry(crate::provider::default_registry());
+        let unchanged = unchanged
+            .iter()
+            .find(|provider| provider.id.as_str() == "my-agent")
+            .unwrap();
+        assert_eq!(unchanged.display_name, "My Edited Agent");
+        assert_eq!(unchanged.launch.command, "my-edited-agent");
+
+        reopened.remove_custom_provider("my-agent").unwrap();
+        assert!(reopened
+            .prepare_registry(crate::provider::default_registry())
+            .iter()
+            .all(|provider| provider.id.as_str() != "my-agent"));
+        assert!(ProviderLifecycleManager::open(directory.path())
+            .prepare_registry(crate::provider::default_registry())
+            .iter()
+            .all(|provider| provider.id.as_str() != "my-agent"));
+    }
+
+    #[test]
+    fn custom_acp_agents_reject_collisions_invalid_ids_and_secret_values() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = ProviderLifecycleManager::open(directory.path());
+        let valid = CustomProviderConfiguration {
+            id: "private-agent".into(),
+            display_name: "Private Agent".into(),
+            command: "private-agent".into(),
+            args: vec![],
+            forwarded_environment: vec!["PRIVATE_AGENT_TOKEN".into()],
+        };
+        manager.register_custom_provider(valid.clone()).unwrap();
+        assert!(manager.register_custom_provider(valid).is_err());
+        assert!(manager
+            .register_custom_provider(CustomProviderConfiguration {
+                id: "codex".into(),
+                display_name: "Collision".into(),
+                command: "collision".into(),
+                args: vec![],
+                forwarded_environment: vec![],
+            })
+            .is_err());
+        assert!(manager
+            .register_custom_provider(CustomProviderConfiguration {
+                id: "Unsafe ID".into(),
+                display_name: "Unsafe".into(),
+                command: "unsafe".into(),
+                args: vec![],
+                forwarded_environment: vec![],
+            })
+            .is_err());
+        assert!(manager
+            .register_custom_provider(CustomProviderConfiguration {
+                id: "bad-env".into(),
+                display_name: "Bad env".into(),
+                command: "bad-env".into(),
+                args: vec![],
+                forwarded_environment: vec!["TOKEN=secret-value".into()],
+            })
+            .is_err());
+        assert!(manager
+            .register_custom_provider(CustomProviderConfiguration {
+                id: "missing-name".into(),
+                display_name: " ".into(),
+                command: "missing-name".into(),
+                args: vec![],
+                forwarded_environment: vec![],
+            })
+            .is_err());
+        assert!(manager
+            .register_custom_provider(CustomProviderConfiguration {
+                id: "missing-command".into(),
+                display_name: "Missing command".into(),
+                command: " ".into(),
+                args: vec![],
+                forwarded_environment: vec![],
+            })
+            .is_err());
+        assert!(manager
+            .register_custom_provider(CustomProviderConfiguration {
+                id: "too-many-args".into(),
+                display_name: "Too many arguments".into(),
+                command: "too-many-args".into(),
+                args: vec!["argument".into(); 65],
+                forwarded_environment: vec![],
+            })
+            .is_err());
+
+        let persisted =
+            fs::read_to_string(directory.path().join("provider-settings.json")).unwrap();
+        assert!(persisted.contains("PRIVATE_AGENT_TOKEN"));
+        assert!(!persisted.contains("secret-value"));
     }
 
     #[cfg(windows)]

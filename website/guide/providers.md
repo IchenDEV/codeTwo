@@ -60,6 +60,24 @@ For GLM, provide `Z_AI_API_KEY` in the environment or run:
 npx -y glm-acp-agent --setup
 ```
 
+## Add a custom ACP Agent
+
+Open **Settings → Providers → Add ACP Agent**. Give the Agent a stable lowercase ID, display name,
+executable or absolute path, optional launch arguments (one per line), and optional host environment
+variable names to forward. C2 stores only environment variable names; their current values remain in
+the host process and are copied only when the Agent starts.
+
+The command must be an ACP server over stdin/stdout. C2 launches it directly without a shell, so do
+not enter a shell pipeline or a command plus space-separated arguments in the command field. Put each
+argument on its own line instead. Adding an Agent does not run it; C2 starts it when a session using
+that Provider sends its first prompt.
+
+Custom Agents use the same sessions, permission mediation, transcripts, MCP attachment, and ACP
+capability negotiation as built-ins. C2 does not assume model lists, native subagent support, install
+recipes, or provider-specific capabilities. The Agent remains responsible for its own credentials,
+account, network behavior, and billing. Removing it from Settings removes only the C2 launch
+definition; existing session records and Agent-owned files remain untouched.
+
 ### Provider-native subagents
 
 C2 never schedules child agents itself. Plugin subagent blocks are sent only to providers whose

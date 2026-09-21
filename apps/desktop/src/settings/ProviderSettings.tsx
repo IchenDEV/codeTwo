@@ -4,7 +4,13 @@ import { SearchField } from "@/components/business/search-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { ChevronDown, Download, RefreshCw } from "@/components/ui/icons";
+import {
+  ChevronDown,
+  Download,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -12,12 +18,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 import {
+  confirmNative,
   configureProvider,
   installProvider,
+  registerCustomProvider,
+  removeCustomProvider,
   setProviderEnabled,
   upgradeProvider,
 } from "../bridge";
 import type {
+  CustomProviderConfiguration,
   ProviderInfo,
   ProviderRuntimeConfiguration,
   ProviderRuntimeOverride,
@@ -38,7 +48,14 @@ const CAPABILITY_LABELS = {
 
 interface ProviderOperation {
   id: string;
-  action: "install" | "upgrade" | "enable" | "configure" | "refresh";
+  action:
+    | "install"
+    | "upgrade"
+    | "enable"
+    | "configure"
+    | "refresh"
+    | "register"
+    | "remove";
 }
 
 function runtimeConfiguration(
@@ -273,15 +290,17 @@ function ProviderRuntimeEditor({
         )}
       </Field>
       <div className="gap-control-group flex items-center justify-end">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={disabled}
-          onClick={reset}
-        >
-          {t("settings.restoreDefaults")}
-        </Button>
+        {!provider.custom && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled}
+            onClick={reset}
+          >
+            {t("settings.restoreDefaults")}
+          </Button>
+        )}
         <Button
           type="button"
           size="sm"
@@ -291,6 +310,161 @@ function ProviderRuntimeEditor({
         >
           {saving ? <Spinner /> : null}
           {saving ? t("settings.providerSaving") : t("settings.providerSave")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CustomProviderForm({
+  disabled,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  disabled: boolean;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (configuration: CustomProviderConfiguration) => Promise<void>;
+}) {
+  const t = useT();
+  const [id, setId] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [command, setCommand] = useState("");
+  const [args, setArgs] = useState("");
+  const [forwardedEnvironment, setForwardedEnvironment] = useState("");
+  const ready =
+    id.trim() !== "" && displayName.trim() !== "" && command.trim() !== "";
+
+  return (
+    <div
+      data-custom-provider-form
+      className="rounded-module border-border bg-fill-quiet/40 mb-3 space-y-3 border p-3"
+    >
+      <div>
+        <p className="text-body font-semibold">
+          {t("settings.customProviderTitle")}
+        </p>
+        <p className="text-callout text-muted-foreground">
+          {t("settings.customProviderHint")}
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="custom-provider-id">
+            {t("settings.customProviderId")}
+          </FieldLabel>
+          <Input
+            id="custom-provider-id"
+            size="compact"
+            value={id}
+            disabled={disabled}
+            placeholder="my-agent"
+            spellCheck={false}
+            onChange={(event) => setId(event.target.value)}
+          />
+          <FieldDescription>
+            {t("settings.customProviderIdHint")}
+          </FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="custom-provider-name">
+            {t("settings.providerDisplayName")}
+          </FieldLabel>
+          <Input
+            id="custom-provider-name"
+            size="compact"
+            value={displayName}
+            disabled={disabled}
+            placeholder="My Agent"
+            onChange={(event) => setDisplayName(event.target.value)}
+          />
+        </Field>
+      </div>
+      <Field>
+        <FieldLabel htmlFor="custom-provider-command">
+          {t("settings.providerRuntimeCommand")}
+        </FieldLabel>
+        <Input
+          id="custom-provider-command"
+          size="compact"
+          value={command}
+          disabled={disabled}
+          placeholder="/path/to/my-agent"
+          spellCheck={false}
+          onChange={(event) => setCommand(event.target.value)}
+        />
+        <FieldDescription>
+          {t("settings.customProviderCommandHint")}
+        </FieldDescription>
+      </Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="custom-provider-args">
+            {t("settings.providerRuntimeArguments")}
+          </FieldLabel>
+          <Textarea
+            id="custom-provider-args"
+            size="compact"
+            rows={3}
+            value={args}
+            disabled={disabled}
+            placeholder="acp"
+            spellCheck={false}
+            onChange={(event) => setArgs(event.target.value)}
+          />
+          <FieldDescription>
+            {t("settings.customProviderArgumentsHint")}
+          </FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="custom-provider-environment">
+            {t("settings.providerForwardedEnvironment")}
+          </FieldLabel>
+          <Textarea
+            id="custom-provider-environment"
+            size="compact"
+            rows={3}
+            value={forwardedEnvironment}
+            disabled={disabled}
+            placeholder="MY_AGENT_TOKEN"
+            spellCheck={false}
+            onChange={(event) => setForwardedEnvironment(event.target.value)}
+          />
+          <FieldDescription>
+            {t("settings.providerForwardedEnvironmentHint")}
+          </FieldDescription>
+        </Field>
+      </div>
+      <div className="gap-control-group flex justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={disabled}
+          onClick={onCancel}
+        >
+          {t("settings.customProviderCancel")}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          data-provider-register
+          disabled={disabled || !ready}
+          onClick={() =>
+            void onSave({
+              id: id.trim(),
+              display_name: displayName.trim(),
+              command: command.trim(),
+              args: listFromLines(args),
+              forwarded_environment: listFromLines(forwardedEnvironment),
+            })
+          }
+        >
+          {saving ? <Spinner /> : null}
+          {saving
+            ? t("settings.customProviderAdding")
+            : t("settings.customProviderAdd")}
         </Button>
       </div>
     </div>
@@ -386,6 +560,9 @@ export function ProviderSettingsPage({
   upgrader = upgradeProvider,
   enabledSaver = setProviderEnabled,
   configurationSaver = configureProvider,
+  customProviderRegistrar = registerCustomProvider,
+  customProviderRemover = removeCustomProvider,
+  customProviderRemoveConfirmer = confirmNative,
 }: {
   providers: ProviderInfo[];
   reload?: () => void | Promise<ProviderInfo[]>;
@@ -399,6 +576,11 @@ export function ProviderSettingsPage({
     provider: string,
     configuration: ProviderRuntimeOverride
   ) => Promise<ProviderInfo[]>;
+  customProviderRegistrar?: (
+    configuration: CustomProviderConfiguration
+  ) => Promise<void>;
+  customProviderRemover?: (provider: string) => Promise<void>;
+  customProviderRemoveConfirmer?: (message: string) => Promise<boolean>;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -407,6 +589,7 @@ export function ProviderSettingsPage({
     null
   );
   const [error, setError] = useState<{ id: string; text: string } | null>(null);
+  const [addingCustomProvider, setAddingCustomProvider] = useState(false);
 
   useEffect(() => {
     if (!reload) return;
@@ -542,6 +725,61 @@ export function ProviderSettingsPage({
     }
   }
 
+  async function registerCustom(configuration: CustomProviderConfiguration) {
+    if (operation) return;
+    setOperation({ id: "*", action: "register" });
+    setError(null);
+    setMessage(null);
+    try {
+      await customProviderRegistrar(configuration);
+      setAddingCustomProvider(false);
+      setMessage({
+        id: "*",
+        text: t("settings.customProviderAdded", {
+          provider: configuration.display_name,
+        }),
+      });
+      await reload?.();
+    } catch (error) {
+      setError({
+        id: "*",
+        text: t("settings.providerActionFailed", { error: String(error) }),
+      });
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  async function removeCustom(provider: ProviderInfo) {
+    if (operation || !provider.custom) return;
+    const confirmed = await customProviderRemoveConfirmer(
+      t("settings.customProviderRemoveConfirm", {
+        provider: provider.display_name,
+      })
+    );
+    if (!confirmed) return;
+    setOperation({ id: provider.id, action: "remove" });
+    setError(null);
+    setMessage(null);
+    try {
+      await customProviderRemover(provider.id);
+      setMessage({
+        id: "*",
+        text: t("settings.customProviderRemoved", {
+          provider: provider.display_name,
+        }),
+      });
+      await reload?.();
+    } catch (error) {
+      setError({
+        id: provider.id,
+        text: t("settings.providerActionFailed", { error: String(error) }),
+      });
+    } finally {
+      setOperation(null);
+    }
+  }
+
   function toggle(providerId: string) {
     setExpanded((current) => {
       const next = new Set(current);
@@ -565,6 +803,16 @@ export function ProviderSettingsPage({
           </span>
         )}
         <Button
+          data-provider-add
+          variant="outline"
+          size="xs"
+          disabled={operation !== null}
+          onClick={() => setAddingCustomProvider((current) => !current)}
+        >
+          <Plus />
+          {t("settings.customProviderAddAction")}
+        </Button>
+        <Button
           data-provider-refresh
           variant="ghost"
           size="xs"
@@ -578,6 +826,14 @@ export function ProviderSettingsPage({
       </div>
       {error?.id === "*" && (
         <p className="text-callout text-destructive mb-2">{error.text}</p>
+      )}
+      {addingCustomProvider && (
+        <CustomProviderForm
+          disabled={operation !== null}
+          saving={operation?.action === "register"}
+          onCancel={() => setAddingCustomProvider(false)}
+          onSave={registerCustom}
+        />
       )}
       <div className="space-y-1">
         {providers.map((provider) => {
@@ -751,6 +1007,21 @@ export function ProviderSettingsPage({
                       <span>{t("settings.needsNode")}</span>
                     )}
                   </div>
+                  {provider.custom && (
+                    <div className="flex justify-end pt-2">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="xs"
+                        data-provider-remove={provider.id}
+                        disabled={operation !== null}
+                        onClick={() => void removeCustom(provider)}
+                      >
+                        <Trash2 />
+                        {t("settings.customProviderRemove")}
+                      </Button>
+                    </div>
+                  )}
                   <ProviderRuntimeEditor
                     provider={provider}
                     disabled={operation !== null}

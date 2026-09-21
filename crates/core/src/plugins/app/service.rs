@@ -185,6 +185,7 @@ impl EventBus {
 pub struct ProviderSummary {
     pub id: String,
     pub display_name: String,
+    pub custom: bool,
     pub available: bool,
     pub enabled: bool,
     pub needs_node: bool,
@@ -307,10 +308,11 @@ impl ProviderService {
                 let management = lifecycle.status(&provider, check_updates).await;
                 let configuration = lifecycle
                     .runtime_configuration(&provider)
-                    .expect("registered provider has a lifecycle recipe");
+                    .expect("registered provider has lifecycle configuration");
                 let summary = ProviderSummary {
                     id: provider.id.as_str().to_string(),
                     display_name: provider.display_name.clone(),
+                    custom: matches!(&provider.id, crate::provider::ProviderId::Custom(_)),
                     available: enabled && management.launch_mode != ProviderLaunchMode::Unavailable,
                     enabled,
                     needs_node: provider.needs_node,

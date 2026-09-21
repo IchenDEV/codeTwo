@@ -47,6 +47,7 @@ import type {
   AppshotSettings,
   BrowserUseSettings,
   ComputerUseSettings,
+  CustomProviderConfiguration,
   AppUpdateStatus,
   DeviceSyncStatus,
   DiagnosticsExportResult,
@@ -233,6 +234,9 @@ export function SettingsPage({
   providerUpgrader,
   providerEnabledSaver,
   providerConfigurationSaver,
+  customProviderRegistrar,
+  customProviderRemover,
+  customProviderRemoveConfirmer,
   deviceSyncStatusLoader,
   deviceSyncEnabledSaver,
   deviceSyncStarter,
@@ -321,6 +325,11 @@ export function SettingsPage({
     provider: string,
     configuration: ProviderRuntimeOverride
   ) => Promise<ProviderInfo[]>;
+  customProviderRegistrar?: (
+    configuration: CustomProviderConfiguration
+  ) => Promise<void>;
+  customProviderRemover?: (provider: string) => Promise<void>;
+  customProviderRemoveConfirmer?: (message: string) => Promise<boolean>;
   deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
   deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
   deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
@@ -619,6 +628,9 @@ export function SettingsPage({
                 upgrader={providerUpgrader}
                 enabledSaver={providerEnabledSaver}
                 configurationSaver={providerConfigurationSaver}
+                customProviderRegistrar={customProviderRegistrar}
+                customProviderRemover={customProviderRemover}
+                customProviderRemoveConfirmer={customProviderRemoveConfirmer}
               />
             )}
             {tab === "developer" && (
